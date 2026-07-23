@@ -23,13 +23,15 @@
  *   ps2: soft path       — honesty: no IRQ/translate/drain/cmd
  *   ps2: soft honesty    — bar3/product-input non-claims
  *   ps2: soft identify   — float-aware soft identify PASS
- *   ps2: soft deepen     — wave=17 areas stamp
+ *   ps2: soft return rate — Wave 18 ok/fail rate lamps
+ *   ps2: soft retcode    — Wave 18 retcode catalog
+ *   ps2: soft deepen     — wave=18 areas stamp
  *   ps2: soft ratio      — Wave 16 status occupancy lamps
  *   ps2: soft headroom   — Wave 16 dual-sample head
  *   ps2: soft surface    — Wave 16 area catalog
  *   ps2: soft return     — Wave 16 return-surface bitmask
- *   ps2: soft return selftest — Wave 17 terminal return surface
- *   ps2: soft retmap     — Wave 17 return-surface map
+ *   ps2: soft return selftest — Wave 17 terminal return surface (kept)
+ *   ps2: soft retmap     — Wave 17 return-surface map (kept)
  *   ps2: soft contract   — Wave 16 soft≠game I/O contract
  *   ps2: soft stats      — emission tallies
  *   ps2: soft inventory PASS|SKIP
@@ -58,9 +60,9 @@
 #define PS2_IRQ_KBD 1u
 #define PS2_IRQ_AUX 12u
 
-/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define PS2_SOFT_DEEPEN_AREAS 25u
-#define PS2_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
+#define PS2_SOFT_DEEPEN_AREAS 27u
+#define PS2_SOFT_DEEPEN_WAVE  18u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -396,25 +398,41 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: ps2: soft return — Wave 17 API return surfaces */
+    /* Grep: ps2: soft return — Wave 17 API return surfaces (kept) */
     kprintf("ps2: soft return via=portio soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ps2: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: ps2: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("ps2: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ps2: soft retmap — Wave 17 return-surface map */
+    /* Grep: ps2: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("ps2: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ps2: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: ps2: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("ps2: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft retcode — Wave 18 retcode catalog */
+    kprintf("ps2: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft deepen wave (Wave 18 stamp) */
     kprintf("ps2: soft deepen wave=%u areas=%u via=portio float=%u "
             "stable=%u channel=%s state=%s ok=%u skip=%u\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE, (unsigned)PS2_SOFT_DEEPEN_AREAS,

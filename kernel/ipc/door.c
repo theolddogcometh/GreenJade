@@ -22,7 +22,7 @@
  *   later reply into a freed slot — reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
  *
- * Soft door call inventory (Wave 17 exclusive deepen — this unit only):
+ * Soft door call inventory (Wave 18 exclusive deepen — this unit only):
  *   - inventory / call / recv / reply / lifecycle / cold / err / path / PASS
  *   - Call: enter / claim / reply / eio / etimedout / enosys / slot_wait /
  *     client_wait + outcome rollup
@@ -32,13 +32,13 @@
  *   - capacity / catalog / tags / deepen / flight / badge / reply_su_inval
  *   - return surface (Wave 17): call|recv|install i64/gj_status buckets
  *     greppable: "door: soft return …"
- *   - return rate / retcode (Wave 17 deepen): call|recv|install rate lamps
+ *   - return rate / retcode (Wave 18 deepen): call|recv|install rate lamps
  *     + retcode catalog greppable: "door: soft return rate|retcode …"
  *   - Cold product snapshot + badge transfer grant/move/fail
  *   greppable: "door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3 / MIG product.
  *
- * Soft ephemeral single-use REPLY (Wave 17 deepen — not full MIG product):
+ * Soft ephemeral single-use REPLY (Wave 18 deepen — not full MIG product):
  *   On slot claim, kernel mints a soft REPLY right bound to the door flight.
  *   First door_reply consumes it; second use fails (stale / second_fail).
  *   Timeout / peer death / thr-exit / init invalidates the soft right.
@@ -68,17 +68,17 @@
 #define DOOR_TAG_CLIENT 2u /* client waiting for a reply */
 #define DOOR_TAG_SLOT   3u /* contender waiting for single-flight slot */
 
-/* Wave 17 exclusive soft deepen stamp (greppable wave=17). */
-#define DOOR_SOFT_DEEPEN_WAVE  17u
-/* +return rate|retcode over Wave 16 return surfaces. */
-#define DOOR_SOFT_DEEPEN_AREAS 26u
+/* Wave 18 exclusive soft deepen stamp (greppable wave=18). */
+#define DOOR_SOFT_DEEPEN_WAVE  18u
+/* +return selftest|retmap over Wave 17 return rate|retcode. */
+#define DOOR_SOFT_DEEPEN_AREAS 28u
 
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
 static u8             g_fReplySoftSelfcheck; /* cold-init self-check once */
 
 /*
- * Soft product inventory (Wave 17 exclusive). Cumulative path tallies across
+ * Soft product inventory (Wave 18 exclusive). Cumulative path tallies across
  * all doors that enter this module. Live/product counters remain per-door
  * (door_stats). greppable: door: soft …
  */
@@ -90,8 +90,8 @@ static u64 g_u64SoftCallEtimedout; /* -ETIMEDOUT terminal arms */
 static u64 g_u64SoftCallEnosys;    /* -ENOSYS terminal arms */
 static u64 g_u64SoftCallSlotWait;  /* contender tag-3 block entries */
 static u64 g_u64SoftCallClientWait;/* in-flight client tag-2 blocks */
-static u64 g_u64SoftCallRetPos;    /* Wave 17: call returned i64Ret >= 0 */
-static u64 g_u64SoftCallRetNeg;    /* Wave 17: call returned i64Ret < 0 */
+static u64 g_u64SoftCallRetPos;    /* Wave 18: call returned i64Ret >= 0 */
+static u64 g_u64SoftCallRetNeg;    /* Wave 18: call returned i64Ret < 0 */
 static u64 g_u64SoftRecvEnter;     /* door_recv entries */
 static u64 g_u64SoftRecvOk;        /* request delivered to server */
 static u64 g_u64SoftRecvPeerDead;  /* PEER_DEAD terminal */
@@ -108,9 +108,9 @@ static u64 g_u64SoftThrExitClient; /* thr-exit cleared client slot */
 static u64 g_u64SoftThrExitServer; /* thr-exit cleared server role */
 static u64 g_u64SoftInstallOk;     /* door_install_endpoint success */
 static u64 g_u64SoftInstallFail;   /* install reject (inval/nodev/cap) */
-static u64 g_u64SoftInstallFailNull; /* Wave 17: null args / no cnode */
-static u64 g_u64SoftInstallFailDead; /* Wave 17: door not live */
-static u64 g_u64SoftInstallFailCap;  /* Wave 17: cap_alloc_install fail */
+static u64 g_u64SoftInstallFailNull; /* Wave 18: null args / no cnode */
+static u64 g_u64SoftInstallFailDead; /* Wave 18: door not live */
+static u64 g_u64SoftInstallFailCap;  /* Wave 18: cap_alloc_install fail */
 static u64 g_u64SoftLogN;          /* inventory log emissions */
 static u8  g_fSoftOnce;            /* one-shot after first call activity */
 
@@ -490,7 +490,7 @@ door_reply_soft_selfcheck(void)
 }
 
 /**
- * Greppable soft door call inventory (Wave 17 exclusive; product / smoke).
+ * Greppable soft door call inventory (Wave 18 exclusive; product / smoke).
  * Prefix-stable markers (door: soft …):
  *   door: soft inventory  — rollup enter/claim/reply + logs + wave
  *   door: soft call       — call path terminal arms + wait tallies
@@ -512,7 +512,11 @@ door_reply_soft_selfcheck(void)
  *   door: soft return     — Wave 17 call|recv|install return surfaces
  *   door: soft return rate— Wave 17 call|recv|install rate lamps
  *   door: soft retcode    — Wave 17 observed i64/status retcode catalog
- *   door: soft deepen     — wave=17 areas stamp
+ *   door: soft return selftest — Wave 18 terminal return surface
+ *   door: soft retmap     — Wave 18 return-surface map
+ *   door: soft return selftest — Wave 18 terminal return surface
+ *   door: soft retmap     — Wave 18 return-surface map
+ *   door: soft deepen     — wave=18 areas stamp
  *   door: soft path       — honesty: soft ≠ bar3 / MIG REPLY product
  *   door: soft inventory PASS / door: soft PASS
  * Companion (not door: soft … prefix):
@@ -745,7 +749,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
 
     /*
      * Grep: door: soft return
-     * Wave 17 public return-surface: call i64 / recv status / install.
+     * Wave 18 public return-surface: call i64 / recv status / install.
      * Soft ≠ MIG REPLY product.
      */
     kprintf("door: soft return call_pos=%lu call_neg=%lu call_eio=%lu "
@@ -866,7 +870,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
 
     /*
      * Grep: door: soft return rate
-     * Wave 17 return-surface rate lamps (soft ≠ product / MIG REPLY).
+     * Wave 17 return-surface rate lamps (kept) (soft ≠ product / MIG REPLY).
      */
     kprintf("door: soft return rate "
             "call_pos=%lu call_neg=%lu "
@@ -899,7 +903,21 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: door: soft return selftest — Wave 18 terminal return surface */
+    kprintf("door: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /* Grep: door: soft retmap — Wave 18 return-surface map */
+    kprintf("door: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
+            "product=OPEN wave=%u soft PASS\n",
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /* Grep: door: soft deepen wave (Wave 18 stamp) */
     kprintf("door: soft deepen wave=%u areas=%u call_enter=%lu "
             "recv_enter=%lu reply_enter=%lu reply_su_create=%lu "
             "ret_call_pos=%lu ret_call_neg=%lu ret_recv_ok=%lu "
@@ -1095,7 +1113,7 @@ door_cold_init(void)
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
     /* Soft REPLY single-use self-check (private scratch door; honesty only). */
     door_reply_soft_selfcheck();
-    /* Grep: door: soft (baseline inventory after cold init; wave=17) */
+    /* Grep: door: soft (baseline inventory after cold init; wave=18) */
     door_soft_inventory_log(&g_doorCold);
 }
 
@@ -1129,7 +1147,7 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
     }
     /*
      * Emit soft inventory on stats read so bring-up smoke also greps
-     * door: soft call/recv/reply/reply_su/return lines (Wave 17; mirrors
+     * door: soft call/recv/reply/reply_su/return lines (Wave 18; mirrors
      * file_lock_count). greppable: door: soft
      */
     door_soft_inventory_log(pDoor);
@@ -1144,7 +1162,7 @@ door_install_endpoint(struct gj_process *pProc, struct gj_door *pDoor,
     if (pProc == NULL || pDoor == NULL || pOutRef == NULL ||
         pProc->pCnode == NULL) {
         door_soft_inc(&g_u64SoftInstallFail);
-        door_soft_inc(&g_u64SoftInstallFailNull); /* Wave 17 return */
+        door_soft_inc(&g_u64SoftInstallFailNull); /* Wave 18 return */
         return GJ_ERR_INVAL;
     }
     if (!door_live(pDoor)) {
@@ -1323,7 +1341,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
 
     if (pDoor == NULL || pRegs == NULL || !pDoor->u32Ready) {
         door_soft_inc(&g_u64SoftCallEnosys);
-        door_soft_inc(&g_u64SoftCallRetNeg); /* Wave 17 return surface */
+        door_soft_inc(&g_u64SoftCallRetNeg); /* Wave 18 return surface */
         door_soft_maybe_once();
         return -LINUX_ENOSYS;
     }
@@ -1414,7 +1432,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             if (i64Ret == -(i64)LINUX_EIO) {
                 door_soft_inc(&g_u64SoftCallEio);
             }
-            /* Wave 17 return surface: pos vs neg i64. */
+            /* Wave 18 return surface: pos vs neg i64. */
             if (i64Ret < 0) {
                 door_soft_inc(&g_u64SoftCallRetNeg);
             } else {

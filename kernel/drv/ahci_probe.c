@@ -20,15 +20,17 @@
  *   ahci: soft regs       — HBA memory offset map
  *   ahci: soft pci        — class 01:06:01 inventory
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
- *   ahci: soft deepen     — wave=17 areas stamp
+ *   ahci: soft return rate — Wave 18 ok/fail rate lamps
+ *   ahci: soft retcode    — Wave 18 retcode catalog
+ *   ahci: soft deepen     — wave=18 areas stamp
  *   ahci: soft ratio      — Wave 15 port/ncs occupancy
  *   ahci: soft headroom   — Wave 15 NP vs PI head
  *   ahci: soft surface    — Wave 16 area catalog
  *   ahci: soft honesty    — Wave 16 bar3/game-I/O non-claims
  *   ahci: soft geom       — Wave 16 HBA reg geometry
  *   ahci: soft return     — Wave 16 return-surface bitmask
- *   ahci: soft return selftest — Wave 17 terminal return surface
- *   ahci: soft retmap     — Wave 17 return-surface map
+ *   ahci: soft return selftest — Wave 17 terminal return surface (kept)
+ *   ahci: soft retmap     — Wave 17 return-surface map (kept)
  *   ahci: soft contract   — Wave 16 soft≠game I/O contract
  *   ahci: soft stats      — emission / probe tallies
  *   ahci: soft inventory PASS|SKIP
@@ -100,9 +102,9 @@
 #define AHCI_BOHC_OOC  (1u << 3) /* OS Ownership Change */
 #define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
 
-/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define AHCI_SOFT_DEEPEN_AREAS 24u
-#define AHCI_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
+#define AHCI_SOFT_DEEPEN_AREAS 26u
+#define AHCI_SOFT_DEEPEN_WAVE  18u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -496,25 +498,41 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: ahci: soft return — Wave 17 API return surfaces */
+    /* Grep: ahci: soft return — Wave 17 API return surfaces (kept) */
     kprintf("ahci: soft return cap=%u pi=%u probe=1 soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (fCapOk != 0 ? 1u : 0u), (fPiOk != 0 ? 1u : 0u), (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: ahci: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("ahci: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft retmap — Wave 17 return-surface map */
+    /* Grep: ahci: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("ahci: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: ahci: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("ahci: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ahci: soft retcode — Wave 18 retcode catalog */
+    kprintf("ahci: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ahci: soft deepen wave (Wave 18 stamp) */
     kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
             "skip=%u\n",

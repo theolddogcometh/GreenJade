@@ -41,7 +41,7 @@
  *   Inventory deepen wave stamp → 16; areas → 15. Wave 9/12 primary lines
  *   stay field-stable. Soft ≠ multi-CPU product / bar3 gate.
  *
- * Wave 17 exclusive soft deepen (this unit only — greppable "smp: soft …"):
+ * Wave 18 exclusive soft deepen (this unit only — greppable "smp: soft …"):
  *   smp: soft return|ret_surface|surface|deepen  — deepen bringup return classes
  *   Inventory deepen wave stamp → 17; areas → 16. Wave 9/12 primary lines
  *   stay field-stable. product_kernel=OPEN. Soft ≠ multi-CPU product / bar3.
@@ -1319,8 +1319,11 @@ smp_bringup_soft_log(void)
             u32CapHead = 0;
         }
 
-        /* Grep: smp: soft deepen */
-        kprintf("smp: soft deepen wave=17 areas=16 verdict=%s tried=%u "
+        /* Grep: smp: soft retmap — Wave 18 return-surface map */
+    kprintf("smp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+
+    /* Grep: smp: soft deepen */
+        kprintf("smp: soft deepen wave=18 areas=17 verdict=%s tried=%u "
                 "ok=%u timeout=%u skipped=%u online=%u cap=%u logs=%u\n",
                 szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,
@@ -1376,19 +1379,19 @@ smp_bringup_soft_log(void)
         /* Grep: smp: soft ratio */
         kprintf("smp: soft ratio ok_bp=%u to_bp=%u skip_bp=%u "
                 "sched_bp=%u tried=%u skipped=%u online=%u cap=%u "
-                "wave=17\n",
+                "wave=18\n",
                 u32OkBp, u32ToBp, u32SkipBp, u32SchedBp, stSoft.u32Tried,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap);
         /* Grep: smp: soft headroom (Wave 15/17) */
         kprintf("smp: soft headroom cap=%u madt=%u stack_slots=%u "
                 "static_max=%u online=%u cap_head=%u madt_head=%u "
-                "wave=17\n",
+                "wave=18\n",
                 stSoft.u32Cap, g_Smp.u32NLocalApic, (u32)GJ_AP_STACK_SLOTS,
                 (u32)GJ_CPU_STATIC_MAX, stSoft.u32Online, u32CapHead,
                 u32MadtHead);
         /*
          * Grep: smp: soft return
-         * Wave 17 return-path catalog — bring-up / ap_run / skip outcomes.
+         * Wave 18 return-path catalog — bring-up / ap_run / skip outcomes.
          * Soft ≠ product multi-CPU / bar3 gate. product_kernel=OPEN.
          */
         kprintf("smp: soft return ok=%u timeout=%u skipped=%u status_fail=%u "
@@ -1396,23 +1399,23 @@ smp_bringup_soft_log(void)
                 "ap_run_fail=%u ap_run_to=%u ap_run_inval=%u ap_run_busy=%u "
                 "start_no_apic=%u start_up=%u start_bad_tramp=%u "
                 "madt_csum_bad=%u skip_dis=%u skip_bsp=%u skip_cap=%u "
-                "product_kernel=OPEN wave=17\n",
+                "product_kernel=OPEN wave=18\n",
                 stSoft.u32Ok, stSoft.u32Timeout, stSoft.u32Skipped,
                 u32StFail, g_u32SoftApPercpuFail, g_u32SoftApIdleFail,
                 stSoft.u32ApRunOk, stSoft.u32ApRunFail, stSoft.u32ApRunTimeout,
                 g_u32SoftApRunInval, g_u32SoftApRunBusy, g_u32SoftStartNoApic,
                 g_u32SoftStartUp, g_u32SoftStartBadTramp, g_u32SoftMadtCsumBad,
                 g_u32SoftSkipDis, g_u32SoftSkipBsp, g_u32SoftSkipCap);
-        /* Grep: smp: soft ret_surface — Wave 17 terminal return classes */
+        /* Grep: smp: soft ret_surface — Wave 18 terminal return classes */
         kprintf("smp: soft ret_surface bringup=ok|timeout|skip|status_fail "
                 "ap=percpu_fail|idle_fail ap_run=ok|fail|to|inval|busy "
                 "start=no_apic|up|bad_tramp madt=csum_bad "
-                "skip=dis|bsp|cap product_kernel=OPEN areas=16 wave=17\n");
-        /* Grep: smp: soft surface (Wave 17 area catalog) */
+                "skip=dis|bsp|cap product_kernel=OPEN areas=17 wave=18\n");
+        /* Grep: smp: soft surface (Wave 18 area catalog) */
         kprintf("smp: soft surface deepen,verdict,handshake,online,sipi,"
                 "x2,fail,ratio,path,headroom,return,ret_surface,surface,"
-                "PASS,inventory,ap_run areas=16 wave=17\n");
-        /* Grep: smp: soft path (Wave 17 honesty; Wave12 path retained) */
+                "PASS,inventory,ap_run areas=17 wave=18\n");
+        /* Grep: smp: soft path (Wave 18 honesty; Wave12 path retained) */
         kprintf("smp: soft path claim=MADT+INIT-SIPI+ap_run "
                 "phases=ENTRY..SCHED soft=Wave17 "
                 "(soft inventory; not bar3)\n");

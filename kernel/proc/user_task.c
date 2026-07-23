@@ -11,7 +11,7 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product inventory (Wave 17 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 18 exclusive deepen; this unit only):
  * greppable: "user: soft …" | "user_task: soft …"
  *   user: soft inventory …
  *   user: soft stats …
@@ -21,10 +21,10 @@
  *   user: soft recheck …
  *   user: soft catalog …
  *   user: soft va …          (dual-window VA geometry)
- *   user: soft return …      (Wave 17 return-path catalog)
- *   user: soft ret_surface … (Wave 17 terminal return classes)
- *   user: soft surface …     (Wave 17 area catalog)
- *   user: soft deepen wave=17 …
+ *   user: soft return …      (Wave 18 return-path catalog)
+ *   user: soft ret_surface … (Wave 18 terminal return classes)
+ *   user: soft surface …     (Wave 18 area catalog)
+ *   user: soft deepen wave=18 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -64,8 +64,8 @@ extern char gj_protonrt_user_blob_end[];
 static int g_fUserMapped;
 static int g_fPersMapped;
 
-/* ---- Soft map / enter counters (grep: user: soft …) Wave 17 ----------- */
-#define GJ_USER_SOFT_WAVE 17u
+/* ---- Soft map / enter counters (grep: user: soft …) Wave 18 ----------- */
+#define GJ_USER_SOFT_WAVE 18u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -235,7 +235,7 @@ user_soft_inventory(const char *szVia)
 
     /*
      * Grep: user: soft return
-     * Wave 17 return-path catalog — map/enter/layout/recheck outcomes.
+     * Wave 18 return-path catalog — map/enter/layout/recheck outcomes.
      * Soft ≠ bar3 / product ring3 gate. product_kernel=OPEN.
      */
     kprintf("user: soft return ring3_ok=%u ring3_fail=%u pers_ok=%u "
@@ -254,16 +254,16 @@ user_soft_inventory(const char *szVia)
             g_u32SoftRecheckFailRing3 + g_u32SoftRecheckFailPers,
             GJ_USER_SOFT_WAVE);
 
-    /* Grep: user: soft ret_surface — Wave 17 terminal return classes */
+    /* Grep: user: soft ret_surface — Wave 18 terminal return classes */
     kprintf("user: soft ret_surface map=ring3_ok|ring3_fail|pers_ok|pers_fail "
             "enter=ok|skip soft=ok|bad layout|as|install|stack=fail "
-            "recheck=pass|fail product_kernel=OPEN areas=14 wave=%u\n",
+            "recheck=pass|fail product_kernel=OPEN areas=15 wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
-    /* Grep: user: soft surface — Wave 17 area catalog */
+    /* Grep: user: soft surface — Wave 18 area catalog */
     kprintf("user: soft surface inventory,stats,map,layout,enter,recheck,"
             "catalog,va,path,return,ret_surface,surface,deepen "
-            "areas=14 wave=%u\n",
+            "areas=15 wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user: soft deepen */
@@ -300,6 +300,9 @@ user_soft_inventory(const char *szVia)
     kprintf("user_task: soft ret_surface map=ring3|pers enter=ok|skip "
             "soft_bad product_kernel=OPEN wave=%u\n",
             GJ_USER_SOFT_WAVE);
+
+    /* Grep: user_task: soft retmap — Wave 18 return-surface map */
+    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
 
     /* Grep: user_task: soft deepen */
     kprintf("user_task: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "

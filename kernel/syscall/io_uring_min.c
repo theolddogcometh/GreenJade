@@ -17,7 +17,7 @@
  * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
  * not bar3, and not a Deck Top-50 claim.
  *
- * Soft inventory (Wave 14 base + Wave 17 exclusive deepen) — greppable "io_uring: soft …":
+ * Soft inventory (Wave 14 base + Wave 18 exclusive deepen) — greppable "io_uring: soft …":
  *   io_uring: soft inventory   — pool/depth caps + call rollup + wave
  *   io_uring: soft setup       — setup ok/enomem/efault tallies
  *   io_uring: soft enter       — enter/submit/inject/eagain tallies
@@ -31,7 +31,7 @@
  *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
  *   io_uring: soft last        — Wave 15 live pool snapshot lamps
  *   io_uring: soft catalog     — Wave 15 surface catalog stamp
- *   io_uring: soft deepen      — wave=17 areas stamp
+ *   io_uring: soft deepen      — wave=18 areas stamp
  *   io_uring: soft inventory PASS / soft PASS
  * greppable: io_uring: soft
  *
@@ -273,13 +273,13 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 17 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE  17u
+/* Wave 18 soft inventory stamp (file-local; never product gate). */
+#define GJ_IORING_SOFT_WAVE  18u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 19u
+#define GJ_IORING_SOFT_AREAS 20u
 
 /*
- * Soft product inventory (Wave 17 exclusive deepen). File-local sticky
+ * Soft product inventory (Wave 18 exclusive deepen). File-local sticky
  * counters; wrap OK; diagnostics only — never hard-gate setup/enter/register.
  * greppable: io_uring: soft
  */
@@ -426,7 +426,7 @@ ioring_soft_scan(void)
 }
 
 /**
- * Greppable soft inventory (Wave 17 exclusive deepen). Prefix "io_uring: soft …".
+ * Greppable soft inventory (Wave 18 exclusive deepen). Prefix "io_uring: soft …".
  * Pure observation — never gates min-rings smoke PASS.
  * Honesty: min rings ≠ full game I/O (soft scaffold only).
  *
@@ -628,23 +628,23 @@ ioring_soft_log(void)
     /* Grep: io_uring: soft catalog (Wave 15 deepen) */
     kprintf("io_uring: soft catalog wave=%u areas=%u "
             "surfaces=inventory,setup,enter,register,mmap,sqe,pool,"
-            "inject,honesty,path,rates,last,catalog,return,deepen,PASS\n",
+            "inject,honesty,path,rates,last,catalog,return,retmap,deepen,PASS\n",
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS);
 
-        /* Grep: io_uring: soft surfaces (Wave 17 deepen) */
+        /* Grep: io_uring: soft surfaces (Wave 18 deepen) */
     kprintf("io_uring: soft surfaces count=%u wave=%u "
             "names=inventory,pool,calls,path,caps,inject,honesty,rates,"
-            "last,catalog,surfaces,note,return,deepen,PASS\n",
+            "last,catalog,surfaces,note,return,retmap,deepen,PASS\n",
             (unsigned)GJ_IORING_SOFT_AREAS, (unsigned)GJ_IORING_SOFT_WAVE);
 
-    /* Grep: io_uring: soft note (Wave 17 deepen) */
-    kprintf("io_uring: soft note milestone=wave17 exclusive=1 "
+    /* Grep: io_uring: soft note (Wave 18 deepen) */
+    kprintf("io_uring: soft note milestone=wave18 exclusive=1 "
             "min_rings=1 full_game_io=0 soft_only=1 not_bar3=1 "
             "wave=%u\n",
             (unsigned)GJ_IORING_SOFT_WAVE);
 
-    /* Grep: io_uring: soft return (Wave 17 deepen) */
+    /* Grep: io_uring: soft return (Wave 18 deepen) */
     kprintf("io_uring: soft return setup_ok=%lu setup_enomem=%lu "
             "enter_ok=%lu enter_ebadf=%lu enter_eagain=%lu reg_ok=%lu "
             "product_gate=0 wave=%u\n",
@@ -657,9 +657,12 @@ ioring_soft_log(void)
             (unsigned)GJ_IORING_SOFT_WAVE);
 
 /* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
+    /* Grep: io_uring: soft retmap — Wave 18 return-surface map */
+    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+
     kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "
             "used=%u mapped=%u setup_ok=%lu enter_ok=%lu sqe_exec=%lu "
-            "(Wave 17 exclusive; min rings soft scaffold; not product game I/O; "
+            "(Wave 18 exclusive; min rings soft scaffold; not product game I/O; "
             "not bar3)\n",
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS,

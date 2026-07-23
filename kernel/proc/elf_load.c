@@ -6,7 +6,7 @@
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 17 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 18 exclusive deepen; this unit only; never hard-gates):
  * greppable: "elf: soft …" | "elf_load: soft …"
  *   elf: soft inventory …
  *   elf: soft probe …
@@ -20,10 +20,10 @@
  *   elf: soft handoff …
  *   elf: soft interp …
  *   elf: soft path …
- *   elf: soft return …       (Wave 17 return-path catalog)
- *   elf: soft ret_surface …  (Wave 17 terminal return classes)
- *   elf: soft surface …      (Wave 17 area catalog)
- *   elf: soft deepen wave=17 …
+ *   elf: soft return …       (Wave 18 return-path catalog)
+ *   elf: soft ret_surface …  (Wave 18 terminal return classes)
+ *   elf: soft surface …      (Wave 18 area catalog)
+ *   elf: soft deepen wave=18 …
  *   elf: soft catalog …      (capacity honesty rollup)
  *   elf: soft bias …         (dyn/so bias + step geometry)
  *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
@@ -139,7 +139,7 @@ static u32              g_cSo;
  * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 17u
+#define GJ_ELF_SOFT_WAVE 18u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -347,7 +347,7 @@ elf_soft_inventory(const char *szVia)
 
     /*
      * Grep: elf: soft return
-     * Wave 17 return-path catalog — probe/load/reloc/handoff outcomes.
+     * Wave 18 return-path catalog — probe/load/reloc/handoff outcomes.
      * Soft ≠ bar3 / product DoD. product_kernel=OPEN.
      */
     kprintf("elf: soft return probe_ok=%u probe_fail=%u load_ok=%u "
@@ -360,17 +360,17 @@ elf_soft_inventory(const char *szVia)
             g_u32SoftVerifyFail, cReg, g_u32SoftInterpFirst,
             g_u32SoftDirect, GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf: soft ret_surface — Wave 17 terminal return classes */
+    /* Grep: elf: soft ret_surface — Wave 18 terminal return classes */
     kprintf("elf: soft ret_surface probe=ok|fail load=ok|fail "
             "reloc=hits|ops handoff=ok|fail verify=ok|fail "
             "so_live interp=first|direct product_kernel=OPEN "
-            "areas=20 wave=%u\n",
+            "areas=21 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf: soft surface — Wave 17 area catalog */
+    /* Grep: elf: soft surface — Wave 18 area catalog */
     kprintf("elf: soft surface inventory,probe,load,reloc,reloc_kind,so,"
             "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=20 wave=%u\n",
+            "surface,deepen,catalog,bias,capacity areas=21 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft deepen */
@@ -494,7 +494,7 @@ elf_soft_inventory(const char *szVia)
             "(soft inventory; not bar3)\n",
             GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf_load: soft return (Wave 17 twin) */
+    /* Grep: elf_load: soft return (Wave 18 twin) */
     kprintf("elf_load: soft return probe_ok=%u probe_fail=%u load_ok=%u "
             "load_fail=%u reloc_hits=%u handoff_ok=%u handoff_fail=%u "
             "verify_ok=%u verify_fail=%u so_live=%u "
@@ -504,17 +504,20 @@ elf_soft_inventory(const char *szVia)
             g_u32SoftHandoffFail, g_u32SoftVerifyOk, g_u32SoftVerifyFail,
             cReg, GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf_load: soft ret_surface (Wave 17 twin) */
+    /* Grep: elf_load: soft ret_surface (Wave 18 twin) */
     kprintf("elf_load: soft ret_surface probe=ok|fail load=ok|fail "
             "reloc handoff=ok|fail verify=ok|fail product_kernel=OPEN "
             "wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf_load: soft surface (Wave 17 twin) */
+    /* Grep: elf_load: soft surface (Wave 18 twin) */
     kprintf("elf_load: soft surface inventory,probe,load,reloc,reloc_kind,so,"
             "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=20 wave=%u\n",
+            "surface,deepen,catalog,bias,capacity areas=21 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft retmap — Wave 18 return-surface map */
+    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
 
     /* Grep: elf_load: soft deepen */
     kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "

@@ -16,7 +16,7 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
- * Wave 17 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ * Wave 18 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
  *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
  *   iommu: soft present    — DMAR/IVRS presence lamps
  *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
@@ -29,11 +29,13 @@
  *   iommu: soft lamps      — composite soft lamps
  *   iommu: soft honesty    — explicit non-claims catalog (W15)
  *   iommu: soft stats      — rollup for agent greps (W15)
- *   iommu: soft surfaces   — Wave 17 return-surface catalog
+ *   iommu: soft surfaces   — Wave 18 return-surface catalog
  *   iommu: soft vendor     — Wave 17 vendor/units return lamps
  *   iommu: soft window_cap — Wave 17 window-cap soft return surface
  *   iommu: soft return     — Wave 17 create/destroy return taxonomy
- *   iommu: soft deepen     — wave=17 stamp + area count
+ *   iommu: soft return selftest — Wave 18 terminal return surface
+ *   iommu: soft retmap     — Wave 18 return-surface map
+ *   iommu: soft deepen     — wave=18 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close;
@@ -62,13 +64,13 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 17 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE  17u
+/* Wave 18 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE  18u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 21u
+#define IOMMU_SOFT_AREAS 23u
 
 /*
- * Wave 17 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 18 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: iommu: soft surfaces
  */
 #define IOMMU_SOFT_SURF_INVENTORY  (1u << 0)
@@ -279,7 +281,7 @@ iommu_soft_note_win_peak(u32 cUsed)
 }
 
 /**
- * Wave 17 greppable soft inventory dump (prefix "iommu: soft …").
+ * Wave 18 greppable soft inventory dump (prefix "iommu: soft …").
  * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
  *
  * greppable: iommu: soft
@@ -437,7 +439,7 @@ iommu_soft_inventory_log(void)
             g_cSoftBmDeny, g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
 
     /*
-     * Wave 17: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 18: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: iommu: soft surfaces
      */
     kprintf("iommu: soft surfaces surf=0x%x catalog=%u "
@@ -449,7 +451,7 @@ iommu_soft_inventory_log(void)
             (unsigned)IOMMU_SOFT_WAVE);
 
     /*
-     * Wave 17: vendor/units return lamps.
+     * Wave 18: vendor/units return lamps.
      * Grep: iommu: soft vendor
      */
     kprintf("iommu: soft vendor name=%s code=%u units=%u "
@@ -462,7 +464,7 @@ iommu_soft_inventory_log(void)
             fPresent, (unsigned)IOMMU_SOFT_WAVE);
 
     /*
-     * Wave 17: window-cap soft return surface (software BDF table).
+     * Wave 18: window-cap soft return surface (software BDF table).
      * Grep: iommu: soft window_cap
      */
     kprintf("iommu: soft window_cap used=%u max=%u create_ok=%u "
@@ -474,7 +476,7 @@ iommu_soft_inventory_log(void)
             g_cSoftWinPeak, (unsigned)IOMMU_SOFT_WAVE);
 
     /*
-     * Wave 17: create/destroy return taxonomy.
+     * Wave 18: create/destroy return taxonomy.
      * Grep: iommu: soft return
      */
     kprintf("iommu: soft return create_ok=%u create_fail=%u update=%u "
@@ -487,7 +489,7 @@ iommu_soft_inventory_log(void)
 
     /*
      * Grep: iommu: soft return rate
-     * Wave 17 return-surface rate lamps (create/destroy/revoke).
+     * Wave 17 return-surface rate lamps (kept) (create/destroy/revoke).
      */
     kprintf("iommu: soft return rate "
             "create_ok=%u create_fail=%u destroy=%u "
@@ -510,9 +512,23 @@ iommu_soft_inventory_log(void)
             "(retcode catalog; Soft≠product always-on IOMMU; soft≠product)\n",
             (unsigned)IOMMU_SOFT_WAVE);
 
-    /* Grep: iommu: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: iommu: soft return selftest — Wave 18 terminal return surface */
+    kprintf("iommu: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft retmap — Wave 18 return-surface map */
+    kprintf("iommu: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
+            "product=OPEN wave=%u soft PASS\n",
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft deepen wave (Wave 18 stamp) */
     kprintf("iommu: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 17 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 18 exclusive; soft only; not product always-on IOMMU; "
             "not bar3; soft≠product)\n",
             (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
             g_cSoftInvLogs, (unsigned)u32Surf);

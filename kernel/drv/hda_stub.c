@@ -35,7 +35,9 @@
  *   hda: soft stats       — probe/smoke/inventory emission tallies
  *   hda: soft path        — honesty: kernel soft ≠ Steam/game audio
  *   hda: soft honesty     — bar3/Steam/PipeWire non-claims
- *   hda: soft deepen      — wave=17 areas stamp
+ *   hda: soft return rate — Wave 18 ok/fail rate lamps
+ *   hda: soft retcode    — Wave 18 retcode catalog
+ *   hda: soft deepen      — wave=18 areas stamp
  *   hda: soft ratio       — Wave 16 stream occupancy lamps
  *   hda: soft headroom    — Wave 16 free stream slots
  *   hda: soft surface     — Wave 16 area catalog
@@ -160,8 +162,8 @@ static u32 g_u32SoftInventoryLogs;
 static u32 g_u32SoftProbeLogs;
 static u32 g_u32SoftSmokeLogs;
 /* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define HDA_SOFT_DEEPEN_AREAS 29u
-#define HDA_SOFT_DEEPEN_WAVE  17u
+#define HDA_SOFT_DEEPEN_AREAS 31u
+#define HDA_SOFT_DEEPEN_WAVE  18u
 
 static void hda_soft_inventory_log(const char *szVia);
 
@@ -2438,25 +2440,41 @@ hda_soft_inventory_log(const char *szVia)
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: hda: soft return — Wave 17 API return surfaces */
+    /* Grep: hda: soft return — Wave 17 API return surfaces (kept) */
     kprintf("hda: soft return soft_inv=1 path=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: hda: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("hda: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft retmap — Wave 17 return-surface map */
+    /* Grep: hda: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("hda: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: hda: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("hda: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft retcode — Wave 18 retcode catalog */
+    kprintf("hda: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft deepen wave (Wave 18 stamp) */
     kprintf("hda: soft deepen wave=%u areas=%u via=%s present=%u mmio=%u "
             "hw_corb=%u stream_dma=%u codec_prog=%u open=%u run=%u "
             "ok=1 skip=0\n",

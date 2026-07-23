@@ -40,7 +40,7 @@
  * virtual counter).
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 17: freq soft + tick soft + path honesty)
+ * Soft inventory deepen (Wave 18: freq soft + tick soft + path honesty)
  * -------------------------------------------------------------------------
  * Greppable family "aarch64: timer soft …" plus focused sub-markers:
  *   aarch64: timer soft frq=… t0=… t1=… adv=… delta=… hits=…
@@ -51,9 +51,9 @@
  *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
  *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
  *   aarch64: timer tick soft PASS | FAIL
- *   aarch64: timer soft inventory wave=17 …
+ *   aarch64: timer soft inventory wave=18 …
  *   aarch64: timer soft stats …
- *   aarch64: timer soft deepen wave=17 areas=…
+ *   aarch64: timer soft deepen wave=18 areas=…
  *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
  *   aarch64: timer soft return inv_ret=… product_kernel=OPEN
  *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
@@ -99,13 +99,13 @@ extern void aarch64_uart_put_hex(unsigned long v);
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
 
-/* Wave 17 soft inventory stamp (greppable wave=17). */
-#define TIMER_SOFT_WAVE 17u
+/* Wave 18 soft inventory stamp (greppable wave=18). */
+#define TIMER_SOFT_WAVE 18u
 
 /* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
 #define TIMER_SOFT_AREAS 9u
 
-/* Soft inventory emit counter (Wave 17 stats). */
+/* Soft inventory emit counter (Wave 18 stats). */
 static unsigned g_cTimerSoftLogs;
 
 /* Soft inventory snapshot from tick path (stack-local via out params). */
@@ -468,7 +468,7 @@ timer_tick_soft_inventory(const struct timer_tick_soft_inv *pInv,
 }
 
 /*
- * Combined soft inventory line (greppable "aarch64: timer soft …"; Wave 17).
+ * Combined soft inventory line (greppable "aarch64: timer soft …"; Wave 18).
  * Returns 1 if both freq soft and tick soft passed.
  */
 static int
@@ -527,7 +527,7 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
     aarch64_uart_put_hex((unsigned long)fTickSoft);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft inventory — Wave 17 rollup. */
+    /* Grep: aarch64: timer soft inventory — Wave 18 rollup. */
     aarch64_uart_puts("aarch64: timer soft inventory wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts(" frq=");
@@ -567,7 +567,7 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
 
     /*
      * Grep: aarch64: timer soft deepen
-     * Wave 17 area catalog — CNTV soft arm only; no IRQ delivery claim.
+     * Wave 18 area catalog — CNTV soft arm only; no IRQ delivery claim.
      */
     aarch64_uart_puts("aarch64: timer soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
@@ -578,7 +578,7 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
     aarch64_uart_put_hex((unsigned long)g_cTimerSoftLogs);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft surf — Wave 17 freq/tick lamps */
+    /* Grep: aarch64: timer soft surf — Wave 18 freq/tick lamps */
     aarch64_uart_puts("aarch64: timer soft surf freq_ok=");
     aarch64_uart_put_hex((unsigned long)fFreqSoft);
     aarch64_uart_puts(" tick_ok=");
@@ -615,13 +615,13 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft exclusive — Wave 17 exclusive deepen */
+    /* Grep: aarch64: timer soft exclusive — Wave 18 exclusive deepen */
     aarch64_uart_puts("aarch64: timer soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft open — Wave 17 open-lamp rollup */
+    /* Grep: aarch64: timer soft open — Wave 18 open-lamp rollup */
     aarch64_uart_puts("aarch64: timer soft open multi_server=0 confine=0 "
                       "bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
@@ -633,7 +633,7 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
         fSoft = 1;
     }
 
-    /* Grep: aarch64: timer soft return — Wave 17 return surfaces */
+    /* Grep: aarch64: timer soft return — Wave 18 return surfaces */
     aarch64_uart_puts("aarch64: timer soft return inv_ret=");
     aarch64_uart_put_hex((unsigned long)(fSoft != 0 ? 1ul : 0ul));
     aarch64_uart_puts(" freq=");
@@ -725,7 +725,7 @@ aarch64_timer_probe(void)
     /* Soft tick inventory (arm bits + dual ISTATUS + quiet end). */
     fTickSoft = timer_tick_soft_inventory(&inv, u64Adv);
 
-    /* Wave 17 combined soft inventory under "aarch64: timer soft …". */
+    /* Wave 18 combined soft inventory under "aarch64: timer soft …". */
     fSoft = timer_soft_inventory(u32Frq, u64T0, u64T1, u64Adv, &inv,
                                  fFreqSoft, fTickSoft);
 

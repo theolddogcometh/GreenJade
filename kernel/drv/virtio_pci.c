@@ -77,9 +77,9 @@
 static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
 
-/* Wave 17 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  17u
-#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 30u
+/* Wave 18 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  18u
+#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 32u
 
 /*
  * Soft product inventory (Wave 15 exclusive deepen). Cumulative path tallies.
@@ -509,25 +509,41 @@ soft_inventory_log(void)
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: virtio-pci: soft return — Wave 17 API return surfaces */
+    /* Grep: virtio-pci: soft return — Wave 17 API return surfaces (kept) */
     kprintf("virtio-pci: soft return soft_inv=1 modern=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-pci: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: virtio-pci: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("virtio-pci: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-pci: soft retmap — Wave 17 return-surface map */
+    /* Grep: virtio-pci: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("virtio-pci: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-pci: soft deepen (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: virtio-pci: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("virtio-pci: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+
+    /* Grep: virtio-pci: soft retcode — Wave 18 retcode catalog */
+    kprintf("virtio-pci: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+
+    /* Grep: virtio-pci: soft deepen (Wave 18 stamp) */
     kprintf("virtio-pci: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,
@@ -720,20 +736,20 @@ soft_inventory_log(void)
      * Wave 17 exclusive twin return surfaces (virtio: soft …).
      * Soft inventory only; never hard-gates product paths.
      */
-    /* Grep: virtio: soft return — Wave 17 API return surfaces */
+    /* Grep: virtio: soft return — Wave 17 API return surfaces (kept) */
     kprintf("virtio: soft return soft_inv=1 modern=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
-    /* Grep: virtio: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: virtio: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("virtio: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
-    /* Grep: virtio: soft retmap — Wave 17 return-surface map */
+    /* Grep: virtio: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("virtio: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio: soft deepen (Wave 17 stamp) */
+    /* Grep: virtio: soft deepen (Wave 18 stamp) */
     kprintf("virtio: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,

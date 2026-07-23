@@ -40,7 +40,9 @@
  *   virtio-input: soft types …       (Wave 15)
  *   virtio-input: soft kicks …       (Wave 15)
  *   virtio-input: soft honesty …     (Wave 15)
- *   virtio-input: soft deepen wave=17 …
+ *   virtio-input: soft return rate — Wave 18 ok/fail rate lamps
+ *   virtio-input: soft retcode    — Wave 18 retcode catalog
+ *   virtio-input: soft deepen wave=18 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -86,9 +88,9 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MIN 0
 #define VI_ABS_SOFT_MAX 32767
 
-/* Wave 17 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define VI_SOFT_WAVE  17u
-#define VI_SOFT_AREAS 33u
+/* Wave 18 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define VI_SOFT_WAVE  18u
+#define VI_SOFT_AREAS 35u
 
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
@@ -795,25 +797,41 @@ soft_inventory(const char *szVia)
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: virtio-input: soft return — Wave 17 API return surfaces */
+    /* Grep: virtio-input: soft return — Wave 17 API return surfaces (kept) */
     kprintf("virtio-input: soft return soft_inv=1 input=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)VI_SOFT_WAVE);
 
-    /* Grep: virtio-input: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: virtio-input: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("virtio-input: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)VI_SOFT_WAVE);
 
-    /* Grep: virtio-input: soft retmap — Wave 17 return-surface map */
+    /* Grep: virtio-input: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("virtio-input: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)VI_SOFT_WAVE);
 
-    /* Grep: virtio-input: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: virtio-input: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("virtio-input: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)VI_SOFT_WAVE);
+
+    /* Grep: virtio-input: soft retcode — Wave 18 retcode catalog */
+    kprintf("virtio-input: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)VI_SOFT_WAVE);
+
+    /* Grep: virtio-input: soft deepen wave (Wave 18 stamp) */
     kprintf("virtio-input: soft deepen wave=%u areas=%u via=%s ready=%u "
             "events=%u polls=%u posted=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

@@ -17,8 +17,9 @@
  *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
  *   when virtio-input is absent (empty ring).
  *
- * Soft door inventory (Wave 17 exclusive deepen; this unit only):
+ * Soft door inventory (Wave 18 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
+ *   - soft retmap: Wave 18 return-surface map (ok|fail|… classes)
  *   - Ownership: claim / reclaim / release / busy / claim_inval
  *   - Present: PRESENT / PRESENT_FB ok|fail|nodev + multi-frame tallies
  *   - Input: poll + pop hit/empty (soft-ok without virtio-input)
@@ -51,8 +52,8 @@
 #define GJ_SESS_MAX_DIM 256u
 #define GJ_SESS_TMP_W   64u
 #define GJ_SESS_TMP_H   64u
-/* Wave 17 deepen stamp (file-local; never hard-gates). */
-#define GJ_SESS_SOFT_WAVE 17u
+/* Wave 18 deepen stamp (file-local; never hard-gates). */
+#define GJ_SESS_SOFT_WAVE 18u
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -62,7 +63,7 @@ static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
 /*
- * Soft product inventory (Wave 17 exclusive deepen). Cumulative path tallies.
+ * Soft product inventory (Wave 18 exclusive deepen). Cumulative path tallies.
  * greppable: session_door: soft …
  */
 static u32 g_u32SoftClaimInval;    /* CLAIM bad token */
@@ -250,7 +251,7 @@ sess_soft_note_op(u32 u32Op)
 }
 
 /**
- * Greppable soft session door inventory (product / smoke; Wave 17 deepen).
+ * Greppable soft session door inventory (product / smoke; Wave 18 deepen).
  *   session_door: soft honesty …
  *   session_door: soft inventory …
  *   session_door: soft claim …
@@ -477,14 +478,14 @@ sess_soft_inventory_log(void)
             (long)g_i64SoftLastRet);
     cAreas++;
 
-    /* Grep: session_door: soft capacity — Wave 17 design-constant lamps. */
+    /* Grep: session_door: soft capacity — Wave 18 design-constant lamps. */
     kprintf("session_door: soft capacity max_dim=%u tmp=%ux%u bpp=4 "
             "ops=9 reclaim=1 multi_frame=1 map_scanout=1 "
             "present_fb=direct|blit soft PASS wave=%u\n",
             GJ_SESS_MAX_DIM, GJ_SESS_TMP_W, GJ_SESS_TMP_H, GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft headroom — Wave 17 live slack lamps. */
+    /* Grep: session_door: soft headroom — Wave 18 live slack lamps. */
     kprintf("session_door: soft headroom calls=%u peak_calls=%u "
             "claims=%u peak_claims=%u user_fb=%u peak_user_fb=%u "
             "ok=%u err_sum=%u wave=%u\n",
@@ -493,7 +494,7 @@ sess_soft_inventory_log(void)
             GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft surface — Wave 17 surface bit lamps. */
+    /* Grep: session_door: soft surface — Wave 18 surface bit lamps. */
     kprintf("session_door: soft surface ready=%u input=%u gpu=%u owned=%u "
             "user_fb=%u multi=%u present_ok=%u fb_ok=%u map_ok=%u "
             "surf=0x%x wave=%u\n",
@@ -509,7 +510,7 @@ sess_soft_inventory_log(void)
             GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft geom — Wave 17 scanout geometry snapshot. */
+    /* Grep: session_door: soft geom — Wave 18 scanout geometry snapshot. */
     kprintf("session_door: soft geom ready=%u w=%u h=%u max_dim=%u "
             "tmp=%ux%u bpp=bgra4 soft %s wave=%u\n",
             u32Ready, u32W, u32H, GJ_SESS_MAX_DIM, GJ_SESS_TMP_W,
@@ -533,7 +534,7 @@ sess_soft_inventory_log(void)
             GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft return — Wave 17 API return surfaces */
+    /* Grep: session_door: soft return — Wave 18 API return surfaces */
     kprintf("session_door: soft return ok=%u inval=%u nodev=%u busy=%u "
             "fault=%u claims=%u present_ok=%u present_fb_ok=%u "
             "input_poll=%u input_pop_hit=%u ready=%u "
@@ -544,7 +545,10 @@ sess_soft_inventory_log(void)
             u32Ready, GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft deepen — Wave 17 stamp + area count. */
+    /* Grep: session_door: soft retmap — Wave 18 return-surface map */
+    kprintf("session_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+
+    /* Grep: session_door: soft deepen — Wave 18 stamp + area count. */
     kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u owned=%u presents_user=%u claims=%u multi=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",

@@ -9,14 +9,14 @@
  *
  * greppable: GJ_COLD_MODE_ cold_ipc_register_service cold_ipc_stats
  *
- * Soft product inventory (Wave 14 base + Wave 17 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 14 base + Wave 18 exclusive deepen; this unit only):
  *   - Mode mask / path preference (service-first vs doors-first)
  *   - Service + queue-consumer registration gens + bind tallies
  *   - Queue slot lifecycle (FREE/PENDING/CLAIMED/DONE) + depth
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=17 stamp
+ *   - soft deepen wave=18 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -65,13 +65,13 @@ static u64 g_u64RegQueue;
 static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
-/* Wave 17 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE  17u
+/* Wave 18 soft inventory stamp (file-local; never product gate). */
+#define GJ_COLD_SOFT_WAVE  18u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_COLD_SOFT_AREAS 20u
+#define GJ_COLD_SOFT_AREAS 21u
 
 /*
- * Soft product inventory (Wave 17 exclusive deepen). Cumulative unless noted live.
+ * Soft product inventory (Wave 18 exclusive deepen). Cumulative unless noted live.
  * greppable: cold_ipc: soft … / cold: soft …
  */
 static u32 g_u32SoftInitEnter;     /* cold_ipc_init entries */
@@ -94,7 +94,7 @@ static u32 g_u32SoftLocalHit;      /* service_local with pfn bound */
 static u32 g_u32SoftLocalMiss;     /* service_local unbound → ENOSYS */
 static u32 g_u32SoftLogN;          /* soft inventory log emissions */
 static u8  g_fSoftInvOnce;         /* one-shot deep dump after activity */
-/* Wave 17 deepen: attach / stats / gen-mismatch / mode API lamps. */
+/* Wave 18 deepen: attach / stats / gen-mismatch / mode API lamps. */
 static u32 g_u32SoftAttachSet;     /* cold_ipc_set_personality_attached calls */
 static u32 g_u32SoftAttachOn;      /* attach set to 1 */
 static u32 g_u32SoftAttachOff;     /* attach set to 0 */
@@ -435,23 +435,23 @@ soft_inventory_log(void)
     /* Grep: cold_ipc: soft catalog (Wave 15 deepen) */
     kprintf("cold_ipc: soft catalog wave=%u areas=%u "
             "surfaces=inventory,mode,service,queue,path,submit,dequeue,"
-            "reply,init,attach,stats,rates,honesty,catalog,return,deepen,PASS\n",
+            "reply,init,attach,stats,rates,honesty,catalog,return,retmap,deepen,PASS\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS);
 
-    /* Grep: cold_ipc: soft surfaces (Wave 17 deepen) */
+    /* Grep: cold_ipc: soft surfaces (Wave 18 deepen) */
     kprintf("cold_ipc: soft surfaces count=%u "
             "names=inventory,mode,service,queue,path,submit,dequeue,"
             "reply,init,attach,stats,rates,honesty,catalog,surfaces,"
-            "note,return,deepen,PASS wave=%u\n",
+            "note,return,retmap,deepen,PASS wave=%u\n",
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
-    /* Grep: cold_ipc: soft note (Wave 17 deepen) */
-    kprintf("cold_ipc: soft note milestone=wave17 exclusive=1 "
+    /* Grep: cold_ipc: soft note (Wave 18 deepen) */
+    kprintf("cold_ipc: soft note milestone=wave18 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
 
-    /* Grep: cold_ipc: soft return (Wave 17 deepen) */
+    /* Grep: cold_ipc: soft return (Wave 18 deepen) */
     kprintf("cold_ipc: soft return submit_svc=%u submit_door=%u "
             "submit_queue=%u submit_enosys=%u deq_claim=%u deq_empty=%u "
             "product_gate=0 wave=%u\n",
@@ -459,10 +459,13 @@ soft_inventory_log(void)
             g_u32SoftSubmitEnosys, g_u32SoftDeqClaim, g_u32SoftDeqEmpty,
             (unsigned)GJ_COLD_SOFT_WAVE);
 
+    /* Grep: cold_ipc: soft retmap — Wave 18 return-surface map */
+    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+
     /* Grep: cold_ipc: soft deepen wave (Wave 15 stamp) */
     kprintf("cold_ipc: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
-            "(Wave 17 exclusive; soft inventory; not bar3)\n",
+            "(Wave 18 exclusive; soft inventory; not bar3)\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS,
             g_u32SoftLogN, u32SvcBound, u32DoorsUsable, u32QueueUsable,
             (unsigned long long)g_u64Submits);
@@ -616,23 +619,23 @@ soft_inventory_log(void)
     /* Grep: cold: soft catalog (Wave 15 deepen) */
     kprintf("cold: soft catalog wave=%u areas=%u "
             "surfaces=inventory,mode,service,queue,path,submit,dequeue,"
-            "reply,init,attach,stats,rates,honesty,catalog,return,deepen,PASS\n",
+            "reply,init,attach,stats,rates,honesty,catalog,return,retmap,deepen,PASS\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS);
 
-    /* Grep: cold: soft surfaces (Wave 17 deepen) */
+    /* Grep: cold: soft surfaces (Wave 18 deepen) */
     kprintf("cold: soft surfaces count=%u "
             "names=inventory,mode,service,queue,path,submit,dequeue,"
             "reply,init,attach,stats,rates,honesty,catalog,surfaces,"
-            "note,return,deepen,PASS wave=%u\n",
+            "note,return,retmap,deepen,PASS wave=%u\n",
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
-    /* Grep: cold: soft note (Wave 17 deepen) */
-    kprintf("cold: soft note milestone=wave17 exclusive=1 "
+    /* Grep: cold: soft note (Wave 18 deepen) */
+    kprintf("cold: soft note milestone=wave18 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
 
-    /* Grep: cold: soft return (Wave 17 deepen) */
+    /* Grep: cold: soft return (Wave 18 deepen) */
     kprintf("cold: soft return submit_svc=%u submit_door=%u "
             "submit_queue=%u submit_enosys=%u deq_claim=%u deq_empty=%u "
             "product_gate=0 wave=%u\n",
@@ -643,7 +646,7 @@ soft_inventory_log(void)
     /* Grep: cold: soft deepen wave (Wave 15 stamp) */
     kprintf("cold: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
-            "(Wave 17 exclusive; soft inventory; not bar3)\n",
+            "(Wave 18 exclusive; soft inventory; not bar3)\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS,
             g_u32SoftLogN, u32SvcBound, u32DoorsUsable, u32QueueUsable,
             (unsigned long long)g_u64Submits);

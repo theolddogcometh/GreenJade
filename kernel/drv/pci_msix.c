@@ -9,7 +9,7 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14/15 base; Wave 17 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 18 exclusive deepen; this unit only):
  * greppable: "pci: soft …" | "msix: soft …"
  *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
  *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
@@ -21,7 +21,9 @@
  *   pci: soft caps …      / msix: soft caps …       — MSI/MSI-X cap IDs
  *   pci: soft consts …    / msix: soft consts …     — vec + addr base map
  *   pci: soft path …      / msix: soft path …       — honesty non-claim
- *   pci: soft deepen …    / msix: soft deepen …     — wave=17 areas stamp
+ *   pci: soft return rate — Wave 18 ok/fail rate lamps
+ *   pci: soft retcode    — Wave 18 retcode catalog
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=18 areas stamp
  *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
  *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
  *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
@@ -63,9 +65,9 @@ static int g_fSoftReady;
 /* Wave 14: times soft inventory printed (diagnostics only). */
 static u32 g_u32SoftInvLogs;
 
-/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define PCI_MSIX_SOFT_DEEPEN_AREAS 22u
-#define PCI_MSIX_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
+#define PCI_MSIX_SOFT_DEEPEN_AREAS 24u
+#define PCI_MSIX_SOFT_DEEPEN_WAVE  18u
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -629,22 +631,38 @@ pci_msix_soft_inventory(const char *szVia)
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: pci: soft deepen / msix: soft deepen (Wave 17 stamp) */
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: pci: soft return — Wave 17 API return surfaces */
+    /* Grep: pci: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("pci: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: pci: soft retcode — Wave 18 retcode catalog */
+    kprintf("pci: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: pci: soft deepen / msix: soft deepen (Wave 18 stamp) */
+    /*
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: pci: soft return — Wave 17 API return surfaces (kept) */
     kprintf("pci: soft return soft_inv=1 table=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: pci: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: pci: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("pci: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: pci: soft retmap — Wave 17 return-surface map */
+    /* Grep: pci: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("pci: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
@@ -659,11 +677,11 @@ pci_msix_soft_inventory(const char *szVia)
     kprintf("msix: soft return soft_inv=1 table=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: msix: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: msix: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("msix: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: msix: soft retmap — Wave 17 return-surface map */
+    /* Grep: msix: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("msix: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);

@@ -23,15 +23,17 @@
  *   nvme: soft bar        — BAR0 map path / bits
  *   nvme: soft pci        — class 01:08:02 inventory
  *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
- *   nvme: soft deepen     — wave=17 areas stamp
+ *   nvme: soft return rate — Wave 18 ok/fail rate lamps
+ *   nvme: soft retcode    — Wave 18 retcode catalog
+ *   nvme: soft deepen     — wave=18 areas stamp
  *   nvme: soft ratio      — Wave 15 CAP/rdy/en basis lamps
  *   nvme: soft headroom   — Wave 15 MQES-derived soft head
  *   nvme: soft surface    — Wave 16 area catalog
  *   nvme: soft honesty    — Wave 16 bar3/game-I/O non-claims
  *   nvme: soft geom       — Wave 16 CAP/reg geometry
  *   nvme: soft return     — Wave 16 return-surface bitmask
- *   nvme: soft return selftest — Wave 17 terminal return surface
- *   nvme: soft retmap     — Wave 17 return-surface map
+ *   nvme: soft return selftest — Wave 17 terminal return surface (kept)
+ *   nvme: soft retmap     — Wave 17 return-surface map (kept)
  *   nvme: soft contract   — Wave 16 soft≠game I/O contract
  *   nvme: soft stats      — emission / probe tallies
  *   nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP
@@ -102,9 +104,9 @@
 #define NVME_CAP_CRMS(c)   ((u32)(((c) >> 59) & 3u))
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
 
-/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define NVME_SOFT_DEEPEN_AREAS 24u
-#define NVME_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
+#define NVME_SOFT_DEEPEN_AREAS 26u
+#define NVME_SOFT_DEEPEN_WAVE  18u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -614,25 +616,41 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: nvme: soft return — Wave 17 API return surfaces */
+    /* Grep: nvme: soft return — Wave 17 API return surfaces (kept) */
     kprintf("nvme: soft return cap=%u vs=%u probe=1 soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (fCapOk != 0 ? 1u : 0u), (fVsOk != 0 ? 1u : 0u), (unsigned)NVME_SOFT_DEEPEN_WAVE);
 
-    /* Grep: nvme: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: nvme: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("nvme: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)NVME_SOFT_DEEPEN_WAVE);
 
-    /* Grep: nvme: soft retmap — Wave 17 return-surface map */
+    /* Grep: nvme: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("nvme: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)NVME_SOFT_DEEPEN_WAVE);
 
-    /* Grep: nvme: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: nvme: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("nvme: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+
+    /* Grep: nvme: soft retcode — Wave 18 retcode catalog */
+    kprintf("nvme: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+
+    /* Grep: nvme: soft deepen wave (Wave 18 stamp) */
     kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
             "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "
             "skip=%u\n",

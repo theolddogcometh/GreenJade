@@ -16,9 +16,9 @@
 #   serial: soft verify PASS|FAIL|idle   (x86 COM1; serial.c)
 #   aarch64: kmain soft PASS             (kmain phase summary)
 #   linux: nr class soft PASS|PARTIAL|NONE  (linux_dispatch NR table)
-# Soft companions (Wave 17 exclusive — info only, never hard-fail):
-#   continuum high-water toward 15900; makefile_max=15900 when greppable (soft ≠ bar3)
-#   (scan is source of truth; do not hardcode 15900 if scan still 15800)
+# Soft companions (Wave 18 exclusive — info only, never hard-fail):
+#   continuum high-water toward 16000; makefile_max=15900 when greppable (soft ≠ bar3)
+#   (scan is source of truth; do not hardcode 15900 if scan still 15900)
 #   product lamps 0; soft ≠ product complete
 #   bar3 OPEN stamp (client launch + Deck Top 50 still NOT-TRIED)
 #
@@ -115,15 +115,15 @@ info_check "serial soft verify" 'serial: soft verify'
 info_check "kmain soft"         'aarch64: kmain soft PASS|kmain soft PASS'
 info_check "nr class soft"      'linux: nr class soft'
 
-# --- Wave 17 soft companions (never increments miss; hard keys stay hard) ---
-# Continuum high-water toward 15900; greppable 15900 only when N>=15900.
-# Scan is source of truth — do not hardcode false makefile_max if still 15800.
+# --- Wave 18 soft companions (never increments miss; hard keys stay hard) ---
+# Continuum high-water toward 16000; greppable 16000 only when N>=16000.
+# Scan is source of truth — do not hardcode false makefile_max if still 15900.
 # Bar3 open stamp: media READY ≠ client run ≠ Top-50; always OPEN honesty.
-echo "  --- continuum / bar3 soft (wave 17) ---"
+echo "  --- continuum / bar3 soft (wave 18) ---"
+info_check "makefile_max=16000 (log)" 'makefile_max=16000'
 info_check "makefile_max=15900 (log)" 'makefile_max=15900'
-info_check "makefile_max=15800 (log)" 'makefile_max=15800'
 info_check "ubar3open / bar3=0 (log)" 'ubar3open|bar3=0|bar3:[[:space:]]*OPEN|bar3 OPEN'
-# Host continuum scan: stamp makefile_max=15900 greppable only when N>=15900.
+# Host continuum scan: stamp makefile_max=16000 greppable only when N>=16000.
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
   mx_line=${mx_line//$'\r'/}
@@ -135,20 +135,20 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   fi
   if [[ -n "${_mx_n:-}" ]]; then
     echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
-    if [[ "$_mx_n" -ge 15900 ]]; then
-      echo "  info: continuum high-water  makefile_max=15900 greppable  (soft graph ≠ bar3)"
-    elif [[ "$_mx_n" -ge 15800 ]]; then
-      echo "  info: continuum high-water  makefile_max=15800 greppable  (prior tip; soft ≠ product)"
-      echo "  info: continuum high-water  makefile_max=15900  (absent; tree max=$_mx_n; scan=truth)"
+    if [[ "$_mx_n" -ge 16000 ]]; then
+      echo "  info: continuum high-water  makefile_max=16000 greppable  (soft graph ≠ bar3)"
+    elif [[ "$_mx_n" -ge 15900 ]]; then
+      echo "  info: continuum high-water  makefile_max=15900 greppable  (prior tip; soft ≠ product)"
+      echo "  info: continuum high-water  makefile_max=16000  (absent; tree max=$_mx_n; scan=truth)"
     else
-      echo "  info: continuum high-water  makefile_max=15900  (absent; tree max=$_mx_n; scan=truth)"
+      echo "  info: continuum high-water  makefile_max=16000  (absent; tree max=$_mx_n; scan=truth)"
     fi
   else
     echo "  info: continuum high-water  makefile_max=(unparsed)"
   fi
   echo "  info: continuum honesty  soft graph wire ≠ bar3 client / Top50 titles"
   echo "  info: continuum honesty  soft ≠ product complete; product lamps 0"
-  echo "  info: continuum wave 17  target decade M=15900 (CREATE-ONLY soft; parent paste wires)"
+  echo "  info: continuum wave 18  target decade M=16000 (CREATE-ONLY soft; parent paste wires)"
 else
   echo "  info: continuum makefile_max=(helper missing)"
 fi

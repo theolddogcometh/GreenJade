@@ -19,7 +19,7 @@
  *   linked, try siblings, soft-retry a bounded number of re-walks, then
  *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
  *
- * Soft inventory (Wave 17 exclusive deepen; this unit only):
+ * Soft inventory (Wave 18 exclusive deepen; this unit only):
  *   - Phase A begin path: ok / dead / busy / again / null / queue full
  *   - Deferred queue: push / drop / pending samples / cursor / full
  *   - CDT walk batch: enter / clear / busy / stale / visit / pass / retry
@@ -29,7 +29,7 @@
  *   - honesty / deepen / PASS / mutex / reply non-claims
  *   - return surface (Wave 17): begin|walk|deferred|reclaim gj_status /
  *     u32 cleared buckets under "cap: revoke soft return …"
- *   - return rate / retcode (Wave 17 deepen): ok/fail rate lamps + retcode
+ *   - return rate / retcode (Wave 18 deepen): ok/fail rate lamps + retcode
  *     catalog under "cap: revoke soft return rate|retcode …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product mutex.
  *   Soft ≠ bar3. Soft ≠ GJ_CAP_REPLY product. Soft ≠ MIG REPLY product.
@@ -37,7 +37,7 @@
  *
  * Grep: cap:cdt deferred / cap:cdt walk / cap:quota soft
  * Grep: cap: revoke try-lock / cap:cdt R2 soft / cap:cdt trylock
- * Grep: cap: revoke soft  (Wave 17 deepen surface)
+ * Grep: cap: revoke soft  (Wave 18 deepen surface)
  * Grep: cap: revoke soft honesty|inventory|deepen|PASS|mutex|reply|return
  * Grep: cap: revoke …     (begin|walk|deferred|reclaim|r2|try-lock|queue)
  */
@@ -55,10 +55,10 @@
  */
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
-/* Wave 17 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE  17u
-/* +return rate|retcode over Wave 16 return surfaces */
-#define GJ_REVOKE_SOFT_AREAS 16u
+/* Wave 18 deepen stamp (file-local; never hard-gates). */
+#define GJ_REVOKE_SOFT_WAVE  18u
+/* +return selftest|retmap over Wave 17 return rate|retcode */
+#define GJ_REVOKE_SOFT_AREAS 18u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -92,7 +92,7 @@ static u32 g_u32R2Retries;
 static u32 g_u32R2SlotsCleared;
 
 /*
- * Wave 17 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
+ * Wave 18 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
  * Grep: cap: revoke soft
  */
 static u32 g_u32SoftBeginEnter;     /* gj_obj_revoke_begin entries */
@@ -101,7 +101,7 @@ static u32 g_u32SoftBeginNull;      /* pObj == NULL */
 static u32 g_u32SoftBeginDead;      /* concurrent revoke → DEAD/REVOKING */
 static u32 g_u32SoftBeginBusy;      /* CAS fail other state */
 static u32 g_u32SoftBeginAgain;     /* queue full after DEAD (R7 retry) */
-/* Wave 17 return-surface: walk/deferred cleared buckets. */
+/* Wave 18 return-surface: walk/deferred cleared buckets. */
 static u32 g_u32SoftRetWalkZero;    /* walk batch returned 0 cleared */
 static u32 g_u32SoftRetWalkPos;     /* walk batch returned >0 cleared */
 static u32 g_u32SoftRetWalkSum;     /* sum of walk cleared (soft) */
@@ -180,7 +180,7 @@ soft_note_pending_peak(u32 u32Pending)
 }
 
 /**
- * Greppable soft revoke inventory (Wave 17 deepen).
+ * Greppable soft revoke inventory (Wave 18 deepen).
  * Prefix family (keep stable for smokes / tooling):
  *   cap: revoke soft inventory|begin|queue|walk|r2|deferred|reclaim|path|…
  *   cap: revoke soft honesty|mutex|reply|return|deepen|PASS
@@ -215,7 +215,7 @@ soft_revoke_inventory_log(void)
     soft_note_pending_peak(u32Pending);
 
     /*
-     * Primary Wave 17 deepen lines under "cap: revoke soft …".
+     * Primary Wave 18 deepen lines under "cap: revoke soft …".
      * Honesty: soft u32SoftLock only — product try-lock still partial.
      * Soft ≠ GJ_CAP_REPLY product / MIG REPLY product / full CDT mutex.
      */
@@ -329,7 +329,7 @@ soft_revoke_inventory_log(void)
 
     /*
      * Grep: cap: revoke soft return
-     * Wave 17 public return-surface: begin/walk/deferred/reclaim buckets.
+     * Wave 18 public return-surface: begin/walk/deferred/reclaim buckets.
      */
     kprintf("cap: revoke soft return begin_ok=%u begin_null=%u "
             "begin_dead=%u begin_busy=%u begin_again=%u "
@@ -370,7 +370,7 @@ soft_revoke_inventory_log(void)
     /* Grep: cap: revoke soft path */
     kprintf("cap: revoke soft path phase_a=DEAD_gen_first phase_ap=cdt_walk "
             "r2=trylock_defer r7=timer_idle_redrive phase_c=reclaim "
-            "lock=soft_u32SoftLock product=PARTIAL return_surface=1 return_rate=1 retcode=1 "
+            "lock=soft_u32SoftLock product=PARTIAL return_surface=1 return_rate=1 retcode=1 return_selftest=1 retmap=1 "
             "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
             "wave=%u (soft inventory; not bar3; soft != GJ_CAP_REPLY "
             "product; soft != MIG REPLY product; soft != full CDT mutex "
@@ -379,7 +379,7 @@ soft_revoke_inventory_log(void)
 
     /*
      * Grep: cap: revoke soft return rate
-     * Wave 17 return-surface rate lamps (soft ≠ product).
+     * Wave 17 return-surface rate lamps (kept) (soft ≠ product).
      */
     kprintf("cap: revoke soft return rate "
             "begin_ok=%u begin_fail=%u "
@@ -408,7 +408,21 @@ soft_revoke_inventory_log(void)
             "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
             g_u32SoftBeginOk, g_u32SoftReclaimOk, GJ_REVOKE_SOFT_WAVE);
 
-    /* Grep: cap: revoke soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: cap: revoke soft return selftest — Wave 18 terminal return surface */
+    kprintf("cap: revoke soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
+            (unsigned)GJ_REVOKE_SOFT_WAVE);
+
+    /* Grep: cap: revoke soft retmap — Wave 18 return-surface map */
+    kprintf("cap: revoke soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
+            "product=OPEN wave=%u soft PASS\n",
+            (unsigned)GJ_REVOKE_SOFT_WAVE);
+
+    /* Grep: cap: revoke soft deepen wave (Wave 18 stamp) */
     kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "
             "begin_ok=%u reclaim_ok=%u walk_pos=%u def_pos=%u "
@@ -427,7 +441,7 @@ soft_revoke_inventory_log(void)
 }
 
 /**
- * Emit Wave 17 soft inventory once after first meaningful revoke activity.
+ * Emit Wave 18 soft inventory once after first meaningful revoke activity.
  * Avoids timer-tick spam; re-log is not required for greppable surface.
  */
 static void
@@ -699,7 +713,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
 
     if (pObj == NULL || u32MaxSlots == 0) {
         soft_inc(&g_u32SoftWalkNop);
-        soft_inc(&g_u32SoftRetWalkZero); /* Wave 17 return surface */
+        soft_inc(&g_u32SoftRetWalkZero); /* Wave 18 return surface */
         return 0;
     }
 
@@ -850,7 +864,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
                 u32VisitCap, GJ_REVOKE_SOFT_WAVE);
     }
 
-    /* Wave 17 return surface: walk cleared buckets. */
+    /* Wave 18 return surface: walk cleared buckets. */
     if (u32Cleared == 0u) {
         soft_inc(&g_u32SoftRetWalkZero);
     } else {
@@ -895,7 +909,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
 
     if (u32MaxSlots == 0) {
         soft_inc(&g_u32SoftDefNop);
-        soft_inc(&g_u32SoftRetDefZero); /* Wave 17 return surface */
+        soft_inc(&g_u32SoftRetDefZero); /* Wave 18 return surface */
         return 0;
     }
 
@@ -1045,7 +1059,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         }
     }
 
-    /* Wave 17 return surface: deferred cleared buckets. */
+    /* Wave 18 return surface: deferred cleared buckets. */
     if (u32Cleared == 0u) {
         soft_inc(&g_u32SoftRetDefZero);
     } else {

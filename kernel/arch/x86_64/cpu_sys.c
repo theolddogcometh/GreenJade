@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 17u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 18u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -524,31 +524,48 @@ cpu_syscall_soft_inventory(void)
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept; never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: cpu: syscall soft return — Wave 17 API return surfaces */
+    /* Grep: cpu: syscall soft return — Wave 17 API return surfaces (kept) */
     kprintf("cpu: syscall soft return ready=%u live=%u star=1 lstar=1 sfmask=1 soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)(g_fSyscallReady ? 1u : 0u), (unsigned)(g_fSoftSnapLive ? 1u : 0u), (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
-    /* Grep: cpu: syscall soft return selftest — Wave 17 terminal return surface */
+    /* Grep: cpu: syscall soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("cpu: syscall soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
-    /* Grep: cpu: syscall soft retmap — Wave 17 return-surface map */
+    /* Grep: cpu: syscall soft retmap — Wave 17 return-surface map (kept) */
     kprintf("cpu: syscall soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
-    /* Grep: cpu: syscall soft deepen (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: cpu: syscall soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("cpu: syscall soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft retcode — Wave 18 retcode catalog */
+    kprintf("cpu: syscall soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft deepen (Wave 18 stamp) */
     kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
             "areas=inventory,program,star,lstar,cstar,sfmask,efer,"
             "enter,verify,expect,path,geom,msr,flags,init,capacity,"
-            "exclusive,claim,ratio,honesty,return,return_selftest,retmap "
-            "(Wave 17 exclusive; soft only; not bar3)\n",
+            "exclusive,claim,ratio,honesty,return,return_selftest,retmap,"
+            "return_rate,retcode "
+            "(Wave 18 exclusive; soft only; not bar3)\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
             (unsigned)(g_fSyscallReady ? 1u : 0u),
             (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,

@@ -10,7 +10,7 @@
  * First few ICR writes are rate-limited to serial (greppable).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 17 exclusive deepen) — greppable "x2apic: soft …"
+ * Soft inventory (Wave 18 exclusive deepen) — greppable "x2apic: soft …"
  * -------------------------------------------------------------------------
  * Pure observation; never hard-gates IPI delivery. Counters wrap OK.
  * Soft ≠ full ICR/timer replace product (timer.c / apic.c product paths
@@ -45,11 +45,13 @@
  * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *   x2apic: soft exclusive   — exclusive=1 unit stamp + wave
  *   x2apic: soft ratio       — probe/enable/icr/eoi path ratios
- *   x2apic: soft deepen      — wave=17 areas stamp
- * Wave 17 exclusive complementary surfaces (never reshape primary fields):
- *   x2apic: soft return      — Wave 17 API return surfaces
- *   x2apic: soft return selftest — Wave 17 terminal return surface
- *   x2apic: soft retmap      — Wave 17 return-surface map
+ *   x2apic: soft return rate — Wave 18 ok/fail rate lamps
+ *   x2apic: soft retcode    — Wave 18 retcode catalog
+ *   x2apic: soft deepen      — wave=18 areas stamp
+ * Wave 17 complementary surfaces (kept) (never reshape primary fields):
+ *   x2apic: soft return      — Wave 17 API return surfaces (kept)
+ *   x2apic: soft return selftest — Wave 17 terminal return surface (kept)
+ *   x2apic: soft retmap      — Wave 17 return-surface map (kept)
  *   x2apic: soft PASS|FAIL|idle — soft lamp (never hard-gates)
  *
  * Legacy ICR soft lines kept: "x2apic: icr soft …" (bring-up continuity).
@@ -83,10 +85,10 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 17 exclusive soft deepen stamp (greppable wave=17). */
-#define X2APIC_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 exclusive soft deepen stamp (greppable wave=18). */
+#define X2APIC_SOFT_DEEPEN_WAVE  18u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
-#define X2APIC_SOFT_DEEPEN_AREAS 31u
+#define X2APIC_SOFT_DEEPEN_AREAS 33u
 
 /* Soft ICR field masks (SDM ICR; decode only — never rewrites product ICR). */
 #define X2APIC_SOFT_ICR_DM_SHIFT     11u /* destination mode (phys/logical) */
@@ -745,25 +747,41 @@ x2apic_soft_inventory(void)
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: x2apic: soft return — Wave 17 API return surfaces */
+    /* Grep: x2apic: soft return — Wave 17 API return surfaces (kept) */
     kprintf("x2apic: soft return supported=%u enabled=%u icr=1 eoi=1 soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             (unsigned)fSupp, (unsigned)(cEn > 0u ? 1u : 0u), (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: x2apic: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("x2apic: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft retmap — Wave 17 return-surface map */
+    /* Grep: x2apic: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("x2apic: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: x2apic: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("x2apic: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
+
+    /* Grep: x2apic: soft retcode — Wave 18 retcode catalog */
+    kprintf("x2apic: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
+
+    /* Grep: x2apic: soft deepen wave (Wave 18 stamp) */
     kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

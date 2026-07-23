@@ -5,7 +5,7 @@
  * Linux hybrid Option C — kernel hot paths (clean-room pure C11).
  * Dual MIT OR Apache-2.0. No GPL source.
  *
- * Soft product inventory (Wave 11/14 base + Wave 17 exclusive deepen):
+ * Soft product inventory (Wave 11/14 base + Wave 18 exclusive deepen):
  *   - Group enter tallies (io/id/mem/time/futex/sched/sig/sock/info/proc)
  *   - Live task view snapshot (pid/tid/cred/brk/fs_base)
  *   - Handler catalog capacity (static product surface count)
@@ -22,8 +22,8 @@
  *   linux: hot soft rates …
  *   linux: hot soft honesty …
  *   linux: hot soft catalog …
- *   linux: hot soft surfaces …   (Wave 17)
- *   linux: hot soft note …       (Wave 17)
+ *   linux: hot soft surfaces …   (Wave 18)
+ *   linux: hot soft note …       (Wave 18)
  *   linux: hot soft deepen …
  *   linux: hot soft inventory PASS / soft PASS
  * greppable: "linux: hot soft"
@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE     17u
-#define GJ_LINUX_HOT_SOFT_AREAS    24u
+#define GJ_LINUX_HOT_SOFT_WAVE     18u
+#define GJ_LINUX_HOT_SOFT_AREAS    25u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -343,31 +343,31 @@ hot_soft_inventory_log(void)
             "wave=%u (soft inventory; never closes hybrid)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
-    /* Grep: linux: hot soft surfaces (Wave 17 deepen) */
+    /* Grep: linux: hot soft surfaces (Wave 18 deepen) */
     kprintf("linux: hot soft surfaces count=%u wave=%u "
             "names=inventory,groups,io,id,mem,time,futex,sched,sig,"
             "sock,info,proc,live,path,stats,rates,honesty,catalog,"
-            "surfaces,note,return,deepen,PASS\n",
+            "surfaces,note,return,retmap,deepen,PASS\n",
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
-    /* Grep: linux: hot soft note (Wave 17 deepen) */
-    kprintf("linux: hot soft note milestone=wave17 exclusive=1 "
+    /* Grep: linux: hot soft note (Wave 18 deepen) */
+    kprintf("linux: hot soft note milestone=wave18 exclusive=1 "
             "soft_only=1 not_bar3=1 handlers=%u enter=%lu wave=%u\n",
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned long)s.u64EnterTotal,
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
-    /* Grep: linux: hot soft catalog (Wave 17 deepen) */
+    /* Grep: linux: hot soft catalog (Wave 18 deepen) */
     kprintf("linux: hot soft catalog wave=%u areas=%u handlers=%u "
             "surfaces=inventory,groups,io,id,mem,time,futex,sched,sig,"
             "sock,info,proc,live,path,stats,rates,honesty,catalog,"
-            "surfaces,note,return,deepen,PASS\n",
+            "surfaces,note,return,retmap,deepen,PASS\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS);
 
-    /* Grep: linux: hot soft return (Wave 17 deepen) */
+    /* Grep: linux: hot soft return (Wave 18 deepen) */
     kprintf("linux: hot soft return enter=%lu null_regs=%lu ctx_set=%lu "
             "handlers=%u groups=%u product_gate=0 wave=%u\n",
             (unsigned long)s.u64EnterTotal,
@@ -377,10 +377,14 @@ hot_soft_inventory_log(void)
             (unsigned)HOT_SOFT_GRP_N,
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
+    /* Grep: linux: hot soft retmap — Wave 18 return-surface map */
+    kprintf("linux: hot soft retmap enter|null_regs|ctx_set|handlers|groups product_gate=0 soft_only=1 wave=%u\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+
     /* Grep: linux: hot soft deepen wave */
     kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 17 exclusive; not bar3)\n",
+            "(Wave 18 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,

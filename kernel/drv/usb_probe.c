@@ -21,13 +21,15 @@
  *   usb: soft pci        — class 0C:03 inventory stamp
  *   usb: soft path       — honesty: probe/soft only; no claim / IRQ / rings
  *   usb: soft honesty    — bar3/HID/rings non-claims
- *   usb: soft deepen     — wave=17 areas stamp
+ *   usb: soft return rate — Wave 18 ok/fail rate lamps
+ *   usb: soft retcode    — Wave 18 retcode catalog
+ *   usb: soft deepen     — wave=18 areas stamp
  *   usb: soft ratio      — Wave 16 identify/BAR occupancy
  *   usb: soft headroom   — Wave 16 map/bar head
  *   usb: soft surface    — Wave 16 area catalog
  *   usb: soft return     — Wave 16 return-surface bitmask
- *   usb: soft return selftest — Wave 17 terminal return surface
- *   usb: soft retmap     — Wave 17 return-surface map
+ *   usb: soft return selftest — Wave 17 terminal return surface (kept)
+ *   usb: soft retmap     — Wave 17 return-surface map (kept)
  *   usb: soft contract   — Wave 16 soft≠game I/O contract
  *   usb: soft stats      — emission / scan tallies
  *   usb: soft inventory PASS|SKIP
@@ -49,9 +51,9 @@
 #define USB_PIF_EHCI 0x20u
 #define USB_PIF_XHCI 0x30u
 
-/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define USB_SOFT_DEEPEN_AREAS 21u
-#define USB_SOFT_DEEPEN_WAVE  17u
+/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
+#define USB_SOFT_DEEPEN_AREAS 23u
+#define USB_SOFT_DEEPEN_WAVE  18u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -462,25 +464,41 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
     }
 
     /*
-     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Wave 17 complementary sub-lines (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: usb: soft return — Wave 17 API return surfaces */
+    /* Grep: usb: soft return — Wave 17 API return surfaces (kept) */
     kprintf("usb: soft return found=%u soft_inv=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
             g_u32SoftFound, (unsigned)USB_SOFT_DEEPEN_WAVE);
 
-    /* Grep: usb: soft return selftest — Wave 17 terminal return surface */
+    /* Grep: usb: soft return selftest — Wave 17 terminal return surface (kept) */
     kprintf("usb: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 wave=%u soft PASS\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
 
-    /* Grep: usb: soft retmap — Wave 17 return-surface map */
+    /* Grep: usb: soft retmap — Wave 17 return-surface map (kept) */
     kprintf("usb: soft retmap soft_inv=1 deepen=1 product=OPEN "
             "wave=%u soft PASS\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
 
-    /* Grep: usb: soft deepen wave (Wave 17 stamp) */
+    /*
+     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: usb: soft return rate — Wave 18 ok/fail rate lamps */
+    kprintf("usb: soft return rate soft_inv=1 selftest=1 retmap=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
+            "(return rate; Soft≠product; not bar3)\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft retcode — Wave 18 retcode catalog */
+    kprintf("usb: soft retcode ok=1 fail=1 inval=1 busy=1 "
+            "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
+            "(retcode catalog; Soft≠product)\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft deepen wave (Wave 18 stamp) */
     kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,

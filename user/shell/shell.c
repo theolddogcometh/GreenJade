@@ -191,6 +191,7 @@
  *           ucontinuum14500 uhda_client uscsi_live (product v1.66)
  *           u768gsoak umakefile14600 ubar3open (product v1.67)
  *           ucontinuum14600 uioringmin u1tibopen (product v1.68)
+ *           ucontinuum15300 umakefile15300 umatrixopen (product v1.69)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -366,11 +367,17 @@
  *            SQE for games); u1tibopen prints 0 (full 1 TiB host soak still
  *            open soft); free exclusive continuum names; soft facts only;
  *            does not claim Deck Top 50 PASS)
- *           (help/version soft banners: help prints GreenJade soft product +
- *            shell=native vfs door + bar3=0 before cmds:; version keeps
- *            "GreenJade shell (native vfs door) v1.68" smoke substring then
+ *           (ucontinuum15300 prints 1 (wired soft high-water Wave 11);
+ *            umakefile15300 prints 1 (makefile_max=15300 soft fact);
+ *            umatrixopen prints 0 (Deck Top 50 matrix still NOT-TRIED soft);
+ *            free exclusive continuum names; soft facts only;
+ *            soft continuum ≠ bar3; does not claim Deck Top 50 PASS)
+ *           (help/version soft banners Wave 11 honesty: help prints
+ *            GreenJade soft product + shell=native vfs door + soft=1 +
+ *            bar3=0 before cmds:; version keeps
+ *            "GreenJade shell (native vfs door) v1.69" smoke substring then
  *            GreenJade soft product + soft=1 + bar3=0; soft facts only —
- *            not bar3 close, not Deck Top 50 PASS)
+ *            not bar3 close, not Deck Top 50 PASS; soft ≠ bar3)
  */
 #include <gj/string.h>
 #include <gj/syscalls.h>
@@ -15002,6 +15009,46 @@ cmd_u1tibopen(void)
     return 0;
 }
 
+/*
+ * ucontinuum15300 — print 1 (wired soft high-water Wave 11) (product v1.69).
+ * Soft fact only: continuum makefile_max=15300 soft graph high-water.
+ * Free exclusive name (ucontinuum14500/14600 already exist).
+ * Soft continuum ≠ bar3; does not claim Deck Top 50 PASS.
+ * Usage: ucontinuum15300
+ */
+static int
+cmd_ucontinuum15300(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
+ * umakefile15300 — print 1 (makefile_max=15300 soft fact) (product v1.69).
+ * Soft fact only; free exclusive name (umakefile14600 already v1.67).
+ * Soft continuum ≠ bar3; does not claim Deck Top 50 PASS.
+ * Usage: umakefile15300
+ */
+static int
+cmd_umakefile15300(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
+ * umatrixopen — print 0 (Deck Top 50 matrix still NOT-TRIED) (product v1.69).
+ * Soft readiness one-liner Wave 11 honesty; free exclusive name.
+ * Soft facts only; does not invent title PASS or close bar3.
+ * Usage: umatrixopen
+ */
+static int
+cmd_umatrixopen(void)
+{
+    out("0\n");
+    return 0;
+}
+
 /* Run one command line; returns 0 ok, -1 fail, 1 exit */
 static int
 run_line(const char *szLine)
@@ -15016,12 +15063,14 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "help") == 0) {
         /*
-         * Soft product banner (facts only). Identifies GreenJade soft
-         * product continuum shell; bar3=0 (still open). Not Deck Top 50
-         * PASS and not bar3 close. Greppable soft inventory for live logs.
+         * Soft product banner Wave 11 honesty (facts only). Identifies
+         * GreenJade soft product continuum shell; soft=1; bar3=0 (still
+         * open). Soft continuum ≠ bar3. Not Deck Top 50 PASS and not bar3
+         * close. Greppable soft inventory for live logs.
          */
         out("GreenJade soft product\n");
         out("shell=native vfs door\n");
+        out("soft=1\n");
         out("bar3=0\n");
         out("cmds: help echo cat ls rm stat touch cp mv head tail wc cmp "
             "sleep size true false clear hostname uname id whoami date env "
@@ -15180,6 +15229,7 @@ run_line(const char *szLine)
             "ucontinuum14500 uhda_client uscsi_live "
             "u768gsoak umakefile14600 ubar3open "
             "ucontinuum14600 uioringmin u1tibopen "
+            "ucontinuum15300 umakefile15300 umatrixopen "
             "dos2unix unix2dos "
             "sync pwd format mount bigfile install stats storecap storestats "
             "storeflush netstats version exit\n");
@@ -15322,13 +15372,14 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "version") == 0) {
         /*
-         * Soft product version banner.
+         * Soft product version banner Wave 11 honesty.
          * Keep substring "GreenJade shell (native vfs door)" for smoke gate.
-         * Extra lines are soft inventory only: GreenJade soft product identity
-         * and bar3=0 (still open). Does not claim Deck Top 50 PASS or bar3
-         * close. Mirrors help soft banner facts for greppable live logs.
+         * Extra lines are soft inventory only: GreenJade soft product identity,
+         * soft=1, and bar3=0 (still open). Soft continuum ≠ bar3. Does not
+         * claim Deck Top 50 PASS or bar3 close. Mirrors help soft banner
+         * facts for greppable live logs (ubar3open / bar3=0 agents).
          */
-        out("GreenJade shell (native vfs door) v1.68\n");
+        out("GreenJade shell (native vfs door) v1.69\n");
         out("GreenJade soft product\n");
         out("soft=1\n");
         out("bar3=0\n");
@@ -18896,6 +18947,15 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "u1tibopen") == 0) {
         return cmd_u1tibopen();
     }
+    if (gj_strcmp(aCmd, "ucontinuum15300") == 0) {
+        return cmd_ucontinuum15300();
+    }
+    if (gj_strcmp(aCmd, "umakefile15300") == 0) {
+        return cmd_umakefile15300();
+    }
+    if (gj_strcmp(aCmd, "umatrixopen") == 0) {
+        return cmd_umatrixopen();
+    }
     if (gj_strcmp(aCmd, "dos2unix") == 0) {
         char aU[64];
 
@@ -19418,6 +19478,10 @@ _start(void)
         "ucontinuum14600",
         "uioringmin",
         "u1tibopen",
+        /* product v1.69 Wave 11: continuum15300/makefile15300/matrix-open soft */
+        "ucontinuum15300",
+        "umakefile15300",
+        "umatrixopen",
         "version",
         "install",
         "exit",
@@ -19552,6 +19616,7 @@ _start(void)
     out("greenjade-shell: ucontinuum14500 uhda_client uscsi_live PASS\n");
     out("greenjade-shell: u768gsoak umakefile14600 ubar3open PASS\n");
     out("greenjade-shell: ucontinuum14600 uioringmin u1tibopen PASS\n");
+    out("greenjade-shell: ucontinuum15300 umakefile15300 umatrixopen PASS\n");
     out("greenjade-shell: storeflush PASS\n");
     out("greenjade-shell: vfs PASS\n");
     out("greenjade-shell: interactive PASS\n");

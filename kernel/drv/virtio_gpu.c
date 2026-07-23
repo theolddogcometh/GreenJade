@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Clean-room virtio-gpu 2D present (OASIS virtio-gpu).
- * No Linux virtio source. Dual MIT OR Apache-2.0 only.
+ * No Linux virtio source. Dual MIT OR Apache-2.0 only. Pure C11 freestanding.
  *
  * Soft path layout (control virtqueue 0 only):
  *   display  — gpu_display_refresh / pick first enabled scanout
@@ -14,6 +14,21 @@
  * Greppable product markers (prefix-stable):
  *   virtio-gpu: ready PASS
  *   virtio-gpu: present PASS
+ *
+ * Wave 11 soft inventory (prefix-stable; never hard-gates; this unit only):
+ *   virtio-gpu: soft inventory …
+ *   virtio-gpu: soft display …
+ *   virtio-gpu: soft resource …
+ *   virtio-gpu: soft scanout …
+ *   virtio-gpu: soft queue …
+ *   virtio-gpu: soft present …
+ *   virtio-gpu: soft attach …
+ *   virtio-gpu: soft counters …
+ *   virtio-gpu: soft path …
+ *   virtio-gpu: soft PASS|NODEV|PARTIAL
+ *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
+ *
+ * greppable: virtio-gpu: soft
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -164,6 +179,21 @@ static u32                   g_u32DispW;
 static u32                   g_u32DispH;
 static u32                   g_u32DispEnabled;
 
+/* Wave 11 soft inventory telemetry (never hard-gates product present). */
+static u32 g_u32SoftLogN;       /* inventory emissions */
+static int g_fSoftOnce;         /* first post-activity inventory emitted */
+static u32 g_u32CmdOk;          /* gpu_cmd success ACKs */
+static u32 g_u32CmdFail;        /* gpu_cmd hard failures (timeout/bad resp) */
+static u32 g_u32CmdTimeout;     /* subset: poll timeout */
+static u32 g_u32PresentReuse;   /* present path reused active resource */
+static u32 g_u32PresentCreate;  /* present path created new host resource */
+static u32 g_u32FlushCount;     /* virtio_gpu_flush successes */
+static u32 g_u32FlushFail;      /* virtio_gpu_flush failures */
+static u32 g_u32DispRefresh;    /* GET_DISPLAY_INFO soft refreshes */
+static u32 g_u32AttachEntsLast; /* last ATTACH_BACKING entry count */
+static u32 g_u32AttachEntsPeak; /* high-water attach mem_entries */
+static u32 g_u32AttachOps;      /* successful attach ops */
+
 /* ---- control-queue transport --------------------------------------------- */
 
 static void
@@ -249,12 +279,14 @@ gpu_cmd(void *pReq, u32 cbReq)
     struct virtio_gpu_ctrl_hdr *pRq;
 
     if (pReq == NULL || cbReq == 0 || cbReq > sizeof(g_aReq)) {
+        g_u32CmdFail++;
         return -1;
     }
     memset(g_aResp, 0, sizeof(g_aResp));
     if (virtio_q_add2(&g_qCtrl,
                       (gj_paddr_t)(gj_vaddr_t)pReq, cbReq, 0,
                       (gj_paddr_t)(gj_vaddr_t)g_aResp, sizeof(g_aResp), 1) < 0) {
+        g_u32CmdFail++;
         return -1;
     }
     virtio_q_kick(&g_qCtrl);
@@ -262,6 +294,8 @@ gpu_cmd(void *pReq, u32 cbReq)
     pRq = (struct virtio_gpu_ctrl_hdr *)pReq;
     if (i32Len < 0) {
         kprintf("virtio-gpu: cmd timeout type=0x%x\n", pRq->u32Type);
+        g_u32CmdTimeout++;
+        g_u32CmdFail++;
         return -1;
     }
     pRh = (struct virtio_gpu_ctrl_hdr *)(void *)g_aResp;
@@ -270,8 +304,10 @@ gpu_cmd(void *pReq, u32 cbReq)
         pRh->u32Type >= VIRTIO_GPU_RESP_ERR_UNSPEC) {
         kprintf("virtio-gpu: bad resp type=0x%x for cmd=0x%x\n",
                 pRh->u32Type, pRq->u32Type);
+        g_u32CmdFail++;
         return -1;
     }
+    g_u32CmdOk++;
     return 0;
 }
 
@@ -438,9 +474,18 @@ gpu_res_attach(u32 u32Res, void *pFb, u32 cbBytes, gj_paddr_t *pOutFirstPa)
     if (pOutFirstPa != NULL) {
         *pOutFirstPa = paFirst;
     }
-    return gpu_cmd(pAttach,
-                   (u32)(sizeof(*pAttach) +
-                         cEnt * sizeof(struct virtio_gpu_mem_entry)));
+    if (gpu_cmd(pAttach,
+                (u32)(sizeof(*pAttach) +
+                      cEnt * sizeof(struct virtio_gpu_mem_entry))) != 0) {
+        return -1;
+    }
+    /* Soft attach tallies (Wave 11 inventory; product path unchanged). */
+    g_u32AttachEntsLast = cEnt;
+    if (cEnt > g_u32AttachEntsPeak) {
+        g_u32AttachEntsPeak = cEnt;
+    }
+    g_u32AttachOps++;
+    return 0;
 }
 
 /* ---- scanout soft path --------------------------------------------------- */
@@ -534,6 +579,154 @@ gpu_xfer_and_flush(u32 u32Res, u32 u32X, u32 u32Y, u32 u32W, u32 u32H,
     return gpu_flush_rect(u32Res, u32X, u32Y, u32W, u32H);
 }
 
+/* ---- soft inventory (Wave 11 exclusive) ---------------------------------- */
+
+/**
+ * Greppable Wave 11 soft inventory dump (product / smoke).
+ * Prefix-stable "virtio-gpu: soft …" — never hard-gates; kprintf only.
+ *
+ *   virtio-gpu: soft inventory  — ready + PCI + present + queue geometry
+ *   virtio-gpu: soft display    — GET_DISPLAY_INFO cache snapshot
+ *   virtio-gpu: soft resource   — active 2D resource + geometry + PA
+ *   virtio-gpu: soft scanout    — bound scanout id / enable state
+ *   virtio-gpu: soft queue      — control q0 size / free watermark
+ *   virtio-gpu: soft present    — present/reuse/create tallies
+ *   virtio-gpu: soft attach     — mem_entry coalesce peak/last
+ *   virtio-gpu: soft counters   — cmd ok/fail/timeout + flush
+ *   virtio-gpu: soft path       — honesty catalog (2D only; not 3D/bar3)
+ *   virtio-gpu: soft PASS|NODEV|PARTIAL
+ *
+ * greppable: virtio-gpu: soft
+ */
+static void
+gpu_soft_inventory(const char *szVia)
+{
+    const char *szVerdict;
+    const char *szViaSafe;
+    u16 u16QSize;
+    u16 u16FreeNow;
+    u8 u8Bus;
+    u8 u8Slot;
+
+    szViaSafe = (szVia != NULL) ? szVia : "path";
+
+    if (g_u32SoftLogN < 0xffffffffu) {
+        g_u32SoftLogN++;
+    }
+
+    u16QSize = g_fReady ? g_qCtrl.u16Size : 0;
+    u16FreeNow = g_fReady ? virtio_q_num_free(&g_qCtrl) : 0;
+    u8Bus = (g_pGpu != NULL) ? g_pGpu->u8Bus : 0;
+    u8Slot = (g_pGpu != NULL) ? g_pGpu->u8Slot : 0;
+
+    /*
+     * Soft verdict (inventory only; present path unchanged):
+     *   NODEV    — not ready / no device
+     *   PASS     — ready + any successful present
+     *   PARTIAL  — ready, no completed product present yet (post-probe)
+     */
+    if (!g_fReady) {
+        szVerdict = "NODEV";
+    } else if (g_u32PresentCount != 0u) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /* Grep: virtio-gpu: soft inventory */
+    kprintf("virtio-gpu: soft inventory via=%s ready=%u bus=%x slot=%x "
+            "q_size=%u free=%u present=%u have_res=%u scanout_bound=%u "
+            "fmt=B8G8R8X8 max_ents=%u log_n=%u\n",
+            szViaSafe, g_fReady ? 1u : 0u, (unsigned)u8Bus, (unsigned)u8Slot,
+            (unsigned)u16QSize, (unsigned)u16FreeNow, g_u32PresentCount,
+            g_fHaveRes ? 1u : 0u, g_fScanoutBound ? 1u : 0u,
+            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES, g_u32SoftLogN);
+
+    /* Grep: virtio-gpu: soft display */
+    kprintf("virtio-gpu: soft display valid=%u scanout=%u w=%u h=%u "
+            "enabled=%u refresh=%u default_w=%u default_h=%u\n",
+            g_fDispValid ? 1u : 0u, g_u32DispScanout, g_u32DispW, g_u32DispH,
+            g_u32DispEnabled, g_u32DispRefresh,
+            (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H);
+
+    /* Grep: virtio-gpu: soft resource */
+    kprintf("virtio-gpu: soft resource have=%u id=%u w=%u h=%u stride=%u "
+            "pa=0x%lx fmt=%u\n",
+            g_fHaveRes ? 1u : 0u, g_u32ResId, g_u32Width, g_u32Height,
+            g_u32Stride, (unsigned long)g_paFb,
+            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM);
+
+    /* Grep: virtio-gpu: soft scanout */
+    kprintf("virtio-gpu: soft scanout bound=%u id=%u max=%u disable_res0=1\n",
+            g_fScanoutBound ? 1u : 0u, g_u32ScanoutId,
+            (unsigned)VIRTIO_GPU_MAX_SCANOUTS);
+
+    /* Grep: virtio-gpu: soft queue */
+    kprintf("virtio-gpu: soft queue ctrl_q=0 size=%u free=%u free_head=%u "
+            "notify_off=%u pa_desc=0x%lx\n",
+            (unsigned)u16QSize, (unsigned)u16FreeNow,
+            (unsigned)(g_fReady ? g_qCtrl.u16FreeHead : 0u),
+            (unsigned)(g_fReady ? g_qCtrl.u16NotifyOff : 0u),
+            (unsigned long)(g_fReady ? (u64)g_qCtrl.paDesc : 0ull));
+
+    /* Grep: virtio-gpu: soft present */
+    kprintf("virtio-gpu: soft present ok=%u create=%u reuse=%u "
+            "flush_ok=%u flush_fail=%u dirty_rect=1 full_flush=1\n",
+            g_u32PresentCount, g_u32PresentCreate, g_u32PresentReuse,
+            g_u32FlushCount, g_u32FlushFail);
+
+    /* Grep: virtio-gpu: soft attach */
+    kprintf("virtio-gpu: soft attach ops=%u ents_last=%u ents_peak=%u "
+            "max_ents=%u page_walk=1 coalesce=1\n",
+            g_u32AttachOps, g_u32AttachEntsLast, g_u32AttachEntsPeak,
+            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES);
+
+    /* Grep: virtio-gpu: soft counters */
+    kprintf("virtio-gpu: soft counters cmd_ok=%u cmd_fail=%u cmd_timeout=%u "
+            "present=%u flush=%u attach=%u disp_refresh=%u\n",
+            g_u32CmdOk, g_u32CmdFail, g_u32CmdTimeout, g_u32PresentCount,
+            g_u32FlushCount, g_u32AttachOps, g_u32DispRefresh);
+
+    /*
+     * Grep: virtio-gpu: soft path
+     * Honesty catalog: 2D present surface only. claim=1 only when DRIVER_OK.
+     * Explicit non-claims: cursor q, 3D, EDID, Steam/bar3 present.
+     */
+    kprintf("virtio-gpu: soft path claim=%u ctrl_q0=1 create_2d=1 attach=1 "
+            "scanout=1 xfer=1 flush=1 dirty_rect=1 get_display=1 "
+            "cursor=0 cmd3d=0 edid=0 steam=0 bar3=0\n",
+            g_fReady ? 1u : 0u);
+
+    /* Grep: virtio-gpu: soft PASS | NODEV | PARTIAL */
+    kprintf("virtio-gpu: soft %s via=%s ready=%u present=%u cmd_ok=%u "
+            "cmd_fail=%u log_n=%u\n",
+            szVerdict, szViaSafe, g_fReady ? 1u : 0u, g_u32PresentCount,
+            g_u32CmdOk, g_u32CmdFail, g_u32SoftLogN);
+
+    /* Grep: virtio-gpu: soft inventory PASS|NODEV|PARTIAL */
+    kprintf("virtio-gpu: soft inventory %s via=%s logs=%u "
+            "(soft inventory only; not bar3)\n",
+            szVerdict, szViaSafe, g_u32SoftLogN);
+}
+
+/**
+ * After first product present/flush activity, print soft inventory once
+ * (mirrors virtio-blk / compositor soft-stats-once). Diagnostics only.
+ */
+static void
+gpu_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32PresentCount == 0u && g_u32FlushCount == 0u &&
+        g_u32CmdFail == 0u) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    gpu_soft_inventory("activity");
+}
+
 /* ---- display soft path --------------------------------------------------- */
 
 /*
@@ -557,6 +750,7 @@ gpu_display_refresh(void)
     if (gpu_cmd(pReq, sizeof(*pReq)) != 0) {
         return -1;
     }
+    g_u32DispRefresh++;
 
     g_u32DispScanout = 0;
     g_u32DispW = VIRTIO_GPU_DEFAULT_W;
@@ -631,6 +825,8 @@ virtio_gpu_probe(void)
     }
     if (g_pGpu == NULL) {
         kprintf("virtio-gpu: no device\n");
+        /* Grep: virtio-gpu: soft … NODEV (Wave 11 soft inventory) */
+        gpu_soft_inventory("nodev");
         return -1;
     }
 
@@ -638,6 +834,7 @@ virtio_gpu_probe(void)
     if (st != GJ_OK || g_pGpu->pCommon == NULL) {
         kprintf("virtio-gpu: pci setup failed %d\n", (int)st);
         g_pGpu = NULL;
+        gpu_soft_inventory("pci_fail");
         return -1;
     }
     /* Prefer V1; fall back to transitional (empty want mask) */
@@ -647,6 +844,7 @@ virtio_gpu_probe(void)
         if (st != GJ_OK) {
             kprintf("virtio-gpu: negotiate failed %d\n", (int)st);
             g_pGpu = NULL;
+            gpu_soft_inventory("negotiate_fail");
             return -1;
         }
     }
@@ -654,6 +852,7 @@ virtio_gpu_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-gpu: ctrl queue failed %d\n", (int)st);
         g_pGpu = NULL;
+        gpu_soft_inventory("q_fail");
         return -1;
     }
     virtio_set_status(g_pGpu, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
@@ -661,6 +860,11 @@ virtio_gpu_probe(void)
     g_fReady = 1;
     kprintf("virtio-gpu: ready PASS bus=%x slot=%x (control q0)\n",
             (unsigned)g_pGpu->u8Bus, (unsigned)g_pGpu->u8Slot);
+    /*
+     * Wave 11 soft inventory rollup (prefix-stable "virtio-gpu: soft …").
+     * PARTIAL until first present; never hard-gates product path.
+     */
+    gpu_soft_inventory("probe");
     return 0;
 }
 
@@ -716,14 +920,22 @@ virtio_gpu_flush(u32 u32X, u32 u32Y, u32 u32Width, u32 u32Height)
     u32 u32CH;
 
     if (!g_fReady || !g_fHaveRes) {
+        g_u32FlushFail++;
         return -1;
     }
     if (gpu_rect_clip(u32X, u32Y, u32Width, u32Height,
                       &u32CX, &u32CY, &u32CW, &u32CH) != 0) {
+        g_u32FlushFail++;
         return -1;
     }
-    return gpu_xfer_and_flush(g_u32ResId, u32CX, u32CY, u32CW, u32CH,
-                              g_u32Stride);
+    if (gpu_xfer_and_flush(g_u32ResId, u32CX, u32CY, u32CW, u32CH,
+                           g_u32Stride) != 0) {
+        g_u32FlushFail++;
+        return -1;
+    }
+    g_u32FlushCount++;
+    gpu_soft_maybe_once();
+    return 0;
 }
 
 int
@@ -829,10 +1041,17 @@ virtio_gpu_present(u32 u32Width, u32 u32Height, void *pFb, u32 u32Stride)
         return -1;
     }
 
+    if (fReuse) {
+        g_u32PresentReuse++;
+    } else {
+        g_u32PresentCreate++;
+    }
     g_u32PresentCount++;
     kprintf("virtio-gpu: present PASS #%u %ux%u fb=0x%lx%s\n",
             g_u32PresentCount, u32Width, u32Height, (unsigned long)paFb,
             fReuse ? " reuse" : "");
+    /* Wave 11: greppable virtio-gpu: soft … once after first present. */
+    gpu_soft_maybe_once();
     return 0;
 }
 
@@ -894,5 +1113,11 @@ virtio_gpu_present_stub(u32 u32Width, u32 u32Height, u64 u64GuestAddr)
 u32
 virtio_gpu_present_count(void)
 {
+    /*
+     * Emit soft inventory on count read so bring-up smoke greps
+     * virtio-gpu: soft … without requiring a second present (mirrors
+     * virtio-blk q_stats / door STATS soft dumps). Never hard-gates.
+     */
+    gpu_soft_inventory("present_count");
     return g_u32PresentCount;
 }

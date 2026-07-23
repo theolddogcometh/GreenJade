@@ -18,23 +18,31 @@
  * Soft inventory (grep: init: soft) — deepen counters, never hard-fail:
  *   init: soft paths ok=… miss=…
  *   init: soft mmap ok=… miss=…
- *   init: soft ipc pipe=… efd=…
+ *   init: soft ipc pipe=… efd=… poll=…
  *   init: soft spawn fork=… wait=… miss=…   (Linux fork soft; no native spawn)
  *   init: soft doors ok=… miss=…
  *   init: soft memobj ok=… miss=…
  *   init: soft links ok=… miss=…
+ *   init: soft ids ok=… miss=…
+ *   init: soft clocks ok=… miss=…
+ *   init: soft fds ok=… miss=…
+ *   init: soft rlimit ok=… miss=…
  *   init: soft stats areas=… path=… mmap=… ipc=… spawn=… door=… memobj=…
+ *                 link=… id=… clock=… fd=… rlim=…
+ *   init: soft deepen wave=11 areas=…
  *
- * Soft deepen (never hard-fails boot):
- *   - libgj string/memory helpers (strcmp/memcpy/itoa)
- *   - CLOCK_REALTIME + clock_getres already on hard MONOTONIC path
- *   - fstat / arch_prctl GET_FS / futex WAKE / brk grow query
- *   - second anon mmap + MAP_FIXED soft probe
- *   - rootfs/product path probes + getdents on /tmp
- *   - link/symlink/readlink + pipe2 + eventfd2 + nanosleep + fork/wait
+ * Soft deepen Wave 11 (never hard-fails boot):
+ *   - libgj string/memory helpers (strcmp/memcpy/itoa/memmove/strstr/…)
+ *   - CLOCK_REALTIME + clock_getres + clock_nanosleep(0)
+ *   - fstat / arch_prctl GET_FS/GS / futex WAKE / brk grow query
+ *   - second anon mmap + MAP_FIXED + madvise + mremap + memfd soft
+ *   - rootfs/product path probes + getdents on /tmp + /proc + /dev
+ *   - link/symlink/readlink + mkdir/rename/unlink + access/statx
+ *   - pipe2 + eventfd2 + poll(0) + dup/fcntl + nanosleep + fork/wait
+ *   - identity (tid/uid/gid/euid/egid) + rlimit/sysinfo/rusage soft
  *   - native doors: platform/notify/console/qos + store/net/vfs/session
  *     STATS (no CLAIM — live daemons own claim tokens)
- *   - scsi READY/STATS + HDA STATS (no stream open)
+ *   - scsi READY/STATS/INQUIRY/READ_CAP + HDA STATS (no stream open)
  *   - named memobj create+map + soft second name probe
  *
  * Parent owns Makefile target + kernel/proc/init_embed.S (.incbin).
@@ -55,10 +63,33 @@
 #define INIT_MAP_ANON    0x20
 #define INIT_MAP_FIXED   0x10
 
+/* Soft madvise advice codes (Linux) */
+#define INIT_MADV_NORMAL   0
+#define INIT_MADV_DONTNEED 4
+
+/* Soft fcntl cmds (Linux) */
+#define INIT_F_GETFD 1
+#define INIT_F_GETFL 3
+
+/* Soft rlimit resources (Linux) */
+#define INIT_RLIMIT_STACK  3
+#define INIT_RLIMIT_NOFILE 7
+#define INIT_RLIMIT_AS     9
+
+/* Soft poll events */
+#define INIT_POLLIN 0x0001
+
 /* Soft product path table entry */
 struct init_soft_path {
     const char *szPath;
     int nFlags; /* openat flags; 0 = O_RDONLY */
+};
+
+/* Minimal pollfd shape for soft poll(timeout=0) */
+struct init_pollfd {
+    int nFd;
+    short nEvents;
+    short nRevents;
 };
 
 /* ---- Soft inventory counters (grep: init: soft) ------------------------ */
@@ -68,6 +99,7 @@ static unsigned g_cSoftMmapOk;
 static unsigned g_cSoftMmapMiss;
 static unsigned g_cSoftIpcPipeOk;
 static unsigned g_cSoftIpcEfdOk;
+static unsigned g_cSoftIpcPollOk;
 static unsigned g_cSoftSpawnFork; /* parent saw child pid from soft fork */
 static unsigned g_cSoftSpawnWait; /* wait4 after soft fork */
 static unsigned g_cSoftSpawnMiss; /* fork failed (< 0) */
@@ -77,6 +109,14 @@ static unsigned g_cSoftMemobjOk;
 static unsigned g_cSoftMemobjMiss;
 static unsigned g_cSoftLinkOk;
 static unsigned g_cSoftLinkMiss;
+static unsigned g_cSoftIdOk;
+static unsigned g_cSoftIdMiss;
+static unsigned g_cSoftClockOk;
+static unsigned g_cSoftClockMiss;
+static unsigned g_cSoftFdOk;
+static unsigned g_cSoftFdMiss;
+static unsigned g_cSoftRlimOk;
+static unsigned g_cSoftRlimMiss;
 static unsigned g_cSoftAreas; /* soft deepen suite areas completed */
 
 /* Count one door/native soft call: >=0 ok, else miss. Never hard-fails. */
@@ -90,18 +130,30 @@ soft_note_door(long i64R)
     }
 }
 
+/* Generic soft note: >=0 → *pOk, else *pMiss. */
+static void
+soft_note(long i64R, unsigned *pOk, unsigned *pMiss)
+{
+    if (i64R >= 0) {
+        (*pOk)++;
+    } else {
+        (*pMiss)++;
+    }
+}
+
 /*
  * Emit greppable soft inventory lines (prefix "init: soft ").
  * Pure observation — always soft; does not gate abi PASS.
+ * Wave 11: ids/clocks/fds/rlimit lines + deepen wave stamp + wider stats.
  */
 static void
 soft_inventory_log(void)
 {
-    static char aLine[192];
+    static char aLine[256];
     unsigned cIpc;
     unsigned cSpawnOk;
 
-    cIpc = g_cSoftIpcPipeOk + g_cSoftIpcEfdOk;
+    cIpc = g_cSoftIpcPipeOk + g_cSoftIpcEfdOk + g_cSoftIpcPollOk;
     cSpawnOk = g_cSoftSpawnFork + g_cSoftSpawnWait;
 
     /* Grep: init: soft paths */
@@ -120,9 +172,10 @@ soft_inventory_log(void)
 
     /* Grep: init: soft ipc */
     (void)gj_snprintf(aLine, sizeof(aLine),
-                      "init: soft ipc pipe=%u efd=%u\n",
+                      "init: soft ipc pipe=%u efd=%u poll=%u\n",
                       (unsigned long)g_cSoftIpcPipeOk,
-                      (unsigned long)g_cSoftIpcEfdOk);
+                      (unsigned long)g_cSoftIpcEfdOk,
+                      (unsigned long)g_cSoftIpcPollOk);
     gj_puts(aLine);
 
     /* Grep: init: soft spawn (Linux fork soft counts; native spawn N/A) */
@@ -154,10 +207,39 @@ soft_inventory_log(void)
                       (unsigned long)g_cSoftLinkMiss);
     gj_puts(aLine);
 
+    /* Grep: init: soft ids (Wave 11) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft ids ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftIdOk,
+                      (unsigned long)g_cSoftIdMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft clocks (Wave 11) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft clocks ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftClockOk,
+                      (unsigned long)g_cSoftClockMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft fds (Wave 11) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft fds ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftFdOk,
+                      (unsigned long)g_cSoftFdMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft rlimit (Wave 11) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft rlimit ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftRlimOk,
+                      (unsigned long)g_cSoftRlimMiss);
+    gj_puts(aLine);
+
     /* Grep: init: soft stats (rollup) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft stats areas=%u path=%u mmap=%u ipc=%u "
-                      "spawn=%u door=%u memobj=%u link=%u\n",
+                      "spawn=%u door=%u memobj=%u link=%u "
+                      "id=%u clock=%u fd=%u rlim=%u\n",
                       (unsigned long)g_cSoftAreas,
                       (unsigned long)g_cSoftPathOk,
                       (unsigned long)g_cSoftMmapOk,
@@ -165,7 +247,17 @@ soft_inventory_log(void)
                       (unsigned long)cSpawnOk,
                       (unsigned long)g_cSoftDoorOk,
                       (unsigned long)g_cSoftMemobjOk,
-                      (unsigned long)g_cSoftLinkOk);
+                      (unsigned long)g_cSoftLinkOk,
+                      (unsigned long)g_cSoftIdOk,
+                      (unsigned long)g_cSoftClockOk,
+                      (unsigned long)g_cSoftFdOk,
+                      (unsigned long)g_cSoftRlimOk);
+    gj_puts(aLine);
+
+    /* Grep: init: soft deepen wave (Wave 11 stamp) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft deepen wave=11 areas=%u\n",
+                      (unsigned long)g_cSoftAreas);
     gj_puts(aLine);
 }
 
@@ -203,6 +295,7 @@ soft_open_probe(const char *szPath, size_t cbRead)
         }
         (void)linux_read((int)i64Fd, aBuf, cbRead);
         (void)linux_lseek((int)i64Fd, 0, 0 /* SEEK_SET */);
+        (void)linux_pread64((int)i64Fd, aBuf, cbRead > 8u ? 8u : cbRead, 0);
     }
     (void)linux_close((int)i64Fd);
 }
@@ -211,8 +304,9 @@ soft_open_probe(const char *szPath, size_t cbRead)
 static void
 soft_libgj_string(void)
 {
-    static char aDst[32];
+    static char aDst[48];
     static char aNum[24];
+    static char aMove[16];
     size_t cb;
 
     (void)gj_memset(aDst, 0, sizeof(aDst));
@@ -222,27 +316,88 @@ soft_libgj_string(void)
     }
     cb = gj_strlen(aDst);
     (void)cb;
+    (void)gj_strnlen(aDst, sizeof(aDst));
     (void)gj_strlcpy(aDst, "init", sizeof(aDst));
     (void)gj_strlcat(aDst, "-soft", sizeof(aDst));
+    (void)gj_strncpy(aMove, "wave11", sizeof(aMove));
+    (void)gj_memmove(aMove + 2, aMove, 4);
     (void)gj_itoa(42, aNum, sizeof(aNum));
     (void)gj_utoa(42ul, aNum, sizeof(aNum));
     (void)gj_xtoa(0xabcul, aNum, sizeof(aNum), 1, 4);
     (void)gj_memchr(aDst, 'i', sizeof(aDst));
     (void)gj_memcmp(aDst, "init", 4);
+    (void)gj_strchr(aDst, 's');
+    (void)gj_strrchr(aDst, 't');
+    (void)gj_strstr(aDst, "soft");
+    (void)gj_strcasecmp("Init", "init");
+    (void)gj_strncasecmp("Wave", "wave", 4);
+    (void)gj_strtoul("11", 0, 10);
+    (void)gj_strtol("-11", 0, 10);
 }
 
-/* Soft: clocks beyond hard MONOTONIC (REALTIME + getres). */
+/* Soft: clocks beyond hard MONOTONIC (REALTIME + getres + nanosleep 0). */
 static void
 soft_clocks(void)
 {
     long i64Ts[2];
+    long i64R;
 
     i64Ts[0] = i64Ts[1] = 0;
-    (void)linux_clock_gettime(0 /* CLOCK_REALTIME */, i64Ts);
+    i64R = linux_clock_gettime(0 /* CLOCK_REALTIME */, i64Ts);
+    soft_note(i64R, &g_cSoftClockOk, &g_cSoftClockMiss);
+
     i64Ts[0] = i64Ts[1] = 0;
-    (void)linux_clock_getres(0 /* CLOCK_REALTIME */, i64Ts);
+    i64R = linux_clock_getres(0 /* CLOCK_REALTIME */, i64Ts);
+    soft_note(i64R, &g_cSoftClockOk, &g_cSoftClockMiss);
+
     i64Ts[0] = i64Ts[1] = 0;
-    (void)linux_clock_getres(1 /* CLOCK_MONOTONIC */, i64Ts);
+    i64R = linux_clock_getres(1 /* CLOCK_MONOTONIC */, i64Ts);
+    soft_note(i64R, &g_cSoftClockOk, &g_cSoftClockMiss);
+
+    /* Zero-duration clock_nanosleep — never blocks. */
+    i64Ts[0] = 0;
+    i64Ts[1] = 0;
+    i64R = linux_clock_nanosleep(1 /* CLOCK_MONOTONIC */, 0, i64Ts, 0);
+    soft_note(i64R, &g_cSoftClockOk, &g_cSoftClockMiss);
+
+    /* Soft REALTIME zero sleep as well. */
+    i64Ts[0] = 0;
+    i64Ts[1] = 0;
+    i64R = linux_clock_nanosleep(0 /* CLOCK_REALTIME */, 0, i64Ts, 0);
+    soft_note(i64R, &g_cSoftClockOk, &g_cSoftClockMiss);
+}
+
+/* Soft: identity surface (tid/uid/gid/euid/egid) — Wave 11. */
+static void
+soft_ids(void)
+{
+    long i64R;
+
+    i64R = linux_gettid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    i64R = linux_getuid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    i64R = linux_getgid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    i64R = linux_geteuid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    i64R = linux_getegid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    i64R = linux_getppid();
+    soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+
+    /* Soft set_tid_address (query-shaped; pointer to static word). */
+    {
+        static int nTidClear = 0;
+
+        i64R = linux_set_tid_address(&nTidClear);
+        soft_note(i64R, &g_cSoftIdOk, &g_cSoftIdMiss);
+    }
 }
 
 /* Soft: arch_prctl GET_FS/GET_GS (TLS bases; never SET — avoid clobber). */
@@ -267,15 +422,20 @@ soft_futex(void)
     (void)linux_futex(&nWord, INIT_FUTEX_WAKE | INIT_FUTEX_PRIVATE_FLAG, 1,
                       0, 0, 0);
     (void)linux_futex(&nWord, INIT_FUTEX_WAKE, 0, 0, 0, 0);
+    (void)linux_futex_wake(&nWord, 1);
 }
 
-/* Soft: extra mmap surface (second anon + optional MAP_FIXED). */
+/* Soft: extra mmap surface (second anon + MAP_FIXED + madvise/mremap/memfd). */
 static void
 soft_mmap_extra(void)
 {
     void *pMap;
     void *pFixed;
+    void *pRemap;
     long i64Brk;
+    long i64Mfd;
+    long i64R;
+    static unsigned char aMfd[8];
 
     pMap = (void *)(uintptr_t)linux_mmap(
         0, 8192, 3 /* PROT_READ|WRITE */,
@@ -283,8 +443,21 @@ soft_mmap_extra(void)
     if (!mmap_is_err(pMap) && pMap != 0) {
         *(volatile unsigned char *)pMap = 0xcd;
         (void)linux_mprotect(pMap, 4096, 3 /* RW */);
-        (void)linux_mprotect(pMap, 4096, 1 /* R */);
-        (void)linux_munmap(pMap, 8192);
+        /* Soft madvise before protect-down / unmap. */
+        i64R = linux_madvise(pMap, 8192, INIT_MADV_NORMAL);
+        soft_note(i64R, &g_cSoftMmapOk, &g_cSoftMmapMiss);
+        /* Soft mremap grow in place (may miss — ok). */
+        pRemap = (void *)(uintptr_t)linux_mremap(pMap, 8192, 16384,
+                                                 1 /* MAYMOVE */, 0);
+        if (!mmap_is_err(pRemap) && pRemap != 0) {
+            g_cSoftMmapOk++;
+            (void)linux_madvise(pRemap, 4096, INIT_MADV_DONTNEED);
+            (void)linux_munmap(pRemap, 16384);
+        } else {
+            g_cSoftMmapMiss++;
+            (void)linux_mprotect(pMap, 4096, 1 /* R */);
+            (void)linux_munmap(pMap, 8192);
+        }
         g_cSoftMmapOk++;
     } else {
         g_cSoftMmapMiss++;
@@ -297,6 +470,27 @@ soft_mmap_extra(void)
     if (!mmap_is_err(pFixed) && pFixed != 0) {
         *(volatile unsigned char *)pFixed = 0x11;
         (void)linux_munmap(pFixed, 4096);
+        g_cSoftMmapOk++;
+    } else {
+        g_cSoftMmapMiss++;
+    }
+
+    /* Soft memfd_create + short write (no seal dance). */
+    i64Mfd = linux_memfd_create("init-mfd", 0);
+    if (i64Mfd >= 0) {
+        aMfd[0] = 'g';
+        aMfd[1] = 'j';
+        (void)linux_write((int)i64Mfd, aMfd, 2);
+        (void)linux_ftruncate((int)i64Mfd, 4096);
+        pMap = (void *)(uintptr_t)linux_mmap(
+            0, 4096, 3, INIT_MAP_PRIVATE, (int)i64Mfd, 0);
+        if (!mmap_is_err(pMap) && pMap != 0) {
+            g_cSoftMmapOk++;
+            (void)linux_munmap(pMap, 4096);
+        } else {
+            g_cSoftMmapMiss++;
+        }
+        (void)linux_close((int)i64Mfd);
         g_cSoftMmapOk++;
     } else {
         g_cSoftMmapMiss++;
@@ -320,24 +514,51 @@ soft_rootfs_paths(void)
     static const struct init_soft_path aPaths[] = {
         { "/etc/os-release", 0 },
         { "/etc/hostname", 0 },
+        { "/etc/passwd", 0 },
+        { "/etc/group", 0 },
         { "/lib/ld-gj.so.1", 0 },
         { "/lib/libc.so.6", 0 },
         { "/lib/libgj-so.so.1", 0 },
         { "/lib/libgj-gnu.so.1", 0 },
+        { "/lib/libGreenJade_icd.so", 0 },
         { "/bin/sh", 0 },
         { "/bin/greenjade-shell", 0 },
         { "/sbin/init", 0 },
         { "/sbin/sshd", 0 },
+        { "/sbin/vfsd", 0 },
+        { "/sbin/storaged", 0 },
+        { "/sbin/netstackd", 0 },
+        { "/sbin/sessiond", 0 },
+        { "/usr/bin/env", 0 },
         { "/tmp", 0 },
+        { "/proc", 0 },
+        { "/proc/self", 0 },
+        { "/dev", 0 },
+        { "/dev/null", 0 },
+        { "/opt/steam", 0 },
     };
     unsigned i;
     long i64Fd;
+    long i64R;
     static char aDent[512];
+    static unsigned char aSt[144];
 
     for (i = 0; i < (unsigned)(sizeof(aPaths) / sizeof(aPaths[0])); i++) {
         /* Short read: ELF magic / text sample when file opens. */
         soft_open_probe(aPaths[i].szPath, 16u);
     }
+
+    /* access / faccessat soft existence probes (never hard-fail). */
+    i64R = linux_access("/tmp", 0 /* F_OK */);
+    soft_note(i64R, &g_cSoftPathOk, &g_cSoftPathMiss);
+    i64R = linux_faccessat(-100, "/etc/os-release", 0, 0);
+    soft_note(i64R, &g_cSoftPathOk, &g_cSoftPathMiss);
+
+    /* newfstatat / statx soft on known path. */
+    i64R = linux_newfstatat(-100, "/tmp", aSt, 0);
+    soft_note(i64R, &g_cSoftPathOk, &g_cSoftPathMiss);
+    i64R = linux_statx(-100, "/tmp", 0, 0x000007ffu /* BASIC_STATS */, aSt);
+    soft_note(i64R, &g_cSoftPathOk, &g_cSoftPathMiss);
 
     /* Directory getdents on /tmp when open succeeds. */
     i64Fd = linux_openat(-100, "/tmp", 0, 0);
@@ -348,9 +569,19 @@ soft_rootfs_paths(void)
     } else {
         g_cSoftPathMiss++;
     }
+
+    /* Soft getdents on /proc when present. */
+    i64Fd = linux_openat(-100, "/proc", 0, 0);
+    if (i64Fd >= 0) {
+        (void)linux_getdents64((int)i64Fd, aDent, sizeof(aDent));
+        (void)linux_close((int)i64Fd);
+        g_cSoftPathOk++;
+    } else {
+        g_cSoftPathMiss++;
+    }
 }
 
-/* Soft: FS create + link/symlink/readlink + fstat (bring-up stubs OK). */
+/* Soft: FS create + link/symlink/readlink + mkdir/rename/unlink. */
 static void
 soft_fs_links(void)
 {
@@ -358,19 +589,47 @@ soft_fs_links(void)
     static const char szB[] = "/tmp/init_ln_b";
     static const char szSl[] = "/tmp/init_sl";
     static const char szTouch[] = "/tmp/init_touch";
+    static const char szDir[] = "/tmp/init_soft_dir";
+    static const char szRen[] = "/tmp/init_soft_ren";
+    static const char szRen2[] = "/tmp/init_soft_ren2";
     static char aLink[64];
     static unsigned char aSt[144];
     static char aDent[256];
+    static char aPwrite[4];
     long i64Fd;
     long i64R;
 
     i64Fd = linux_openat(-100, szTouch, 0x41 /* O_WRONLY|O_CREAT */, 0644);
     if (i64Fd >= 0) {
         (void)linux_write((int)i64Fd, "gj", 2);
+        aPwrite[0] = 'W';
+        aPwrite[1] = '1';
+        (void)linux_pwrite64((int)i64Fd, aPwrite, 2, 0);
+        (void)linux_fdatasync((int)i64Fd);
         (void)linux_fsync((int)i64Fd);
         (void)linux_fstat((int)i64Fd, aSt);
         (void)linux_close((int)i64Fd);
         g_cSoftLinkOk++;
+    } else {
+        g_cSoftLinkMiss++;
+    }
+
+    /* Soft sync (global) — never hard-fail. */
+    (void)linux_sync();
+
+    i64R = linux_mkdir(szDir, 0755);
+    soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
+    i64R = linux_mkdirat(-100, szDir, 0755); /* may EEXIST — still soft */
+    (void)i64R;
+
+    i64Fd = linux_openat(-100, szRen, 0x41 /* O_WRONLY|O_CREAT */, 0644);
+    if (i64Fd >= 0) {
+        (void)linux_write((int)i64Fd, "R", 1);
+        (void)linux_close((int)i64Fd);
+        i64R = linux_rename(szRen, szRen2);
+        soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
+        i64R = linux_unlink(szRen2);
+        soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
     } else {
         g_cSoftLinkMiss++;
     }
@@ -401,24 +660,55 @@ soft_fs_links(void)
         } else {
             g_cSoftLinkMiss++;
         }
+        /* Soft readlinkat + unlinkat cleanup (best-effort). */
+        i64R = linux_readlinkat(-100, szSl, aLink, sizeof(aLink));
+        soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
+        (void)linux_unlinkat(-100, szB, 0);
+        (void)linux_unlinkat(-100, szSl, 0);
+        (void)linux_chmod(szA, 0644);
+        i64R = linux_unlink(szA);
+        soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
     } else {
         g_cSoftLinkMiss++;
     }
+
+    /* Soft rmdir of soft dir (may miss if not empty / unsupported). */
+    i64R = linux_rmdir(szDir);
+    soft_note(i64R, &g_cSoftLinkOk, &g_cSoftLinkMiss);
 }
 
-/* Soft: pipe2 + eventfd2 round-trip (no block). */
+/* Soft: pipe2 + eventfd2 + poll(timeout=0) round-trip (no block). */
 static void
 soft_ipc_fds(void)
 {
     int aPipe[2];
     long i64Efd;
+    long i64R;
     static unsigned char aScratch[8];
     static unsigned long long u64One = 1ull;
+    struct init_pollfd stPf;
 
     aPipe[0] = aPipe[1] = -1;
     if (linux_pipe2(aPipe, 0) == 0 && aPipe[0] >= 0 && aPipe[1] >= 0) {
         (void)linux_write(aPipe[1], "gj", 2);
+        /* Soft poll with timeout 0 while data ready — never blocks. */
+        stPf.nFd = aPipe[0];
+        stPf.nEvents = (short)INIT_POLLIN;
+        stPf.nRevents = 0;
+        i64R = linux_poll(&stPf, 1ul, 0);
+        if (i64R >= 0) {
+            g_cSoftIpcPollOk++;
+        }
         (void)linux_read(aPipe[0], aScratch, 2);
+        (void)linux_close(aPipe[0]);
+        (void)linux_close(aPipe[1]);
+        g_cSoftIpcPipeOk++;
+    }
+
+    /* Soft CLOEXEC pipe probe (flags may soft-miss). */
+    aPipe[0] = aPipe[1] = -1;
+    if (linux_pipe2(aPipe, 0x80000 /* O_CLOEXEC */) == 0 &&
+        aPipe[0] >= 0 && aPipe[1] >= 0) {
         (void)linux_close(aPipe[0]);
         (void)linux_close(aPipe[1]);
         g_cSoftIpcPipeOk++;
@@ -428,10 +718,90 @@ soft_ipc_fds(void)
     if (i64Efd >= 0) {
         u64One = 1ull;
         (void)linux_write((int)i64Efd, &u64One, 8);
+        stPf.nFd = (int)i64Efd;
+        stPf.nEvents = (short)INIT_POLLIN;
+        stPf.nRevents = 0;
+        i64R = linux_poll(&stPf, 1ul, 0);
+        if (i64R >= 0) {
+            g_cSoftIpcPollOk++;
+        }
         (void)linux_read((int)i64Efd, &u64One, 8);
         (void)linux_close((int)i64Efd);
         g_cSoftIpcEfdOk++;
     }
+}
+
+/* Soft: dup/fcntl/close_range surface (Wave 11 fds). */
+static void
+soft_fds(void)
+{
+    long i64Dup;
+    long i64R;
+    int aPipe[2];
+
+    aPipe[0] = aPipe[1] = -1;
+    if (linux_pipe2(aPipe, 0) != 0 || aPipe[0] < 0) {
+        g_cSoftFdMiss++;
+        return;
+    }
+
+    i64Dup = linux_dup(aPipe[0]);
+    soft_note(i64Dup, &g_cSoftFdOk, &g_cSoftFdMiss);
+
+    i64R = linux_fcntl(aPipe[0], INIT_F_GETFD, 0);
+    soft_note(i64R, &g_cSoftFdOk, &g_cSoftFdMiss);
+
+    i64R = linux_fcntl(aPipe[0], INIT_F_GETFL, 0);
+    soft_note(i64R, &g_cSoftFdOk, &g_cSoftFdMiss);
+
+    if (i64Dup >= 0) {
+        i64R = linux_dup2((int)i64Dup, (int)i64Dup); /* identity soft */
+        soft_note(i64R, &g_cSoftFdOk, &g_cSoftFdMiss);
+        i64R = linux_dup3(aPipe[0], (int)i64Dup, 0);
+        soft_note(i64R, &g_cSoftFdOk, &g_cSoftFdMiss);
+        (void)linux_close((int)i64Dup);
+    }
+
+    /* Soft close_range on the pipe pair upper fd only (safe band). */
+    if (aPipe[1] >= 0) {
+        i64R = linux_close_range((unsigned)aPipe[1], (unsigned)aPipe[1], 0);
+        if (i64R < 0) {
+            (void)linux_close(aPipe[1]);
+            g_cSoftFdMiss++;
+        } else {
+            g_cSoftFdOk++;
+        }
+    }
+    (void)linux_close(aPipe[0]);
+}
+
+/* Soft: rlimit / sysinfo / rusage (Wave 11). */
+static void
+soft_rlimit(void)
+{
+    static unsigned long long aRlim[2];
+    static unsigned char aInfo[128];
+    static unsigned char aUsage[144];
+    long i64R;
+
+    aRlim[0] = aRlim[1] = 0;
+    i64R = linux_getrlimit(INIT_RLIMIT_STACK, aRlim);
+    soft_note(i64R, &g_cSoftRlimOk, &g_cSoftRlimMiss);
+
+    aRlim[0] = aRlim[1] = 0;
+    i64R = linux_getrlimit(INIT_RLIMIT_NOFILE, aRlim);
+    soft_note(i64R, &g_cSoftRlimOk, &g_cSoftRlimMiss);
+
+    /* prlimit64 query-only (pNew = NULL). */
+    aRlim[0] = aRlim[1] = 0;
+    i64R = linux_prlimit64(0, INIT_RLIMIT_AS, 0, aRlim);
+    soft_note(i64R, &g_cSoftRlimOk, &g_cSoftRlimMiss);
+
+    i64R = linux_sysinfo(aInfo);
+    soft_note(i64R, &g_cSoftRlimOk, &g_cSoftRlimMiss);
+
+    i64R = linux_getrusage(0 /* RUSAGE_SELF */, aUsage);
+    soft_note(i64R, &g_cSoftRlimOk, &g_cSoftRlimMiss);
 }
 
 /* Soft: nanosleep 1us + fork/wait4 (spawn soft counts; child may be stub). */
@@ -454,6 +824,9 @@ soft_sleep_fork(void)
         if (i64W >= 0) {
             g_cSoftSpawnWait++;
         }
+        /* Soft waitid surface (may miss). */
+        (void)linux_waitid(1 /* P_PID */, (unsigned)i64Child, 0, 4 /* WEXITED */,
+                           0);
     } else if (i64Child == 0) {
         /* Child view not scheduled in bring-up fork stub — unused */
     } else {
@@ -474,51 +847,71 @@ soft_native_doors(void)
     static unsigned u32Sess[8];
     static unsigned u32Scsi[2];
     static unsigned u32Hda[3];
+    static unsigned char aInq[36];
+    static unsigned u32Cap[2];
+    static unsigned char aEv[32];
     static unsigned long long u64Cap;
     long i64R;
 
     /* Platform inventory (op0 IOMMU present, op1 MSI-X count; no wow64 flip). */
     soft_note_door(gj_platform_info(0, 0, 0, 0));
     soft_note_door(gj_platform_info(1, 0, 0, 0));
+    /* WOW64 query only (arg1=0) — never enable/disable. */
+    soft_note_door(gj_platform_info(2, 0, 0, 0));
 
     /* Notify poll only (block=0). */
     soft_note_door(gj_notify_wait(GJ_NOTIFY_WHICH_MSIX_GLOBAL, 0ul, 0));
 
     soft_note_door(gj_console_poll());
     soft_note_door(gj_set_qos(0, 0));
+    soft_note_door(gj_set_cpu(0, 0));
     gj_yield(); /* void return — surface exercised counts as door ok */
     g_cSoftDoorOk++;
     soft_note_door(gj_dlog("greenjade-init: soft dlog\n"));
 
-    /* Store: STATS + CAP query (no claim/read/write). */
+    /* Store: STATS + CAP + QUEUE + FLUSH + RING_STATE (no claim/read/write). */
     u32Store[0] = u32Store[1] = u32Store[2] = u32Store[3] = 0;
     soft_note_door(gj_store(GJ_STORE_OP_STATS, (long)(uintptr_t)u32Store, 0, 0));
     u64Cap = 0;
     soft_note_door(gj_store(GJ_STORE_OP_CAP, (long)(uintptr_t)&u64Cap, 0, 0));
     soft_note_door(gj_store(GJ_STORE_OP_QUEUE_INFO, 0, 0, 0));
+    soft_note_door(gj_store(GJ_STORE_OP_FLUSH, 0, 0, 0));
+    soft_note_door(gj_store(GJ_STORE_OP_RING_STATE, (long)(uintptr_t)u32Store, 0,
+                            0));
 
-    /* Net: POLL + STATS (+ TCP_STATS soft). */
+    /* Net: POLL + STATS (+ TCP_STATS soft) + QUEUE_INFO numeric. */
     soft_note_door(gj_net(GJ_NET_OP_POLL, 0, 0, 0));
     u32Net[0] = u32Net[1] = u32Net[2] = u32Net[3] = 0;
     soft_note_door(gj_net(GJ_NET_OP_STATS, (long)(uintptr_t)u32Net, 0, 0));
     soft_note_door(gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)u32Net, 0, 0));
+    soft_note_door(gj_net(14u /* QUEUE_INFO */, (long)(uintptr_t)u32Net, 0, 0));
+    soft_note_door(gj_net(20u /* RING_STATE */, (long)(uintptr_t)u32Net, 0, 0));
 
-    /* VFS: STATS only. */
+    /* VFS: STATS + LIST soft (no CLAIM). */
     u32Vfs[0] = u32Vfs[1] = u32Vfs[2] = u32Vfs[3] = 0;
     soft_note_door(gj_vfs(GJ_VFS_OP_STATS, (long)(uintptr_t)u32Vfs, 0, 0));
+    soft_note_door(gj_vfs(GJ_VFS_OP_LIST, (long)(uintptr_t)aInq, 0,
+                          (long)sizeof(aInq)));
 
-    /* Session: STATS + DISPLAY_INFO soft (no CLAIM). */
+    /* Session: STATS + DISPLAY_INFO + INPUT_POLL + INPUT_POP soft (no CLAIM). */
     u32Sess[0] = u32Sess[1] = u32Sess[2] = u32Sess[3] = 0;
     soft_note_door(gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)u32Sess, 0, 0));
     soft_note_door(gj_session(GJ_SESS_OP_DISPLAY_INFO, (long)(uintptr_t)u32Sess,
                               0, 0));
     soft_note_door(gj_session(GJ_SESS_OP_INPUT_POLL, 0, 0, 0));
+    /* INPUT_POP may -EAGAIN with empty queue — still soft door miss ok. */
+    soft_note_door(gj_session(GJ_SESS_OP_INPUT_POP, (long)(uintptr_t)aEv, 0, 0));
 
-    /* SCSI: READY + STATS (no READ/WRITE). */
+    /* SCSI: READY + STATS + INQUIRY + READ_CAP (no READ/WRITE). */
     i64R = gj_scsi(GJ_SCSI_OP_READY, 0, 0, 0);
     soft_note_door(i64R);
     u32Scsi[0] = u32Scsi[1] = 0;
     soft_note_door(gj_scsi(GJ_SCSI_OP_STATS, (long)(uintptr_t)u32Scsi, 0, 0));
+    (void)gj_memset(aInq, 0, sizeof(aInq));
+    soft_note_door(gj_scsi(GJ_SCSI_OP_INQUIRY, (long)(uintptr_t)aInq,
+                           (long)sizeof(aInq), 0));
+    u32Cap[0] = u32Cap[1] = 0;
+    soft_note_door(gj_scsi(GJ_SCSI_OP_READ_CAP, (long)(uintptr_t)u32Cap, 0, 0));
 
     /* HDA: STATS only (no OPEN/START). */
     u32Hda[0] = u32Hda[1] = u32Hda[2] = 0;
@@ -562,6 +955,20 @@ soft_named_memobj(void)
     } else {
         g_cSoftMemobjMiss++;
     }
+
+    /* Third soft name — Wave 11 deepen. */
+    i64R = gj_memobj_create_named("init-shm3", 1);
+    if (i64R == 0) {
+        i64Va = gj_memobj_map_named("init-shm3", 0x35200000ul, 3);
+        if (i64Va > 0) {
+            *(volatile unsigned *)(uintptr_t)i64Va = 0x53484d33u; /* SHM3 */
+            g_cSoftMemobjOk++;
+        } else {
+            g_cSoftMemobjMiss++;
+        }
+    } else {
+        g_cSoftMemobjMiss++;
+    }
 }
 
 /* Aggregate soft deepen; inventory log + soft deepen marker when reached. */
@@ -571,6 +978,8 @@ soft_deepen_all(void)
     soft_libgj_string();
     g_cSoftAreas++;
     soft_clocks();
+    g_cSoftAreas++;
+    soft_ids();
     g_cSoftAreas++;
     soft_arch_prctl();
     g_cSoftAreas++;
@@ -583,6 +992,10 @@ soft_deepen_all(void)
     soft_fs_links();
     g_cSoftAreas++;
     soft_ipc_fds();
+    g_cSoftAreas++;
+    soft_fds();
+    g_cSoftAreas++;
+    soft_rlimit();
     g_cSoftAreas++;
     soft_sleep_fork();
     g_cSoftAreas++;
@@ -665,7 +1078,7 @@ _start(void)
     soft_named_memobj();
 
     /*
-     * Soft deepen: clocks/arch/futex/mmap/rootfs/ipc/doors.
+     * Soft deepen: clocks/ids/arch/futex/mmap/rootfs/ipc/fds/rlimit/doors.
      * All soft — never changes hard-fail exit codes above.
      */
     soft_deepen_all();

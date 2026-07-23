@@ -8,9 +8,20 @@
  * Pure C11 — dual MIT OR Apache-2.0.
  *
  * greppable: GJ_COLD_MODE_ cold_ipc_register_service cold_ipc_stats
+ *
+ * Soft product inventory (Wave 11 exclusive; this unit only):
+ *   - Mode mask / path preference (service-first vs doors-first)
+ *   - Service + queue-consumer registration gens + bind tallies
+ *   - Queue slot lifecycle (FREE/PENDING/CLAIMED/DONE) + depth
+ *   - Submit path hits (service/doors/queue) + outcome counters
+ *   Never hard-gates; diagnostics only (wrap OK).
+ * Greppable twin prefixes (product / agent greps):
+ *   "cold_ipc: soft …"
+ *   "cold: soft …"
  */
 #include <gj/cold_ipc.h>
 #include <gj/door.h>
+#include <gj/klog.h>
 #include <gj/string.h>
 #include <gj/thread.h>
 
@@ -51,6 +62,34 @@ static u64 g_u64RegQueue;
 static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
+/*
+ * Soft product inventory (Wave 11). Cumulative unless noted live.
+ * greppable: cold_ipc: soft … / cold: soft …
+ */
+static u32 g_u32SoftInitEnter;     /* cold_ipc_init entries */
+static u32 g_u32SoftInitOk;        /* first-time init completed */
+static u32 g_u32SoftInitIdem;      /* already-inited early return */
+static u32 g_u32SoftSubmitEnter;   /* cold_ipc_submit entries */
+static u32 g_u32SoftSubmitNull;    /* submit with pRegs == NULL */
+static u32 g_u32SoftSubmitSvc;     /* submit took service path */
+static u32 g_u32SoftSubmitDoor;    /* submit took doors path */
+static u32 g_u32SoftSubmitQueue;   /* submit took queue path */
+static u32 g_u32SoftSubmitEnosys;  /* submit fell through to ENOSYS */
+static u32 g_u32SoftDeqEnter;      /* cold_ipc_dequeue entries */
+static u32 g_u32SoftDeqClaim;      /* soft claim PENDING → CLAIMED */
+static u32 g_u32SoftDeqEmpty;      /* dequeue empty / null */
+static u32 g_u32SoftReplyEnter;    /* cold_ipc_reply entries */
+static u32 g_u32SoftReplyOk;       /* reply matched PENDING/CLAIMED */
+static u32 g_u32SoftReplyMiss;     /* reply id miss */
+static u32 g_u32SoftLocalEnter;    /* cold_ipc_service_local entries */
+static u32 g_u32SoftLocalHit;      /* service_local with pfn bound */
+static u32 g_u32SoftLocalMiss;     /* service_local unbound → ENOSYS */
+static u32 g_u32SoftLogN;          /* soft inventory log emissions */
+static u8  g_fSoftInvOnce;         /* one-shot deep dump after activity */
+
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+
 static u32
 bump_service_gen(void)
 {
@@ -87,6 +126,49 @@ count_pending(void)
         }
     }
     return u32N;
+}
+
+/**
+ * Soft slot tallies by state (diagnostics; no hard lock).
+ */
+static void
+count_slots(u32 *pFree, u32 *pPending, u32 *pClaimed, u32 *pDone)
+{
+    u32 iSlot;
+    u32 u32Free = 0;
+    u32 u32Pending = 0;
+    u32 u32Claimed = 0;
+    u32 u32Done = 0;
+
+    for (iSlot = 0; iSlot < GJ_COLD_QUEUE_DEPTH; iSlot++) {
+        switch (g_aQ[iSlot].u32State) {
+        case GJ_COLD_PENDING:
+            u32Pending++;
+            break;
+        case GJ_COLD_CLAIMED:
+            u32Claimed++;
+            break;
+        case GJ_COLD_DONE:
+            u32Done++;
+            break;
+        case GJ_COLD_FREE:
+        default:
+            u32Free++;
+            break;
+        }
+    }
+    if (pFree != NULL) {
+        *pFree = u32Free;
+    }
+    if (pPending != NULL) {
+        *pPending = u32Pending;
+    }
+    if (pClaimed != NULL) {
+        *pClaimed = u32Claimed;
+    }
+    if (pDone != NULL) {
+        *pDone = u32Done;
+    }
 }
 
 /**
@@ -132,11 +214,240 @@ queue_usable(void)
            (g_fAttached || g_u32QueueGen != 0 || g_pfnService != NULL);
 }
 
+/**
+ * Greppable soft cold_ipc inventory (product / smoke).
+ * Twin prefixes so either agent grep works:
+ *   cold_ipc: soft inventory|mode|service|queue|path|submit|dequeue|reply …
+ *   cold: soft inventory|mode|service|queue|path|submit|dequeue|reply …
+ * greppable: cold_ipc: soft
+ * greppable: cold: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Free;
+    u32 u32Pending;
+    u32 u32Claimed;
+    u32 u32Done;
+    u32 u32Mode;
+    u32 u32SvcGen;
+    u32 u32QGen;
+    u32 u32Attached;
+    u32 u32SvcBound;
+    u32 u32DoorsEn;
+    u32 u32SvcUsable;
+    u32 u32DoorsUsable;
+    u32 u32QueueUsable;
+    u32 u32DoorsFirst;
+    u32 u32SvcFirst;
+    u32 u32ReqSrv;
+    const char *szOrder;
+
+    if (g_u32SoftLogN < 0xffffffffu) {
+        g_u32SoftLogN++;
+    }
+
+    /* Snapshot live state (diagnostics only; no hard lock). */
+    count_slots(&u32Free, &u32Pending, &u32Claimed, &u32Done);
+    u32Mode = g_u32ModeFlags;
+    u32SvcGen = g_u32ServiceGen;
+    u32QGen = g_u32QueueGen;
+    u32Attached = cold_ipc_personality_attached() ? 1u : 0u;
+    u32SvcBound = (g_pfnService != NULL) ? 1u : 0u;
+    u32DoorsEn = (u32Mode & GJ_COLD_MODE_DOORS) != 0 ? 1u : 0u;
+    u32SvcUsable = service_usable() ? 1u : 0u;
+    u32DoorsUsable = doors_usable(NULL) ? 1u : 0u;
+    u32QueueUsable = queue_usable() ? 1u : 0u;
+    u32DoorsFirst = ((u32Mode & GJ_COLD_MODE_DOORS_FIRST) != 0) &&
+                    ((u32Mode & GJ_COLD_MODE_SERVICE_FIRST) == 0)
+                        ? 1u
+                        : 0u;
+    u32SvcFirst = (u32Mode & GJ_COLD_MODE_SERVICE_FIRST) != 0 ? 1u : 0u;
+    u32ReqSrv = (u32Mode & GJ_COLD_MODE_REQUIRE_SERVER) != 0 ? 1u : 0u;
+    if (u32DoorsFirst) {
+        szOrder = "doors>service>queue";
+    } else {
+        szOrder = "service>doors>queue";
+    }
+
+    /*
+     * Primary prefix: cold_ipc: soft …
+     * Catalog capacity + live gens + path tallies for smoke greps.
+     */
+    /* Grep: cold_ipc: soft inventory */
+    kprintf("cold_ipc: soft inventory depth=%u free=%u pending=%u "
+            "claimed=%u done=%u attached=%u svc_bound=%u doors_en=%u "
+            "mode=0x%x svc_gen=%u q_gen=%u log_n=%u\n",
+            (unsigned)GJ_COLD_QUEUE_DEPTH, u32Free, u32Pending, u32Claimed,
+            u32Done, u32Attached, u32SvcBound, u32DoorsEn, u32Mode, u32SvcGen,
+            u32QGen, g_u32SoftLogN);
+
+    /* Grep: cold_ipc: soft mode */
+    kprintf("cold_ipc: soft mode flags=0x%x doors=%u service=%u queue=%u "
+            "svc_first=%u doors_first=%u req_server=%u changes=%llu "
+            "order=%s\n",
+            u32Mode, u32DoorsEn,
+            (u32Mode & GJ_COLD_MODE_SERVICE) != 0 ? 1u : 0u,
+            (u32Mode & GJ_COLD_MODE_QUEUE) != 0 ? 1u : 0u, u32SvcFirst,
+            u32DoorsFirst, u32ReqSrv,
+            (unsigned long long)g_u64ModeChanges, szOrder);
+
+    /* Grep: cold_ipc: soft service */
+    kprintf("cold_ipc: soft service bound=%u gen=%u usable=%u reg=%llu "
+            "unreg=%llu local_enter=%u local_hit=%u local_miss=%u\n",
+            u32SvcBound, u32SvcGen, u32SvcUsable,
+            (unsigned long long)g_u64RegService,
+            (unsigned long long)g_u64UnregService, g_u32SoftLocalEnter,
+            g_u32SoftLocalHit, g_u32SoftLocalMiss);
+
+    /* Grep: cold_ipc: soft queue */
+    kprintf("cold_ipc: soft queue depth=%u free=%u pending=%u claimed=%u "
+            "done=%u gen=%u usable=%u reg=%llu unreg=%llu full=%llu\n",
+            (unsigned)GJ_COLD_QUEUE_DEPTH, u32Free, u32Pending, u32Claimed,
+            u32Done, u32QGen, u32QueueUsable,
+            (unsigned long long)g_u64RegQueue,
+            (unsigned long long)g_u64UnregQueue,
+            (unsigned long long)g_u64QueueFull);
+
+    /* Grep: cold_ipc: soft path */
+    kprintf("cold_ipc: soft path order=%s svc_usable=%u doors_usable=%u "
+            "queue_usable=%u claim=service+doors+queue "
+            "(soft inventory; not bar3)\n",
+            szOrder, u32SvcUsable, u32DoorsUsable, u32QueueUsable);
+
+    /* Grep: cold_ipc: soft submit */
+    kprintf("cold_ipc: soft submit enter=%u null=%u svc=%u door=%u "
+            "queue=%u enosys=%u hits_svc=%llu hits_door=%llu "
+            "hits_queue=%llu submits=%llu inval=%llu\n",
+            g_u32SoftSubmitEnter, g_u32SoftSubmitNull, g_u32SoftSubmitSvc,
+            g_u32SoftSubmitDoor, g_u32SoftSubmitQueue, g_u32SoftSubmitEnosys,
+            (unsigned long long)g_u64ServiceHits,
+            (unsigned long long)g_u64DoorHits,
+            (unsigned long long)g_u64QueueHits,
+            (unsigned long long)g_u64Submits,
+            (unsigned long long)g_u64Inval);
+
+    /* Grep: cold_ipc: soft dequeue */
+    kprintf("cold_ipc: soft dequeue enter=%u claim=%u empty=%u "
+            "dequeues=%llu empty_ctr=%llu\n",
+            g_u32SoftDeqEnter, g_u32SoftDeqClaim, g_u32SoftDeqEmpty,
+            (unsigned long long)g_u64Dequeues,
+            (unsigned long long)g_u64DequeueEmpty);
+
+    /* Grep: cold_ipc: soft reply */
+    kprintf("cold_ipc: soft reply enter=%u ok=%u miss=%u replies=%llu "
+            "miss_ctr=%llu lifecycle=FREE>PENDING>CLAIMED>DONE>FREE\n",
+            g_u32SoftReplyEnter, g_u32SoftReplyOk, g_u32SoftReplyMiss,
+            (unsigned long long)g_u64Replies,
+            (unsigned long long)g_u64ReplyMiss);
+
+    /* Grep: cold_ipc: soft init */
+    kprintf("cold_ipc: soft init enter=%u ok=%u idem=%u inited=%u\n",
+            g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftInitIdem,
+            g_fInited ? 1u : 0u);
+
+    /*
+     * Twin prefix: cold: soft … (agent-friendly alias; same tallies).
+     */
+    /* Grep: cold: soft inventory */
+    kprintf("cold: soft inventory depth=%u free=%u pending=%u "
+            "claimed=%u done=%u attached=%u svc_bound=%u doors_en=%u "
+            "mode=0x%x svc_gen=%u q_gen=%u log_n=%u\n",
+            (unsigned)GJ_COLD_QUEUE_DEPTH, u32Free, u32Pending, u32Claimed,
+            u32Done, u32Attached, u32SvcBound, u32DoorsEn, u32Mode, u32SvcGen,
+            u32QGen, g_u32SoftLogN);
+
+    /* Grep: cold: soft mode */
+    kprintf("cold: soft mode flags=0x%x doors=%u service=%u queue=%u "
+            "svc_first=%u doors_first=%u req_server=%u changes=%llu "
+            "order=%s\n",
+            u32Mode, u32DoorsEn,
+            (u32Mode & GJ_COLD_MODE_SERVICE) != 0 ? 1u : 0u,
+            (u32Mode & GJ_COLD_MODE_QUEUE) != 0 ? 1u : 0u, u32SvcFirst,
+            u32DoorsFirst, u32ReqSrv,
+            (unsigned long long)g_u64ModeChanges, szOrder);
+
+    /* Grep: cold: soft service */
+    kprintf("cold: soft service bound=%u gen=%u usable=%u reg=%llu "
+            "unreg=%llu local_enter=%u local_hit=%u local_miss=%u\n",
+            u32SvcBound, u32SvcGen, u32SvcUsable,
+            (unsigned long long)g_u64RegService,
+            (unsigned long long)g_u64UnregService, g_u32SoftLocalEnter,
+            g_u32SoftLocalHit, g_u32SoftLocalMiss);
+
+    /* Grep: cold: soft queue */
+    kprintf("cold: soft queue depth=%u free=%u pending=%u claimed=%u "
+            "done=%u gen=%u usable=%u reg=%llu unreg=%llu full=%llu\n",
+            (unsigned)GJ_COLD_QUEUE_DEPTH, u32Free, u32Pending, u32Claimed,
+            u32Done, u32QGen, u32QueueUsable,
+            (unsigned long long)g_u64RegQueue,
+            (unsigned long long)g_u64UnregQueue,
+            (unsigned long long)g_u64QueueFull);
+
+    /* Grep: cold: soft path */
+    kprintf("cold: soft path order=%s svc_usable=%u doors_usable=%u "
+            "queue_usable=%u claim=service+doors+queue "
+            "(soft inventory; not bar3)\n",
+            szOrder, u32SvcUsable, u32DoorsUsable, u32QueueUsable);
+
+    /* Grep: cold: soft submit */
+    kprintf("cold: soft submit enter=%u null=%u svc=%u door=%u "
+            "queue=%u enosys=%u hits_svc=%llu hits_door=%llu "
+            "hits_queue=%llu submits=%llu inval=%llu\n",
+            g_u32SoftSubmitEnter, g_u32SoftSubmitNull, g_u32SoftSubmitSvc,
+            g_u32SoftSubmitDoor, g_u32SoftSubmitQueue, g_u32SoftSubmitEnosys,
+            (unsigned long long)g_u64ServiceHits,
+            (unsigned long long)g_u64DoorHits,
+            (unsigned long long)g_u64QueueHits,
+            (unsigned long long)g_u64Submits,
+            (unsigned long long)g_u64Inval);
+
+    /* Grep: cold: soft dequeue */
+    kprintf("cold: soft dequeue enter=%u claim=%u empty=%u "
+            "dequeues=%llu empty_ctr=%llu\n",
+            g_u32SoftDeqEnter, g_u32SoftDeqClaim, g_u32SoftDeqEmpty,
+            (unsigned long long)g_u64Dequeues,
+            (unsigned long long)g_u64DequeueEmpty);
+
+    /* Grep: cold: soft reply */
+    kprintf("cold: soft reply enter=%u ok=%u miss=%u replies=%llu "
+            "miss_ctr=%llu lifecycle=FREE>PENDING>CLAIMED>DONE>FREE\n",
+            g_u32SoftReplyEnter, g_u32SoftReplyOk, g_u32SoftReplyMiss,
+            (unsigned long long)g_u64Replies,
+            (unsigned long long)g_u64ReplyMiss);
+
+    /* Grep: cold: soft init */
+    kprintf("cold: soft init enter=%u ok=%u idem=%u inited=%u\n",
+            g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftInitIdem,
+            g_fInited ? 1u : 0u);
+}
+
+/**
+ * After first product submit/dequeue/reply/local activity, print soft
+ * inventory once (mirrors futex/input_hub soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftSubmitEnter == 0 && g_u32SoftDeqEnter == 0 &&
+        g_u32SoftReplyEnter == 0 && g_u32SoftLocalEnter == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
+
 void
 cold_ipc_init(void)
 {
+    g_u32SoftInitEnter++;
+
     /* Idempotent: must not wipe protonrt service after attach (boot smoke). */
     if (g_fInited) {
+        g_u32SoftInitIdem++;
         return;
     }
     memset(g_aQ, 0, sizeof(g_aQ));
@@ -166,8 +477,28 @@ cold_ipc_init(void)
     g_u64RegQueue = 0;
     g_u64UnregQueue = 0;
     g_u64ModeChanges = 0;
+    g_u32SoftSubmitEnter = 0;
+    g_u32SoftSubmitNull = 0;
+    g_u32SoftSubmitSvc = 0;
+    g_u32SoftSubmitDoor = 0;
+    g_u32SoftSubmitQueue = 0;
+    g_u32SoftSubmitEnosys = 0;
+    g_u32SoftDeqEnter = 0;
+    g_u32SoftDeqClaim = 0;
+    g_u32SoftDeqEmpty = 0;
+    g_u32SoftReplyEnter = 0;
+    g_u32SoftReplyOk = 0;
+    g_u32SoftReplyMiss = 0;
+    g_u32SoftLocalEnter = 0;
+    g_u32SoftLocalHit = 0;
+    g_u32SoftLocalMiss = 0;
+    g_u32SoftLogN = 0;
+    g_fSoftInvOnce = 0;
     door_cold_init();
     g_fInited = 1;
+    g_u32SoftInitOk++;
+    /* Grep: cold_ipc: soft / cold: soft (baseline inventory after init) */
+    soft_inventory_log();
 }
 
 void
@@ -398,8 +729,11 @@ cold_ipc_dequeue(struct gj_cold_request *pOut)
 {
     u32 iSlot;
 
+    g_u32SoftDeqEnter++;
     if (pOut == NULL) {
         g_u64DequeueEmpty++;
+        g_u32SoftDeqEmpty++;
+        soft_inventory_maybe_once();
         return 0;
     }
     for (iSlot = 0; iSlot < GJ_COLD_QUEUE_DEPTH; iSlot++) {
@@ -408,10 +742,14 @@ cold_ipc_dequeue(struct gj_cold_request *pOut)
             g_aQ[iSlot].u32State = GJ_COLD_CLAIMED;
             *pOut = g_aQ[iSlot];
             g_u64Dequeues++;
+            g_u32SoftDeqClaim++;
+            soft_inventory_maybe_once();
             return 1;
         }
     }
     g_u64DequeueEmpty++;
+    g_u32SoftDeqEmpty++;
+    soft_inventory_maybe_once();
     return 0;
 }
 
@@ -420,6 +758,7 @@ cold_ipc_reply(u64 u64Id, i64 i64Ret)
 {
     u32 iSlot;
 
+    g_u32SoftReplyEnter++;
     for (iSlot = 0; iSlot < GJ_COLD_QUEUE_DEPTH; iSlot++) {
         u32 u32St = g_aQ[iSlot].u32State;
 
@@ -429,10 +768,14 @@ cold_ipc_reply(u64 u64Id, i64 i64Ret)
             g_aQ[iSlot].u32State = GJ_COLD_DONE;
             (void)thread_wake(&g_aQ[iSlot], 0, 8);
             g_u64Replies++;
+            g_u32SoftReplyOk++;
+            soft_inventory_maybe_once();
             return 1;
         }
     }
     g_u64ReplyMiss++;
+    g_u32SoftReplyMiss++;
+    soft_inventory_maybe_once();
     return 0;
 }
 
@@ -514,9 +857,12 @@ cold_ipc_submit(struct gj_linux_regs *pRegs, u64 u64TimeoutNsec)
     (void)u64TimeoutNsec;
 
     g_u64Submits++;
+    g_u32SoftSubmitEnter++;
 
     if (pRegs == NULL) {
         g_u64Inval++;
+        g_u32SoftSubmitNull++;
+        soft_inventory_maybe_once();
         return -LINUX_EINVAL;
     }
 
@@ -533,41 +879,60 @@ cold_ipc_submit(struct gj_linux_regs *pRegs, u64 u64TimeoutNsec)
 
     if (fDoorsFirst) {
         if (path_doors(pRegs, &i64R)) {
+            g_u32SoftSubmitDoor++;
+            soft_inventory_maybe_once();
             return i64R;
         }
         if (path_service(pRegs, &i64R)) {
+            g_u32SoftSubmitSvc++;
+            soft_inventory_maybe_once();
             return i64R;
         }
     } else {
         if (path_service(pRegs, &i64R)) {
+            g_u32SoftSubmitSvc++;
+            soft_inventory_maybe_once();
             return i64R;
         }
         if (path_doors(pRegs, &i64R)) {
+            g_u32SoftSubmitDoor++;
+            soft_inventory_maybe_once();
             return i64R;
         }
     }
 
     if (path_queue(pRegs, &i64R)) {
+        g_u32SoftSubmitQueue++;
+        soft_inventory_maybe_once();
         return i64R;
     }
 
     g_u64Enosys++;
+    g_u32SoftSubmitEnosys++;
+    soft_inventory_maybe_once();
     return -LINUX_ENOSYS;
 }
 
 i64
 cold_ipc_service_local(struct gj_linux_regs *pRegs)
 {
+    g_u32SoftLocalEnter++;
     if (pRegs == NULL) {
         g_u64Inval++;
+        g_u32SoftLocalMiss++;
+        soft_inventory_maybe_once();
         return -LINUX_EINVAL;
     }
     g_u64ServiceLocal++;
     if (g_pfnService != NULL) {
+        g_u32SoftLocalHit++;
         pRegs->i64Ret = g_pfnService(pRegs, g_pServiceCtx);
+        soft_inventory_maybe_once();
         return pRegs->i64Ret;
     }
+    g_u32SoftLocalMiss++;
     pRegs->i64Ret = -LINUX_ENOSYS;
+    soft_inventory_maybe_once();
     return pRegs->i64Ret;
 }
 

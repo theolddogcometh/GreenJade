@@ -5,6 +5,24 @@
  * Clean-room ELF64 ET_EXEC / ET_DYN load + PT_INTERP / PT_DYNAMIC / RELA.
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
+ *
+ * Soft inventory (Wave 11 exclusive; this unit only; never hard-gates):
+ * greppable: "elf: soft …" | "elf_load: soft …"
+ *   elf: soft inventory …
+ *   elf: soft probe …
+ *   elf: soft load …
+ *   elf: soft reloc …
+ *   elf: soft so …
+ *   elf: soft needed …
+ *   elf: soft resolve …
+ *   elf: soft auxv …
+ *   elf: soft handoff …
+ *   elf: soft interp …
+ *   elf: soft path …
+ *   elf: soft PASS|PARTIAL
+ *   elf_load: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
+ *   elf_load: soft PASS|PARTIAL
+ * Diagnostics / smoke grep only — soft ≠ bar3; soft ≠ product DoD.
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -102,9 +120,293 @@ struct gj_elf_so {
 static struct gj_elf_so g_aSo[GJ_ELF_SO_MAX];
 static u32              g_cSo;
 
+/*
+ * Wave 11 soft inventory telemetry (never hard-gates product load path).
+ * greppable: elf: soft / elf_load: soft
+ */
+static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
+static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
+static u32 g_u32SoftProbeDyn;     /* probes with ET_DYN */
+static u32 g_u32SoftProbeExec;    /* probes with ET_EXEC */
+static u32 g_u32SoftProbeInterp;  /* probes with PT_INTERP */
+static u32 g_u32SoftProbeInterpSoft; /* INTERP soft-ok path */
+static u32 g_u32SoftProbeNeeded;  /* total DT_NEEDED names seen on probe */
+static u32 g_u32SoftLoadOk;       /* elf_load_image_bias success */
+static u32 g_u32SoftLoadFail;     /* load fail (header/AS/map/empty) */
+static u32 g_u32SoftLoadDyn;      /* successful ET_DYN loads */
+static u32 g_u32SoftLoadExec;     /* successful ET_EXEC loads */
+static u32 g_u32SoftLoadBiasReq;  /* non-zero bias request loads */
+static u32 g_u32SoftMapPages;     /* PT_LOAD segments mapped (lifetime) */
+static u32 g_u32SoftRelocOps;     /* reloc apply calls with cRel > 0 */
+static u32 g_u32SoftRelocHits;    /* sum of applied reloc counts */
+static u32 g_u32SoftSymHits;      /* sum of GLOB_DAT/JUMP_SLOT counts */
+static u32 g_u32SoftSoMapOk;      /* DT_NEEDED SO map success */
+static u32 g_u32SoftSoMapFail;    /* SO map fail */
+static u32 g_u32SoftSoSkip;       /* non-ELF SO skip */
+static u32 g_u32SoftSoHash;       /* SOs with DT_HASH */
+static u32 g_u32SoftSoGnu;        /* SOs with DT_GNU_HASH */
+static u32 g_u32SoftNeededOk;     /* vfs resolve hit */
+static u32 g_u32SoftNeededMiss;   /* vfs resolve miss */
+static u32 g_u32SoftNeededCalls;  /* elf_resolve_needed_vfs entries */
+static u32 g_u32SoftAuxvFill;     /* elf_fill_auxv calls */
+static u32 g_u32SoftAuxvPairs;    /* last auxv pair count (soft sample) */
+static u32 g_u32SoftHandoffOk;    /* publish_handoff success */
+static u32 g_u32SoftHandoffFail;  /* publish_handoff fail */
+static u32 g_u32SoftVerifyOk;     /* ld_handoff_verify PASS */
+static u32 g_u32SoftVerifyFail;   /* ld_handoff_verify FAIL */
+static u32 g_u32SoftInterpFirst;  /* INTERP-first applied */
+static u32 g_u32SoftInterpDefer;  /* INTERP present, dynlinker miss → main */
+static u32 g_u32SoftDirect;       /* direct main entry (no INTERP start) */
+static u32 g_u32SoftResolveGnu;   /* SO registry gnu-hash hit */
+static u32 g_u32SoftResolveHash;  /* SO registry SysV hash hit */
+static u32 g_u32SoftResolveScan;  /* SO registry linear scan hit */
+static u32 g_u32SoftResolveMiss;  /* SO registry lookup miss */
+static u32 g_u32SoftRegFindHit;   /* elf_so_registry_find hit */
+static u32 g_u32SoftRegFindMiss;  /* elf_so_registry_find miss */
+static u32 g_u32SoftLogN;         /* soft inventory dump emissions */
+static int g_fSoftInvOnce;        /* first post-activity inventory emitted */
+
 static void path_copy_n(char *szDst, size_t cbDst, const char *szSrc);
 static void path_join2(char *szDst, size_t cbDst, const char *szPfx,
                        const char *szName);
+static void elf_soft_inventory(const char *szVia);
+static void elf_soft_maybe_once(void);
+
+/** Soft: bump one counter (wrap OK; never hard-gates). */
+static void
+elf_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/**
+ * Greppable Wave 11 soft inventory dump (product / smoke).
+ * Twin prefixes so either agent grep works:
+ *   elf: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
+ *   elf_load: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
+ * Never hard-gates load path. Soft ≠ bar3.
+ *
+ * greppable: elf: soft
+ * greppable: elf_load: soft
+ */
+static void
+elf_soft_inventory(const char *szVia)
+{
+    u32 cReg;
+    u32 cHashLive;
+    u32 cGnuLive;
+    u32 iSo;
+    const char *szVerdict;
+
+    if (szVia == NULL) {
+        szVia = "path";
+    }
+    elf_soft_inc(&g_u32SoftLogN);
+
+    cReg = 0;
+    cHashLive = 0;
+    cGnuLive = 0;
+    for (iSo = 0; iSo < GJ_ELF_SO_MAX; iSo++) {
+        if (!g_aSo[iSo].u8Used) {
+            continue;
+        }
+        cReg++;
+        if (g_aSo[iSo].u8HasHash) {
+            cHashLive++;
+        }
+        if (g_aSo[iSo].u8HasGnu) {
+            cGnuLive++;
+        }
+    }
+
+    /*
+     * Soft verdict (inventory only; product path unchanged):
+     *   PASS    — at least one successful image load
+     *   PARTIAL — probe/activity without a completed load yet
+     */
+    if (g_u32SoftLoadOk != 0u) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /*
+     * Primary prefix: elf: soft …
+     * Catalog capacity + lifetime tallies for bring-up smoke greps.
+     */
+    /* Grep: elf: soft inventory */
+    kprintf("elf: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
+            "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
+            "probe_ok=%u handoff_ok=%u log_n=%u\n",
+            szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
+            g_u32SoftHandoffOk, g_u32SoftLogN);
+
+    /* Grep: elf: soft probe */
+    kprintf("elf: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
+            "interp_soft=%u needed_seen=%u\n",
+            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftProbeDyn,
+            g_u32SoftProbeExec, g_u32SoftProbeInterp, g_u32SoftProbeInterpSoft,
+            g_u32SoftProbeNeeded);
+
+    /* Grep: elf: soft load */
+    kprintf("elf: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
+            "phdr_segs=%u so_max=%u\n",
+            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
+            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftMapPages,
+            (unsigned)GJ_ELF_SO_MAX);
+
+    /* Grep: elf: soft reloc */
+    kprintf("elf: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
+            "tls=DTPMOD,DTPOFF,TPOFF irel=1\n",
+            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits);
+
+    /* Grep: elf: soft so */
+    kprintf("elf: soft so map_ok=%u map_fail=%u skip=%u live=%u "
+            "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
+            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip, cReg,
+            cHashLive, cGnuLive, g_u32SoftSoHash, g_u32SoftSoGnu, g_cSo);
+
+    /* Grep: elf: soft needed */
+    kprintf("elf: soft needed calls=%u ok=%u miss=%u max=%u "
+            "pfx=/lib/,/usr/lib/\n",
+            g_u32SoftNeededCalls, g_u32SoftNeededOk, g_u32SoftNeededMiss,
+            (unsigned)GJ_ELF_NEEDED_MAX);
+
+    /* Grep: elf: soft resolve */
+    kprintf("elf: soft resolve gnu=%u hash=%u scan=%u miss=%u "
+            "reg_hit=%u reg_miss=%u order=gnu,hash,scan\n",
+            g_u32SoftResolveGnu, g_u32SoftResolveHash, g_u32SoftResolveScan,
+            g_u32SoftResolveMiss, g_u32SoftRegFindHit, g_u32SoftRegFindMiss);
+
+    /* Grep: elf: soft auxv */
+    kprintf("elf: soft auxv fill=%u last_pairs=%u max=%u "
+            "at=PHDR,PHENT,PHNUM,PAGESZ,BASE,ENTRY,RANDOM,EXECFN\n",
+            g_u32SoftAuxvFill, g_u32SoftAuxvPairs, (unsigned)GJ_AUXV_MAX);
+
+    /* Grep: elf: soft handoff */
+    kprintf("elf: soft handoff ok=%u fail=%u verify_ok=%u verify_fail=%u "
+            "va=0x%lx stack=0x%lx magic=GJLD\n",
+            g_u32SoftHandoffOk, g_u32SoftHandoffFail, g_u32SoftVerifyOk,
+            g_u32SoftVerifyFail, (unsigned long)GJ_LD_HANDOFF_VA,
+            (unsigned long)GJ_LD_STACK_VA);
+
+    /* Grep: elf: soft interp */
+    kprintf("elf: soft interp first=%u defer=%u direct=%u "
+            "soft_norm=/lib/ soft_ok=absolute\n",
+            g_u32SoftInterpFirst, g_u32SoftInterpDefer, g_u32SoftDirect);
+
+    /* Grep: elf: soft path */
+    kprintf("elf: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
+            "ld-gj=1 so_reg=1 vfs_needed=1 (soft inventory; not bar3)\n");
+
+    /* Grep: elf: soft PASS | PARTIAL */
+    kprintf("elf: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
+            "log_n=%u\n",
+            szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
+            g_u32SoftHandoffOk, g_u32SoftLogN);
+
+    /*
+     * Twin prefix: elf_load: soft … (agent-friendly alias; same tallies).
+     */
+    /* Grep: elf_load: soft inventory */
+    kprintf("elf_load: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
+            "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
+            "probe_ok=%u handoff_ok=%u log_n=%u\n",
+            szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
+            g_u32SoftHandoffOk, g_u32SoftLogN);
+
+    /* Grep: elf_load: soft probe */
+    kprintf("elf_load: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
+            "interp_soft=%u needed_seen=%u\n",
+            g_u32SoftProbeOk, g_u32SoftProbeFail, g_u32SoftProbeDyn,
+            g_u32SoftProbeExec, g_u32SoftProbeInterp, g_u32SoftProbeInterpSoft,
+            g_u32SoftProbeNeeded);
+
+    /* Grep: elf_load: soft load */
+    kprintf("elf_load: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
+            "phdr_segs=%u so_max=%u\n",
+            g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
+            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftMapPages,
+            (unsigned)GJ_ELF_SO_MAX);
+
+    /* Grep: elf_load: soft reloc */
+    kprintf("elf_load: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
+            "tls=DTPMOD,DTPOFF,TPOFF irel=1\n",
+            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits);
+
+    /* Grep: elf_load: soft so */
+    kprintf("elf_load: soft so map_ok=%u map_fail=%u skip=%u live=%u "
+            "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
+            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip, cReg,
+            cHashLive, cGnuLive, g_u32SoftSoHash, g_u32SoftSoGnu, g_cSo);
+
+    /* Grep: elf_load: soft needed */
+    kprintf("elf_load: soft needed calls=%u ok=%u miss=%u max=%u "
+            "pfx=/lib/,/usr/lib/\n",
+            g_u32SoftNeededCalls, g_u32SoftNeededOk, g_u32SoftNeededMiss,
+            (unsigned)GJ_ELF_NEEDED_MAX);
+
+    /* Grep: elf_load: soft resolve */
+    kprintf("elf_load: soft resolve gnu=%u hash=%u scan=%u miss=%u "
+            "reg_hit=%u reg_miss=%u order=gnu,hash,scan\n",
+            g_u32SoftResolveGnu, g_u32SoftResolveHash, g_u32SoftResolveScan,
+            g_u32SoftResolveMiss, g_u32SoftRegFindHit, g_u32SoftRegFindMiss);
+
+    /* Grep: elf_load: soft auxv */
+    kprintf("elf_load: soft auxv fill=%u last_pairs=%u max=%u "
+            "at=PHDR,PHENT,PHNUM,PAGESZ,BASE,ENTRY,RANDOM,EXECFN\n",
+            g_u32SoftAuxvFill, g_u32SoftAuxvPairs, (unsigned)GJ_AUXV_MAX);
+
+    /* Grep: elf_load: soft handoff */
+    kprintf("elf_load: soft handoff ok=%u fail=%u verify_ok=%u verify_fail=%u "
+            "va=0x%lx stack=0x%lx magic=GJLD\n",
+            g_u32SoftHandoffOk, g_u32SoftHandoffFail, g_u32SoftVerifyOk,
+            g_u32SoftVerifyFail, (unsigned long)GJ_LD_HANDOFF_VA,
+            (unsigned long)GJ_LD_STACK_VA);
+
+    /* Grep: elf_load: soft interp */
+    kprintf("elf_load: soft interp first=%u defer=%u direct=%u "
+            "soft_norm=/lib/ soft_ok=absolute\n",
+            g_u32SoftInterpFirst, g_u32SoftInterpDefer, g_u32SoftDirect);
+
+    /* Grep: elf_load: soft path */
+    kprintf("elf_load: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
+            "ld-gj=1 so_reg=1 vfs_needed=1 (soft inventory; not bar3)\n");
+
+    /* Grep: elf_load: soft PASS | PARTIAL */
+    kprintf("elf_load: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
+            "log_n=%u\n",
+            szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
+            g_u32SoftHandoffOk, g_u32SoftLogN);
+}
+
+/**
+ * After first product probe/load/handoff activity, print soft inventory once
+ * (mirrors virtio-blk / input_hub soft-stats-once). Diagnostics only.
+ */
+static void
+elf_soft_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftProbeOk == 0u && g_u32SoftLoadOk == 0u &&
+        g_u32SoftLoadFail == 0u && g_u32SoftHandoffOk == 0u &&
+        g_u32SoftSoMapOk == 0u) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    elf_soft_inventory("activity");
+}
 
 /*
  * Default ET_DYN load base when program vaddrs are low.
@@ -461,6 +763,23 @@ elf_probe_image(const void *pImage, u64 cb, struct gj_elf_info *pInfo)
 
     st = elf_fill_probe(pImage, cb, pInfo, NULL);
     if (st == GJ_OK) {
+        elf_soft_inc(&g_u32SoftProbeOk);
+        if (pInfo != NULL) {
+            if (pInfo->u16Type == ET_DYN) {
+                elf_soft_inc(&g_u32SoftProbeDyn);
+            } else if (pInfo->u16Type == ET_EXEC) {
+                elf_soft_inc(&g_u32SoftProbeExec);
+            }
+            if ((pInfo->u32Flags & GJ_ELF_INFO_HAS_INTERP) != 0) {
+                elf_soft_inc(&g_u32SoftProbeInterp);
+            }
+            if ((pInfo->u32Flags & GJ_ELF_INFO_INTERP_SOFT) != 0) {
+                elf_soft_inc(&g_u32SoftProbeInterpSoft);
+            }
+            if (pInfo->u16Needed > 0) {
+                g_u32SoftProbeNeeded += (u32)pInfo->u16Needed;
+            }
+        }
         kprintf("elf: probe type=%u loads=%u entry=0x%lx needed=%u interp=%s\n",
                 (unsigned)pInfo->u16Type, pInfo->u32Phdrs,
                 (unsigned long)pInfo->u64Entry, (unsigned)pInfo->u16Needed,
@@ -472,6 +791,9 @@ elf_probe_image(const void *pImage, u64 cb, struct gj_elf_info *pInfo)
         if ((pInfo->u32Flags & GJ_ELF_INFO_INTERP_SOFT) != 0) {
             kprintf("elf: INTERP soft probe %s PASS\n", pInfo->szInterp);
         }
+        elf_soft_maybe_once();
+    } else {
+        elf_soft_inc(&g_u32SoftProbeFail);
     }
     return st;
 }
@@ -634,6 +956,7 @@ elf_so_registry_find(const char *szName, u64 *pBias, u32 *pcb)
     u32 u32H;
 
     if (szName == NULL || szName[0] == '\0') {
+        elf_soft_inc(&g_u32SoftRegFindMiss);
         return 0;
     }
     u32H = elf_sysv_hash_name(szName);
@@ -655,9 +978,11 @@ elf_so_registry_find(const char *szName, u64 *pBias, u32 *pcb)
             if (pcb != NULL) {
                 *pcb = pSo->cbImg;
             }
+            elf_soft_inc(&g_u32SoftRegFindHit);
             return 1;
         }
     }
+    elf_soft_inc(&g_u32SoftRegFindMiss);
     return 0;
 }
 
@@ -910,6 +1235,7 @@ elf_lookup_in_sos(const char *szName, u64 *pVal)
             elf_gnu_hash_lookup(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
                                 pSo->u64GnuHash, pSo->u64Symtab, pSo->u64Strtab,
                                 pSo->u64Syment, szName, pVal)) {
+            elf_soft_inc(&g_u32SoftResolveGnu);
             kprintf("elf: gnu-hash resolve %s in %s PASS\n", szName,
                     pSo->szName);
             return 1;
@@ -918,6 +1244,7 @@ elf_lookup_in_sos(const char *szName, u64 *pVal)
             elf_hash_lookup(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
                             pSo->u64Hash, pSo->u64Symtab, pSo->u64Strtab,
                             pSo->u64Syment, szName, pVal)) {
+            elf_soft_inc(&g_u32SoftResolveHash);
             kprintf("elf: hash resolve %s in %s PASS\n", szName, pSo->szName);
             return 1;
         }
@@ -925,10 +1252,12 @@ elf_lookup_in_sos(const char *szName, u64 *pVal)
             elf_symtab_scan(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
                             pSo->u64Symtab, pSo->u64Strtab, pSo->u64Syment,
                             szName, pVal)) {
+            elf_soft_inc(&g_u32SoftResolveScan);
             kprintf("elf: scan resolve %s in %s PASS\n", szName, pSo->szName);
             return 1;
         }
     }
+    elf_soft_inc(&g_u32SoftResolveMiss);
     return 0;
 }
 
@@ -1252,16 +1581,20 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
     gj_status_t st;
 
     if (pProc == NULL) {
+        elf_soft_inc(&g_u32SoftLoadFail);
         return GJ_ERR_INVAL;
     }
     st = elf_fill_probe(pImage, cb, &info, &pEh);
     if (st != GJ_OK) {
+        elf_soft_inc(&g_u32SoftLoadFail);
         kprintf("elf: bad header\n");
+        elf_soft_maybe_once();
         return st;
     }
 
     if (u64BiasReq != 0) {
         u64Bias = u64BiasReq;
+        elf_soft_inc(&g_u32SoftLoadBiasReq);
     } else if (info.u16Type == ET_DYN && info.u64LoadMin < 0x100000ull) {
         u64Bias = GJ_ELF_DYN_BIAS;
     }
@@ -1276,6 +1609,8 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
     info.u64Base = (info.u16Type == ET_DYN) ? u64Bias : info.u64LoadMin;
 
     if (process_as_ensure(pProc) != GJ_OK) {
+        elf_soft_inc(&g_u32SoftLoadFail);
+        elf_soft_maybe_once();
         return GJ_ERR_NOMEM;
     }
     process_as_activate(pProc);
@@ -1327,13 +1662,18 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
                        (const u8 *)pImage + u64SegOff, cbCopy);
             }
             if (map_page_copy(u64Page, aTmp, GJ_PAGE_SIZE, u32Prot) != GJ_OK) {
+                elf_soft_inc(&g_u32SoftLoadFail);
+                elf_soft_maybe_once();
                 return GJ_ERR_NOMEM;
             }
         }
         u32Loaded++;
+        elf_soft_inc(&g_u32SoftMapPages);
     }
 
     if (u32Loaded == 0) {
+        elf_soft_inc(&g_u32SoftLoadFail);
+        elf_soft_maybe_once();
         return GJ_ERR_INVAL;
     }
 
@@ -1344,6 +1684,9 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         info.u32SymRelocs = cSym;
         if (cRel > 0) {
             info.u32Flags |= GJ_ELF_INFO_RELOC_OK;
+            elf_soft_inc(&g_u32SoftRelocOps);
+            g_u32SoftRelocHits += cRel;
+            g_u32SoftSymHits += cSym;
             kprintf("elf: relocs applied=%u sym=%u bias=0x%lx\n", cRel, cSym,
                     (unsigned long)u64Bias);
         }
@@ -1358,6 +1701,12 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
     if (pInfo != NULL) {
         *pInfo = info;
     }
+    elf_soft_inc(&g_u32SoftLoadOk);
+    if (info.u16Type == ET_DYN) {
+        elf_soft_inc(&g_u32SoftLoadDyn);
+    } else if (info.u16Type == ET_EXEC) {
+        elf_soft_inc(&g_u32SoftLoadExec);
+    }
     kprintf("elf: loaded phdrs=%u type=%u entry=0x%lx range=0x%lx-0x%lx bias=0x%lx\n",
             u32Loaded, (unsigned)info.u16Type, (unsigned long)info.u64Entry,
             (unsigned long)info.u64LoadMin, (unsigned long)info.u64LoadMax,
@@ -1369,6 +1718,7 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         kprintf("elf: DT_NEEDED count=%u first=%s\n", (unsigned)info.u16Needed,
                 info.aNeeded[0]);
     }
+    elf_soft_maybe_once();
     return GJ_OK;
 }
 
@@ -1482,6 +1832,8 @@ elf_fill_auxv(struct gj_process *pProc, const struct gj_elf_info *pMain,
     n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_NULL, 0);
 
     pProc->cAuxv = n;
+    elf_soft_inc(&g_u32SoftAuxvFill);
+    g_u32SoftAuxvPairs = n;
     kprintf("elf: auxv pairs=%u phdr=0x%lx entry=0x%lx base=0x%lx random=0x%lx "
             "PASS\n",
             n, (unsigned long)pMain->u64PhdrVa, (unsigned long)pMain->u64Entry,
@@ -1528,6 +1880,7 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
                 g_aSo[iSlot].aImg[1] != (u8)'E' ||
                 g_aSo[iSlot].aImg[2] != (u8)'L' ||
                 g_aSo[iSlot].aImg[3] != (u8)'F') {
+                elf_soft_inc(&g_u32SoftSoSkip);
                 kprintf("elf: SO skip non-ELF %s\n", szPath);
                 break;
             }
@@ -1550,6 +1903,13 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
                                     pEhSo);
                     cLoaded++;
                     g_cSo = cLoaded;
+                    elf_soft_inc(&g_u32SoftSoMapOk);
+                    if (g_aSo[iSlot].u8HasHash) {
+                        elf_soft_inc(&g_u32SoftSoHash);
+                    }
+                    if (g_aSo[iSlot].u8HasGnu) {
+                        elf_soft_inc(&g_u32SoftSoGnu);
+                    }
                     kprintf("elf: SO map %s entry=0x%lx bias=0x%lx "
                             "hash=0x%lx gnu=0x%lx sym=0x%lx nh=0x%x PASS\n",
                             szPath, (unsigned long)so.u64Entry,
@@ -1563,6 +1923,7 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
                                 g_aSo[iSlot].szName, g_aSo[iSlot].szSoname);
                     }
                 } else {
+                    elf_soft_inc(&g_u32SoftSoMapFail);
                     kprintf("elf: SO map %s FAIL\n", szPath);
                 }
             }
@@ -1589,6 +1950,7 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
         kprintf("elf: SO registry n=%u hash=%u gnu=%u PASS\n", cLoaded, cHash,
                 cGnu);
     }
+    elf_soft_maybe_once();
     return cLoaded;
 }
 
@@ -1636,13 +1998,16 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
         } else {
             pProc->u32StartThr = 0; /* rewritten existing thr(s) */
         }
+        elf_soft_inc(&g_u32SoftInterpFirst);
         kprintf("linux: execve INTERP-first entry=0x%lx sp=0x%lx thr=%u PASS\n",
                 (unsigned long)u64Entry, (unsigned long)u64Stack, cRepl);
+        elf_soft_maybe_once();
         return GJ_OK;
     }
     /* INTERP soft miss: path present but dynlinker not loaded → main entry */
     if ((pMain->u32Flags & GJ_ELF_INFO_HAS_INTERP) != 0 &&
         (pInterp == NULL || pInterp->u64Entry == 0)) {
+        elf_soft_inc(&g_u32SoftInterpDefer);
         kprintf("elf: INTERP soft defer main entry=0x%lx PASS\n",
                 (unsigned long)pMain->u64Entry);
     }
@@ -1657,8 +2022,10 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
             cRepl = 1;
         }
     }
+    elf_soft_inc(&g_u32SoftDirect);
     kprintf("linux: execve direct entry=0x%lx sp=0x%lx thr=%u\n",
             (unsigned long)u64Entry, (unsigned long)u64Stack, cRepl);
+    elf_soft_maybe_once();
     return GJ_OK;
 }
 
@@ -1673,6 +2040,7 @@ elf_resolve_needed_vfs(const struct gj_elf_info *pInfo)
     if (pInfo == NULL) {
         return 0;
     }
+    elf_soft_inc(&g_u32SoftNeededCalls);
     for (iNeeded = 0; iNeeded < pInfo->u16Needed && iNeeded < GJ_ELF_NEEDED_MAX;
          iNeeded++) {
         i64 i64Fd;
@@ -1690,12 +2058,14 @@ elf_resolve_needed_vfs(const struct gj_elf_info *pInfo)
                 (void)vfs_ram_close(i64Fd);
                 cOk++;
                 fFound = 1;
+                elf_soft_inc(&g_u32SoftNeededOk);
                 kprintf("elf: DT_NEEDED resolve %s -> %s PASS\n",
                         pInfo->aNeeded[iNeeded], szPath);
                 break;
             }
         }
         if (!fFound) {
+            elf_soft_inc(&g_u32SoftNeededMiss);
             kprintf("elf: DT_NEEDED resolve %s missing\n",
                     pInfo->aNeeded[iNeeded]);
         }
@@ -1862,6 +2232,7 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     const char *szUsePath;
 
     if (pProc == NULL || pMain == NULL) {
+        elf_soft_inc(&g_u32SoftHandoffFail);
         return GJ_ERR_INVAL;
     }
     if (szPath != NULL && szPath[0] != '\0') {
@@ -1883,6 +2254,7 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     ho.u64Stack = GJ_LD_STACK_VA;
 
     if (process_as_ensure(pProc) != GJ_OK) {
+        elf_soft_inc(&g_u32SoftHandoffFail);
         return GJ_ERR_NOMEM;
     }
     pa = pmm_alloc();
@@ -1894,6 +2266,7 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
         if (paStack != 0) {
             pmm_free(paStack);
         }
+        elf_soft_inc(&g_u32SoftHandoffFail);
         return GJ_ERR_NOMEM;
     }
     u64Saved = cpu_read_cr3();
@@ -1942,6 +2315,7 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
         GJ_OK) {
         pmm_free(pa);
         pmm_free(paStack);
+        elf_soft_inc(&g_u32SoftHandoffFail);
         return GJ_ERR_NOMEM;
     }
     if (vmm_map_page((gj_vaddr_t)GJ_LD_STACK_VA, paStack,
@@ -1974,12 +2348,14 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
                          strlen(ho.szPath) + 1u);
     }
 
+    elf_soft_inc(&g_u32SoftHandoffOk);
     kprintf("elf: handoff va=0x%lx entry=0x%lx base=0x%lx path=%s sym=%u "
             "so=%u random=0x%lx PASS\n",
             (unsigned long)GJ_LD_HANDOFF_VA, (unsigned long)ho.u64Entry,
             (unsigned long)ho.u64Base,
             ho.szPath[0] != '\0' ? ho.szPath : "(none)", ho.cSymReloc, ho.cSo,
             (unsigned long)GJ_LD_RANDOM_VA);
+    elf_soft_maybe_once();
     return GJ_OK;
 }
 
@@ -1992,14 +2368,17 @@ elf_ld_handoff_verify(struct gj_process *pProc)
     gj_paddr_t paEntry;
 
     if (pProc == NULL) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         return GJ_ERR_INVAL;
     }
     if (process_as_ensure(pProc) != GJ_OK) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         return GJ_ERR_NOMEM;
     }
     process_as_activate(pProc);
     pa = vmm_virt_to_phys((gj_vaddr_t)GJ_LD_HANDOFF_VA);
     if (pa == 0) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         kprintf("ld-gj: handoff page missing\n");
         return GJ_ERR_NOENT;
     }
@@ -2010,16 +2389,19 @@ elf_ld_handoff_verify(struct gj_process *pProc)
     process_as_activate(pProc);
 
     if (ho.u64Magic != GJ_LD_HANDOFF_MAGIC) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         kprintf("ld-gj: handoff magic FAIL 0x%lx\n",
                 (unsigned long)ho.u64Magic);
         return GJ_ERR_INVAL;
     }
     if (ho.u64Entry == 0 || ho.u64Phdr == 0) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         kprintf("ld-gj: handoff entry/phdr FAIL\n");
         return GJ_ERR_INVAL;
     }
     paEntry = vmm_virt_to_phys((gj_vaddr_t)(ho.u64Entry & ~0xfffull));
     if (paEntry == 0) {
+        elf_soft_inc(&g_u32SoftVerifyFail);
         kprintf("ld-gj: AT_ENTRY not mapped 0x%lx\n",
                 (unsigned long)ho.u64Entry);
         return GJ_ERR_FAULT;
@@ -2058,6 +2440,8 @@ elf_ld_handoff_verify(struct gj_process *pProc)
                     (unsigned long)GJ_LD_RANDOM_VA);
         }
     }
+    elf_soft_inc(&g_u32SoftVerifyOk);
     kprintf("ld-gj: handoff PASS\n");
+    elf_soft_maybe_once();
     return GJ_OK;
 }

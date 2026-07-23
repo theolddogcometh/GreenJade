@@ -17,6 +17,15 @@
  *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
  *   when virtio-input is absent (empty ring).
  *
+ * Soft door inventory (Wave 11 exclusive deepen):
+ *   - Ownership: claim / reclaim / release / busy / claim_inval
+ *   - Present: PRESENT / PRESENT_FB ok|fail|nodev + multi-frame tallies
+ *   - Input: poll + pop hit/empty (soft-ok without virtio-input)
+ *   - Meta: stats / display_info / map_scanout
+ *   - Aggregate err buckets + live ready snapshot
+ *   greppable: "session_door: soft …"
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
+ *
  * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
  * branch is for early kernel smokes that pass HHDM/static buffers.
  */
@@ -41,6 +50,189 @@ static u32 g_u32UserPresents;
 static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
+/*
+ * Soft product inventory (Wave 11 exclusive). Cumulative path tallies.
+ * greppable: session_door: soft …
+ */
+static u32 g_u32SoftClaimInval;    /* CLAIM bad token */
+static u32 g_u32SoftClaimBusy;     /* CLAIM different owner */
+static u32 g_u32SoftRelease;       /* RELEASE success (was owned) */
+static u32 g_u32SoftReleaseFree;   /* RELEASE when already free (soft 0) */
+static u32 g_u32SoftReleaseInval;  /* RELEASE token mismatch */
+static u32 g_u32SoftPresentOk;     /* PRESENT success */
+static u32 g_u32SoftPresentNodev;  /* PRESENT no compositor */
+static u32 g_u32SoftPresentIo;     /* PRESENT backend fail */
+static u32 g_u32SoftPresentFbOk;   /* PRESENT_FB success */
+static u32 g_u32SoftPresentFbInval;/* PRESENT_FB arg reject */
+static u32 g_u32SoftPresentFbNodev;/* PRESENT_FB no backend */
+static u32 g_u32SoftPresentFbFault;/* PRESENT_FB copy/blit fault */
+static u32 g_u32SoftPresentFbIo;   /* PRESENT_FB present fail */
+static u32 g_u32SoftPresentFbDirect; /* PRESENT_FB virtio-gpu direct path */
+static u32 g_u32SoftPresentFbBlit; /* PRESENT_FB compositor blit path */
+static u32 g_u32SoftDisplayOk;     /* DISPLAY_INFO ok */
+static u32 g_u32SoftDisplayInval;  /* DISPLAY_INFO bad arg */
+static u32 g_u32SoftDisplayFault;  /* DISPLAY_INFO copy fault */
+static u32 g_u32SoftInputPoll;     /* INPUT_POLL ok (always soft) */
+static u32 g_u32SoftInputPopHit;   /* INPUT_POP filled event */
+static u32 g_u32SoftInputPopEmpty; /* INPUT_POP empty ring */
+static u32 g_u32SoftInputPopInval; /* INPUT_POP null dst */
+static u32 g_u32SoftInputPopFault; /* INPUT_POP copy fault */
+static u32 g_u32SoftStatsOk;       /* STATS copy-out success */
+static u32 g_u32SoftStatsInval;    /* STATS null dst */
+static u32 g_u32SoftStatsFault;    /* STATS copy fault */
+static u32 g_u32SoftMapOk;         /* MAP_SCANOUT success */
+static u32 g_u32SoftMapInval;      /* MAP_SCANOUT bad args */
+static u32 g_u32SoftMapNodev;      /* MAP_SCANOUT no compositor/fb */
+static u32 g_u32SoftMapFault;      /* MAP_SCANOUT copy fault */
+static u32 g_u32SoftInval;         /* aggregate INVAL terminals */
+static u32 g_u32SoftNodev;         /* aggregate NODEV terminals */
+static u32 g_u32SoftBusy;          /* aggregate BUSY terminals */
+static u32 g_u32SoftFault;         /* aggregate FAULT terminals */
+static u32 g_u32SoftIo;            /* aggregate IO terminals */
+static u32 g_u32SoftNosupport;     /* unknown opcode */
+static u32 g_u32SoftLogs;          /* soft inventory emissions */
+static u8  g_fSoftOnce;            /* one-shot after first call activity */
+
+static void sess_soft_inc(u32 *pCtr);
+static void sess_soft_note_err(i64 i64R);
+static void sess_soft_inventory_log(void);
+static void sess_soft_maybe_once(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+sess_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Soft: classify a terminal status into aggregate err buckets.
+ * Success / positive pop counts are ignored.
+ */
+static void
+sess_soft_note_err(i64 i64R)
+{
+    if (i64R == GJ_ERR_INVAL) {
+        sess_soft_inc(&g_u32SoftInval);
+    } else if (i64R == GJ_ERR_NODEV) {
+        sess_soft_inc(&g_u32SoftNodev);
+    } else if (i64R == GJ_ERR_BUSY) {
+        sess_soft_inc(&g_u32SoftBusy);
+    } else if (i64R == GJ_ERR_FAULT) {
+        sess_soft_inc(&g_u32SoftFault);
+    } else if (i64R == GJ_ERR_IO) {
+        sess_soft_inc(&g_u32SoftIo);
+    } else if (i64R == GJ_ERR_NOSUPPORT) {
+        sess_soft_inc(&g_u32SoftNosupport);
+    }
+}
+
+/**
+ * Greppable soft session door inventory (product / smoke).
+ *   session_door: soft inventory …
+ *   session_door: soft claim …
+ *   session_door: soft present …
+ *   session_door: soft input …
+ *   session_door: soft meta …
+ *   session_door: soft err …
+ *   session_door: soft path …
+ * greppable: session_door: soft
+ */
+static void
+sess_soft_inventory_log(void)
+{
+    u32 u32Owned;
+    u32 u32Ready;
+    u32 u32Input;
+    u32 u32Gpu;
+    u32 u32Multi;
+    u32 u32UserFb;
+    u32 u32W = 0;
+    u32 u32H = 0;
+
+    sess_soft_inc(&g_u32SoftLogs);
+    u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
+    u32Ready = session_compositor_ready() ? 1u : 0u;
+    u32Input = session_input_ready() ? 1u : 0u;
+    u32Gpu = virtio_gpu_ready() ? 1u : 0u;
+    u32UserFb = (g_u32UserPresents != 0) ? 1u : 0u;
+    u32Multi = (g_u32UserPresents >= 2u) ? 1u : 0u;
+    if (u32Ready != 0) {
+        session_compositor_size(&u32W, &u32H);
+    }
+
+    /* Grep: session_door: soft inventory */
+    kprintf("session_door: soft inventory calls=%u owned=%u token=0x%x "
+            "claims=%u reclaims=%u user_presents=%u multi=%u ready=%u "
+            "input=%u gpu=%u w=%u h=%u max_dim=%u logs=%u wave=11\n",
+            g_u32Calls, u32Owned, g_u32OwnerToken, g_u32Claims, g_u32Reclaims,
+            g_u32UserPresents, u32Multi, u32Ready, u32Input, u32Gpu, u32W,
+            u32H, GJ_SESS_MAX_DIM, g_u32SoftLogs);
+
+    /* Grep: session_door: soft claim */
+    kprintf("session_door: soft claim ok=%u reclaim=%u busy=%u inval=%u "
+            "release=%u release_free=%u release_inval=%u\n",
+            g_u32Claims, g_u32Reclaims, g_u32SoftClaimBusy,
+            g_u32SoftClaimInval, g_u32SoftRelease, g_u32SoftReleaseFree,
+            g_u32SoftReleaseInval);
+
+    /* Grep: session_door: soft present */
+    kprintf("session_door: soft present ok=%u nodev=%u io=%u fb_ok=%u "
+            "fb_inval=%u fb_nodev=%u fb_fault=%u fb_io=%u fb_direct=%u "
+            "fb_blit=%u user_fb=%u multi=%u\n",
+            g_u32SoftPresentOk, g_u32SoftPresentNodev, g_u32SoftPresentIo,
+            g_u32SoftPresentFbOk, g_u32SoftPresentFbInval,
+            g_u32SoftPresentFbNodev, g_u32SoftPresentFbFault,
+            g_u32SoftPresentFbIo, g_u32SoftPresentFbDirect,
+            g_u32SoftPresentFbBlit, u32UserFb, u32Multi);
+
+    /* Grep: session_door: soft input */
+    kprintf("session_door: soft input poll=%u pop_hit=%u pop_empty=%u "
+            "pop_inval=%u pop_fault=%u ready=%u\n",
+            g_u32SoftInputPoll, g_u32SoftInputPopHit, g_u32SoftInputPopEmpty,
+            g_u32SoftInputPopInval, g_u32SoftInputPopFault, u32Input);
+
+    /* Grep: session_door: soft meta */
+    kprintf("session_door: soft meta stats=%u stats_inval=%u stats_fault=%u "
+            "display=%u display_inval=%u display_fault=%u map=%u "
+            "map_inval=%u map_nodev=%u map_fault=%u\n",
+            g_u32SoftStatsOk, g_u32SoftStatsInval, g_u32SoftStatsFault,
+            g_u32SoftDisplayOk, g_u32SoftDisplayInval, g_u32SoftDisplayFault,
+            g_u32SoftMapOk, g_u32SoftMapInval, g_u32SoftMapNodev,
+            g_u32SoftMapFault);
+
+    /* Grep: session_door: soft err */
+    kprintf("session_door: soft err inval=%u nodev=%u busy=%u fault=%u "
+            "io=%u nosupport=%u logs=%u\n",
+            g_u32SoftInval, g_u32SoftNodev, g_u32SoftBusy, g_u32SoftFault,
+            g_u32SoftIo, g_u32SoftNosupport, g_u32SoftLogs);
+
+    /* Grep: session_door: soft path */
+    kprintf("session_door: soft path claim=sessiond present=comp|gpu_fb "
+            "input=hub_soft map=va_hint multi_frame=bit18 reclaim=bit19 "
+            "(soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product call activity, print soft inventory once (mirrors
+ * store/net/compositor soft-stats-once). Safe from call return paths only.
+ */
+static void
+sess_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32Calls == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    sess_soft_inventory_log();
+}
+
 void
 session_door_init(void)
 {
@@ -50,7 +242,47 @@ session_door_init(void)
     g_u32UserPresents = 0;
     g_u32Claims = 0;
     g_u32Reclaims = 0;
+    g_u32SoftClaimInval = 0;
+    g_u32SoftClaimBusy = 0;
+    g_u32SoftRelease = 0;
+    g_u32SoftReleaseFree = 0;
+    g_u32SoftReleaseInval = 0;
+    g_u32SoftPresentOk = 0;
+    g_u32SoftPresentNodev = 0;
+    g_u32SoftPresentIo = 0;
+    g_u32SoftPresentFbOk = 0;
+    g_u32SoftPresentFbInval = 0;
+    g_u32SoftPresentFbNodev = 0;
+    g_u32SoftPresentFbFault = 0;
+    g_u32SoftPresentFbIo = 0;
+    g_u32SoftPresentFbDirect = 0;
+    g_u32SoftPresentFbBlit = 0;
+    g_u32SoftDisplayOk = 0;
+    g_u32SoftDisplayInval = 0;
+    g_u32SoftDisplayFault = 0;
+    g_u32SoftInputPoll = 0;
+    g_u32SoftInputPopHit = 0;
+    g_u32SoftInputPopEmpty = 0;
+    g_u32SoftInputPopInval = 0;
+    g_u32SoftInputPopFault = 0;
+    g_u32SoftStatsOk = 0;
+    g_u32SoftStatsInval = 0;
+    g_u32SoftStatsFault = 0;
+    g_u32SoftMapOk = 0;
+    g_u32SoftMapInval = 0;
+    g_u32SoftMapNodev = 0;
+    g_u32SoftMapFault = 0;
+    g_u32SoftInval = 0;
+    g_u32SoftNodev = 0;
+    g_u32SoftBusy = 0;
+    g_u32SoftFault = 0;
+    g_u32SoftIo = 0;
+    g_u32SoftNosupport = 0;
+    g_u32SoftLogs = 0;
+    g_fSoftOnce = 0;
     kprintf("session_door: init (present+input+claim soft)\n");
+    /* Grep: session_door: soft (baseline inventory after init) */
+    sess_soft_inventory_log();
 }
 
 int
@@ -69,12 +301,22 @@ u32
 session_door_claim_count(void)
 {
     /* Soft diagnostics: first claims + idempotent reclaims. */
+    /*
+     * Emit soft inventory on claim stats read so bring-up can grep
+     * session_door: soft … (Wave 11). greppable: session_door claim soft
+     */
+    sess_soft_inventory_log();
     return g_u32Claims + g_u32Reclaims;
 }
 
 u32
 session_door_user_presents(void)
 {
+    /*
+     * Soft diagnostics re-read: emit inventory so multi-frame smoke greps
+     * greppable session_door: soft lines without a dedicated syscall.
+     */
+    sess_soft_inventory_log();
     return g_u32UserPresents;
 }
 
@@ -155,6 +397,9 @@ sess_blit_fb(u8 *pDst, u32 u32DstStride, u64 u64Src, u32 u32SrcStride,
 i64
 session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 {
+    i64 i64Ret;
+    int fSoftInv = 0;
+
     if (!g_fInit) {
         return GJ_ERR_NODEV;
     }
@@ -164,33 +409,45 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_SESS_OP_CLAIM:
         /* arg1 = non-zero ownership token (low 32 bits). */
         if (u64Arg1 == 0 || (u64Arg1 >> 32) != 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftClaimInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
-            return GJ_ERR_BUSY; /* another sessiond */
+            sess_soft_inc(&g_u32SoftClaimBusy);
+            i64Ret = GJ_ERR_BUSY; /* another sessiond */
+            break;
         }
         /* Soft reclaim: same token re-CLAIM is idempotent (no re-log). */
         if (g_u32OwnerToken == (u32)u64Arg1) {
             g_u32Reclaims++;
-            return 0;
+            i64Ret = 0;
+            break;
         }
         g_u32OwnerToken = (u32)u64Arg1;
         g_u32Claims++;
         kprintf("session_door: CLAIM token=0x%x (userspace owns scanout)\n",
                 g_u32OwnerToken);
-        return 0;
+        i64Ret = 0;
+        break;
 
     case GJ_SESS_OP_RELEASE:
         /* Soft free path: already unowned → 0 (no token match required). */
         if (g_u32OwnerToken == 0) {
-            return 0;
+            sess_soft_inc(&g_u32SoftReleaseFree);
+            i64Ret = 0;
+            break;
         }
         if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftReleaseInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         kprintf("session_door: RELEASE token=0x%x\n", g_u32OwnerToken);
         g_u32OwnerToken = 0;
-        return 0;
+        sess_soft_inc(&g_u32SoftRelease);
+        i64Ret = 0;
+        break;
 
     case GJ_SESS_OP_PRESENT:
         /*
@@ -199,12 +456,18 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          * Soft multi-frame: use present_n(1) path bookkeeping via present().
          */
         if (!session_compositor_ready()) {
-            return GJ_ERR_NODEV;
+            sess_soft_inc(&g_u32SoftPresentNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         if (session_compositor_present() != 0) {
-            return GJ_ERR_IO;
+            sess_soft_inc(&g_u32SoftPresentIo);
+            i64Ret = GJ_ERR_IO;
+            break;
         }
-        return 0;
+        sess_soft_inc(&g_u32SoftPresentOk);
+        i64Ret = 0;
+        break;
 
     case GJ_SESS_OP_DISPLAY_INFO: {
         /* arg1 → u32[2] {w, h} */
@@ -212,19 +475,31 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftDisplayInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         aWH[0] = 0;
         aWH[1] = 0;
         session_compositor_size(&aWH[0], &aWH[1]);
         st = sess_copy_out(u64Arg1, aWH, sizeof(aWH));
-        return st;
+        if (st == 0) {
+            sess_soft_inc(&g_u32SoftDisplayOk);
+        } else if (st == GJ_ERR_FAULT) {
+            sess_soft_inc(&g_u32SoftDisplayFault);
+        } else {
+            sess_soft_inc(&g_u32SoftDisplayInval);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_SESS_OP_INPUT_POLL:
         /* Soft: always 0; empty hub when virtio-input absent. */
         session_input_poll();
-        return 0;
+        sess_soft_inc(&g_u32SoftInputPoll);
+        i64Ret = 0;
+        break;
 
     case GJ_SESS_OP_INPUT_POP: {
         /* arg1 → struct gj_input_event; ret 1 if event, 0 if empty. */
@@ -233,19 +508,31 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftInputPopInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         memset(&ev, 0, sizeof(ev));
         /* pop soft-refills once (lazy fan-in) inside session_input_pop. */
         fGot = session_input_pop(&ev);
         if (!fGot) {
-            return 0;
+            sess_soft_inc(&g_u32SoftInputPopEmpty);
+            i64Ret = 0;
+            break;
         }
         st = sess_copy_out(u64Arg1, &ev, sizeof(ev));
         if (st != 0) {
-            return st;
+            if (st == GJ_ERR_FAULT) {
+                sess_soft_inc(&g_u32SoftInputPopFault);
+            } else {
+                sess_soft_inc(&g_u32SoftInputPopInval);
+            }
+            i64Ret = st;
+            break;
         }
-        return 1;
+        sess_soft_inc(&g_u32SoftInputPopHit);
+        i64Ret = 1;
+        break;
     }
 
     case GJ_SESS_OP_STATS: {
@@ -266,7 +553,9 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftStatsInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         u32Pend = session_input_pending();
         if (u32Pend > 255u) {
@@ -289,7 +578,20 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
                  (g_u32Reclaims != 0 ? (1u << 19) : 0u);
         aSt[4] = g_u32OwnerToken;
         st = sess_copy_out(u64Arg1, aSt, sizeof(aSt));
-        return st;
+        if (st == 0) {
+            sess_soft_inc(&g_u32SoftStatsOk);
+            /*
+             * Emit soft inventory on STATS so bring-up smoke greps
+             * session_door: soft … lines. greppable: session_door: soft
+             */
+            fSoftInv = 1;
+        } else if (st == GJ_ERR_FAULT) {
+            sess_soft_inc(&g_u32SoftStatsFault);
+        } else {
+            sess_soft_inc(&g_u32SoftStatsInval);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_SESS_OP_MAP_SCANOUT: {
@@ -306,19 +608,27 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0 || u64Arg2 == 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftMapInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         if (!session_compositor_ready()) {
-            return GJ_ERR_NODEV;
+            sess_soft_inc(&g_u32SoftMapNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         pFb = session_compositor_fb();
         if (pFb == NULL) {
-            return GJ_ERR_NODEV;
+            sess_soft_inc(&g_u32SoftMapNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         session_compositor_size(&u32W, &u32H);
         u32Stride = session_compositor_stride();
         if (u32W == 0 || u32H == 0 || u32Stride == 0) {
-            return GJ_ERR_NODEV;
+            sess_soft_inc(&g_u32SoftMapNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         u64Va = (u64)(uintptr_t)pFb;
         aInfo[0] = u32W;
@@ -326,10 +636,24 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         aInfo[2] = u32Stride;
         st = sess_copy_out(u64Arg1, &u64Va, sizeof(u64Va));
         if (st != 0) {
-            return st;
+            if (st == GJ_ERR_FAULT) {
+                sess_soft_inc(&g_u32SoftMapFault);
+            } else {
+                sess_soft_inc(&g_u32SoftMapInval);
+            }
+            i64Ret = st;
+            break;
         }
         st = sess_copy_out(u64Arg2, aInfo, sizeof(aInfo));
-        return st;
+        if (st == 0) {
+            sess_soft_inc(&g_u32SoftMapOk);
+        } else if (st == GJ_ERR_FAULT) {
+            sess_soft_inc(&g_u32SoftMapFault);
+        } else {
+            sess_soft_inc(&g_u32SoftMapInval);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_SESS_OP_PRESENT_FB: {
@@ -354,50 +678,71 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
         if (u64Arg3 == 0 || u32ReqW == 0 || u32ReqH == 0 ||
             u32ReqW > GJ_SESS_MAX_DIM || u32ReqH > GJ_SESS_MAX_DIM) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftPresentFbInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         /* Reject tokens that look like truncated wide values on w/h. */
         if ((u64Arg1 >> 32) != 0 || (u64Arg2 >> 32) != 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftPresentFbInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
 
         u32SrcStride = u32ReqW * 4u;
         u32Bytes = u32SrcStride * u32ReqH;
         if (u32Bytes / u32SrcStride != u32ReqH) {
-            return GJ_ERR_INVAL; /* overflow guard (defensive) */
+            sess_soft_inc(&g_u32SoftPresentFbInval);
+            i64Ret = GJ_ERR_INVAL; /* overflow guard (defensive) */
+            break;
         }
 
         if (!session_compositor_ready()) {
             if (!virtio_gpu_ready()) {
-                return GJ_ERR_NODEV;
+                sess_soft_inc(&g_u32SoftPresentFbNodev);
+                i64Ret = GJ_ERR_NODEV;
+                break;
             }
             if (user_range_ok(u64Arg3, u32Bytes)) {
                 static u8 aTmp[GJ_SESS_TMP_W * GJ_SESS_TMP_H * 4u];
 
                 if (u32Bytes > sizeof(aTmp)) {
-                    return GJ_ERR_INVAL;
+                    sess_soft_inc(&g_u32SoftPresentFbInval);
+                    i64Ret = GJ_ERR_INVAL;
+                    break;
                 }
                 if (copy_from_user(aTmp, u64Arg3, u32Bytes) != GJ_OK) {
-                    return GJ_ERR_FAULT;
+                    sess_soft_inc(&g_u32SoftPresentFbFault);
+                    i64Ret = GJ_ERR_FAULT;
+                    break;
                 }
                 if (virtio_gpu_present(u32ReqW, u32ReqH, aTmp,
                                        u32SrcStride) != 0) {
-                    return GJ_ERR_IO;
+                    sess_soft_inc(&g_u32SoftPresentFbIo);
+                    i64Ret = GJ_ERR_IO;
+                    break;
                 }
             } else if (virtio_gpu_present(u32ReqW, u32ReqH,
                                           (void *)(gj_vaddr_t)u64Arg3,
                                           u32SrcStride) != 0) {
-                return GJ_ERR_IO;
+                sess_soft_inc(&g_u32SoftPresentFbIo);
+                i64Ret = GJ_ERR_IO;
+                break;
             }
             g_u32UserPresents++;
-            return 0;
+            sess_soft_inc(&g_u32SoftPresentFbOk);
+            sess_soft_inc(&g_u32SoftPresentFbDirect);
+            i64Ret = 0;
+            break;
         }
 
         session_compositor_size(&u32Cw, &u32Ch);
         u32DstStride = session_compositor_stride();
         pDst = (u8 *)session_compositor_fb();
         if (pDst == NULL || u32Cw == 0 || u32Ch == 0 || u32DstStride == 0) {
-            return GJ_ERR_NODEV;
+            sess_soft_inc(&g_u32SoftPresentFbNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         /* Clip to scanout; never write past the allocated tile. */
         u32CopyW = u32ReqW;
@@ -409,21 +754,43 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             u32CopyH = u32Ch;
         }
         if (u32CopyW == 0 || u32CopyH == 0) {
-            return GJ_ERR_INVAL;
+            sess_soft_inc(&g_u32SoftPresentFbInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         st = sess_blit_fb(pDst, u32DstStride, u64Arg3, u32SrcStride, u32CopyW,
                           u32CopyH);
         if (st != 0) {
-            return st;
+            if (st == GJ_ERR_FAULT) {
+                sess_soft_inc(&g_u32SoftPresentFbFault);
+            } else {
+                sess_soft_inc(&g_u32SoftPresentFbInval);
+            }
+            i64Ret = st;
+            break;
         }
         if (session_compositor_present() != 0) {
-            return GJ_ERR_IO;
+            sess_soft_inc(&g_u32SoftPresentFbIo);
+            i64Ret = GJ_ERR_IO;
+            break;
         }
         g_u32UserPresents++;
-        return 0;
+        sess_soft_inc(&g_u32SoftPresentFbOk);
+        sess_soft_inc(&g_u32SoftPresentFbBlit);
+        i64Ret = 0;
+        break;
     }
 
     default:
-        return GJ_ERR_NOSUPPORT;
+        i64Ret = GJ_ERR_NOSUPPORT;
+        break;
     }
+
+    /* Wave 11 soft inventory tallies (never mutates i64Ret). */
+    sess_soft_note_err(i64Ret);
+    sess_soft_maybe_once();
+    if (fSoftInv) {
+        sess_soft_inventory_log();
+    }
+    return i64Ret;
 }

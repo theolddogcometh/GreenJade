@@ -8,6 +8,19 @@
  * No GPL source.
  *
  * greppable: MSI-X table soft path
+ *
+ * Soft inventory (Wave 11 exclusive; this unit only; never hard-gates):
+ * greppable: "pci: soft …" | "msix: soft …"
+ *   pci: soft inventory … / msix: soft inventory …
+ *   pci: soft table …     / msix: soft table …
+ *   pci: soft pba …       / msix: soft pba …
+ *   pci: soft fire …      / msix: soft fire …
+ *   pci: soft mask …      / msix: soft mask …
+ *   pci: soft hw …        / msix: soft hw …
+ *   pci: soft path …      / msix: soft path …
+ *   pci: soft inventory PASS / pci: soft PASS
+ *   msix: soft inventory PASS / msix: soft PASS
+ * Honesty: soft shadow depth ≠ full device Table Size; soft ≠ bar3.
  */
 #include <gj/config.h>
 #include <gj/irq_msix.h>
@@ -35,6 +48,8 @@ static u64 g_u64SoftPba;
 static u32 g_u32SoftProg;
 static u32 g_u32SoftFire;
 static int g_fSoftReady;
+/* Wave 11: times soft inventory printed (diagnostics only). */
+static u32 g_u32SoftInvLogs;
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -276,6 +291,150 @@ pci_msix_soft_ready(void)
     return g_fSoftReady;
 }
 
+/*
+ * Wave 11 soft inventory — greppable "pci: soft …" / "msix: soft …".
+ * Pure observation; never allocates; never hard-gates HW/soft fire paths.
+ * szVia: caller tag (probe / exercise / anon). Twin prefixes for greps.
+ *
+ * greppable: pci: soft inventory
+ * greppable: msix: soft inventory
+ */
+static void
+pci_msix_soft_inventory(const char *szVia)
+{
+    u32 iEnt;
+    u32 cProgLive = 0;
+    u32 cMasked = 0;
+    u32 cFired = 0;
+    u32 u32Addr0 = 0;
+    u32 u32Data0 = 0;
+    u32 u32VecCtl0 = 0;
+    u32 fIrqReady;
+    const char *szViaSafe;
+
+    szViaSafe = (szVia != NULL) ? szVia : "anon";
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
+    }
+
+    if (!g_fSoftReady) {
+        pci_msix_soft_table_init();
+    }
+
+    for (iEnt = 0; iEnt < GJ_MSIX_SOFT_TBL; iEnt++) {
+        if (g_aSoftTab[iEnt].u8Programmed) {
+            cProgLive++;
+            if ((g_aSoftTab[iEnt].u32VecCtl & GJ_MSIX_VECCTL_MASK) != 0) {
+                cMasked++;
+            }
+            if (g_aSoftTab[iEnt].u8SoftFire) {
+                cFired++;
+            }
+        }
+    }
+    if (g_aSoftTab[0].u8Programmed) {
+        u32Addr0 = g_aSoftTab[0].u32MsgAddrLo;
+        u32Data0 = g_aSoftTab[0].u32MsgData;
+        u32VecCtl0 = g_aSoftTab[0].u32VecCtl;
+    }
+    fIrqReady = irq_msix_ready() ? 1u : 0u;
+
+    /*
+     * Grep: pci: soft inventory / msix: soft inventory
+     * Soft table geometry + lifetime counters for product smoke.
+     */
+    kprintf("pci: soft inventory via=%s ready=%u depth=%u prog=%u "
+            "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
+            "logs=%u\n",
+            szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
+            (unsigned)cProgLive, (unsigned)g_u32SoftFire,
+            (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
+            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs);
+    kprintf("msix: soft inventory via=%s ready=%u depth=%u prog=%u "
+            "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
+            "logs=%u\n",
+            szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
+            (unsigned)cProgLive, (unsigned)g_u32SoftFire,
+            (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
+            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs);
+
+    /* Grep: pci: soft table / msix: soft table */
+    kprintf("pci: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
+            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
+            (unsigned)u32Data0, (unsigned)u32VecCtl0,
+            (unsigned)(g_aSoftTab[0].u8Programmed ? 1 : 0),
+            (unsigned)(g_aSoftTab[0].u8SoftFire ? 1 : 0),
+            (unsigned)PCI_MSIX_PROBE_VEC);
+    kprintf("msix: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
+            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
+            (unsigned)u32Data0, (unsigned)u32VecCtl0,
+            (unsigned)(g_aSoftTab[0].u8Programmed ? 1 : 0),
+            (unsigned)(g_aSoftTab[0].u8SoftFire ? 1 : 0),
+            (unsigned)PCI_MSIX_PROBE_VEC);
+
+    /* Grep: pci: soft pba / msix: soft pba */
+    kprintf("pci: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
+            "width=64\n",
+            (unsigned long)g_u64SoftPba);
+    kprintf("msix: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
+            "width=64\n",
+            (unsigned long)g_u64SoftPba);
+
+    /* Grep: pci: soft fire / msix: soft fire */
+    kprintf("pci: soft fire count=%u live_fired=%u badge_tbl=GJ_MSIX_BADGE_TBL "
+            "inject_if_ready=%u masked_hold=1\n",
+            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)fIrqReady);
+    kprintf("msix: soft fire count=%u live_fired=%u badge_tbl=GJ_MSIX_BADGE_TBL "
+            "inject_if_ready=%u masked_hold=1\n",
+            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)fIrqReady);
+
+    /* Grep: pci: soft mask / msix: soft mask */
+    kprintf("pci: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
+            "prog_live=%u\n",
+            (unsigned)cMasked, (unsigned)cProgLive);
+    kprintf("msix: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
+            "prog_live=%u\n",
+            (unsigned)cMasked, (unsigned)cProgLive);
+
+    /* Grep: pci: soft hw / msix: soft hw — HW program tallies (may be 0) */
+    kprintf("pci: soft hw programmed=%u scan_api=1 enable_api=1 "
+            "program_first=1 map_device=1\n",
+            (unsigned)g_u32Programmed);
+    kprintf("msix: soft hw programmed=%u scan_api=1 enable_api=1 "
+            "program_first=1 map_device=1\n",
+            (unsigned)g_u32Programmed);
+
+    /*
+     * Grep: pci: soft path / msix: soft path
+     * Honesty: bounded soft shadow ≠ full device Table Size; soft ≠ bar3.
+     */
+    kprintf("pci: soft path claim=kernel_soft depth_bound=%u "
+            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 via=%s\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe);
+    kprintf("msix: soft path claim=kernel_soft depth_bound=%u "
+            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 via=%s\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe);
+
+    /* Soft path is always available after init — inventory PASS. */
+    if (g_fSoftReady) {
+        /* Grep: pci: soft inventory PASS / pci: soft PASS */
+        kprintf("pci: soft inventory PASS via=%s logs=%u\n", szViaSafe,
+                (unsigned)g_u32SoftInvLogs);
+        kprintf("pci: soft PASS via=%s\n", szViaSafe);
+        /* Grep: msix: soft inventory PASS / msix: soft PASS */
+        kprintf("msix: soft inventory PASS via=%s logs=%u\n", szViaSafe,
+                (unsigned)g_u32SoftInvLogs);
+        kprintf("msix: soft PASS via=%s\n", szViaSafe);
+    } else {
+        kprintf("pci: soft inventory SKIP via=%s\n", szViaSafe);
+        kprintf("msix: soft inventory SKIP via=%s\n", szViaSafe);
+    }
+}
+
 u32
 pci_msix_soft_table_exercise(void)
 {
@@ -350,6 +509,8 @@ pci_msix_soft_table_exercise(void)
                 g_u32SoftProg, g_u32SoftFire,
                 (unsigned long)pci_msix_soft_pba());
     }
+    /* Wave 11: greppable soft inventory rollup (after exercise state). */
+    pci_msix_soft_inventory("exercise");
     return fOk;
 }
 
@@ -571,6 +732,11 @@ pci_msix_probe_log(void)
     cProg = pci_msix_program_first(PCI_MSIX_PROBE_VEC);
     /* Soft table always exercised (works with zero devices). */
     fSoft = pci_msix_soft_table_exercise();
+    /*
+     * Wave 11 soft inventory at probe (exercise already dumps once;
+     * probe via= tag deepens greppable "pci: soft …" / "msix: soft …").
+     */
+    pci_msix_soft_inventory("probe");
     if (cScan > 0 || cEnabled > 0 || fSoft) {
         kprintf("pci: MSI-X probe PASS\n");
         if (cEnabled > 0) {

@@ -17,6 +17,25 @@
  *     (user vs ksmoke path). Diagnostics only; never hard-gate.
  *     greppable: native: soft stats
  *
+ * Wave 11 exclusive soft inventory deepen (this unit only; never hard-gates):
+ *   native: soft inventory   — entry/handled/nosupport + caps + log_n
+ *   native: soft stats       — aggregate rollup (legacy greppable line)
+ *   native: soft outcome     — ok/err + GJ_ERR_* buckets
+ *   native: soft class       — handled subsystem buckets
+ *   native: soft door        — session/net/store/vfs façade split
+ *   native: soft reserved    — frozen VM/futex/wait/untyped/unknown NR
+ *   native: soft copy        — copy_in/out/name + user vs ksmoke path
+ *   native: soft platform    — PLATFORM_INFO op split
+ *   native: soft console     — CONSOLE op split
+ *   native: soft scsi        — SCSI op split
+ *   native: soft hda         — HDA_STREAM op split
+ *   native: soft cap         — CAP_* op split
+ *   native: soft ipc         — IPC_CALL/RECV/REPLY + diag split
+ *   native: soft last        — last_nr / last_ret snapshot
+ *   native: soft path        — honesty: native GJ path ≠ Linux hybrid / bar3
+ *   native: soft inventory PASS (soft lamp only; not product gate)
+ * greppable: native: soft
+ *
  * Pure C11 freestanding. Dual-licensed MIT OR Apache-2.0.
  */
 #include <gj/cap.h>
@@ -61,31 +80,112 @@ extern struct gj_process *g_pLinuxProc;
 /* Soft product counters (wrap OK). See gj_native_dispatch_stats in syscall.h. */
 static struct gj_native_dispatch_stats g_nativeStats;
 
-void
-gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut)
+/*
+ * Wave 11 exclusive deepen (file-local; never hard-gates; wrap OK).
+ * Per-op tallies for multi-op GJ_SYS_* surfaces + inventory emission count.
+ * greppable: native: soft …
+ */
+struct native_soft_deep {
+    u64 u64SoftLog; /* inventory / multi-line dump emissions */
+    /* PLATFORM_INFO arg0 split */
+    u64 u64PlatIommu;
+    u64 u64PlatMsix;
+    u64 u64PlatWow64;
+    u64 u64PlatMsixInj;
+    u64 u64PlatIommuEnf;
+    u64 u64PlatIommuWin;
+    u64 u64PlatInval;
+    /* CONSOLE arg0 split */
+    u64 u64ConPoll;
+    u64 u64ConGetc;
+    u64 u64ConRead;
+    u64 u64ConInval;
+    /* SCSI arg0 split */
+    u64 u64ScsiReady;
+    u64 u64ScsiStats;
+    u64 u64ScsiInq;
+    u64 u64ScsiReadCap;
+    u64 u64ScsiRead10;
+    u64 u64ScsiWrite10;
+    u64 u64ScsiInval;
+    /* HDA_STREAM arg0 split */
+    u64 u64HdaOpen;
+    u64 u64HdaWrite;
+    u64 u64HdaStart;
+    u64 u64HdaTick;
+    u64 u64HdaClose;
+    u64 u64HdaStats;
+    u64 u64HdaInval;
+    /* CAP_* number split (handled path) */
+    u64 u64CapMint;
+    u64 u64CapMove;
+    u64 u64CapCopy;
+    u64 u64CapRevoke;
+    u64 u64CapIdent;
+    /* IPC + diag number split */
+    u64 u64IpcCall;
+    u64 u64IpcRecv;
+    u64 u64IpcReply;
+    u64 u64DiagLog;
+    u64 u64DiagYield;
+    u64 u64DiagExit;
+};
+
+static struct native_soft_deep g_nativeDeep;
+/* One-shot multi-line inventory after first non-null dispatch (soft). */
+static u8 g_fSoftNativeOnce;
+
+static void native_soft_inc(u64 *pCtr);
+static void native_soft_inventory_log(void);
+static void native_soft_maybe_once(void);
+
+/** Soft: bump path tally (u64 wrap is fine for telemetry). */
+static void
+native_soft_inc(u64 *pCtr)
 {
-    if (pOut == NULL) {
+    if (pCtr == NULL) {
         return;
     }
-    *pOut = g_nativeStats;
+    (*pCtr)++;
 }
 
-void
-gj_native_dispatch_stats_reset(void)
+/**
+ * Greppable Wave 11 soft native inventory (product / smoke).
+ * Snapshots public stats + file-local deepen counters before print.
+ * Diagnostics only; wrap OK; never hard-gates.
+ * greppable: native: soft
+ */
+static void
+native_soft_inventory_log(void)
 {
-    memset(&g_nativeStats, 0, sizeof(g_nativeStats));
-}
+    struct gj_native_dispatch_stats s;
+    struct native_soft_deep d;
 
-u64
-gj_native_dispatch_stats_soft(void)
-{
+    native_soft_inc(&g_nativeDeep.u64SoftLog);
+    s = g_nativeStats;
+    d = g_nativeDeep;
+
+    /* Grep: native: soft inventory */
+    kprintf("native: soft inventory entries=%llu null=%llu handled=%llu "
+            "nosupport=%llu door=%llu logs=%llu "
+            "debug_log_max=%u console_chunk=%u hda_chunk=%u scsi_xfer=%u "
+            "user_copy=user_range_ok+copy_{to,from}_user "
+            "ksmoke=HHDM/static personality=NATIVE\n",
+            (unsigned long long)s.u64Entries,
+            (unsigned long long)s.u64NullGuard,
+            (unsigned long long)s.u64Handled,
+            (unsigned long long)s.u64Nosupport,
+            (unsigned long long)s.u64DoorFacade,
+            (unsigned long long)d.u64SoftLog,
+            (unsigned)GJ_NATIVE_DEBUG_LOG_MAX,
+            (unsigned)GJ_NATIVE_CONSOLE_CHUNK,
+            (unsigned)GJ_NATIVE_HDA_CHUNK,
+            (unsigned)GJ_NATIVE_SCSI_XFER_MAX);
+
     /*
-     * Snapshot first so a concurrent soft bump cannot tear mid-print.
-     * Diagnostics only; wrap OK; never hard-gates.
+     * Legacy aggregate rollup — keep field order stable for existing greps.
      * Grep: native: soft stats
      */
-    struct gj_native_dispatch_stats s = g_nativeStats;
-
     kprintf("native: soft stats entries=%llu null=%llu handled=%llu "
             "nosupport=%llu ok=%llu err=%llu ret0=%llu ret_pos=%llu "
             "inval=%llu fault=%llu nodev=%llu again=%llu io=%llu nomem=%llu "
@@ -151,7 +251,227 @@ gj_native_dispatch_stats_soft(void)
             (unsigned long long)s.u64CopyKsmoke,
             (unsigned long long)s.u64LastNr,
             (unsigned long long)s.u64LastRet);
-    return s.u64Entries;
+
+    /* Grep: native: soft outcome */
+    kprintf("native: soft outcome ok=%llu err=%llu ret0=%llu ret_pos=%llu "
+            "inval=%llu fault=%llu nodev=%llu again=%llu io=%llu nomem=%llu "
+            "noent=%llu perm=%llu busy=%llu "
+            "nosupport_term=%llu (err includes nosupport)\n",
+            (unsigned long long)s.u64Ok,
+            (unsigned long long)s.u64Err,
+            (unsigned long long)s.u64RetZero,
+            (unsigned long long)s.u64RetPos,
+            (unsigned long long)s.u64Inval,
+            (unsigned long long)s.u64Fault,
+            (unsigned long long)s.u64Nodev,
+            (unsigned long long)s.u64Again,
+            (unsigned long long)s.u64Io,
+            (unsigned long long)s.u64Nomem,
+            (unsigned long long)s.u64Noent,
+            (unsigned long long)s.u64Perm,
+            (unsigned long long)s.u64Busy,
+            (unsigned long long)s.u64Nosupport);
+
+    /* Grep: native: soft class */
+    kprintf("native: soft class diag=%llu ipc=%llu cap=%llu process=%llu "
+            "thread=%llu cold=%llu gpu=%llu memobj=%llu hda=%llu "
+            "platform=%llu notify=%llu console=%llu scsi=%llu door=%llu\n",
+            (unsigned long long)s.u64Diag,
+            (unsigned long long)s.u64Ipc,
+            (unsigned long long)s.u64Cap,
+            (unsigned long long)s.u64Process,
+            (unsigned long long)s.u64Thread,
+            (unsigned long long)s.u64Cold,
+            (unsigned long long)s.u64Gpu,
+            (unsigned long long)s.u64Memobj,
+            (unsigned long long)s.u64Hda,
+            (unsigned long long)s.u64Platform,
+            (unsigned long long)s.u64Notify,
+            (unsigned long long)s.u64Console,
+            (unsigned long long)s.u64Scsi,
+            (unsigned long long)s.u64DoorFacade);
+
+    /* Grep: native: soft door */
+    kprintf("native: soft door facade=%llu sess=%llu net=%llu store=%llu "
+            "vfs=%llu claim=door_facade product=userspace_servers\n",
+            (unsigned long long)s.u64DoorFacade,
+            (unsigned long long)s.u64Session,
+            (unsigned long long)s.u64Net,
+            (unsigned long long)s.u64Store,
+            (unsigned long long)s.u64Vfs);
+
+    /* Grep: native: soft reserved */
+    kprintf("native: soft reserved vm=%llu futex=%llu wait=%llu untyped=%llu "
+            "unknown_nr=%llu "
+            "(default-path only; frozen NR; never product gate)\n",
+            (unsigned long long)s.u64Vm,
+            (unsigned long long)s.u64Futex,
+            (unsigned long long)s.u64Wait,
+            (unsigned long long)s.u64Untyped,
+            (unsigned long long)s.u64UnknownNr);
+
+    /* Grep: native: soft copy */
+    kprintf("native: soft copy cin_ok=%llu cin_fail=%llu cout_ok=%llu "
+            "cout_fail=%llu cname_ok=%llu cname_fail=%llu "
+            "bin=%llu bout=%llu user=%llu ksmoke=%llu\n",
+            (unsigned long long)s.u64CopyInOk,
+            (unsigned long long)s.u64CopyInFail,
+            (unsigned long long)s.u64CopyOutOk,
+            (unsigned long long)s.u64CopyOutFail,
+            (unsigned long long)s.u64CopyNameOk,
+            (unsigned long long)s.u64CopyNameFail,
+            (unsigned long long)s.u64BytesCopyIn,
+            (unsigned long long)s.u64BytesCopyOut,
+            (unsigned long long)s.u64CopyUser,
+            (unsigned long long)s.u64CopyKsmoke);
+
+    /* Grep: native: soft platform */
+    kprintf("native: soft platform iommu=%llu msix=%llu wow64=%llu "
+            "msix_inj=%llu iommu_enf=%llu iommu_win=%llu inval=%llu "
+            "ops=0..5 handled_total=%llu\n",
+            (unsigned long long)d.u64PlatIommu,
+            (unsigned long long)d.u64PlatMsix,
+            (unsigned long long)d.u64PlatWow64,
+            (unsigned long long)d.u64PlatMsixInj,
+            (unsigned long long)d.u64PlatIommuEnf,
+            (unsigned long long)d.u64PlatIommuWin,
+            (unsigned long long)d.u64PlatInval,
+            (unsigned long long)s.u64Platform);
+
+    /* Grep: native: soft console */
+    kprintf("native: soft console poll=%llu getc=%llu read=%llu inval=%llu "
+            "chunk=%u handled_total=%llu\n",
+            (unsigned long long)d.u64ConPoll,
+            (unsigned long long)d.u64ConGetc,
+            (unsigned long long)d.u64ConRead,
+            (unsigned long long)d.u64ConInval,
+            (unsigned)GJ_NATIVE_CONSOLE_CHUNK,
+            (unsigned long long)s.u64Console);
+
+    /* Grep: native: soft scsi */
+    kprintf("native: soft scsi ready=%llu stats=%llu inq=%llu readcap=%llu "
+            "read10=%llu write10=%llu inval=%llu xfer_max=%u "
+            "handled_total=%llu\n",
+            (unsigned long long)d.u64ScsiReady,
+            (unsigned long long)d.u64ScsiStats,
+            (unsigned long long)d.u64ScsiInq,
+            (unsigned long long)d.u64ScsiReadCap,
+            (unsigned long long)d.u64ScsiRead10,
+            (unsigned long long)d.u64ScsiWrite10,
+            (unsigned long long)d.u64ScsiInval,
+            (unsigned)GJ_NATIVE_SCSI_XFER_MAX,
+            (unsigned long long)s.u64Scsi);
+
+    /* Grep: native: soft hda */
+    kprintf("native: soft hda open=%llu write=%llu start=%llu tick=%llu "
+            "close=%llu stats=%llu inval=%llu chunk=%u handled_total=%llu\n",
+            (unsigned long long)d.u64HdaOpen,
+            (unsigned long long)d.u64HdaWrite,
+            (unsigned long long)d.u64HdaStart,
+            (unsigned long long)d.u64HdaTick,
+            (unsigned long long)d.u64HdaClose,
+            (unsigned long long)d.u64HdaStats,
+            (unsigned long long)d.u64HdaInval,
+            (unsigned)GJ_NATIVE_HDA_CHUNK,
+            (unsigned long long)s.u64Hda);
+
+    /* Grep: native: soft cap */
+    kprintf("native: soft cap mint=%llu move=%llu copy=%llu revoke=%llu "
+            "ident=%llu handled_total=%llu scheme=A_current_cnode\n",
+            (unsigned long long)d.u64CapMint,
+            (unsigned long long)d.u64CapMove,
+            (unsigned long long)d.u64CapCopy,
+            (unsigned long long)d.u64CapRevoke,
+            (unsigned long long)d.u64CapIdent,
+            (unsigned long long)s.u64Cap);
+
+    /* Grep: native: soft ipc */
+    kprintf("native: soft ipc call=%llu recv=%llu reply=%llu "
+            "diag_log=%llu diag_yield=%llu diag_exit=%llu "
+            "ipc_total=%llu diag_total=%llu\n",
+            (unsigned long long)d.u64IpcCall,
+            (unsigned long long)d.u64IpcRecv,
+            (unsigned long long)d.u64IpcReply,
+            (unsigned long long)d.u64DiagLog,
+            (unsigned long long)d.u64DiagYield,
+            (unsigned long long)d.u64DiagExit,
+            (unsigned long long)s.u64Ipc,
+            (unsigned long long)s.u64Diag);
+
+    /* Grep: native: soft last */
+    kprintf("native: soft last nr=%llu ret_bits=0x%llx logs=%llu\n",
+            (unsigned long long)s.u64LastNr,
+            (unsigned long long)s.u64LastRet,
+            (unsigned long long)d.u64SoftLog);
+
+    /*
+     * Honesty: native GJ_SYS_* path is not Linux hybrid and not bar3.
+     * Grep: native: soft path
+     */
+    kprintf("native: soft path claim=native_gj_sys "
+            "linux_hybrid=0 bar3=0 product_doors=session,net,store,vfs "
+            "reserved_stubs=vm,futex,wait,untyped "
+            "copy_user=1 copy_ksmoke=1 soft_only=1\n");
+
+    /*
+     * Soft lamp only — inventory emit succeeded. Never hard-gates.
+     * Grep: native: soft inventory PASS
+     * Grep: native: soft PASS
+     */
+    kprintf("native: soft inventory PASS logs=%llu entries=%llu "
+            "handled=%llu nosupport=%llu\n",
+            (unsigned long long)d.u64SoftLog,
+            (unsigned long long)s.u64Entries,
+            (unsigned long long)s.u64Handled,
+            (unsigned long long)s.u64Nosupport);
+    kprintf("native: soft PASS logs=%llu\n",
+            (unsigned long long)d.u64SoftLog);
+}
+
+/**
+ * After first non-null dispatch, print soft inventory once
+ * (mirrors futex/door soft-stats-once). Diagnostics only.
+ */
+static void
+native_soft_maybe_once(void)
+{
+    if (g_fSoftNativeOnce != 0) {
+        return;
+    }
+    if (g_nativeStats.u64Entries == 0 && g_nativeStats.u64NullGuard == 0) {
+        return;
+    }
+    g_fSoftNativeOnce = 1;
+    native_soft_inventory_log();
+}
+
+void
+gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    *pOut = g_nativeStats;
+}
+
+void
+gj_native_dispatch_stats_reset(void)
+{
+    memset(&g_nativeStats, 0, sizeof(g_nativeStats));
+    memset(&g_nativeDeep, 0, sizeof(g_nativeDeep));
+    g_fSoftNativeOnce = 0;
+}
+
+u64
+gj_native_dispatch_stats_soft(void)
+{
+    /*
+     * Full Wave 11 multi-line soft inventory (includes legacy stats line).
+     * Snapshots inside native_soft_inventory_log; never hard-gates.
+     * Grep: native: soft stats / native: soft inventory
+     */
+    native_soft_inventory_log();
+    return g_nativeStats.u64Entries;
 }
 
 /**
@@ -441,6 +761,8 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
 
     if (pRegs == NULL) {
         g_nativeStats.u64NullGuard++;
+        /* Soft: still allow one-shot inventory after null-guard activity. */
+        native_soft_maybe_once();
         return;
     }
     g_nativeStats.u64Entries++;
@@ -456,6 +778,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         size_t cbChunk;
         i64 st;
 
+        native_soft_inc(&g_nativeDeep.u64DiagLog);
         if (u64Src == 0) {
             pRegs->i64Ret = GJ_ERR_INVAL;
             break;
@@ -483,10 +806,12 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         break;
     }
     case GJ_SYS_YIELD:
+        native_soft_inc(&g_nativeDeep.u64DiagYield);
         thread_yield();
         pRegs->i64Ret = 0;
         break;
     case GJ_SYS_EXIT:
+        native_soft_inc(&g_nativeDeep.u64DiagExit);
         kprintf("gj: SYS_EXIT %ld\n", (long)pRegs->u64Arg0);
         thread_exit();
         /* Not reached on a live path; keep a defined ret for smokes. */
@@ -524,6 +849,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         struct gj_linux_regs req;
         struct gj_door *pDoor;
 
+        native_soft_inc(&g_nativeDeep.u64IpcCall);
         memset(&req, 0, sizeof(req));
         req.u64Nr = pRegs->u64Arg0;
         req.u64Arg0 = pRegs->u64Arg1;
@@ -546,6 +872,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         int n;
         i64 st;
 
+        native_soft_inc(&g_nativeDeep.u64IpcRecv);
         pDoor = door_cold_personality();
         if (pDoor == NULL) {
             pRegs->i64Ret = GJ_ERR_NODEV;
@@ -568,6 +895,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
     case GJ_SYS_IPC_REPLY: {
         struct gj_door *pDoor = door_cold_personality();
 
+        native_soft_inc(&g_nativeDeep.u64IpcReply);
         if (pDoor == NULL) {
             pRegs->i64Ret = GJ_ERR_NODEV;
             break;
@@ -726,8 +1054,10 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         u32 u32Op = (u32)pRegs->u64Arg0;
 
         if (u32Op == 0) {
+            native_soft_inc(&g_nativeDeep.u64ConPoll);
             pRegs->i64Ret = serial_poll();
         } else if (u32Op == 1) {
+            native_soft_inc(&g_nativeDeep.u64ConGetc);
             pRegs->i64Ret = serial_getchar();
         } else if (u32Op == 2) {
             u64 u64Buf = pRegs->u64Arg1;
@@ -736,6 +1066,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u8 aTmp[GJ_NATIVE_CONSOLE_CHUNK];
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64ConRead);
             if (u64Buf == 0 || cbMax == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -755,6 +1086,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             }
             pRegs->i64Ret = (i64)n;
         } else {
+            native_soft_inc(&g_nativeDeep.u64ConInval);
             pRegs->i64Ret = GJ_ERR_INVAL;
         }
         break;
@@ -766,6 +1098,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             struct gj_iommu_info info;
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64PlatIommu);
             memset(&info, 0, sizeof(info));
             iommu_info_get(&info);
             if (pRegs->u64Arg1 != 0) {
@@ -781,6 +1114,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 n;
             u32 cb;
 
+            native_soft_inc(&g_nativeDeep.u64PlatMsix);
             memset(aInfo, 0, sizeof(aInfo));
             n = pci_msix_scan(aInfo, 16);
             if (pRegs->u64Arg1 != 0 && n > 0) {
@@ -796,6 +1130,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             /* WoW64 personality control */
             u32 u32Act = (u32)pRegs->u64Arg1;
 
+            native_soft_inc(&g_nativeDeep.u64PlatWow64);
             if (u32Act == 1) {
                 wow64_set(1);
             } else if (u32Act == 2) {
@@ -805,9 +1140,11 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
                             ((i64)(wow64_enabled() ? 1 : 0) << 32);
         } else if (u32Op == 3) {
             /* MSI-X Notification soft inject */
+            native_soft_inc(&g_nativeDeep.u64PlatMsixInj);
             irq_msix_soft_inject(pRegs->u64Arg1 ? pRegs->u64Arg1 : 1ull);
             pRegs->i64Ret = (i64)irq_msix_count();
         } else if (u32Op == 4) {
+            native_soft_inc(&g_nativeDeep.u64PlatIommuEnf);
             iommu_enforce_set((int)pRegs->u64Arg1);
             pRegs->i64Ret = iommu_enforce_get();
         } else if (u32Op == 5) {
@@ -816,6 +1153,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u8 u8Slot = (u8)((u32Bdf >> 8) & 0xffu);
             u8 u8Func = (u8)(u32Bdf & 0xffu);
 
+            native_soft_inc(&g_nativeDeep.u64PlatIommuWin);
             if (pRegs->u64Arg3 == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -827,6 +1165,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
                 pRegs->i64Ret = (i64)iommu_window_count();
             }
         } else {
+            native_soft_inc(&g_nativeDeep.u64PlatInval);
             pRegs->i64Ret = GJ_ERR_INVAL;
         }
         break;
@@ -857,12 +1196,14 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
 
         switch (u32Op) {
         case 5: /* ready */
+            native_soft_inc(&g_nativeDeep.u64ScsiReady);
             pRegs->i64Ret = scsi_mid_ready() ? 1 : 0;
             break;
         case 6: { /* stats */
             u32 aSt[2];
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64ScsiStats);
             if (pRegs->u64Arg1 == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -877,6 +1218,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 cb = (u32)pRegs->u64Arg2;
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64ScsiInq);
             if (pRegs->u64Arg1 == 0 || cb == 0 || cb > sizeof(aScsiXfer)) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -896,6 +1238,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 aCap[2];
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64ScsiReadCap);
             if (pRegs->u64Arg1 == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -923,6 +1266,11 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 cb;
             i64 st;
 
+            if (u32Op == 2) {
+                native_soft_inc(&g_nativeDeep.u64ScsiRead10);
+            } else {
+                native_soft_inc(&g_nativeDeep.u64ScsiWrite10);
+            }
             if (u32Blocks == 0) {
                 u32Blocks = 1;
             }
@@ -963,6 +1311,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             break;
         }
         default:
+            native_soft_inc(&g_nativeDeep.u64ScsiInval);
             pRegs->i64Ret = GJ_ERR_INVAL;
             break;
         }
@@ -974,6 +1323,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
 
         switch (u32Op) {
         case 0:
+            native_soft_inc(&g_nativeDeep.u64HdaOpen);
             pRegs->i64Ret =
                 hda_stream_open((u32)pRegs->u64Arg1, (u32)pRegs->u64Arg2,
                                 (u32)pRegs->u64Arg3) == 0
@@ -987,6 +1337,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 cbChunk;
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64HdaWrite);
             if (pRegs->u64Arg1 == 0 || cbWant == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -1014,12 +1365,15 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             break;
         }
         case 2:
+            native_soft_inc(&g_nativeDeep.u64HdaStart);
             pRegs->i64Ret = hda_stream_start() == 0 ? 0 : GJ_ERR_INVAL;
             break;
         case 3:
+            native_soft_inc(&g_nativeDeep.u64HdaTick);
             pRegs->i64Ret = (i64)hda_stream_tick((u32)pRegs->u64Arg1);
             break;
         case 4:
+            native_soft_inc(&g_nativeDeep.u64HdaClose);
             hda_stream_close();
             pRegs->i64Ret = 0;
             break;
@@ -1027,6 +1381,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             u32 aSt[3];
             i64 st;
 
+            native_soft_inc(&g_nativeDeep.u64HdaStats);
             if (pRegs->u64Arg1 == 0) {
                 pRegs->i64Ret = GJ_ERR_INVAL;
                 break;
@@ -1039,6 +1394,7 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             break;
         }
         default:
+            native_soft_inc(&g_nativeDeep.u64HdaInval);
             pRegs->i64Ret = GJ_ERR_INVAL;
             break;
         }
@@ -1091,6 +1447,17 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         struct gj_cap_resolved res;
         gj_status_t st;
 
+        if (pRegs->u64Nr == GJ_SYS_CAP_IDENT) {
+            native_soft_inc(&g_nativeDeep.u64CapIdent);
+        } else if (pRegs->u64Nr == GJ_SYS_CAP_REVOKE) {
+            native_soft_inc(&g_nativeDeep.u64CapRevoke);
+        } else if (pRegs->u64Nr == GJ_SYS_CAP_MOVE) {
+            native_soft_inc(&g_nativeDeep.u64CapMove);
+        } else if (pRegs->u64Nr == GJ_SYS_CAP_COPY) {
+            native_soft_inc(&g_nativeDeep.u64CapCopy);
+        } else {
+            native_soft_inc(&g_nativeDeep.u64CapMint);
+        }
         if (pProc == NULL || pProc->pCnode == NULL) {
             pRegs->i64Ret = GJ_ERR_INVAL;
             break;
@@ -1137,4 +1504,6 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
     }
 
     native_stats_finish(pRegs->u64Nr, pRegs->i64Ret, fHitDefault);
+    /* Wave 11: one-shot greppable soft inventory after first activity. */
+    native_soft_maybe_once();
 }

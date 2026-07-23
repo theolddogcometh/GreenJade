@@ -10,7 +10,14 @@
  *   wait  → reap exit code, invalidate parent PROCESS cap, recycle spawn slot
  * Failure paths reverse tear down (no orphan AS / stale cap).
  *
- * Soft product (grep: spawn: soft | spawn: mint soft):
+ * Soft product inventory (Wave 11 exclusive; this unit only):
+ *   - Spawn path: enter / ok / fail + deny reasons (null/cnode/full/meta/as/mint/thr)
+ *   - Mint path: install + soft post-mint verify reason catalog
+ *   - Kill / wait / from_cap path tallies + live peak
+ *   greppable: "spawn: soft …"
+ *   Never hard-gates; diagnostics / smoke grep only (wrap OK).
+ *
+ * Soft mint verify (grep: spawn: mint soft | spawn: soft mint):
  *   Post-mint verify of PROCESS type/rights/obj/gen (fail closed on soft bad)
  *   Cumulative ok/fail/live/kill/wait + mint ok/fail/soft/soft_bad counters
  */
@@ -45,6 +52,58 @@ static u32 g_cMintFail;      /* PROCESS cap install fail */
 static u32 g_cMintSoft;      /* soft post-mint verify PASS */
 static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
 
+/*
+ * Soft product inventory (Wave 11 exclusive). Cumulative unless noted live/peak.
+ * greppable: spawn: soft …
+ */
+static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
+static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
+static u32 g_u32SoftDenyNoCnode;     /* parent CNode missing */
+static u32 g_u32SoftDenyFull;        /* fixed spawn table full */
+static u32 g_u32SoftDenyMeta;        /* bootstrap root meta fail */
+static u32 g_u32SoftDenyAs;          /* process_as_ensure fail */
+static u32 g_u32SoftDenyMint;        /* mint install or soft-verify fail */
+static u32 g_u32SoftDenyThr;         /* thread_create fail */
+static u32 g_u32SoftLivePeak;        /* peak occupied slots */
+
+static u32 g_u32SoftMintNullArg;     /* mint/verify null parent/child/ref */
+static u32 g_u32SoftMintNullRef;     /* soft-verify null cap ref */
+static u32 g_u32SoftMintResolve;     /* soft-verify resolve fail */
+static u32 g_u32SoftMintType;        /* soft-verify type != PROCESS */
+static u32 g_u32SoftMintObj;         /* soft-verify object pointer mismatch */
+static u32 g_u32SoftMintGen;         /* soft-verify slot gen mismatch */
+static u32 g_u32SoftMintCoreRights;  /* soft-verify core rights missing */
+static u32 g_u32SoftMintRights;      /* soft-verify full wanted rights miss */
+static u32 g_u32SoftMintFromCap;     /* soft-verify process_from_cap mismatch */
+static u32 g_u32SoftMintInstallFail; /* gj_cap_alloc_install fail */
+
+static u32 g_u32SoftKillEnter;       /* process_kill entries */
+static u32 g_u32SoftKillIdem;        /* kill already-dead (idempotent ok) */
+static u32 g_u32SoftKillDenyNull;    /* kill null parent/ref */
+static u32 g_u32SoftKillDenyResolve; /* kill resolve fail */
+static u32 g_u32SoftKillDenyType;    /* kill type != PROCESS */
+static u32 g_u32SoftKillDenyRights;  /* kill missing DESTROY */
+static u32 g_u32SoftKillDenyNoent;   /* kill null child object */
+
+static u32 g_u32SoftWaitEnter;       /* process_wait entries */
+static u32 g_u32SoftWaitAgain;       /* wait while child still alive */
+static u32 g_u32SoftWaitDenyNull;    /* wait null parent/ref */
+static u32 g_u32SoftWaitDenyResolve; /* wait resolve fail */
+static u32 g_u32SoftWaitDenyType;    /* wait type != PROCESS */
+static u32 g_u32SoftWaitDenyRights;  /* wait missing WAIT */
+static u32 g_u32SoftWaitDenyNoent;   /* wait null child object */
+
+static u32 g_u32SoftFromCapHit;      /* process_from_cap success */
+static u32 g_u32SoftFromCapMiss;     /* process_from_cap fail-closed */
+
+static u32 g_u32SoftLogN;            /* soft inventory log emissions */
+static u8  g_fSoftOnce;              /* one-shot after first product activity */
+
+static void spawn_soft_inc(u32 *pCtr);
+static void soft_inventory_log(const char *szVia);
+static void soft_inventory_maybe_once(void);
+static void soft_note_live_peak(void);
+
 /**
  * Occupied fixed spawn slots (live children not yet reaped via process_wait).
  */
@@ -61,6 +120,158 @@ spawn_live_count(void)
         }
     }
     return cLive;
+}
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+spawn_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/** Soft: track peak occupied fixed slots (diagnostics only). */
+static void
+soft_note_live_peak(void)
+{
+    u32 cLive;
+
+    cLive = spawn_live_count();
+    if (cLive > g_u32SoftLivePeak) {
+        g_u32SoftLivePeak = cLive;
+    }
+}
+
+/**
+ * Greppable soft spawn inventory (Wave 11 exclusive; product / smoke).
+ * Prefix-stable markers (spawn: soft …):
+ *   spawn: soft inventory  — table caps + live/peak + rights + logs
+ *   spawn: soft stats      — cumulative ok/fail/live/kill/wait/mint*
+ *   spawn: soft spawn      — enter/ok/fail + deny reason catalog
+ *   spawn: soft mint       — install + soft-verify reason catalog
+ *   spawn: soft kill       — enter/ok/idem + deny catalog
+ *   spawn: soft wait       — enter/ok/again + deny catalog
+ *   spawn: soft from_cap   — process_from_cap hit/miss
+ *   spawn: soft path       — honesty: fixed table ≠ full posix_spawn
+ *   spawn: soft inventory PASS / spawn: soft PASS
+ *
+ * Never hard-gates; diagnostics only.
+ * greppable: spawn: soft
+ */
+static void
+soft_inventory_log(const char *szVia)
+{
+    const char *szViaSafe;
+    u32         cLive;
+    u32         u32Free;
+    u16         u16Base;
+    u16         u16Core;
+
+    spawn_soft_inc(&g_u32SoftLogN);
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    cLive = spawn_live_count();
+    u32Free = (cLive < GJ_SPAWN_MAX) ? (GJ_SPAWN_MAX - cLive) : 0u;
+    u16Base = GJ_SPAWN_PROCESS_RIGHTS_BASE;
+    u16Core = GJ_SPAWN_PROCESS_RIGHTS_CORE;
+
+    /* Grep: spawn: soft inventory */
+    kprintf("spawn: soft inventory via=%s max=%u slots=%u live=%u free=%u "
+            "peak=%u rights_base=0x%x rights_core=0x%x logs=%u\n",
+            szViaSafe, GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS,
+            cLive, u32Free, g_u32SoftLivePeak,
+            (unsigned)u16Base, (unsigned)u16Core, g_u32SoftLogN);
+
+    /* Grep: spawn: soft stats */
+    kprintf("spawn: soft stats ok=%u fail=%u live=%u kill=%u wait=%u "
+            "mint_ok=%u mint_fail=%u mint_soft=%u mint_soft_bad=%u\n",
+            g_cSpawned, g_cSpawnFail, cLive, g_cKill, g_cWait,
+            g_cMintOk, g_cMintFail, g_cMintSoft, g_cMintSoftBad);
+
+    /* Grep: spawn: soft spawn */
+    kprintf("spawn: soft spawn enter=%u ok=%u fail=%u deny_null=%u "
+            "deny_cnode=%u deny_full=%u deny_meta=%u deny_as=%u "
+            "deny_mint=%u deny_thr=%u\n",
+            g_u32SoftSpawnEnter, g_cSpawned, g_cSpawnFail,
+            g_u32SoftDenyNull, g_u32SoftDenyNoCnode, g_u32SoftDenyFull,
+            g_u32SoftDenyMeta, g_u32SoftDenyAs, g_u32SoftDenyMint,
+            g_u32SoftDenyThr);
+
+    /* Grep: spawn: soft mint */
+    kprintf("spawn: soft mint install_ok=%u install_fail=%u soft_pass=%u "
+            "soft_bad=%u null_arg=%u null_ref=%u resolve=%u type=%u "
+            "obj=%u gen=%u core_rights=%u rights=%u from_cap=%u\n",
+            g_cMintOk, g_cMintFail, g_cMintSoft, g_cMintSoftBad,
+            g_u32SoftMintNullArg, g_u32SoftMintNullRef, g_u32SoftMintResolve,
+            g_u32SoftMintType, g_u32SoftMintObj, g_u32SoftMintGen,
+            g_u32SoftMintCoreRights, g_u32SoftMintRights,
+            g_u32SoftMintFromCap);
+
+    /* Grep: spawn: soft kill */
+    kprintf("spawn: soft kill enter=%u ok=%u idem=%u deny_null=%u "
+            "deny_resolve=%u deny_type=%u deny_rights=%u deny_noent=%u\n",
+            g_u32SoftKillEnter, g_cKill, g_u32SoftKillIdem,
+            g_u32SoftKillDenyNull, g_u32SoftKillDenyResolve,
+            g_u32SoftKillDenyType, g_u32SoftKillDenyRights,
+            g_u32SoftKillDenyNoent);
+
+    /* Grep: spawn: soft wait */
+    kprintf("spawn: soft wait enter=%u ok=%u again=%u deny_null=%u "
+            "deny_resolve=%u deny_type=%u deny_rights=%u deny_noent=%u\n",
+            g_u32SoftWaitEnter, g_cWait, g_u32SoftWaitAgain,
+            g_u32SoftWaitDenyNull, g_u32SoftWaitDenyResolve,
+            g_u32SoftWaitDenyType, g_u32SoftWaitDenyRights,
+            g_u32SoftWaitDenyNoent);
+
+    /* Grep: spawn: soft from_cap */
+    kprintf("spawn: soft from_cap hit=%u miss=%u\n",
+            g_u32SoftFromCapHit, g_u32SoftFromCapMiss);
+
+    /*
+     * Honesty line: fixed spawn table + PROCESS mint is product bring-up,
+     * not full posix_spawn / multi-server confine.
+     * Grep: spawn: soft path
+     */
+    kprintf("spawn: soft path claim=process_spawn G-PROC-2=mint "
+            "G-PROC-5=death fixed_table=1 table_max=%u cnode_slots=%u "
+            "posix_spawn=0 multi_server_confine=0 via=%s "
+            "(soft inventory; not bar3)\n",
+            GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS, szViaSafe);
+
+    /*
+     * Soft lamp only — table + core rights configured. Never hard-gates.
+     * Grep: spawn: soft inventory PASS | spawn: soft PASS
+     */
+    if (GJ_SPAWN_MAX > 0u && u16Core != 0) {
+        kprintf("spawn: soft inventory PASS via=%s logs=%u live=%u "
+                "peak=%u mint_soft=%u mint_soft_bad=%u\n",
+                szViaSafe, g_u32SoftLogN, cLive, g_u32SoftLivePeak,
+                g_cMintSoft, g_cMintSoftBad);
+        kprintf("spawn: soft PASS via=%s\n", szViaSafe);
+    } else {
+        kprintf("spawn: soft FAIL via=%s max=%u core=0x%x "
+                "(soft inventory only; not product gate)\n",
+                szViaSafe, GJ_SPAWN_MAX, (unsigned)u16Core);
+    }
+}
+
+/**
+ * After first product spawn/kill/wait activity, print soft inventory once
+ * (mirrors door/futex soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32SoftSpawnEnter == 0 && g_u32SoftKillEnter == 0 &&
+        g_u32SoftWaitEnter == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    soft_inventory_log("once");
 }
 
 u32
@@ -141,11 +352,11 @@ process_spawn_stats_soft(void)
     u32 cLive;
 
     cLive = spawn_live_count();
-    /* Grep: spawn: soft stats */
-    kprintf("spawn: soft stats ok=%u fail=%u live=%u kill=%u wait=%u "
-            "mint_ok=%u mint_fail=%u mint_soft=%u mint_soft_bad=%u\n",
-            g_cSpawned, g_cSpawnFail, cLive, g_cKill, g_cWait,
-            g_cMintOk, g_cMintFail, g_cMintSoft, g_cMintSoftBad);
+    /*
+     * Wave 11: full greppable soft inventory dump (includes soft stats line).
+     * Grep: spawn: soft
+     */
+    soft_inventory_log("stats");
     return cLive;
 }
 
@@ -242,6 +453,7 @@ spawn_process_rights(u32 u32Jit)
  * Checks type, object pointer, slot gen, and core rights matrix.
  * Fail closed: returns non-OK so spawn tears down the partial child.
  * Grep: spawn: mint soft
+ * Grep: spawn: soft mint (Wave 11 reason tallies)
  */
 static gj_status_t
 spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
@@ -256,10 +468,12 @@ spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
     if (pParent == NULL || pRef == NULL || pChild == NULL ||
         pParent->pCnode == NULL) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintNullArg);
         return GJ_ERR_INVAL;
     }
     if (gj_cap_ref_is_null(pRef)) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintNullRef);
         kprintf("spawn: mint soft FAIL null ref\n");
         return GJ_ERR_INVAL;
     }
@@ -267,22 +481,26 @@ spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
     st = gj_cap_resolve_ref(pParent->pCnode, pRef, &res);
     if (st != GJ_OK) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintResolve);
         kprintf("spawn: mint soft FAIL resolve st=%d\n", (int)st);
         return st;
     }
     if (res.u16Type != (u16)GJ_CAP_PROCESS) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintType);
         kprintf("spawn: mint soft FAIL type=%u want=PROCESS\n",
                 (unsigned)res.u16Type);
         return GJ_ERR_PERM;
     }
     if (res.pObj != (void *)&pChild->hdr) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintObj);
         kprintf("spawn: mint soft FAIL obj mismatch\n");
         return GJ_ERR_INVAL;
     }
     if (res.pSlot != NULL && res.pSlot->u32Gen != pRef->u32SlotGen) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintGen);
         kprintf("spawn: mint soft FAIL gen slot=%u ref=%u\n",
                 res.pSlot->u32Gen, pRef->u32SlotGen);
         return GJ_ERR_INVAL;
@@ -291,6 +509,7 @@ spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
     if ((res.u16Rights & GJ_SPAWN_PROCESS_RIGHTS_CORE) !=
         GJ_SPAWN_PROCESS_RIGHTS_CORE) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintCoreRights);
         kprintf("spawn: mint soft FAIL core rights=0x%x need=0x%x\n",
                 (unsigned)res.u16Rights,
                 (unsigned)GJ_SPAWN_PROCESS_RIGHTS_CORE);
@@ -299,6 +518,7 @@ spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
     /* Full wanted rights should match install (soft observability). */
     if ((res.u16Rights & u16WantRights) != u16WantRights) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintRights);
         kprintf("spawn: mint soft FAIL rights=0x%x want=0x%x\n",
                 (unsigned)res.u16Rights, (unsigned)u16WantRights);
         return GJ_ERR_PERM;
@@ -307,6 +527,7 @@ spawn_process_cap_mint_soft_verify(struct gj_process *pParent,
     pFrom = process_from_cap(pParent, pRef);
     if (pFrom != pChild) {
         g_cMintSoftBad++;
+        spawn_soft_inc(&g_u32SoftMintFromCap);
         kprintf("spawn: mint soft FAIL from_cap mismatch\n");
         return GJ_ERR_INVAL;
     }
@@ -333,6 +554,8 @@ spawn_process_cap_mint(struct gj_process *pParent, struct gj_process *pChild,
     if (pParent == NULL || pChild == NULL || pOutRef == NULL ||
         pParent->pCnode == NULL) {
         g_cMintFail++;
+        spawn_soft_inc(&g_u32SoftMintNullArg);
+        spawn_soft_inc(&g_u32SoftMintInstallFail);
         return GJ_ERR_INVAL;
     }
 
@@ -341,6 +564,7 @@ spawn_process_cap_mint(struct gj_process *pParent, struct gj_process *pChild,
                               &pChild->hdr, pOutRef);
     if (st != GJ_OK) {
         g_cMintFail++;
+        spawn_soft_inc(&g_u32SoftMintInstallFail);
         kprintf("spawn: mint soft FAIL install st=%d\n", (int)st);
         return st;
     }
@@ -372,26 +596,40 @@ process_kill(struct gj_process *pParent, const struct gj_cap_ref *pRef,
     struct gj_cap_resolved res;
     gj_status_t st;
 
+    spawn_soft_inc(&g_u32SoftKillEnter);
+
     if (pParent == NULL || pRef == NULL) {
+        spawn_soft_inc(&g_u32SoftKillDenyNull);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     st = gj_cap_resolve_ref(pParent->pCnode, pRef, &res);
     if (st != GJ_OK) {
+        spawn_soft_inc(&g_u32SoftKillDenyResolve);
+        soft_inventory_maybe_once();
         return st;
     }
     if (res.u16Type != (u16)GJ_CAP_PROCESS) {
+        spawn_soft_inc(&g_u32SoftKillDenyType);
+        soft_inventory_maybe_once();
         return GJ_ERR_PERM;
     }
     if ((res.u16Rights & (u16)GJ_RIGHT_DESTROY) == 0) {
+        spawn_soft_inc(&g_u32SoftKillDenyRights);
+        soft_inventory_maybe_once();
         return GJ_ERR_PERM;
     }
     pChild = (struct gj_process *)res.pObj;
     if (pChild == NULL) {
+        spawn_soft_inc(&g_u32SoftKillDenyNoent);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOENT;
     }
     g_cKill++;
     if (!pChild->u32Alive) {
         /* Already dead — idempotent kill */
+        spawn_soft_inc(&g_u32SoftKillIdem);
+        soft_inventory_maybe_once();
         return GJ_OK;
     }
     /*
@@ -400,6 +638,7 @@ process_kill(struct gj_process *pParent, const struct gj_cap_ref *pRef,
      */
     process_death(pChild, u32ExitCode);
     kprintf("spawn: kill child exit=%u PASS\n", u32ExitCode);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -413,24 +652,38 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
     gj_status_t st;
     u32 u32Exit;
 
+    spawn_soft_inc(&g_u32SoftWaitEnter);
+
     if (pParent == NULL || pRef == NULL) {
+        spawn_soft_inc(&g_u32SoftWaitDenyNull);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     st = gj_cap_resolve_ref(pParent->pCnode, pRef, &res);
     if (st != GJ_OK) {
+        spawn_soft_inc(&g_u32SoftWaitDenyResolve);
+        soft_inventory_maybe_once();
         return st;
     }
     if (res.u16Type != (u16)GJ_CAP_PROCESS) {
+        spawn_soft_inc(&g_u32SoftWaitDenyType);
+        soft_inventory_maybe_once();
         return GJ_ERR_PERM;
     }
     if ((res.u16Rights & (u16)GJ_RIGHT_WAIT) == 0) {
+        spawn_soft_inc(&g_u32SoftWaitDenyRights);
+        soft_inventory_maybe_once();
         return GJ_ERR_PERM;
     }
     pChild = (struct gj_process *)res.pObj;
     if (pChild == NULL) {
+        spawn_soft_inc(&g_u32SoftWaitDenyNoent);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOENT;
     }
     if (pChild->u32Alive) {
+        spawn_soft_inc(&g_u32SoftWaitAgain);
+        soft_inventory_maybe_once();
         return GJ_ERR_AGAIN;
     }
     u32Exit = pChild->u32ExitCode;
@@ -451,6 +704,7 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
     }
     g_cWait++;
     kprintf("spawn: wait reaped exit=%u PASS\n", u32Exit);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -461,12 +715,15 @@ process_from_cap(struct gj_process *pParent, const struct gj_cap_ref *pRef)
     gj_status_t st;
 
     if (pParent == NULL || pRef == NULL || pParent->pCnode == NULL) {
+        spawn_soft_inc(&g_u32SoftFromCapMiss);
         return NULL;
     }
     st = gj_cap_resolve_ref(pParent->pCnode, pRef, &res);
     if (st != GJ_OK || res.u16Type != (u16)GJ_CAP_PROCESS) {
+        spawn_soft_inc(&g_u32SoftFromCapMiss);
         return NULL;
     }
+    spawn_soft_inc(&g_u32SoftFromCapHit);
     return (struct gj_process *)res.pObj;
 }
 
@@ -482,12 +739,18 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     u32 u32Thr;
     u32 u32Ppid;
 
+    spawn_soft_inc(&g_u32SoftSpawnEnter);
+
     if (pParent == NULL || pArgs == NULL || pArgs->pfnEntry == NULL) {
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyNull);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     if (pParent->pCnode == NULL) {
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyNoCnode);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
 
@@ -500,6 +763,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     }
     if (pSlot == NULL) {
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyFull);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOMEM;
     }
     memset(pSlot, 0, sizeof(*pSlot));
@@ -517,6 +782,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     if (st != GJ_OK) {
         pSlot->u8Used = 0;
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyMeta);
+        soft_inventory_maybe_once();
         return st;
     }
 
@@ -524,6 +791,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     if (st != GJ_OK) {
         pSlot->u8Used = 0;
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyAs);
+        soft_inventory_maybe_once();
         return st;
     }
 
@@ -532,6 +801,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     if (st != GJ_OK) {
         spawn_fail_cleanup(pSlot, NULL, NULL);
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyMint);
+        soft_inventory_maybe_once();
         return st;
     }
 
@@ -539,6 +810,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     if (u32Thr == 0) {
         spawn_fail_cleanup(pSlot, pParent, &ref);
         g_cSpawnFail++;
+        spawn_soft_inc(&g_u32SoftDenyThr);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOMEM;
     }
 
@@ -550,6 +823,7 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     (void)process_wait_register(pChild, u32Ppid != 0 ? u32Ppid : 1u);
 
     g_cSpawned++;
+    soft_note_live_peak();
     kprintf("spawn: child thr=%u cr3=0x%lx cap slot=%lu gen=%u "
             "count=%u live=%u mint_soft=%u PASS\n",
             u32Thr, (unsigned long)pChild->u64Cr3,
@@ -562,5 +836,6 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     if (pOutCap != NULL) {
         *pOutCap = ref;
     }
+    soft_inventory_maybe_once();
     return GJ_OK;
 }

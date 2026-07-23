@@ -11,11 +11,27 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
+ * Soft product inventory (Wave 11 exclusive deepen; this unit only):
+ *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
+ *   - Lifetime: charged / released / net / peak components / max-one
+ *   - Waste events: waste_allocs/frees, align/unsplit hits, take_whole
+ *   - Fail taxonomy: zero / uninit / oversize / oom / double_free
+ *   - Ops: allocs / frees / grow / split / best_fit / null_free
+ *   greppable: "kheap: soft …"
+ *   Never hard-gates; diagnostics only (wrap OK).
+ *
  * Greppable:
  *   kheap: init
  *   kheap: stats …
  *   kheap: counters …
- *   kheap: soft …   (allocs/frees/bytes soft + deepen)
+ *   kheap: soft …            (baseline allocs/frees/bytes + waste)
+ *   kheap: soft inventory …
+ *   kheap: soft live …
+ *   kheap: soft lifetime …
+ *   kheap: soft waste …
+ *   kheap: soft fail …
+ *   kheap: soft ops …
+ *   kheap: soft path …
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -54,12 +70,28 @@ static size_t              g_cbSoftAlign;
 static size_t              g_cbSoftUnsplit;
 /* Soft deepen: lifetime + peak + waste-hit events (not live). */
 static size_t              g_cbSoftPeak;       /* peak live soft_frag */
+static size_t              g_cbSoftPeakAlign;  /* peak live soft align */
+static size_t              g_cbSoftPeakUnsplit;/* peak live soft unsplit */
+static size_t              g_cbSoftMaxAlignOne;/* max align waste per alloc */
+static size_t              g_cbSoftMaxUnsplitOne; /* max unsplit per alloc */
+static size_t              g_cbUsedPeak;       /* peak live used payload */
+static size_t              g_cFreeBlocksPeak;  /* peak free-list length */
 static u64                 g_cbSoftCharged;    /* lifetime soft bytes in */
 static u64                 g_cbSoftReleased;   /* lifetime soft bytes out */
 static u64                 g_cSoftWasteAlloc;  /* allocs with any soft waste */
 static u64                 g_cSoftWasteFree;   /* frees releasing soft waste */
 static u64                 g_cSoftAlignHit;    /* allocs with align pad */
 static u64                 g_cSoftUnsplitHit;  /* allocs with unsplit remainder */
+static u64                 g_cSoftTakeWhole;   /* alloc took whole free block */
+static u64                 g_cSoftBestFit;     /* best-fit selection hits */
+/* Soft fail taxonomy (Wave 11; subset of g_cFail / free guards). */
+static u64                 g_cSoftFailZero;    /* alloc cb == 0 */
+static u64                 g_cSoftFailUninit;  /* alloc before kheap_init */
+static u64                 g_cSoftFailOversize;/* request > page payload */
+static u64                 g_cSoftFailOom;     /* PMM grow failed */
+static u64                 g_cSoftNullFree;    /* free(NULL) */
+static u64                 g_cSoftFreeUninit;  /* free before init */
+static u64                 g_cSoftLogN;        /* soft inventory dump count */
 static u64                 g_cAlloc;
 static u64                 g_cFree;
 static u64                 g_cGrow;
@@ -71,7 +103,7 @@ static int                 g_fInit;
 /**
  * Soft-account one successful alloc's internal waste.
  * Updates live soft bytes (caller already added align/unsplit), lifetime
- * charged, peak live soft_frag, and soft waste-hit event counters.
+ * charged, peak live soft_frag / components, max-one, waste-hit events.
  */
 static void
 soft_note_alloc(size_t cbAlignWaste, size_t cbUnsplit)
@@ -87,6 +119,18 @@ soft_note_alloc(size_t cbAlignWaste, size_t cbUnsplit)
     if (cbAlignWaste > 0 || cbUnsplit > 0) {
         g_cSoftWasteAlloc++;
         g_cbSoftCharged += (u64)cbAlignWaste + (u64)cbUnsplit;
+    }
+    if (cbAlignWaste > g_cbSoftMaxAlignOne) {
+        g_cbSoftMaxAlignOne = cbAlignWaste;
+    }
+    if (cbUnsplit > g_cbSoftMaxUnsplitOne) {
+        g_cbSoftMaxUnsplitOne = cbUnsplit;
+    }
+    if (g_cbSoftAlign > g_cbSoftPeakAlign) {
+        g_cbSoftPeakAlign = g_cbSoftAlign;
+    }
+    if (g_cbSoftUnsplit > g_cbSoftPeakUnsplit) {
+        g_cbSoftPeakUnsplit = g_cbSoftUnsplit;
     }
     cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
     if (cbSoftLive > g_cbSoftPeak) {
@@ -107,6 +151,18 @@ soft_note_free(size_t cbAlign, size_t cbUnsplit)
     }
 }
 
+/** Soft: bump used / free_blocks high-water marks (diagnostics only). */
+static void
+soft_note_peaks(void)
+{
+    if (g_cbUsed > g_cbUsedPeak) {
+        g_cbUsedPeak = g_cbUsed;
+    }
+    if (g_cFreeBlocks > g_cFreeBlocksPeak) {
+        g_cFreeBlocksPeak = g_cFreeBlocks;
+    }
+}
+
 void
 kheap_init(void)
 {
@@ -117,12 +173,27 @@ kheap_init(void)
     g_cbSoftAlign = 0;
     g_cbSoftUnsplit = 0;
     g_cbSoftPeak = 0;
+    g_cbSoftPeakAlign = 0;
+    g_cbSoftPeakUnsplit = 0;
+    g_cbSoftMaxAlignOne = 0;
+    g_cbSoftMaxUnsplitOne = 0;
+    g_cbUsedPeak = 0;
+    g_cFreeBlocksPeak = 0;
     g_cbSoftCharged = 0;
     g_cbSoftReleased = 0;
     g_cSoftWasteAlloc = 0;
     g_cSoftWasteFree = 0;
     g_cSoftAlignHit = 0;
     g_cSoftUnsplitHit = 0;
+    g_cSoftTakeWhole = 0;
+    g_cSoftBestFit = 0;
+    g_cSoftFailZero = 0;
+    g_cSoftFailUninit = 0;
+    g_cSoftFailOversize = 0;
+    g_cSoftFailOom = 0;
+    g_cSoftNullFree = 0;
+    g_cSoftFreeUninit = 0;
+    g_cSoftLogN = 0;
     g_cAlloc = 0;
     g_cFree = 0;
     g_cGrow = 0;
@@ -176,6 +247,7 @@ grow(void)
     g_cbFree += pBlk->cbSize;
     g_cFreeBlocks++;
     g_cGrow++;
+    soft_note_peaks();
     return GJ_OK;
 }
 
@@ -191,8 +263,14 @@ kheap_alloc(size_t cb)
     size_t cbUnsplit;
     void *pOut;
 
-    if (!g_fInit || cb == 0) {
+    if (!g_fInit) {
         g_cFail++;
+        g_cSoftFailUninit++;
+        return NULL;
+    }
+    if (cb == 0) {
+        g_cFail++;
+        g_cSoftFailZero++;
         return NULL;
     }
     cbNeed = align_up(cb);
@@ -203,6 +281,7 @@ kheap_alloc(size_t cb)
      */
     if (cbNeed > GJ_KHEAP_PAGE_PAYLOAD) {
         g_cFail++;
+        g_cSoftFailOversize++;
         return NULL;
     }
 
@@ -222,6 +301,7 @@ kheap_alloc(size_t cb)
             }
         }
         if (pBest != NULL) {
+            g_cSoftBestFit++;
             cbUnsplit = 0;
             /* Split if leftover holds another header + 16-byte payload. */
             if (pBest->cbSize >= cbNeed + GJ_KHEAP_SPLIT_MIN) {
@@ -259,6 +339,7 @@ kheap_alloc(size_t cb)
             } else {
                 /* Take whole free block; excess is soft unsplit waste. */
                 cbUnsplit = pBest->cbSize - cbNeed;
+                g_cSoftTakeWhole++;
                 if (g_cbFree >= pBest->cbSize) {
                     g_cbFree -= pBest->cbSize;
                 } else {
@@ -282,12 +363,14 @@ kheap_alloc(size_t cb)
             soft_note_alloc(cbAlignWaste, cbUnsplit);
             g_cbUsed += pBest->cbSize;
             g_cAlloc++;
+            soft_note_peaks();
             pOut = payload_from_block(pBest);
             memset(pOut, 0, pBest->cbSize);
             return pOut;
         }
         if (grow() != GJ_OK) {
             g_cFail++;
+            g_cSoftFailOom++;
             return NULL;
         }
     }
@@ -300,7 +383,12 @@ kheap_free(void *p)
     size_t cbAlign;
     size_t cbUnsplit;
 
-    if (p == NULL || !g_fInit) {
+    if (p == NULL) {
+        g_cSoftNullFree++;
+        return;
+    }
+    if (!g_fInit) {
+        g_cSoftFreeUninit++;
         return;
     }
     pBlk = block_from_payload(p);
@@ -337,6 +425,7 @@ kheap_free(void *p)
     g_cbFree += pBlk->cbSize;
     g_cFreeBlocks++;
     g_cFree++;
+    soft_note_peaks();
 }
 
 size_t
@@ -387,8 +476,16 @@ void
 kheap_dump_stats(void)
 {
     size_t cbSoftLive;
+    u64 u64SoftNet;
 
     cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
+    /* Lifetime net: charged - released (0 if released ahead; wrap-safe). */
+    if (g_cbSoftCharged >= g_cbSoftReleased) {
+        u64SoftNet = g_cbSoftCharged - g_cbSoftReleased;
+    } else {
+        u64SoftNet = 0;
+    }
+    g_cSoftLogN++;
 
     kprintf("kheap: stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_align=%lu soft_unsplit=%lu\n",
@@ -406,16 +503,13 @@ kheap_dump_stats(void)
             (unsigned long)g_cSplit,
             (unsigned long)g_cFail,
             (unsigned long)g_cDoubleFree);
+
     /*
-     * Soft heap stats deepen — greppable: kheap: soft
-     *   allocs / frees : successful heap ops (soft-visible totals)
-     *   bytes          : live soft frag (align + unsplit)
-     *   align/unsplit  : live soft split of bytes
-     *   peak           : high-water live soft_frag
-     *   charged/released: lifetime soft bytes in/out
-     *   waste_allocs/frees: ops that moved soft waste
-     *   align_hit/unsplit_hit: allocs that charged each kind
+     * Soft heap inventory deepen (Wave 11) — greppable: kheap: soft
+     * Baseline line preserves prior greps (allocs/frees/bytes + waste).
+     * Catalog sub-lines: inventory | live | lifetime | waste | fail | ops | path
      */
+    /* Grep: kheap: soft (baseline) */
     kprintf("kheap: soft allocs=%lu frees=%lu bytes=%lu "
             "align=%lu unsplit=%lu peak=%lu "
             "charged=%lu released=%lu "
@@ -433,4 +527,74 @@ kheap_dump_stats(void)
             (unsigned long)g_cSoftWasteFree,
             (unsigned long)g_cSoftAlignHit,
             (unsigned long)g_cSoftUnsplitHit);
+
+    /* Grep: kheap: soft inventory */
+    kprintf("kheap: soft inventory page_payload=%lu split_min=%lu "
+            "align=16 policy=best_fit grow=pmm_page magic=live+free "
+            "logs=%lu\n",
+            (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
+            (unsigned long)GJ_KHEAP_SPLIT_MIN,
+            (unsigned long)g_cSoftLogN);
+
+    /* Grep: kheap: soft live */
+    kprintf("kheap: soft live frag=%lu align=%lu unsplit=%lu peak=%lu "
+            "used=%lu used_peak=%lu free=%lu free_blocks=%lu "
+            "free_blocks_peak=%lu\n",
+            (unsigned long)cbSoftLive,
+            (unsigned long)g_cbSoftAlign,
+            (unsigned long)g_cbSoftUnsplit,
+            (unsigned long)g_cbSoftPeak,
+            (unsigned long)g_cbUsed,
+            (unsigned long)g_cbUsedPeak,
+            (unsigned long)g_cbFree,
+            (unsigned long)g_cFreeBlocks,
+            (unsigned long)g_cFreeBlocksPeak);
+
+    /* Grep: kheap: soft lifetime */
+    kprintf("kheap: soft lifetime charged=%lu released=%lu net=%lu "
+            "peak_align=%lu peak_unsplit=%lu "
+            "max_align_one=%lu max_unsplit_one=%lu\n",
+            (unsigned long)g_cbSoftCharged,
+            (unsigned long)g_cbSoftReleased,
+            (unsigned long)u64SoftNet,
+            (unsigned long)g_cbSoftPeakAlign,
+            (unsigned long)g_cbSoftPeakUnsplit,
+            (unsigned long)g_cbSoftMaxAlignOne,
+            (unsigned long)g_cbSoftMaxUnsplitOne);
+
+    /* Grep: kheap: soft waste */
+    kprintf("kheap: soft waste allocs=%lu frees=%lu align_hit=%lu "
+            "unsplit_hit=%lu take_whole=%lu split=%lu\n",
+            (unsigned long)g_cSoftWasteAlloc,
+            (unsigned long)g_cSoftWasteFree,
+            (unsigned long)g_cSoftAlignHit,
+            (unsigned long)g_cSoftUnsplitHit,
+            (unsigned long)g_cSoftTakeWhole,
+            (unsigned long)g_cSplit);
+
+    /* Grep: kheap: soft fail */
+    kprintf("kheap: soft fail total=%lu zero=%lu uninit=%lu oversize=%lu "
+            "oom=%lu double_free=%lu free_uninit=%lu null_free=%lu\n",
+            (unsigned long)g_cFail,
+            (unsigned long)g_cSoftFailZero,
+            (unsigned long)g_cSoftFailUninit,
+            (unsigned long)g_cSoftFailOversize,
+            (unsigned long)g_cSoftFailOom,
+            (unsigned long)g_cDoubleFree,
+            (unsigned long)g_cSoftFreeUninit,
+            (unsigned long)g_cSoftNullFree);
+
+    /* Grep: kheap: soft ops */
+    kprintf("kheap: soft ops allocs=%lu frees=%lu grow=%lu split=%lu "
+            "best_fit=%lu take_whole=%lu\n",
+            (unsigned long)g_cAlloc,
+            (unsigned long)g_cFree,
+            (unsigned long)g_cGrow,
+            (unsigned long)g_cSplit,
+            (unsigned long)g_cSoftBestFit,
+            (unsigned long)g_cSoftTakeWhole);
+
+    /* Grep: kheap: soft path */
+    kprintf("kheap: soft path claim=freelist+pmm_grow scrub=free "
+            "zero=alloc policy=best_fit (soft inventory; not bar3)\n");
 }

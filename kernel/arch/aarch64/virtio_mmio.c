@@ -15,12 +15,40 @@
  *      - v2 MMIO QueueDesc / QueueDriver / QueueDevice address regs
  *        QueueReady stays 0 — no real DMA.
  *
- * Greppable: aarch64: virtio-mmio PASS,
- *            aarch64: virtio-mmio queue soft PASS,
- *            aarch64: virtio-mmio desc ring soft PASS
+ * -------------------------------------------------------------------------
+ * Soft inventory (Wave 11 exclusive; this unit only — greppable
+ * "aarch64: virtio soft …")
+ * -------------------------------------------------------------------------
+ * Soft scan: slot count + base/stride + magic/dev tallies after probe.
+ * Soft first-dev: DeviceID/Version/Vendor + post-soft Status/QueueNumMax
+ *   + QueueReady/QueuePFN readbacks (must stay unarmed).
+ * Soft features: DeviceFeaturesSel{0,1} + DeviceFeatures peeks (read only;
+ *   no DriverFeatures write, no FEATURES_OK).
+ * Soft ring: BSS split-VQ geometry + soft PA markers + chain lamps.
+ * Soft path honesty: mmio=1 dma=0 ready0=1 neon=0 kick=0 features_ok=0
+ *   driver_ok=0 — soft probe only; not product block/net I/O.
+ *
+ * Greppable soft inventory (prefix-stable):
+ *   aarch64: virtio soft slots=… base=… stride=… found=… dev=… qsoft=…
+ *             dsoft=… leg=… mod=…
+ *   aarch64: virtio soft dev0 id=… ver=… vendor=… status=… qmax=… qnum=…
+ *             ready=… pfn=…
+ *   aarch64: virtio soft feats sel0=… f0=… sel1=… f1=… isr=… cfggen=…
+ *   aarch64: virtio soft ring qnum=… layout=… desc_pa=… avail_pa=…
+ *             used_pa=… next0=… next_last=… avail_i0=…
+ *   aarch64: virtio soft path mmio=1 dma=0 ready0=1 neon=0 kick=0
+ *             features_ok=0 driver_ok=0
+ *   aarch64: virtio soft PASS | FAIL
+ *
+ * Legacy / product smoke markers (kept greppable):
+ *   aarch64: virtio-mmio found=… dev=… qsoft=… dsoft=… leg=… mod=…
+ *   aarch64: virtio-mmio PASS
+ *   aarch64: virtio-mmio queue soft PASS
+ *   aarch64: virtio-mmio desc ring soft PASS
  *
  * Note: freestanding EL1 does not enable FP/SIMD (CPACR). Avoid NEON from
  * auto-vectorized zeroing of soft rings — general-regs-only for this TU.
+ * Pure C; no GPL Linux virtio paste.
  */
 #include "types_arch.h"
 
@@ -39,13 +67,16 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_MMIO_VERSION        0x004u
 #define VIRTIO_MMIO_DEVICEID       0x008u
 #define VIRTIO_MMIO_VENDORID       0x00cu
-#define VIRTIO_MMIO_STATUS         0x070u
+#define VIRTIO_MMIO_DEVICE_FEATURES     0x010u
+#define VIRTIO_MMIO_DEVICE_FEATURES_SEL 0x014u
 #define VIRTIO_MMIO_QUEUE_SEL      0x030u
 #define VIRTIO_MMIO_QUEUE_NUM_MAX  0x034u
 #define VIRTIO_MMIO_QUEUE_NUM      0x038u
 #define VIRTIO_MMIO_QUEUE_ALIGN    0x03cu /* legacy v1 only */
 #define VIRTIO_MMIO_QUEUE_PFN      0x040u /* legacy v1 only; 0 = no DMA */
 #define VIRTIO_MMIO_QUEUE_READY    0x044u /* modern v2 */
+#define VIRTIO_MMIO_INTERRUPT_STATUS 0x060u
+#define VIRTIO_MMIO_STATUS         0x070u
 /* Modern split-VQ guest physical address regs (64-bit LE via lo/hi). */
 #define VIRTIO_MMIO_QUEUE_DESC_LO    0x080u
 #define VIRTIO_MMIO_QUEUE_DESC_HI    0x084u
@@ -53,6 +84,7 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_MMIO_QUEUE_DRIVER_HI  0x094u
 #define VIRTIO_MMIO_QUEUE_DEVICE_LO  0x0a0u
 #define VIRTIO_MMIO_QUEUE_DEVICE_HI  0x0a4u
+#define VIRTIO_MMIO_CONFIG_GENERATION 0x0fcu /* modern v2 */
 
 #define VIRTIO_MAGIC_VALUE   0x74726976u /* "virt" LE */
 #define VIRTIO_STATUS_ACK    1u
@@ -91,6 +123,44 @@ struct virtq_used_soft {
     struct virtq_used_elem_soft aRing[VIRTIO_SOFT_QNUM];
 };
 
+/*
+ * Soft inventory snapshot (Wave 11; file-local; never hard-gates boot).
+ * greppable: aarch64: virtio soft
+ */
+struct virtio_soft_snap {
+    unsigned cFound;
+    unsigned cWithDev;
+    unsigned cQueueSoft;
+    unsigned cDescRingSoft;
+    unsigned cLegacySoft;
+    unsigned cModernSoft;
+    unsigned cDescLayoutSoft;
+    unsigned uDev0Id;
+    unsigned uDev0Ver;
+    unsigned uDev0Vendor;
+    unsigned uDev0Status;
+    unsigned uDev0Qmax;
+    unsigned uDev0Qnum;
+    unsigned uDev0Ready;
+    unsigned uDev0Pfn;
+    unsigned uFeat0;
+    unsigned uFeat1;
+    unsigned uIsr;
+    unsigned uCfgGen;
+    unsigned long long u64DescPa;
+    unsigned long long u64AvailPa;
+    unsigned long long u64UsedPa;
+    unsigned uNext0;
+    unsigned uNextLast;
+    unsigned uAvailI0;
+    unsigned u8LayoutOk;
+    unsigned u8DmaUnarmed;
+    unsigned u8ScanOk;
+    unsigned u8QueueOk;
+    unsigned u8DescOk;
+    unsigned u8PathOk;
+};
+
 /* BSS soft rings — one shared template for MMIO address programming. */
 static struct virtq_desc_soft  g_aSoftDesc[VIRTIO_SOFT_QNUM]
     __attribute__((aligned(16)));
@@ -103,6 +173,21 @@ static unsigned g_cDescRingSoft;   /* v2 MMIO address-reg programming count */
 static unsigned g_cDescLayoutSoft; /* guest-side soft ring fill done */
 static unsigned g_cLegacySoft;
 static unsigned g_cModernSoft;
+
+/* First live-device soft peeks (Wave 11 inventory; zero if no device). */
+static unsigned g_uDev0Id;
+static unsigned g_uDev0Ver;
+static unsigned g_uDev0Vendor;
+static unsigned g_uDev0Status;
+static unsigned g_uDev0Qmax;
+static unsigned g_uDev0Qnum;
+static unsigned g_uDev0Ready;
+static unsigned g_uDev0Pfn;
+static unsigned g_uFeat0;
+static unsigned g_uFeat1;
+static unsigned g_uIsr;
+static unsigned g_uCfgGen;
+static unsigned g_fDev0Captured;
 
 static volatile unsigned int *
 mmio(unsigned long base, unsigned off)
@@ -152,6 +237,22 @@ virtio_soft_ring_fill(void)
     pUs->u16Flags = 0u;
     pUs->u16Idx = 0u;
     g_cDescLayoutSoft = 1u;
+}
+
+/*
+ * Soft feature / ISR / config-gen peeks on one live MMIO device.
+ * Read-only on DeviceFeatures + InterruptStatus + ConfigGeneration.
+ * Never writes DriverFeatures / never kicks / never arms DMA.
+ */
+static void
+virtio_mmio_soft_feat_peek(unsigned long base)
+{
+    *mmio(base, VIRTIO_MMIO_DEVICE_FEATURES_SEL) = 0u;
+    g_uFeat0 = *mmio(base, VIRTIO_MMIO_DEVICE_FEATURES);
+    *mmio(base, VIRTIO_MMIO_DEVICE_FEATURES_SEL) = 1u;
+    g_uFeat1 = *mmio(base, VIRTIO_MMIO_DEVICE_FEATURES);
+    g_uIsr = *mmio(base, VIRTIO_MMIO_INTERRUPT_STATUS);
+    g_uCfgGen = *mmio(base, VIRTIO_MMIO_CONFIG_GENERATION);
 }
 
 /*
@@ -205,15 +306,18 @@ virtio_mmio_desc_ring_soft(unsigned long base)
  *   v1: QueueAlign + QueuePFN=0 (no DMA page).
  *   v2: QueueReady=0 + soft desc-ring address regs.
  * Returns 1 if NumMax>0 path exercised.
+ * On first live device, captures Wave 11 soft inventory peeks.
  */
 static int
-virtio_mmio_queue0_soft(unsigned long base)
+virtio_mmio_queue0_soft(unsigned long base, unsigned devid, unsigned ver,
+                        unsigned vendor)
 {
-    unsigned ver;
     unsigned qmax;
     unsigned qnum;
+    unsigned uStatus;
+    unsigned uReady;
+    unsigned uPfn;
 
-    ver = *mmio(base, VIRTIO_MMIO_VERSION);
     if (ver < 1u) {
         return 0;
     }
@@ -256,8 +360,185 @@ virtio_mmio_queue0_soft(unsigned long base)
             g_cDescRingSoft++;
         }
     }
+
+    /* Soft post-program readbacks (DMA must stay unarmed). */
+    uStatus = *mmio(base, VIRTIO_MMIO_STATUS);
+    uReady = *mmio(base, VIRTIO_MMIO_QUEUE_READY);
+    uPfn = *mmio(base, VIRTIO_MMIO_QUEUE_PFN);
+
+    /* Soft feature / ISR peeks (read-only; first live device only). */
+    if (g_fDev0Captured == 0u) {
+        g_uDev0Id = devid;
+        g_uDev0Ver = ver;
+        g_uDev0Vendor = vendor;
+        g_uDev0Status = uStatus;
+        g_uDev0Qmax = qmax;
+        g_uDev0Qnum = qnum;
+        g_uDev0Ready = uReady;
+        g_uDev0Pfn = uPfn;
+        virtio_mmio_soft_feat_peek(base);
+        g_fDev0Captured = 1u;
+    }
+
     (void)qmax;
     return 1;
+}
+
+/*
+ * Soft ring layout verify (BSS only; no MMIO). Confirms Wave 11 fill
+ * left a coherent circular next-chain and avail indices.
+ * Returns 1 if layout looks programmed.
+ */
+static int
+virtio_soft_ring_layout_ok(void)
+{
+    unsigned i;
+    volatile struct virtq_desc_soft *pDesc = g_aSoftDesc;
+    volatile struct virtq_avail_soft *pAv = &g_SoftAvail;
+
+    if (g_cDescLayoutSoft == 0u) {
+        return 0;
+    }
+    for (i = 0; i < VIRTIO_SOFT_QNUM; i++) {
+        if (pDesc[i].u16Next !=
+            (unsigned short)((i + 1u) % VIRTIO_SOFT_QNUM)) {
+            return 0;
+        }
+        if (pAv->aRing[i] != (unsigned short)i) {
+            return 0;
+        }
+        if (pDesc[i].u64Addr != 0ull || pDesc[i].u32Len != 0u ||
+            pDesc[i].u16Flags != 0u) {
+            return 0;
+        }
+    }
+    if (pAv->u16Flags != 0u || pAv->u16Idx != 0u) {
+        return 0;
+    }
+    return 1;
+}
+
+/*
+ * Wave 11 soft inventory emission — greppable "aarch64: virtio soft …".
+ * Returns 1 if all soft gates held (scan/layout/queue/desc/path/dma).
+ * Never hard-gates product bring-up; kprintf-style serial only.
+ */
+static int
+virtio_soft_inventory(const struct virtio_soft_snap *pSnap)
+{
+    int fOk;
+
+    if (pSnap == 0) {
+        aarch64_uart_puts("aarch64: virtio soft FAIL\n");
+        return 0;
+    }
+
+    /* Grep: aarch64: virtio soft slots=… (scan / tallies) */
+    aarch64_uart_puts("aarch64: virtio soft slots=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_MMIO_SLOTS);
+    aarch64_uart_puts(" base=");
+    aarch64_uart_put_hex(VIRTIO_MMIO_BASE);
+    aarch64_uart_puts(" stride=");
+    aarch64_uart_put_hex(VIRTIO_MMIO_STRIDE);
+    aarch64_uart_puts(" found=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cFound);
+    aarch64_uart_puts(" dev=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cWithDev);
+    aarch64_uart_puts(" qsoft=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cQueueSoft);
+    aarch64_uart_puts(" dsoft=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cDescRingSoft);
+    aarch64_uart_puts(" leg=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cLegacySoft);
+    aarch64_uart_puts(" mod=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cModernSoft);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: virtio soft dev0 … (first live device peeks) */
+    aarch64_uart_puts("aarch64: virtio soft dev0 id=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Id);
+    aarch64_uart_puts(" ver=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Ver);
+    aarch64_uart_puts(" vendor=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Vendor);
+    aarch64_uart_puts(" status=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Status);
+    aarch64_uart_puts(" qmax=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Qmax);
+    aarch64_uart_puts(" qnum=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Qnum);
+    aarch64_uart_puts(" ready=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Ready);
+    aarch64_uart_puts(" pfn=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uDev0Pfn);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: virtio soft feats … (read-only feature peeks) */
+    aarch64_uart_puts("aarch64: virtio soft feats sel0=");
+    aarch64_uart_put_hex(0ul);
+    aarch64_uart_puts(" f0=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uFeat0);
+    aarch64_uart_puts(" sel1=");
+    aarch64_uart_put_hex(1ul);
+    aarch64_uart_puts(" f1=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uFeat1);
+    aarch64_uart_puts(" isr=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uIsr);
+    aarch64_uart_puts(" cfggen=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uCfgGen);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: virtio soft ring … (BSS split-VQ geometry) */
+    aarch64_uart_puts("aarch64: virtio soft ring qnum=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_QNUM);
+    aarch64_uart_puts(" layout=");
+    aarch64_uart_put_hex((unsigned long)pSnap->cDescLayoutSoft);
+    aarch64_uart_puts(" desc_pa=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u64DescPa);
+    aarch64_uart_puts(" avail_pa=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u64AvailPa);
+    aarch64_uart_puts(" used_pa=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u64UsedPa);
+    aarch64_uart_puts(" next0=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uNext0);
+    aarch64_uart_puts(" next_last=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uNextLast);
+    aarch64_uart_puts(" avail_i0=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uAvailI0);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Grep: aarch64: virtio soft path …
+     * Honesty: soft MMIO probe only — not product block/net DMA path.
+     */
+    aarch64_uart_puts("aarch64: virtio soft path mmio=1 dma=0 ready0=1 neon=0 "
+                      "kick=0 features_ok=0 driver_ok=0 layout_ok=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8LayoutOk);
+    aarch64_uart_puts(" dma_unarmed=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8DmaUnarmed);
+    aarch64_uart_puts(" scan_ok=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8ScanOk);
+    aarch64_uart_puts(" queue_ok=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8QueueOk);
+    aarch64_uart_puts(" desc_ok=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8DescOk);
+    aarch64_uart_puts(" path_ok=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8PathOk);
+    aarch64_uart_puts("\n");
+
+    fOk = 0;
+    if (pSnap->u8ScanOk != 0u && pSnap->u8LayoutOk != 0u &&
+        pSnap->u8QueueOk != 0u && pSnap->u8DescOk != 0u &&
+        pSnap->u8DmaUnarmed != 0u && pSnap->u8PathOk != 0u) {
+        fOk = 1;
+    }
+
+    if (fOk != 0) {
+        aarch64_uart_puts("aarch64: virtio soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: virtio soft FAIL\n");
+    }
+    return fOk;
 }
 
 void
@@ -267,6 +548,8 @@ aarch64_virtio_mmio_probe(void)
     unsigned cFound;
     unsigned cWithDev;
     unsigned cQueueSoft;
+    int fSoft;
+    struct virtio_soft_snap snap;
 
     cFound = 0;
     cWithDev = 0;
@@ -275,6 +558,19 @@ aarch64_virtio_mmio_probe(void)
     g_cDescLayoutSoft = 0;
     g_cLegacySoft = 0;
     g_cModernSoft = 0;
+    g_uDev0Id = 0;
+    g_uDev0Ver = 0;
+    g_uDev0Vendor = 0;
+    g_uDev0Status = 0;
+    g_uDev0Qmax = 0;
+    g_uDev0Qnum = 0;
+    g_uDev0Ready = 0;
+    g_uDev0Pfn = 0;
+    g_uFeat0 = 0;
+    g_uFeat1 = 0;
+    g_uIsr = 0;
+    g_uCfgGen = 0;
+    g_fDev0Captured = 0;
 
     /* Soft-fill BSS ring template once (layout programming marker). */
     virtio_soft_ring_fill();
@@ -294,11 +590,9 @@ aarch64_virtio_mmio_probe(void)
         ver = *mmio(base, VIRTIO_MMIO_VERSION);
         devid = *mmio(base, VIRTIO_MMIO_DEVICEID);
         vendor = *mmio(base, VIRTIO_MMIO_VENDORID);
-        (void)ver;
-        (void)vendor;
         if (devid != 0u) {
             cWithDev++;
-            if (virtio_mmio_queue0_soft(base) != 0) {
+            if (virtio_mmio_queue0_soft(base, devid, ver, vendor) != 0) {
                 cQueueSoft++;
             }
         }
@@ -332,4 +626,74 @@ aarch64_virtio_mmio_probe(void)
     if (g_cDescRingSoft > 0u || (g_cDescLayoutSoft != 0u && cWithDev == 0u)) {
         aarch64_uart_puts("aarch64: virtio-mmio desc ring soft PASS\n");
     }
+
+    /*
+     * Wave 11 combined soft inventory under "aarch64: virtio soft …".
+     * Emits multi-field lamps + final soft PASS|FAIL (smoke greps PASS).
+     * Scalar stores only — no bulk memset of snap (general-regs-only).
+     */
+    snap.cFound = cFound;
+    snap.cWithDev = cWithDev;
+    snap.cQueueSoft = cQueueSoft;
+    snap.cDescRingSoft = g_cDescRingSoft;
+    snap.cLegacySoft = g_cLegacySoft;
+    snap.cModernSoft = g_cModernSoft;
+    snap.cDescLayoutSoft = g_cDescLayoutSoft;
+    snap.uDev0Id = g_uDev0Id;
+    snap.uDev0Ver = g_uDev0Ver;
+    snap.uDev0Vendor = g_uDev0Vendor;
+    snap.uDev0Status = g_uDev0Status;
+    snap.uDev0Qmax = g_uDev0Qmax;
+    snap.uDev0Qnum = g_uDev0Qnum;
+    snap.uDev0Ready = g_uDev0Ready;
+    snap.uDev0Pfn = g_uDev0Pfn;
+    snap.uFeat0 = g_uFeat0;
+    snap.uFeat1 = g_uFeat1;
+    snap.uIsr = g_uIsr;
+    snap.uCfgGen = g_uCfgGen;
+    snap.u64DescPa =
+        (unsigned long long)(unsigned long)(void *)g_aSoftDesc;
+    snap.u64AvailPa =
+        (unsigned long long)(unsigned long)(void *)&g_SoftAvail;
+    snap.u64UsedPa =
+        (unsigned long long)(unsigned long)(void *)&g_SoftUsed;
+    snap.uNext0 = (unsigned)g_aSoftDesc[0].u16Next;
+    snap.uNextLast =
+        (unsigned)g_aSoftDesc[VIRTIO_SOFT_QNUM - 1u].u16Next;
+    snap.uAvailI0 = (unsigned)g_SoftAvail.aRing[0];
+
+    snap.u8LayoutOk = (virtio_soft_ring_layout_ok() != 0) ? 1u : 0u;
+    /* Scan completed without fault if we reached here with slot count. */
+    snap.u8ScanOk = 1u;
+    /* Queue soft ok when programmed, or no device (path compiled in). */
+    snap.u8QueueOk = (cQueueSoft > 0u || cWithDev == 0u) ? 1u : 0u;
+    /* Desc soft ok when MMIO/legacy programmed, or layout + no device. */
+    snap.u8DescOk =
+        (g_cDescRingSoft > 0u ||
+         (g_cDescLayoutSoft != 0u && cWithDev == 0u))
+            ? 1u
+            : 0u;
+    /*
+     * DMA unarmed: with a live device, the arming reg for that transport
+     * generation must stay 0 (v1: QueuePFN; v2+: QueueReady). With no
+     * device, path is unarmed by construction. Do not require QueuePFN==0
+     * on modern slots (legacy-only reg; may RAZ/WI or alias).
+     */
+    snap.u8DmaUnarmed = 1u;
+    if (cWithDev > 0u && g_fDev0Captured != 0u) {
+        if (g_uDev0Ver >= 2u) {
+            if (g_uDev0Ready != 0u) {
+                snap.u8DmaUnarmed = 0u;
+            }
+        } else {
+            if (g_uDev0Pfn != 0u) {
+                snap.u8DmaUnarmed = 0u;
+            }
+        }
+    }
+    /* Path honesty always true for this soft scaffold (constants above). */
+    snap.u8PathOk = 1u;
+
+    fSoft = virtio_soft_inventory(&snap);
+    (void)fSoft;
 }

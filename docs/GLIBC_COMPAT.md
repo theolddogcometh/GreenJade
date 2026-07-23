@@ -853,10 +853,60 @@ Wired through `graph_batch14300.c` (makefile_max=14300). Soft gates; bar3 still 
 
 Wired through `graph_batch14400.c` (makefile_max=14400). Soft gates; bar3 still open.
 
-## Status note — 2026-07-23 (refresh)
 
-**Parallel soft waves:** continuum **makefile_max=14900** shipped (parent wire of CREATE-ONLY decades through `graph_batch14900.c`). Soft gates / host milestone probes only — not Steam client.
+## Continuum Batches 14401–14500 (parent wire)
 
-**bar3 still open** (Steam client + Deck Top 50 title runs; matrix NOT-TRIED × 50). Soft surface `gj_bar3_ready_14900` remains 0.
+Wired through `graph_batch14500.c` (makefile_max=14500). Soft gates; bar3 still open.
 
-Also on tree (kernel/media soft, not bar3): 768G hierarchical soak; media Steam path wired; host soft check READY|SKELETON|MISSING.
+
+## Continuum Batches 14501–14600 (parent wire)
+
+Wired through `graph_batch14600.c` (makefile_max=14600). Soft gates; bar3 still open.
+
+
+## Continuum Batches 14601–14700 (parent wire)
+
+Wired through `graph_batch14700.c` (makefile_max=14700). Soft gates; bar3 still open.
+
+
+## Continuum Batches 14701–14800 (parent wire)
+
+Wired through `graph_batch14800.c` (makefile_max=14800). Soft gates; bar3 still open.
+
+
+## Continuum Batches 14801–14900 (parent wire)
+
+Wired through `graph_batch14900.c` (makefile_max=14900). Soft gates; bar3 still open.
+
+
+## Continuum Batches 14901–15000 (parent wire)
+
+Wired through `graph_batch15000.c` (makefile_max=15000). Soft gates; bar3 still open.
+
+
+## Continuum Batches 15001–15100 (parent wire)
+
+Wired through `graph_batch15100.c` (makefile_max=15100). Soft gates; bar3 still open.
+
+
+## Continuum Batches 15101–15200 (parent wire)
+
+Wired exclusive CREATE-ONLY continuum product soft stubs through `graph_batch15300.c` (makefile_max=15300). Soft gates / host milestone probes only; bar3 still open.
+
+
+## Status note — 2026-07-23 (Wave 11 honesty)
+
+**Additive honesty (Wave 11 exclusive for this file):**
+
+| Claim surface | What it is | What it is **not** |
+|---------------|------------|--------------------|
+| Continuum soft graph | CREATE-ONLY freestanding TUs in `user/libcgj/src/graph_batchN.c`, parent-wired into `CGJ_SRCS` | Full GNU glibc product; drop-in behavioral parity; Steam/Proton runtime complete |
+| `makefile_max=15300` | Numeric high-water of wired `graph_batchN.c` basenames (ends at `graph_batch15300.c`; verify `./scripts/gj-continuum-makefile-snippet.sh --max`) | Bar3 closed; Deck Top 50 tried; host-glibc replacement finished |
+| libcgj / `libc.so.6` product ELF | Clean-room **glibc-shaped** bring-up + growing symbol surface (versions, smokes) | Shipped GNU glibc; “full glibc” claim |
+| Host milestone probes (`cgj_soft_milestone_*`) | Soft gates that symbols/markers resolve under freestanding build | Client launch; title PASS; product score |
+
+**Continuum soft ≠ full glibc product.** Parallel soft waves through **makefile_max=15300** grow clean-room graph surface and host soft probes only. They do **not** make libcgj a full glibc, do **not** close Option C host-glibc / Steam graphs by themselves, and do **not** imply complete `GLIBC_2.*` behavioral parity with GNU libc.
+
+**bar3 still open** (Steam **client** launch + Deck Top 50 title runs; matrix **NOT-TRIED × 50**). Soft surfaces such as `gj_bar3_ready_15200` / `gj_product_score_15200` remain **0** by design. Soft continuum, media `STATUS=READY`, and kernel smokes are **not** bar3 completion.
+
+Also on tree (kernel/media soft, not bar3 / not full glibc): 768G hierarchical soak; media Steam path wired; host soft check READY\|SKELETON\|MISSING.

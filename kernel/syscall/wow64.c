@@ -7,6 +7,15 @@
  * Product PE32 loading is userspace; CS32 int 0x80 is trap_dispatch.
  * Hybrid SYSCALL uses this table; soft thunk zero-extends and fixes mmap2
  * pgoff / socketcall demux for pure-C paths without hardware compat CS.
+ *
+ * Soft inventory (Wave 11 exclusive; this unit only) — greppable "wow64: soft …":
+ *   wow64: soft inventory …
+ *   wow64: soft map …
+ *   wow64: soft thunk …
+ *   wow64: soft adjust …
+ *   wow64: soft personality …
+ *   wow64: soft path …
+ * Pure observation; never hard-gates path PASS; wrap OK; not bar3.
  */
 #include <gj/klog.h>
 #include <gj/wow64.h>
@@ -19,6 +28,128 @@ static u32 g_u32ThunkHits;
 static u32 g_u32Mmap2Hits;
 static u32 g_u32SocketcallHits;
 
+/*
+ * Soft product inventory (Wave 11 exclusive). Cumulative path tallies.
+ * greppable: wow64: soft …
+ */
+static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
+static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
+static u32 g_u32SoftIsMappedProbe;  /* wow64_nr_is_mapped probes */
+static u32 g_u32SoftThunkEnter;     /* wow64_thunk_soft entries */
+static u32 g_u32SoftThunkNull;      /* thunk_soft with pThunk == NULL */
+static u32 g_u32SoftThunkOk;        /* thunk_soft success returns */
+static u32 g_u32SoftAdjustEnter;    /* wow64_adjust_args entries */
+static u32 g_u32SoftAdjustNop;      /* adjust early return (null/0) */
+static u32 g_u32SoftAdjustZx;       /* adjust applied ARGS_ZX */
+static u32 g_u32SoftAdjustMmap2;    /* adjust mmap2 pgoff path */
+static u32 g_u32SoftAdjustSocket;   /* adjust socketcall demux path */
+static u32 g_u32SoftAdjustSockFail; /* socketcall unknown subcall */
+static u32 g_u32SoftAdjustOldMmap;  /* old_mmap (NR 90) soft path */
+static u32 g_u32SoftAdjustLlseek;   /* _llseek (NR 140) soft compose */
+static u32 g_u32SoftArgsZxCalls;    /* wow64_args_zero_extend calls */
+static u32 g_u32SoftSocketNrOk;     /* wow64_socketcall_nr mapped */
+static u32 g_u32SoftSocketNrFail;   /* socketcall_nr unknown/null */
+static u32 g_u32SoftPtr32;          /* wow64_ptr32 calls */
+static u32 g_u32SoftPersonOn;       /* wow64_set(on) transitions */
+static u32 g_u32SoftPersonOff;      /* wow64_set(off) transitions */
+static u32 g_u32SoftLogN;           /* soft inventory log emissions */
+static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
+
+static void soft_inc(u32 *pCtr);
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/**
+ * Greppable soft WoW64 inventory (product / smoke).
+ * Prefix-stable markers (wow64: soft …):
+ *   wow64: soft inventory     — personality + public counter rollup
+ *   wow64: soft map           — translate / is_mapped path tallies
+ *   wow64: soft thunk         — wow64_thunk_soft path tallies
+ *   wow64: soft adjust        — mmap2 / socketcall / llseek fixups
+ *   wow64: soft personality   — enable/disable surface
+ *   wow64: soft path          — honesty claim (soft ≠ bar3)
+ * greppable: wow64: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Enabled;
+
+    soft_inc(&g_u32SoftLogN);
+    u32Enabled = (g_fWow64 != 0) ? 1u : 0u;
+
+    /* Grep: wow64: soft inventory */
+    kprintf("wow64: soft inventory enabled=%u calls=%u map=%u identity=%u "
+            "thunk=%u mmap2=%u socketcall=%u log_n=%u\n",
+            u32Enabled, g_u32Calls, g_u32MapHits, g_u32IdentityHits,
+            g_u32ThunkHits, g_u32Mmap2Hits, g_u32SocketcallHits,
+            g_u32SoftLogN);
+
+    /* Grep: wow64: soft map */
+    kprintf("wow64: soft map enter=%u null_out=%u is_mapped=%u "
+            "hits=%u identity=%u\n",
+            g_u32SoftTranslateEnter, g_u32SoftTranslateNull,
+            g_u32SoftIsMappedProbe, g_u32MapHits, g_u32IdentityHits);
+
+    /* Grep: wow64: soft thunk */
+    kprintf("wow64: soft thunk enter=%u ok=%u null=%u hits=%u\n",
+            g_u32SoftThunkEnter, g_u32SoftThunkOk, g_u32SoftThunkNull,
+            g_u32ThunkHits);
+
+    /* Grep: wow64: soft adjust */
+    kprintf("wow64: soft adjust enter=%u nop=%u zx=%u mmap2=%u socket=%u "
+            "sock_fail=%u old_mmap=%u llseek=%u args_zx=%u "
+            "sock_nr_ok=%u sock_nr_fail=%u ptr32=%u\n",
+            g_u32SoftAdjustEnter, g_u32SoftAdjustNop, g_u32SoftAdjustZx,
+            g_u32SoftAdjustMmap2, g_u32SoftAdjustSocket,
+            g_u32SoftAdjustSockFail, g_u32SoftAdjustOldMmap,
+            g_u32SoftAdjustLlseek, g_u32SoftArgsZxCalls,
+            g_u32SoftSocketNrOk, g_u32SoftSocketNrFail, g_u32SoftPtr32);
+
+    /* Grep: wow64: soft personality */
+    kprintf("wow64: soft personality enabled=%u on=%u off=%u "
+            "page_shift=%u\n",
+            u32Enabled, g_u32SoftPersonOn, g_u32SoftPersonOff,
+            GJ_WOW64_PAGE_SHIFT);
+
+    /* Grep: wow64: soft path */
+    kprintf("wow64: soft path claim=nr_map+arg_zx+mmap2_pgoff+"
+            "socketcall_demux+llseek_compose hybrid=SYSCALL+int80 "
+            "(soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product translate/thunk/adjust/personality activity, print
+ * soft inventory once (mirrors futex/compositor soft-stats-once).
+ * Diagnostics only — never gates path PASS.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftTranslateEnter == 0 && g_u32SoftThunkEnter == 0 &&
+        g_u32SoftAdjustEnter == 0 && g_u32SoftPersonOn == 0 &&
+        g_u32SoftPersonOff == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
+
 int
 wow64_enabled(void)
 {
@@ -29,7 +160,14 @@ void
 wow64_set(int fOn)
 {
     g_fWow64 = fOn ? 1 : 0;
+    if (g_fWow64 != 0) {
+        soft_inc(&g_u32SoftPersonOn);
+    } else {
+        soft_inc(&g_u32SoftPersonOff);
+    }
     kprintf("wow64: personality %s\n", g_fWow64 ? "on" : "off");
+    /* Wave 11: greppable soft inventory on personality flip. */
+    soft_inventory_maybe_once();
 }
 
 /*
@@ -338,8 +476,11 @@ wow64_translate_nr(u32 u32Nr32, u32 *pOutNr)
 {
     int fMapped;
 
+    soft_inc(&g_u32SoftTranslateEnter);
     g_u32Calls++;
     if (pOutNr == NULL) {
+        soft_inc(&g_u32SoftTranslateNull);
+        soft_inventory_maybe_once();
         return -1;
     }
     fMapped = wow64_map_nr_core(u32Nr32, pOutNr);
@@ -348,6 +489,7 @@ wow64_translate_nr(u32 u32Nr32, u32 *pOutNr)
     } else {
         g_u32IdentityHits++;
     }
+    soft_inventory_maybe_once();
     return 0;
 }
 
@@ -356,6 +498,7 @@ wow64_nr_is_mapped(u32 u32Nr32)
 {
     u32 u32Nr64;
 
+    soft_inc(&g_u32SoftIsMappedProbe);
     return wow64_map_nr_core(u32Nr32, &u32Nr64);
 }
 
@@ -365,6 +508,7 @@ wow64_args_zero_extend(u64 *pArgs, u32 cArgs)
     u32 iArg;
     u32 cTouch;
 
+    soft_inc(&g_u32SoftArgsZxCalls);
     if (pArgs == NULL || cArgs == 0) {
         return 0;
     }
@@ -384,6 +528,7 @@ wow64_mmap2_pgoff_to_bytes(u32 u32PgoffPages)
 u64
 wow64_ptr32(u64 u64Val)
 {
+    soft_inc(&g_u32SoftPtr32);
     return u64Val & 0xffffffffull;
 }
 
@@ -396,6 +541,7 @@ wow64_socketcall_nr(u32 u32Call, u32 *pOutNr)
     u32 nr64;
 
     if (pOutNr == NULL) {
+        soft_inc(&g_u32SoftSocketNrFail);
         return -1;
     }
     switch (u32Call) {
@@ -420,9 +566,11 @@ wow64_socketcall_nr(u32 u32Call, u32 *pOutNr)
     case GJ_WOW64_SYS_RECVMMSG:    nr64 = 299; break; /* recvmmsg */
     case GJ_WOW64_SYS_SENDMMSG:    nr64 = 307; break; /* sendmmsg */
     default:
+        soft_inc(&g_u32SoftSocketNrFail);
         return -1;
     }
     *pOutNr = nr64;
+    soft_inc(&g_u32SoftSocketNrOk);
     return 0;
 }
 
@@ -433,12 +581,16 @@ wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs)
     u32 u32Call;
     u32 u32SockNr;
 
+    soft_inc(&g_u32SoftAdjustEnter);
     if (pArgs == NULL || cArgs == 0) {
+        soft_inc(&g_u32SoftAdjustNop);
+        soft_inventory_maybe_once();
         return 0;
     }
 
     (void)wow64_args_zero_extend(pArgs, cArgs);
     u32Flags |= GJ_WOW64_THUNK_ARGS_ZX;
+    soft_inc(&g_u32SoftAdjustZx);
 
     if (u32Nr32 == 192u) {
         /* mmap2: arg5 is page offset → byte offset for mmap */
@@ -446,17 +598,20 @@ wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs)
             pArgs[5] = wow64_mmap2_pgoff_to_bytes((u32)pArgs[5]);
             u32Flags |= GJ_WOW64_THUNK_MMAP2_PGOFF;
             g_u32Mmap2Hits++;
+            soft_inc(&g_u32SoftAdjustMmap2);
         }
         if (pOutNr64 != NULL) {
             *pOutNr64 = 9; /* mmap */
         }
         u32Flags |= GJ_WOW64_THUNK_NR_MAPPED;
+        soft_inventory_maybe_once();
         return u32Flags;
     }
 
     if (u32Nr32 == 102u) {
         /* socketcall(call, args_ptr): demux NR; user pull later */
         u32Call = (u32)pArgs[0];
+        soft_inc(&g_u32SoftAdjustSocket);
         if (wow64_socketcall_nr(u32Call, &u32SockNr) == 0) {
             if (pOutNr64 != NULL) {
                 *pOutNr64 = u32SockNr;
@@ -470,7 +625,9 @@ wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs)
                 *pOutNr64 = 41;
             }
             u32Flags |= GJ_WOW64_THUNK_SOCKETCALL;
+            soft_inc(&g_u32SoftAdjustSockFail);
         }
+        soft_inventory_maybe_once();
         return u32Flags;
     }
 
@@ -479,10 +636,12 @@ wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs)
          * old_mmap: single struct ptr in arg0 on i386. Soft path only
          * zero-extends; struct unpack is trap/dispatch responsibility.
          */
+        soft_inc(&g_u32SoftAdjustOldMmap);
         u32Flags |= GJ_WOW64_THUNK_NR_MAPPED;
         if (pOutNr64 != NULL) {
             *pOutNr64 = 9;
         }
+        soft_inventory_maybe_once();
         return u32Flags;
     }
 
@@ -498,10 +657,13 @@ wow64_adjust_args(u32 u32Nr32, u32 *pOutNr64, u64 *pArgs, u32 cArgs)
             pArgs[1] = u64Off;
             pArgs[2] = pArgs[4]; /* whence */
             u32Flags |= GJ_WOW64_THUNK_NR_MAPPED;
+            soft_inc(&g_u32SoftAdjustLlseek);
         }
+        soft_inventory_maybe_once();
         return u32Flags;
     }
 
+    soft_inventory_maybe_once();
     return u32Flags;
 }
 
@@ -512,12 +674,16 @@ wow64_thunk_soft(struct gj_wow64_thunk *pThunk)
     int fMapped;
     u32 u32Adj;
 
+    soft_inc(&g_u32SoftThunkEnter);
     if (pThunk == NULL) {
+        soft_inc(&g_u32SoftThunkNull);
+        soft_inventory_maybe_once();
         return -1;
     }
 
     g_u32ThunkHits++;
     g_u32Calls++;
+    soft_inc(&g_u32SoftThunkOk);
 
     fMapped = wow64_map_nr_core(pThunk->u32Nr32, &u32Nr64);
     if (fMapped) {
@@ -539,6 +705,7 @@ wow64_thunk_soft(struct gj_wow64_thunk *pThunk)
         pThunk->u32SocketCall = (u32)(pThunk->aArgs[0] & 0xffffffffull);
     }
 
+    soft_inventory_maybe_once();
     return 0;
 }
 

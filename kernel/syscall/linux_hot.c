@@ -4,6 +4,19 @@
  *
  * Linux hybrid Option C — kernel hot paths (clean-room pure C11).
  * Dual MIT OR Apache-2.0. No GPL source.
+ *
+ * Soft product inventory (Wave 11 exclusive; this unit only):
+ *   - Group enter tallies (io/id/mem/time/futex/sched/sig/sock/info/proc)
+ *   - Live task view snapshot (pid/tid/cred/brk/fs_base)
+ *   - Handler catalog capacity (static product surface count)
+ *   Never hard-gates; wrap OK; diagnostics only — does not alter i64Ret.
+ * Greppable prefix-stable serial markers:
+ *   linux: hot soft inventory …
+ *   linux: hot soft io|id|mem|time|futex|sched|sig|sock|info|proc …
+ *   linux: hot soft live …
+ *   linux: hot soft path …
+ *   linux: hot soft stats …
+ * greppable: "linux: hot soft"
  */
 #include <gj/cpu.h>
 #include <gj/error.h>
@@ -43,6 +56,212 @@ static u64 g_u64GsBase;
 static u64 g_u64ClearChildTid;
 static u64 g_u64MonoNsec; /* crude mono clock until TSC calibrate */
 
+/*
+ * Soft inventory groups (Wave 11). Enter-only tallies — never rewrite ret.
+ * greppable: linux: hot soft …
+ */
+enum {
+    HOT_SOFT_GRP_IO = 0,   /* write/readv/pread/pwrite family */
+    HOT_SOFT_GRP_ID,       /* get/set uid/gid/pid/sid/groups/personality */
+    HOT_SOFT_GRP_MEM,      /* brk/mmap/mprotect/mlock/pkey/mbind */
+    HOT_SOFT_GRP_TIME,     /* clock_* nanosleep itimer alarm timeofday */
+    HOT_SOFT_GRP_FUTEX,    /* futex + robust_list + set_tid_address */
+    HOT_SOFT_GRP_SCHED,    /* yield + sched_* affinity/param/attr */
+    HOT_SOFT_GRP_SIG,      /* tkill tgkill sigaltstack rt_sig* pause */
+    HOT_SOFT_GRP_SOCK,     /* getsockopt/name/peer/shutdown */
+    HOT_SOFT_GRP_INFO,     /* uname/sysinfo/prctl/cap/random/getcpu */
+    HOT_SOFT_GRP_PROC,     /* exit/waitid/process_vm/membarrier/rseq */
+    HOT_SOFT_GRP_N
+};
+
+/* Static product surface: public gj_linux_hot_* entry count (catalog). */
+#define GJ_LINUX_HOT_SOFT_HANDLERS 105u
+#define GJ_LINUX_HOT_SOFT_WAVE     11u
+
+struct linux_hot_soft {
+    u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
+    u64 u64EnterTotal;          /* sum of all group enters */
+    u64 u64NullRegs;            /* pRegs == NULL observed at enter */
+    u64 u64CtxSet;              /* gj_linux_set_current calls */
+    u64 u64LogN;                /* inventory log emissions */
+};
+
+static struct linux_hot_soft g_hotSoft;
+static u8 g_fHotSoftOnce; /* one-shot deep dump after first activity */
+
+static void hot_soft_inc(u64 *pCtr);
+static void hot_soft_enter(u32 u32Grp, const struct gj_linux_regs *pRegs);
+static void hot_soft_inventory_log(void);
+static void hot_soft_inventory_maybe_once(void);
+
+/** Soft: bump path tally (u64 wrap is fine for telemetry). */
+static void
+hot_soft_inc(u64 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Soft enter note — never alters handler return. Diagnostics only.
+ * greppable: linux: hot soft
+ */
+static void
+hot_soft_enter(u32 u32Grp, const struct gj_linux_regs *pRegs)
+{
+    if (u32Grp < (u32)HOT_SOFT_GRP_N) {
+        hot_soft_inc(&g_hotSoft.aEnter[u32Grp]);
+    }
+    hot_soft_inc(&g_hotSoft.u64EnterTotal);
+    if (pRegs == NULL) {
+        hot_soft_inc(&g_hotSoft.u64NullRegs);
+    }
+    hot_soft_inventory_maybe_once();
+}
+
+/**
+ * Greppable soft Linux hot-path inventory (product / smoke).
+ *   linux: hot soft inventory …
+ *   linux: hot soft io|id|mem|time|futex|sched|sig|sock|info|proc …
+ *   linux: hot soft live …
+ *   linux: hot soft path …
+ *   linux: hot soft stats …
+ * greppable: linux: hot soft
+ */
+static void
+hot_soft_inventory_log(void)
+{
+    struct linux_hot_soft s;
+    u32 u32HasProc;
+    u32 u32BrkLive;
+
+    hot_soft_inc(&g_hotSoft.u64LogN);
+    s = g_hotSoft;
+    u32HasProc = (g_pLinuxProc != NULL) ? 1u : 0u;
+    u32BrkLive = (g_u64BrkBase != 0 || g_u64BrkCur != 0) ? 1u : 0u;
+
+    /* Grep: linux: hot soft inventory */
+    kprintf("linux: hot soft inventory wave=%u handlers=%u groups=%u "
+            "enter=%lu null_regs=%lu ctx_set=%lu log_n=%lu "
+            "proc=%u brk_live=%u\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
+            (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
+            (unsigned)HOT_SOFT_GRP_N,
+            (unsigned long)s.u64EnterTotal,
+            (unsigned long)s.u64NullRegs,
+            (unsigned long)s.u64CtxSet,
+            (unsigned long)s.u64LogN,
+            u32HasProc, u32BrkLive);
+
+    /* Grep: linux: hot soft io */
+    kprintf("linux: hot soft io enter=%lu "
+            "surface=write,writev,readv,preadv,pwritev,pread64,pwrite64\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_IO]);
+
+    /* Grep: linux: hot soft id */
+    kprintf("linux: hot soft id enter=%lu "
+            "surface=get/set uid/gid/pid/sid/groups/personality\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_ID]);
+
+    /* Grep: linux: hot soft mem */
+    kprintf("linux: hot soft mem enter=%lu "
+            "surface=brk,mmap,munmap,mremap,mprotect,msync,mincore,"
+            "mlock,pkey,mbind\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_MEM]);
+
+    /* Grep: linux: hot soft time */
+    kprintf("linux: hot soft time enter=%lu "
+            "surface=clock_*,nanosleep,itimer,alarm,timeofday,time\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_TIME]);
+
+    /* Grep: linux: hot soft futex */
+    kprintf("linux: hot soft futex enter=%lu "
+            "surface=futex,futex_wake2,futex_wait2,robust_list,"
+            "set_tid_address\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_FUTEX]);
+
+    /* Grep: linux: hot soft sched */
+    kprintf("linux: hot soft sched enter=%lu "
+            "surface=yield,sched_get/set*,affinity,attr,priority\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SCHED]);
+
+    /* Grep: linux: hot soft sig */
+    kprintf("linux: hot soft sig enter=%lu "
+            "surface=tkill,tgkill,sigaltstack,rt_sig*,pause\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SIG]);
+
+    /* Grep: linux: hot soft sock */
+    kprintf("linux: hot soft sock enter=%lu "
+            "surface=getsockopt,setsockopt,getsockname,getpeername,"
+            "shutdown\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SOCK]);
+
+    /* Grep: linux: hot soft info */
+    kprintf("linux: hot soft info enter=%lu "
+            "surface=uname,sysinfo,times,rusage,prctl,cap,random,getcpu,"
+            "priority,arch_prctl\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_INFO]);
+
+    /* Grep: linux: hot soft proc */
+    kprintf("linux: hot soft proc enter=%lu "
+            "surface=exit,exit_group,waitid,process_vm_*,membarrier,rseq\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_PROC]);
+
+    /* Grep: linux: hot soft live */
+    kprintf("linux: hot soft live pid=%u tid=%u ppid=%u pgid=%u sid=%u "
+            "uid=%u euid=%u gid=%u egid=%u brk_base=0x%lx brk_cur=0x%lx "
+            "fs_base=0x%lx gs_base=0x%lx clear_ctid=0x%lx\n",
+            g_u32LinuxPid, g_u32LinuxTid, g_u32LinuxPpid, g_u32LinuxPgid,
+            g_u32LinuxSid, g_u32LinuxUid, g_u32LinuxEuid, g_u32LinuxGid,
+            g_u32LinuxEgid,
+            (unsigned long)g_u64BrkBase, (unsigned long)g_u64BrkCur,
+            (unsigned long)g_u64FsBase, (unsigned long)g_u64GsBase,
+            (unsigned long)g_u64ClearChildTid);
+
+    /* Grep: linux: hot soft path */
+    kprintf("linux: hot soft path hybrid=OptionC hot=kernel "
+            "cold=personality enter_only=1 ret_rewrite=0 "
+            "(soft inventory; not bar3)\n");
+
+    /* Grep: linux: hot soft stats */
+    kprintf("linux: hot soft stats enter=%lu io=%lu id=%lu mem=%lu "
+            "time=%lu futex=%lu sched=%lu sig=%lu sock=%lu info=%lu "
+            "proc=%lu null=%lu ctx=%lu log_n=%lu\n",
+            (unsigned long)s.u64EnterTotal,
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_IO],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_ID],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_MEM],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_TIME],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_FUTEX],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SCHED],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SIG],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SOCK],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_INFO],
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_PROC],
+            (unsigned long)s.u64NullRegs,
+            (unsigned long)s.u64CtxSet,
+            (unsigned long)s.u64LogN);
+}
+
+/**
+ * After first product activity (set_current or any hot enter), print soft
+ * inventory once (mirrors memobj/door soft-stats-once). Diagnostics only.
+ */
+static void
+hot_soft_inventory_maybe_once(void)
+{
+    if (g_fHotSoftOnce != 0) {
+        return;
+    }
+    if (g_hotSoft.u64EnterTotal == 0 && g_hotSoft.u64CtxSet == 0) {
+        return;
+    }
+    g_fHotSoftOnce = 1;
+    hot_soft_inventory_log();
+}
+
 void serial_putchar(char ch);
 
 void
@@ -51,6 +270,9 @@ gj_linux_set_current(struct gj_process *pProc, u32 u32Pid, u32 u32Tid)
     g_pLinuxProc = pProc;
     g_u32LinuxPid = u32Pid ? u32Pid : 1;
     g_u32LinuxTid = u32Tid ? u32Tid : g_u32LinuxPid;
+    /* Wave 11 soft: arm inventory on bind (bring-up smoke greps). */
+    hot_soft_inc(&g_hotSoft.u64CtxSet);
+    hot_soft_inventory_maybe_once();
 }
 
 static void
@@ -83,6 +305,7 @@ gj_linux_hot_write(struct gj_linux_regs *pRegs)
     u64 u64Src;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -164,6 +387,7 @@ gj_linux_hot_writev(struct gj_linux_regs *pRegs)
     struct linux_iovec aIov[8];
     u8 aChunk[256];
 
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -233,6 +457,7 @@ gj_linux_hot_readv(struct gj_linux_regs *pRegs)
     struct linux_iovec aIov[8];
     u8 aChunk[256];
 
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -295,12 +520,14 @@ i64
 gj_linux_hot_preadv(struct gj_linux_regs *pRegs)
 {
     /* preadv(fd, iov, iovcnt, offset) — ignore offset; sequential readv */
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     return gj_linux_hot_readv(pRegs);
 }
 
 i64
 gj_linux_hot_pwritev(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     return gj_linux_hot_writev(pRegs);
 }
 
@@ -308,6 +535,7 @@ i64
 gj_linux_hot_tkill(struct gj_linux_regs *pRegs)
 {
     /* tkill(tid, sig): accept self; ignore delivery for bring-up */
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -325,6 +553,7 @@ i64
 gj_linux_hot_tgkill(struct gj_linux_regs *pRegs)
 {
     /* tgkill(tgid, tid, sig) */
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -345,6 +574,7 @@ gj_linux_hot_sigaltstack(struct gj_linux_regs *pRegs)
     static u32 g_u32SsFlags = 2; /* SS_DISABLE */
     static u64 g_u64SsSize;
 
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -378,6 +608,7 @@ gj_linux_hot_sigaltstack(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_getscheduler(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0; /* SCHED_NORMAL */
 }
@@ -385,6 +616,7 @@ gj_linux_hot_sched_getscheduler(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_setscheduler(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -394,6 +626,7 @@ gj_linux_hot_sched_getparam(struct gj_linux_regs *pRegs)
 {
     int prio = 0;
 
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EINVAL;
     }
@@ -408,6 +641,7 @@ gj_linux_hot_sched_getparam(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_setparam(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -415,6 +649,7 @@ gj_linux_hot_sched_setparam(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_get_priority_max(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0; /* SCHED_OTHER max */
 }
@@ -422,6 +657,7 @@ gj_linux_hot_sched_get_priority_max(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_get_priority_min(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -432,6 +668,7 @@ gj_linux_hot_msync(struct gj_linux_regs *pRegs)
     u64 va;
     u64 len;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -454,6 +691,7 @@ gj_linux_hot_getsockopt(struct gj_linux_regs *pRegs)
     int v = 0;
     u32 len = 4;
 
+    hot_soft_enter(HOT_SOFT_GRP_SOCK, pRegs);
     if (pRegs == NULL || !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
         return -LINUX_EBADF;
     }
@@ -494,6 +732,7 @@ gj_linux_hot_setsockopt(struct gj_linux_regs *pRegs)
 {
     int v = 0;
 
+    hot_soft_enter(HOT_SOFT_GRP_SOCK, pRegs);
     if (pRegs == NULL || !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
         return -LINUX_EBADF;
     }
@@ -515,6 +754,7 @@ gj_linux_hot_getsockname(struct gj_linux_regs *pRegs)
     u32 len = 16;
     i64 r;
 
+    hot_soft_enter(HOT_SOFT_GRP_SOCK, pRegs);
     if (pRegs == NULL || !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
         return -LINUX_EBADF;
     }
@@ -553,6 +793,7 @@ gj_linux_hot_getpeername(struct gj_linux_regs *pRegs)
     u32 len = 16;
     i64 r;
 
+    hot_soft_enter(HOT_SOFT_GRP_SOCK, pRegs);
     if (pRegs == NULL || !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
         return -LINUX_EBADF;
     }
@@ -587,6 +828,7 @@ gj_linux_hot_getpeername(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_shutdown(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SOCK, pRegs);
     if (pRegs == NULL || !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
         return -LINUX_EBADF;
     }
@@ -603,6 +845,7 @@ gj_linux_hot_rt_sigaction(struct gj_linux_regs *pRegs)
     u8 aZero[32];
     u32 i;
 
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -627,6 +870,7 @@ gj_linux_hot_rt_sigprocmask(struct gj_linux_regs *pRegs)
     /* how, *set, *oldset, sigsetsize */
     u32 cb = 8;
 
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -654,6 +898,7 @@ i64
 gj_linux_hot_rt_sigreturn(struct gj_linux_regs *pRegs)
 {
     /* No signal frames yet — not reached from real handlers */
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -664,6 +909,7 @@ gj_linux_hot_getitimer(struct gj_linux_regs *pRegs)
     u8 aZero[32];
     u32 i;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EFAULT;
     }
@@ -685,6 +931,7 @@ gj_linux_hot_setitimer(struct gj_linux_regs *pRegs)
     u8 aZero[32];
     u32 i;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -708,6 +955,7 @@ gj_linux_hot_alarm(struct gj_linux_regs *pRegs)
 {
     u32 u32Prev;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -724,6 +972,7 @@ gj_linux_hot_pause(struct gj_linux_regs *pRegs)
      * pause() waits for signal. Without signal delivery, return EINTR
      * immediately so callers can retry (libc/wine tolerate).
      */
+    hot_soft_enter(HOT_SOFT_GRP_SIG, pRegs);
     (void)pRegs;
     return -LINUX_EINTR;
 }
@@ -747,6 +996,7 @@ gj_linux_hot_prctl(struct gj_linux_regs *pRegs)
 {
     u64 op;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -804,6 +1054,7 @@ gj_linux_hot_set_robust_list(struct gj_linux_regs *pRegs)
 {
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -842,6 +1093,7 @@ gj_linux_hot_get_robust_list(struct gj_linux_regs *pRegs)
     u32 u32Pid;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0 || pRegs->u64Arg2 == 0) {
         return -LINUX_EFAULT;
     }
@@ -886,6 +1138,7 @@ gj_linux_hot_waitid(struct gj_linux_regs *pRegs)
     u8 aInfo[128];
     u32 i;
 
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -935,6 +1188,7 @@ gj_linux_hot_mincore(struct gj_linux_regs *pRegs)
     u64 i;
     u8 aBit[64];
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL || pRegs->u64Arg2 == 0) {
         return -LINUX_EINVAL;
     }
@@ -966,6 +1220,7 @@ gj_linux_hot_mincore(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_sched_yield(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     thread_yield();
     return 0;
@@ -974,6 +1229,7 @@ gj_linux_hot_sched_yield(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getpid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxPid;
 }
@@ -981,6 +1237,7 @@ gj_linux_hot_getpid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_gettid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxTid;
 }
@@ -988,6 +1245,7 @@ gj_linux_hot_gettid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getuid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxUid;
 }
@@ -995,6 +1253,7 @@ gj_linux_hot_getuid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getgid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxGid;
 }
@@ -1002,6 +1261,7 @@ gj_linux_hot_getgid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_geteuid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxEuid;
 }
@@ -1009,6 +1269,7 @@ gj_linux_hot_geteuid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getegid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxEgid;
 }
@@ -1016,6 +1277,7 @@ gj_linux_hot_getegid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_setuid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1029,6 +1291,7 @@ gj_linux_hot_setuid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_setgid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1043,6 +1306,7 @@ gj_linux_hot_setreuid(struct gj_linux_regs *pRegs)
 {
     i64 r, e;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1062,6 +1326,7 @@ gj_linux_hot_setregid(struct gj_linux_regs *pRegs)
 {
     i64 r, e;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1081,6 +1346,7 @@ gj_linux_hot_setresuid(struct gj_linux_regs *pRegs)
 {
     i64 r, e, s;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1104,6 +1370,7 @@ gj_linux_hot_setresgid(struct gj_linux_regs *pRegs)
 {
     i64 r, e, s;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1125,6 +1392,7 @@ gj_linux_hot_setresgid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1161,6 +1429,7 @@ gj_linux_hot_getresuid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getresgid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1200,6 +1469,7 @@ gj_linux_hot_setpgid(struct gj_linux_regs *pRegs)
     u32 pid;
     u32 pgid;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1214,6 +1484,7 @@ gj_linux_hot_setpgid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_setsid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     g_u32LinuxSid = g_u32LinuxPid;
     g_u32LinuxPgid = g_u32LinuxPid;
@@ -1224,6 +1495,7 @@ i64
 gj_linux_hot_setgroups(struct gj_linux_regs *pRegs)
 {
     /* Accept any size; groups table not stored beyond getgroups smoke */
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1232,6 +1504,7 @@ i64
 gj_linux_hot_mlock(struct gj_linux_regs *pRegs)
 {
     /* No swap: mlock always succeeds for mapped ranges */
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1239,6 +1512,7 @@ gj_linux_hot_mlock(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_munlock(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1246,6 +1520,7 @@ gj_linux_hot_munlock(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_mlockall(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1253,6 +1528,7 @@ gj_linux_hot_mlockall(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_munlockall(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1261,6 +1537,7 @@ i64
 gj_linux_hot_pkey_alloc(struct gj_linux_regs *pRegs)
 {
     /* Return synthetic key id 1 (no real PKRU). */
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 1;
 }
@@ -1268,6 +1545,7 @@ gj_linux_hot_pkey_alloc(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_pkey_free(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL || (i64)pRegs->u64Arg0 < 1) {
         return -LINUX_EINVAL;
     }
@@ -1277,6 +1555,7 @@ gj_linux_hot_pkey_free(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getppid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxPpid;
 }
@@ -1284,6 +1563,7 @@ gj_linux_hot_getppid(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getsid(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxSid;
 }
@@ -1293,6 +1573,7 @@ gj_linux_hot_personality(struct gj_linux_regs *pRegs)
 {
     static u32 g_u32Pers = 0; /* PER_LINUX */
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1411,12 +1692,14 @@ process_vm_copy(struct gj_linux_regs *pRegs, int fWriteRemote)
 i64
 gj_linux_hot_process_vm_readv(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     return process_vm_copy(pRegs, 0);
 }
 
 i64
 gj_linux_hot_process_vm_writev(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     return process_vm_copy(pRegs, 1);
 }
 
@@ -1427,6 +1710,7 @@ gj_linux_hot_membarrier(struct gj_linux_regs *pRegs)
      * membarrier(cmd, flags): no-op success for bring-up.
      * Single-CPU-ish + SMP already uses serializing barriers elsewhere.
      */
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     (void)pRegs;
     __asm__ volatile("mfence" ::: "memory");
     return 0;
@@ -1439,6 +1723,7 @@ gj_linux_hot_rseq(struct gj_linux_regs *pRegs)
      * rseq(rseq, rseq_len, flags, sig): register/unregister.
      * Accept and ignore structure for glibc probe (no critical sections yet).
      */
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1447,6 +1732,7 @@ i64
 gj_linux_hot_sched_setaffinity(struct gj_linux_regs *pRegs)
 {
     /* Accept any mask; single-task bring-up ignores CPU set. */
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1458,6 +1744,7 @@ gj_linux_hot_sched_getaffinity(struct gj_linux_regs *pRegs)
     u8 aMask[8];
     u64 u64Len;
 
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1487,6 +1774,7 @@ gj_linux_hot_capget(struct gj_linux_regs *pRegs)
     u32 aHdr[2];
     u32 aData[6];
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1515,6 +1803,7 @@ i64
 gj_linux_hot_capset(struct gj_linux_regs *pRegs)
 {
     /* Accept any set for bring-up (no real capability enforcement yet). */
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1525,6 +1814,7 @@ gj_linux_hot_getcpu(struct gj_linux_regs *pRegs)
     u32 cpu = 0;
     u32 node = 0;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1552,6 +1842,7 @@ gj_linux_hot_gettimeofday(struct gj_linux_regs *pRegs)
     i64 aTv[2];
     u64 nsec;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1580,6 +1871,7 @@ i64
 gj_linux_hot_settimeofday(struct gj_linux_regs *pRegs)
 {
     /* Accept no-op (no RTC write on bring-up) */
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1590,6 +1882,7 @@ gj_linux_hot_time(struct gj_linux_regs *pRegs)
     i64 sec;
     u64 nsec;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (timer_ready()) {
         nsec = timer_mono_nsec();
     } else {
@@ -1613,6 +1906,7 @@ i64
 gj_linux_hot_clock_settime(struct gj_linux_regs *pRegs)
 {
     /* Bring-up: accept CLOCK_REALTIME set as no-op (no RTC write). */
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1627,6 +1921,7 @@ i64
 gj_linux_hot_clock_adjtime(struct gj_linux_regs *pRegs)
 {
     /* Accept adjtimex-shaped no-op; leave timespec buffer untouched. */
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1635,6 +1930,7 @@ i64
 gj_linux_hot_sched_setattr(struct gj_linux_regs *pRegs)
 {
     /* Accept SCHED_OTHER-shaped setattr (no real class switch yet). */
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1645,6 +1941,7 @@ gj_linux_hot_sched_getattr(struct gj_linux_regs *pRegs)
     /* Write minimal sched_attr: size=48, policy=0 (NORMAL), nice=0 */
     u8 aAttr[48];
 
+    hot_soft_enter(HOT_SOFT_GRP_SCHED, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1675,6 +1972,7 @@ i64
 gj_linux_hot_mbind(struct gj_linux_regs *pRegs)
 {
     /* NUMA mbind — accept no-op (single node bring-up). */
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1682,6 +1980,7 @@ gj_linux_hot_mbind(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_set_mempolicy(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     (void)pRegs;
     return 0;
 }
@@ -1691,6 +1990,7 @@ gj_linux_hot_get_mempolicy(struct gj_linux_regs *pRegs)
 {
     i64 mode = 0; /* MPOL_DEFAULT */
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs != NULL && pRegs->u64Arg0 != 0) {
         if (user_range_ok(pRegs->u64Arg0, 8)) {
             if (copy_to_user(pRegs->u64Arg0, &mode, 8) != GJ_OK) {
@@ -1710,6 +2010,7 @@ gj_linux_hot_exit(struct gj_linux_regs *pRegs)
     struct gj_thread *pThr = thread_current();
     u64 u64Ctid;
 
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     kprintf("linux: exit(%ld)\n", (long)i64Code);
     /* futex: robust exit — soft G-FUT-ROBUST OWNER_DIED walk before death */
     if (pThr != NULL) {
@@ -1750,6 +2051,7 @@ gj_linux_hot_exit(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_exit_group(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_PROC, pRegs);
     return gj_linux_hot_exit(pRegs);
 }
 
@@ -1758,6 +2060,7 @@ gj_linux_hot_brk(struct gj_linux_regs *pRegs)
 {
     u64 u64Req;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1788,6 +2091,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
     gj_vaddr_t va;
     int fFixed;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1853,6 +2157,7 @@ gj_linux_hot_munmap(struct gj_linux_regs *pRegs)
 {
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EINVAL;
     }
@@ -1883,6 +2188,7 @@ gj_linux_hot_mremap(struct gj_linux_regs *pRegs)
     gj_vaddr_t vaGrow;
     struct gj_linux_regs one;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -1965,6 +2271,7 @@ gj_linux_hot_mprotect(struct gj_linux_regs *pRegs)
     gj_status_t st;
     u64 u64SavedCr3 = 0;
 
+    hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2021,6 +2328,7 @@ gj_linux_hot_clock_gettime(struct gj_linux_regs *pRegs)
     struct linux_timespec tsK;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2059,6 +2367,7 @@ gj_linux_hot_clock_getres(struct gj_linux_regs *pRegs)
     struct linux_timespec tsK;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2115,6 +2424,7 @@ gj_linux_hot_nanosleep(struct gj_linux_regs *pRegs)
     struct linux_timespec tsK;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
         return -LINUX_EINVAL;
     }
@@ -2141,6 +2451,7 @@ gj_linux_hot_clock_nanosleep(struct gj_linux_regs *pRegs)
     struct linux_timespec tsK;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_TIME, pRegs);
     if (pRegs == NULL || pRegs->u64Arg2 == 0) {
         return -LINUX_EINVAL;
     }
@@ -2236,6 +2547,7 @@ gj_linux_hot_futex(struct gj_linux_regs *pRegs)
     i64 i64Ts;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
         return -LINUX_EINVAL;
     }
@@ -2290,6 +2602,7 @@ gj_linux_hot_futex_wake2(struct gj_linux_regs *pRegs)
     /* futex_wake(uaddr, mask, nr, flags) → FUTEX_WAKE_BITSET soft */
     struct gj_linux_regs r;
 
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2310,6 +2623,7 @@ gj_linux_hot_futex_wait2(struct gj_linux_regs *pRegs)
     /* futex_wait(uaddr, val, mask, flags, ...) → FUTEX_WAIT_BITSET soft */
     struct gj_linux_regs r;
 
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2332,6 +2646,7 @@ gj_linux_hot_arch_prctl(struct gj_linux_regs *pRegs)
     u64 u64Addr;
     u64 u64Val;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2366,6 +2681,7 @@ gj_linux_hot_arch_prctl(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_set_tid_address(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_FUTEX, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2379,6 +2695,7 @@ gj_linux_hot_getgroups(struct gj_linux_regs *pRegs)
     u32 u32Size;
     u32 gid = g_u32LinuxGid;
 
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2402,6 +2719,7 @@ gj_linux_hot_getgroups(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getpgrp(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_ID, pRegs);
     (void)pRegs;
     return (i64)g_u32LinuxPgid;
 }
@@ -2430,6 +2748,7 @@ gj_linux_hot_sysinfo(struct gj_linux_regs *pRegs)
     struct linux_sysinfo si;
     u64 mono;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
         return -LINUX_EFAULT;
     }
@@ -2465,6 +2784,7 @@ gj_linux_hot_times(struct gj_linux_regs *pRegs)
     u64 mono;
     i64 ticks;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
@@ -2518,6 +2838,7 @@ gj_linux_hot_getrusage(struct gj_linux_regs *pRegs)
     struct linux_rusage ru;
     u64 mono;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EFAULT;
     }
@@ -2542,6 +2863,7 @@ gj_linux_hot_getrusage(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_getpriority(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     (void)pRegs;
     /* nice 0 → kernel returns 20 - nice for getpriority */
     return 20;
@@ -2550,6 +2872,7 @@ gj_linux_hot_getpriority(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_setpriority(struct gj_linux_regs *pRegs)
 {
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     (void)pRegs;
     return 0; /* accept any nice for bring-up */
 }
@@ -2570,6 +2893,7 @@ gj_linux_hot_uname(struct gj_linux_regs *pRegs)
     struct linux_utsname utsK;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
         return -LINUX_EFAULT;
     }
@@ -2601,6 +2925,7 @@ gj_linux_hot_getrandom(struct gj_linux_regs *pRegs)
     static u32 g_u32Prng = 0xC0FFEEu;
     gj_status_t st;
 
+    hot_soft_enter(HOT_SOFT_GRP_INFO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
         return -LINUX_EFAULT;
     }
@@ -2634,6 +2959,7 @@ gj_linux_hot_pread64(struct gj_linux_regs *pRegs)
     i64 n;
     i64 fd;
 
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EFAULT;
     }
@@ -2668,6 +2994,7 @@ gj_linux_hot_pwrite64(struct gj_linux_regs *pRegs)
     size_t cb;
     i64 fd;
 
+    hot_soft_enter(HOT_SOFT_GRP_IO, pRegs);
     if (pRegs == NULL || pRegs->u64Arg1 == 0) {
         return -LINUX_EFAULT;
     }

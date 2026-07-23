@@ -16,6 +16,15 @@
  * Soft phase counter: one tick per successful bring-up step; summary
  * line before the fixed "M0 OK" product bar.
  *
+ * Soft inventory (Wave 11 exclusive; this unit only — greppable
+ * "aarch64: kmain soft …")
+ * -------------------------------------------------------------------------
+ * Soft inventory: rollup of phase / ok / fail lamps + live pmm/coop.
+ * Soft bringup: fixed-order scaffold steps (exceptions→virtio).
+ * Soft shared: freestanding C + sched + pmm core soft outcomes.
+ * Soft mem: PMM-backed multi-pattern probe outcome + free/total.
+ * Soft path honesty: M0 scaffold only — not bar3 / Deck / continuum.
+ *
  * Greppable:
  *   aarch64: shared C kernel PASS (string+kprintf)
  *   aarch64: shared C soft PASS | FAIL steps=… len=…
@@ -25,7 +34,15 @@
  *   aarch64: shared pmm soft PASS | FAIL free=… total=…
  *   aarch64: mem probe soft pa=… free0=… free1=… pat=…
  *   aarch64: mem probe PASS | soft FAIL
+ *   aarch64: kmain soft inventory phases=… soft_ok=… soft_fail=…
+ *             pmm_free=… pmm_tot=… coop_id=… logs=…
+ *   aarch64: kmain soft bringup exceptions=… cpu=… psci=… gic=…
+ *             timer=… pmm=… mmu=… coop=… svc=… virtio=…
+ *   aarch64: kmain soft shared c=… sched=… pmm=…
+ *   aarch64: kmain soft mem probe=… free=… total=…
+ *   aarch64: kmain soft path m0=1 bar3=0 deck=0 continuum=0 arch=aarch64
  *   aarch64: kmain soft PASS phases=… soft_ok=… soft_fail=…
+ *             pmm_free=… pmm_tot=… coop_id=…
  *   M0 OK
  *
  * Greppable markers from callees — see README.md
@@ -54,6 +71,26 @@ void aarch64_psci_probe(void);
 static u32 g_cSoftPhases;
 static u32 g_cSoftOk;
 static u32 g_cSoftFail;
+static u32 g_cSoftInvLogs; /* aarch64: kmain soft inventory emit count */
+
+/*
+ * Soft area lamps (0/1; Wave 11 inventory). Scaffold steps that cannot
+ * return failure still record 1 after the call (product bring-up path).
+ */
+static u8 g_u8SoftSharedC;
+static u8 g_u8SoftSched;
+static u8 g_u8SoftSharedPmm;
+static u8 g_u8SoftMem;
+static u8 g_u8SoftExc;
+static u8 g_u8SoftCpu;
+static u8 g_u8SoftPsci;
+static u8 g_u8SoftGic;
+static u8 g_u8SoftTimer;
+static u8 g_u8SoftPmmInit;
+static u8 g_u8SoftMmu;
+static u8 g_u8SoftCoop;
+static u8 g_u8SoftSvc;
+static u8 g_u8SoftVirtio;
 
 static void
 soft_tick(int fOk)
@@ -122,12 +159,14 @@ shared_c_probe(void)
         kprintf("aarch64: shared C soft FAIL steps=%u len=%u\n",
                 cSteps, (unsigned)cbLen);
         soft_tick(0);
+        g_u8SoftSharedC = 0u;
         return 0;
     }
     kprintf("aarch64: shared C kernel PASS (string+kprintf)\n");
     kprintf("aarch64: shared C soft PASS steps=%u len=%u\n",
             cSteps, (unsigned)cbLen);
     soft_tick(1);
+    g_u8SoftSharedC = 1u;
     return 1;
 }
 
@@ -155,6 +194,7 @@ shared_mm_sched_probe(void)
     } else {
         kprintf("aarch64: shared sched soft FAIL\n");
     }
+    g_u8SoftSched = (fSched != 0) ? 1u : 0u;
 
     cFree1 = gj_pmm_core_free_count();
     kprintf("aarch64: shared sched soft id=%u free=%u total=%u free_after=%u\n",
@@ -171,6 +211,7 @@ shared_mm_sched_probe(void)
         kprintf("aarch64: shared pmm soft FAIL free=%u total=%u\n",
                 gj_pmm_core_free_count(), gj_pmm_core_total_count());
     }
+    g_u8SoftSharedPmm = (fPmm != 0) ? 1u : 0u;
 
     soft_tick(fSched);
     soft_tick(fPmm);
@@ -199,6 +240,7 @@ mem_probe(void)
                 cFree0, gj_pmm_core_free_count());
         kprintf("aarch64: mem probe soft FAIL\n");
         soft_tick(0);
+        g_u8SoftMem = 0u;
         return;
     }
 
@@ -233,63 +275,159 @@ mem_probe(void)
     if (fOk) {
         kprintf("aarch64: mem probe PASS\n");
         soft_tick(1);
+        g_u8SoftMem = 1u;
     } else {
         kprintf("aarch64: mem probe soft FAIL\n");
         soft_tick(0);
+        g_u8SoftMem = 0u;
     }
+}
+
+/*
+ * Wave 11 soft inventory emission — greppable "aarch64: kmain soft …".
+ * Diagnostics only; never hard-gates M0. Returns 1 if soft_fail==0 and
+ * all tracked soft lamps are set (shared + bring-up + mem).
+ */
+static int
+kmain_soft_inventory(void)
+{
+    unsigned cFree;
+    unsigned cTotal;
+    u32 u32CoopId;
+    int fOk;
+
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
+
+    cFree = gj_pmm_core_free_count();
+    cTotal = gj_pmm_core_total_count();
+    u32CoopId = gj_coop_current_id();
+
+    /* Grep: aarch64: kmain soft inventory */
+    kprintf("aarch64: kmain soft inventory phases=%u soft_ok=%u soft_fail=%u "
+            "pmm_free=%u pmm_tot=%u coop_id=%u logs=%u\n",
+            (unsigned)g_cSoftPhases, (unsigned)g_cSoftOk,
+            (unsigned)g_cSoftFail, cFree, cTotal, (unsigned)u32CoopId,
+            (unsigned)g_cSoftInvLogs);
+
+    /* Grep: aarch64: kmain soft bringup */
+    kprintf("aarch64: kmain soft bringup exceptions=%u cpu=%u psci=%u "
+            "gic=%u timer=%u pmm=%u mmu=%u coop=%u svc=%u virtio=%u\n",
+            (unsigned)g_u8SoftExc, (unsigned)g_u8SoftCpu,
+            (unsigned)g_u8SoftPsci, (unsigned)g_u8SoftGic,
+            (unsigned)g_u8SoftTimer, (unsigned)g_u8SoftPmmInit,
+            (unsigned)g_u8SoftMmu, (unsigned)g_u8SoftCoop,
+            (unsigned)g_u8SoftSvc, (unsigned)g_u8SoftVirtio);
+
+    /* Grep: aarch64: kmain soft shared */
+    kprintf("aarch64: kmain soft shared c=%u sched=%u pmm=%u\n",
+            (unsigned)g_u8SoftSharedC, (unsigned)g_u8SoftSched,
+            (unsigned)g_u8SoftSharedPmm);
+
+    /* Grep: aarch64: kmain soft mem */
+    kprintf("aarch64: kmain soft mem probe=%u free=%u total=%u\n",
+            (unsigned)g_u8SoftMem, cFree, cTotal);
+
+    /*
+     * Grep: aarch64: kmain soft path
+     * Honesty: M0 aarch64 scaffold only — not bar3 / Deck Top 50 / continuum.
+     */
+    kprintf("aarch64: kmain soft path m0=1 bar3=0 deck=0 continuum=0 "
+            "arch=aarch64\n");
+
+    fOk = 0;
+    if (g_cSoftFail == 0u &&
+        g_u8SoftSharedC != 0u && g_u8SoftSched != 0u &&
+        g_u8SoftSharedPmm != 0u && g_u8SoftMem != 0u &&
+        g_u8SoftExc != 0u && g_u8SoftCpu != 0u &&
+        g_u8SoftPsci != 0u && g_u8SoftGic != 0u &&
+        g_u8SoftTimer != 0u && g_u8SoftPmmInit != 0u &&
+        g_u8SoftMmu != 0u && g_u8SoftCoop != 0u &&
+        g_u8SoftSvc != 0u && g_u8SoftVirtio != 0u) {
+        fOk = 1;
+    }
+
+    /*
+     * Grep: aarch64: kmain soft PASS | FAIL
+     * Smoke scripts (run-aarch64 / podman-smoke / product-summary) expect
+     * the PASS form; FAIL remains greppable and never blocks M0 OK.
+     */
+    if (fOk != 0) {
+        kprintf("aarch64: kmain soft PASS phases=%u soft_ok=%u soft_fail=%u "
+                "pmm_free=%u pmm_tot=%u coop_id=%u\n",
+                (unsigned)g_cSoftPhases, (unsigned)g_cSoftOk,
+                (unsigned)g_cSoftFail, cFree, cTotal, (unsigned)u32CoopId);
+    } else {
+        kprintf("aarch64: kmain soft FAIL phases=%u soft_ok=%u soft_fail=%u "
+                "pmm_free=%u pmm_tot=%u coop_id=%u\n",
+                (unsigned)g_cSoftPhases, (unsigned)g_cSoftOk,
+                (unsigned)g_cSoftFail, cFree, cTotal, (unsigned)u32CoopId);
+    }
+    return fOk;
 }
 
 void
 aarch64_kmain(void)
 {
+    int fSoft;
+
     kprintf("GreenJade aarch64 product kernel (shared C)\n");
 
     (void)shared_c_probe();
 
     aarch64_exceptions_install();
     soft_tick(1); /* install path is non-returning-fail in product scaffold */
+    g_u8SoftExc = 1u;
 
     aarch64_cpu_probe();
     soft_tick(1);
+    g_u8SoftCpu = 1u;
 
     /* PSCI: HVC/SMC with fault recovery (PASS or soft SKIP). */
     aarch64_psci_probe();
     soft_tick(1);
+    g_u8SoftPsci = 1u;
 
     aarch64_gic_init();
     soft_tick(1);
+    g_u8SoftGic = 1u;
 
     aarch64_timer_probe();
     soft_tick(1);
+    g_u8SoftTimer = 1u;
 
     aarch64_pmm_init();
     soft_tick(1);
+    g_u8SoftPmmInit = 1u;
 
     aarch64_mmu_init();
     soft_tick(1);
+    g_u8SoftMmu = 1u;
 
     gj_coop_init();
     soft_tick(1);
+    g_u8SoftCoop = 1u;
 
     shared_mm_sched_probe();
 
     aarch64_svc_selftest();
     soft_tick(1);
+    g_u8SoftSvc = 1u;
 
     aarch64_virtio_mmio_probe();
     soft_tick(1);
+    g_u8SoftVirtio = 1u;
 
     mem_probe();
 
     /*
+     * Wave 11 combined soft inventory under "aarch64: kmain soft …".
      * Soft summary only — M0 OK remains the fixed product bar grepped by
      * make aarch64-smoke / run-aarch64.sh (exact "M0 OK").
      */
-    kprintf("aarch64: kmain soft PASS phases=%u soft_ok=%u soft_fail=%u "
-            "pmm_free=%u pmm_tot=%u coop_id=%u\n",
-            (unsigned)g_cSoftPhases, (unsigned)g_cSoftOk,
-            (unsigned)g_cSoftFail, gj_pmm_core_free_count(),
-            gj_pmm_core_total_count(), (unsigned)gj_coop_current_id());
+    fSoft = kmain_soft_inventory();
+    (void)fSoft;
     kprintf("M0 OK\n");
 
     for (;;) {

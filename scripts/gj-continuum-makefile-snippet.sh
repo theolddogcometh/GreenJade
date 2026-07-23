@@ -9,17 +9,17 @@
 # ----------------------------------
 # GreenJade grows the clean-room libcgj *graph continuum* as CREATE-ONLY
 # freestanding pure-C TUs (user/libcgj/src/graph_batchN.c). A continuum
-# *decade* is a closed batch range ending at a milestone M (e.g. M=15100
-# → exclusive wave 15051–15100). Soft host probes
+# *decade* is a closed batch range ending at a milestone M (e.g. M=15300
+# → exclusive wave 15251–15300). Soft host probes
 # (user/libcgj/tests/cgj_soft_milestone_M.c) KAT the decade marker lamps
 # only; identity/fill bands are structural unique surfaces.
 #
 # This script is the **parent paste half** of that workflow:
 #
 #   1. CREATE-ONLY sources land first (generators / exclusive agents).
-#      Example generator for the 15100 wave (Wave 9 exclusive):
-#        user/libcgj/src/_gen_milestone_15100.py
-#        python3 user/libcgj/src/_gen_milestone_15100.py --dry-run
+#      Example generator for the 15300 wave (Wave 11 exclusive):
+#        user/libcgj/src/_gen_milestone_15300.py
+#        python3 user/libcgj/src/_gen_milestone_15300.py --dry-run
 #   2. Parent wires CGJ_SRCS by pasting this helper's stdout into the
 #      Makefile (this script never writes the Makefile itself).
 #   3. Rebuild libcgj; optional soft milestone host probes.
@@ -30,33 +30,33 @@
 # already referenced in the Makefile (grep scan). It is not hard-coded,
 # not a Steam readiness claim, and not advanced by this helper alone.
 # The scan has **no artificial cap** — it correctly reports through
-# graph_batch15100.c (and beyond) once those basenames are wired.
+# graph_batch15300.c (and beyond) once those basenames are wired.
 #
 # On the shipped soft continuum tree the high-water is:
 #
-#   makefile_max=15100
+#   makefile_max=15300
 #
 # Verify anytime (stdout is greppable by product-summary side panels):
 #
 #   ./scripts/gj-continuum-makefile-snippet.sh --max
-#   # → makefile_max=15100
+#   # → makefile_max=15300
 #
 # Do **not** document or assert a higher max than the Makefile scan
-# reports. Soft graph growth through graph_batch15100.c is **not** bar3,
-# not Deck Top-50 title runs, and not product score (gj_bar3_ready_15100
-# and gj_product_score_15100 remain 0 by design).
+# reports. Soft graph growth through graph_batch15300.c is **not** bar3,
+# not Deck Top-50 title runs, and not product score (gj_bar3_ready_15300
+# and gj_product_score_15300 remain 0 by design).
 #
-# Decade paste hygiene (15100-era / Wave 9 example)
+# Decade paste hygiene (15300-era / Wave 11 example)
 # ------------------------------------------------
-# After CREATE-ONLY wave 15051–15100 exists on disk (optional extension
-# 15001–15050 may land ahead of the decade bands):
+# After CREATE-ONLY wave 15251–15300 exists on disk (optional extension
+# 15201–15250 may land ahead of the decade bands):
 #
 #   # Prefer exist-only so missing TUs never produce dead Makefile lines:
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15051 15100
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15001 15100
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15251 15300
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15201 15300
 #
 #   # Or explicit full decade after confirming all 50 TUs present:
-#   ./scripts/gj-continuum-makefile-snippet.sh 15051 15100
+#   ./scripts/gj-continuum-makefile-snippet.sh 15251 15300
 #
 #   # After a prior wire, emit the next N lines past honest makefile_max:
 #   ./scripts/gj-continuum-makefile-snippet.sh --next 100
@@ -69,20 +69,20 @@
 #   fill       [M-24, M-10]   gj_batch_id_N + unique soft unit helper
 #   markers    [M-9,  M]      decade soft-gate lamps (host probe surface)
 #
-# For M=15100 that is identity 15051–15075, fill 15076–15090,
-# markers 15091–15100. Continuum extension 15001–15050 sits ahead of
-# the decade bands. Prior decade M=15000: identity 14951–14975,
-# fill 14976–14990, markers 14991–15000.
-# See _gen_milestone_15100.py module docstring (when present) and
-# user/libcgj/tests/NOTES_milestone_15100.txt (when present).
+# For M=15300 that is identity 15251–15275, fill 15276–15290,
+# markers 15291–15300. Continuum extension 15201–15250 sits ahead of
+# the decade bands. Prior decade M=15200: identity 15151–15175,
+# fill 15176–15190, markers 15191–15200.
+# See _gen_milestone_15300.py module docstring (when present) and
+# user/libcgj/tests/NOTES_milestone_15300.txt (when present).
 #
 # Usage:
-#   ./scripts/gj-continuum-makefile-snippet.sh 14951 15000
-#   ./scripts/gj-continuum-makefile-snippet.sh 15051 15100
+#   ./scripts/gj-continuum-makefile-snippet.sh 15151 15200
+#   ./scripts/gj-continuum-makefile-snippet.sh 15251 15300
 #   ./scripts/gj-continuum-makefile-snippet.sh --next 100
 #   ./scripts/gj-continuum-makefile-snippet.sh --next          # default decade 100
 #   ./scripts/gj-continuum-makefile-snippet.sh --max           # print makefile_max only
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15051 15100
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15251 15300
 #
 # Options:
 #   --next [N]       emit N lines after highest graph_batch* in Makefile (default 100)
@@ -103,24 +103,24 @@
 #            safe to discard when capturing paste text:  … 2>/dev/null
 #
 # Example paste target (end of CGJ_SRCS before rand48.c):
-#   user/libcgj/src/graph_batch15100.c \
-#   user/libcgj/src/graph_batch15101.c \   ← helper output starts here (future)
+#   user/libcgj/src/graph_batch15300.c \
+#   user/libcgj/src/graph_batch15301.c \   ← helper output starts here (future)
 #
 # Non-claims (keep soft continuum honest)
 # ---------------------------------------
 #   * Emitting paste lines does not wire the tree until a human/parent
 #     pastes them and rebuilds.
-#   * makefile_max=15100 is soft graph parent wire only.
+#   * makefile_max=15300 is soft graph parent wire only.
 #   * Soft milestone host gates ≠ Steam client launch ≠ title try.
 #   * Matrix Deck Top-50 stays NOT-TRIED until real-DUT title runs.
 #
 # See also:
-#   user/libcgj/src/_gen_milestone_15000.py   (prior decade CREATE-ONLY emitter)
-#   user/libcgj/src/_gen_milestone_15100.py   (Wave 9 CREATE-ONLY emitter)
-#   user/libcgj/tests/NOTES_milestone_15000.txt
-#   user/libcgj/tests/NOTES_milestone_15100.txt
-#   user/libcgj/tests/cgj_soft_milestone_15000.c
-#   user/libcgj/tests/cgj_soft_milestone_15100.c
+#   user/libcgj/src/_gen_milestone_15200.py   (prior decade CREATE-ONLY emitter)
+#   user/libcgj/src/_gen_milestone_15300.py   (Wave 11 CREATE-ONLY emitter)
+#   user/libcgj/tests/NOTES_milestone_15200.txt
+#   user/libcgj/tests/NOTES_milestone_15300.txt
+#   user/libcgj/tests/cgj_soft_milestone_15200.c
+#   user/libcgj/tests/cgj_soft_milestone_15300.c
 #   docs/GLIBC_COMPAT.md   (graph continuum status)
 #   docs/STEAM_HWTEST.md    (continuum soft scope)
 #   scripts/gj-product-summary.sh  (side panel: continuum makefile_max=…)
@@ -152,19 +152,19 @@ Emit paste-ready CGJ_SRCS lines:
 
 makefile_max honesty:
   --max scans the Makefile for the highest graph_batchN.c already wired.
-  Scan has no artificial cap (supports through graph_batch15100.c and beyond).
-  Current soft continuum high-water on tree: makefile_max=15100
+  Scan has no artificial cap (supports through graph_batch15300.c and beyond).
+  Current soft continuum high-water on tree: makefile_max=15300
   (CREATE-ONLY graph only — not bar3 / Steam client / Top-50 titles).
 
 Workflow:
-  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_15100.py)
+  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_15300.py)
   2. Paste this helper's stdout into CGJ_SRCS (before rand48.c etc.)
   3. Rebuild libcgj; optional cgj_soft_milestone_*.c host probes
 
-Decade bands for milestone M=15100 (docs only; helper emits paths only):
-  identity 15051-15075 | fill 15076-15090 | markers 15091-15100
-  extension 15001-15050 (pre-decade; may land ahead of identity/fill/markers)
-  (prior M=15000: identity 14951-14975 | fill 14976-14990 | markers 14991-15000)
+Decade bands for milestone M=15300 (docs only; helper emits paths only):
+  identity 15251-15275 | fill 15276-15290 | markers 15291-15300
+  extension 15201-15250 (pre-decade; may land ahead of identity/fill/markers)
+  (prior M=15200: identity 15151-15175 | fill 15176-15190 | markers 15191-15200)
 
 Options:
   --next [N]            after makefile_max, emit N lines (default 100)
@@ -180,14 +180,14 @@ Env:
 
 Examples:
   ./scripts/gj-continuum-makefile-snippet.sh --max
-  ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15051 15100
+  ./scripts/gj-continuum-makefile-snippet.sh --exist-only 15251 15300
   ./scripts/gj-continuum-makefile-snippet.sh --next 100
 EOF
 }
 
 # Highest graph_batchN.c referenced in Makefile (numeric max).
 # Honest scan only — never hard-code a milestone here.
-# No artificial upper bound: correctly reports through 15100+ when wired.
+# No artificial upper bound: correctly reports through 15300+ when wired.
 makefile_max() {
 	if [[ ! -f "$MAKEFILE" ]]; then
 		echo "gj-continuum-makefile-snippet: missing Makefile: $MAKEFILE" >&2

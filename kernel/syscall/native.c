@@ -17,7 +17,7 @@
  *     (user vs ksmoke path). Diagnostics only; never hard-gate.
  *     greppable: native: soft stats
  *
- * Soft inventory (Wave 11/14 base + Wave 18 exclusive deepen; this unit only):
+ * Soft inventory (Wave 11/14 base + Wave 19 exclusive deepen; this unit only):
  *   native: soft inventory   — entry/handled/nosupport + caps + log_n
  *   native: soft stats       — aggregate rollup (legacy greppable line)
  *   native: soft outcome     — ok/err + GJ_ERR_* buckets
@@ -42,10 +42,10 @@
  *   native: soft notify      — NOTIFY_WAIT
  *   native: soft rates       — handled/nosupport/err basis points
  *   native: soft honesty     — hybrid open; not bar3
- *   native: soft deepen      — wave=18 area stamp
+ *   native: soft deepen      — wave=19 area stamp
  *   native: soft edge        — Wave 15 entries/null/handled combined
  *   native: soft share       — Wave 15 door/class share lamps
- *   native: soft catalog     — Wave 18 surface catalog stamp
+ *   native: soft catalog     — Wave 19 surface catalog stamp
  *   native: soft inventory PASS (soft lamp only; not product gate)
  * greppable: native: soft
  *
@@ -95,7 +95,7 @@ extern struct gj_process *g_pLinuxProc;
 static struct gj_native_dispatch_stats g_nativeStats;
 
 /*
- * Wave 11/14 base + Wave 18 exclusive deepen (file-local; never hard-gates).
+ * Wave 11/14 base + Wave 19 exclusive deepen (file-local; never hard-gates).
  * Per-op tallies for multi-op GJ_SYS_* surfaces + inventory emission count.
  * greppable: native: soft …
  */
@@ -158,8 +158,8 @@ struct native_soft_deep {
 };
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define NATIVE_SOFT_WAVE  18u
-#define NATIVE_SOFT_AREAS 32u
+#define NATIVE_SOFT_WAVE  19u
+#define NATIVE_SOFT_AREAS 34u
 
 static struct native_soft_deep g_nativeDeep;
 /* One-shot multi-line inventory after first non-null dispatch (soft). */
@@ -521,22 +521,22 @@ native_soft_inventory_log(void)
             "(native soft inventory; hybrid product remains open)\n",
             (unsigned)NATIVE_SOFT_WAVE);
 
-    /* Grep: native: soft surfaces (Wave 18 deepen) */
+    /* Grep: native: soft surfaces (Wave 19 deepen) */
     kprintf("native: soft surfaces count=%u wave=%u "
             "names=inventory,route,path,rates,honesty,last,catalog,"
             "surfaces,note,return,retmap,deepen,PASS\n",
             NATIVE_SOFT_AREAS, (unsigned)NATIVE_SOFT_WAVE);
 
-    /* Grep: native: soft note (Wave 18 deepen) */
-    kprintf("native: soft note milestone=wave18 exclusive=1 "
+    /* Grep: native: soft note (Wave 19 deepen) */
+    kprintf("native: soft note milestone=wave19 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)NATIVE_SOFT_WAVE);
 
-    /* Grep: native: soft retmap — Wave 18 return-surface map */
-    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+    /* Grep: native: soft retmap — Wave 19 return-surface map */
+    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
 
     /* Grep: native: soft deepen */
-    /* Grep: native: soft edge (Wave 18 deepen) */
+    /* Grep: native: soft edge (Wave 19 deepen) */
     kprintf("native: soft edge entries=%llu null=%llu handled=%llu "
             "nosupport=%llu door=%llu term=%llu wave=%u\n",
             (unsigned long long)s.u64Entries,
@@ -547,7 +547,7 @@ native_soft_inventory_log(void)
             (unsigned long long)u64Term,
             (unsigned)NATIVE_SOFT_WAVE);
 
-    /* Grep: native: soft share (Wave 18 deepen) */
+    /* Grep: native: soft share (Wave 19 deepen) */
     kprintf("native: soft share bp_handled=%llu bp_nosupport=%llu "
             "bp_err=%llu door=%llu cap=%llu ipc=%llu wave=%u\n",
             (unsigned long long)u64BpHandled,
@@ -558,14 +558,14 @@ native_soft_inventory_log(void)
             (unsigned long long)s.u64Ipc,
             (unsigned)NATIVE_SOFT_WAVE);
 
-    /* Grep: native: soft catalog (Wave 18 deepen) */
+    /* Grep: native: soft catalog (Wave 19 deepen) */
     kprintf("native: soft catalog wave=%u areas=%u "
             "surfaces=inventory,stats,outcome,class,door,reserved,copy,"
             "platform,console,scsi,hda,cap,ipc,last,process,thread,gpu,"
             "memobj,cold,notify,rates,honesty,edge,share,catalog,surfaces,note,return,retmap,deepen,path\n",
             (unsigned)NATIVE_SOFT_WAVE, NATIVE_SOFT_AREAS);
 
-    /* Grep: native: soft return (Wave 18 deepen) */
+    /* Grep: native: soft return (Wave 19 deepen) */
     kprintf("native: soft return handled=%llu nosupport=%llu err=%llu "
             "ok=%llu null=%llu term=%llu product_gate=0 wave=%u\n",
             (unsigned long long)s.u64Handled,
@@ -576,6 +576,21 @@ native_soft_inventory_log(void)
             (unsigned long long)u64Term,
             (unsigned)NATIVE_SOFT_WAVE);
 
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: native: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("native: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)NATIVE_SOFT_WAVE);
+    /* Grep: native: soft retlane — Wave 19 return-lane catalog */
+    kprintf("native: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)NATIVE_SOFT_WAVE);
     kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "
             "surfaces=inventory,stats,outcome,class,door,reserved,copy,"

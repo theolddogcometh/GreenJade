@@ -11,7 +11,7 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Soft product inventory (Wave 18 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 19 exclusive deepen; this unit only):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
  *   - Lifetime: charged / released / net / peak components / max-one
@@ -19,8 +19,8 @@
  *   - Fail taxonomy: zero / uninit / oversize / oom / double_free
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
- *   - Wave 18: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=18 + PASS/NONE
+ *   - Wave 19: surfaces / magic / return / header return surfaces
+ *   - Path catalog + stats rollup + deepen wave=19 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -43,13 +43,13 @@
  *   kheap: soft lamps …      (Wave 15 readiness lamps)
  *   kheap: soft path …
  *   kheap: soft stats …
- *   kheap: soft surfaces …   (Wave 18 return-surface catalog)
+ *   kheap: soft surfaces …   (Wave 19 return-surface catalog)
  *   kheap: soft magic …      (Wave 17 LIVE/FREE magic catalog)
  *   kheap: soft return …     (Wave 17 null/fail return taxonomy)
  *   kheap: soft header …     (Wave 17 block header geometry)
- *   kheap: soft return selftest — Wave 18 terminal return surface
- *   kheap: soft retmap     — Wave 18 return-surface map
- *   kheap: soft deepen wave=18 …
+ *   kheap: soft return selftest — Wave 19 terminal return surface
+ *   kheap: soft retmap     — Wave 19 return-surface map
+ *   kheap: soft deepen wave=19 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -60,13 +60,13 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 18 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 18u
+/* Wave 19 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 19u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 22u
+#define KHEAP_SOFT_AREAS 24u
 
 /*
- * Wave 18 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: kheap: soft surfaces
  */
 #define KHEAP_SOFT_SURF_HONESTY   (1u << 0)
@@ -886,7 +886,7 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
-     * Wave 18: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: kheap: soft surfaces
      */
     kprintf("kheap: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -898,7 +898,7 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
-     * Wave 18: LIVE/FREE magic catalog (observe-only).
+     * Wave 19: LIVE/FREE magic catalog (observe-only).
      * Grep: kheap: soft magic
      */
     kprintf("kheap: soft magic live=0x%x free=0x%x double_free_guard=1 "
@@ -911,7 +911,7 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
-     * Wave 18: null/fail return taxonomy (alloc/free soft returns).
+     * Wave 19: null/fail return taxonomy (alloc/free soft returns).
      * Grep: kheap: soft return
      */
     kprintf("kheap: soft return null_uninit=%lu null_zero=%lu "
@@ -929,7 +929,7 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
-     * Wave 18: block header geometry (constants; not product capacity).
+     * Wave 19: block header geometry (constants; not product capacity).
      * Grep: kheap: soft header
      */
     kprintf("kheap: soft header sizeof=%u align_field=u16 unsplit_field=u16 "
@@ -975,24 +975,39 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: kheap: soft return selftest — Wave 18 terminal return surface */
+    /* Grep: kheap: soft return selftest — Wave 19 terminal return surface */
     kprintf("kheap: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
             (unsigned)KHEAP_SOFT_WAVE);
 
-    /* Grep: kheap: soft retmap — Wave 18 return-surface map */
+    /* Grep: kheap: soft retmap — Wave 19 return-surface map */
     kprintf("kheap: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)KHEAP_SOFT_WAVE);
 
-    /* Grep: kheap: soft deepen wave (Wave 18 stamp; areas = prior soft lines). */
+    /* Grep: kheap: soft deepen wave (Wave 19 stamp; areas = prior soft lines). */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: kheap: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("kheap: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)KHEAP_SOFT_WAVE);
+    /* Grep: kheap: soft retlane — Wave 19 return-lane catalog */
+    kprintf("kheap: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)KHEAP_SOFT_WAVE);
     kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
             "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "
             "free_max=%lu surf=0x%x product_tib=0 bar3=OPEN "
-            "(Wave 18 exclusive; soft; not product; not bar3; "
+            "(Wave 19 exclusive; soft; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)KHEAP_SOFT_WAVE,
             cAreas,

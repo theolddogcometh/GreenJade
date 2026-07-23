@@ -6,7 +6,7 @@
  * (scaffold; not in x86_64 build). Base: 0x09000000 on virt machine.
  *
  * -------------------------------------------------------------------------
- * Soft UART inventory (Wave 18 exclusive deepen — no IRQ / no RX product path)
+ * Soft UART inventory (Wave 19 exclusive deepen — no IRQ / no RX product path)
  * -------------------------------------------------------------------------
  * Soft FR peek: TXFF/RXFE/TXFE/RXFF/BUSY status lamps while transmitting.
  * Soft ID peek: PeripheralID + CellID (PrimeCell PL011 shape on virt).
@@ -16,7 +16,7 @@
  * aarch64_uart_soft_selftest (called by cpu_info soft deepen).
  * Soft TX stats: char count + thrwait + max FR-wait spins + TXFF hits.
  * Soft program: expected PrimeCell peri/cell pack + base + spin cap.
- * Soft deepen: area catalog stamp wave=18.
+ * Soft deepen: area catalog stamp wave=19.
  * Soft path honesty: polled early console only; product_kernel=OPEN.
  *
  * Shared serial hex dump helper: aarch64_uart_put_hex / put_hex_n /
@@ -28,11 +28,11 @@
  *   aarch64: uart soft lamps txfe=… rxfe=… txff=… rxff=… busy=…
  *   aarch64: uart soft ctrl cr=… lcrh=… ibrd=… fbrd=… imsc=… dmacr=… rsr=…
  *   aarch64: uart soft id peri=… cell=… match=… fr_live=…
- *   aarch64: uart soft inventory wave=18 …
+ *   aarch64: uart soft inventory wave=19 …
  *   aarch64: uart soft program base=… peri=… cell=… spin_cap=…
  *   aarch64: uart soft stats …
- *   aarch64: uart soft deepen wave=18 areas=…
- *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=18
+ *   aarch64: uart soft deepen wave=19 areas=…
+ *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=19
  *   aarch64: uart soft return inv_ret=… product_kernel=OPEN
  *   aarch64: uart soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: uart soft PASS | FAIL
@@ -104,14 +104,14 @@
 /* Soft hex-dump cap (early-console safety). */
 #define PL011_SOFT_DUMP_MAX 256u
 
-/* Wave 18 soft inventory stamp (greppable wave=18). */
-#define PL011_SOFT_WAVE 18u
+/* Wave 19 soft inventory stamp (greppable wave=19). */
+#define PL011_SOFT_WAVE 19u
 
 /* Soft deepen areas: chars,fr,lamps,ctrl,id,program,stats,path,honesty. */
-#define PL011_SOFT_AREAS 12u
+#define PL011_SOFT_AREAS 14u
 
 /*
- * Soft UART inventory snapshot (Wave 18).
+ * Soft UART inventory snapshot (Wave 19).
  * Live peeks only — never written back to MMIO.
  * greppable: aarch64: uart soft
  */
@@ -149,7 +149,7 @@ static unsigned long g_cUartChars;
 static unsigned long g_cUartSpinMax;
 static unsigned long g_cUartTxFullHits;
 static unsigned long g_cUartThrWaits; /* putchar paths that spun at least once */
-static unsigned      g_cUartSoftLogs; /* Wave 18 inventory emit count */
+static unsigned      g_cUartSoftLogs; /* Wave 19 inventory emit count */
 static int           g_fUartSoftDone;
 static int           g_fUartSoftSnapLive;
 static struct uart_soft_snap g_UartSoftSnap;
@@ -412,7 +412,7 @@ uart_soft_verify_inner(void)
 }
 
 /*
- * Soft UART inventory lines (greppable "aarch64: uart soft …"; Wave 18).
+ * Soft UART inventory lines (greppable "aarch64: uart soft …"; Wave 19).
  * Returns 1 if soft verify PASS.
  */
 static int
@@ -514,7 +514,7 @@ uart_soft_inventory(void)
     aarch64_uart_put_hex((unsigned long)g_UartSoftSnap.u8VerifyOk);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: uart soft inventory — Wave 18 rollup. */
+    /* Grep: aarch64: uart soft inventory — Wave 19 rollup. */
     aarch64_uart_puts("aarch64: uart soft inventory wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts(" chars=");
@@ -562,8 +562,23 @@ uart_soft_inventory(void)
 
     /*
      * Grep: aarch64: uart soft deepen
-     * Wave 18 area catalog — polled soft console only.
+     * Wave 19 area catalog — polled soft console only.
      */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: aarch64: uart: soft retclass — Wave 19 return-class taxonomy */
+    aarch64_uart_puts("aarch64: uart: soft retclass ok|fail|inval|nodev|busy|nomem "
+                      "soft_only=1 product_gate=0 wave=");
+    aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+    aarch64_uart_puts(" (retclass taxonomy; Soft!=product; not bar3)\n");
+    /* Grep: aarch64: uart: soft retlane — Wave 19 return-lane catalog */
+    aarch64_uart_puts("aarch64: uart: soft retlane inv|selftest|rate|retcode|retmap|class "
+                      "product_kernel=OPEN soft_ne_product=1 wave=");
+    aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+    aarch64_uart_puts(" (retlane catalog; Soft!=product)\n");
     aarch64_uart_puts("aarch64: uart soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -573,7 +588,7 @@ uart_soft_inventory(void)
     aarch64_uart_put_hex((unsigned long)g_cUartSoftLogs);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: uart soft surf — Wave 18 id/fr/verify lamps */
+    /* Grep: aarch64: uart soft surf — Wave 19 id/fr/verify lamps */
     aarch64_uart_puts("aarch64: uart soft surf match=");
     aarch64_uart_put_hex((unsigned long)g_UartSoftSnap.u8IdMatch);
     aarch64_uart_puts(" fr_live=");
@@ -609,20 +624,20 @@ uart_soft_inventory(void)
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: uart soft exclusive — Wave 18 exclusive deepen */
+    /* Grep: aarch64: uart soft exclusive — Wave 19 exclusive deepen */
     aarch64_uart_puts("aarch64: uart soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: uart soft open — Wave 18 open-lamp rollup */
+    /* Grep: aarch64: uart soft open — Wave 19 open-lamp rollup */
     aarch64_uart_puts("aarch64: uart soft open multi_server=0 confine=0 "
                       "bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
 
-    /* Grep: aarch64: uart soft return — Wave 18 return surfaces */
+    /* Grep: aarch64: uart soft return — Wave 19 return surfaces */
     aarch64_uart_puts("aarch64: uart soft return inv_ret=");
     aarch64_uart_put_hex((unsigned long)(fOk != 0 ? 1ul : 0ul));
     aarch64_uart_puts(" product_kernel=OPEN wave=");
@@ -682,7 +697,7 @@ aarch64_uart_soft_selftest(void)
     }
     g_fUartSoftDone = 1;
 
-    /* Wave 18 combined soft inventory under "aarch64: uart soft …". */
+    /* Wave 19 combined soft inventory under "aarch64: uart soft …". */
     fInvOk = uart_soft_inventory();
 
     fHexOk = uart_hex_soft_exercise();

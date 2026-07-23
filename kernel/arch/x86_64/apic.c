@@ -7,7 +7,7 @@
  * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
  * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  *
- * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 18 exclusive deepen;
+ * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 19 exclusive deepen;
  * this unit only — greppable "apic: soft …"):
  *   apic: soft PASS|PARTIAL|UP|FAIL|NONE …  — primary verdict (Wave 10+)
  *   apic: soft inventory …                  — rollup catalog + wave tag
@@ -40,9 +40,9 @@
  *   apic: soft return …                     — Wave 17 API return surfaces (kept)
  *   apic: soft return selftest …            — Wave 17 terminal return surface (kept)
  *   apic: soft retmap …                     — Wave 17 return-surface map (kept)
- *   apic: soft return rate — Wave 18 ok/fail rate lamps
- *   apic: soft retcode    — Wave 18 retcode catalog
- *   apic: soft deepen …                     — wave=18 areas stamp
+ *   apic: soft return rate — Wave 19 ok/fail rate lamps
+ *   apic: soft retcode    — Wave 19 retcode catalog
+ *   apic: soft deepen …                     — wave=19 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -101,7 +101,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE        18u
+#define APIC_SOFT_WAVE        19u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -129,7 +129,7 @@ static u32            g_u32HzProgrammed;
 
 /*
  * Soft inventory counters (file-local; wrap OK; diagnostics only).
- * Wave 10 base + Wave 12 path + Wave 18 exclusive deepen.
+ * Wave 10 base + Wave 12 path + Wave 19 exclusive deepen.
  * Hot IRQ path only bumps counters already present — no kprintf.
  * greppable: apic: soft
  * greppable: apic: soft stats
@@ -814,22 +814,37 @@ apic_soft_inventory(const char *szVia)
             (unsigned)APIC_SOFT_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: apic: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: apic: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("apic: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)APIC_SOFT_WAVE);
 
-    /* Grep: apic: soft retcode — Wave 18 retcode catalog */
+    /* Grep: apic: soft retcode — Wave 19 retcode catalog */
     kprintf("apic: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)APIC_SOFT_WAVE);
 
     /* Grep: apic: soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: apic: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("apic: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)APIC_SOFT_WAVE);
+    /* Grep: apic: soft retlane — Wave 19 return-lane catalog */
+    kprintf("apic: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)APIC_SOFT_WAVE);
     kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"
             "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject,"

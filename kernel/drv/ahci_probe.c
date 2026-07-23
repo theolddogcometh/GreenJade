@@ -20,9 +20,9 @@
  *   ahci: soft regs       — HBA memory offset map
  *   ahci: soft pci        — class 01:06:01 inventory
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
- *   ahci: soft return rate — Wave 18 ok/fail rate lamps
- *   ahci: soft retcode    — Wave 18 retcode catalog
- *   ahci: soft deepen     — wave=18 areas stamp
+ *   ahci: soft return rate — Wave 19 ok/fail rate lamps
+ *   ahci: soft retcode    — Wave 19 retcode catalog
+ *   ahci: soft deepen     — wave=19 areas stamp
  *   ahci: soft ratio      — Wave 15 port/ncs occupancy
  *   ahci: soft headroom   — Wave 15 NP vs PI head
  *   ahci: soft surface    — Wave 16 area catalog
@@ -102,9 +102,9 @@
 #define AHCI_BOHC_OOC  (1u << 3) /* OS Ownership Change */
 #define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
 
-/* Wave 18 deepen area count (fixed greppable categories in inventory log). */
-#define AHCI_SOFT_DEEPEN_AREAS 26u
-#define AHCI_SOFT_DEEPEN_WAVE  18u
+/* Wave 19 deepen area count (fixed greppable categories in inventory log). */
+#define AHCI_SOFT_DEEPEN_AREAS 28u
+#define AHCI_SOFT_DEEPEN_WAVE  19u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -517,22 +517,37 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
             (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: ahci: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: ahci: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("ahci: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft retcode — Wave 18 retcode catalog */
+    /* Grep: ahci: soft retcode — Wave 19 retcode catalog */
     kprintf("ahci: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft deepen wave (Wave 18 stamp) */
+    /* Grep: ahci: soft deepen wave (Wave 19 stamp) */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: ahci: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("ahci: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+    /* Grep: ahci: soft retlane — Wave 19 return-lane catalog */
+    kprintf("ahci: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
     kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
             "skip=%u\n",

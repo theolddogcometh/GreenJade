@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 18 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 19 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -19,9 +19,9 @@
  *   pmm_core: soft total     — total immutable across soft exercise
  *   pmm_core: soft restore   — free/total restored after selftest
  *   pmm_core: soft path      — surface catalog + product non-claims
- *   pmm_core: soft geom      — Wave 18 page/span geometry
- *   pmm_core: soft return    — Wave 18 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=18 stamp + area count
+ *   pmm_core: soft geom      — Wave 19 page/span geometry
+ *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
+ *   pmm_core: soft deepen    — wave=19 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 18 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 18u
+/* Wave 19 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 19u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -41,7 +41,7 @@ static u64 g_u64Base;
 static u64 g_u64Limit;
 static unsigned g_cFree;
 static unsigned g_cTotal;
-/* Wave 18: soft inventory emission counter (observability only). */
+/* Wave 19: soft inventory emission counter (observability only). */
 static u32 g_cSoftInvLogs;
 
 void
@@ -136,7 +136,7 @@ soft_walk_free(void)
 }
 
 /*
- * Wave 18 greppable soft inventory dump (never hard-gates boot).
+ * Wave 19 greppable soft inventory dump (never hard-gates boot).
  * Safe after init; does not allocate. Prefix-stable: "pmm_core: soft …".
  * greppable: pmm_core: soft
  */
@@ -174,12 +174,12 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
             "(soft inventory only; not hierarchical pmm)\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft exclusive — Wave 18 exclusive deepen */
+    /* Grep: pmm_core: soft exclusive — Wave 19 exclusive deepen */
     kprintf("pmm_core: soft exclusive multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 order0=1 wave=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft open — Wave 18 open-lamp rollup */
+    /* Grep: pmm_core: soft open — Wave 19 open-lamp rollup */
     kprintf("pmm_core: soft open multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 wave=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
@@ -214,7 +214,7 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
             "order_max=0 product_tib=0 wave=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft geom (Wave 18 page/span geometry) */
+    /* Grep: pmm_core: soft geom (Wave 19 page/span geometry) */
     kprintf("pmm_core: soft geom page_size=%lu page_shift=%u "
             "span=0x%lx span_pages=%u base=0x%lx limit=0x%lx "
             "node_bytes=%u wave=%u\n",
@@ -225,13 +225,28 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
             (unsigned)sizeof(struct pmm_core_node),
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft return — Wave 18 API return surfaces */
+    /* Grep: pmm_core: soft return — Wave 19 API return surfaces */
     kprintf("pmm_core: soft return alloc_pa=1 free_void=1 free_count=1 "
             "total_count=1 selftest_bool=1 inv_ret=%u product_kernel=OPEN "
             "wave=%u\n",
             (fPass != 0) ? 1u : 0u, (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: pmm_core: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("pmm_core: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)PMM_CORE_SOFT_WAVE);
+    /* Grep: pmm_core: soft retlane — Wave 19 return-lane catalog */
+    kprintf("pmm_core: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)PMM_CORE_SOFT_WAVE);
     kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE, cAreas, cFreeSnap, cTotalSnap,
@@ -246,7 +261,7 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
 }
 
 /*
- * Soft deepen Wave 18: reject path, alignment/range, free-count steps,
+ * Soft deepen Wave 19: reject path, alignment/range, free-count steps,
  * LIFO reuse + double LIFO, payload survive (node header scrub only),
  * freelist chain walk, total immutable, restore pool counts + inventory.
  * Returns 1 on PASS, 0 on soft FAIL. Does not drain the whole pool.
@@ -263,7 +278,7 @@ gj_pmm_core_selftest(void)
     unsigned cTotal0;
     unsigned cChain;
     unsigned cAreas;
-    u32 u32Surf; /* soft surface bit lamps (Wave 18) */
+    u32 u32Surf; /* soft surface bit lamps (Wave 19) */
     volatile u32 *pMark;
     volatile u32 *pMark2;
     int fOk;
@@ -308,7 +323,7 @@ gj_pmm_core_selftest(void)
     if (g_u64Base >= GJ_PMM_CORE_PAGE_SIZE) {
         gj_pmm_core_free(g_u64Base - GJ_PMM_CORE_PAGE_SIZE);
     }
-    /* Mid-page unaligned inside pool (Wave 18 reject deepen). */
+    /* Mid-page unaligned inside pool (Wave 19 reject deepen). */
     if (g_u64Limit > g_u64Base + 1ul) {
         gj_pmm_core_free(g_u64Base + 1ul);
         gj_pmm_core_free(g_u64Base + (GJ_PMM_CORE_PAGE_SIZE / 2ul));
@@ -325,7 +340,7 @@ gj_pmm_core_selftest(void)
     cAreas++; /* reject */
 
     /*
-     * Wave 18 return surface: empty freelist returns 0 from alloc after
+     * Wave 19 return surface: empty freelist returns 0 from alloc after
      * temporary drain of one page is not done here (pool must stay live);
      * document non-zero alloc return shape via paA path below.
      * Soft-only: product hierarchical pmm remains separate.
@@ -452,7 +467,7 @@ gj_pmm_core_selftest(void)
     cAreas++; /* payload */
 
     /*
-     * Wave 18 double LIFO: free C (LIFO-B) then A; next two allocs must be
+     * Wave 19 double LIFO: free C (LIFO-B) then A; next two allocs must be
      * A then former-B (most recent free first). Stamp second payload mark.
      */
     pMark2 = (volatile u32 *)(void *)((gj_vaddr_t)paA + 128ul);
@@ -590,7 +605,7 @@ soft_out:
                 g_cFree, g_cTotal, (unsigned)PMM_CORE_SOFT_WAVE);
     }
 
-    /* Grep: pmm_core: soft return selftest — Wave 18 terminal return surface */
+    /* Grep: pmm_core: soft return selftest — Wave 19 terminal return surface */
     kprintf("pmm_core: soft return selftest_ret=%d surf=0x%x areas=%u "
             "product_kernel=OPEN wave=%u\n",
             fOk, u32Surf, cAreas, (unsigned)PMM_CORE_SOFT_WAVE);

@@ -18,7 +18,7 @@
  *   pop_order_split: exact order, else split a higher block and push
  *   sibling buddies back (rearranges nodes only — never invents frames).
  *
- * Wave 18 soft inventory deepen (extends Wave 13; greppable: pmm: soft):
+ * Wave 19 soft inventory deepen (extends Wave 13; greppable: pmm: soft):
  *   "pmm: soft honesty …"    explicit non-claims (not 1 TiB product; not bar3)
  *   "pmm: soft inventory …"  free/total, zones, pending, hierarchy snapshot
  *   "pmm: soft zones …"      low/high free frames + release state
@@ -35,15 +35,15 @@
  *   "pmm: soft hhdm …"       high-zone vs HHDM dependency (Wave 15)
  *   "pmm: soft lamps …"      composite readiness lamps (Wave 15)
  *   "pmm: soft OPEN …"       P-MEM-3 / product_tib / bar3 OPEN (Wave 15)
- *   "pmm: soft surfaces …"   Wave 18 return-surface catalog (surf bitmask)
+ *   "pmm: soft surfaces …"   Wave 19 return-surface catalog (surf bitmask)
  *   "pmm: soft ratio …"      Wave 17 free/total soft ratio lamps
  *   "pmm: soft sites …"      Wave 17 emission-site catalog
  *   "pmm: soft api …"        Wave 17 alloc/free surface return lamps
  *   "pmm: soft return rate …" Wave 17 free/total return-rate lamps
  *   "pmm: soft retcode …"    Wave 17 alloc/free retcode catalog
- *   pmm: soft return selftest — Wave 18 terminal return surface
- *   pmm: soft retmap     — Wave 18 return-surface map
- *   "pmm: soft deepen …"     wave=18 stamp + area count
+ *   pmm: soft return selftest — Wave 19 terminal return surface
+ *   pmm: soft retmap     — Wave 19 return-surface map
+ *   "pmm: soft deepen …"     wave=19 stamp + area count
  *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
  * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3;
  *          soft ≠ bar3; soft ≠ product.
@@ -75,13 +75,13 @@
 #define PMM_MAX_ORDER        9u
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
-/* Wave 18 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE        18u
+/* Wave 19 greppable soft inventory stamp (file-local; never product gate). */
+#define PMM_SOFT_WAVE        19u
 /* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
-#define PMM_SOFT_AREAS       24u
+#define PMM_SOFT_AREAS       26u
 
 /*
- * Wave 18 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * Bits mark greppable soft areas this unit emits — not product close.
  * greppable: pmm: soft surfaces
  */
@@ -479,7 +479,7 @@ log_tib_design_soft(void)
 }
 
 /**
- * Wave 18 greppable soft PMM inventory dump (product / smoke deepen).
+ * Wave 19 greppable soft PMM inventory dump (product / smoke deepen).
  * Prefix-stable markers (pmm: soft …):
  *   pmm: soft honesty    — explicit non-claims (not 1 TiB product; not bar3)
  *   pmm: soft inventory  — free/total, zones, pending, hierarchy snapshot
@@ -497,13 +497,13 @@ log_tib_design_soft(void)
  *   pmm: soft hhdm       — high-zone vs HHDM dependency (Wave 15)
  *   pmm: soft lamps      — composite readiness lamps (Wave 15)
  *   pmm: soft OPEN       — P-MEM-3 / product_tib / bar3 OPEN (Wave 15)
- *   pmm: soft surfaces   — Wave 18 return-surface catalog (surf bitmask)
+ *   pmm: soft surfaces   — Wave 19 return-surface catalog (surf bitmask)
  *   pmm: soft ratio      — Wave 17 free/total soft ratio lamps
  *   pmm: soft sites      — Wave 17 emission-site catalog
  *   pmm: soft api        — Wave 17 alloc/free surface return lamps
- *   pmm: soft return selftest — Wave 18 terminal return surface
- *   pmm: soft retmap     — Wave 18 return-surface map
- *   pmm: soft deepen     — wave=18 stamp + area count
+ *   pmm: soft return selftest — Wave 19 terminal return surface
+ *   pmm: soft retmap     — Wave 19 return-surface map
+ *   pmm: soft deepen     — wave=19 stamp + area count
  *   pmm: soft PASS | EMPTY | NONE | inventory PASS
  *
  * Never allocates. Safe after pmm_init (and later release/soak paths).
@@ -782,7 +782,7 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Wave 18: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: pmm: soft surfaces
      */
     kprintf("pmm: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -795,7 +795,7 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Wave 18: free/total soft ratio lamps (never product gate).
+     * Wave 19: free/total soft ratio lamps (never product gate).
      * Grep: pmm: soft ratio
      */
     kprintf("pmm: soft ratio free_pct=%u low_pct=%u free=%lu total=%lu "
@@ -809,7 +809,7 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Wave 18: emission-site catalog (via= string space).
+     * Wave 19: emission-site catalog (via= string space).
      * Grep: pmm: soft sites
      */
     kprintf("pmm: soft sites via=%s "
@@ -820,7 +820,7 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Wave 18: alloc/free surface return lamps (observability only).
+     * Wave 19: alloc/free surface return lamps (observability only).
      * Grep: pmm: soft api
      */
     kprintf("pmm: soft api alloc=1 free=1 alloc_pages=1 free_pages=1 "
@@ -855,26 +855,41 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Grep: pmm: soft deepen wave (Wave 18 stamp; areas = prior soft lines).
+     * Grep: pmm: soft deepen wave (Wave 19 stamp; areas = prior soft lines).
      * catalog=PMM_SOFT_AREAS is design high-water; areas is this emission.
      */
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: pmm: soft return selftest — Wave 18 terminal return surface */
+    /* Grep: pmm: soft return selftest — Wave 19 terminal return surface */
     kprintf("pmm: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
             (unsigned)PMM_SOFT_WAVE);
 
-    /* Grep: pmm: soft retmap — Wave 18 return-surface map */
+    /* Grep: pmm: soft retmap — Wave 19 return-surface map */
     kprintf("pmm: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)PMM_SOFT_WAVE);
 
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: pmm: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("pmm: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)PMM_SOFT_WAVE);
+    /* Grep: pmm: soft retlane — Wave 19 return-lane catalog */
+    kprintf("pmm: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)PMM_SOFT_WAVE);
     kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
             "free=%lu logs=%u surf=0x%x product_tib=0 pmem3=OPEN bar3=OPEN "
-            "(Wave 18 exclusive; soft; not 1TiB product; not bar3; "
+            "(Wave 19 exclusive; soft; not 1TiB product; not bar3; "
             "soft≠product)\n",
             (unsigned)PMM_SOFT_WAVE, cAreas, (unsigned)PMM_SOFT_AREAS,
             szWhere, szReady, (unsigned long)g_cFramesFree, g_cSoftInvLogs,

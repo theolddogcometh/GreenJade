@@ -10,12 +10,12 @@
  * pmm_release_high after success (main.c) for hierarchical free on large
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
- * Soft VMM inventory (Wave 18 exclusive deepen; Wave 10/13 base):
+ * Soft VMM inventory (Wave 19 exclusive deepen; Wave 10/13 base):
  *   - Live AS / COW table / HHDM / device UC / ensure_id snaps
  *   - Cumulative create/destroy/break/share/table + map/clone rejects
  *   - Peaks / layout / path honesty / soft PASS lamp
  *   - Wave 15: honesty / unmap / prot / pte / stats / OPEN / deepen
- *   - Wave 18: surfaces / tlb / anon / share return surfaces
+ *   - Wave 19: surfaces / tlb / anon / share return surfaces
  *   greppable: "vmm: soft …"
  *
  * Soft higher-half readiness inventory (Wave 15 deepen; Wave 13 base; soft only):
@@ -100,7 +100,7 @@ static u32               g_cEnsureIdCall;
 static u32               g_cEnsureIdFix;
 
 /*
- * Soft product inventory (Wave 18 exclusive deepen; extends Wave 13).
+ * Soft product inventory (Wave 19 exclusive deepen; extends Wave 13).
  * Cumulative unless noted live/peak. Diagnostics only — never hard-gate
  * product AS/COW/HHDM. greppable: vmm: soft
  */
@@ -177,12 +177,12 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE           18u
+#define GJ_VMM_SOFT_WAVE           19u
 /* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS          28u
+#define GJ_VMM_SOFT_AREAS          30u
 
 /*
- * Wave 18 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: vmm: soft surfaces
  */
 #define VMM_SOFT_SURF_HONESTY   (1u << 0)
@@ -557,7 +557,7 @@ higher_half_soft_inventory(void)
 }
 
 /**
- * Greppable soft VMM inventory (product / smoke; Wave 18 exclusive deepen).
+ * Greppable soft VMM inventory (product / smoke; Wave 19 exclusive deepen).
  *   vmm: soft honesty …
  *   vmm: soft inventory …
  *   vmm: soft as …
@@ -578,15 +578,15 @@ higher_half_soft_inventory(void)
  *   vmm: soft lamps …
  *   vmm: soft stats …
  *   vmm: soft OPEN …
- *   vmm: soft surfaces …  (Wave 18 return-surface catalog)
+ *   vmm: soft surfaces …  (Wave 19 return-surface catalog)
  *   vmm: soft tlb …       (Wave 17 TLB invalidate honesty OPEN)
  *   vmm: soft anon …      (Wave 17 anon cursor surface)
  *   vmm: soft share …     (Wave 17 kernel-half share surface)
- *   vmm: soft return selftest — Wave 18 terminal return surface
- *   vmm: soft retmap     — Wave 18 return-surface map
- *   vmm: soft return selftest — Wave 18 terminal return surface
- *   vmm: soft retmap     — Wave 18 return-surface map
- *   vmm: soft deepen wave=18 …
+ *   vmm: soft return selftest — Wave 19 terminal return surface
+ *   vmm: soft retmap     — Wave 19 return-surface map
+ *   vmm: soft return selftest — Wave 19 terminal return surface
+ *   vmm: soft retmap     — Wave 19 return-surface map
+ *   vmm: soft deepen wave=19 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -817,7 +817,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 18: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 19: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: vmm: soft surfaces
      */
     kprintf("vmm: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -829,7 +829,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 18: TLB invalidate honesty (product shootdown remains OPEN).
+     * Wave 19: TLB invalidate honesty (product shootdown remains OPEN).
      * Grep: vmm: soft tlb
      */
     kprintf("vmm: soft tlb invlpg=soft_local shootdown=OPEN "
@@ -839,7 +839,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 18: anon cursor surface (user VA bump allocator soft).
+     * Wave 19: anon cursor surface (user VA bump allocator soft).
      * Grep: vmm: soft anon
      */
     kprintf("vmm: soft anon next=0x%lx base=0x%lx end=0x%lx "
@@ -854,7 +854,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 18: kernel-half share surface (identity bridge residual).
+     * Wave 19: kernel-half share surface (identity bridge residual).
      * Grep: vmm: soft share
      */
     kprintf("vmm: soft share kernel_half=1 user_half_private=1 "
@@ -893,26 +893,41 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Grep: vmm: soft deepen wave (Wave 18 stamp; areas = prior soft lines).
+     * Grep: vmm: soft deepen wave (Wave 19 stamp; areas = prior soft lines).
      */
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: vmm: soft return selftest — Wave 18 terminal return surface */
+    /* Grep: vmm: soft return selftest — Wave 19 terminal return surface */
     kprintf("vmm: soft return selftest inv_ret=1 product_kernel=OPEN "
             "multi_server=0 bar3=0 rate_limited=0 wave=%u soft PASS\n",
             (unsigned)GJ_VMM_SOFT_WAVE);
 
-    /* Grep: vmm: soft retmap — Wave 18 return-surface map */
+    /* Grep: vmm: soft retmap — Wave 19 return-surface map */
     kprintf("vmm: soft retmap soft_inv=1 deepen=1 return_rate=1 retcode=1 "
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)GJ_VMM_SOFT_WAVE);
 
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: vmm: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("vmm: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    /* Grep: vmm: soft retlane — Wave 19 return-lane catalog */
+    kprintf("vmm: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_VMM_SOFT_WAVE);
     kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
             "product_tib=0 bar3=OPEN "
-            "(Wave 18 exclusive; soft only; not product; not bar3; "
+            "(Wave 19 exclusive; soft only; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)GJ_VMM_SOFT_WAVE, cAreas,
             (unsigned)GJ_VMM_SOFT_AREAS, g_cSoftInvLogs, fHhdm, fTemplate,

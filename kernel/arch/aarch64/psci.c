@@ -16,7 +16,7 @@
  * Soft conduit detail + recover-fault counters are greppable.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 18 exclusive; this unit only)
+ * Soft inventory deepen (Wave 19 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: psci soft …" under fixed areas:
  *   inventory | version | conduit | features | recover | gates | path | deepen
@@ -73,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 18 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE    18u
-#define PSCI_SOFT_AREAS   11u
+/* Wave 19 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE    19u
+#define PSCI_SOFT_AREAS   13u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -296,7 +296,7 @@ psci_conduit_soft_log(int fEl3)
 }
 
 /*
- * Wave 18 combined soft inventory under "aarch64: psci soft …".
+ * Wave 19 combined soft inventory under "aarch64: psci soft …".
  * Emits multi-area lamps + final soft PASS|FAIL. Never hard-gates.
  * Grep areas: inventory | version | conduit | features | recover | gates |
  *             path | deepen
@@ -400,7 +400,7 @@ psci_soft_inventory(int fFeatSoft)
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts(" (soft inventory; not bar3)\n");
 
-    /* Grep: aarch64: psci soft surf — Wave 18 gate bit lamps */
+    /* Grep: aarch64: psci soft surf — Wave 19 gate bit lamps */
     aarch64_uart_puts("aarch64: psci soft surf live=");
     aarch64_uart_put_hex((unsigned long)uGateLive);
     aarch64_uart_puts(" conduit=");
@@ -420,6 +420,21 @@ psci_soft_inventory(int fFeatSoft)
     aarch64_uart_puts("\n");
 
     /* Grep: aarch64: psci soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: aarch64: psci: soft retclass — Wave 19 return-class taxonomy */
+    aarch64_uart_puts("aarch64: psci: soft retclass ok|fail|inval|nodev|busy|nomem "
+                      "soft_only=1 product_gate=0 wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts(" (retclass taxonomy; Soft!=product; not bar3)\n");
+    /* Grep: aarch64: psci: soft retlane — Wave 19 return-lane catalog */
+    aarch64_uart_puts("aarch64: psci: soft retlane inv|selftest|rate|retcode|retmap|class "
+                      "product_kernel=OPEN soft_ne_product=1 wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts(" (retlane catalog; Soft!=product)\n");
     aarch64_uart_puts("aarch64: psci soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -434,13 +449,13 @@ psci_soft_inventory(int fFeatSoft)
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: psci soft exclusive — Wave 18 exclusive deepen */
+    /* Grep: aarch64: psci soft exclusive — Wave 19 exclusive deepen */
     aarch64_uart_puts("aarch64: psci soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: psci soft open — Wave 18 open-lamp rollup */
+    /* Grep: aarch64: psci soft open — Wave 19 open-lamp rollup */
     aarch64_uart_puts("aarch64: psci soft open multi_server=0 confine=0 "
                       "bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
@@ -452,7 +467,7 @@ psci_soft_inventory(int fFeatSoft)
         fOk = 1;
     }
 
-    /* Grep: aarch64: psci soft return — Wave 18 return surfaces */
+    /* Grep: aarch64: psci soft return — Wave 19 return surfaces */
     aarch64_uart_puts("aarch64: psci soft return inv_ret=");
     aarch64_uart_put_hex((unsigned long)(fOk != 0 ? 1ul : 0ul));
     aarch64_uart_puts(" product_kernel=OPEN wave=");
@@ -505,7 +520,7 @@ aarch64_psci_probe(void)
         aarch64_uart_puts("aarch64: psci soft SKIP (no firmware)\n");
         psci_conduit_soft_log(fEl3);
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
-        /* Wave 18: still emit multi-area inventory on SKIP path. */
+        /* Wave 19: still emit multi-area inventory on SKIP path. */
         fInvSoft = psci_soft_inventory(0);
         (void)fInvSoft;
         return;
@@ -557,7 +572,7 @@ aarch64_psci_probe(void)
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
     }
 
-    /* Wave 18 combined soft inventory under "aarch64: psci soft …". */
+    /* Wave 19 combined soft inventory under "aarch64: psci soft …". */
     fInvSoft = psci_soft_inventory(fFeatSoft);
     (void)fInvSoft;
 }

@@ -7,7 +7,7 @@
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
  *
- * Soft product inventory (Wave 18 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 19 exclusive deepen; this unit only):
  * greppable: "process: soft …"
  *   process: soft inventory …
  *   process: soft stats …
@@ -22,17 +22,17 @@
  *   process: soft jit …
  *   process: soft promise …
  *   process: soft path …
- *   process: soft return …  (Wave 18 return-path catalog)
- *   process: soft ret_surface … (Wave 18 terminal return classes)
- *   process: soft surface … (Wave 18 area catalog)
- *   process: soft deepen wave=18 …
+ *   process: soft return …  (Wave 19 return-path catalog)
+ *   process: soft ret_surface … (Wave 19 terminal return classes)
+ *   process: soft surface … (Wave 19 area catalog)
+ *   process: soft deepen wave=19 …
  *   process: soft PASS|PARTIAL
- *   Apple §13 bootstrap seal checklist (wave=18 stamp):
+ *   Apple §13 bootstrap seal checklist (wave=19 stamp):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=18 …
- *   G-PROC-5 death tallies (wave=18 stamp):
- *     process: death … / process: death deepen wave=18 …
+ *     process: bootstrap seal soft deepen wave=19 …
+ *   G-PROC-5 death tallies (wave=19 stamp):
+ *     process: death … / process: death deepen wave=19 …
  *
  * Honesty: soft inventory only — not product multi-server seal, not Apple §13
  * closed, not bar3. Death cleanup ≠ bootstrap seal product.
@@ -49,10 +49,10 @@
 #include <gj/thread.h>
 #include <gj/vmm.h>
 
-/* ---- Wave 18 exclusive soft inventory (this unit only) ------------------ */
-#define GJ_PROCESS_SOFT_WAVE   18u
-#define GJ_PROCESS_SOFT_AREAS  23u /* greppable inventory area count */
-#define GJ_SEAL_SOFT_WAVE      18u /* Apple s13 seal checklist stamp */
+/* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
+#define GJ_PROCESS_SOFT_WAVE   19u
+#define GJ_PROCESS_SOFT_AREAS  25u /* greppable inventory area count */
+#define GJ_SEAL_SOFT_WAVE      19u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
 /* Forward: wait table lives later; soft census snapshots used/zombie/free. */
@@ -136,7 +136,7 @@ process_soft_inc(u32 *pCtr)
 }
 
 /*
- * Greppable Wave 18 soft process inventory (product / smoke).
+ * Greppable Wave 19 soft process inventory (product / smoke).
  * Prefix-stable: "process: soft …". Never hard-gates.
  * greppable: process: soft
  */
@@ -265,7 +265,7 @@ process_soft_inventory(const char *szVia)
 
     /*
      * Grep: process: soft return
-     * Wave 18 return-path catalog — init/seal/pager/fault/wait/fork outcomes.
+     * Wave 19 return-path catalog — init/seal/pager/fault/wait/fork outcomes.
      * Soft ≠ multi-server seal / bar3 product gate. product_kernel=OPEN.
      */
     kprintf("process: soft return init_ok=%u init_null=%u root_ok=%u "
@@ -282,14 +282,14 @@ process_soft_inventory(const char *szVia)
             g_u32SoftForkAsFail, g_u32SoftDeathEnter, g_u32SoftConfineN,
             GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft ret_surface — Wave 18 terminal return classes */
+    /* Grep: process: soft ret_surface — Wave 19 terminal return classes */
     kprintf("process: soft ret_surface init=ok|null root=ok|fail|busy "
             "pager=set|fail fault=no_pager|wx|busy wait=reg_ok|reg_full|echild "
             "fork=ok|full|as_fail death confine product_kernel=OPEN "
             "areas=%u wave=%u\n",
             GJ_PROCESS_SOFT_AREAS, GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft surface — Wave 18 area catalog */
+    /* Grep: process: soft surface — Wave 19 area catalog */
     kprintf("process: soft surface inventory,stats,init,seal,confine,"
             "pager,fault,wait,death,fork,jit,promise,path,return,"
             "ret_surface,surface,deepen,PASS,bootstrap_seal,death_tallies,"
@@ -302,10 +302,25 @@ process_soft_inventory(const char *szVia)
             u32Free, u32Used, GJ_WAIT_SLOTS, GJ_FORK_STUBS,
             GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft retmap — Wave 18 return-surface map */
-    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+    /* Grep: process: soft retmap — Wave 19 return-surface map */
+    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
 
     /* Grep: process: soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: process: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("process: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)GJ_PROCESS_SOFT_WAVE);
+    /* Grep: process: soft retlane — Wave 19 return-lane catalog */
+    kprintf("process: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_PROCESS_SOFT_WAVE);
     kprintf("process: soft deepen wave=%u areas=%u via=%s init_ok=%u "
             "root_ok=%u confine=%u pager_set=%u fault=%u wait_reg=%u "
             "death=%u fork_ok=%u logs=%u "
@@ -595,6 +610,21 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
      * Wave 13 deepen stamp + emit tallies.
      * Grep: process: bootstrap seal soft deepen | process: bootstrap seal soft tallies
      */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: process: bootstrap seal: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("process: bootstrap seal: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)GJ_PROCESS_SOFT_WAVE);
+    /* Grep: process: bootstrap seal: soft retlane — Wave 19 return-lane catalog */
+    kprintf("process: bootstrap seal: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_PROCESS_SOFT_WAVE);
     kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
             "logs=%u emits=%llu rate_limited=%llu "
             "(not product-complete; no bar3)\n",

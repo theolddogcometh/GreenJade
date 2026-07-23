@@ -11,9 +11,9 @@
  * When the ring is full the oldest event is dropped — latency over fidelity
  * for the interim keyboard/pointer path. Drop count is retained for STATS.
  *
- * Soft input hub inventory (Wave 18 exclusive deepen; this unit only):
+ * Soft input hub inventory (Wave 19 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 18 return-surface map (ok|fail|… classes)
+ *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Ring capacity / live pending / peak / free + drop-oldest policy
  *   - Fan-in src tallies (virtio live + soft inject slot)
  *   - Poll: enter / nodev / ready / drain / idle / cap-hit / burst peaks
@@ -42,8 +42,8 @@
 #define GJ_INPUT_RING 64u
 /* Cap one poll burst so a stuck backend cannot spin the door forever. */
 #define GJ_INPUT_POLL_MAX 256u
-/* Wave 18 deepen stamp (file-local; never hard-gates). */
-#define GJ_INPUT_SOFT_WAVE 18u
+/* Wave 19 deepen stamp (file-local; never hard-gates). */
+#define GJ_INPUT_SOFT_WAVE 19u
 
 static struct gj_input_event g_aRing[GJ_INPUT_RING];
 static u32 g_u32Head;
@@ -56,7 +56,7 @@ static u32 g_aPushedSrc[GJ_INPUT_SRC_MAX];
 static int g_fReady;
 
 /*
- * Soft product inventory (Wave 18 exclusive deepen).
+ * Soft product inventory (Wave 19 exclusive deepen).
  * Cumulative unless noted live/peak. Never hard-gates.
  * greppable: input_hub: soft … / input: soft …
  */
@@ -161,7 +161,7 @@ soft_note_ready(int fNow)
 
 /**
  * Greppable soft input hub inventory (product / smoke).
- * Twin prefixes so either agent grep works (Wave 18 deepen):
+ * Twin prefixes so either agent grep works (Wave 19 deepen):
  *   input_hub: soft honesty|inventory|ring|fan-in|poll|push|pop|enqueue|
  *              drop|lazy|ready|ev|stats|query|ratio|balance|peaks|
  *              capacity|wrap|headroom|surface|terminal|catalog|path|
@@ -264,7 +264,7 @@ soft_inventory_log(void)
 
     /*
      * Primary prefix: input_hub: soft …
-     * Wave 18 deepen adds headroom/surface/terminal + prior surfaces.
+     * Wave 19 deepen adds headroom/surface/terminal + prior surfaces.
      */
     /* Grep: input_hub: soft honesty */
     kprintf("input_hub: soft honesty interim_ring=1 desktop_product=OPEN "
@@ -410,14 +410,14 @@ soft_inventory_log(void)
             g_u32SoftSaneRepair);
     cAreas++;
 
-    /* Grep: input_hub: soft headroom — Wave 18 live slack lamps. */
+    /* Grep: input_hub: soft headroom — Wave 19 live slack lamps. */
     kprintf("input_hub: soft headroom free=%u pending=%u peak=%u "
             "ring=%u occ_pct=%u peak_occ=%u drop_bp=%u wave=%u\n",
             u32Free, u32Pending, u32Peak, GJ_INPUT_RING, u32OccPct,
             g_u32SoftPeakOccPct, u32DropRatio, GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft surface — Wave 18 surface bit lamps. */
+    /* Grep: input_hub: soft surface — Wave 19 surface bit lamps. */
     kprintf("input_hub: soft surface ready=%u virtio_live=%u pending=%u "
             "pushed=%u popped=%u dropped=%u enqueue=%u "
             "surf=0x%x wave=%u\n",
@@ -435,7 +435,7 @@ soft_inventory_log(void)
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft terminal — Wave 18 outcome rollup. */
+    /* Grep: input_hub: soft terminal — Wave 19 outcome rollup. */
     kprintf("input_hub: soft terminal push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u soft %s wave=%u\n",
             g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
@@ -448,7 +448,7 @@ soft_inventory_log(void)
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
             "catalog,return,path,deepen "
-            "wave=%u areas_expect=26 soft PASS\n",
+            "wave=%u areas_expect=28 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
@@ -460,7 +460,7 @@ soft_inventory_log(void)
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft return — Wave 18 API return surfaces */
+    /* Grep: input_hub: soft return — Wave 19 API return surfaces */
     kprintf("input_hub: soft return push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u ready=%u "
             "product_desktop=OPEN wave=%u\n",
@@ -469,10 +469,25 @@ soft_inventory_log(void)
             g_u32SoftDropOld, u32Ready, GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft retmap — Wave 18 return-surface map */
-    kprintf("input_hub: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+    /* Grep: input_hub: soft retmap — Wave 19 return-surface map */
+    kprintf("input_hub: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
 
-    /* Grep: input_hub: soft deepen — Wave 18 stamp + area count. */
+    /* Grep: input_hub: soft deepen — Wave 19 stamp + area count. */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: input_hub: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("input_hub: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)GJ_INPUT_SOFT_WAVE);
+    /* Grep: input_hub: soft retlane — Wave 19 return-lane catalog */
+    kprintf("input_hub: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_INPUT_SOFT_WAVE);
     kprintf("input_hub: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u pushed=%u pop_hit=%u enqueue=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",
@@ -614,13 +629,13 @@ soft_inventory_log(void)
             u32Head, g_u32SoftHeadWrap, g_u32SoftEnqFull, g_u32SoftDropOld,
             g_u32SoftSaneRepair);
 
-    /* Grep: input: soft headroom (Wave 18 twin) */
+    /* Grep: input: soft headroom (Wave 19 twin) */
     kprintf("input: soft headroom free=%u pending=%u peak=%u "
             "ring=%u occ_pct=%u peak_occ=%u drop_bp=%u wave=%u\n",
             u32Free, u32Pending, u32Peak, GJ_INPUT_RING, u32OccPct,
             g_u32SoftPeakOccPct, u32DropRatio, GJ_INPUT_SOFT_WAVE);
 
-    /* Grep: input: soft surface (Wave 18 twin) */
+    /* Grep: input: soft surface (Wave 19 twin) */
     kprintf("input: soft surface ready=%u virtio_live=%u pending=%u "
             "pushed=%u popped=%u dropped=%u enqueue=%u "
             "surf=0x%x wave=%u\n",
@@ -637,7 +652,7 @@ soft_inventory_log(void)
                 ((g_u32SoftEnqueue != 0u) ? (1u << 6) : 0u),
             GJ_INPUT_SOFT_WAVE);
 
-    /* Grep: input: soft terminal (Wave 18 twin) */
+    /* Grep: input: soft terminal (Wave 19 twin) */
     kprintf("input: soft terminal push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u soft %s wave=%u\n",
             g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
@@ -649,7 +664,7 @@ soft_inventory_log(void)
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
             "catalog,return,path,deepen "
-            "wave=%u areas_expect=26 soft PASS\n",
+            "wave=%u areas_expect=28 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
 
     /* Grep: input: soft path */
@@ -659,7 +674,7 @@ soft_inventory_log(void)
             GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX,
             GJ_INPUT_SOFT_WAVE);
 
-    /* Grep: input: soft return — Wave 18 twin return surfaces */
+    /* Grep: input: soft return — Wave 19 twin return surfaces */
     kprintf("input: soft return push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u ready=%u "
             "product_desktop=OPEN wave=%u\n",
@@ -668,6 +683,21 @@ soft_inventory_log(void)
             g_u32SoftDropOld, u32Ready, GJ_INPUT_SOFT_WAVE);
 
     /* Grep: input: soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: input: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("input: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)GJ_INPUT_SOFT_WAVE);
+    /* Grep: input: soft retlane — Wave 19 return-lane catalog */
+    kprintf("input: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_INPUT_SOFT_WAVE);
     kprintf("input: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u pushed=%u pop_hit=%u enqueue=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",

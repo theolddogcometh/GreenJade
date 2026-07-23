@@ -8,7 +8,7 @@
  * Soft deepen: greppable #PF COW path logs + trap soft stats (trap.h).
  * Keep vmm "COW break" strings untouched; except_port_deliver path unchanged.
  *
- * Soft trap inventory (Wave 13 base + Wave 18 exclusive complementary deepen;
+ * Soft trap inventory (Wave 13 base + Wave 19 exclusive complementary deepen;
  * this unit only):
  *   Lifetime classify / #PF COW / PE32 / except-or-kill tallies (gj_trap_stats).
  *   File-local resume/halt/last-frame/rate lamps (never hard-gate).
@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    18u
+#define TRAP_SOFT_WAVE    19u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -267,10 +267,10 @@ read_cr2(void)
  *   trap: soft halt       — kernel / null frame halt entries
  *   trap: soft rate       — milestone / quiet / force / skip rollup
  *   trap: soft path       — product claim + honesty
- *   trap: soft deepen     — Wave 18 stamp line
+ *   trap: soft deepen     — Wave 19 stamp line
  * Wave 15 complementary (kept; never reshape primary):
  *   trap: soft honesty / api / frame / vec / mile
- * Wave 16 complementary (kept) + Wave 18 return surfaces:
+ * Wave 16 complementary (kept) + Wave 19 return surfaces:
  *   trap: soft exclusive / claim / ratio
  *
  * Never allocates; never hard-gates. Diagnostics only (wrap OK).
@@ -583,22 +583,37 @@ trap_soft_inventory_log(void)
             (unsigned)TRAP_SOFT_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: trap: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: trap: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("trap: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /* Grep: trap: soft retcode — Wave 18 retcode catalog */
+    /* Grep: trap: soft retcode — Wave 19 retcode catalog */
     kprintf("trap: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)TRAP_SOFT_WAVE);
 
     /* Grep: trap: soft deepen */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: trap: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("trap: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)TRAP_SOFT_WAVE);
+    /* Grep: trap: soft retlane — Wave 19 return-lane catalog */
+    kprintf("trap: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)TRAP_SOFT_WAVE);
     kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"

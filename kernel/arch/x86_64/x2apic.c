@@ -10,7 +10,7 @@
  * First few ICR writes are rate-limited to serial (greppable).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 18 exclusive deepen) — greppable "x2apic: soft …"
+ * Soft inventory (Wave 19 exclusive deepen) — greppable "x2apic: soft …"
  * -------------------------------------------------------------------------
  * Pure observation; never hard-gates IPI delivery. Counters wrap OK.
  * Soft ≠ full ICR/timer replace product (timer.c / apic.c product paths
@@ -45,9 +45,9 @@
  * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *   x2apic: soft exclusive   — exclusive=1 unit stamp + wave
  *   x2apic: soft ratio       — probe/enable/icr/eoi path ratios
- *   x2apic: soft return rate — Wave 18 ok/fail rate lamps
- *   x2apic: soft retcode    — Wave 18 retcode catalog
- *   x2apic: soft deepen      — wave=18 areas stamp
+ *   x2apic: soft return rate — Wave 19 ok/fail rate lamps
+ *   x2apic: soft retcode    — Wave 19 retcode catalog
+ *   x2apic: soft deepen      — wave=19 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   x2apic: soft return      — Wave 17 API return surfaces (kept)
  *   x2apic: soft return selftest — Wave 17 terminal return surface (kept)
@@ -85,10 +85,10 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 18 exclusive soft deepen stamp (greppable wave=18). */
-#define X2APIC_SOFT_DEEPEN_WAVE  18u
+/* Wave 19 exclusive soft deepen stamp (greppable wave=19). */
+#define X2APIC_SOFT_DEEPEN_WAVE  19u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
-#define X2APIC_SOFT_DEEPEN_AREAS 33u
+#define X2APIC_SOFT_DEEPEN_AREAS 35u
 
 /* Soft ICR field masks (SDM ICR; decode only — never rewrites product ICR). */
 #define X2APIC_SOFT_ICR_DM_SHIFT     11u /* destination mode (phys/logical) */
@@ -766,22 +766,37 @@ x2apic_soft_inventory(void)
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: x2apic: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: x2apic: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("x2apic: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft retcode — Wave 18 retcode catalog */
+    /* Grep: x2apic: soft retcode — Wave 19 retcode catalog */
     kprintf("x2apic: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft deepen wave (Wave 18 stamp) */
+    /* Grep: x2apic: soft deepen wave (Wave 19 stamp) */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: x2apic: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("x2apic: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
+    /* Grep: x2apic: soft retlane — Wave 19 return-lane catalog */
+    kprintf("x2apic: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
     kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

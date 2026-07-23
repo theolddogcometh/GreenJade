@@ -35,9 +35,9 @@
  *   idt: soft exclusive … — exclusive=1 unit stamp + wave
  *   idt: soft claim …     — product claim bounds (exc32+int80+gates)
  *   idt: soft ratio …     — install/reject/verify/band path ratios
- *   idt: soft return rate — Wave 18 ok/fail rate lamps
- *   idt: soft retcode    — Wave 18 retcode catalog
- *   idt: soft deepen …    — wave=18 areas stamp
+ *   idt: soft return rate — Wave 19 ok/fail rate lamps
+ *   idt: soft retcode    — Wave 19 retcode catalog
+ *   idt: soft deepen …    — wave=19 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   idt: soft return …    — Wave 17 API return surfaces (kept)
  *   idt: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -106,7 +106,7 @@ static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define IDT_SOFT_WAVE 18u
+#define IDT_SOFT_WAVE 19u
 
 /*
  * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
@@ -797,22 +797,37 @@ idt_soft_inventory_print(void)
             (unsigned)IDT_SOFT_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: idt: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: idt: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("idt: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)IDT_SOFT_WAVE);
 
-    /* Grep: idt: soft retcode — Wave 18 retcode catalog */
+    /* Grep: idt: soft retcode — Wave 19 retcode catalog */
     kprintf("idt: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)IDT_SOFT_WAVE);
 
-    /* Grep: idt: soft deepen — Wave 18 stamp + area catalog */
+    /* Grep: idt: soft deepen — Wave 19 stamp + area catalog */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: idt: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("idt: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)IDT_SOFT_WAVE);
+    /* Grep: idt: soft retlane — Wave 19 return-lane catalog */
+    kprintf("idt: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)IDT_SOFT_WAVE);
     kprintf("idt: soft deepen wave=%u areas="
             "inventory,present,layout,contract,bands,type,span,"
             "vectors,entry,last,stats,path,program,verify,"

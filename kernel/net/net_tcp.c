@@ -20,9 +20,9 @@
  *   segs = TX segments + RX segments seen by net_tcp_input
  *   rtx  = successful last-segment retransmits from net_tcp_poll
  *
- * Soft inventory (Wave 18 exclusive deepen; this unit only):
+ * Soft inventory (Wave 19 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
- *   - soft retmap: Wave 18 return-surface map (ok|fail|… classes)
+ *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   Lifetime path / ring / multi-seg / rtx / TW tallies (struct tcp_soft).
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
  *     net: tcp soft inventory …  — live table + caps + wave
@@ -41,7 +41,7 @@
  *     net: tcp soft stats …      — aggregate path tallies
  *     net: tcp soft path …       — honesty: soft inventory ≠ bar3
  *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
- *     net: tcp soft deepen …     — wave=18 stamp + area count
+ *     net: tcp soft deepen …     — wave=19 stamp + area count
  *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
  *     net: tcp soft PASS …
  *   Twin prefix also emitted: "net_tcp: soft …".
@@ -81,11 +81,11 @@
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
-/* Wave 18 exclusive soft deepen stamp (greppable wave=18). */
-#define TCP_SOFT_DEEPEN_WAVE  18u
+/* Wave 19 exclusive soft deepen stamp (greppable wave=19). */
+#define TCP_SOFT_DEEPEN_WAVE  19u
 /* inventory sock bind life xfer input poll ring multi state capacity
  * catalog outcome stats path headroom surface ratio PASS slot deepen = 21 */
-#define TCP_SOFT_DEEPEN_AREAS 23u
+#define TCP_SOFT_DEEPEN_AREAS 25u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -157,7 +157,7 @@ static u16 g_u16IpId;
 /*
  * Soft product inventory counters — wrap OK; diagnostics only; never
  * hard-gate product paths. Grep: net: tcp soft / net_tcp: soft
- * Wave 18 deepen: multi-line path dumps, capacity/catalog/outcome,
+ * Wave 19 deepen: multi-line path dumps, capacity/catalog/outcome,
  * rate-limit lamps, deepen stamp, PASS. Soft ≠ bar3.
  */
 struct tcp_soft {
@@ -332,7 +332,7 @@ tcp_soft_event_ok(void)
 }
 
 /*
- * Greppable soft product inventory + path dumps (Wave 18 exclusive).
+ * Greppable soft product inventory + path dumps (Wave 19 exclusive).
  * Prefix-stable: "net: tcp soft …" and twin "net_tcp: soft …".
  * fForce: include per-live-slot detail (init / emfile / stats / rtx-poll).
  * Cadence dumps skip slots after TCP_SOFT_SLOT_LOGS to avoid flood.
@@ -722,7 +722,7 @@ tcp_soft_print(int fForce)
 		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
 		u32Wave);
 
-	/* Grep: net: tcp soft headroom — Wave 18 live slack lamps. */
+	/* Grep: net: tcp soft headroom — Wave 19 live slack lamps. */
 	kprintf("net: tcp soft headroom free=%u used=%u max=%u estab=%u "
 		"listen=%u hwm=%llu rtx_live=%u wave=%u\n",
 		cFree, cUsed, (unsigned)TCP_MAX, cEstab, cListen,
@@ -734,7 +734,7 @@ tcp_soft_print(int fForce)
 		cFree, cUsed, (unsigned)TCP_MAX, cEstab,
 		(unsigned long long)s.u64HwmUsed, u32Wave);
 
-	/* Grep: net: tcp soft surface — Wave 18 surface bit lamps. */
+	/* Grep: net: tcp soft surface — Wave 19 surface bit lamps. */
 	kprintf("net: tcp soft surface used=%u estab=%u listen=%u loop=%u "
 		"multi=%u rtx=%u surf=0x%x wave=%u\n",
 		cUsed != 0u ? 1u : 0u, cEstab != 0u ? 1u : 0u,
@@ -776,7 +776,7 @@ tcp_soft_print(int fForce)
 			u32OccBp, u32EstabBp, cUsed, cEstab, u32Wave);
 	}
 
-	/* Grep: net: tcp soft return — Wave 18 API return surfaces */
+	/* Grep: net: tcp soft return — Wave 19 API return surfaces */
 	kprintf("net: tcp soft return sock_ok=%llu sock_fail=%llu "
 		"bind_ok=%llu listen_ok=%llu conn_ok=%llu accept_ok=%llu "
 		"send_ok=%llu recv_ok=%llu close_ok=%llu product_tcp=OPEN wave=%u\n",
@@ -793,7 +793,22 @@ tcp_soft_print(int fForce)
 		(unsigned long long)s.u64SendOk, (unsigned long long)s.u64RecvOk,
 		u32Wave);
 
-	/* Grep: net: tcp soft deepen (Wave 18 stamp) */
+	/* Grep: net: tcp soft deepen (Wave 19 stamp) */
+	/*
+	 * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+	 * Return surfaces only — soft inventory; never hard-gates product paths.
+	 * Soft≠product; not bar3.
+	 */
+	/* Grep: net: tcp: soft retclass — Wave 19 return-class taxonomy */
+	kprintf("net: tcp: soft retclass ok|fail|inval|nodev|busy|nomem "
+	        "soft_only=1 product_gate=0 wave=%u "
+	        "(retclass taxonomy; Soft≠product; not bar3)\n",
+	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
+	/* Grep: net: tcp: soft retlane — Wave 19 return-lane catalog */
+	kprintf("net: tcp: soft retlane inv|selftest|rate|retcode|retmap|class "
+	        "product_kernel=OPEN soft_ne_product=1 wave=%u "
+	        "(retlane catalog; Soft≠product)\n",
+	        (unsigned)TCP_SOFT_DEEPEN_WAVE);
 	kprintf("net: tcp soft deepen wave=%u areas=%u used=%u estab=%u "
 		"ops=%llu multi=%llu logs=%u skip=%llu "
 		"event_n=%u event_skip=%llu ok=1 skip_hard=0\n",
@@ -803,8 +818,8 @@ tcp_soft_print(int fForce)
 		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
 		(unsigned long long)s.u64EventSkip);
 
-	/* Grep: net_tcp: soft retmap — Wave 18 return-surface map */
-	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=18\n");
+	/* Grep: net_tcp: soft retmap — Wave 19 return-surface map */
+	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
 
 	/* Grep: net_tcp: soft deepen (twin) */
 	kprintf("net_tcp: soft deepen wave=%u areas=%u used=%u ops=%llu "

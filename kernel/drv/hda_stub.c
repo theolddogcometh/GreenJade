@@ -35,9 +35,9 @@
  *   hda: soft stats       — probe/smoke/inventory emission tallies
  *   hda: soft path        — honesty: kernel soft ≠ Steam/game audio
  *   hda: soft honesty     — bar3/Steam/PipeWire non-claims
- *   hda: soft return rate — Wave 18 ok/fail rate lamps
- *   hda: soft retcode    — Wave 18 retcode catalog
- *   hda: soft deepen      — wave=18 areas stamp
+ *   hda: soft return rate — Wave 19 ok/fail rate lamps
+ *   hda: soft retcode    — Wave 19 retcode catalog
+ *   hda: soft deepen      — wave=19 areas stamp
  *   hda: soft ratio       — Wave 16 stream occupancy lamps
  *   hda: soft headroom    — Wave 16 free stream slots
  *   hda: soft surface     — Wave 16 area catalog
@@ -162,8 +162,8 @@ static u32 g_u32SoftInventoryLogs;
 static u32 g_u32SoftProbeLogs;
 static u32 g_u32SoftSmokeLogs;
 /* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define HDA_SOFT_DEEPEN_AREAS 31u
-#define HDA_SOFT_DEEPEN_WAVE  18u
+#define HDA_SOFT_DEEPEN_AREAS 33u
+#define HDA_SOFT_DEEPEN_WAVE  19u
 
 static void hda_soft_inventory_log(const char *szVia);
 
@@ -2459,22 +2459,37 @@ hda_soft_inventory_log(const char *szVia)
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
     /*
-     * ---- Wave 18 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      */
-    /* Grep: hda: soft return rate — Wave 18 ok/fail rate lamps */
+    /* Grep: hda: soft return rate — Wave 19 ok/fail rate lamps */
     kprintf("hda: soft return rate soft_inv=1 selftest=1 retmap=1 "
             "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u "
             "(return rate; Soft≠product; not bar3)\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft retcode — Wave 18 retcode catalog */
+    /* Grep: hda: soft retcode — Wave 19 retcode catalog */
     kprintf("hda: soft retcode ok=1 fail=1 inval=1 busy=1 "
             "selftest=1 retmap=1 product=OPEN soft_ne_product=1 wave=%u "
             "(retcode catalog; Soft≠product)\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft deepen wave (Wave 18 stamp) */
+    /* Grep: hda: soft deepen wave (Wave 19 stamp) */
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: hda: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("hda: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+    /* Grep: hda: soft retlane — Wave 19 return-lane catalog */
+    kprintf("hda: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
     kprintf("hda: soft deepen wave=%u areas=%u via=%s present=%u mmio=%u "
             "hw_corb=%u stream_dma=%u codec_prog=%u open=%u run=%u "
             "ok=1 skip=0\n",
@@ -2776,6 +2791,21 @@ hda_multi_stream_smoke(void)
     (void)hda_codec_set_amp(GJ_HDA_NID_DAC, 0x7f, 0);
     kprintf("hda: multi-stream mixer PASS streams=%u master=%u\n",
             GJ_HDA_STREAMS_MAX, hda_mixer_master());
+    /*
+     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: hda: soft retclass — Wave 19 return-class taxonomy */
+    kprintf("hda: soft retclass ok|fail|inval|nodev|busy|nomem "
+            "soft_only=1 product_gate=0 wave=%u "
+            "(retclass taxonomy; Soft≠product; not bar3)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+    /* Grep: hda: soft retlane — Wave 19 return-lane catalog */
+    kprintf("hda: soft retlane inv|selftest|rate|retcode|retmap|class "
+            "product_kernel=OPEN soft_ne_product=1 wave=%u "
+            "(retlane catalog; Soft≠product)\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
     kprintf("hda: soft deepen PASS wave=%u areas=%u codec_hits=%u "
             "mix_underrun=%u\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE, (unsigned)HDA_SOFT_DEEPEN_AREAS,

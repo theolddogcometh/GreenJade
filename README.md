@@ -5,7 +5,7 @@
 | | |
 |--|--|
 | **Codename** | GreenJade |
-| **Priorities** | **1. Security → 2. Performance → 3. Portability → 4. Readability** (**unchanged** by games) |
+| **Priorities** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
 | **Product** | General-purpose **desktop** |
 | **Adoption games** | **Steam Deck Top 50** via Proton ([docs/PROTON_PERSONALITY.md](docs/PROTON_PERSONALITY.md)) — when installable on **real hardware**, install Steam and run the Top 50 matrix |
 | **Firmware** | **UEFI** (primary) |

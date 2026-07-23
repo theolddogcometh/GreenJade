@@ -8,6 +8,20 @@
  *
  * SEND/RECV bounce is NET_XFER_MAX (4096) in net_door.c — must stay large
  * enough for multi-seg TCP bulk (e.g. 3000 B > MSS) in one door call.
+ *
+ * Soft paths (bring-up / product smoke):
+ *   CLAIM is idempotent for the same 32-bit token (reclaim soft);
+ *   a different token returns BUSY. RELEASE when free is soft 0.
+ *   Virtio queue / ring ops are allowed without claim for smokes;
+ *   netstackd prefers the owned path.
+ *   EXPORT/MAP/KICK soft-skip with NODEV when virtio-net is absent.
+ *   RING_STATE always succeeds (free=0 / pushes=0 without device).
+ *   MAP records last user VA; re-MAP of the same VA is a soft reclaim
+ *   of the map window (re-install PTEs, re-export).
+ *
+ * Greppable product markers (main / netstackd; keep ABI stable):
+ *   net_door: PASS / ownership PASS / socket path PASS /
+ *   virtio queue PASS / ring map PASS / avail push PASS / user ring PASS
  */
 #pragma once
 
@@ -32,9 +46,12 @@
 #define GJ_NET_OP_CLOSE  8u
 /** listen: arg1=fd */
 #define GJ_NET_OP_LISTEN 9u
-/** claim: arg1=token — netstackd ownership */
+/**
+ * claim: arg1=non-zero 32-bit token — netstackd ownership.
+ * Soft reclaim: same token re-CLAIM is idempotent.
+ */
 #define GJ_NET_OP_CLAIM  10u
-/** release: arg1=token */
+/** release: arg1=token (must match when owned; soft 0 when free) */
 #define GJ_NET_OP_RELEASE 11u
 /**
  * Virtio queue (owned path preferred; allowed without claim for bring-up):
@@ -45,11 +62,17 @@
 #define GJ_NET_OP_VIRTIO_TX  12u
 #define GJ_NET_OP_VIRTIO_RX  13u
 #define GJ_NET_OP_QUEUE_INFO 14u
-/** EXPORT_RING: arg1=which(0=rx,1=tx) arg2=user ptr to gj_virtq_export */
+/**
+ * EXPORT_RING: arg1=which(0=rx,1=tx) arg2=user ptr to gj_virtq_export
+ * Soft: NODEV when virtio-net is absent.
+ */
 #define GJ_NET_OP_EXPORT_RING 15u
-/** MAP_RING: arg1=which arg2=user VA base (page-aligned) arg3=export out ptr */
+/**
+ * MAP_RING: arg1=which arg2=user VA base (page-aligned) arg3=export out ptr
+ * Soft: NODEV without device; re-MAP same VA is map reclaim soft.
+ */
 #define GJ_NET_OP_MAP_RING    16u
-/** KICK: arg1=which — notify device of available buffers */
+/** KICK: arg1=which — notify device of available buffers (NODEV soft-skip) */
 #define GJ_NET_OP_KICK        17u
 /**
  * AVAIL_PUSH (UDX ring programming):
@@ -59,7 +82,11 @@
 #define GJ_NET_OP_AVAIL_PUSH  18u
 /** USED_REAP: arg1=which arg2=max → reaped count */
 #define GJ_NET_OP_USED_REAP   19u
-/** RING_STATE: arg1=user u32[4] {free_tx, free_rx, avail_pushes, vq_calls} */
+/**
+ * RING_STATE: arg1=user u32[4] {free_tx, free_rx, avail_pushes, vq_calls}
+ * Soft: always fills zeros when virtio-net is absent (no hard fail).
+ * aS[2] packs high16=user_ring_pushes, low16=total avail pushes.
+ */
 #define GJ_NET_OP_RING_STATE  20u
 /**
  * MAP_DMA: arg1=user VA base (page-aligned) arg2=user ptr to gj_virtq_dma_export
@@ -91,4 +118,16 @@
 
 void net_door_init(void);
 i64  net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3);
+/** Non-zero when a userspace owner token is held. */
 int  net_door_owned(void);
+/** Current owner token, or 0 if kernel interim owns policy. */
+u32  net_door_owner_token(void);
+/** Last successful MAP_RING user VA base, or 0 if never mapped. */
+u64  net_door_ring_map_va(void);
+/** Soft path: EXPORT/MAP/KICK/RING_STATE call count. */
+u32  net_door_ring_calls(void);
+/**
+ * Soft diagnostics: first claims + idempotent reclaims.
+ * greppable: net_door claim soft
+ */
+u32  net_door_claim_count(void);

@@ -9,7 +9,9 @@
  *   X25519           — RFC 7748 Montgomery ladder
  *   HMAC-SHA256      — RFC 2104 over SHA-256
  *   ChaCha20         — RFC 8439 quarter-round stream cipher
+ *   Poly1305         — RFC 8439 one-time authenticator (soft AEAD leg)
  *   Host identity    — seeded product key + HMAC-SHA256 of exchange hash H
+ *   Soft self-check  — RFC 8439 §2.5.2 Poly1305 test vector at hostkey init
  *
  * Used by freestanding KEX: curve25519-sha256@libssh.org, NEWKEYS key
  * derivation (RFC 4253 §7.2), and post-NEWKEYS channel encrypt/MAC.
@@ -388,17 +390,33 @@ gj_ssh_x25519(uint8_t *q, const uint8_t *n, const uint8_t *p)
 	pack25519(q, a);
 }
 
-/* ---- HMAC-SHA256 (RFC 2104) --------------------------------------------- */
+/* ---- Constant-time helpers + wipe --------------------------------------- */
 
 /* Best-effort wipe of stack secrets (no libc; pure C). */
 static void
 bytes_wipe(uint8_t *p, size_t n)
 {
-	size_t i;
+	size_t iByte;
 
-	for (i = 0; i < n; i++) {
-		p[i] = 0;
+	for (iByte = 0; iByte < n; iByte++) {
+		p[iByte] = 0;
 	}
+}
+
+/*
+ * Constant-time equality of two byte strings (no early exit).
+ * Returns 1 if equal, 0 otherwise. Used for MAC / Poly1305 tags.
+ */
+int
+gj_ssh_memeq_ct(const uint8_t *pA, const uint8_t *pB, size_t cb)
+{
+	size_t iByte;
+	uint8_t uDiff = 0;
+
+	for (iByte = 0; iByte < cb; iByte++) {
+		uDiff |= (uint8_t)(pA[iByte] ^ pB[iByte]);
+	}
+	return uDiff == 0;
 }
 
 void
@@ -538,6 +556,300 @@ gj_ssh_chacha20_xor(const uint8_t key[32], const uint8_t nonce[12],
 	}
 }
 
+/* ---- Poly1305 (RFC 8439 §2.5) ------------------------------------------- */
+
+/*
+ * Soft multiprecision helpers for Poly1305 over p = 2^130 - 5.
+ * Little-endian 32-bit limbs; values fit in 5 limbs during multiply.
+ */
+static void
+poly_add(uint32_t *pH, const uint32_t *pN, unsigned cLimbs)
+{
+	uint64_t u64C = 0;
+	unsigned iLimb;
+
+	for (iLimb = 0; iLimb < cLimbs; iLimb++) {
+		u64C += (uint64_t)pH[iLimb] + pN[iLimb];
+		pH[iLimb] = (uint32_t)u64C;
+		u64C >>= 32;
+	}
+	if (cLimbs < 5) {
+		pH[cLimbs] += (uint32_t)u64C;
+	}
+}
+
+/* Reduce pH (5 limbs) mod 2^130 - 5 into 5 limbs with h < 2^130. */
+static void
+poly_freeze_partial(uint32_t *pH)
+{
+	uint32_t uMask;
+	uint64_t u64C;
+	unsigned iLimb;
+
+	/* h = h + (h >> 130) * 5  (fold high bits above 130) */
+	uMask = pH[4] >> 2; /* bits 130..159 in limb 4 */
+	pH[4] &= 3u;
+	u64C = (uint64_t)pH[0] + (uint64_t)uMask * 5u;
+	pH[0] = (uint32_t)u64C;
+	u64C >>= 32;
+	for (iLimb = 1; iLimb < 5; iLimb++) {
+		u64C += pH[iLimb];
+		pH[iLimb] = (uint32_t)u64C;
+		u64C >>= 32;
+	}
+}
+
+/* Final: if h >= p then h -= p; result in low 128 bits. */
+static void
+poly_freeze_final(uint32_t *pH)
+{
+	uint32_t aG[5];
+	uint64_t u64C;
+	uint32_t uMask;
+	unsigned iLimb;
+
+	poly_freeze_partial(pH);
+	/* g = h + 5; if carry out of bit 130 then h = g & (2^130-1) */
+	u64C = (uint64_t)pH[0] + 5u;
+	aG[0] = (uint32_t)u64C;
+	u64C >>= 32;
+	u64C += pH[1];
+	aG[1] = (uint32_t)u64C;
+	u64C >>= 32;
+	u64C += pH[2];
+	aG[2] = (uint32_t)u64C;
+	u64C >>= 32;
+	u64C += pH[3];
+	aG[3] = (uint32_t)u64C;
+	u64C >>= 32;
+	u64C += pH[4];
+	aG[4] = (uint32_t)u64C;
+	/* Select g if bit 130 set (aG[4] >= 4), else h */
+	uMask = 0u - ((aG[4] >> 2) & 1u);
+	for (iLimb = 0; iLimb < 4; iLimb++) {
+		pH[iLimb] = (pH[iLimb] & ~uMask) | (aG[iLimb] & uMask);
+	}
+	pH[4] = (pH[4] & ~uMask) | ((aG[4] & 3u) & uMask);
+}
+
+/* pH = pH * pR mod (2^130 - 5); pR is 4 limbs (r < 2^128 after clamp). */
+static void
+poly_mul_mod(uint32_t *pH, const uint32_t *pR)
+{
+	uint64_t aT[8];
+	unsigned i, j;
+
+	for (i = 0; i < 8; i++) {
+		aT[i] = 0;
+	}
+	for (i = 0; i < 5; i++) {
+		for (j = 0; j < 4; j++) {
+			aT[i + j] += (uint64_t)pH[i] * pR[j];
+		}
+	}
+	/* Propagate carries into 32-bit limbs (up to 8) */
+	{
+		uint64_t u64C = 0;
+		uint32_t aLimb[8];
+
+		for (i = 0; i < 8; i++) {
+			u64C += aT[i];
+			aLimb[i] = (uint32_t)u64C;
+			u64C >>= 32;
+		}
+		/* Reduce mod 2^130-5: high * 5 folded into low */
+		/* bits from limb 4 high (>>2) and limbs 5..7 */
+		{
+			uint64_t u64Hi = ((uint64_t)aLimb[4] >> 2) |
+					 ((uint64_t)aLimb[5] << 30) |
+					 ((uint64_t)aLimb[6] << 62);
+			/* aLimb[6] << 62 may lose bits; handle limb-wise */
+			uint32_t aHi[5];
+			uint64_t u64C2;
+
+			/* hi = value >> 130 as 5 limbs from aLimb[4..7] */
+			aHi[0] = (aLimb[4] >> 2) | (aLimb[5] << 30);
+			aHi[1] = (aLimb[5] >> 2) | (aLimb[6] << 30);
+			aHi[2] = (aLimb[6] >> 2) | (aLimb[7] << 30);
+			aHi[3] = (aLimb[7] >> 2);
+			aHi[4] = 0;
+			(void)u64Hi;
+
+			pH[0] = aLimb[0];
+			pH[1] = aLimb[1];
+			pH[2] = aLimb[2];
+			pH[3] = aLimb[3];
+			pH[4] = aLimb[4] & 3u;
+
+			/* h += hi * 5 */
+			u64C2 = (uint64_t)pH[0] + (uint64_t)aHi[0] * 5u;
+			pH[0] = (uint32_t)u64C2;
+			u64C2 >>= 32;
+			u64C2 += (uint64_t)pH[1] + (uint64_t)aHi[1] * 5u;
+			pH[1] = (uint32_t)u64C2;
+			u64C2 >>= 32;
+			u64C2 += (uint64_t)pH[2] + (uint64_t)aHi[2] * 5u;
+			pH[2] = (uint32_t)u64C2;
+			u64C2 >>= 32;
+			u64C2 += (uint64_t)pH[3] + (uint64_t)aHi[3] * 5u;
+			pH[3] = (uint32_t)u64C2;
+			u64C2 >>= 32;
+			u64C2 += (uint64_t)pH[4] + (uint64_t)aHi[4] * 5u;
+			pH[4] = (uint32_t)u64C2;
+		}
+	}
+	poly_freeze_partial(pH);
+}
+
+/*
+ * One-time authenticator. Key is 32 bytes (r || s); tag is 16 bytes.
+ * Soft AEAD leg for product post-NEWKEYS integrity self-check (paired with
+ * ChaCha20 stream). Clean-room pure C from RFC 8439.
+ */
+void
+gj_ssh_poly1305(const uint8_t key[32], const uint8_t *pMsg, size_t cbMsg,
+		uint8_t tag[16])
+{
+	uint32_t aR[4];
+	uint32_t aH[5];
+	uint32_t aN[5];
+	uint32_t aS[4];
+	uint8_t aClamp[16];
+	uint8_t aBlock[17];
+	size_t cbLeft = cbMsg;
+	const uint8_t *p = pMsg;
+	size_t iByte;
+	unsigned iLimb;
+	uint64_t u64C;
+
+	/* Clamp r per RFC 8439 §2.5 */
+	for (iByte = 0; iByte < 16; iByte++) {
+		aClamp[iByte] = key[iByte];
+	}
+	aClamp[3] &= 15;
+	aClamp[7] &= 15;
+	aClamp[11] &= 15;
+	aClamp[15] &= 15;
+	aClamp[4] &= 252;
+	aClamp[8] &= 252;
+	aClamp[12] &= 252;
+	aR[0] = (uint32_t)aClamp[0] | ((uint32_t)aClamp[1] << 8) |
+		((uint32_t)aClamp[2] << 16) | ((uint32_t)aClamp[3] << 24);
+	aR[1] = (uint32_t)aClamp[4] | ((uint32_t)aClamp[5] << 8) |
+		((uint32_t)aClamp[6] << 16) | ((uint32_t)aClamp[7] << 24);
+	aR[2] = (uint32_t)aClamp[8] | ((uint32_t)aClamp[9] << 8) |
+		((uint32_t)aClamp[10] << 16) | ((uint32_t)aClamp[11] << 24);
+	aR[3] = (uint32_t)aClamp[12] | ((uint32_t)aClamp[13] << 8) |
+		((uint32_t)aClamp[14] << 16) | ((uint32_t)aClamp[15] << 24);
+
+	aS[0] = (uint32_t)key[16] | ((uint32_t)key[17] << 8) |
+		((uint32_t)key[18] << 16) | ((uint32_t)key[19] << 24);
+	aS[1] = (uint32_t)key[20] | ((uint32_t)key[21] << 8) |
+		((uint32_t)key[22] << 16) | ((uint32_t)key[23] << 24);
+	aS[2] = (uint32_t)key[24] | ((uint32_t)key[25] << 8) |
+		((uint32_t)key[26] << 16) | ((uint32_t)key[27] << 24);
+	aS[3] = (uint32_t)key[28] | ((uint32_t)key[29] << 8) |
+		((uint32_t)key[30] << 16) | ((uint32_t)key[31] << 24);
+
+	for (iLimb = 0; iLimb < 5; iLimb++) {
+		aH[iLimb] = 0;
+	}
+
+	while (cbLeft > 0) {
+		size_t cbTake = cbLeft < 16 ? cbLeft : 16;
+
+		for (iByte = 0; iByte < 17; iByte++) {
+			aBlock[iByte] = 0;
+		}
+		for (iByte = 0; iByte < cbTake; iByte++) {
+			aBlock[iByte] = p[iByte];
+		}
+		aBlock[cbTake] = 1; /* + 2^{8*cbTake} */
+
+		for (iLimb = 0; iLimb < 5; iLimb++) {
+			aN[iLimb] = 0;
+		}
+		aN[0] = (uint32_t)aBlock[0] | ((uint32_t)aBlock[1] << 8) |
+			((uint32_t)aBlock[2] << 16) | ((uint32_t)aBlock[3] << 24);
+		aN[1] = (uint32_t)aBlock[4] | ((uint32_t)aBlock[5] << 8) |
+			((uint32_t)aBlock[6] << 16) | ((uint32_t)aBlock[7] << 24);
+		aN[2] = (uint32_t)aBlock[8] | ((uint32_t)aBlock[9] << 8) |
+			((uint32_t)aBlock[10] << 16) |
+			((uint32_t)aBlock[11] << 24);
+		aN[3] = (uint32_t)aBlock[12] | ((uint32_t)aBlock[13] << 8) |
+			((uint32_t)aBlock[14] << 16) |
+			((uint32_t)aBlock[15] << 24);
+		aN[4] = (uint32_t)aBlock[16];
+
+		poly_add(aH, aN, 5);
+		poly_mul_mod(aH, aR);
+
+		p += cbTake;
+		cbLeft -= cbTake;
+	}
+
+	poly_freeze_final(aH);
+
+	/* tag = (h + s) mod 2^128 */
+	u64C = (uint64_t)aH[0] + aS[0];
+	tag[0] = (uint8_t)u64C;
+	tag[1] = (uint8_t)(u64C >> 8);
+	tag[2] = (uint8_t)(u64C >> 16);
+	tag[3] = (uint8_t)(u64C >> 24);
+	u64C = (u64C >> 32) + aH[1] + aS[1];
+	tag[4] = (uint8_t)u64C;
+	tag[5] = (uint8_t)(u64C >> 8);
+	tag[6] = (uint8_t)(u64C >> 16);
+	tag[7] = (uint8_t)(u64C >> 24);
+	u64C = (u64C >> 32) + aH[2] + aS[2];
+	tag[8] = (uint8_t)u64C;
+	tag[9] = (uint8_t)(u64C >> 8);
+	tag[10] = (uint8_t)(u64C >> 16);
+	tag[11] = (uint8_t)(u64C >> 24);
+	u64C = (u64C >> 32) + aH[3] + aS[3];
+	tag[12] = (uint8_t)u64C;
+	tag[13] = (uint8_t)(u64C >> 8);
+	tag[14] = (uint8_t)(u64C >> 16);
+	tag[15] = (uint8_t)(u64C >> 24);
+
+	bytes_wipe(aClamp, sizeof(aClamp));
+	bytes_wipe(aBlock, sizeof(aBlock));
+	for (iLimb = 0; iLimb < 4; iLimb++) {
+		aR[iLimb] = 0;
+		aS[iLimb] = 0;
+	}
+	for (iLimb = 0; iLimb < 5; iLimb++) {
+		aH[iLimb] = 0;
+		aN[iLimb] = 0;
+	}
+}
+
+/*
+ * RFC 8439 §2.5.2 test vector (soft self-check).
+ * Returns 1 on match, 0 on mismatch. Does not use network.
+ */
+int
+gj_ssh_poly1305_selfcheck(void)
+{
+	/* Key, message, and tag from RFC 8439 §2.5.2 */
+	static const uint8_t aKey[32] = {
+	    0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33, 0x7f, 0x44,
+	    0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8, 0x01, 0x03, 0x80, 0x8a,
+	    0xfb, 0x0d, 0xb2, 0xfd, 0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49,
+	    0xf5, 0x1b
+	};
+	static const uint8_t aMsg[] =
+	    "Cryptographic Forum Research Group";
+	static const uint8_t aTagExp[16] = {
+	    0xa8, 0x06, 0x1d, 0xc1, 0x30, 0x51, 0x36, 0xc6, 0xc2, 0x2b,
+	    0x8b, 0xaf, 0x0c, 0x01, 0x27, 0xa9
+	};
+	uint8_t aTag[16];
+
+	gj_ssh_poly1305(aKey, aMsg, sizeof(aMsg) - 1, aTag);
+	return gj_ssh_memeq_ct(aTag, aTagExp, 16);
+}
+
 /*
  * ---- Production host identity -------------------------------------------
  * Seeded from a fixed product label (stable across boots until entropy
@@ -548,6 +860,7 @@ gj_ssh_chacha20_xor(const uint8_t key[32], const uint8_t nonce[12],
 static uint8_t g_host_sk[32];
 static uint8_t g_host_pk[32];
 static int g_host_ready;
+static int g_poly_ok;
 
 void
 gj_ssh_hostkey_init(void)
@@ -565,6 +878,9 @@ gj_ssh_hostkey_init(void)
 	}
 	base[0] = 9; /* RFC 7748 base point u=9 */
 
+	/* Soft crypto inventory: Poly1305 RFC vector before identity seed */
+	g_poly_ok = gj_ssh_poly1305_selfcheck();
+
 	/* Permanent product identity: SHA-256(label || "prod") → clamped sk */
 	gj_ssh_sha256_init(&hx);
 	gj_ssh_sha256_update(&hx, seed_label, sizeof(seed_label) - 1);
@@ -576,6 +892,14 @@ gj_ssh_hostkey_init(void)
 	g_host_sk[31] |= 64;
 	gj_ssh_x25519(g_host_pk, g_host_sk, base);
 	g_host_ready = 1;
+}
+
+/* 1 if Poly1305 RFC §2.5.2 vector matched at hostkey_init, else 0. */
+int
+gj_ssh_poly1305_ok(void)
+{
+	gj_ssh_hostkey_init();
+	return g_poly_ok;
 }
 
 void
@@ -600,14 +924,11 @@ gj_ssh_hostkey_sign(const uint8_t *msg, size_t msg_len, uint8_t sig[32])
 int
 gj_ssh_hostkey_verify(const uint8_t *msg, size_t msg_len, const uint8_t sig[32])
 {
-	uint8_t t[32];
-	unsigned i;
-	int d = 0;
+	uint8_t aTag[32];
+	int fOk;
 
-	gj_ssh_hostkey_sign(msg, msg_len, t);
-	for (i = 0; i < 32; i++) {
-		d |= t[i] ^ sig[i];
-	}
-	bytes_wipe(t, sizeof(t));
-	return d == 0;
+	gj_ssh_hostkey_sign(msg, msg_len, aTag);
+	fOk = gj_ssh_memeq_ct(aTag, sig, 32);
+	bytes_wipe(aTag, sizeof(aTag));
+	return fOk;
 }

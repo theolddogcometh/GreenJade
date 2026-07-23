@@ -21,7 +21,7 @@ See repository root `LICENSE` and `third_party/PROVENANCE.md`.
 | Path | Role |
 |------|------|
 | `src/sshd_gj.c` | Freestanding product daemon (TCP :22, full KEX/session smoke) |
-| `src/ssh_crypto.c` | SHA-256, X25519, HMAC-SHA256, ChaCha20, host identity |
+| `src/ssh_crypto.c` | SHA-256, X25519, HMAC-SHA256, ChaCha20, Poly1305, host identity |
 | `src/sshd.c` | Host POSIX listen + soft banner/KEXINIT smoke |
 
 ## Status
@@ -73,9 +73,13 @@ Failure lines use the same prefix with **FAIL**. Default mode is `--once`
 2. Banners (RFC 4253) over TCP — product id `SSH-2.0-GreenJade_sshd`
 3. **KEX** `curve25519-sha256` — X25519 + SHA-256 shared secret
 4. **Production host identity** — seeded host key (not demo `0x41…` scalars); HMAC-SHA256 signature of exchange hash `H`
-5. **NEWKEYS** + key derivation (RFC 4253 §7.2) → ChaCha20 + HMAC-SHA256
-6. **Session channel** + shell MOTD + encrypted CHANNEL_DATA
-7. Daemon parks with listen held (eth ACCEPT on a slow tick)
+5. **SSH_MSG_KEX_ECDH_REPLY** on wire (K_S ‖ Q_S ‖ sig) + dual shared-secret match
+6. **NEWKEYS** both directions (peer drain) + soft **SERVICE_REQUEST/ACCEPT** (`ssh-userauth`)
+7. **Session channel** + shell MOTD (client drains cleartext)
+8. Key derivation (RFC 4253 §7.2) → ChaCha20 + HMAC-SHA256 integrity
+9. **Encrypted CHANNEL_DATA** send + recv (constant-time MAC verify + decrypt)
+10. **Poly1305** soft AEAD leg (RFC 8439 §2.5.2 vector + post-keys tag)
+11. Daemon parks with listen held (eth ACCEPT on a slow tick)
 
 QEMU hostfwd `2222→22` targets guest TCP :22. Lab-host SSH remains for serial/bench (operator path, not product crypto).
 
@@ -88,13 +92,19 @@ explicit so boot logs distinguish crypto KEX from post-KEX session work:
 sshd-gj: start TCP :22 full path
 sshd-gj: TCP listening :22 (virtio + loopback)
 sshd-gj: peer banner PASS
+sshd-gj: poly1305 selfcheck PASS
 sshd-gj: hostkey sign PASS
+sshd-gj: ECDH_REPLY PASS
+sshd-gj: shared secret match PASS
 sshd-gj: x25519 KEX shared PASS
 sshd-gj: KEX PASS (curve25519-sha256 + hostkey)
 sshd-gj: NEWKEYS exchange PASS
+sshd-gj: service soft PASS
 sshd-gj: channel+shell MOTD PASS
 sshd-gj: key derivation PASS (ChaCha20+HMAC)
+sshd-gj: poly1305 aead soft PASS
 sshd-gj: encrypted channel PASS
+sshd-gj: encrypted channel recv PASS
 sshd-gj: post-KEX session PASS
 sshd-gj: live path PASS (TCP+KEX+NEWKEYS+shell)
 sshd-gj: daemon park (TCP :22 listen held)
@@ -103,13 +113,19 @@ sshd-gj: daemon park (TCP :22 listen held)
 | Marker | Meaning |
 |--------|---------|
 | `peer banner PASS` | RFC 4253 identification string exchange |
+| `poly1305 selfcheck PASS` | RFC 8439 §2.5.2 Poly1305 test vector |
 | `hostkey sign PASS` | Product hostkey sign + verify of `H` |
+| `ECDH_REPLY PASS` | SSH_MSG_KEX_ECDH_REPLY on wire + soft parse |
+| `shared secret match PASS` | Server/client X25519 shared secrets equal |
 | `x25519 KEX shared PASS` | X25519 shared secret from ECDH |
 | `KEX PASS (…)` | Aggregate: hostkey + curve25519-sha256 KEX OK |
-| `NEWKEYS exchange PASS` | SSH_MSG_NEWKEYS both directions |
+| `NEWKEYS exchange PASS` | SSH_MSG_NEWKEYS both directions + peer drain |
+| `service soft PASS` | Soft SERVICE_REQUEST/ACCEPT (`ssh-userauth`) |
 | `channel+shell MOTD PASS` | Session channel open + shell + MOTD |
 | `key derivation PASS` | RFC 4253 §7.2 keys armed (ChaCha20 + HMAC) |
+| `poly1305 aead soft PASS` | Poly1305 over session material (soft AEAD leg) |
 | `encrypted channel PASS` | Encrypted CHANNEL_DATA after NEWKEYS |
+| `encrypted channel recv PASS` | Client MAC verify + ChaCha20 decrypt of channel data |
 | `post-KEX session PASS` | Full `do_kex_and_session` success |
 | `live path PASS (…)` | Banner + session both green; daemon parks |
 

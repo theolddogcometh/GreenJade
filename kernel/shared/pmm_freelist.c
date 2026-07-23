@@ -88,22 +88,110 @@ gj_pmm_core_total_count(void)
     return g_cTotal;
 }
 
+/*
+ * Soft deepen: reject path, alignment/range, free-count steps, LIFO reuse,
+ * payload survive (node header scrub only), restore pool counts.
+ * Returns 1 on PASS, 0 on soft FAIL. Does not drain the whole pool.
+ */
 int
 gj_pmm_core_selftest(void)
 {
-    u64 a;
-    u64 b;
-    unsigned c0;
+    u64 paA;
+    u64 paB;
+    u64 paC;
+    unsigned cFree0;
+    unsigned cTotal0;
+    volatile u32 *pMark;
 
-    c0 = g_cFree;
-    a = gj_pmm_core_alloc();
-    if (a == 0) {
+    cFree0 = g_cFree;
+    cTotal0 = g_cTotal;
+
+    if (cTotal0 == 0u || cFree0 == 0u) {
         return 0;
     }
-    b = gj_pmm_core_alloc();
-    gj_pmm_core_free(a);
-    if (b != 0) {
-        gj_pmm_core_free(b);
+    if (cFree0 > cTotal0) {
+        return 0;
     }
-    return (g_cFree == c0) ? 1 : 0;
+
+    /* Reject paths must not touch free count. */
+    gj_pmm_core_free(0);
+    gj_pmm_core_free(1ul); /* unaligned */
+    gj_pmm_core_free(g_u64Limit); /* OOB high (limit exclusive) */
+    if (g_u64Base >= GJ_PMM_CORE_PAGE_SIZE) {
+        gj_pmm_core_free(g_u64Base - GJ_PMM_CORE_PAGE_SIZE);
+    }
+    if (g_cFree != cFree0 || g_cTotal != cTotal0) {
+        return 0;
+    }
+
+    paA = gj_pmm_core_alloc();
+    if (paA == 0) {
+        return 0;
+    }
+    if ((paA & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul) {
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+    if (paA < g_u64Base || paA >= g_u64Limit) {
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+    if (g_cFree != cFree0 - 1u || g_cTotal != cTotal0) {
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+
+    paB = gj_pmm_core_alloc();
+    if (paB == 0) {
+        /* Single-page pool: free A and accept restore. */
+        gj_pmm_core_free(paA);
+        return (g_cFree == cFree0 && g_cTotal == cTotal0) ? 1 : 0;
+    }
+    if (paA == paB) {
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+    if ((paB & (GJ_PMM_CORE_PAGE_SIZE - 1ul)) != 0ul ||
+        paB < g_u64Base || paB >= g_u64Limit) {
+        gj_pmm_core_free(paA);
+        gj_pmm_core_free(paB);
+        return 0;
+    }
+    if (g_cFree != cFree0 - 2u) {
+        gj_pmm_core_free(paA);
+        gj_pmm_core_free(paB);
+        return 0;
+    }
+
+    /*
+     * LIFO: free pushes front; next alloc must return paB.
+     * Payload past node header survives free+alloc (only sizeof(node) scrubbed).
+     */
+    pMark = (volatile u32 *)(void *)((gj_vaddr_t)paB + 64ul);
+    *pMark = 0xC0FFEEU;
+    gj_pmm_core_free(paB);
+    if (g_cFree != cFree0 - 1u) {
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+    paC = gj_pmm_core_alloc();
+    if (paC != paB) {
+        if (paC != 0) {
+            gj_pmm_core_free(paC);
+        }
+        gj_pmm_core_free(paA);
+        return 0;
+    }
+    if (*pMark != 0xC0FFEEU) {
+        gj_pmm_core_free(paA);
+        gj_pmm_core_free(paC);
+        return 0;
+    }
+
+    gj_pmm_core_free(paA);
+    gj_pmm_core_free(paC);
+    if (g_cFree != cFree0 || g_cTotal != cTotal0) {
+        return 0;
+    }
+    return 1;
 }

@@ -176,9 +176,22 @@ enum gj_personality gj_syscall_get_default_personality(void);
 /**
  * Top-level entry (from asm or tests).
  * Routes by current task personality (default LINUX until native apps exist).
- * NULL pRegs is a no-op (defensive).
+ * NULL pRegs is a no-op (defensive). Soft counters: SYSCALL_ENTRY_SOFT_STATS.
  */
 void gj_syscall_dispatch(struct gj_syscall_regs *pRegs);
+
+/**
+ * Asm LSTAR edge (syscall_entry.S → C). Soft-notes bridge then dispatches.
+ * NULL pRegs is a soft-counted no-op (defensive).
+ */
+void gj_syscall_entry_asm_bridge(struct gj_syscall_regs *pRegs);
+
+/**
+ * Soft edge note for LSTAR bridge only.
+ * Bumps bridge enter / null; does not route. Smoke tests that call
+ * gj_syscall_dispatch directly skip this path (bridge counters stay 0).
+ */
+void gj_syscall_entry_soft_note_bridge(struct gj_syscall_regs *pRegs);
 
 /** Force Linux hybrid path (Option C). Declared here; implemented in linux_*. */
 void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
@@ -189,6 +202,90 @@ void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
  */
 void gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs);
 
+/**
+ * Soft counters for native GJ_SYS_* dispatch (wrap OK; diagnostics only).
+ * Never hard-gate product paths. greppable: native: soft stats
+ *
+ * Entries / outcomes:
+ *   u64Entries     — non-NULL dispatch calls
+ *   u64NullGuard   — NULL pRegs early return
+ *   u64Handled     — switch hit a known case (not default)
+ *   u64Nosupport   — default / reserved NR → GJ_ERR_NOSUPPORT
+ *   u64Ok          — i64Ret >= 0 after handler
+ *   u64Err         — i64Ret < 0 after handler
+ *   u64Inval/Fault/Nodev/Again/Io/Nomem — common GJ_ERR_* buckets
+ *
+ * Subsystem buckets (sparse GJ_SYS_* blocks; only counted when handled):
+ *   u64Diag        — DEBUG_LOG / YIELD / EXIT
+ *   u64Ipc         — IPC_CALL / RECV / REPLY
+ *   u64Cap         — CAP_MINT / MOVE / COPY / REVOKE / IDENT
+ *   u64Process     — PROCESS_SPAWN (and wired PROCESS_*)
+ *   u64Thread      — THREAD_SET_QOS / CPU
+ *   u64Cold        — COLD_DEQUEUE / COLD_REPLY / PERSONALITY_SERVE
+ *   u64Gpu         — GPU_PRESENT / GPU_DISPLAY_INFO
+ *   u64Memobj      — MEMOBJ_CREATE_NAMED / MAP_NAMED
+ *   u64Hda         — HDA_STREAM
+ *   u64DoorFacade  — SESSION / NET / STORE / VFS
+ *   u64Platform    — PLATFORM_INFO
+ *   u64Notify      — NOTIFY_WAIT
+ *   u64Console     — CONSOLE
+ *   u64Scsi        — SCSI
+ *
+ * Copy helpers used by the native path (soft deepen):
+ *   u64CopyInOk/Fail, u64CopyOutOk/Fail, u64CopyNameOk/Fail
+ *   u64BytesCopyIn / u64BytesCopyOut
+ *
+ * Snapshot: u64LastNr / u64LastRet (bit pattern of last i64Ret).
+ */
+struct gj_native_dispatch_stats {
+    u64 u64Entries;
+    u64 u64NullGuard;
+    u64 u64Handled;
+    u64 u64Nosupport;
+    u64 u64Ok;
+    u64 u64Err;
+    u64 u64Inval;
+    u64 u64Fault;
+    u64 u64Nodev;
+    u64 u64Again;
+    u64 u64Io;
+    u64 u64Nomem;
+    u64 u64Diag;
+    u64 u64Ipc;
+    u64 u64Cap;
+    u64 u64Process;
+    u64 u64Thread;
+    u64 u64Cold;
+    u64 u64Gpu;
+    u64 u64Memobj;
+    u64 u64Hda;
+    u64 u64DoorFacade;
+    u64 u64Platform;
+    u64 u64Notify;
+    u64 u64Console;
+    u64 u64Scsi;
+    u64 u64CopyInOk;
+    u64 u64CopyInFail;
+    u64 u64CopyOutOk;
+    u64 u64CopyOutFail;
+    u64 u64CopyNameOk;
+    u64 u64CopyNameFail;
+    u64 u64BytesCopyIn;
+    u64 u64BytesCopyOut;
+    u64 u64LastNr;
+    u64 u64LastRet;
+};
+
+/** Snapshot soft counters into *pOut (NULL → no-op). */
+void gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut);
+/** Clear soft counters (lifetime restarts). */
+void gj_native_dispatch_stats_reset(void);
+/**
+ * Greppable soft line: "native: soft stats ...".
+ * Returns u64Entries (handy for smoke assert chains).
+ */
+u64 gj_native_dispatch_stats_soft(void);
+
 /* Stats for smoke / debugging (Linux hybrid path). */
 struct gj_linux_dispatch_stats {
     u64 u64HotHits;
@@ -198,3 +295,63 @@ struct gj_linux_dispatch_stats {
 
 void gj_linux_dispatch_stats_get(struct gj_linux_dispatch_stats *pOut);
 void gj_linux_dispatch_stats_reset(void);
+
+/*
+ * Soft deepen: top-level SYSCALL entry / personality-route counters.
+ * Distinct from gj_native_dispatch_stats / gj_linux_dispatch_stats (those
+ * cover handler interiors). This surface is LSTAR bridge + route only.
+ * Wrap OK; diagnostics / smoke — never hard-gate product paths.
+ * greppable: SYSCALL_ENTRY_SOFT_STATS
+ * greppable: "syscall: soft stats"
+ *
+ * Bridge (entry_bridge.c / LSTAR):
+ *   u64BridgeEnter / u64BridgeNull
+ * Dispatch route (dispatch.c; asm + smoke):
+ *   u64DispatchEnter / u64DispatchNull
+ *   u64Native / u64Linux
+ *   u64PcbNative / u64PcbLinux / u64DefaultPers
+ *   u64Bound / u64Unbound
+ * Lifecycle:
+ *   u64Init / u64SetPersOk / u64SetPersReject
+ * Outcome soft (after route writes i64Ret):
+ *   u64Complete / u64RetNeg / u64RetZero / u64RetPos
+ *   u64LastNr / u64LastRetBits
+ * Live mirrors (0/1, not cumulative):
+ *   u64DefaultIsLinux / u64DefaultIsNative
+ */
+struct gj_syscall_entry_stats {
+    u64 u64BridgeEnter;
+    u64 u64BridgeNull;
+    u64 u64DispatchEnter;
+    u64 u64DispatchNull;
+    u64 u64Native;
+    u64 u64Linux;
+    u64 u64PcbNative;
+    u64 u64PcbLinux;
+    u64 u64DefaultPers;
+    u64 u64Bound;
+    u64 u64Unbound;
+    u64 u64Init;
+    u64 u64SetPersOk;
+    u64 u64SetPersReject;
+    u64 u64Complete;
+    u64 u64RetNeg;
+    u64 u64RetZero;
+    u64 u64RetPos;
+    u64 u64LastNr;
+    u64 u64LastRetBits;
+    u64 u64DefaultIsLinux;
+    u64 u64DefaultIsNative;
+};
+
+/** Snapshot entry soft counters into *pOut. NULL pOut is a no-op. */
+void gj_syscall_entry_stats_get(struct gj_syscall_entry_stats *pOut);
+
+/** Zero cumulative entry soft counters; refresh default-personality mirrors. */
+void gj_syscall_entry_stats_reset(void);
+
+/**
+ * Greppable soft stats line: "syscall: soft stats ..."
+ * Returns u64DispatchEnter (handy for smoke without parsing).
+ */
+u64 gj_syscall_entry_stats_soft(void);

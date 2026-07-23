@@ -11,7 +11,27 @@
  *   [1] low16=segments, high16=retransmits
  *   [2] rx_bytes
  *   [3] tx_bytes (full 32-bit)
+ *
+ * Ownership: token 0 means kernel interim owns policy; non-zero means
+ * netstackd claimed the door. Claim is re-entrant for the same token
+ * (idempotent reclaim soft), BUSY for a different token. RELEASE when
+ * free is soft 0. Queue / ring ops allowed without claim for bring-up
+ * smokes (owned path preferred by product netstackd).
+ *
+ * Ring soft path (netstackd / UDX):
+ *   EXPORT/MAP/KICK → NODEV when virtio-net is absent (client soft-skips).
+ *   RING_STATE always succeeds: free=0 pushes=0 without device.
+ *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
+ *   soft reclaim of the map (re-install PTEs, re-export).
+ *
+ * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
+ * branch is for early kernel smokes that pass HHDM/static buffers.
+ *
+ * Product PASS markers (main.c) depend on CLAIM/RELEASE, QUEUE_INFO,
+ * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
+ * keep those ABI-stable.
  */
+#include <gj/config.h>
 #include <gj/error.h>
 #include <gj/klog.h>
 #include <gj/net_door.h>
@@ -43,8 +63,12 @@ typedef char net_xfer_ge_mss[(NET_XFER_MAX > 1024u) ? 1 : -1];
 
 static int g_fInit;
 static u32 g_u32Calls;
-static u32 g_u32OwnerToken;
+static u32 g_u32OwnerToken; /* 0 = kernel interim owns */
 static u32 g_u32VqCalls;
+static u32 g_u32Claims;     /* successful first claims */
+static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft path */
+static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
+static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
 
 void
 net_door_init(void)
@@ -53,13 +77,42 @@ net_door_init(void)
     g_u32Calls = 0;
     g_u32OwnerToken = 0;
     g_u32VqCalls = 0;
-    kprintf("net_door: init\n");
+    g_u32Claims = 0;
+    g_u32Reclaims = 0;
+    g_u32RingCalls = 0;
+    g_u64RingMapVa = 0;
+    kprintf("net_door: init (claim+ring soft)\n");
 }
 
 int
 net_door_owned(void)
 {
     return g_u32OwnerToken != 0;
+}
+
+u32
+net_door_owner_token(void)
+{
+    return g_u32OwnerToken;
+}
+
+u64
+net_door_ring_map_va(void)
+{
+    return g_u64RingMapVa;
+}
+
+u32
+net_door_ring_calls(void)
+{
+    return g_u32RingCalls;
+}
+
+u32
+net_door_claim_count(void)
+{
+    /* Soft diagnostics: first claims + idempotent reclaims. */
+    return g_u32Claims + g_u32Reclaims;
 }
 
 i64
@@ -71,21 +124,33 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     g_u32Calls++;
     switch (u32Op) {
     case GJ_NET_OP_CLAIM:
-        if (u64Arg1 == 0) {
+        /* arg1 = non-zero ownership token (low 32 bits only). */
+        if (u64Arg1 == 0 || (u64Arg1 >> 32) != 0) {
             return GJ_ERR_INVAL;
         }
         if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
-            return GJ_ERR_BUSY;
+            return GJ_ERR_BUSY; /* another netstackd */
+        }
+        /* Soft reclaim: same token re-CLAIM is idempotent (no re-log). */
+        if (g_u32OwnerToken == (u32)u64Arg1) {
+            g_u32Reclaims++;
+            return 0;
         }
         g_u32OwnerToken = (u32)u64Arg1;
-        kprintf("net_door: CLAIM token=0x%x\n", g_u32OwnerToken);
+        g_u32Claims++;
+        kprintf("net_door: CLAIM token=0x%x (userspace owns net)\n",
+                g_u32OwnerToken);
         return 0;
     case GJ_NET_OP_RELEASE:
-        if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
+        /* Soft free path: already unowned → 0 (no token match required). */
+        if (g_u32OwnerToken == 0) {
+            return 0;
+        }
+        if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
             return GJ_ERR_INVAL;
         }
+        kprintf("net_door: RELEASE token=0x%x\n", g_u32OwnerToken);
         g_u32OwnerToken = 0;
-        kprintf("net_door: RELEASE\n");
         return 0;
     case GJ_NET_OP_POLL:
         net_eth_poll();
@@ -303,8 +368,13 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_NET_OP_EXPORT_RING: {
         struct gj_virtq_export ex;
 
+        g_u32RingCalls++;
         if (u64Arg2 == 0) {
             return GJ_ERR_INVAL;
+        }
+        /* Soft-skip surface: no virtio-net → NODEV (netstackd soft-logs). */
+        if (!virtio_net_ready()) {
+            return GJ_ERR_NODEV;
         }
         if (virtio_net_export_q((u16)u64Arg1, &ex) != 0) {
             return GJ_ERR_NODEV;
@@ -321,11 +391,32 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
     case GJ_NET_OP_MAP_RING: {
         struct gj_virtq_export ex;
+        int fRemap;
 
+        g_u32RingCalls++;
+        if (u64Arg2 == 0) {
+            return GJ_ERR_INVAL;
+        }
+        /* VA base must be page-aligned for ring map into user AS. */
+        if ((u64Arg2 & (GJ_PAGE_SIZE - 1ull)) != 0) {
+            return GJ_ERR_INVAL;
+        }
+        /* Soft-skip surface: no virtio-net → NODEV (distinct from map FAULT). */
+        if (!virtio_net_ready()) {
+            return GJ_ERR_NODEV;
+        }
+        /*
+         * Soft re-MAP of the same VA: re-install PTEs + re-export (idempotent
+         * hand-off for netstackd / UDX reclaim of the map window).
+         */
+        fRemap = (g_u64RingMapVa != 0 && g_u64RingMapVa == u64Arg2) ? 1 : 0;
         if (virtio_net_map_q_user((u16)u64Arg1, u64Arg2, &ex) != 0) {
             return GJ_ERR_FAULT;
         }
+        g_u64RingMapVa = u64Arg2;
         g_u32VqCalls++;
+        /* fRemap: soft re-MAP of same VA (PTE re-install); ring_calls covers it. */
+        (void)fRemap;
         if (u64Arg3 != 0) {
             if (user_range_ok(u64Arg3, sizeof(ex))) {
                 if (copy_to_user(u64Arg3, &ex, sizeof(ex)) != GJ_OK) {
@@ -338,6 +429,11 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         return 0;
     }
     case GJ_NET_OP_KICK:
+        g_u32RingCalls++;
+        /* Soft-skip when virtio-net absent; kick is best-effort notify. */
+        if (!virtio_net_ready()) {
+            return GJ_ERR_NODEV;
+        }
         if (virtio_net_kick_q((u16)u64Arg1) != 0) {
             return GJ_ERR_NODEV;
         }
@@ -380,16 +476,24 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         return (i64)n;
     }
     case GJ_NET_OP_RING_STATE: {
+        /* Soft: always fills state; free/pushes = 0 without virtio-net. */
         u32 aS[4];
 
+        g_u32RingCalls++;
         if (u64Arg1 == 0) {
             return GJ_ERR_INVAL;
         }
-        aS[0] = virtio_net_q_free(1);
-        aS[1] = virtio_net_q_free(0);
-        /* high 16: user_ring_pushes, low 16: total avail pushes */
-        aS[2] = (virtio_net_user_ring_pushes() << 16) |
-                (virtio_net_avail_pushes() & 0xffffu);
+        if (virtio_net_ready()) {
+            aS[0] = virtio_net_q_free(1);
+            aS[1] = virtio_net_q_free(0);
+            /* high 16: user_ring_pushes, low 16: total avail pushes */
+            aS[2] = (virtio_net_user_ring_pushes() << 16) |
+                    (virtio_net_avail_pushes() & 0xffffu);
+        } else {
+            aS[0] = 0;
+            aS[1] = 0;
+            aS[2] = 0;
+        }
         aS[3] = g_u32VqCalls;
         if (user_range_ok(u64Arg1, sizeof(aS))) {
             if (copy_to_user(u64Arg1, aS, sizeof(aS)) != GJ_OK) {
@@ -405,6 +509,12 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
         if (u64Arg1 == 0) {
             return GJ_ERR_INVAL;
+        }
+        if ((u64Arg1 & (GJ_PAGE_SIZE - 1ull)) != 0) {
+            return GJ_ERR_INVAL;
+        }
+        if (!virtio_net_ready()) {
+            return GJ_ERR_NODEV;
         }
         if (virtio_net_map_dma_user(u64Arg1, &ex) != 0) {
             return GJ_ERR_FAULT;

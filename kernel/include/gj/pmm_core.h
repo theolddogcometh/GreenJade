@@ -27,5 +27,9 @@ void gj_pmm_core_free(u64 u64Pa);
 unsigned gj_pmm_core_free_count(void);
 unsigned gj_pmm_core_total_count(void);
 
-/** Soft self-check: alloc+free one page; returns 1 on ok. */
+/**
+ * Soft self-check deepen: reject OOB/unaligned free, alloc align+range,
+ * free-count steps, LIFO reuse, payload past node survives, pool restore.
+ * Returns 1 on PASS, 0 on soft FAIL.
+ */
 int gj_pmm_core_selftest(void);

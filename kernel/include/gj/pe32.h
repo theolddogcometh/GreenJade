@@ -19,7 +19,15 @@ struct gj_pe32_info {
     u32 u32ImageBase32; /* PE32 Preferred ImageBase (low) */
     u64 u64ImageBase;   /* PE32+ or extended */
     u32 u32SizeOfImage;
+    u32 u32SizeOfHeaders; /* soft load: header span (0 if truncated opt) */
+    u32 u32SectionAlign;  /* SectionAlignment (soft; 0 if absent) */
+    u32 u32FileAlign;     /* FileAlignment (soft; 0 if absent) */
+    u32 u32RelocRva;      /* IMAGE_DIRECTORY_ENTRY_BASERELOC RVA (0=none) */
+    u32 u32RelocSize;     /* basereloc directory size */
+    u32 u32ImportRva;     /* IMAGE_DIRECTORY_ENTRY_IMPORT RVA (soft probe) */
+    u32 u32ImportSize;
     u16 u16Subsystem;
+    u16 u16DllChars;      /* DllCharacteristics (ASLR/NX soft hints) */
     u8  u8IsPe32;       /* 1 = PE32, 0 = PE32+ */
     u8  u8IsDll;
     u16 u16NumSections;
@@ -83,9 +91,37 @@ struct gj_pe32_load {
 /**
  * Stage + map PE into pProc AS. Uses preferred base when free, else high VA.
  * Allocates a small stack. Fills *pOut. Caller creates user thread.
+ * Soft path: load_soft_validate + soft_relocate when rebasing off preferred.
  */
 int pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
                       struct gj_pe32_load *pOut);
+
+/**
+ * Soft-validate PE for process load: entry RVA + section VA spans fit
+ * SizeOfImage; empty sections ok. Returns 0 if loadable under soft policy.
+ */
+int pe32_load_soft_validate(const struct gj_pe32_info *pInfo,
+                            const struct gj_pe32_section *pSec, u32 u32NSec);
+
+/**
+ * Soft VA pick for load: preferred ImageBase when high+aligned, else 0x50000000.
+ * Avoids low identity (0x400000) used by classic PE defaults.
+ */
+u64 pe32_load_soft_va(const struct gj_pe32_info *pInfo);
+
+/**
+ * Soft IMAGE_BASE_RELOCATION apply when u64VaBase != preferred ImageBase.
+ * Missing/empty reloc dir is soft-success (fixed-base smoke PE).
+ * Returns 0 on success/skip, -1 on corrupt reloc blocks.
+ */
+int pe32_soft_relocate(void *pImage, u32 cbImage,
+                       const struct gj_pe32_info *pInfo, u64 u64VaBase);
+
+/**
+ * Soft load path: parse + sections + stage + validate + i386 soft-exec entry
+ * (no AS map / no thread). PE32 i386 only. Returns 0 on recognized exit.
+ */
+int pe32_load_soft_exec(const void *pFile, u32 cbFile, i32 *pExitCode);
 
 /** Smoke: header + section stage + user map (no thread). */
 int pe32_smoke(void);
@@ -107,9 +143,10 @@ int pe32_compat_frame_prepare(u64 u64Entry32, u64 u64Stack32, u64 *pFrameOut,
 
 /**
  * Soft-execute a tiny i386 PE payload from staged image (no real 32-bit CS).
- * Recognizes clean-room sequences used in smokes:
+ * Recognizes clean-room sequences used in smokes / load soft paths:
  *   mov eax,1; xor ebx,ebx; int 0x80  → exit via i386 Linux NR 1 / 252
  *   int 0x80 subset: read/write/open/close/brk/mmap2(90|192)/path-ish NRs
+ * Soft stack (push/pop/call/ret), jcc/ZF, lea-less reg-reg mov, PE prologues.
  * Soft mmap2 returns synthetic VA 0x57000000 (matches hw int80 mmap band).
  * Returns 0 on recognized exit, -1 on unknown opcodes / bounds error.
  * *pExitCode set when non-NULL.

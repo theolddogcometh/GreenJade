@@ -1,6 +1,9 @@
 /*
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Runtime GDT + TSS. Soft user-segment observability: CS32 / DS / CS64
+ * descriptor inventory, LAR probe counters, greppable soft logs.
  */
 #pragma once
 
@@ -50,3 +53,89 @@ u64  tss_get_rsp0(void);
 u64  tss_irq_rsp0(void);
 /** Restore TSS.RSP0 to the dedicated IRQ stack. */
 void tss_use_irq_rsp0(void);
+
+/* ------------------------------------------------------------------ */
+/* Soft GDT user-segment observability (boot telemetry)               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Soft snapshot of user segment descriptors + readiness lamps.
+ * Access/gran are raw GDT bytes; flags are soft verify results.
+ */
+struct gj_gdt_user_soft {
+    u8  u8Cs32Access;  /* index 3 access byte */
+    u8  u8Cs32Gran;    /* index 3 gran byte */
+    u8  u8DsAccess;    /* index 4 */
+    u8  u8DsGran;
+    u8  u8Cs64Access;  /* index 5 */
+    u8  u8Cs64Gran;
+    u8  u8Cs32Ready;   /* software ready (present DPL3 code D=1) */
+    u8  u8Cs32Compat;  /* L=0 D=1 DPL3 code */
+    u8  u8Cs64Long;    /* L=1 D=0 DPL3 code (long-mode user) */
+    u8  u8DsOk;        /* present DPL3 data */
+    u8  u8LarOk;       /* last LAR soft result (0 if never) */
+    u8  u8Init;        /* non-zero after gdt_init soft note */
+    u16 u16Cs32Sel;    /* GJ_GDT_USER_CS32 */
+    u16 u16DsSel;      /* GJ_GDT_USER_DS */
+    u16 u16Cs64Sel;    /* GJ_GDT_USER_CS */
+    u32 u32LarAr;      /* last LAR access-rights word */
+    u64 u64Rsp0;       /* TSS.RSP0 at soft note */
+    u64 u64Ist1;       /* TSS.IST1 at soft note */
+};
+
+/** gdt_init soft notes (BSP). */
+u32  gdt_user_soft_inits(void);
+/** gdt_load_ap soft notes. */
+u32  gdt_user_soft_ap_loads(void);
+/** LAR probe attempts (gdt_user_cs32_lar_ok). */
+u32  gdt_user_soft_lar_probes(void);
+/** LAR soft PASS count. */
+u32  gdt_user_soft_lar_ok(void);
+/** LAR soft FAIL count. */
+u32  gdt_user_soft_lar_bad(void);
+/** Soft full user-segment verify PASS count. */
+u32  gdt_user_soft_verify_ok(void);
+/** Soft full user-segment verify FAIL count. */
+u32  gdt_user_soft_verify_bad(void);
+
+/** Raw GDT access/gran for user CS32 / DS / CS64 (0 until gdt_init). */
+u8   gdt_user_soft_cs32_access(void);
+u8   gdt_user_soft_cs32_gran(void);
+u8   gdt_user_soft_ds_access(void);
+u8   gdt_user_soft_cs64_access(void);
+u8   gdt_user_soft_cs64_gran(void);
+
+/**
+ * Soft: CS64 is long-mode user code (P|DPL3|code, L=1, D=0).
+ * Returns 1 if descriptor matches SYSRETQ target.
+ */
+int  gdt_user_cs64_is_long(void);
+
+/**
+ * Soft: user DS is present DPL3 data (SS/DS/ES for ring-3).
+ * Returns 1 if descriptor is usable.
+ */
+int  gdt_user_ds_ok(void);
+
+/**
+ * Soft full verify of CS32 compat + CS64 long + DS + (optional LAR).
+ * fDoLar: non-zero → also run LAR probe. Bumps soft counters.
+ * Returns 1 on PASS, 0 on FAIL / not init.
+ */
+int  gdt_user_soft_verify(int fDoLar);
+
+/**
+ * Fill *pOut with last soft snapshot (zeros if never init).
+ * Returns 1 if soft snapshot is live, 0 otherwise.
+ */
+int  gdt_user_soft_info_get(struct gj_gdt_user_soft *pOut);
+
+/**
+ * Greppable soft summary:
+ *   gdt: user soft inits=… ap=… lar_probe=… lar_ok=… lar_bad=… verify_ok=… verify_bad=…
+ *   gdt: user soft cs32 acc=0x… gran=0x… ready=… compat=… sel=0x…
+ *   gdt: user soft ds acc=0x… ok=… sel=0x… cs64 acc=0x… gran=0x… long=… sel=0x…
+ *   gdt: user soft tss rsp0=0x… ist1=0x… lar_ar=0x…
+ *   gdt: user soft verify PASS|FAIL|idle
+ */
+void gdt_user_soft_log(void);

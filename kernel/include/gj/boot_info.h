@@ -29,6 +29,26 @@
  * Consumers should prefer flags when present, but still tolerate flags==0 and
  * probe non-zero fields (older fillers).
  *
+ * Soft product surface (this module / UEFI handoff only)
+ * ------------------------------------------------------
+ * Soft = greppable observability + classify helpers; never hard-fails the
+ * product path. Callers may ignore soft_* return codes.
+ *
+ *   boot_info_soft_memmap()  — walk EFI MD array; count usable reclaim types
+ *   boot_info_soft_gop_ok()  — soft FB geometry sanity (base/size/bpp)
+ *   boot_info_soft_log()     — serial markers (call after serial_init)
+ *
+ * Grep markers (kernel side, kprintf after serial_init):
+ *   boot: handoff soft PASS|PARTIAL|STUB …
+ *   boot: memmap soft PASS|SKIP|REJECT …
+ *   boot: GOP soft PASS|SKIP|REJECT …
+ *   boot: identity soft PASS …          (identity_map.c)
+ *
+ * Grep markers (EFI stub COM1, prefix GJ-EFI:):
+ *   GJ-EFI: GOP soft PASS|SKIP …
+ *   GJ-EFI: memmap soft PASS|REJECT …
+ *   GJ-EFI: handoff soft PASS|PARTIAL …
+ *
  * Pure C11 freestanding; dual MIT OR Apache-2.0.
  */
 #pragma once
@@ -48,6 +68,42 @@
 #define GJ_BOOT_F_FB         (1u << 2) /* u64FbBase + geometry valid */
 #define GJ_BOOT_F_KERNEL_IMG (1u << 3) /* u64KernelPhys/Bytes span valid */
 #define GJ_BOOT_F_MB2_INFO   (1u << 4) /* u32Mb2InfoPhys is Multiboot2 info */
+
+/*
+ * EFI memory types soft-reclaimed as usable RAM after ExitBootServices
+ * (must match kmain_uefi region filter and uefi_stub soft memmap walk).
+ */
+#define GJ_BOOT_EFI_MT_LOADER_CODE  1u
+#define GJ_BOOT_EFI_MT_LOADER_DATA  2u
+#define GJ_BOOT_EFI_MT_BS_CODE      3u
+#define GJ_BOOT_EFI_MT_BS_DATA      4u
+#define GJ_BOOT_EFI_MT_CONVENTIONAL 7u
+#define GJ_BOOT_EFI_MT_ACPI_RECLAIM 9u
+
+/* Minimum EFI_MEMORY_DESCRIPTOR layout used by soft memmap walks. */
+struct gj_boot_efi_md {
+    u32 u32Type;
+    u32 u32Pad;
+    u64 paPhysical;
+    u64 vaVirtual;
+    u64 u64Pages;
+    u64 u64Attribute;
+};
+
+/**
+ * Soft EFI memmap classification (observability only).
+ * Zero-filled if pInfo has no map; never panics.
+ */
+struct gj_boot_soft_memmap {
+    u64 cDescs;        /* total descriptors walked */
+    u64 cUsableDescs;  /* reclaimable-type descriptors */
+    u64 cUsablePages;  /* sum of 4 KiB pages in usable descs */
+    u64 cbUsable;      /* cUsablePages * 4096 */
+    u64 cConvPages;    /* ConventionalMemory pages only */
+    u64 u64DescSize;   /* stride used for the walk */
+    u32 fPresent;      /* 1 if map pointer + bytes non-zero */
+    u32 fOk;           /* 1 if present and cUsablePages > 0 */
+};
 
 struct gj_boot_info {
     u32  u32Magic;       /* GJ_BOOT_INFO_MAGIC */
@@ -89,6 +145,29 @@ const struct gj_boot_info *boot_info_get(void);
  * NULL or the snapshot is not a GreenJade handoff.
  */
 int boot_info_valid(const struct gj_boot_info *pInfo);
+
+/**
+ * Soft: classify EFI memory map in *pInfo into *pOut.
+ * UEFI only (u64MemDescSize stride). Multiboot maps leave fPresent=0.
+ * Soft-safe: NULL args no-op; bad stride falls back to sizeof(gj_boot_efi_md).
+ * Grep: boot: memmap soft (via boot_info_soft_log).
+ */
+void boot_info_soft_memmap(const struct gj_boot_info *pInfo,
+                           struct gj_boot_soft_memmap *pOut);
+
+/**
+ * Soft: 1 if FB base + geometry look usable for early desktop FB.
+ * Rejects zero base, zero dims, bpp not in {15,16,24,32}, pitch < width*bytes.
+ * Grep: boot: GOP soft (via boot_info_soft_log).
+ */
+int boot_info_soft_gop_ok(const struct gj_boot_info *pInfo);
+
+/**
+ * Soft: greppable handoff / memmap / GOP serial markers.
+ * Call after serial_init (UEFI: identity_map path). Never hard-fails.
+ * Grep: boot: handoff soft | boot: memmap soft | boot: GOP soft
+ */
+void boot_info_soft_log(const struct gj_boot_info *pInfo);
 
 /**
  * Product UEFI entry (long mode, identity map from firmware).

@@ -4,6 +4,8 @@
  *
  * Process (task): shared CNode, root meta (slot 0), default pager on PCB,
  * wait4 reaper, G-PROC-5 death (CNode wipe + private AS for wait children).
+ * Soft deepen: pager ep ref/badge + slot-1 mirror; wait reparent/WNOWAIT;
+ * death quota-aware CNode clear + orphan reparent (G-PROC-5).
  * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md · SOLARIS_STYLE §6
  */
 #pragma once
@@ -12,6 +14,20 @@
 #include <gj/error.h>
 #include <gj/fault.h>
 #include <gj/types.h>
+
+/*
+ * Optional user-visible pager mirror (CAP_ADDRESSING optional slot 1).
+ * Canonical pager remains PCB refPager; slot is introspection soft only.
+ */
+#ifndef GJ_CAP_SLOT_PAGER
+#define GJ_CAP_SLOT_PAGER 1ull
+#endif
+
+/* wait4 option bits (Linux-shaped soft; WNOHANG is the product path). */
+#define GJ_WAIT_WNOHANG    1
+#define GJ_WAIT_WUNTRACED  2
+#define GJ_WAIT_WCONTINUED 8
+#define GJ_WAIT_WNOWAIT    0x01000000
 
 /*
  * Root meta object installed in CNode slot 0 after bootstrap.
@@ -119,16 +135,33 @@ gj_status_t gj_process_bootstrap_root_meta(struct gj_process *pProc,
 /**
  * Canonical pager registration (PCB). Does not require well-known CNode slot.
  * Endpoint is named by Scheme A handle in *this* process CNode (or null to clear).
- * v1: stores ref; full impl resolves ENDPOINT + GRANT and holds kernel ref.
+ * Soft (SOLARIS_STYLE §9): ENDPOINT+GRANT, LIVE check, kernel u32Ref hold,
+ * optional badge snap, optional slot-1 mirror; replace drops prior hold.
  */
 gj_status_t gj_process_set_pager(struct gj_process *pProc, u64 u64EpSlot,
                                  u32 u32EpGen);
 
-/** Clear pager (empty again). */
+/**
+ * Soft: set pager with explicit badge. u32Badge==0 ⇒ snap door_get_badge();
+ * non-zero stores the caller badge on the PCB.
+ */
+gj_status_t gj_process_set_pager_badge(struct gj_process *pProc, u64 u64EpSlot,
+                                       u32 u32EpGen, u32 u32Badge);
+
+/** Clear pager (empty again). Soft: drop kernel ep ref; clear slot-1 mirror. */
 void gj_process_clear_pager(struct gj_process *pProc);
 
-/** Non-zero if pager registered (gen != 0). */
+/** Non-zero if pager registered (gen != 0) and soft-refresh LIVE. */
 int gj_process_has_pager(const struct gj_process *pProc);
+
+/** Soft: PCB pager badge (0 if none). */
+u32 gj_process_pager_badge(const struct gj_process *pProc);
+
+/**
+ * Soft: if registered pager endpoint is not LIVE, clear PCB pager (ep-revoke
+ * hook surface; full global scan later).
+ */
+void gj_process_pager_refresh(struct gj_process *pProc);
 
 /**
  * Page-fault policy entry (CAP_ADDRESSING fault path).
@@ -174,7 +207,7 @@ void process_wait_note_exit(struct gj_process *pChild, u32 u32Code);
 /** Drop wait-table entry for pProc (cap wait / spawn slot recycle). */
 void process_wait_forget(struct gj_process *pProc);
 /**
- * wait4-shaped: pid -1 = any child; options bit0 = WNOHANG.
+ * wait4-shaped: pid -1 = any child; options WNOHANG / soft WNOWAIT.
  * Returns child pid, 0 (WNOHANG none), or -errno (ECHILD).
  * *pStatus gets exit status (code << 8) when non-NULL.
  */
@@ -182,7 +215,8 @@ i64  process_wait4(i64 i64Pid, i32 *pStatus, int nOptions);
 
 /**
  * G-PROC-5 death: mark zombie, clear pager/exception port, drop regions.
- * For wait-registered children: wipe CNode slots + destroy private AS.
+ * Soft deepen: orphan reparent to init, quota+CDT-aware CNode wipe for
+ * wait-registered children, private AS destroy, exec scrub.
  * Never destroys boot/init AS. Idempotent when already fully torn down.
  */
 void process_death(struct gj_process *pProc, u32 u32ExitCode);
@@ -204,3 +238,16 @@ i64 process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions);
 
 /** Mark a wait-registered Linux pid as zombie (exit code). Returns 0 or -ESRCH. */
 i64 process_linux_exit_pid(u32 u32Pid, u32 u32Code);
+
+/**
+ * Soft wait-table observability (reaper deepen).
+ * u32Ppid==0 → any parent. Counts unreaped used slots matching filter.
+ */
+u32 process_wait_live_count(u32 u32Ppid);
+u32 process_wait_zombie_count(u32 u32Ppid);
+
+/**
+ * Soft: reparent unreaped children of u32OldPpid onto u32NewPpid (init=1).
+ * Used by process_death (G-PROC-5 orphan path). Returns count reparented.
+ */
+u32 process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid);

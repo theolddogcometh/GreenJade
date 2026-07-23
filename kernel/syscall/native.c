@@ -12,6 +12,9 @@
  *     their product wiring lands; numbers stay frozen (syscall.h).
  *   - Door façades (session/net/store/vfs) and platform ops are the main
  *     product surface for freestanding embeds (sessiond, scsi_mid, …).
+ *   - Soft stats (gj_native_dispatch_stats_*): entry/outcome + subsystem
+ *     buckets + copy-helper counters. Diagnostics only; never hard-gate.
+ *     greppable: native: soft stats
  *
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  */
@@ -54,6 +57,194 @@
 
 extern struct gj_process *g_pLinuxProc;
 
+/* Soft product counters (wrap OK). See gj_native_dispatch_stats in syscall.h. */
+static struct gj_native_dispatch_stats g_nativeStats;
+
+void
+gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    *pOut = g_nativeStats;
+}
+
+void
+gj_native_dispatch_stats_reset(void)
+{
+    memset(&g_nativeStats, 0, sizeof(g_nativeStats));
+}
+
+u64
+gj_native_dispatch_stats_soft(void)
+{
+    /* Grep: native: soft stats */
+    kprintf("native: soft stats entries=%llu null=%llu handled=%llu "
+            "nosupport=%llu ok=%llu err=%llu "
+            "inval=%llu fault=%llu nodev=%llu again=%llu io=%llu nomem=%llu "
+            "diag=%llu ipc=%llu cap=%llu process=%llu thread=%llu cold=%llu "
+            "gpu=%llu memobj=%llu hda=%llu door=%llu platform=%llu "
+            "notify=%llu console=%llu scsi=%llu "
+            "cin_ok=%llu cin_fail=%llu cout_ok=%llu cout_fail=%llu "
+            "cname_ok=%llu cname_fail=%llu bin=%llu bout=%llu "
+            "last_nr=%llu last_ret=%llu\n",
+            (unsigned long long)g_nativeStats.u64Entries,
+            (unsigned long long)g_nativeStats.u64NullGuard,
+            (unsigned long long)g_nativeStats.u64Handled,
+            (unsigned long long)g_nativeStats.u64Nosupport,
+            (unsigned long long)g_nativeStats.u64Ok,
+            (unsigned long long)g_nativeStats.u64Err,
+            (unsigned long long)g_nativeStats.u64Inval,
+            (unsigned long long)g_nativeStats.u64Fault,
+            (unsigned long long)g_nativeStats.u64Nodev,
+            (unsigned long long)g_nativeStats.u64Again,
+            (unsigned long long)g_nativeStats.u64Io,
+            (unsigned long long)g_nativeStats.u64Nomem,
+            (unsigned long long)g_nativeStats.u64Diag,
+            (unsigned long long)g_nativeStats.u64Ipc,
+            (unsigned long long)g_nativeStats.u64Cap,
+            (unsigned long long)g_nativeStats.u64Process,
+            (unsigned long long)g_nativeStats.u64Thread,
+            (unsigned long long)g_nativeStats.u64Cold,
+            (unsigned long long)g_nativeStats.u64Gpu,
+            (unsigned long long)g_nativeStats.u64Memobj,
+            (unsigned long long)g_nativeStats.u64Hda,
+            (unsigned long long)g_nativeStats.u64DoorFacade,
+            (unsigned long long)g_nativeStats.u64Platform,
+            (unsigned long long)g_nativeStats.u64Notify,
+            (unsigned long long)g_nativeStats.u64Console,
+            (unsigned long long)g_nativeStats.u64Scsi,
+            (unsigned long long)g_nativeStats.u64CopyInOk,
+            (unsigned long long)g_nativeStats.u64CopyInFail,
+            (unsigned long long)g_nativeStats.u64CopyOutOk,
+            (unsigned long long)g_nativeStats.u64CopyOutFail,
+            (unsigned long long)g_nativeStats.u64CopyNameOk,
+            (unsigned long long)g_nativeStats.u64CopyNameFail,
+            (unsigned long long)g_nativeStats.u64BytesCopyIn,
+            (unsigned long long)g_nativeStats.u64BytesCopyOut,
+            (unsigned long long)g_nativeStats.u64LastNr,
+            (unsigned long long)g_nativeStats.u64LastRet);
+    return g_nativeStats.u64Entries;
+}
+
+/**
+ * Bump subsystem bucket for a handled GJ_SYS_* number.
+ * Unknown / reserved numbers are not classified here (caller uses nosupport).
+ */
+static void
+native_stats_class_bump(u64 u64Nr)
+{
+    switch (u64Nr) {
+    case GJ_SYS_DEBUG_LOG:
+    case GJ_SYS_YIELD:
+    case GJ_SYS_EXIT:
+        g_nativeStats.u64Diag++;
+        break;
+    case GJ_SYS_IPC_CALL:
+    case GJ_SYS_IPC_RECV:
+    case GJ_SYS_IPC_REPLY:
+        g_nativeStats.u64Ipc++;
+        break;
+    case GJ_SYS_CAP_MINT:
+    case GJ_SYS_CAP_MOVE:
+    case GJ_SYS_CAP_COPY:
+    case GJ_SYS_CAP_REVOKE:
+    case GJ_SYS_CAP_IDENT:
+        g_nativeStats.u64Cap++;
+        break;
+    case GJ_SYS_PROCESS_SET_PAGER:
+    case GJ_SYS_PROCESS_SPAWN:
+    case GJ_SYS_PROCESS_KILL:
+        g_nativeStats.u64Process++;
+        break;
+    case GJ_SYS_THREAD_SET_QOS:
+    case GJ_SYS_THREAD_SET_CPU:
+        g_nativeStats.u64Thread++;
+        break;
+    case GJ_SYS_COLD_DEQUEUE:
+    case GJ_SYS_COLD_REPLY:
+    case GJ_SYS_PERSONALITY_SERVE:
+        g_nativeStats.u64Cold++;
+        break;
+    case GJ_SYS_GPU_PRESENT:
+    case GJ_SYS_GPU_DISPLAY_INFO:
+        g_nativeStats.u64Gpu++;
+        break;
+    case GJ_SYS_MEMOBJ_CREATE_NAMED:
+    case GJ_SYS_MEMOBJ_MAP_NAMED:
+        g_nativeStats.u64Memobj++;
+        break;
+    case GJ_SYS_HDA_STREAM:
+        g_nativeStats.u64Hda++;
+        break;
+    case GJ_SYS_SESSION:
+    case GJ_SYS_NET:
+    case GJ_SYS_STORE:
+    case GJ_SYS_VFS:
+        g_nativeStats.u64DoorFacade++;
+        break;
+    case GJ_SYS_PLATFORM_INFO:
+        g_nativeStats.u64Platform++;
+        break;
+    case GJ_SYS_NOTIFY_WAIT:
+        g_nativeStats.u64Notify++;
+        break;
+    case GJ_SYS_CONSOLE:
+        g_nativeStats.u64Console++;
+        break;
+    case GJ_SYS_SCSI:
+        g_nativeStats.u64Scsi++;
+        break;
+    default:
+        /* Handled case without a named bucket (should stay rare). */
+        break;
+    }
+}
+
+/**
+ * Classify outcome from i64Ret after a dispatch completes.
+ */
+static void
+native_stats_outcome(i64 i64Ret)
+{
+    if (i64Ret >= 0) {
+        g_nativeStats.u64Ok++;
+        return;
+    }
+    g_nativeStats.u64Err++;
+    if (i64Ret == GJ_ERR_INVAL) {
+        g_nativeStats.u64Inval++;
+    } else if (i64Ret == GJ_ERR_FAULT) {
+        g_nativeStats.u64Fault++;
+    } else if (i64Ret == GJ_ERR_NODEV) {
+        g_nativeStats.u64Nodev++;
+    } else if (i64Ret == GJ_ERR_AGAIN) {
+        g_nativeStats.u64Again++;
+    } else if (i64Ret == GJ_ERR_IO) {
+        g_nativeStats.u64Io++;
+    } else if (i64Ret == GJ_ERR_NOMEM) {
+        g_nativeStats.u64Nomem++;
+    }
+    /* NOSUPPORT and other GJ_ERR_* remain under u64Err (+ u64Nosupport). */
+}
+
+/**
+ * Finish soft accounting for one dispatch (known case or default).
+ */
+static void
+native_stats_finish(u64 u64Nr, i64 i64Ret, int fHitDefault)
+{
+    if (fHitDefault) {
+        g_nativeStats.u64Nosupport++;
+    } else {
+        g_nativeStats.u64Handled++;
+        native_stats_class_bump(u64Nr);
+    }
+    native_stats_outcome(i64Ret);
+    g_nativeStats.u64LastNr = u64Nr;
+    g_nativeStats.u64LastRet = (u64)i64Ret;
+}
+
 /**
  * Copy @cb bytes to caller buffer at @u64Dst.
  * Uses copy_to_user when the range is in the user VA window.
@@ -62,16 +253,20 @@ static i64
 native_copy_out(u64 u64Dst, const void *pSrc, u32 cb)
 {
     if (u64Dst == 0 || pSrc == NULL || cb == 0) {
+        g_nativeStats.u64CopyOutFail++;
         return GJ_ERR_INVAL;
     }
     if (user_range_ok(u64Dst, cb)) {
         if (copy_to_user(u64Dst, pSrc, cb) != GJ_OK) {
+            g_nativeStats.u64CopyOutFail++;
             return GJ_ERR_FAULT;
         }
     } else {
         /* Kernel-smoke path: destination is a trusted HHDM/static buffer. */
         memcpy((void *)(gj_vaddr_t)u64Dst, pSrc, cb);
     }
+    g_nativeStats.u64CopyOutOk++;
+    g_nativeStats.u64BytesCopyOut += (u64)cb;
     return 0;
 }
 
@@ -82,15 +277,19 @@ static i64
 native_copy_in(void *pDst, u64 u64Src, u32 cb)
 {
     if (pDst == NULL || u64Src == 0 || cb == 0) {
+        g_nativeStats.u64CopyInFail++;
         return GJ_ERR_INVAL;
     }
     if (user_range_ok(u64Src, cb)) {
         if (copy_from_user(pDst, u64Src, cb) != GJ_OK) {
+            g_nativeStats.u64CopyInFail++;
             return GJ_ERR_FAULT;
         }
     } else {
         memcpy(pDst, (const void *)(gj_vaddr_t)u64Src, cb);
     }
+    g_nativeStats.u64CopyInOk++;
+    g_nativeStats.u64BytesCopyIn += (u64)cb;
     return 0;
 }
 
@@ -105,6 +304,7 @@ native_copy_name(char *szDst, u64 u64Src, u32 cbMax)
     i64 st;
 
     if (szDst == NULL || u64Src == 0 || cbMax < 2u) {
+        g_nativeStats.u64CopyNameFail++;
         return GJ_ERR_INVAL;
     }
     memset(szDst, 0, cbMax);
@@ -113,15 +313,18 @@ native_copy_name(char *szDst, u64 u64Src, u32 cbMax)
 
         st = native_copy_in(&ch, u64Src + i, 1u);
         if (st != 0) {
+            g_nativeStats.u64CopyNameFail++;
             return st;
         }
         szDst[i] = ch;
         if (ch == '\0') {
+            g_nativeStats.u64CopyNameOk++;
             return 0;
         }
     }
     /* Truncated: force terminator (defensive; names must fit). */
     szDst[cbMax - 1u] = '\0';
+    g_nativeStats.u64CopyNameOk++;
     return 0;
 }
 
@@ -146,9 +349,13 @@ native_tid_or_current(u32 u32Id)
 void
 gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
 {
+    int fHitDefault = 0;
+
     if (pRegs == NULL) {
+        g_nativeStats.u64NullGuard++;
         return;
     }
+    g_nativeStats.u64Entries++;
     /* Native errors are GJ_ERR_*; unknown numbers land here until a case. */
     pRegs->i64Ret = GJ_ERR_NOSUPPORT;
 
@@ -836,7 +1043,10 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         break;
     }
     default:
+        fHitDefault = 1;
         pRegs->i64Ret = GJ_ERR_NOSUPPORT;
         break;
     }
+
+    native_stats_finish(pRegs->u64Nr, pRegs->i64Ret, fHitDefault);
 }

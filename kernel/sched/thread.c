@@ -5,6 +5,11 @@
  * Cooperative threads + RR/QoS pick. See thread.h for dual-stack layout and
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
+ *
+ * Soft product deepen (this unit only):
+ *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
+ *   - pick_next soft stats + equal-rank wait-age fairness
+ *   - kstack base+mid canary + poison HWM soft scan
  */
 #include <gj/apic.h>
 #include <gj/cpu.h>
@@ -30,16 +35,38 @@ static struct gj_thread *g_apIdle[GJ_CPU_STATIC_MAX]; /* per-CPU idle (0 = BSP) 
 static u32 g_u32NextId = 1;
 /* External affinity/QoS — keep out of struct to preserve layout stability. */
 static u8 g_aThrCpu[GJ_MAX_THREADS]; /* 0=BSP default; 0xFF=any */
-static u8 g_aThrQos[GJ_MAX_THREADS]; /* 0=normal 1=interactive 2=background */
+static u8 g_aThrQos[GJ_MAX_THREADS]; /* GJ_QOS_* base class */
+/* Soft PI residual boost ticks (capped); decayed on schedule leave. */
+static u8 g_aThrBoost[GJ_MAX_THREADS];
+/* Soft wait-age: last pick gen for equal-rank fairness. */
+static u32 g_aThrLastPick[GJ_MAX_THREADS];
+static u32 g_u32PickGen;
 
 /* Soft preemption flag (BSP idle path; not per-CPU). */
 static volatile int g_fYieldReq;
 
+/* Soft product counters (pick / QoS / canary). */
+static struct gj_sched_soft_stats g_soft;
+static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
+
 static void thread_trampoline(void);
 
+static u32
+thr_index(struct gj_thread *pThr)
+{
+    if (pThr == NULL) {
+        return GJ_MAX_THREADS;
+    }
+    if (pThr < &g_aThreads[0] || pThr >= &g_aThreads[GJ_MAX_THREADS]) {
+        return GJ_MAX_THREADS;
+    }
+    return (u32)(pThr - &g_aThreads[0]);
+}
+
 /*
- * aKstack grows down from top. Plant canary at low address so overflow
- * stomps it before smashing adjacent thr fields / other stacks.
+ * aKstack grows down from top. Plant base canary at low address + mid
+ * soft canary so overflow stomps markers before adjacent thr fields.
+ * Poison fill enables soft high-water measurement.
  */
 static u64
 thr_kstack_top(struct gj_thread *pThr)
@@ -54,19 +81,67 @@ static void
 thr_plant_kstack_canary(struct gj_thread *pThr)
 {
     u64 *pCan;
+    u64 *pMid;
 
     if (pThr == NULL) {
         return;
     }
+    /* Soft poison: unused depth stays GJ_THR_KSTACK_POISON for HWM scan. */
+    memset(pThr->aKstack, (int)GJ_THR_KSTACK_POISON, GJ_THR_KSTACK_SIZE);
     pCan = (u64 *)(void *)&pThr->aKstack[0];
     *pCan = GJ_THR_KSTACK_CANARY;
     pThr->u64KstackCanary = GJ_THR_KSTACK_CANARY;
+    pMid = (u64 *)(void *)&pThr->aKstack[GJ_THR_KSTACK_MID];
+    *pMid = GJ_THR_KSTACK_CANARY_MID;
+    g_soft.u64CanaryPlant++;
+}
+
+/*
+ * Soft high-water: bytes from top down to first non-poison (stack grows down).
+ * Skips base canary region; mid canary may register as used if crossed.
+ */
+static u32
+thr_kstack_hwm_soft(struct gj_thread *pThr)
+{
+    u8 *pBase;
+    u8 *pTop;
+    u8 *pScan;
+    u32 cbUsed;
+
+    if (pThr == NULL) {
+        return 0;
+    }
+    pBase = pThr->aKstack;
+    pTop = pBase + GJ_THR_KSTACK_SIZE;
+    pScan = pTop;
+    while (pScan > pBase + sizeof(u64)) {
+        u32 u32Off;
+
+        pScan--;
+        u32Off = (u32)(pScan - pBase);
+        /* Mid canary is planted non-poison — skip for HWM soft only. */
+        if (u32Off >= GJ_THR_KSTACK_MID &&
+            u32Off < GJ_THR_KSTACK_MID + (u32)sizeof(u64)) {
+            continue;
+        }
+        if (*pScan != GJ_THR_KSTACK_POISON) {
+            pScan++;
+            break;
+        }
+    }
+    cbUsed = (u32)(pTop - pScan);
+    g_soft.u64StackHwmSamples++;
+    if ((u64)cbUsed > g_soft.u64StackHwmMax) {
+        g_soft.u64StackHwmMax = (u64)cbUsed;
+    }
+    return cbUsed;
 }
 
 static void
 thread_check_kstack(struct gj_thread *pThr)
 {
     u64 *pCan;
+    u64 *pMid;
 
     if (pThr == NULL) {
         return;
@@ -75,8 +150,11 @@ thread_check_kstack(struct gj_thread *pThr)
     if (pThr->u64KstackCanary == 0) {
         return;
     }
+    g_soft.u64CanaryCheck++;
     pCan = (u64 *)(void *)&pThr->aKstack[0];
+    pMid = (u64 *)(void *)&pThr->aKstack[GJ_THR_KSTACK_MID];
     if (*pCan != pThr->u64KstackCanary) {
+        g_soft.u64CanaryFail++;
         kprintf("sched: KSTACK OVERFLOW thr=%u canary=0x%lx got=0x%lx — halt\n",
                 pThr->u32Id, (unsigned long)pThr->u64KstackCanary,
                 (unsigned long)*pCan);
@@ -84,6 +162,18 @@ thread_check_kstack(struct gj_thread *pThr)
             __asm__ volatile("cli; hlt");
         }
     }
+    if (*pMid != GJ_THR_KSTACK_CANARY_MID) {
+        g_soft.u64CanaryFail++;
+        kprintf("sched: KSTACK MID OVERFLOW thr=%u mid=0x%lx got=0x%lx — halt\n",
+                pThr->u32Id, (unsigned long)GJ_THR_KSTACK_CANARY_MID,
+                (unsigned long)*pMid);
+        for (;;) {
+            __asm__ volatile("cli; hlt");
+        }
+    }
+    g_soft.u64CanaryMidOk++;
+    g_soft.u64CanaryOk++;
+    (void)thr_kstack_hwm_soft(pThr);
 }
 
 /*
@@ -183,6 +273,11 @@ thread_init(void)
     memset(g_aThreads, 0, sizeof(g_aThreads));
     memset(g_aThrCpu, 0, sizeof(g_aThrCpu)); /* all BSP-affine by default */
     memset(g_aThrQos, 0, sizeof(g_aThrQos));
+    memset(g_aThrBoost, 0, sizeof(g_aThrBoost));
+    memset(g_aThrLastPick, 0, sizeof(g_aThrLastPick));
+    memset(&g_soft, 0, sizeof(g_soft));
+    g_u32PickGen = 1;
+    g_fSoftStatsOnce = 0;
     g_fYieldReq = 0;
     /* Slot 0 = idle/bootstrap thread representing current execution */
     g_pIdle = &g_aThreads[0];
@@ -195,17 +290,25 @@ thread_init(void)
     thr_plant_kstack_canary(g_pIdle);
     g_pIdle->u32SysUserValid = 0;
     g_aThrCpu[0] = 0;
+    g_aThrQos[0] = GJ_QOS_NORMAL;
     g_apIdle[0] = g_pIdle;
     cpu_set_current_thread(g_pIdle);
     for (iThr = 1; iThr < GJ_MAX_THREADS; iThr++) {
         g_aThreads[iThr].u32State = GJ_THR_UNUSED;
         g_aThrCpu[iThr] = 0;
+        g_aThrQos[iThr] = GJ_QOS_NORMAL;
+        g_aThrBoost[iThr] = 0;
     }
     for (iThr = 1; iThr < GJ_CPU_STATIC_MAX; iThr++) {
         g_apIdle[iThr] = NULL;
     }
     kprintf("sched: thread_init idle id=%u kstack=0x%lx\n", g_pIdle->u32Id,
             (unsigned long)g_pIdle->u64KstackTop);
+    /* Soft product markers (greppable; prefix-stable). */
+    kprintf("sched: soft qos classes=0..4 (norm/int/bg/util/drv) boost_cap=%u\n",
+            GJ_QOS_BOOST_CAP);
+    kprintf("sched: soft kstack canary base+mid hwm poison=0x%x mid_off=%u\n",
+            (unsigned)GJ_THR_KSTACK_POISON, (unsigned)GJ_THR_KSTACK_MID);
 }
 
 int
@@ -233,7 +336,9 @@ thread_init_ap_idle(u32 u32Cpu)
     }
     memset(pThr, 0, sizeof(*pThr));
     g_aThrCpu[iThr] = (u8)u32Cpu;
-    g_aThrQos[iThr] = 0;
+    g_aThrQos[iThr] = GJ_QOS_NORMAL;
+    g_aThrBoost[iThr] = 0;
+    g_aThrLastPick[iThr] = 0;
     pThr->u32Id = g_u32NextId++;
     pThr->u32State = GJ_THR_RUNNABLE;
     pThr->pProc = NULL;
@@ -273,7 +378,9 @@ thread_create(struct gj_process *pProc, void (*pfn)(void *), void *pArg)
     }
     memset(pThr, 0, sizeof(*pThr));
     g_aThrCpu[iThr] = 0; /* BSP until thread_set_cpu */
-    g_aThrQos[iThr] = 0;
+    g_aThrQos[iThr] = GJ_QOS_NORMAL;
+    g_aThrBoost[iThr] = 0;
+    g_aThrLastPick[iThr] = 0;
     pThr->u32Id = g_u32NextId++;
     pThr->u32State = GJ_THR_RUNNABLE;
     pThr->pProc = pProc;
@@ -448,17 +555,76 @@ cpu_idle(u32 u32Cpu)
     return NULL;
 }
 
+/*
+ * Base QoS → rank (higher first). Historical 0/1/2 order preserved:
+ * interactive > normal > background. Soft deepen adds utility + driver.
+ */
 static u8
 qos_rank(u8 u8Qos)
 {
-    /* interactive(1) > normal(0) > background(2) */
-    if (u8Qos == 1) {
-        return 2;
+    /* DRIVER(4) > INTERACTIVE(1) > NORMAL(0) > UTILITY(3) > BACKGROUND(2) */
+    if (u8Qos == GJ_QOS_DRIVER) {
+        return 4;
     }
-    if (u8Qos == 2) {
+    if (u8Qos == GJ_QOS_INTERACTIVE) {
+        return 3;
+    }
+    if (u8Qos == GJ_QOS_UTILITY) {
+        return 1;
+    }
+    if (u8Qos == GJ_QOS_BACKGROUND) {
         return 0;
     }
-    return 1;
+    /* NORMAL and unknown → middle-high default */
+    return 2;
+}
+
+static u8
+qos_rank_eff(u32 u32Idx)
+{
+    u8 u8R;
+
+    if (u32Idx >= GJ_MAX_THREADS) {
+        return 0;
+    }
+    u8R = qos_rank(g_aThrQos[u32Idx]);
+    /* Soft capped PI: residual boost lifts rank but never past driver. */
+    if (g_aThrBoost[u32Idx] != 0) {
+        u8 u8Cap = 4;
+
+        if ((u16)u8R + (u16)g_aThrBoost[u32Idx] >= (u16)u8Cap) {
+            u8R = u8Cap;
+        } else {
+            u8R = (u8)(u8R + g_aThrBoost[u32Idx]);
+        }
+    }
+    return u8R;
+}
+
+static void
+pick_note_class(u8 u8Qos)
+{
+    if (u8Qos == GJ_QOS_INTERACTIVE) {
+        g_soft.u64PickInteractive++;
+    } else if (u8Qos == GJ_QOS_BACKGROUND) {
+        g_soft.u64PickBackground++;
+    } else if (u8Qos == GJ_QOS_UTILITY) {
+        g_soft.u64PickUtility++;
+    } else if (u8Qos == GJ_QOS_DRIVER) {
+        g_soft.u64PickDriver++;
+    } else {
+        g_soft.u64PickNormal++;
+    }
+}
+
+static void
+pick_soft_maybe_dump(void)
+{
+    /* One-shot warm soft dump after enough picks (greppable product depth). */
+    if (g_fSoftStatsOnce == 0 && g_soft.u64PickTotal >= 64ull) {
+        g_fSoftStatsOnce = 1;
+        (void)thread_sched_soft_stats_print();
+    }
 }
 
 static struct gj_thread *
@@ -470,8 +636,10 @@ pick_next(void)
     u32 u32Start;
     struct gj_thread *pIdle;
     struct gj_thread *pBest = NULL;
+    struct gj_thread *pCur;
     u32 u32BestIdx = 0;
     u8 u8BestRank = 0;
+    u32 u32BestWait = 0;
 
     if (u32Cpu >= GJ_CPU_STATIC_MAX) {
         u32Cpu = 0;
@@ -482,8 +650,10 @@ pick_next(void)
         u32 u32Idx = (u32Start + iThr) % GJ_MAX_THREADS;
         struct gj_thread *pThr = &g_aThreads[u32Idx];
         u8 u8R;
+        u32 u32Wait;
 
         if (!thr_ok_on_cpu(u32Idx, u32Cpu)) {
+            g_soft.u64PickAffSkip++;
             continue;
         }
         /* Idle threads only when nothing else is runnable */
@@ -497,26 +667,52 @@ pick_next(void)
         if (pThr->u32State != GJ_THR_RUNNABLE) {
             continue;
         }
-        u8R = qos_rank(g_aThrQos[u32Idx]);
-        if (pBest == NULL || u8R > u8BestRank) {
+        u8R = qos_rank_eff(u32Idx);
+        /* Soft wait-age: gen delta since last pick (equal-rank fairness). */
+        u32Wait = g_u32PickGen - g_aThrLastPick[u32Idx];
+        if (pBest == NULL || u8R > u8BestRank ||
+            (u8R == u8BestRank && u32Wait > u32BestWait)) {
+            if (pBest != NULL && u8R == u8BestRank && u32Wait > u32BestWait) {
+                g_soft.u64PickEqualFair++;
+            }
             pBest = pThr;
             u32BestIdx = u32Idx;
             u8BestRank = u8R;
+            u32BestWait = u32Wait;
         }
     }
     if (pBest != NULL) {
         g_aRobin[u32Cpu] = (u32BestIdx + 1) % GJ_MAX_THREADS;
+        g_aThrLastPick[u32BestIdx] = g_u32PickGen;
+        g_u32PickGen++;
+        g_soft.u64PickTotal++;
+        pick_note_class(g_aThrQos[u32BestIdx]);
+        pick_soft_maybe_dump();
         return pBest;
     }
     pIdle = cpu_idle(u32Cpu);
     if (pIdle != NULL && pIdle->u32State != GJ_THR_EXITED) {
+        u32 u32IdleIdx;
+
         if (pIdle->u32State == GJ_THR_BLOCKED ||
             pIdle->u32State == GJ_THR_UNUSED) {
             pIdle->u32State = GJ_THR_RUNNABLE;
         }
+        u32IdleIdx = thr_index(pIdle);
+        if (u32IdleIdx < GJ_MAX_THREADS) {
+            g_aThrLastPick[u32IdleIdx] = g_u32PickGen;
+        }
+        g_u32PickGen++;
+        g_soft.u64PickTotal++;
+        g_soft.u64PickIdle++;
+        pick_soft_maybe_dump();
         return pIdle;
     }
-    return thread_current();
+    pCur = thread_current();
+    g_soft.u64PickTotal++;
+    g_soft.u64PickSelf++;
+    pick_soft_maybe_dump();
+    return pCur;
 }
 
 void
@@ -527,7 +723,13 @@ thread_set_qos(u32 u32ThrId, u32 u32Qos)
     for (iThr = 0; iThr < GJ_MAX_THREADS; iThr++) {
         if (g_aThreads[iThr].u32Id == u32ThrId &&
             g_aThreads[iThr].u32State != GJ_THR_UNUSED) {
-            g_aThrQos[iThr] = (u8)(u32Qos <= 2u ? u32Qos : 0);
+            if (u32Qos <= GJ_QOS_CLASS_MAX) {
+                g_aThrQos[iThr] = (u8)u32Qos;
+            } else {
+                g_aThrQos[iThr] = GJ_QOS_NORMAL;
+                g_soft.u64QosClamp++;
+            }
+            g_soft.u64QosSet++;
             return;
         }
     }
@@ -543,7 +745,89 @@ thread_get_qos(u32 u32ThrId)
             return g_aThrQos[iThr];
         }
     }
+    return GJ_QOS_NORMAL;
+}
+
+void
+thread_qos_boost_soft(u32 u32ThrId, u32 u32Ticks)
+{
+    u32 iThr;
+    u8 u8Add;
+
+    if (u32Ticks == 0) {
+        return;
+    }
+    u8Add = (u8)(u32Ticks > GJ_QOS_BOOST_CAP ? GJ_QOS_BOOST_CAP : u32Ticks);
+    for (iThr = 0; iThr < GJ_MAX_THREADS; iThr++) {
+        if (g_aThreads[iThr].u32Id == u32ThrId &&
+            g_aThreads[iThr].u32State != GJ_THR_UNUSED) {
+            u16 u16Sum = (u16)g_aThrBoost[iThr] + (u16)u8Add;
+
+            if (u16Sum > GJ_QOS_BOOST_CAP) {
+                g_aThrBoost[iThr] = (u8)GJ_QOS_BOOST_CAP;
+            } else {
+                g_aThrBoost[iThr] = (u8)u16Sum;
+            }
+            g_soft.u64QosBoostSoft++;
+            return;
+        }
+    }
+}
+
+u32
+thread_qos_effective_rank(u32 u32ThrId)
+{
+    u32 iThr;
+
+    for (iThr = 0; iThr < GJ_MAX_THREADS; iThr++) {
+        if (g_aThreads[iThr].u32Id == u32ThrId &&
+            g_aThreads[iThr].u32State != GJ_THR_UNUSED) {
+            return (u32)qos_rank_eff(iThr);
+        }
+    }
     return 0;
+}
+
+void
+thread_sched_soft_stats_get(struct gj_sched_soft_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    *pOut = g_soft;
+}
+
+u64
+thread_sched_soft_stats_print(void)
+{
+    /* Grep: sched: soft stats */
+    kprintf("sched: soft stats pick=%lu idle=%lu int=%lu norm=%lu bg=%lu "
+            "util=%lu drv=%lu aff_skip=%lu eq_fair=%lu self=%lu "
+            "qos_set=%lu qos_clamp=%lu boost=%lu decay=%lu "
+            "can_plant=%lu can_chk=%lu can_ok=%lu can_mid=%lu can_fail=%lu "
+            "hwm_max=%lu hwm_n=%lu\n",
+            (unsigned long)g_soft.u64PickTotal,
+            (unsigned long)g_soft.u64PickIdle,
+            (unsigned long)g_soft.u64PickInteractive,
+            (unsigned long)g_soft.u64PickNormal,
+            (unsigned long)g_soft.u64PickBackground,
+            (unsigned long)g_soft.u64PickUtility,
+            (unsigned long)g_soft.u64PickDriver,
+            (unsigned long)g_soft.u64PickAffSkip,
+            (unsigned long)g_soft.u64PickEqualFair,
+            (unsigned long)g_soft.u64PickSelf,
+            (unsigned long)g_soft.u64QosSet,
+            (unsigned long)g_soft.u64QosClamp,
+            (unsigned long)g_soft.u64QosBoostSoft,
+            (unsigned long)g_soft.u64QosBoostDecay,
+            (unsigned long)g_soft.u64CanaryPlant,
+            (unsigned long)g_soft.u64CanaryCheck,
+            (unsigned long)g_soft.u64CanaryOk,
+            (unsigned long)g_soft.u64CanaryMidOk,
+            (unsigned long)g_soft.u64CanaryFail,
+            (unsigned long)g_soft.u64StackHwmMax,
+            (unsigned long)g_soft.u64StackHwmSamples);
+    return g_soft.u64PickTotal;
 }
 
 void
@@ -651,9 +935,17 @@ schedule(void)
     }
 
     if (pCur != NULL) {
+        u32 u32CurIdx;
+
         thread_check_kstack(pCur);
         if (pCur->u32State == GJ_THR_RUNNING) {
             pCur->u32State = GJ_THR_RUNNABLE;
+        }
+        /* Soft PI decay: one boost tick per leave (capped residual). */
+        u32CurIdx = thr_index(pCur);
+        if (u32CurIdx < GJ_MAX_THREADS && g_aThrBoost[u32CurIdx] != 0) {
+            g_aThrBoost[u32CurIdx]--;
+            g_soft.u64QosBoostDecay++;
         }
         /* Preserve SYSCALL return target across thr switch (per-CPU otherwise). */
         thread_save_sys_user(pCur);

@@ -190,6 +190,7 @@
  *           unetstack upmmhier (product v1.65)
  *           ucontinuum14500 uhda_client uscsi_live (product v1.66)
  *           u768gsoak umakefile14600 ubar3open (product v1.67)
+ *           ucontinuum14600 uioringmin u1tibopen (product v1.68)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -359,6 +360,11 @@
  *           (u768gsoak prints 1 (large-RAM soak path shipped soft);
  *            umakefile14600 prints 1; ubar3open prints 0 (bar3 still open);
  *            free exclusive continuum names; soft facts only;
+ *            does not claim Deck Top 50 PASS)
+ *           (ucontinuum14600 prints 1 (wired soft decade after 14500);
+ *            uioringmin prints 1 (io_uring min rings shipped soft — not full
+ *            SQE for games); u1tibopen prints 0 (full 1 TiB host soak still
+ *            open soft); free exclusive continuum names; soft facts only;
  *            does not claim Deck Top 50 PASS)
  */
 #include <gj/string.h>
@@ -14952,6 +14958,45 @@ cmd_ubar3open(void)
     return 0;
 }
 
+/*
+ * ucontinuum14600 — print 1 (wired soft) (product v1.68).
+ * Soft fact only; free exclusive name (ucontinuum14500 already v1.66).
+ * Does not claim Deck Top 50 PASS.
+ * Usage: ucontinuum14600
+ */
+static int
+cmd_ucontinuum14600(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
+ * uioringmin — print 1 (io_uring min rings shipped soft) (product v1.68).
+ * Soft fact only: setup/enter/register soft surface shipped; not full SQE
+ * for games. Free exclusive name. Does not claim Deck Top 50 PASS.
+ * Usage: uioringmin
+ */
+static int
+cmd_uioringmin(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
+ * u1tibopen — print 0 (full 1 TiB host soak still open) (product v1.68).
+ * Soft readiness one-liner; free exclusive name (u768gsoak already v1.67).
+ * Soft facts only; does not claim Deck Top 50 PASS.
+ * Usage: u1tibopen
+ */
+static int
+cmd_u1tibopen(void)
+{
+    out("0\n");
+    return 0;
+}
+
 /* Run one command line; returns 0 ok, -1 fail, 1 exit */
 static int
 run_line(const char *szLine)
@@ -15121,6 +15166,7 @@ run_line(const char *szLine)
             "unetstack upmmhier "
             "ucontinuum14500 uhda_client uscsi_live "
             "u768gsoak umakefile14600 ubar3open "
+            "ucontinuum14600 uioringmin u1tibopen "
             "dos2unix unix2dos "
             "sync pwd format mount bigfile install stats storecap storestats "
             "storeflush netstats version exit\n");
@@ -15263,7 +15309,7 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "version") == 0) {
         /* Keep substring "GreenJade shell (native vfs door)" for smoke gate */
-        out("GreenJade shell (native vfs door) v1.64\n");
+        out("GreenJade shell (native vfs door) v1.68\n");
         return 0;
     }
     if (gj_strcmp(aCmd, "storecap") == 0) {
@@ -18819,6 +18865,15 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "ubar3open") == 0) {
         return cmd_ubar3open();
     }
+    if (gj_strcmp(aCmd, "ucontinuum14600") == 0) {
+        return cmd_ucontinuum14600();
+    }
+    if (gj_strcmp(aCmd, "uioringmin") == 0) {
+        return cmd_uioringmin();
+    }
+    if (gj_strcmp(aCmd, "u1tibopen") == 0) {
+        return cmd_u1tibopen();
+    }
     if (gj_strcmp(aCmd, "dos2unix") == 0) {
         char aU[64];
 
@@ -19337,6 +19392,10 @@ _start(void)
         "u768gsoak",
         "umakefile14600",
         "ubar3open",
+        /* product v1.68: continuum14600/ioring-min/1tib-open soft one-liners */
+        "ucontinuum14600",
+        "uioringmin",
+        "u1tibopen",
         "version",
         "install",
         "exit",
@@ -19470,6 +19529,7 @@ _start(void)
     out("greenjade-shell: unetstack upmmhier PASS\n");
     out("greenjade-shell: ucontinuum14500 uhda_client uscsi_live PASS\n");
     out("greenjade-shell: u768gsoak umakefile14600 ubar3open PASS\n");
+    out("greenjade-shell: ucontinuum14600 uioringmin u1tibopen PASS\n");
     out("greenjade-shell: storeflush PASS\n");
     out("greenjade-shell: vfs PASS\n");
     out("greenjade-shell: interactive PASS\n");

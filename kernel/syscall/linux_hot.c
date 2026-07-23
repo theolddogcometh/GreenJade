@@ -802,33 +802,73 @@ gj_linux_hot_prctl(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_set_robust_list(struct gj_linux_regs *pRegs)
 {
+    gj_status_t st;
+
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
-    g_u64RobustHead = pRegs->u64Arg0;
-    g_u64RobustLen = pRegs->u64Arg1;
-    return 0;
+    /*
+     * Wire G-FUT-ROBUST / futex: robust set via futex_set_robust_list when
+     * a current thread exists. Soft process mirror kept for get fallback and
+     * kernel hybrid smoke without thr context.
+     */
+    st = futex_set_robust_list(pRegs->u64Arg0, pRegs->u64Arg1);
+    if (st == GJ_OK) {
+        g_u64RobustHead = pRegs->u64Arg0;
+        g_u64RobustLen = pRegs->u64Arg1;
+        return 0;
+    }
+    if (st == GJ_ERR_NOMEM) {
+        return -LINUX_ENOMEM;
+    }
+    /* Soft fallback: no thread_current (bring-up smoke path). */
+    if (thread_current() == NULL) {
+        if (pRegs->u64Arg1 == 0 || pRegs->u64Arg1 > 64ull) {
+            return -LINUX_EINVAL;
+        }
+        g_u64RobustHead = pRegs->u64Arg0;
+        g_u64RobustLen = pRegs->u64Arg1;
+        return 0;
+    }
+    return -LINUX_EINVAL;
 }
 
 i64
 gj_linux_hot_get_robust_list(struct gj_linux_regs *pRegs)
 {
-    /* get_robust_list(pid, **head_ptr, *len_ptr) */
+    /* get_robust_list(pid, **head_ptr, *len_ptr) — G-FUT-ROBUST soft */
     u64 head;
+    u64 len;
+    u32 u32Pid;
+    gj_status_t st;
 
     if (pRegs == NULL || pRegs->u64Arg1 == 0 || pRegs->u64Arg2 == 0) {
         return -LINUX_EFAULT;
     }
-    head = g_u64RobustHead;
+    u32Pid = (u32)pRegs->u64Arg0;
+    /* futex: robust get — prefer per-tid slot (tid 0 ⇒ current). */
+    st = futex_get_robust_list(u32Pid, &head, &len);
+    if (st != GJ_OK) {
+        /* Soft process mirror when slot unset / no thr (smoke PASS path). */
+        if (u32Pid != 0 && u32Pid != g_u32LinuxPid && u32Pid != g_u32LinuxTid) {
+            return -LINUX_ESRCH;
+        }
+        head = g_u64RobustHead;
+        len = g_u64RobustLen;
+    }
     if (user_range_ok(pRegs->u64Arg1, 8)) {
-        (void)copy_to_user(pRegs->u64Arg1, &head, 8);
+        if (copy_to_user(pRegs->u64Arg1, &head, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
     } else {
         *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = head;
     }
     if (user_range_ok(pRegs->u64Arg2, 8)) {
-        (void)copy_to_user(pRegs->u64Arg2, &g_u64RobustLen, 8);
+        if (copy_to_user(pRegs->u64Arg2, &len, 8) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
     } else {
-        *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = g_u64RobustLen;
+        *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = len;
     }
     return 0;
 }
@@ -1668,8 +1708,37 @@ gj_linux_hot_exit(struct gj_linux_regs *pRegs)
 {
     i64 i64Code = pRegs ? (i64)pRegs->u64Arg0 : 0;
     struct gj_thread *pThr = thread_current();
+    u64 u64Ctid;
 
     kprintf("linux: exit(%ld)\n", (long)i64Code);
+    /* futex: robust exit — soft G-FUT-ROBUST OWNER_DIED walk before death */
+    if (pThr != NULL) {
+        (void)futex_exit_robust_list(pThr);
+    }
+    /*
+     * Soft clear_child_tid: store 0 + wake one private waiter (glibc join).
+     * Best-effort; ignore faults on unmapped CTID.
+     */
+    u64Ctid = g_u64ClearChildTid;
+    g_u64ClearChildTid = 0;
+    if (u64Ctid != 0) {
+        struct gj_futex_key key;
+        int fOk = 0;
+
+        if (user_range_ok(u64Ctid, sizeof(u32))) {
+            if (user_range_mapped(u64Ctid, sizeof(u32)) &&
+                user_store_u32(u64Ctid, 0) == GJ_OK) {
+                fOk = 1;
+            }
+        } else {
+            /* Kernel-mode smoke path only */
+            *(volatile u32 *)(gj_vaddr_t)u64Ctid = 0;
+            fOk = 1;
+        }
+        if (fOk && futex_key_from_uaddr(&key, u64Ctid, 1) == GJ_OK) {
+            (void)futex_wake(&key, 1);
+        }
+    }
     if (pThr != NULL && pThr->pProc != NULL) {
         process_death(pThr->pProc, (u32)i64Code);
     }
@@ -2111,15 +2180,60 @@ gj_linux_hot_clock_nanosleep(struct gj_linux_regs *pRegs)
     return sleep_timespec(&tsK);
 }
 
+/*
+ * Soft futex timeout → absolute mono-nsec deadline (0 = none).
+ * fAbs: WAIT_BITSET uses absolute timespec; classic WAIT is relative.
+ * CLOCK_REALTIME flag accepted but still mapped to mono soft (G-FUT-2).
+ * Returns 0, or -LINUX_EFAULT / -LINUX_EINVAL.
+ */
+static i64
+hot_futex_deadline(u64 u64TsPtr, int fAbs, u64 *pOutDeadline)
+{
+    struct linux_timespec tsK;
+    u64 u64Now;
+    u64 u64Ns;
+
+    if (pOutDeadline == NULL) {
+        return -LINUX_EINVAL;
+    }
+    *pOutDeadline = 0;
+    if (u64TsPtr == 0) {
+        return 0;
+    }
+    if (user_range_ok(u64TsPtr, sizeof(tsK))) {
+        if (copy_from_user(&tsK, u64TsPtr, sizeof(tsK)) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        tsK = *(const struct linux_timespec *)(gj_vaddr_t)u64TsPtr;
+    }
+    if (tsK.i64Sec < 0 || tsK.i64Nsec < 0 || tsK.i64Nsec >= 1000000000) {
+        return -LINUX_EINVAL;
+    }
+    u64Ns = (u64)tsK.i64Sec * 1000000000ull + (u64)tsK.i64Nsec;
+    u64Now = timer_ready() ? timer_mono_nsec() : g_u64MonoNsec;
+    if (fAbs) {
+        /* WAIT_BITSET: absolute timespec (mono soft; CLOCK_REALTIME flag ok). */
+        *pOutDeadline = u64Ns;
+    } else {
+        /* Classic WAIT: relative timespec → absolute mono deadline. */
+        *pOutDeadline = u64Now + u64Ns;
+    }
+    return 0;
+}
+
 i64
 gj_linux_hot_futex(struct gj_linux_regs *pRegs)
 {
     u32 u32Op;
+    u32 u32Cmd;
     u32 u32Val;
+    u32 u32Bitset;
     volatile u32 *pU32;
     struct gj_futex_key key;
     u64 u64Deadline;
     int fPrivate;
+    i64 i64Ts;
     gj_status_t st;
 
     if (pRegs == NULL || pRegs->u64Arg0 == 0) {
@@ -2134,19 +2248,38 @@ gj_linux_hot_futex(struct gj_linux_regs *pRegs)
     pU32 = (volatile u32 *)(gj_vaddr_t)pRegs->u64Arg0;
     u32Op = (u32)pRegs->u64Arg1;
     fPrivate = (u32Op & GJ_FUTEX_PRIVATE_FLAG) ? 1 : 0;
-    u32Op &= 0x7fu;
+    /* CLOCK_REALTIME only affects wait deadlines; soft maps to mono. */
+    u32Cmd = u32Op & 0x7fu;
     st = futex_key_from_uaddr(&key, pRegs->u64Arg0, fPrivate);
     if (st != GJ_OK) {
         return -LINUX_EFAULT;
     }
 
-    if (u32Op == GJ_FUTEX_WAIT) {
+    if (u32Cmd == GJ_FUTEX_WAIT) {
         u32Val = (u32)pRegs->u64Arg2;
-        u64Deadline = pRegs->u64Arg3 ? (g_u64MonoNsec + 100000ull) : 0;
+        i64Ts = hot_futex_deadline(pRegs->u64Arg3, 0, &u64Deadline);
+        if (i64Ts < 0) {
+            return i64Ts;
+        }
         return futex_wait(pU32, u32Val, &key, u64Deadline);
     }
-    if (u32Op == GJ_FUTEX_WAKE) {
+    if (u32Cmd == GJ_FUTEX_WAKE) {
         return futex_wake(&key, (u32)pRegs->u64Arg2);
+    }
+    /* futex: wait_bitset — G-FUT-BITSET soft product (val3 = bitset) */
+    if (u32Cmd == GJ_FUTEX_WAIT_BITSET) {
+        u32Val = (u32)pRegs->u64Arg2;
+        u32Bitset = (u32)pRegs->u64Arg5;
+        i64Ts = hot_futex_deadline(pRegs->u64Arg3, 1, &u64Deadline);
+        if (i64Ts < 0) {
+            return i64Ts;
+        }
+        return futex_wait_bitset(pU32, u32Val, &key, u64Deadline, u32Bitset);
+    }
+    /* futex: wake_bitset — G-FUT-BITSET soft product (val3 = bitset) */
+    if (u32Cmd == GJ_FUTEX_WAKE_BITSET) {
+        u32Bitset = (u32)pRegs->u64Arg5;
+        return futex_wake_bitset(&key, (u32)pRegs->u64Arg2, u32Bitset);
     }
     return -LINUX_ENOSYS;
 }
@@ -2154,31 +2287,41 @@ gj_linux_hot_futex(struct gj_linux_regs *pRegs)
 i64
 gj_linux_hot_futex_wake2(struct gj_linux_regs *pRegs)
 {
-    /* futex_wake(uaddr, mask, nr, flags) → classic FUTEX_WAKE */
+    /* futex_wake(uaddr, mask, nr, flags) → FUTEX_WAKE_BITSET soft */
     struct gj_linux_regs r;
 
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
     r = *pRegs;
-    r.u64Arg1 = GJ_FUTEX_WAKE | GJ_FUTEX_PRIVATE_FLAG;
+    /* Soft: private by default (bring-up); mask → val3 bitset */
+    r.u64Arg1 = GJ_FUTEX_WAKE_BITSET | GJ_FUTEX_PRIVATE_FLAG;
     r.u64Arg2 = pRegs->u64Arg2; /* nr */
+    r.u64Arg5 = pRegs->u64Arg1; /* mask */
+    if (r.u64Arg5 == 0) {
+        r.u64Arg5 = GJ_FUTEX_BITSET_MATCH_ANY;
+    }
     return gj_linux_hot_futex(&r);
 }
 
 i64
 gj_linux_hot_futex_wait2(struct gj_linux_regs *pRegs)
 {
-    /* futex_wait(uaddr, val, mask, flags, ...) → classic FUTEX_WAIT */
+    /* futex_wait(uaddr, val, mask, flags, ...) → FUTEX_WAIT_BITSET soft */
     struct gj_linux_regs r;
 
     if (pRegs == NULL) {
         return -LINUX_EINVAL;
     }
     r = *pRegs;
-    r.u64Arg1 = GJ_FUTEX_WAIT | GJ_FUTEX_PRIVATE_FLAG;
+    /* Soft: private by default; mask → val3 bitset */
+    r.u64Arg1 = GJ_FUTEX_WAIT_BITSET | GJ_FUTEX_PRIVATE_FLAG;
     r.u64Arg2 = pRegs->u64Arg1; /* val */
-    r.u64Arg3 = 0;
+    r.u64Arg3 = pRegs->u64Arg4; /* optional timespec* (soft) */
+    r.u64Arg5 = pRegs->u64Arg2; /* mask */
+    if (r.u64Arg5 == 0) {
+        r.u64Arg5 = GJ_FUTEX_BITSET_MATCH_ANY;
+    }
     return gj_linux_hot_futex(&r);
 }
 

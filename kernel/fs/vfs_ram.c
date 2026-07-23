@@ -134,6 +134,8 @@ static int             g_fScsiMounted;
 static i32             g_iBlkFile = -1; /* file slot for /dev/vda */
 static u64             g_u64ScsiCapBytes;
 
+static void epoll_detach_fd(i64 i64Fd);
+
 static int
 path_eq(const char *szA, const char *szB)
 {
@@ -170,20 +172,270 @@ path_copy(char *szDst, const char *szSrc)
     szDst[i] = '\0';
 }
 
+/**
+ * Normalize absolute path: collapse //, resolve . and .., drop trailing /.
+ * Writes NUL-terminated result into szOut (VFS_MAX_PATH). Returns 0 or -errno.
+ */
+static i64
+path_norm(char *szOut, const char *szIn)
+{
+    size_t iIn;
+    size_t iOut;
+    size_t cComp;
+    size_t aComp[32];
+
+    if (szOut == NULL || szIn == NULL || szIn[0] == '\0') {
+        return -14; /* EFAULT */
+    }
+    if (szIn[0] != '/') {
+        return -22; /* EINVAL — only absolute paths */
+    }
+    szOut[0] = '/';
+    iOut = 1;
+    iIn = 0;
+    cComp = 0;
+    while (szIn[iIn] != '\0') {
+        size_t iStart;
+        size_t cbComp;
+        size_t k;
+
+        while (szIn[iIn] == '/') {
+            iIn++;
+        }
+        if (szIn[iIn] == '\0') {
+            break;
+        }
+        iStart = iIn;
+        while (szIn[iIn] != '\0' && szIn[iIn] != '/') {
+            iIn++;
+        }
+        cbComp = iIn - iStart;
+        if (cbComp == 1 && szIn[iStart] == '.') {
+            continue;
+        }
+        if (cbComp == 2 && szIn[iStart] == '.' && szIn[iStart + 1] == '.') {
+            if (cComp > 0) {
+                cComp--;
+                iOut = aComp[cComp];
+            } else {
+                iOut = 1; /* stay at root */
+            }
+            continue;
+        }
+        if (cComp >= 32u) {
+            return -36; /* ENAMETOOLONG */
+        }
+        if (iOut > 1) {
+            if (iOut + 1 >= VFS_MAX_PATH) {
+                return -36;
+            }
+            szOut[iOut++] = '/';
+        }
+        if (iOut + cbComp >= VFS_MAX_PATH) {
+            return -36;
+        }
+        aComp[cComp++] = iOut;
+        for (k = 0; k < cbComp; k++) {
+            szOut[iOut++] = szIn[iStart + k];
+        }
+    }
+    if (iOut == 0) {
+        szOut[0] = '/';
+        iOut = 1;
+    }
+    szOut[iOut] = '\0';
+    return 0;
+}
+
+static i32
+find_symlink(const char *szPath)
+{
+    u32 s;
+
+    if (szPath == NULL) {
+        return -1;
+    }
+    for (s = 0; s < VFS_MAX_SYMLINKS; s++) {
+        if (g_aSym[s].u8Used && path_eq(g_aSym[s].szLink, szPath)) {
+            return (i32)s;
+        }
+    }
+    return -1;
+}
+
+/** Parent directory of szPath into szOut ("/" for top-level). Returns 0 or -errno. */
+static i64
+path_dirname(char *szOut, const char *szPath)
+{
+    size_t n;
+    size_t iLast;
+
+    if (szOut == NULL || szPath == NULL || szPath[0] == '\0') {
+        return -14;
+    }
+    n = 0;
+    while (szPath[n] != '\0' && n + 1 < VFS_MAX_PATH) {
+        n++;
+    }
+    if (n == 0) {
+        return -22;
+    }
+    iLast = n;
+    while (iLast > 0 && szPath[iLast - 1] != '/') {
+        iLast--;
+    }
+    if (iLast == 0) {
+        szOut[0] = '/';
+        szOut[1] = '\0';
+        return 0;
+    }
+    if (iLast == 1) {
+        szOut[0] = '/';
+        szOut[1] = '\0';
+        return 0;
+    }
+    {
+        size_t i;
+
+        for (i = 0; i + 1 < iLast && i + 1 < VFS_MAX_PATH; i++) {
+            szOut[i] = szPath[i];
+        }
+        szOut[i] = '\0';
+    }
+    return 0;
+}
+
+/**
+ * Normalize and follow symlink table (max 8 hops). Built-in proc links left as-is
+ * for callers that special-case them. Writes final path to szOut.
+ */
+static i64
+path_resolve(char *szOut, const char *szIn)
+{
+    char szCur[VFS_MAX_PATH];
+    char szNext[VFS_MAX_PATH];
+    int nDepth;
+    i32 iSym;
+    i64 st;
+
+    st = path_norm(szCur, szIn);
+    if (st != 0) {
+        return st;
+    }
+    for (nDepth = 0; nDepth < 8; nDepth++) {
+        iSym = find_symlink(szCur);
+        if (iSym < 0) {
+            path_copy(szOut, szCur);
+            return 0;
+        }
+        if (g_aSym[iSym].szTarget[0] == '/') {
+            st = path_norm(szNext, g_aSym[iSym].szTarget);
+            if (st != 0) {
+                return st;
+            }
+        } else {
+            char szDir[VFS_MAX_PATH];
+            char szJoin[VFS_MAX_PATH];
+            size_t i;
+            size_t j;
+
+            if (path_dirname(szDir, szCur) != 0) {
+                return -22;
+            }
+            i = 0;
+            if (szDir[0] == '/' && szDir[1] == '\0') {
+                szJoin[i++] = '/';
+            } else {
+                while (szDir[i] != '\0' && i + 1 < VFS_MAX_PATH) {
+                    szJoin[i] = szDir[i];
+                    i++;
+                }
+                if (i + 1 < VFS_MAX_PATH) {
+                    szJoin[i++] = '/';
+                }
+            }
+            j = 0;
+            while (g_aSym[iSym].szTarget[j] != '\0' && i + 1 < VFS_MAX_PATH) {
+                szJoin[i++] = g_aSym[iSym].szTarget[j++];
+            }
+            szJoin[i] = '\0';
+            st = path_norm(szNext, szJoin);
+            if (st != 0) {
+                return st;
+            }
+        }
+        path_copy(szCur, szNext);
+    }
+    return -40; /* ELOOP */
+}
+
+/** Non-zero if szPath is a direct child of directory szDir. */
+static int
+path_is_child_of(const char *szDir, const char *szPath)
+{
+    size_t nDir;
+    size_t i;
+
+    if (szDir == NULL || szPath == NULL) {
+        return 0;
+    }
+    nDir = 0;
+    while (szDir[nDir] != '\0') {
+        nDir++;
+    }
+    if (nDir == 0) {
+        return 0;
+    }
+    /* Root: any single-component absolute path is a child */
+    if (nDir == 1 && szDir[0] == '/') {
+        if (szPath[0] != '/' || szPath[1] == '\0') {
+            return 0;
+        }
+        for (i = 1; szPath[i] != '\0'; i++) {
+            if (szPath[i] == '/') {
+                return 0; /* deeper than one level */
+            }
+        }
+        return 1;
+    }
+    for (i = 0; i < nDir; i++) {
+        if (szPath[i] != szDir[i]) {
+            return 0;
+        }
+    }
+    if (szPath[nDir] != '/') {
+        return 0;
+    }
+    /* No further slash after the child name */
+    for (i = nDir + 1; szPath[i] != '\0'; i++) {
+        if (szPath[i] == '/') {
+            return 0;
+        }
+    }
+    return szPath[nDir + 1] != '\0';
+}
+
 static void
 seed_file(const char *szPath, const char *szData)
 {
     u32 i;
     size_t cb;
+    char szNorm[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
         return;
+    }
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
     }
     for (i = 0; i < VFS_MAX_FILES; i++) {
         if (!g_aFiles[i].u8Used) {
             g_aFiles[i].u8Used = 1;
             g_aFiles[i].u8Kind = VFS_KIND_RAM;
-            path_copy(g_aFiles[i].szPath, szPath);
+            g_aFiles[i].u8IsDir = 0;
+            g_aFiles[i].u32Mode = 0100644u;
+            g_aFiles[i].u32Nlink = 1;
+            path_copy(g_aFiles[i].szPath, szNorm);
             cb = 0;
             if (szData != NULL) {
                 while (szData[cb] != '\0' && cb + 1 < VFS_MAX_DATA) {
@@ -345,11 +597,47 @@ vfs_ram_open(const char *szPath, int fCreate)
 {
     i32 iFile;
     u32 iFd;
+    char szResolved[VFS_MAX_PATH];
+    i64 st;
 
     if (szPath == NULL || szPath[0] == '\0') {
         return -14; /* EFAULT */
     }
-    iFile = find_file(szPath);
+    st = path_resolve(szResolved, szPath);
+    if (st != 0) {
+        /* Unresolvable / relative: still try raw path after norm */
+        if (path_norm(szResolved, szPath) != 0) {
+            path_copy(szResolved, szPath);
+        }
+    }
+    /* Virtual directory markers (no file slot) */
+    if (path_eq(szResolved, "/") || path_eq(szResolved, "/tmp") ||
+        path_eq(szResolved, "/proc") || path_eq(szResolved, "/dev") ||
+        path_eq(szResolved, "/bin") || path_eq(szResolved, "/etc") ||
+        path_eq(szResolved, "/lib") || path_eq(szResolved, "/usr") ||
+        path_eq(szResolved, "/var") || path_eq(szResolved, "/var/tmp")) {
+        /* Materialize empty dir marker so getdents/fstat work */
+        iFile = find_file(szResolved);
+        if (iFile < 0) {
+            for (iFile = 0; (u32)iFile < VFS_MAX_FILES; iFile++) {
+                if (!g_aFiles[iFile].u8Used) {
+                    g_aFiles[iFile].u8Used = 1;
+                    g_aFiles[iFile].u8Kind = VFS_KIND_RAM;
+                    g_aFiles[iFile].u8IsDir = 1;
+                    g_aFiles[iFile].u32Mode = 0040755u;
+                    g_aFiles[iFile].u32Nlink = 2;
+                    path_copy(g_aFiles[iFile].szPath, szResolved);
+                    g_aFiles[iFile].cbData = 0;
+                    break;
+                }
+            }
+            if ((u32)iFile >= VFS_MAX_FILES) {
+                return -28;
+            }
+        }
+    } else {
+        iFile = find_file(szResolved);
+    }
     if (iFile < 0) {
         if (!fCreate) {
             return -2; /* ENOENT */
@@ -361,7 +649,7 @@ vfs_ram_open(const char *szPath, int fCreate)
                 g_aFiles[iFile].u8IsDir = 0;
                 g_aFiles[iFile].u32Mode = 0100644u;
                 g_aFiles[iFile].u32Nlink = 1;
-                path_copy(g_aFiles[iFile].szPath, szPath);
+                path_copy(g_aFiles[iFile].szPath, szResolved);
                 g_aFiles[iFile].cbData = 0;
                 break;
             }
@@ -486,13 +774,20 @@ i64
 vfs_ram_symlink(const char *szTarget, const char *szLink)
 {
     u32 i;
+    char szNorm[VFS_MAX_PATH];
 
     if (szTarget == NULL || szLink == NULL || szLink[0] == '\0' ||
         szTarget[0] == '\0') {
         return -14;
     }
+    if (path_norm(szNorm, szLink) != 0) {
+        path_copy(szNorm, szLink);
+    }
+    if (find_file(szNorm) >= 0) {
+        return -17; /* EEXIST */
+    }
     for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
-        if (g_aSym[i].u8Used && path_eq(g_aSym[i].szLink, szLink)) {
+        if (g_aSym[i].u8Used && path_eq(g_aSym[i].szLink, szNorm)) {
             path_copy(g_aSym[i].szTarget, szTarget);
             return 0;
         }
@@ -500,7 +795,7 @@ vfs_ram_symlink(const char *szTarget, const char *szLink)
     for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
         if (!g_aSym[i].u8Used) {
             g_aSym[i].u8Used = 1;
-            path_copy(g_aSym[i].szLink, szLink);
+            path_copy(g_aSym[i].szLink, szNorm);
             path_copy(g_aSym[i].szTarget, szTarget);
             return 0;
         }
@@ -512,18 +807,27 @@ i64
 vfs_ram_utimens(const char *szPath)
 {
     i32 iFile;
+    char szResolved[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
         return -14;
     }
-    if (path_eq(szPath, "/") || path_eq(szPath, "/tmp") ||
-        path_eq(szPath, "/proc/self/exe")) {
+    if (path_resolve(szResolved, szPath) != 0) {
+        if (path_norm(szResolved, szPath) != 0) {
+            path_copy(szResolved, szPath);
+        }
+    }
+    if (path_eq(szResolved, "/") || path_eq(szResolved, "/tmp") ||
+        path_eq(szResolved, "/proc/self/exe")) {
         return 0;
     }
-    iFile = find_file(szPath);
+    if (find_symlink(szResolved) >= 0) {
+        return 0;
+    }
+    iFile = find_file(szResolved);
     if (iFile < 0) {
         /* Create empty file as touch */
-        i64 fd = vfs_ram_open(szPath, 1);
+        i64 fd = vfs_ram_open(szResolved, 1);
 
         if (fd < 0) {
             return fd;
@@ -541,18 +845,31 @@ vfs_ram_link(const char *szOld, const char *szNew)
     i32 iOld;
     i32 iNew;
     u32 i;
+    char szOldR[VFS_MAX_PATH];
+    char szNewR[VFS_MAX_PATH];
 
     if (szOld == NULL || szNew == NULL || szOld[0] == '\0' || szNew[0] == '\0') {
         return -14;
     }
-    iOld = find_file(szOld);
+    if (path_resolve(szOldR, szOld) != 0) {
+        if (path_norm(szOldR, szOld) != 0) {
+            path_copy(szOldR, szOld);
+        }
+    }
+    if (path_norm(szNewR, szNew) != 0) {
+        path_copy(szNewR, szNew);
+    }
+    iOld = find_file(szOldR);
     if (iOld < 0) {
         return -2;
     }
     if (g_aFiles[iOld].u8Kind != VFS_KIND_RAM) {
         return -1;
     }
-    if (find_file(szNew) >= 0) {
+    if (g_aFiles[iOld].u8IsDir) {
+        return -21; /* EISDIR */
+    }
+    if (find_file(szNewR) >= 0 || find_symlink(szNewR) >= 0) {
         return -17; /* EEXIST */
     }
     /* New path entry that aliases same content (copy for bring-up) */
@@ -560,7 +877,7 @@ vfs_ram_link(const char *szOld, const char *szNew)
         if (!g_aFiles[iNew].u8Used) {
             g_aFiles[iNew] = g_aFiles[iOld];
             g_aFiles[iNew].u8Used = 1;
-            path_copy(g_aFiles[iNew].szPath, szNew);
+            path_copy(g_aFiles[iNew].szPath, szNewR);
             g_aFiles[iOld].u32Nlink++;
             g_aFiles[iNew].u32Nlink = g_aFiles[iOld].u32Nlink;
             /* Deep-copy data buffer already done by struct assign */
@@ -578,18 +895,22 @@ vfs_ram_unlink(const char *szPath)
 {
     i32 iFile;
     u32 s;
+    char szNorm[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
         return -14;
     }
-    /* Symlinks first */
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
+    }
+    /* Symlinks first (do not follow) */
     for (s = 0; s < VFS_MAX_SYMLINKS; s++) {
-        if (g_aSym[s].u8Used && path_eq(g_aSym[s].szLink, szPath)) {
+        if (g_aSym[s].u8Used && path_eq(g_aSym[s].szLink, szNorm)) {
             memset(&g_aSym[s], 0, sizeof(g_aSym[s]));
             return 0;
         }
     }
-    iFile = find_file(szPath);
+    iFile = find_file(szNorm);
     if (iFile < 0) {
         return -2;
     }
@@ -599,9 +920,7 @@ vfs_ram_unlink(const char *szPath)
     if (g_aFiles[iFile].u8IsDir) {
         return -21; /* EISDIR */
     }
-    if (g_aFiles[iFile].u32Nlink > 1) {
-        g_aFiles[iFile].u32Nlink--;
-    }
+    /* Copy-based hard links: free this path entry only */
     memset(&g_aFiles[iFile], 0, sizeof(g_aFiles[iFile]));
     return 0;
 }
@@ -610,26 +929,42 @@ i64
 vfs_ram_rmdir(const char *szPath)
 {
     i32 iFile;
+    u32 i;
+    char szNorm[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
         return -14;
     }
-    if (path_eq(szPath, "/") || path_eq(szPath, "/tmp")) {
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
+    }
+    if (path_eq(szNorm, "/") || path_eq(szNorm, "/tmp") ||
+        path_eq(szNorm, "/proc") || path_eq(szNorm, "/dev")) {
         return -16; /* EBUSY */
     }
-    iFile = find_file(szPath);
+    iFile = find_file(szNorm);
     if (iFile < 0) {
         return -2;
     }
-    if (!g_aFiles[iFile].u8IsDir && g_aFiles[iFile].cbData != 0) {
-        return -20; /* ENOTDIR / not empty-ish */
-    }
-    /* Treat empty RAM marker as rmdir-able (mkdir creates empty file marker) */
     if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
         return -20;
     }
+    if (!g_aFiles[iFile].u8IsDir) {
+        return -20; /* ENOTDIR */
+    }
     if (g_aFiles[iFile].cbData != 0) {
         return -39; /* ENOTEMPTY */
+    }
+    /* Refuse if any path is a direct child */
+    for (i = 0; i < VFS_MAX_FILES; i++) {
+        if (g_aFiles[i].u8Used && path_is_child_of(szNorm, g_aFiles[i].szPath)) {
+            return -39; /* ENOTEMPTY */
+        }
+    }
+    for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
+        if (g_aSym[i].u8Used && path_is_child_of(szNorm, g_aSym[i].szLink)) {
+            return -39;
+        }
     }
     memset(&g_aFiles[iFile], 0, sizeof(g_aFiles[iFile]));
     return 0;
@@ -677,16 +1012,262 @@ vfs_ram_mark_dir(i64 i64Fd)
 i64
 vfs_ram_fallocate(i64 i64Fd, i64 i64Off, i64 i64Len)
 {
+    struct vfs_fd *pFd;
+    struct vfs_file *pFile;
     i64 need;
+    u32 u32Need;
+    u32 i;
 
     if (!vfs_ram_fd_ok(i64Fd) || i64Off < 0 || i64Len < 0) {
         return -22;
     }
+    if (i64Len == 0) {
+        return 0;
+    }
+    pFd = &g_aFds[i64Fd];
+    if (pFd->u8Kind != VFS_KIND_RAM || pFd->u32File >= VFS_MAX_FILES) {
+        return -22; /* only RAM regular files */
+    }
+    pFile = &g_aFiles[pFd->u32File];
+    if (!pFile->u8Used) {
+        return -9;
+    }
+    if (pFile->u8IsDir) {
+        return -21; /* EISDIR */
+    }
     need = i64Off + i64Len;
     if (need < i64Off) {
-        return -22; /* overflow */
+        return -75; /* EOVERFLOW */
     }
-    return vfs_ram_ftruncate(i64Fd, need);
+    /* Grow only — fallocate never shrinks (unlike ftruncate) */
+    if (need <= (i64)pFile->cbData) {
+        return 0;
+    }
+    if (need > (i64)VFS_MAX_DATA) {
+        return -28; /* ENOSPC */
+    }
+    u32Need = (u32)need;
+    for (i = pFile->cbData; i < u32Need; i++) {
+        pFile->aData[i] = 0;
+    }
+    pFile->cbData = u32Need;
+    return 0;
+}
+
+i64
+vfs_ram_fallocate_punch(i64 i64Fd, i64 i64Off, i64 i64Len)
+{
+    struct vfs_fd *pFd;
+    struct vfs_file *pFile;
+    i64 i64End;
+    u32 i;
+    u32 u32From;
+    u32 u32To;
+
+    if (!vfs_ram_fd_ok(i64Fd) || i64Off < 0 || i64Len < 0) {
+        return -22;
+    }
+    if (i64Len == 0) {
+        return 0;
+    }
+    pFd = &g_aFds[i64Fd];
+    if (pFd->u8Kind != VFS_KIND_RAM || pFd->u32File >= VFS_MAX_FILES) {
+        return -22;
+    }
+    pFile = &g_aFiles[pFd->u32File];
+    if (!pFile->u8Used || pFile->u8IsDir) {
+        return pFile->u8IsDir ? -21 : -9;
+    }
+    i64End = i64Off + i64Len;
+    if (i64End < i64Off) {
+        return -75;
+    }
+    if (i64Off >= (i64)pFile->cbData) {
+        return 0; /* past EOF — nothing to punch */
+    }
+    u32From = (u32)i64Off;
+    u32To = (i64End > (i64)pFile->cbData) ? pFile->cbData : (u32)i64End;
+    for (i = u32From; i < u32To; i++) {
+        pFile->aData[i] = 0;
+    }
+    return 0;
+}
+
+i64
+vfs_ram_fsync(i64 i64Fd)
+{
+    if (!vfs_ram_fd_ok(i64Fd)) {
+        return -9;
+    }
+    return 0; /* ramfs: durable already */
+}
+
+i64
+vfs_ram_fdatasync(i64 i64Fd)
+{
+    return vfs_ram_fsync(i64Fd);
+}
+
+i64
+vfs_ram_bytes_readable(i64 i64Fd)
+{
+    struct vfs_fd *pFd;
+
+    if (!vfs_ram_fd_ok(i64Fd)) {
+        return -9;
+    }
+    pFd = &g_aFds[i64Fd];
+    if (pFd->u8Kind == VFS_KIND_EVENTFD) {
+        u32 iEv = pFd->u32File;
+
+        if (iEv < VFS_MAX_EVENTFD && g_aEventUsed[iEv] && g_aEventCnt[iEv] != 0) {
+            return 8;
+        }
+        return 0;
+    }
+    if (pFd->u8Kind == VFS_KIND_TIMERFD) {
+        u32 iT = pFd->u32File;
+
+        if (iT < VFS_MAX_TIMERFD && g_aTimerUsed[iT] && g_aTimerTicks[iT] != 0) {
+            return 8;
+        }
+        return 0;
+    }
+    if (pFd->u8Kind == VFS_KIND_SIGNALFD) {
+        u32 iS = pFd->u32File;
+
+        if (iS < VFS_MAX_SIGNALFD && g_aSigUsed[iS] && g_aSigPending[iS] != 0) {
+            return 128;
+        }
+        return 0;
+    }
+    if (pFd->u8Kind == VFS_KIND_INOTIFY) {
+        u32 iIn = pFd->u32File;
+
+        if (iIn < VFS_MAX_INOTIFY && g_aInotify[iIn].u8Used) {
+            return (i64)g_aInotify[iIn].u8Nq * 16;
+        }
+        return 0;
+    }
+    if (pFd->u8Kind == VFS_KIND_PIPE) {
+        u8 u8From;
+
+        if (pFd->u32File >= VFS_MAX_PIPES || !g_aPipes[pFd->u32File].u8Used) {
+            return -9;
+        }
+        u8From = (u8)(1u - pFd->u8End);
+        return (i64)g_aPipes[pFd->u32File].u32Len[u8From];
+    }
+    if (pFd->u8Kind == VFS_KIND_RAM && pFd->u32File < VFS_MAX_FILES &&
+        g_aFiles[pFd->u32File].u8Used) {
+        if (pFd->u64Off >= g_aFiles[pFd->u32File].cbData) {
+            return 0;
+        }
+        return (i64)(g_aFiles[pFd->u32File].cbData - (u32)pFd->u64Off);
+    }
+    return 0;
+}
+
+i64
+vfs_ram_mkdir(const char *szPath, u32 u32Mode)
+{
+    i32 iFile;
+    char szNorm[VFS_MAX_PATH];
+    u32 u32Perm;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return -14;
+    }
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
+    }
+    if (find_file(szNorm) >= 0 || find_symlink(szNorm) >= 0) {
+        return -17; /* EEXIST */
+    }
+    u32Perm = (u32Mode & 07777u);
+    if (u32Perm == 0) {
+        u32Perm = 0755u;
+    }
+    for (iFile = 0; (u32)iFile < VFS_MAX_FILES; iFile++) {
+        if (!g_aFiles[iFile].u8Used) {
+            g_aFiles[iFile].u8Used = 1;
+            g_aFiles[iFile].u8Kind = VFS_KIND_RAM;
+            g_aFiles[iFile].u8IsDir = 1;
+            g_aFiles[iFile].u32Mode = 0040000u | u32Perm;
+            g_aFiles[iFile].u32Nlink = 2;
+            path_copy(g_aFiles[iFile].szPath, szNorm);
+            g_aFiles[iFile].cbData = 0;
+            return 0;
+        }
+    }
+    return -28;
+}
+
+i64
+vfs_ram_chmod(const char *szPath, u32 u32Mode)
+{
+    i32 iFile;
+    char szResolved[VFS_MAX_PATH];
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return -14;
+    }
+    if (path_resolve(szResolved, szPath) != 0) {
+        if (path_norm(szResolved, szPath) != 0) {
+            path_copy(szResolved, szPath);
+        }
+    }
+    iFile = find_file(szResolved);
+    if (iFile < 0) {
+        return -2;
+    }
+    if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
+        return -1;
+    }
+    g_aFiles[iFile].u32Mode =
+        (g_aFiles[iFile].u32Mode & ~07777u) | (u32Mode & 07777u);
+    if (g_aFiles[iFile].u8IsDir) {
+        g_aFiles[iFile].u32Mode =
+            (g_aFiles[iFile].u32Mode & 07777u) | 0040000u;
+    } else if ((g_aFiles[iFile].u32Mode & 0170000u) == 0) {
+        g_aFiles[iFile].u32Mode |= 0100000u;
+    }
+    return 0;
+}
+
+i64
+vfs_ram_truncate(const char *szPath, i64 i64Len)
+{
+    i32 iFile;
+    i64 i64Fd;
+    i64 st;
+    char szResolved[VFS_MAX_PATH];
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return -14;
+    }
+    if (i64Len < 0) {
+        return -22;
+    }
+    if (path_resolve(szResolved, szPath) != 0) {
+        if (path_norm(szResolved, szPath) != 0) {
+            path_copy(szResolved, szPath);
+        }
+    }
+    iFile = find_file(szResolved);
+    if (iFile < 0) {
+        return -2;
+    }
+    if (g_aFiles[iFile].u8IsDir) {
+        return -21;
+    }
+    i64Fd = vfs_ram_open(szResolved, 0);
+    if (i64Fd < 0) {
+        return i64Fd;
+    }
+    st = vfs_ram_ftruncate(i64Fd, i64Len);
+    (void)vfs_ram_close(i64Fd);
+    return st;
 }
 
 i64
@@ -787,20 +1368,63 @@ vfs_ram_readlink(const char *szPath, char *pBuf, size_t cb)
 i64
 vfs_ram_access(const char *szPath, int nMode)
 {
-    (void)nMode;
+    char szResolved[VFS_MAX_PATH];
+    char szNorm[VFS_MAX_PATH];
+    i32 iFile;
+    u32 u32Mode;
+    /* Linux: F_OK=0 R_OK=4 W_OK=2 X_OK=1 */
+    int fNeedR = (nMode & 4) != 0;
+    int fNeedW = (nMode & 2) != 0;
+    int fNeedX = (nMode & 1) != 0;
+
     if (szPath == NULL || szPath[0] == '\0') {
         return -14;
     }
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
+    }
+    /* Symlink existence for F_OK without follow when only checking link path */
+    if (find_symlink(szNorm) >= 0 && nMode == 0) {
+        return 0;
+    }
+    if (path_resolve(szResolved, szPath) != 0) {
+        path_copy(szResolved, szNorm);
+    }
     /* Known virtual paths */
-    if (path_eq(szPath, "/proc/self/exe") || path_eq(szPath, "/proc/self/cwd") ||
-        path_eq(szPath, "/") || path_eq(szPath, "/tmp") ||
-        path_eq(szPath, "/bin/greenjade")) {
+    if (path_eq(szResolved, "/proc/self/exe") ||
+        path_eq(szResolved, "/proc/self/cwd") || path_eq(szResolved, "/") ||
+        path_eq(szResolved, "/tmp") || path_eq(szResolved, "/proc") ||
+        path_eq(szResolved, "/dev") || path_eq(szResolved, "/bin") ||
+        path_eq(szResolved, "/etc") || path_eq(szResolved, "/lib") ||
+        path_eq(szResolved, "/bin/greenjade")) {
+        if (fNeedW && (path_eq(szResolved, "/proc/self/exe") ||
+                       path_eq(szResolved, "/proc/self/cwd"))) {
+            return -13; /* EACCES */
+        }
         return 0;
     }
-    if (find_file(szPath) >= 0) {
+    iFile = find_file(szResolved);
+    if (iFile < 0) {
+        return -2; /* ENOENT */
+    }
+    if (nMode == 0) {
         return 0;
     }
-    return -2; /* ENOENT */
+    u32Mode = g_aFiles[iFile].u32Mode;
+    if (u32Mode == 0) {
+        u32Mode = 0100644u;
+    }
+    /* Owner bits only (uid 0 in bring-up still checks perm mask) */
+    if (fNeedR && (u32Mode & 0444u) == 0) {
+        return -13;
+    }
+    if (fNeedW && (u32Mode & 0222u) == 0) {
+        return -13;
+    }
+    if (fNeedX && (u32Mode & 0111u) == 0) {
+        return -13;
+    }
+    return 0;
 }
 
 /* Linux x86_64 struct stat (public layout, first fields we fill). */
@@ -868,13 +1492,23 @@ vfs_ram_fstat(i64 i64Fd, void *pStat, size_t cbStat)
         if (g_aFiles[pFd->u32File].u32Mode != 0) {
             mode = g_aFiles[pFd->u32File].u32Mode;
         }
+        if (g_aFiles[pFd->u32File].u8IsDir) {
+            mode = (mode & 07777u) | 0040000u;
+            size = 0;
+        }
     } else if (pFd->u8Kind == VFS_KIND_PIPE) {
         mode = 0010644u; /* fifo */
     } else if (pFd->u8Kind == VFS_KIND_BLK || pFd->u8Kind == VFS_KIND_SCSI) {
         mode = 0060644u; /* block */
         size = (i64)(g_u64ScsiCapBytes ? g_u64ScsiCapBytes : 0);
-    } else if (pFd->u8Kind == VFS_KIND_EVENTFD) {
-        mode = 0020644u;
+    } else if (pFd->u8Kind == VFS_KIND_EVENTFD ||
+               pFd->u8Kind == VFS_KIND_TIMERFD ||
+               pFd->u8Kind == VFS_KIND_SIGNALFD ||
+               pFd->u8Kind == VFS_KIND_EPOLL ||
+               pFd->u8Kind == VFS_KIND_INOTIFY ||
+               pFd->u8Kind == VFS_KIND_PIDFD ||
+               pFd->u8Kind == VFS_KIND_IOURING) {
+        mode = 0020644u; /* char-device shaped */
     }
     fill_stat(&st, (u64)i64Fd + 100u, mode, size);
     if (pFd->u8Kind == VFS_KIND_RAM && pFd->u32File < VFS_MAX_FILES &&
@@ -890,25 +1524,79 @@ vfs_ram_rename(const char *szOld, const char *szNew)
 {
     i32 iFile;
     i32 iExist;
+    u32 s;
+    char szOldN[VFS_MAX_PATH];
+    char szNewN[VFS_MAX_PATH];
 
     if (szOld == NULL || szNew == NULL || szOld[0] == '\0' ||
         szNew[0] == '\0') {
         return -14;
     }
-    iFile = find_file(szOld);
+    if (path_norm(szOldN, szOld) != 0) {
+        path_copy(szOldN, szOld);
+    }
+    if (path_norm(szNewN, szNew) != 0) {
+        path_copy(szNewN, szNew);
+    }
+    if (path_eq(szOldN, szNewN)) {
+        return 0;
+    }
+    /* Symlink rename */
+    for (s = 0; s < VFS_MAX_SYMLINKS; s++) {
+        if (g_aSym[s].u8Used && path_eq(g_aSym[s].szLink, szOldN)) {
+            i32 iClash = find_symlink(szNewN);
+
+            if (iClash >= 0 && (u32)iClash != s) {
+                memset(&g_aSym[iClash], 0, sizeof(g_aSym[iClash]));
+            }
+            iExist = find_file(szNewN);
+            if (iExist >= 0) {
+                if (g_aFiles[iExist].u8IsDir) {
+                    return -21;
+                }
+                memset(&g_aFiles[iExist], 0, sizeof(g_aFiles[iExist]));
+            }
+            path_copy(g_aSym[s].szLink, szNewN);
+            return 0;
+        }
+    }
+    iFile = find_file(szOldN);
     if (iFile < 0) {
         return -2;
     }
     if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
         return -1; /* EPERM-shaped for device nodes */
     }
-    iExist = find_file(szNew);
+    iExist = find_file(szNewN);
     if (iExist >= 0 && iExist != iFile) {
-        /* Replace target (unlink first) */
-        g_aFiles[iExist].u8Used = 0;
-        g_aFiles[iExist].cbData = 0;
+        if (g_aFiles[iExist].u8IsDir && !g_aFiles[iFile].u8IsDir) {
+            return -21; /* EISDIR */
+        }
+        if (!g_aFiles[iExist].u8IsDir && g_aFiles[iFile].u8IsDir) {
+            return -20; /* ENOTDIR */
+        }
+        if (g_aFiles[iExist].u8IsDir) {
+            /* Only replace empty dir */
+            u32 i;
+
+            for (i = 0; i < VFS_MAX_FILES; i++) {
+                if (g_aFiles[i].u8Used &&
+                    path_is_child_of(g_aFiles[iExist].szPath,
+                                     g_aFiles[i].szPath)) {
+                    return -39;
+                }
+            }
+        }
+        memset(&g_aFiles[iExist], 0, sizeof(g_aFiles[iExist]));
     }
-    path_copy(g_aFiles[iFile].szPath, szNew);
+    {
+        i32 iSym = find_symlink(szNewN);
+
+        if (iSym >= 0) {
+            memset(&g_aSym[iSym], 0, sizeof(g_aSym[iSym]));
+        }
+    }
+    path_copy(g_aFiles[iFile].szPath, szNewN);
     return 0;
 }
 
@@ -934,9 +1622,15 @@ vfs_ram_ftruncate(i64 i64Fd, i64 i64Len)
     if (!pFile->u8Used) {
         return -9;
     }
+    if (pFile->u8IsDir) {
+        return -21; /* EISDIR */
+    }
     u32New = (u32)i64Len;
+    if ((i64)u32New != i64Len) {
+        return -75; /* EOVERFLOW — beyond u32 / cap */
+    }
     if (u32New > VFS_MAX_DATA) {
-        u32New = VFS_MAX_DATA;
+        return -28; /* ENOSPC rather than silent clip */
     }
     if (u32New > pFile->cbData) {
         for (i = pFile->cbData; i < u32New; i++) {
@@ -957,31 +1651,125 @@ vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat)
     struct vfs_stat64 st;
     u32 mode = 0100644u;
     i64 size = 0;
+    char szResolved[VFS_MAX_PATH];
 
     if (szPath == NULL || pStat == NULL || cbStat < sizeof(st)) {
         return -14;
     }
-    if (path_eq(szPath, "/") || path_eq(szPath, "/tmp")) {
+    if (path_resolve(szResolved, szPath) != 0) {
+        if (path_norm(szResolved, szPath) != 0) {
+            path_copy(szResolved, szPath);
+        }
+    }
+    if (path_eq(szResolved, "/") || path_eq(szResolved, "/tmp") ||
+        path_eq(szResolved, "/proc") || path_eq(szResolved, "/dev") ||
+        path_eq(szResolved, "/bin") || path_eq(szResolved, "/etc") ||
+        path_eq(szResolved, "/lib") || path_eq(szResolved, "/usr") ||
+        path_eq(szResolved, "/var") || path_eq(szResolved, "/var/tmp")) {
         fill_stat(&st, 2, 0040755u, 0); /* directory */
         memcpy(pStat, &st, sizeof(st));
         return 0;
     }
-    if (path_eq(szPath, "/proc/self/exe") || path_eq(szPath, "/bin/greenjade")) {
+    if (path_eq(szResolved, "/proc/self/exe") ||
+        path_eq(szResolved, "/bin/greenjade")) {
         fill_stat(&st, 3, 0100755u, 4096);
         memcpy(pStat, &st, sizeof(st));
         return 0;
     }
-    iFile = find_file(szPath);
+    if (path_eq(szResolved, "/proc/self/cwd")) {
+        fill_stat(&st, 4, 0040755u, 0);
+        memcpy(pStat, &st, sizeof(st));
+        return 0;
+    }
+    iFile = find_file(szResolved);
     if (iFile < 0) {
         return -2;
     }
     if (g_aFiles[iFile].u8Kind == VFS_KIND_RAM) {
         size = (i64)g_aFiles[iFile].cbData;
+        if (g_aFiles[iFile].u32Mode != 0) {
+            mode = g_aFiles[iFile].u32Mode;
+        }
+        if (g_aFiles[iFile].u8IsDir) {
+            mode = (mode & 07777u) | 0040000u;
+            size = 0;
+        }
     } else if (g_aFiles[iFile].u8Kind == VFS_KIND_BLK ||
                g_aFiles[iFile].u8Kind == VFS_KIND_SCSI) {
         mode = 0060644u;
+        size = (i64)g_u64ScsiCapBytes;
     }
     fill_stat(&st, (u64)iFile + 200u, mode, size);
+    if (g_aFiles[iFile].u32Nlink > 0) {
+        st.st_nlink = g_aFiles[iFile].u32Nlink;
+    }
+    memcpy(pStat, &st, sizeof(st));
+    return 0;
+}
+
+i64
+vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
+{
+    i32 iSym;
+    i32 iFile;
+    struct vfs_stat64 st;
+    char szNorm[VFS_MAX_PATH];
+    size_t n;
+
+    if (szPath == NULL || pStat == NULL || cbStat < sizeof(st)) {
+        return -14;
+    }
+    if (path_norm(szNorm, szPath) != 0) {
+        path_copy(szNorm, szPath);
+    }
+    /* Built-in symlinks */
+    if (path_eq(szNorm, "/proc/self/exe") || path_eq(szNorm, "/proc/self/cwd")) {
+        fill_stat(&st, 5, 0120777u, 0); /* S_IFLNK */
+        st.st_size = path_eq(szNorm, "/proc/self/cwd") ? 1 : 13;
+        memcpy(pStat, &st, sizeof(st));
+        return 0;
+    }
+    iSym = find_symlink(szNorm);
+    if (iSym >= 0) {
+        n = 0;
+        while (g_aSym[iSym].szTarget[n] != '\0') {
+            n++;
+        }
+        fill_stat(&st, (u64)iSym + 300u, 0120777u, (i64)n);
+        memcpy(pStat, &st, sizeof(st));
+        return 0;
+    }
+    /* Non-link: same as stat without follow (already resolved-ish) */
+    iFile = find_file(szNorm);
+    if (iFile < 0) {
+        /* Virtual dirs */
+        if (path_eq(szNorm, "/") || path_eq(szNorm, "/tmp") ||
+            path_eq(szNorm, "/proc") || path_eq(szNorm, "/dev")) {
+            fill_stat(&st, 2, 0040755u, 0);
+            memcpy(pStat, &st, sizeof(st));
+            return 0;
+        }
+        return -2;
+    }
+    {
+        u32 mode = 0100644u;
+        i64 size = (i64)g_aFiles[iFile].cbData;
+
+        if (g_aFiles[iFile].u32Mode != 0) {
+            mode = g_aFiles[iFile].u32Mode;
+        }
+        if (g_aFiles[iFile].u8IsDir) {
+            mode = (mode & 07777u) | 0040000u;
+            size = 0;
+        } else if (g_aFiles[iFile].u8Kind == VFS_KIND_BLK ||
+                   g_aFiles[iFile].u8Kind == VFS_KIND_SCSI) {
+            mode = 0060644u;
+        }
+        fill_stat(&st, (u64)iFile + 200u, mode, size);
+        if (g_aFiles[iFile].u32Nlink > 0) {
+            st.st_nlink = g_aFiles[iFile].u32Nlink;
+        }
+    }
     memcpy(pStat, &st, sizeof(st));
     return 0;
 }
@@ -1334,6 +2122,8 @@ vfs_ram_close(i64 i64Fd)
     if (!vfs_ram_fd_ok(i64Fd)) {
         return -9;
     }
+    /* Drop this fd from every epoll interest list before releasing */
+    epoll_detach_fd(i64Fd);
     if (g_aFds[i64Fd].u8Kind == VFS_KIND_PIPE) {
         u32 u32Pair = g_aFds[i64Fd].u32File;
         u8 u8End = g_aFds[i64Fd].u8End;
@@ -1489,46 +2279,70 @@ vfs_ram_eventfd2(u32 u32Init, int nFlags)
 
 /* ---- epoll (interest list + ready probe for pipes/eventfd/ram) ----------- */
 
+#define VFS_EPOLLIN     0x0001u
+#define VFS_EPOLLOUT    0x0004u
+#define VFS_EPOLLERR    0x0008u
+#define VFS_EPOLLHUP    0x0010u
+#define VFS_EPOLLRDHUP  0x2000u
+#define VFS_EPOLLONESHOT 0x40000000u
+
+/**
+ * Compute ready events. ERR/HUP/RDHUP are always candidates; IN/OUT are
+ * filtered by u32Want (caller may OR them). u32Want==0 → default IN|OUT.
+ */
 static u32
 epoll_ready_mask(i32 i32Fd, u32 u32Want)
 {
     u32 u32Got = 0;
+    u32 u32Req;
     struct vfs_fd *pFd;
 
+    u32Req = u32Want & (VFS_EPOLLIN | VFS_EPOLLOUT | VFS_EPOLLRDHUP);
+    if (u32Req == 0) {
+        u32Req = VFS_EPOLLIN | VFS_EPOLLOUT;
+    }
     if (i32Fd < 0 || !vfs_ram_fd_ok((i64)i32Fd)) {
-        return 0x008u; /* EPOLLERR for dead fd */
+        return VFS_EPOLLERR | VFS_EPOLLHUP;
     }
     pFd = &g_aFds[i32Fd];
     if (pFd->u8Kind == VFS_KIND_EVENTFD) {
         u32 iEv = pFd->u32File;
 
-        if (iEv < VFS_MAX_EVENTFD && g_aEventUsed[iEv] &&
-            g_aEventCnt[iEv] != 0 && (u32Want & 0x001u)) {
-            u32Got |= 0x001u; /* EPOLLIN */
+        if (iEv >= VFS_MAX_EVENTFD || !g_aEventUsed[iEv]) {
+            return VFS_EPOLLERR;
         }
-        if (u32Want & 0x004u) {
-            u32Got |= 0x004u; /* always writable */
+        if ((u32Req & VFS_EPOLLIN) && g_aEventCnt[iEv] != 0) {
+            u32Got |= VFS_EPOLLIN;
+        }
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT; /* always writable */
         }
     } else if (pFd->u8Kind == VFS_KIND_TIMERFD) {
         u32 iT = pFd->u32File;
 
-        if (iT < VFS_MAX_TIMERFD && g_aTimerUsed[iT] &&
-            g_aTimerTicks[iT] != 0 && (u32Want & 0x001u)) {
-            u32Got |= 0x001u;
+        if (iT >= VFS_MAX_TIMERFD || !g_aTimerUsed[iT]) {
+            return VFS_EPOLLERR;
+        }
+        if ((u32Req & VFS_EPOLLIN) && g_aTimerTicks[iT] != 0) {
+            u32Got |= VFS_EPOLLIN;
         }
     } else if (pFd->u8Kind == VFS_KIND_SIGNALFD) {
         u32 iS = pFd->u32File;
 
-        if (iS < VFS_MAX_SIGNALFD && g_aSigUsed[iS] &&
-            g_aSigPending[iS] != 0 && (u32Want & 0x001u)) {
-            u32Got |= 0x001u;
+        if (iS >= VFS_MAX_SIGNALFD || !g_aSigUsed[iS]) {
+            return VFS_EPOLLERR;
+        }
+        if ((u32Req & VFS_EPOLLIN) && g_aSigPending[iS] != 0) {
+            u32Got |= VFS_EPOLLIN;
         }
     } else if (pFd->u8Kind == VFS_KIND_INOTIFY) {
         u32 iIn = pFd->u32File;
 
-        if (iIn < VFS_MAX_INOTIFY && g_aInotify[iIn].u8Used &&
-            g_aInotify[iIn].u8Nq > 0 && (u32Want & 0x001u)) {
-            u32Got |= 0x001u;
+        if (iIn >= VFS_MAX_INOTIFY || !g_aInotify[iIn].u8Used) {
+            return VFS_EPOLLERR;
+        }
+        if ((u32Req & VFS_EPOLLIN) && g_aInotify[iIn].u8Nq > 0) {
+            u32Got |= VFS_EPOLLIN;
         }
     } else if (pFd->u8Kind == VFS_KIND_PIPE) {
         struct vfs_pipe_pair *pPair;
@@ -1536,31 +2350,76 @@ epoll_ready_mask(i32 i32Fd, u32 u32Want)
         u8 u8To;
 
         if (pFd->u32File >= VFS_MAX_PIPES || !g_aPipes[pFd->u32File].u8Used) {
-            return 0x008u;
+            return VFS_EPOLLERR;
         }
         pPair = &g_aPipes[pFd->u32File];
         u8From = (u8)(1u - pFd->u8End);
         u8To = pFd->u8End;
-        if ((u32Want & 0x001u) && pPair->u32Len[u8From] > 0) {
-            u32Got |= 0x001u;
+        if ((u32Req & VFS_EPOLLIN) && pPair->u32Len[u8From] > 0) {
+            u32Got |= VFS_EPOLLIN;
         }
-        if ((u32Want & 0x001u) && !pPair->u8Open[u8From] &&
-            pPair->u32Len[u8From] == 0) {
-            u32Got |= 0x010u; /* EPOLLHUP */
+        /* Peer closed: HUP when no more data; RDHUP when peer end gone */
+        if (!pPair->u8Open[u8From]) {
+            if (pPair->u32Len[u8From] == 0) {
+                u32Got |= VFS_EPOLLHUP;
+            }
+            u32Got |= VFS_EPOLLRDHUP;
+            if ((u32Req & VFS_EPOLLIN) && pPair->u32Len[u8From] == 0) {
+                u32Got |= VFS_EPOLLIN; /* EOF readable */
+            }
         }
-        if ((u32Want & 0x004u) &&
-            pPair->u32Len[u8To] < VFS_PIPE_BUF && pPair->u8Open[1u - u8To]) {
-            u32Got |= 0x004u;
+        if (!pPair->u8Open[1u - u8To]) {
+            /* Writer-side peer gone: further writes fail — still report OUT clear */
+            ;
+        } else if ((u32Req & VFS_EPOLLOUT) &&
+                   pPair->u32Len[u8To] < VFS_PIPE_BUF) {
+            u32Got |= VFS_EPOLLOUT;
+        }
+        if (!pPair->u8Open[1u - u8To] && pPair->u32Len[u8To] >= VFS_PIPE_BUF) {
+            u32Got |= VFS_EPOLLERR; /* no consumer, buffer full */
+        }
+    } else if (pFd->u8Kind == VFS_KIND_PIDFD) {
+        /* Bring-up: pidfd is always "process alive" → never HUP; OUT ready */
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT;
+        }
+        /* Readable when a synthetic exit bit is stored in high half of off */
+        if ((u32Req & VFS_EPOLLIN) && (pFd->u64Off >> 32) != 0) {
+            u32Got |= VFS_EPOLLIN;
+        }
+    } else if (pFd->u8Kind == VFS_KIND_IOURING) {
+        /* Ring fd: always OUT; IN when slot non-zero (armed) */
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT;
+        }
+        if (u32Req & VFS_EPOLLIN) {
+            u32Got |= VFS_EPOLLIN;
+        }
+    } else if (pFd->u8Kind == VFS_KIND_EPOLL) {
+        /* Nested epoll: never ready for I/O on the epoll fd itself */
+        return 0;
+    } else if (pFd->u8Kind == VFS_KIND_BLK || pFd->u8Kind == VFS_KIND_SCSI) {
+        /* Block devices: always ready for requested IN/OUT */
+        if (u32Req & VFS_EPOLLIN) {
+            u32Got |= VFS_EPOLLIN;
+        }
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT;
+        }
+    } else if (pFd->u8Kind == VFS_KIND_RAM) {
+        /*
+         * Regular files / dirs: Linux always reports POLLIN|POLLOUT when
+         * requested (disk I/O never "blocks" in poll sense for local files).
+         */
+        if (u32Req & VFS_EPOLLIN) {
+            u32Got |= VFS_EPOLLIN;
+        }
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT;
         }
     } else {
-        /* RAM/block/scsi/epoll: treat as always writable; readable if non-empty */
-        if (u32Want & 0x004u) {
-            u32Got |= 0x004u;
-        }
-        if ((u32Want & 0x001u) && pFd->u8Kind == VFS_KIND_RAM &&
-            pFd->u32File < VFS_MAX_FILES &&
-            g_aFiles[pFd->u32File].cbData > pFd->u64Off) {
-            u32Got |= 0x001u;
+        if (u32Req & VFS_EPOLLOUT) {
+            u32Got |= VFS_EPOLLOUT;
         }
     }
     return u32Got;
@@ -1569,7 +2428,43 @@ epoll_ready_mask(i32 i32Fd, u32 u32Want)
 u32
 vfs_ram_poll_mask(i64 i64Fd, u32 u32Want)
 {
-    return epoll_ready_mask((i32)i64Fd, u32Want);
+    u32 u32Got = epoll_ready_mask((i32)i64Fd, u32Want);
+    u32 u32Keep;
+
+    /* Surface ERR/HUP/RDHUP even if not in want; IN/OUT only if wanted (or want 0) */
+    u32Keep = u32Got & (VFS_EPOLLERR | VFS_EPOLLHUP | VFS_EPOLLRDHUP);
+    if (u32Want == 0) {
+        return u32Got;
+    }
+    return u32Keep | (u32Got & u32Want);
+}
+
+/** Drop any epoll interest entries that watch i64Fd (called on close). */
+static void
+epoll_detach_fd(i64 i64Fd)
+{
+    u32 iEp;
+    u32 i;
+
+    if (i64Fd < 3 || i64Fd >= VFS_MAX_FDS) {
+        return;
+    }
+    for (iEp = 0; iEp < VFS_MAX_EPOLL; iEp++) {
+        struct vfs_epoll *pE = &g_aEpoll[iEp];
+
+        if (!pE->u8Used) {
+            continue;
+        }
+        i = 0;
+        while (i < pE->u8N) {
+            if (pE->aWatch[i].i32Fd == (i32)i64Fd) {
+                pE->aWatch[i] = pE->aWatch[pE->u8N - 1u];
+                pE->u8N--;
+                continue;
+            }
+            i++;
+        }
+    }
 }
 
 i64
@@ -1608,6 +2503,7 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
     struct vfs_fd *pEp;
     struct vfs_epoll *pE;
     u32 i;
+    u32 u32Ev;
 
     if (!vfs_ram_fd_ok(i64Ep)) {
         return -9;
@@ -1620,9 +2516,19 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
     if (i64Fd == i64Ep) {
         return -22; /* cannot watch self */
     }
+    /* Default interest if caller passed zero (common in smoke paths) */
+    u32Ev = u32Events;
+    if ((u32Ev & (VFS_EPOLLIN | VFS_EPOLLOUT | VFS_EPOLLRDHUP)) == 0 &&
+        nOp != 2) {
+        u32Ev |= VFS_EPOLLIN;
+    }
     if (nOp == 1 /* EPOLL_CTL_ADD */) {
         if (!vfs_ram_fd_ok(i64Fd)) {
             return -9;
+        }
+        /* Reject watching another epoll instance (simplifies bring-up) */
+        if (g_aFds[i64Fd].u8Kind == VFS_KIND_EPOLL) {
+            return -22;
         }
         for (i = 0; i < pE->u8N; i++) {
             if (pE->aWatch[i].i32Fd == (i32)i64Fd) {
@@ -1630,15 +2536,16 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
             }
         }
         if (pE->u8N >= VFS_EPOLL_WATCH) {
-            return -24;
+            return -24; /* EMFILE — interest list full */
         }
         pE->aWatch[pE->u8N].i32Fd = (i32)i64Fd;
-        pE->aWatch[pE->u8N].u32Events = u32Events ? u32Events : 0x001u;
+        pE->aWatch[pE->u8N].u32Events = u32Ev;
         pE->aWatch[pE->u8N].u64Data = u64Data;
         pE->u8N++;
         return 0;
     }
     if (nOp == 2 /* EPOLL_CTL_DEL */) {
+        /* Linux: DEL does not require the target fd to still be open */
         for (i = 0; i < pE->u8N; i++) {
             if (pE->aWatch[i].i32Fd == (i32)i64Fd) {
                 pE->aWatch[i] = pE->aWatch[pE->u8N - 1u];
@@ -1649,16 +2556,19 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
         return -2; /* ENOENT */
     }
     if (nOp == 3 /* EPOLL_CTL_MOD */) {
+        if (!vfs_ram_fd_ok(i64Fd)) {
+            return -9;
+        }
         for (i = 0; i < pE->u8N; i++) {
             if (pE->aWatch[i].i32Fd == (i32)i64Fd) {
-                pE->aWatch[i].u32Events = u32Events ? u32Events : 0x001u;
+                pE->aWatch[i].u32Events = u32Ev;
                 pE->aWatch[i].u64Data = u64Data;
                 return 0;
             }
         }
-        return -2;
+        return -2; /* ENOENT — not in interest list */
     }
-    return -22;
+    return -22; /* EINVAL — unknown op */
 }
 
 i64
@@ -2051,25 +2961,40 @@ vfs_ram_epoll_wait(i64 i64Ep, void *pEvents, int nMax, int nTimeout)
         return -22;
     }
     if (nMax <= 0) {
-        return 0;
+        return -22;
     }
-    if (nMax > 16) {
-        nMax = 16;
+    if (nMax > (int)VFS_EPOLL_WATCH) {
+        nMax = (int)VFS_EPOLL_WATCH;
     }
     pE = &g_aEpoll[pEp->u32File];
     pOut = (u8 *)pEvents;
     for (i = 0; i < pE->u8N && (int)nOut < nMax; i++) {
-        u32 u32R =
-            epoll_ready_mask(pE->aWatch[i].i32Fd, pE->aWatch[i].u32Events);
+        u32 u32Want = pE->aWatch[i].u32Events;
+        u32 u32R;
+        u32 u32Report;
 
-        if (u32R != 0) {
+        /* Disabled oneshot slot (events cleared after prior fire) */
+        if ((u32Want & (VFS_EPOLLIN | VFS_EPOLLOUT | VFS_EPOLLRDHUP |
+                        VFS_EPOLLONESHOT)) == 0) {
+            continue;
+        }
+        u32R = epoll_ready_mask(pE->aWatch[i].i32Fd, u32Want);
+        /* Always surface ERR/HUP/RDHUP; gate IN/OUT by interest */
+        u32Report = u32R & (VFS_EPOLLERR | VFS_EPOLLHUP | VFS_EPOLLRDHUP);
+        u32Report |= u32R & u32Want &
+                     (VFS_EPOLLIN | VFS_EPOLLOUT | VFS_EPOLLRDHUP);
+        if (u32Report != 0) {
             if (pOut != NULL) {
                 /* packed epoll_event: u32 events + u64 data (12 bytes) */
-                memcpy(pOut + (size_t)nOut * 12u, &u32R, 4);
+                memcpy(pOut + (size_t)nOut * 12u, &u32Report, 4);
                 memcpy(pOut + (size_t)nOut * 12u + 4, &pE->aWatch[i].u64Data,
                        8);
             }
             nOut++;
+            /* EPOLLONESHOT: disarm until EPOLL_CTL_MOD re-arms */
+            if (u32Want & VFS_EPOLLONESHOT) {
+                pE->aWatch[i].u32Events = 0;
+            }
         }
     }
     return (i64)nOut;
@@ -2111,21 +3036,6 @@ vfs_ram_lseek(i64 i64Fd, i64 i64Off, int nWhence)
     return i64New;
 }
 
-/** How many used files have index < iFile. */
-static u32
-skip_count_before(u32 iFile)
-{
-    u32 i;
-    u32 n = 0;
-
-    for (i = 0; i < iFile && i < VFS_MAX_FILES; i++) {
-        if (g_aFiles[i].u8Used) {
-            n++;
-        }
-    }
-    return n;
-}
-
 i64
 vfs_ram_pread(i64 i64Fd, void *pBuf, size_t cb, u64 u64Off)
 {
@@ -2161,6 +3071,8 @@ vfs_ram_pwrite(i64 i64Fd, const void *pBuf, size_t cb, u64 u64Off)
 /*
  * linux_dirent64 (packed):
  *   u64 d_ino; i64 d_off; u16 d_reclen; u8 d_type; char d_name[];
+ * When the fd is a directory path, only direct children are listed.
+ * Cursor is an ordinal among the filtered set (stored in fd offset).
  */
 i64
 vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
@@ -2170,6 +3082,9 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
     u32 idx;
     u32 written = 0;
     u32 iFile;
+    u32 u32Ord;
+    const char *szDir;
+    int fFilter;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
         return -9;
@@ -2178,45 +3093,78 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
         return -22;
     }
     pFd = &g_aFds[i64Fd];
+    if (pFd->u8Kind != VFS_KIND_RAM && pFd->u8Kind != VFS_KIND_BLK &&
+        pFd->u8Kind != VFS_KIND_SCSI) {
+        return -20; /* ENOTDIR for pipes/eventfd/etc. */
+    }
     pOut = (u8 *)pBuf;
     idx = (u32)pFd->u64Off;
+    szDir = NULL;
+    fFilter = 0;
+    if (pFd->u8Kind == VFS_KIND_RAM && pFd->u32File < VFS_MAX_FILES &&
+        g_aFiles[pFd->u32File].u8Used) {
+        szDir = g_aFiles[pFd->u32File].szPath;
+        if (g_aFiles[pFd->u32File].u8IsDir || path_eq(szDir, "/") ||
+            path_eq(szDir, "/tmp") || path_eq(szDir, "/proc") ||
+            path_eq(szDir, "/dev") || path_eq(szDir, "/bin") ||
+            path_eq(szDir, "/etc") || path_eq(szDir, "/lib") ||
+            path_eq(szDir, "/usr") || path_eq(szDir, "/var") ||
+            path_eq(szDir, "/var/tmp")) {
+            fFilter = 1;
+        }
+    }
+    u32Ord = 0;
     for (iFile = 0; iFile < VFS_MAX_FILES; iFile++) {
         const char *sz;
+        const char *szBase;
         u32 nameLen;
         u32 reclen;
         u32 j;
-        u32 pos;
+        u8 u8Type;
 
         if (!g_aFiles[iFile].u8Used) {
             continue;
         }
-        pos = skip_count_before(iFile);
-        if (pos < idx) {
+        if (fFilter && szDir != NULL) {
+            if (!path_is_child_of(szDir, g_aFiles[iFile].szPath)) {
+                continue;
+            }
+        }
+        if (u32Ord < idx) {
+            u32Ord++;
             continue;
         }
-        if (pos > idx) {
+        if (u32Ord > idx) {
             break;
         }
         sz = g_aFiles[iFile].szPath;
+        szBase = sz;
         {
-            const char *b = sz;
             u32 k;
 
             for (k = 0; sz[k] != '\0'; k++) {
                 if (sz[k] == '/' && sz[k + 1] != '\0') {
-                    b = sz + k + 1;
+                    szBase = sz + k + 1;
                 }
             }
-            sz = b;
         }
         nameLen = 0;
-        while (sz[nameLen] != '\0' && nameLen < 64) {
+        while (szBase[nameLen] != '\0' && nameLen < 64) {
             nameLen++;
         }
         reclen = (u32)(19u + nameLen + 1u);
         reclen = (reclen + 7u) & ~7u;
         if (written + reclen > cb) {
             break;
+        }
+        /* d_type: DT_DIR=4 DT_REG=8 DT_BLK=6 DT_LNK=10 DT_UNKNOWN=0 */
+        if (g_aFiles[iFile].u8IsDir) {
+            u8Type = 4;
+        } else if (g_aFiles[iFile].u8Kind == VFS_KIND_BLK ||
+                   g_aFiles[iFile].u8Kind == VFS_KIND_SCSI) {
+            u8Type = 6;
+        } else {
+            u8Type = 8;
         }
         pOut[written + 0] = (u8)(iFile + 1);
         pOut[written + 1] = 0;
@@ -2240,9 +3188,9 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
         }
         pOut[written + 16] = (u8)(reclen & 0xffu);
         pOut[written + 17] = (u8)((reclen >> 8) & 0xffu);
-        pOut[written + 18] = 8;
+        pOut[written + 18] = u8Type;
         for (j = 0; j < nameLen; j++) {
-            pOut[written + 19 + j] = (u8)sz[j];
+            pOut[written + 19 + j] = (u8)szBase[j];
         }
         pOut[written + 19 + nameLen] = 0;
         for (j = 20 + nameLen; j < reclen; j++) {
@@ -2250,6 +3198,7 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
         }
         written += reclen;
         idx++;
+        u32Ord++;
         pFd->u64Off = idx;
     }
     return (i64)written;

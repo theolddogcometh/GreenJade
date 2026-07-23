@@ -27,7 +27,10 @@ u32 gj_coop_create(gj_coop_entry_fn pfn, void *pArg);
 void gj_coop_yield(void);
 void gj_coop_exit(void);
 u32 gj_coop_current_id(void);
-/** Soft selftest: create thr, yield, exit. Returns 1 on PASS. */
+/**
+ * Soft selftest deepen: boot id, null create, arg+id handoff, EXITED reuse,
+ * two-thr yield RR, capacity fill+reclaim. Returns 1 on PASS, 0 on soft FAIL.
+ */
 int gj_coop_selftest(void);
 
 /* Arch must provide: switch stacks (save *pOldSp, load u64NewSp). */

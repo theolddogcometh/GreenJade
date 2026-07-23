@@ -93,14 +93,29 @@ i64 vfs_ram_access(const char *szPath, int nMode);
  */
 i64 vfs_ram_fstat(i64 i64Fd, void *pStat, size_t cbStat);
 
-/** Path-based stat (open-lookup without permanently consuming an fd slot). */
+/** Path-based stat (follows symlink table entries). */
 i64 vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat);
 
-/** rename: move path (ram files only). Returns 0 or -errno. */
+/**
+ * lstat-shaped: do not follow symlink table; S_IFLNK for table links.
+ * Built-in /proc/self/exe and /proc/self/cwd report as symlinks.
+ */
+i64 vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat);
+
+/** rename: move path (ram files + symlink table). Returns 0 or -errno. */
 i64 vfs_ram_rename(const char *szOld, const char *szNew);
 
 /** ftruncate: set RAM file size (zero-fill or clip). */
 i64 vfs_ram_ftruncate(i64 i64Fd, i64 i64Len);
+
+/** Path-based truncate (RAM files only). */
+i64 vfs_ram_truncate(const char *szPath, i64 i64Len);
+
+/** Path-based chmod (RAM files only). */
+i64 vfs_ram_chmod(const char *szPath, u32 u32Mode);
+
+/** mkdir-shaped: create empty directory marker at path. */
+i64 vfs_ram_mkdir(const char *szPath, u32 u32Mode);
 
 /**
  * F_DUPFD-shaped: clone fd to lowest free >= i64Min.
@@ -136,9 +151,26 @@ i64 vfs_ram_fchmod(i64 i64Fd, u32 u32Mode);
 i64 vfs_ram_mark_dir(i64 i64Fd);
 
 /**
- * fallocate-shaped: ensure file size >= offset+len (mode ignored for bring-up).
+ * fallocate-shaped: ensure file size >= offset+len (grow only; never shrinks).
+ * Zero-fills the extension. Rejects directories and non-RAM fds.
  */
 i64 vfs_ram_fallocate(i64 i64Fd, i64 i64Off, i64 i64Len);
+
+/**
+ * Zero a byte range inside an existing RAM file without changing size
+ * (fallocate FALLOC_FL_PUNCH_HOLE|KEEP_SIZE-shaped).
+ */
+i64 vfs_ram_fallocate_punch(i64 i64Fd, i64 i64Off, i64 i64Len);
+
+/** fsync / fdatasync: no-op success for any live ramfs fd. */
+i64 vfs_ram_fsync(i64 i64Fd);
+i64 vfs_ram_fdatasync(i64 i64Fd);
+
+/**
+ * Bytes available to read without blocking (FIONREAD-shaped).
+ * Pipes/eventfd/timerfd/signalfd/inotify/ram remainder; 0 if none.
+ */
+i64 vfs_ram_bytes_readable(i64 i64Fd);
 
 /**
  * sendfile-shaped: copy up to cb bytes from in_fd to out_fd.
@@ -151,13 +183,15 @@ i64 vfs_ram_epoll_create1(int nFlags);
 
 /**
  * epoll_ctl: nOp 1=ADD 2=DEL 3=MOD.
- * u32Events: EPOLLIN=1 EPOLLOUT=4 (public values).
+ * u32Events: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10;
+ *            EPOLLRDHUP=0x2000 EPOLLONESHOT=0x40000000 (honoured in wait).
  */
 i64 vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data);
 
 /**
  * epoll_wait: fill packed {u32 events; u64 data} records (12 bytes each).
- * nTimeout ignored (non-blocking probe). Returns ready count or -errno.
+ * nTimeout ignored (non-blocking probe). EPOLLONESHOT disables after fire.
+ * Returns ready count or -errno.
  */
 i64 vfs_ram_epoll_wait(i64 i64Ep, void *pEvents, int nMax, int nTimeout);
 
@@ -196,7 +230,9 @@ i64 vfs_ram_copy_file_range(i64 i64In, u64 *pOffIn, i64 i64Out, u64 *pOffOut,
                             size_t cb);
 
 /**
- * poll readiness mask for an fd (EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10).
- * Returns ready bits among u32Want, or 0 if not ready / unknown.
+ * poll readiness mask for an fd.
+ * Bits: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10 EPOLLRDHUP=0x2000.
+ * ERR/HUP/RDHUP are returned even when not present in u32Want (Linux-shaped).
+ * Regular/block files always ready for IN|OUT among the requested bits.
  */
 u32 vfs_ram_poll_mask(i64 i64Fd, u32 u32Want);

@@ -4,6 +4,10 @@
  *
  * Exception / IRQ trap dispatch (G-IDT-*): kernel halt on ring-0 faults,
  * PE32 CS32 smokes (#BP / int 0x80), COW break on user #PF, else kill.
+ *
+ * Soft deepen: greppable #PF COW path logs + trap soft stats (trap.h).
+ * Keep vmm "COW break" strings untouched; except_port_deliver path unchanged.
+ * Grep: trap: soft stats · trap: #PF soft
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -161,12 +165,58 @@ static const char *const g_aszExc[] = {
     "24",   "25",   "26",   "27",   "28",   "29",   "#SX",  "31",
 };
 
+/* Soft trap path counters — wrap OK; never gate product policy. */
+static struct gj_trap_stats g_trapStats;
+
 static u64
 read_cr2(void)
 {
     u64 u64Cr2;
     __asm__ volatile ("mov %%cr2, %0" : "=r"(u64Cr2));
     return u64Cr2;
+}
+
+void
+trap_stats_get(struct gj_trap_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    *pOut = g_trapStats;
+}
+
+void
+trap_stats_reset(void)
+{
+    memset(&g_trapStats, 0, sizeof(g_trapStats));
+}
+
+u64
+trap_stats_soft(void)
+{
+    /* Grep: trap: soft stats */
+    kprintf("trap: soft stats total=%lu user=%lu kern=%lu null=%lu "
+            "vec32=%lu vec_hi=%lu pe32_bp=%lu pe32_int80=%lu "
+            "pf_user=%lu cow_cand=%lu cow_cr3=%lu cow_ok=%lu cow_miss=%lu "
+            "cow_skip=%lu except_ok=%lu except_miss=%lu kill=%lu\n",
+            (unsigned long)g_trapStats.u64Total,
+            (unsigned long)g_trapStats.u64User,
+            (unsigned long)g_trapStats.u64Kernel,
+            (unsigned long)g_trapStats.u64NullFrame,
+            (unsigned long)g_trapStats.u64VecLt32,
+            (unsigned long)g_trapStats.u64VecGe32,
+            (unsigned long)g_trapStats.u64Pe32Bp,
+            (unsigned long)g_trapStats.u64Pe32Int80,
+            (unsigned long)g_trapStats.u64PfUser,
+            (unsigned long)g_trapStats.u64PfCowCand,
+            (unsigned long)g_trapStats.u64PfCowCr3Sw,
+            (unsigned long)g_trapStats.u64PfCowOk,
+            (unsigned long)g_trapStats.u64PfCowMiss,
+            (unsigned long)g_trapStats.u64PfCowSkip,
+            (unsigned long)g_trapStats.u64ExceptDeliver,
+            (unsigned long)g_trapStats.u64ExceptMiss,
+            (unsigned long)g_trapStats.u64Kill);
+    return g_trapStats.u64Total;
 }
 
 void
@@ -177,6 +227,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     struct gj_thread *pThr;
 
     if (pFrame == NULL) {
+        g_trapStats.u64NullFrame++;
         kprintf("trap: null frame\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
@@ -186,6 +237,18 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     u32Vec = (u32)pFrame->u64Vector;
     fUser = ((pFrame->u64Cs & 3ull) == 3ull) ? 1 : 0;
     pThr = thread_current();
+
+    g_trapStats.u64Total++;
+    if (fUser) {
+        g_trapStats.u64User++;
+    } else {
+        g_trapStats.u64Kernel++;
+    }
+    if (u32Vec < 32u) {
+        g_trapStats.u64VecLt32++;
+    } else {
+        g_trapStats.u64VecGe32++;
+    }
 
     /* Suppress banner noise for expected PE32 paths (int3 / int 0x80) */
     if (!(fUser && (u32Vec == 3 || u32Vec == 128) &&
@@ -226,6 +289,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         (pFrame->u64Cs & 0xffull) == (u64)GJ_GDT_USER_CS32) {
         g_u32Pe32HwEnterCs = (u32)pFrame->u64Cs;
         g_u32Pe32HwEnterHits++;
+        g_trapStats.u64Pe32Bp++;
         kprintf("pe32: hw enter PASS cs=0x%lx rip=0x%lx hits=%u\n",
                 (unsigned long)pFrame->u64Cs,
                 (unsigned long)pFrame->u64Rip,
@@ -259,6 +323,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
 
         g_u32Pe32Int80Calls++;
         g_u32Pe32Int80LastNr = u32Nr;
+        g_trapStats.u64Pe32Int80++;
         pe32_fd_table_init();
         if (g_u32Pe32Brk == 0) {
             g_u32Pe32Brk = 0x56000000u; /* soft heap base */
@@ -2239,21 +2304,62 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     /*
      * User write #PF on a present COW page → break sharing and resume.
      * Error code: bit0=P, bit1=W/R, bit2=U/S (Intel SDM).
+     *
+     * Soft deepen (grep: trap: #PF soft): log decision tree + bump stats.
+     * Actual break still logs greppable `vmm: COW break …` from vmm.
      */
     if (u32Vec == 14 && fUser) {
         u64 u64Err = pFrame->u64Error;
         u64 u64Cr2 = read_cr2();
+        u64 u64VaPage = u64Cr2 & ~0xfffull;
+        u32 u32ThrId = (pThr != NULL) ? pThr->u32Id : 0u;
+        u32 u32P = (u32)(u64Err & 1ull);
+        u32 u32W = (u32)((u64Err >> 1) & 1ull);
+        u32 u32U = (u32)((u64Err >> 2) & 1ull);
+
+        g_trapStats.u64PfUser++;
+        /* Grep: trap: #PF soft path */
+        kprintf("trap: #PF soft path cr2=0x%lx va=0x%lx err=0x%lx "
+                "P=%u W=%u U=%u thr=%u rip=0x%lx\n",
+                (unsigned long)u64Cr2,
+                (unsigned long)u64VaPage,
+                (unsigned long)u64Err,
+                u32P, u32W, u32U, u32ThrId,
+                (unsigned long)pFrame->u64Rip);
 
         if ((u64Err & 0x3ull) == 0x3ull) { /* present + write */
+            g_trapStats.u64PfCowCand++;
+            /* Grep: trap: #PF soft cow try */
+            kprintf("trap: #PF soft cow try va=0x%lx thr=%u\n",
+                    (unsigned long)u64VaPage, u32ThrId);
             if (pThr != NULL && pThr->pProc != NULL &&
                 pThr->pProc->u64Cr3 != 0) {
                 /* Switch to the process AS so COW break targets its CR3 */
                 cpu_load_cr3(pThr->pProc->u64Cr3);
+                g_trapStats.u64PfCowCr3Sw++;
+                /* Grep: trap: #PF soft cow cr3 */
+                kprintf("trap: #PF soft cow cr3=0x%lx thr=%u\n",
+                        (unsigned long)pThr->pProc->u64Cr3, u32ThrId);
             }
-            if (vmm_cow_break_page((gj_vaddr_t)(u64Cr2 & ~0xfffull)) ==
-                GJ_OK) {
+            if (vmm_cow_break_page((gj_vaddr_t)u64VaPage) == GJ_OK) {
+                g_trapStats.u64PfCowOk++;
+                /* Grep: trap: #PF soft cow ok */
+                kprintf("trap: #PF soft cow ok va=0x%lx thr=%u resume\n",
+                        (unsigned long)u64VaPage, u32ThrId);
                 return; /* resume faulting instruction */
             }
+            g_trapStats.u64PfCowMiss++;
+            /* Grep: trap: #PF soft cow miss */
+            kprintf("trap: #PF soft cow miss va=0x%lx thr=%u "
+                    "(not COW leaf / nomem) fallthrough\n",
+                    (unsigned long)u64VaPage, u32ThrId);
+        } else {
+            g_trapStats.u64PfCowSkip++;
+            /* Grep: trap: #PF soft cow skip */
+            kprintf("trap: #PF soft cow skip cr2=0x%lx err=0x%lx "
+                    "P=%u W=%u thr=%u\n",
+                    (unsigned long)u64Cr2, (unsigned long)u64Err,
+                    u32P, u32W, u32ThrId);
         }
     }
 
@@ -2262,12 +2368,16 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         except_port_deliver(pThr->pProc, u32Vec, pFrame->u64Error,
                             pFrame->u64Rip,
                             u32Vec == 14 ? read_cr2() : 0)) {
+        g_trapStats.u64ExceptDeliver++;
         kprintf("trap: delivered to exception port (thr stays)\n");
         /* Handler wakes; faulting thread blocks until policy advances */
         thread_block(&pThr->pProc->excPort, 1);
         schedule();
         /* Resumed without resolution → fall through and kill */
+    } else {
+        g_trapStats.u64ExceptMiss++;
     }
+    g_trapStats.u64Kill++;
     kprintf("trap: killing user thread\n");
     if (pThr != NULL && pThr->u32Id != 0) {
         pThr->u32State = GJ_THR_EXITED;

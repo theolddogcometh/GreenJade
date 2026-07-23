@@ -42,7 +42,28 @@ enum gj_thread_state {
 #define GJ_THR_STACK_SIZE    (16u * 1024u)
 #define GJ_THR_KSTACK_SIZE   (32u * 1024u)
 #define GJ_MAX_THREADS       32
-#define GJ_THR_KSTACK_CANARY 0xC4A1C4A1C4A1C4A1ull
+#define GJ_THR_KSTACK_CANARY     0xC4A1C4A1C4A1C4A1ull
+/* Mid-stack soft canary: early overflow signal before base canary. */
+#define GJ_THR_KSTACK_CANARY_MID 0xA5C3A5C3A5C3A5C3ull
+/* 8-byte aligned midpoint slot (grows-down kstack soft depth marker). */
+#define GJ_THR_KSTACK_MID        ((GJ_THR_KSTACK_SIZE / 2u) & ~7u)
+/* Soft poison fill for high-water soft scan (unused bytes). */
+#define GJ_THR_KSTACK_POISON     0xFDu
+
+/*
+ * QoS classes (Apple-shaped soft product). 0..2 keep historical meaning
+ * used by syscalls / main personality; 3..4 deepen soft desktop classes.
+ * Rank (higher first): DRIVER > INTERACTIVE > NORMAL > UTILITY > BACKGROUND.
+ * Capped soft PI boost (thread_qos_boost_soft) may temporarily lift rank.
+ */
+#define GJ_QOS_NORMAL       0u
+#define GJ_QOS_INTERACTIVE  1u
+#define GJ_QOS_BACKGROUND   2u
+#define GJ_QOS_UTILITY      3u
+#define GJ_QOS_DRIVER       4u /* soft-RT UDX/audio; quota-backed later */
+#define GJ_QOS_CLASS_MAX    4u
+/* Soft boost residual cap (Apple §8 capped PI spirit; no unbounded lift). */
+#define GJ_QOS_BOOST_CAP    4u
 
 #define GJ_THR_F_USER_ENTRY   (1u << 0) /* enter ring-3 (64-bit) on first run */
 #define GJ_THR_F_USER32_ENTRY (1u << 1) /* enter ring-3 compat CS32 via iretq */
@@ -163,8 +184,58 @@ u32  thread_create_on_cpu(struct gj_process *pProc, void (*pfn)(void *),
 void thread_resched_cpu(u32 u32Cpu);
 
 /**
- * QoS class (Solaris/Apple-shaped): 0=normal, 1=interactive, 2=background.
- * Affects pick order among RUNNABLE threads on this CPU (higher first).
+ * QoS class (Apple-shaped soft): see GJ_QOS_* (0..4). Affects pick order
+ * among RUNNABLE threads on this CPU (higher rank first). Out-of-range
+ * class clamps to GJ_QOS_NORMAL (soft clamp counted).
  */
 void thread_set_qos(u32 u32ThrId, u32 u32Qos);
 u32  thread_get_qos(u32 u32ThrId);
+
+/**
+ * Soft PI-shaped boost: temporary rank addend on thr, capped at
+ * GJ_QOS_BOOST_CAP. Decays one tick each schedule leave. No door coupling.
+ */
+void thread_qos_boost_soft(u32 u32ThrId, u32 u32Ticks);
+
+/**
+ * Effective soft rank for thr (base QoS rank + residual boost, capped).
+ * Returns 0 if thr unknown.
+ */
+u32  thread_qos_effective_rank(u32 u32ThrId);
+
+/*
+ * Greppable soft product counters (pick_next / QoS / kstack canary).
+ * Prefix-stable line: "sched: soft stats ..."
+ */
+struct gj_sched_soft_stats {
+    u64 u64PickTotal;        /* non-null pick_next returns */
+    u64 u64PickIdle;         /* idle thr selected */
+    u64 u64PickInteractive;  /* base class picks */
+    u64 u64PickNormal;
+    u64 u64PickBackground;
+    u64 u64PickUtility;
+    u64 u64PickDriver;
+    u64 u64PickAffSkip;      /* affinity mismatches walked */
+    u64 u64PickEqualFair;    /* equal-rank wait-age wins */
+    u64 u64PickSelf;         /* fell back to current */
+    u64 u64QosSet;           /* thread_set_qos hits */
+    u64 u64QosClamp;         /* class out of range → normal */
+    u64 u64QosBoostSoft;     /* boost_soft applications */
+    u64 u64QosBoostDecay;    /* boost ticks decayed on leave */
+    u64 u64CanaryPlant;      /* base+mid plant ops */
+    u64 u64CanaryCheck;      /* check invocations */
+    u64 u64CanaryOk;         /* base+mid intact */
+    u64 u64CanaryMidOk;      /* mid intact (subset of ok) */
+    u64 u64CanaryFail;       /* base or mid mismatch (halt path) */
+    u64 u64StackHwmMax;      /* max soft high-water bytes seen */
+    u64 u64StackHwmSamples;  /* HWM soft samples taken */
+};
+
+/** Copy soft stats into *pOut (no-op if NULL). */
+void thread_sched_soft_stats_get(struct gj_sched_soft_stats *pOut);
+
+/**
+ * Grep: sched: soft stats
+ * Dump soft counters via kprintf. Returns u64PickTotal.
+ */
+u64  thread_sched_soft_stats_print(void);

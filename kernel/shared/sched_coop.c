@@ -22,8 +22,14 @@ static struct gj_coop_thr g_aThr[GJ_COOP_MAX_THR];
 static u32 g_u32Cur;
 static u32 g_u32NextId = 1;
 static int g_fInited;
+
+/* Soft selftest scratch (volatile — observed across yield/switch). */
 static volatile int g_fSelftestDone;
 static volatile int g_fSelftestRan;
+static volatile u32 g_u32SelftestSeenId;
+static volatile u32 g_u32SelftestArg;
+static volatile u32 g_cSelftestHits;
+static volatile u32 g_u32SelftestOrder;
 
 static void
 coop_trampoline(void)
@@ -48,6 +54,10 @@ gj_coop_init(void)
     g_fInited = 1;
     g_fSelftestDone = 0;
     g_fSelftestRan = 0;
+    g_u32SelftestSeenId = 0;
+    g_u32SelftestArg = 0;
+    g_cSelftestHits = 0;
+    g_u32SelftestOrder = 0;
 }
 
 u32
@@ -182,29 +192,182 @@ gj_coop_current_id(void)
 static void
 selftest_entry(void *pArg)
 {
-    (void)pArg;
+    g_u32SelftestArg = (u32)(gj_vaddr_t)pArg;
+    g_u32SelftestSeenId = gj_coop_current_id();
     g_fSelftestRan = 1;
     g_fSelftestDone = 1;
+    g_cSelftestHits++;
     gj_coop_exit();
 }
 
+/* A: mark, yield so peer can run, mark resume, exit. */
+static void
+selftest_entry_a(void *pArg)
+{
+    (void)pArg;
+    g_u32SelftestOrder |= 1u;
+    g_cSelftestHits++;
+    gj_coop_yield();
+    g_u32SelftestOrder |= 4u;
+    gj_coop_exit();
+}
+
+/* B: mark and exit (runs while A yielded). */
+static void
+selftest_entry_b(void *pArg)
+{
+    (void)pArg;
+    g_u32SelftestOrder |= 2u;
+    g_cSelftestHits++;
+    gj_coop_exit();
+}
+
+static void
+selftest_quick_exit(void *pArg)
+{
+    (void)pArg;
+    g_cSelftestHits++;
+    gj_coop_exit();
+}
+
+/*
+ * Soft deepen: boot id, null create, arg+id handoff, slot reuse after exit,
+ * two-thr yield RR, capacity fill + reclaim. Returns 1 on PASS.
+ */
 int
 gj_coop_selftest(void)
 {
-    u32 id;
-    unsigned spins;
+    u32 u32Id;
+    u32 u32Id2;
+    u32 u32Fill;
+    unsigned uSpins;
+    u32 cCreated;
 
     if (!g_fInited) {
         gj_coop_init();
     }
-    g_fSelftestDone = 0;
-    g_fSelftestRan = 0;
-    id = gj_coop_create(selftest_entry, 0);
-    if (id == 0) {
+
+    if (gj_coop_current_id() != 0u) {
         return 0;
     }
-    for (spins = 0; spins < 64u && !g_fSelftestDone; spins++) {
+
+    /* Null entry must fail. */
+    if (gj_coop_create(0, 0) != 0u) {
+        return 0;
+    }
+
+    /* Solo yield is a no-op when no other runnable thr. */
+    gj_coop_yield();
+    if (gj_coop_current_id() != 0u) {
+        return 0;
+    }
+
+    /* --- create / yield / exit with arg + current_id --- */
+    g_fSelftestDone = 0;
+    g_fSelftestRan = 0;
+    g_u32SelftestSeenId = 0;
+    g_u32SelftestArg = 0;
+    g_cSelftestHits = 0;
+    u32Id = gj_coop_create(selftest_entry, (void *)(gj_vaddr_t)0xA5A5u);
+    if (u32Id == 0u) {
+        return 0;
+    }
+    for (uSpins = 0; uSpins < 64u && !g_fSelftestDone; uSpins++) {
         gj_coop_yield();
     }
-    return (g_fSelftestRan && g_fSelftestDone) ? 1 : 0;
+    if (!g_fSelftestRan || !g_fSelftestDone) {
+        return 0;
+    }
+    if (g_u32SelftestSeenId != u32Id || g_u32SelftestArg != 0xA5A5u) {
+        return 0;
+    }
+    if (gj_coop_current_id() != 0u) {
+        return 0;
+    }
+
+    /* --- EXITED slot reuse --- */
+    g_fSelftestDone = 0;
+    g_fSelftestRan = 0;
+    g_u32SelftestSeenId = 0;
+    g_u32SelftestArg = 0;
+    u32Id2 = gj_coop_create(selftest_entry, (void *)(gj_vaddr_t)0xBEEFu);
+    if (u32Id2 == 0u) {
+        return 0;
+    }
+    for (uSpins = 0; uSpins < 64u && !g_fSelftestDone; uSpins++) {
+        gj_coop_yield();
+    }
+    if (!g_fSelftestRan || g_u32SelftestSeenId != u32Id2 ||
+        g_u32SelftestArg != 0xBEEFu) {
+        return 0;
+    }
+    if (gj_coop_current_id() != 0u) {
+        return 0;
+    }
+
+    /* --- two-thr RR: A yields, B runs, A resumes --- */
+    g_cSelftestHits = 0;
+    g_u32SelftestOrder = 0;
+    u32Id = gj_coop_create(selftest_entry_a, 0);
+    u32Id2 = gj_coop_create(selftest_entry_b, 0);
+    if (u32Id == 0u || u32Id2 == 0u) {
+        return 0;
+    }
+    for (uSpins = 0; uSpins < 128u && (g_u32SelftestOrder & 7u) != 7u; uSpins++) {
+        gj_coop_yield();
+    }
+    if (g_cSelftestHits < 2u || (g_u32SelftestOrder & 7u) != 7u) {
+        return 0;
+    }
+    if (gj_coop_current_id() != 0u) {
+        return 0;
+    }
+
+    /* --- fill remaining slots, reject overflow, reclaim after exit --- */
+    g_cSelftestHits = 0;
+    cCreated = 0;
+    for (;;) {
+        u32Fill = gj_coop_create(selftest_quick_exit, 0);
+        if (u32Fill == 0u) {
+            break;
+        }
+        cCreated++;
+        if (cCreated > GJ_COOP_MAX_THR) {
+            return 0;
+        }
+    }
+    if (cCreated == 0u) {
+        return 0;
+    }
+    /* Table full — another create must fail. */
+    if (gj_coop_create(selftest_quick_exit, 0) != 0u) {
+        return 0;
+    }
+    for (uSpins = 0; uSpins < 256u && g_cSelftestHits < cCreated; uSpins++) {
+        gj_coop_yield();
+    }
+    if (g_cSelftestHits < cCreated) {
+        return 0;
+    }
+    /* After all EXITED, create must work again. */
+    g_fSelftestDone = 0;
+    g_fSelftestRan = 0;
+    g_u32SelftestSeenId = 0;
+    g_u32SelftestArg = 0;
+    u32Id = gj_coop_create(selftest_entry, (void *)(gj_vaddr_t)0x1111u);
+    if (u32Id == 0u) {
+        return 0;
+    }
+    for (uSpins = 0; uSpins < 64u && !g_fSelftestDone; uSpins++) {
+        gj_coop_yield();
+    }
+    if (!g_fSelftestRan || g_u32SelftestSeenId != u32Id ||
+        g_u32SelftestArg != 0x1111u) {
+        return 0;
+    }
+    if (gj_coop_current_id() != 0u) {
+        return 0;
+    }
+
+    return 1;
 }

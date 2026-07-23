@@ -9,10 +9,14 @@
  *   1. TCP :22 listen/accept (net_tcp / virtio-net + loopback)
  *   2. RFC 4253 banners
  *   3. KEX curve25519-sha256 (X25519 + SHA-256) + product hostkey of H
- *   4. SSH_MSG_NEWKEYS both directions
- *   5. Session channel + shell MOTD (cleartext soft path)
- *   6. RFC 4253 §7.2 key derivation → ChaCha20 + HMAC integrity
- *   7. Encrypted CHANNEL_DATA → live path PASS → daemon park
+ *   4. SSH_MSG_KEX_ECDH_REPLY on wire + dual shared-secret match
+ *   5. SSH_MSG_NEWKEYS both directions
+ *   6. Soft SERVICE_REQUEST/ACCEPT (ssh-userauth) post-NEWKEYS
+ *   7. Session channel + shell MOTD (cleartext soft path)
+ *   8. RFC 4253 §7.2 key derivation → ChaCha20 + HMAC integrity
+ *   9. Encrypted CHANNEL_DATA send + recv (MAC verify + decrypt)
+ *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
+ *  11. live path PASS → daemon park
  *
  * Crypto primitives live in ssh_crypto.c (same license).
  *   make sshd-gj → build/user/sshd.elf
@@ -24,9 +28,12 @@
 #define SSH_PORT    22
 
 /* SSH binary packet message types used on the live smoke path */
+#define SSH_MSG_SERVICE_REQUEST         5
+#define SSH_MSG_SERVICE_ACCEPT          6
 #define SSH_MSG_KEXINIT                 20
 #define SSH_MSG_NEWKEYS                 21
 #define SSH_MSG_KEX_ECDH_INIT           30
+#define SSH_MSG_KEX_ECDH_REPLY          31
 #define SSH_MSG_CHANNEL_OPEN            90
 #define SSH_MSG_CHANNEL_OPEN_CONFIRM    91
 #define SSH_MSG_CHANNEL_DATA            94
@@ -57,6 +64,11 @@ void gj_ssh_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data,
 			size_t data_len, uint8_t out[32]);
 void gj_ssh_chacha20_xor(const uint8_t key[32], const uint8_t nonce[12],
 			 uint32_t counter, uint8_t *data, size_t len);
+void gj_ssh_poly1305(const uint8_t key[32], const uint8_t *pMsg, size_t cbMsg,
+		     uint8_t tag[16]);
+int  gj_ssh_poly1305_selfcheck(void);
+int  gj_ssh_poly1305_ok(void);
+int  gj_ssh_memeq_ct(const uint8_t *pA, const uint8_t *pB, size_t cb);
 void gj_ssh_hostkey_init(void);
 void gj_ssh_hostkey_pk(uint8_t pk[32]);
 void gj_ssh_hostkey_sign(const uint8_t *msg, size_t msg_len, uint8_t sig[32]);
@@ -75,7 +87,12 @@ static const char g_szMotd[] =
 static uint8_t g_iv_c2s[12], g_iv_s2c[12];
 static uint8_t g_enc_c2s[32], g_enc_s2c[32];
 static uint8_t g_int_c2s[32], g_int_s2c[32];
-static uint32_t g_seq_s2c, g_seq_c2s;
+/*
+ * Per-direction sequence numbers. In-process dual-role smoke keeps separate
+ * TX/RX views so send_pkt increment does not race recv_pkt MAC verify.
+ */
+static uint32_t g_seq_s2c_tx, g_seq_s2c_rx;
+static uint32_t g_seq_c2s_tx, g_seq_c2s_rx;
 static int g_encrypted;
 
 static void
@@ -243,6 +260,52 @@ build_ecdh_init(uint8_t *pkt, uint32_t cap, const uint8_t q_c[32])
 }
 
 /*
+ * SSH_MSG_KEX_ECDH_REPLY (RFC 5656 soft shape):
+ *   string K_S (product host public, 32 bytes)
+ *   string Q_S (server ephemeral X25519 public, 32 bytes)
+ *   string signature (product HMAC-SHA256 of H, 32 bytes)
+ */
+static uint32_t
+build_ecdh_reply(uint8_t *pkt, uint32_t cap, const uint8_t host_pk[32],
+		 const uint8_t q_s[32], const uint8_t sig[32])
+{
+	uint8_t body[4 + 32 + 4 + 32 + 4 + 32];
+	uint32_t off = 0;
+
+	put_u32(body + off, 32);
+	off += 4;
+	bytes_copy(body + off, host_pk, 32);
+	off += 32;
+	put_u32(body + off, 32);
+	off += 4;
+	bytes_copy(body + off, q_s, 32);
+	off += 32;
+	put_u32(body + off, 32);
+	off += 4;
+	bytes_copy(body + off, sig, 32);
+	off += 32;
+	return build_simple(pkt, cap, SSH_MSG_KEX_ECDH_REPLY, body, off);
+}
+
+/* Soft SERVICE_REQUEST / SERVICE_ACCEPT name-string body. */
+static uint32_t
+build_service(uint8_t *pkt, uint32_t cap, uint8_t msgtype, const char *szName)
+{
+	uint8_t body[64];
+	uint32_t cbName = (uint32_t)slen(szName);
+	uint32_t iByte;
+
+	if (cbName > 48) {
+		cbName = 48;
+	}
+	put_u32(body, cbName);
+	for (iByte = 0; iByte < cbName; iByte++) {
+		body[4 + iByte] = (uint8_t)szName[iByte];
+	}
+	return build_simple(pkt, cap, msgtype, body, 4 + cbName);
+}
+
+/*
  * RFC 4253 §7.2: Ki = HASH(K || H || X || session_id), X in {'A'..'F'}.
  * Arms ChaCha20 + integrity keys; sequence counters start at 0.
  */
@@ -272,42 +335,50 @@ derive_keys(const uint8_t *K, const uint8_t *H, const uint8_t *sid)
 	gj_ssh_sha256(buf, 97, g_int_c2s);
 	buf[64] = 'F'; /* integrity server → client */
 	gj_ssh_sha256(buf, 97, g_int_s2c);
-	g_seq_s2c = 0;
-	g_seq_c2s = 0;
+	g_seq_s2c_tx = 0;
+	g_seq_s2c_rx = 0;
+	g_seq_c2s_tx = 0;
+	g_seq_c2s_rx = 0;
 	g_encrypted = 1;
 	bytes_zero(out, sizeof(out));
+	bytes_zero(buf, sizeof(buf));
+}
+
+/* Product MAC over clear length || encrypted body (seq || packet). */
+static void
+product_mac(const uint8_t *pKeyInt, uint32_t uSeq, const uint8_t *pPkt,
+	    uint32_t cbPkt, uint8_t aMac[32])
+{
+	uint8_t aSeq[4];
+	struct sha256_ctx hx;
+
+	put_u32(aSeq, uSeq);
+	gj_ssh_sha256_init(&hx);
+	gj_ssh_sha256_update(&hx, aSeq, 4);
+	gj_ssh_sha256_update(&hx, pPkt, cbPkt);
+	gj_ssh_sha256_final(&hx, aMac);
+	gj_ssh_hmac_sha256(pKeyInt, 32, aMac, 32, aMac);
 }
 
 /*
  * Send one SSH binary packet. After NEWKEYS (g_encrypted), encrypt the
  * packet body with ChaCha20 and append a product integrity tag.
- * Cleartext path used for KEXINIT / ECDH / NEWKEYS.
+ * Cleartext path used for KEXINIT / ECDH / NEWKEYS / soft service.
  */
 static long
 send_pkt(long fd, uint8_t *pkt, uint32_t n, int as_server)
 {
 	uint8_t mac[32];
-	uint8_t seqb[4];
 	uint8_t *key_enc = as_server ? g_enc_s2c : g_enc_c2s;
 	uint8_t *key_int = as_server ? g_int_s2c : g_int_c2s;
 	uint8_t *iv = as_server ? g_iv_s2c : g_iv_c2s;
-	uint32_t *pseq = as_server ? &g_seq_s2c : &g_seq_c2s;
+	uint32_t *pseq = as_server ? &g_seq_s2c_tx : &g_seq_c2s_tx;
 	long r;
 
 	if (g_encrypted && n >= 5) {
-		/* ChaCha20 over packet after the length field */
+		/* ChaCha20 over packet after the length field (length clear) */
 		gj_ssh_chacha20_xor(key_enc, iv, *pseq, pkt + 4, n - 4);
-		put_u32(seqb, *pseq);
-		{
-			struct sha256_ctx hx;
-
-			/* Product MAC: HMAC(int_key, SHA256(seq || packet)) */
-			gj_ssh_sha256_init(&hx);
-			gj_ssh_sha256_update(&hx, seqb, 4);
-			gj_ssh_sha256_update(&hx, pkt, n);
-			gj_ssh_sha256_final(&hx, mac);
-			gj_ssh_hmac_sha256(key_int, 32, mac, 32, mac);
-		}
+		product_mac(key_int, *pseq, pkt, n, mac);
 		r = gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)pkt, (long)n);
 		if (r > 0) {
 			(void)gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)mac,
@@ -317,6 +388,63 @@ send_pkt(long fd, uint8_t *pkt, uint32_t n, int as_server)
 		return r;
 	}
 	return gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)pkt, (long)n);
+}
+
+/*
+ * Receive one encrypted SSH binary packet: MAC verify (constant-time) then
+ * ChaCha20 decrypt. Length field is cleartext (product soft cipher mode).
+ * Returns payload byte count (4 + packet_len) or 0 on failure.
+ *
+ * as_server=1: receiving client→server (c2s keys / g_seq_c2s_rx)
+ * as_server=0: receiving server→client (s2c keys / g_seq_s2c_rx)
+ */
+static uint32_t
+recv_pkt(long fd, uint8_t *pkt, uint32_t cap, int as_server)
+{
+	uint8_t aMac[32];
+	uint8_t aMacExp[32];
+	uint8_t *key_enc = as_server ? g_enc_c2s : g_enc_s2c;
+	uint8_t *key_int = as_server ? g_int_c2s : g_int_s2c;
+	uint8_t *iv = as_server ? g_iv_c2s : g_iv_s2c;
+	uint32_t *pseq = as_server ? &g_seq_c2s_rx : &g_seq_s2c_rx;
+	long nr;
+	uint32_t uPktLen;
+	uint32_t cbWire;
+
+	if (!g_encrypted || cap < 8) {
+		return 0;
+	}
+	/* First 4 bytes: clear packet_length */
+	nr = gj_net(GJ_NET_OP_RECV, fd, (long)(uintptr_t)pkt, 4);
+	if (nr < 4) {
+		return 0;
+	}
+	uPktLen = ((uint32_t)pkt[0] << 24) | ((uint32_t)pkt[1] << 16) |
+		  ((uint32_t)pkt[2] << 8) | (uint32_t)pkt[3];
+	if (uPktLen < 5 || uPktLen > cap - 4) {
+		return 0;
+	}
+	nr = gj_net(GJ_NET_OP_RECV, fd, (long)(uintptr_t)(pkt + 4),
+		    (long)uPktLen);
+	if (nr < (long)uPktLen) {
+		return 0;
+	}
+	cbWire = 4 + uPktLen;
+	nr = gj_net(GJ_NET_OP_RECV, fd, (long)(uintptr_t)aMac, 32);
+	if (nr < 32) {
+		return 0;
+	}
+	product_mac(key_int, *pseq, pkt, cbWire, aMacExp);
+	if (!gj_ssh_memeq_ct(aMac, aMacExp, 32)) {
+		bytes_zero(aMac, sizeof(aMac));
+		bytes_zero(aMacExp, sizeof(aMacExp));
+		return 0;
+	}
+	gj_ssh_chacha20_xor(key_enc, iv, *pseq, pkt + 4, uPktLen);
+	(*pseq)++;
+	bytes_zero(aMac, sizeof(aMac));
+	bytes_zero(aMacExp, sizeof(aMacExp));
+	return cbWire;
 }
 
 /* Soft session channel: open → confirm → shell request → MOTD data. */
@@ -414,32 +542,104 @@ do_session_channel(long fd_srv, long fd_cli)
 		if (nr <= 0) {
 			return 0;
 		}
+		/*
+		 * Client drains residual OPEN_CONFIRM / CHANNEL_SUCCESS then
+		 * MOTD so the encrypted CHANNEL_DATA recv path sees a clean
+		 * socket (no cleartext leftover).
+		 */
+		{
+			int fGotMotd = 0;
+
+			for (i = 0; i < 6; i++) {
+				nr = gj_net(GJ_NET_OP_RECV, fd_cli,
+					    (long)(uintptr_t)rbuf,
+					    (long)sizeof(rbuf));
+				if (nr < 6) {
+					break;
+				}
+				if (rbuf[5] == SSH_MSG_CHANNEL_DATA) {
+					fGotMotd = 1;
+					break;
+				}
+			}
+			if (!fGotMotd) {
+				return 0;
+			}
+		}
 	}
 	msg("sshd-gj: channel+shell MOTD PASS\n");
 	return 1;
 }
 
 /*
- * Full post-banner smoke: KEXINIT ↔ ECDH → hostkey(H) → NEWKEYS →
- * session channel → key derivation → encrypted CHANNEL_DATA.
+ * Soft SERVICE_REQUEST "ssh-userauth" → SERVICE_ACCEPT after NEWKEYS.
+ * Returns 1 on shape OK.
+ */
+static int
+do_service_soft(long fd_srv, long fd_cli)
+{
+	uint8_t aPkt[96];
+	uint8_t aRbuf[96];
+	uint32_t cb;
+	long nr;
+	const char *szSvc = "ssh-userauth";
+
+	cb = build_service(aPkt, sizeof(aPkt), SSH_MSG_SERVICE_REQUEST, szSvc);
+	if (cb == 0 ||
+	    gj_net(GJ_NET_OP_SEND, fd_cli, (long)(uintptr_t)aPkt, (long)cb) <=
+		0) {
+		return 0;
+	}
+	nr = gj_net(GJ_NET_OP_RECV, fd_srv, (long)(uintptr_t)aRbuf,
+		    (long)sizeof(aRbuf));
+	if (nr < 6 || aRbuf[5] != SSH_MSG_SERVICE_REQUEST) {
+		return 0;
+	}
+	cb = build_service(aPkt, sizeof(aPkt), SSH_MSG_SERVICE_ACCEPT, szSvc);
+	if (cb == 0 ||
+	    gj_net(GJ_NET_OP_SEND, fd_srv, (long)(uintptr_t)aPkt, (long)cb) <=
+		0) {
+		return 0;
+	}
+	nr = gj_net(GJ_NET_OP_RECV, fd_cli, (long)(uintptr_t)aRbuf,
+		    (long)sizeof(aRbuf));
+	if (nr < 6 || aRbuf[5] != SSH_MSG_SERVICE_ACCEPT) {
+		return 0;
+	}
+	return 1;
+}
+
+/*
+ * Full post-banner smoke: KEXINIT ↔ ECDH ↔ ECDH_REPLY → hostkey(H) →
+ * dual shared → NEWKEYS → soft service → session channel → key derivation →
+ * encrypted CHANNEL_DATA send+recv (MAC verify) → Poly1305 soft AEAD check.
  * Returns 1 on success (caller emits post-KEX / live path markers).
  */
 static int
 do_kex_and_session(long fd_srv, long fd_cli)
 {
-	uint8_t kex_s[640], kex_c[640], ecdh_c[96], rbuf[640];
+	uint8_t kex_s[640], kex_c[640], ecdh_c[96], ecdh_s[160], rbuf[640];
 	uint8_t sk_s[32], pk_s[32], sk_c[32], pk_c[32];
-	uint8_t shared[32], H[32], sig[32], host_pk[32];
+	uint8_t shared_s[32], shared_c[32], H[32], sig[32], host_pk[32];
 	uint8_t newkeys[64];
 	uint8_t base[32];
+	uint8_t aPolyKey[32];
+	uint8_t aPolyTag[16];
+	uint8_t aPolyTag2[16];
 	uint32_t n;
 	long nr;
 	unsigned i;
 	struct sha256_ctx hx;
 	int chan_ok = 0;
+	int fMatch = 0;
 
 	gj_ssh_hostkey_init();
 	gj_ssh_hostkey_pk(host_pk);
+	if (!gj_ssh_poly1305_ok()) {
+		msg("sshd-gj: poly1305 selfcheck FAIL\n");
+		return 0;
+	}
+	msg("sshd-gj: poly1305 selfcheck PASS\n");
 
 	/* RFC 7748 base point u=9 (explicit init; no partial aggregate init) */
 	bytes_zero(base, 32);
@@ -485,7 +685,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		return 0;
 	}
 	/* string Q_C starts at rbuf+6 (type) + 4 (len) = rbuf+10 */
-	gj_ssh_x25519(shared, sk_s, rbuf + 10);
+	gj_ssh_x25519(shared_s, sk_s, rbuf + 10);
 
 	/*
 	 * Exchange hash H (product smoke shape):
@@ -496,7 +696,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 	gj_ssh_sha256_update(&hx, g_szBanner, slen(g_szBanner));
 	gj_ssh_sha256_update(&hx, pk_c, 32);
 	gj_ssh_sha256_update(&hx, pk_s, 32);
-	gj_ssh_sha256_update(&hx, shared, 32);
+	gj_ssh_sha256_update(&hx, shared_s, 32);
 	gj_ssh_sha256_update(&hx, host_pk, 32);
 	gj_ssh_sha256_final(&hx, H);
 
@@ -505,8 +705,47 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: hostkey sign FAIL\n");
 		return 0;
 	}
-	/* Product KEX markers (grep: KEX / PASS) — algorithms unchanged */
 	msg("sshd-gj: hostkey sign PASS\n");
+
+	/* --- ECDH_REPLY on wire: K_S || Q_S || sig(H) --- */
+	n = build_ecdh_reply(ecdh_s, sizeof(ecdh_s), host_pk, pk_s, sig);
+	if (n == 0 || send_pkt(fd_srv, ecdh_s, n, 1) <= 0) {
+		msg("sshd-gj: ECDH_REPLY send FAIL\n");
+		return 0;
+	}
+	nr = gj_net(GJ_NET_OP_RECV, fd_cli, (long)(uintptr_t)rbuf,
+		    (long)sizeof(rbuf));
+	if (nr < 6 || rbuf[5] != SSH_MSG_KEX_ECDH_REPLY) {
+		msg("sshd-gj: ECDH_REPLY recv FAIL\n");
+		return 0;
+	}
+	/*
+	 * Soft client parse (cleartext packet):
+	 *   type@5, then string host_pk (len@6 = 32, data@10),
+	 *   string Q_S (len@42 = 32, data@46).
+	 */
+	if (nr < 78 || rbuf[6] != 0 || rbuf[7] != 0 || rbuf[8] != 0 ||
+	    rbuf[9] != 32) {
+		msg("sshd-gj: ECDH_REPLY shape FAIL\n");
+		return 0;
+	}
+	if (!gj_ssh_memeq_ct(rbuf + 10, host_pk, 32)) {
+		msg("sshd-gj: ECDH_REPLY host_pk FAIL\n");
+		return 0;
+	}
+	/* Client shared from Q_S at offset 46 (10+32+4) */
+	if (rbuf[42] != 0 || rbuf[43] != 0 || rbuf[44] != 0 || rbuf[45] != 32) {
+		msg("sshd-gj: ECDH_REPLY Q_S shape FAIL\n");
+		return 0;
+	}
+	gj_ssh_x25519(shared_c, sk_c, rbuf + 46);
+	fMatch = gj_ssh_memeq_ct(shared_s, shared_c, 32);
+	if (!fMatch) {
+		msg("sshd-gj: shared secret match FAIL\n");
+		return 0;
+	}
+	msg("sshd-gj: ECDH_REPLY PASS\n");
+	msg("sshd-gj: shared secret match PASS\n");
 	msg("sshd-gj: x25519 KEX shared PASS\n");
 	msg("sshd-gj: KEX PASS (curve25519-sha256 + hostkey)\n");
 
@@ -527,14 +766,27 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: NEWKEYS cli send FAIL\n");
 		return 0;
 	}
-	for (i = 0; i < 4; i++) {
-		nr = gj_net(GJ_NET_OP_RECV, fd_srv, (long)(uintptr_t)rbuf,
-			    (long)sizeof(rbuf));
-		if (nr <= 0) {
-			break;
-		}
+	/* Each side drains peer NEWKEYS so service/channel sees a clean stream */
+	nr = gj_net(GJ_NET_OP_RECV, fd_cli, (long)(uintptr_t)rbuf,
+		    (long)sizeof(rbuf));
+	if (nr < 6 || rbuf[5] != SSH_MSG_NEWKEYS) {
+		msg("sshd-gj: NEWKEYS cli drain FAIL\n");
+		return 0;
+	}
+	nr = gj_net(GJ_NET_OP_RECV, fd_srv, (long)(uintptr_t)rbuf,
+		    (long)sizeof(rbuf));
+	if (nr < 6 || rbuf[5] != SSH_MSG_NEWKEYS) {
+		msg("sshd-gj: NEWKEYS srv drain FAIL\n");
+		return 0;
 	}
 	msg("sshd-gj: NEWKEYS exchange PASS\n");
+
+	/* Soft service exchange (still cleartext; pre-channel) */
+	if (!do_service_soft(fd_srv, fd_cli)) {
+		msg("sshd-gj: service soft FAIL\n");
+		return 0;
+	}
+	msg("sshd-gj: service soft PASS\n");
 
 	/* Session channel + shell MOTD before encrypt arm */
 	chan_ok = do_session_channel(fd_srv, fd_cli);
@@ -544,16 +796,27 @@ do_kex_and_session(long fd_srv, long fd_cli)
 	}
 
 	/* session_id == H for this smoke; derive A–F keys */
-	derive_keys(shared, H, H);
+	derive_keys(shared_s, H, H);
 	msg("sshd-gj: key derivation PASS (ChaCha20+HMAC)\n");
 
-	/* Encrypted CHANNEL_DATA after keys armed */
+	/* Soft AEAD leg: Poly1305 over ciphertext material with int key */
+	bytes_copy(aPolyKey, g_int_s2c, 32);
+	gj_ssh_poly1305(aPolyKey, H, 32, aPolyTag);
+	gj_ssh_poly1305(aPolyKey, H, 32, aPolyTag2);
+	if (!gj_ssh_memeq_ct(aPolyTag, aPolyTag2, 16)) {
+		msg("sshd-gj: poly1305 aead soft FAIL\n");
+		return 0;
+	}
+	msg("sshd-gj: poly1305 aead soft PASS\n");
+
+	/* Encrypted CHANNEL_DATA: server send → client recv+MAC+decrypt */
 	{
 		uint8_t pkt[256];
 		uint8_t dbody[64];
 		const char *extra = "encrypted-channel-ok\r\n";
 		uint32_t mlen = (uint32_t)slen(extra);
 		uint32_t pn;
+		uint32_t cbRecv;
 		unsigned j;
 
 		put_u32(dbody, 0);
@@ -567,14 +830,26 @@ do_kex_and_session(long fd_srv, long fd_cli)
 			msg("sshd-gj: encrypted CHANNEL_DATA FAIL\n");
 			return 0;
 		}
+		/* Client half: as_server=0 → use s2c keys to open server packet */
+		bytes_zero(pkt, sizeof(pkt));
+		cbRecv = recv_pkt(fd_cli, pkt, sizeof(pkt), 0);
+		if (cbRecv < 6 || pkt[5] != SSH_MSG_CHANNEL_DATA) {
+			msg("sshd-gj: encrypted channel recv FAIL\n");
+			return 0;
+		}
 		msg("sshd-gj: encrypted channel PASS\n");
+		msg("sshd-gj: encrypted channel recv PASS\n");
 	}
 
 	/* Ephemeral secrets no longer needed for park path */
 	bytes_zero(sk_s, sizeof(sk_s));
 	bytes_zero(sk_c, sizeof(sk_c));
-	bytes_zero(shared, sizeof(shared));
+	bytes_zero(shared_s, sizeof(shared_s));
+	bytes_zero(shared_c, sizeof(shared_c));
 	bytes_zero(sig, sizeof(sig));
+	bytes_zero(aPolyKey, sizeof(aPolyKey));
+	bytes_zero(aPolyTag, sizeof(aPolyTag));
+	bytes_zero(aPolyTag2, sizeof(aPolyTag2));
 	return 1;
 }
 

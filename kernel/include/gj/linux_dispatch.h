@@ -43,6 +43,47 @@ enum gj_linux_path gj_linux_classify(u64 u64Nr);
 /** Full hybrid dispatch (hot or cold). */
 void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
 
+/**
+ * Deep NR-table classification + set_hot/set_cold coverage inventory.
+ *
+ * Slot fields (u32HotSlots/Cold/None/…) are filled by a post-init scan of
+ * the path table (authoritative). set_* Ok/Reject count registration
+ * attempts. Runtime u64* deepen hybrid accounting beyond hit totals
+ * (hot-defer→cold, OOR, PATH_NONE).
+ */
+struct gj_linux_nr_class_stats {
+    u32 u32TableSize;    /* GJ_LINUX_NR_TABLE */
+    u32 u32HotSlots;     /* PATH_HOT slots */
+    u32 u32ColdSlots;    /* PATH_COLD slots */
+    u32 u32NoneSlots;    /* PATH_NONE slots */
+    u32 u32Classified;   /* hot + cold */
+    u32 u32MaxHotNr;     /* highest NR set_hot accepted */
+    u32 u32MaxColdNr;    /* highest NR set_cold accepted */
+    u32 u32MaxClassNr;   /* max(hot, cold) NR */
+    u32 u32SetHotOk;     /* successful set_hot */
+    u32 u32SetColdOk;    /* successful set_cold */
+    u32 u32SetHotReject; /* OOR or NULL pfn */
+    u32 u32SetColdReject;/* OOR */
+    /* Runtime path accounting (deepen; mirrors + extends hit stats). */
+    u64 u64HotHits;
+    u64 u64ColdHits;
+    u64 u64Enosys;
+    u64 u64HotDeferCold; /* HOT handler returned -ENOSYS → cold/ENOSYS */
+    u64 u64Oor;          /* NR >= table */
+    u64 u64NonePath;     /* in-table PATH_NONE → ENOSYS */
+};
+
+/** Snapshot classification + coverage + runtime counters. */
+void gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut);
+
+/**
+ * Soft inventory log (greppable):
+ *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… none=… class=…
+ *          max=… table=… set_hot=… set_cold=… rej_h=… rej_c=…
+ *          hits_h=… hits_c=… enosys=… defer=… oor=… none_path=…
+ */
+void gj_linux_nr_class_soft_log(void);
+
 /* Hot path implementations (linux_hot.c) */
 i64 gj_linux_hot_write(struct gj_linux_regs *pRegs);
 i64 gj_linux_hot_sched_yield(struct gj_linux_regs *pRegs);

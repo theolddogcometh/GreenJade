@@ -6,6 +6,7 @@
  * Pure C11 clean-room Linux x86_64 surface — no GPL source.
  */
 #include <gj/cold_ipc.h>
+#include <gj/klog.h>
 #include <gj/linux_dispatch.h>
 #include <gj/syscall.h>
 #include <gj/wow64.h>
@@ -20,12 +21,52 @@ static void *g_pColdCtx;
 
 static struct gj_linux_dispatch_stats g_stats;
 
+/* Deep NR-table classification + set_hot/set_cold coverage (soft). */
+static struct gj_linux_nr_class_stats g_class;
+
+static void
+nr_class_scan_slots(void)
+{
+    u32 iNr;
+    u32 u32Hot = 0;
+    u32 u32Cold = 0;
+    u32 u32None = 0;
+
+    for (iNr = 0; iNr < GJ_LINUX_NR_TABLE; iNr++) {
+        u8 u8Path = g_aPath[iNr];
+
+        if (u8Path == (u8)GJ_LINUX_PATH_HOT) {
+            u32Hot++;
+        } else if (u8Path == (u8)GJ_LINUX_PATH_COLD) {
+            u32Cold++;
+        } else {
+            u32None++;
+        }
+    }
+    g_class.u32TableSize = GJ_LINUX_NR_TABLE;
+    g_class.u32HotSlots = u32Hot;
+    g_class.u32ColdSlots = u32Cold;
+    g_class.u32NoneSlots = u32None;
+    g_class.u32Classified = u32Hot + u32Cold;
+    if (g_class.u32MaxHotNr > g_class.u32MaxColdNr) {
+        g_class.u32MaxClassNr = g_class.u32MaxHotNr;
+    } else {
+        g_class.u32MaxClassNr = g_class.u32MaxColdNr;
+    }
+}
+
 static void
 set_hot(u32 u32Nr, gj_linux_hot_fn_t pfn)
 {
     if (u32Nr < GJ_LINUX_NR_TABLE && pfn != NULL) {
         g_apfnHot[u32Nr] = pfn;
         g_aPath[u32Nr] = (u8)GJ_LINUX_PATH_HOT;
+        g_class.u32SetHotOk++;
+        if (u32Nr > g_class.u32MaxHotNr) {
+            g_class.u32MaxHotNr = u32Nr;
+        }
+    } else {
+        g_class.u32SetHotReject++;
     }
 }
 
@@ -35,6 +76,12 @@ set_cold(u32 u32Nr)
     if (u32Nr < GJ_LINUX_NR_TABLE) {
         g_apfnHot[u32Nr] = NULL;
         g_aPath[u32Nr] = (u8)GJ_LINUX_PATH_COLD;
+        g_class.u32SetColdOk++;
+        if (u32Nr > g_class.u32MaxColdNr) {
+            g_class.u32MaxColdNr = u32Nr;
+        }
+    } else {
+        g_class.u32SetColdReject++;
     }
 }
 
@@ -52,6 +99,26 @@ gj_linux_dispatch_init(void)
     g_stats.u64HotHits = 0;
     g_stats.u64ColdHits = 0;
     g_stats.u64Enosys = 0;
+
+    /* Classification coverage counters (set_hot/set_cold deepen). */
+    g_class.u32TableSize = GJ_LINUX_NR_TABLE;
+    g_class.u32HotSlots = 0;
+    g_class.u32ColdSlots = 0;
+    g_class.u32NoneSlots = 0;
+    g_class.u32Classified = 0;
+    g_class.u32MaxHotNr = 0;
+    g_class.u32MaxColdNr = 0;
+    g_class.u32MaxClassNr = 0;
+    g_class.u32SetHotOk = 0;
+    g_class.u32SetColdOk = 0;
+    g_class.u32SetHotReject = 0;
+    g_class.u32SetColdReject = 0;
+    g_class.u64HotHits = 0;
+    g_class.u64ColdHits = 0;
+    g_class.u64Enosys = 0;
+    g_class.u64HotDeferCold = 0;
+    g_class.u64Oor = 0;
+    g_class.u64NonePath = 0;
 
     /* ---- Hot paths (kernel) ------------------------------------------- */
     set_hot(LINUX_NR_write, gj_linux_hot_write);
@@ -371,6 +438,10 @@ gj_linux_dispatch_init(void)
     set_cold(LINUX_NR_wait4);
     set_cold(LINUX_NR_kill);
     set_cold(LINUX_NR_lstat);
+
+    /* Authoritative slot scan + greppable set_hot/set_cold coverage soft log. */
+    nr_class_scan_slots();
+    gj_linux_nr_class_soft_log();
 }
 
 void
@@ -418,6 +489,8 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
 
     if (pRegs->u64Nr >= GJ_LINUX_NR_TABLE) {
         g_stats.u64Enosys++;
+        g_class.u64Enosys++;
+        g_class.u64Oor++;
         return;
     }
     u32Nr = (u32)pRegs->u64Nr;
@@ -430,8 +503,13 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             /* Hot may return -ENOSYS to defer (e.g. non-anon mmap). */
             if (pRegs->i64Ret != -LINUX_ENOSYS) {
                 g_stats.u64HotHits++;
+                g_class.u64HotHits++;
                 return;
             }
+            g_class.u64HotDeferCold++;
+        } else {
+            /* HOT slot without fn → defer (table inconsistency). */
+            g_class.u64HotDeferCold++;
         }
         /* Fall through to cold personality. */
     }
@@ -441,20 +519,25 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         if (cold_ipc_personality_attached()) {
             pRegs->i64Ret = cold_ipc_submit(pRegs, 0);
             g_stats.u64ColdHits++;
+            g_class.u64ColdHits++;
             return;
         }
         /* Legacy direct cold hook (tests / early bring-up). */
         if (g_pfnCold != NULL) {
             pRegs->i64Ret = g_pfnCold(pRegs, g_pColdCtx);
             g_stats.u64ColdHits++;
+            g_class.u64ColdHits++;
             return;
         }
         g_stats.u64Enosys++;
+        g_class.u64Enosys++;
         pRegs->i64Ret = -LINUX_ENOSYS;
         return;
     }
 
     g_stats.u64Enosys++;
+    g_class.u64Enosys++;
+    g_class.u64NonePath++;
     pRegs->i64Ret = -LINUX_ENOSYS;
 }
 
@@ -473,4 +556,61 @@ gj_linux_dispatch_stats_reset(void)
     g_stats.u64HotHits = 0;
     g_stats.u64ColdHits = 0;
     g_stats.u64Enosys = 0;
+    /* Runtime class counters only; slot coverage stays post-init. */
+    g_class.u64HotHits = 0;
+    g_class.u64ColdHits = 0;
+    g_class.u64Enosys = 0;
+    g_class.u64HotDeferCold = 0;
+    g_class.u64Oor = 0;
+    g_class.u64NonePath = 0;
+}
+
+void
+gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    /* Refresh slot scan so callers see live table state. */
+    nr_class_scan_slots();
+    *pOut = g_class;
+}
+
+void
+gj_linux_nr_class_soft_log(void)
+{
+    const char *szVerdict;
+    u32 u32Rej;
+
+    nr_class_scan_slots();
+    u32Rej = g_class.u32SetHotReject + g_class.u32SetColdReject;
+
+    if (g_class.u32Classified == 0) {
+        szVerdict = "NONE";
+    } else if (u32Rej == 0 && g_class.u32HotSlots > 0 &&
+               g_class.u32ColdSlots > 0) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /*
+     * Greppable soft coverage line (product / smoke inventory):
+     *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… …
+     */
+    kprintf("linux: nr class soft %s hot=%u cold=%u none=%u class=%u "
+            "max=%u table=%u set_hot=%u set_cold=%u rej_h=%u rej_c=%u\n",
+            szVerdict, g_class.u32HotSlots, g_class.u32ColdSlots,
+            g_class.u32NoneSlots, g_class.u32Classified, g_class.u32MaxClassNr,
+            g_class.u32TableSize, g_class.u32SetHotOk, g_class.u32SetColdOk,
+            g_class.u32SetHotReject, g_class.u32SetColdReject);
+    kprintf("linux: nr class soft hits_h=%lu hits_c=%lu enosys=%lu "
+            "defer=%lu oor=%lu none_path=%lu max_h=%u max_c=%u\n",
+            (unsigned long)g_class.u64HotHits,
+            (unsigned long)g_class.u64ColdHits,
+            (unsigned long)g_class.u64Enosys,
+            (unsigned long)g_class.u64HotDeferCold,
+            (unsigned long)g_class.u64Oor,
+            (unsigned long)g_class.u64NonePath, g_class.u32MaxHotNr,
+            g_class.u32MaxColdNr);
 }

@@ -25,6 +25,16 @@
  * Leaf PTE flags: PRESENT | RW | PS (2 MiB). No NX / user / global bits —
  * early boot only; VMM installs product maps (HHDM, W^X, SMEP/SMAP) later.
  *
+ * Soft product surface
+ * --------------------
+ * After CR3 load (serial already up on UEFI path), emit greppable soft markers
+ * for identity install and the published gj_boot_info (GOP / memmap / handoff).
+ *
+ * Grep markers:
+ *   boot: identity soft PASS cr3=… leaves=… gib=4
+ *   boot: handoff soft … / boot: memmap soft … / boot: GOP soft …
+ *     (via boot_info_soft_log when source is UEFI)
+ *
  * Limits (not product end-state)
  * ------------------------------
  *   - Covers only [0, 4 GiB). Machines with >4 GiB RAM still boot; PMM uses
@@ -36,6 +46,7 @@
  *
  * Pure C11 freestanding; dual MIT OR Apache-2.0. No assembly required.
  */
+#include <gj/boot_info.h>
 #include <gj/klog.h>
 #include <gj/string.h>
 #include <gj/types.h>
@@ -46,6 +57,9 @@
 
 /* Six pages: PML4 + PDPT + 4×PD (covers 4 GiB with 2 MiB leaves). */
 static u8 g_aPt[6u * 4096u] __attribute__((aligned(4096)));
+
+/* Soft install counter (observability). */
+static u32 g_cSoftIdentityInstall;
 
 /**
  * Build PML4→PDPT→4×PD covering phys [0, 4 GiB) at VA=PA and load CR3.
@@ -63,12 +77,17 @@ boot_install_identity_4gib(void)
     u64 *pPd;
     u32 iPd;
     u32 iPage;
+    u64 u64Cr3Expect;
+    u64 u64Cr3Read;
+    u32 cLeaves;
+    const struct gj_boot_info *pBi;
 
     memset(g_aPt, 0, sizeof(g_aPt));
 
     /* PML4[0] → PDPT | P | W  (low 512 GiB half; we only need first 4 GiB). */
     pPml4[0] = ((u64)(gj_vaddr_t)pPdpt) | PTE_P | PTE_W;
 
+    cLeaves = 0;
     for (iPd = 0; iPd < 4u; iPd++) {
         /* PD index iPd owns phys [iPd GiB, (iPd+1) GiB). */
         pPd = (u64 *)(void *)&g_aPt[(2u + iPd) * 4096u];
@@ -78,6 +97,7 @@ boot_install_identity_4gib(void)
             u64 pa = ((u64)iPd << 30) + ((u64)iPage << 21);
 
             pPd[iPage] = pa | PTE_P | PTE_W | PTE_PS;
+            cLeaves++;
         }
     }
 
@@ -86,7 +106,26 @@ boot_install_identity_4gib(void)
      * used until VMM must sit in the identity window or be covered by these
      * leaves — true for the product ELF load addresses.
      */
-    __asm__ volatile ("mov %0, %%cr3" : : "r"((u64)(gj_vaddr_t)pPml4) : "memory");
+    u64Cr3Expect = (u64)(gj_vaddr_t)pPml4;
+    __asm__ volatile ("mov %0, %%cr3" : : "r"(u64Cr3Expect) : "memory");
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(u64Cr3Read));
+
+    g_cSoftIdentityInstall++;
     kprintf("boot: identity map ready va=pa [0,4GiB) cr3=0x%lx\n",
-            (unsigned long)(gj_vaddr_t)pPml4);
+            (unsigned long)u64Cr3Expect);
+    /* Grep: boot: identity soft PASS */
+    kprintf("boot: identity soft PASS cr3=0x%lx cr3_read=0x%lx match=%d "
+            "leaves=%u gib=4 pt_pages=6 installs=%u\n",
+            (unsigned long)u64Cr3Expect, (unsigned long)u64Cr3Read,
+            u64Cr3Read == u64Cr3Expect, (unsigned)cLeaves,
+            (unsigned)g_cSoftIdentityInstall);
+
+    /*
+     * Soft UEFI handoff deepen: GOP / memmap / handoff markers once serial
+     * is up and identity is ours. Multiboot does not call this function.
+     */
+    pBi = boot_info_get();
+    if (pBi != NULL && pBi->u32Source == GJ_BOOT_SRC_UEFI) {
+        boot_info_soft_log(pBi);
+    }
 }

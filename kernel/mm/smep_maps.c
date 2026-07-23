@@ -2,21 +2,48 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clear USER bit on kernel half; enable SMEP/SMAP (G-MAP-1..3, P-MEM-6).
+ * Clear USER bit on kernel half; enable SMEP/SMAP (G-MAP-1..4, P-MEM-6).
+ *
+ * Soft deepen:
+ *   - Full PML4 walk: low half outside user band + all kernel-half leaves
+ *   - 1GiB / 2MiB / 4K PS leaves; straddle large-page soft residual count
+ *   - G-MAP-4 soft: count U+!NX clears as UX residual fixed
+ *   - Post-harden residual-U audit → greppable soft PASS/FAIL
+ *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
+ *
+ * greppable: smep: harden
+ * greppable: smep: SMEP
+ * greppable: smep: SMAP
+ * greppable: smep: audit
+ * greppable: smep: stats
+ * greppable: SMEP_HARDEN_STATS
  */
 #include <gj/config.h>
 #include <gj/klog.h>
 #include <gj/smep.h>
+#include <gj/string.h>
 #include <gj/user_access.h>
 #include <gj/vmm.h>
 
 #define PTE_P   (1ull << 0)
 #define PTE_U   (1ull << 2)
 #define PTE_PS  (1ull << 7)
+#define PTE_NX  (1ull << 63)
 #define PTE_ADDR_MASK 0x000ffffffffff000ull
 
 #define CR4_SMEP (1ull << 20)
 #define CR4_SMAP (1ull << 21)
+
+/* CPUID.7:0 — EBX bits for SMEP / SMAP (Intel SDM). */
+#define CPUID7_EBX_SMEP (1u << 7)
+#define CPUID7_EBX_SMAP (1u << 20)
+
+/* Canonical sign-extend mask for bit 47 (4-level paging). */
+#define CANON_SIGN_MASK 0xffff000000000000ull
+
+static struct gj_smep_stats g_stats;
+static int                  g_fSmepOn;
+static int                  g_fSmapOn;
 
 /**
  * Page-table walk VA for a physical table frame.
@@ -33,7 +60,7 @@ read_cr3(void)
 {
     u64 u64Cr3;
 
-    __asm__ volatile ("mov %%cr3, %0" : "=r"(u64Cr3));
+    __asm__ volatile("mov %%cr3, %0" : "=r"(u64Cr3));
     return u64Cr3;
 }
 
@@ -42,110 +69,488 @@ read_cr4(void)
 {
     u64 u64Cr4;
 
-    __asm__ volatile ("mov %%cr4, %0" : "=r"(u64Cr4));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(u64Cr4));
     return u64Cr4;
 }
 
 static void
 write_cr4(u64 u64Cr4)
 {
-    __asm__ volatile ("mov %0, %%cr4" : : "r"(u64Cr4) : "memory");
+    __asm__ volatile("mov %0, %%cr4" : : "r"(u64Cr4) : "memory");
+}
+
+static void
+reload_cr3(void)
+{
+    u64 u64Cr3 = read_cr3();
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(u64Cr3) : "memory");
+}
+
+/**
+ * Soft CPUID leaf 7 subleaf 0. Returns EBX feature bits (0 if leaf absent).
+ */
+static u32
+cpuid7_ebx(void)
+{
+    u32 u32Max;
+    u32 u32A;
+    u32 u32B;
+    u32 u32C;
+    u32 u32D;
+
+    __asm__ volatile("cpuid"
+                     : "=a"(u32Max), "=b"(u32B), "=c"(u32C), "=d"(u32D)
+                     : "a"(0u), "c"(0u));
+    (void)u32B;
+    (void)u32C;
+    (void)u32D;
+    if (u32Max < 7u) {
+        return 0;
+    }
+    __asm__ volatile("cpuid"
+                     : "=a"(u32A), "=b"(u32B), "=c"(u32C), "=d"(u32D)
+                     : "a"(7u), "c"(0u));
+    (void)u32A;
+    (void)u32C;
+    (void)u32D;
+    return u32B;
+}
+
+/**
+ * Build canonical VA from 4-level indices (4K grain; higher PS ignore low).
+ */
+static u64
+canon_va(u32 u32I4, u32 u32I3, u32 u32I2, u32 u32I1)
+{
+    u64 u64Va;
+
+    u64Va = ((u64)u32I4 << 39) | ((u64)u32I3 << 30) |
+            ((u64)u32I2 << 21) | ((u64)u32I1 << 12);
+    if ((u64Va & (1ull << 47)) != 0) {
+        u64Va |= CANON_SIGN_MASK;
+    }
+    return u64Va;
+}
+
+/** Non-zero if [va, va+cb) is wholly outside the product user window. */
+static int
+va_wholly_outside_user(u64 u64Va, u64 u64Cb)
+{
+    u64 u64End;
+
+    if (u64Cb == 0) {
+        return 1;
+    }
+    u64End = u64Va + u64Cb;
+    if (u64End < u64Va) {
+        /* Overflow → treat as kernel/high; harden soft. */
+        return 1;
+    }
+    if (u64End <= GJ_USER_VA_BASE || u64Va >= GJ_USER_VA_END) {
+        return 1;
+    }
+    return 0;
+}
+
+/** Non-zero if range is wholly inside the product user window. */
+static int
+va_wholly_inside_user(u64 u64Va, u64 u64Cb)
+{
+    u64 u64End;
+
+    if (u64Cb == 0) {
+        return 1;
+    }
+    u64End = u64Va + u64Cb;
+    if (u64End < u64Va) {
+        return 0;
+    }
+    if (u64Va >= GJ_USER_VA_BASE && u64End <= GJ_USER_VA_END) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Decide whether a present leaf at [va, va+cb) must lose U.
+ * Kernel half (high canonical / PML4 ≥ 256): always clear U (G-MAP-1).
+ * Low half: clear when wholly outside user band; leave wholly inside;
+ * straddle large pages counted soft residual (cannot partial-clear PS).
+ */
+static int
+leaf_must_clear_u(u64 u64Va, u64 u64Cb, int fKernelHalf, int *pStraddle)
+{
+    if (pStraddle != NULL) {
+        *pStraddle = 0;
+    }
+    if (fKernelHalf != 0) {
+        return 1;
+    }
+    if (va_wholly_outside_user(u64Va, u64Cb) != 0) {
+        return 1;
+    }
+    if (va_wholly_inside_user(u64Va, u64Cb) != 0) {
+        return 0;
+    }
+    /* Partial overlap with user band (large-page edge case). */
+    if (pStraddle != NULL) {
+        *pStraddle = 1;
+    }
+    return 0;
+}
+
+/**
+ * Clear U on one leaf entry; update soft counters.
+ * fSize: 0=4K, 1=2M, 2=1G.
+ */
+static void
+clear_u_leaf(u64 *pEntry, u64 u64Va, int fSize)
+{
+    if (pEntry == NULL) {
+        return;
+    }
+    if ((*pEntry & PTE_P) == 0) {
+        return;
+    }
+    if ((*pEntry & PTE_U) == 0) {
+        return;
+    }
+    /* G-MAP-4 soft: executable user residual on kernel VA. */
+    if ((*pEntry & PTE_NX) == 0) {
+        g_stats.u64UxCleared++;
+    }
+    *pEntry &= ~PTE_U;
+    if (fSize == 2) {
+        g_stats.u64Cleared1g++;
+    } else if (fSize == 1) {
+        g_stats.u64Cleared2m++;
+    } else {
+        g_stats.u64Cleared4k++;
+    }
+    (void)u64Va;
+}
+
+/**
+ * Walk one PML4 tree: clear U on kernel-only leaves; optional audit-only.
+ * fMutate 0 → count residual U only (soft audit); 1 → clear.
+ * Returns residual U leaves still set outside user band (after pass).
+ */
+static u64
+walk_harden_pml4(u64 *pPml4, int fMutate)
+{
+    u32 u32I4;
+    u32 u32I3;
+    u32 u32I2;
+    u32 u32I1;
+    u64 u64Remain = 0;
+
+    if (pPml4 == NULL) {
+        return 0;
+    }
+
+    for (u32I4 = 0; u32I4 < 512u; u32I4++) {
+        u64 *pPdpt;
+        int fKernelHalf = (u32I4 >= 256u) ? 1 : 0;
+
+        if ((pPml4[u32I4] & PTE_P) == 0) {
+            continue;
+        }
+        /* PML4e never a leaf on 4-level; ignore PS if set. */
+        pPdpt = phys_to_virt(pPml4[u32I4] & PTE_ADDR_MASK);
+
+        for (u32I3 = 0; u32I3 < 512u; u32I3++) {
+            u64 *pPd;
+            u64 u64Va1g = canon_va(u32I4, u32I3, 0, 0);
+            int fStraddle = 0;
+
+            if ((pPdpt[u32I3] & PTE_P) == 0) {
+                continue;
+            }
+            if ((pPdpt[u32I3] & PTE_PS) != 0) {
+                /* 1GiB page */
+                g_stats.u64WalkedLeaves++;
+                if (leaf_must_clear_u(u64Va1g, 1ull << 30, fKernelHalf,
+                                      &fStraddle) != 0) {
+                    if (fMutate != 0) {
+                        clear_u_leaf(&pPdpt[u32I3], u64Va1g, 2);
+                    }
+                    if ((pPdpt[u32I3] & PTE_U) != 0) {
+                        u64Remain++;
+                    }
+                } else if (fStraddle != 0) {
+                    g_stats.u64StraddleLarge++;
+                    /* Soft residual: cannot split without vmm. */
+                    if ((pPdpt[u32I3] & PTE_U) != 0) {
+                        u64Remain++;
+                    }
+                } else {
+                    g_stats.u64SkippedUserBand++;
+                }
+                continue;
+            }
+
+            pPd = phys_to_virt(pPdpt[u32I3] & PTE_ADDR_MASK);
+            for (u32I2 = 0; u32I2 < 512u; u32I2++) {
+                u64 *pPt;
+                u64 u64Va2m = canon_va(u32I4, u32I3, u32I2, 0);
+
+                if ((pPd[u32I2] & PTE_P) == 0) {
+                    continue;
+                }
+                if ((pPd[u32I2] & PTE_PS) != 0) {
+                    /* 2MiB page */
+                    g_stats.u64WalkedLeaves++;
+                    fStraddle = 0;
+                    if (leaf_must_clear_u(u64Va2m, 1ull << 21, fKernelHalf,
+                                          &fStraddle) != 0) {
+                        if (fMutate != 0) {
+                            clear_u_leaf(&pPd[u32I2], u64Va2m, 1);
+                        }
+                        if ((pPd[u32I2] & PTE_U) != 0) {
+                            u64Remain++;
+                        }
+                    } else if (fStraddle != 0) {
+                        g_stats.u64StraddleLarge++;
+                        if ((pPd[u32I2] & PTE_U) != 0) {
+                            u64Remain++;
+                        }
+                    } else {
+                        g_stats.u64SkippedUserBand++;
+                    }
+                    continue;
+                }
+
+                pPt = phys_to_virt(pPd[u32I2] & PTE_ADDR_MASK);
+                for (u32I1 = 0; u32I1 < 512u; u32I1++) {
+                    u64 u64Va = canon_va(u32I4, u32I3, u32I2, u32I1);
+
+                    if ((pPt[u32I1] & PTE_P) == 0) {
+                        continue;
+                    }
+                    g_stats.u64WalkedLeaves++;
+                    fStraddle = 0;
+                    if (leaf_must_clear_u(u64Va, (u64)GJ_PAGE_SIZE,
+                                          fKernelHalf, &fStraddle) != 0) {
+                        if (fMutate != 0) {
+                            clear_u_leaf(&pPt[u32I1], u64Va, 0);
+                        }
+                        if ((pPt[u32I1] & PTE_U) != 0) {
+                            u64Remain++;
+                        }
+                    } else if (fStraddle != 0) {
+                        /* 4K cannot straddle user edge if PAGE_SIZE aligned. */
+                        g_stats.u64StraddleLarge++;
+                        if ((pPt[u32I1] & PTE_U) != 0) {
+                            u64Remain++;
+                        }
+                    } else {
+                        g_stats.u64SkippedUserBand++;
+                    }
+                }
+            }
+        }
+    }
+    return u64Remain;
+}
+
+static u64 *
+harden_pml4_base(void)
+{
+    u64 u64Cr3 = vmm_kernel_cr3();
+
+    /* Prefer kernel template CR3 when published (G-AS soft). */
+    if (u64Cr3 == 0) {
+        u64Cr3 = read_cr3() & PTE_ADDR_MASK;
+    } else {
+        u64Cr3 &= PTE_ADDR_MASK;
+    }
+    return phys_to_virt(u64Cr3);
 }
 
 void
 cpu_enable_smep(void)
 {
-    u64 u64Cr4 = read_cr4();
+    u32 u32Ebx = cpuid7_ebx();
+    u64 u64Cr4;
 
+    if ((u32Ebx & CPUID7_EBX_SMEP) == 0) {
+        g_stats.u64SmepSkip++;
+        g_fSmepOn = 0;
+        g_stats.u64SmepOn = 0;
+        kprintf("smep: SMEP soft skip (CPUID.7 no SMEP)\n");
+        return;
+    }
+    u64Cr4 = read_cr4();
     u64Cr4 |= CR4_SMEP;
     write_cr4(u64Cr4);
-    kprintf("cpu: SMEP enabled (CR4=0x%lx)\n", (unsigned long)u64Cr4);
+    u64Cr4 = read_cr4();
+    if ((u64Cr4 & CR4_SMEP) != 0) {
+        g_fSmepOn = 1;
+        g_stats.u64SmepOn = 1;
+        kprintf("smep: SMEP enabled CR4=0x%lx soft PASS\n",
+                (unsigned long)u64Cr4);
+    } else {
+        g_fSmepOn = 0;
+        g_stats.u64SmepOn = 0;
+        g_stats.u64SoftFail++;
+        kprintf("smep: SMEP soft FAIL CR4=0x%lx (bit not sticky)\n",
+                (unsigned long)u64Cr4);
+    }
 }
 
 void
 cpu_enable_smap(void)
 {
-    u64 u64Cr4 = read_cr4();
+    u32 u32Ebx = cpuid7_ebx();
+    u64 u64Cr4;
 
+    if ((u32Ebx & CPUID7_EBX_SMAP) == 0) {
+        g_stats.u64SmapSkip++;
+        g_fSmapOn = 0;
+        g_stats.u64SmapOn = 0;
+        kprintf("smep: SMAP soft skip (CPUID.7 no SMAP)\n");
+        return;
+    }
+    u64Cr4 = read_cr4();
     u64Cr4 |= CR4_SMAP;
     write_cr4(u64Cr4);
     /* Default AC clear — kernel must STAC before user access */
-    __asm__ volatile ("clac" ::: "memory");
-    user_access_smap_enabled();
-    kprintf("cpu: SMAP enabled (CR4=0x%lx); copy_* uses STAC/CLAC\n",
-            (unsigned long)u64Cr4);
+    __asm__ volatile("clac" ::: "memory");
+    u64Cr4 = read_cr4();
+    if ((u64Cr4 & CR4_SMAP) != 0) {
+        g_fSmapOn = 1;
+        g_stats.u64SmapOn = 1;
+        user_access_smap_enabled();
+        kprintf("smep: SMAP enabled CR4=0x%lx; copy_* STAC/CLAC soft PASS\n",
+                (unsigned long)u64Cr4);
+    } else {
+        g_fSmapOn = 0;
+        g_stats.u64SmapOn = 0;
+        g_stats.u64SoftFail++;
+        kprintf("smep: SMAP soft FAIL CR4=0x%lx (bit not sticky)\n",
+                (unsigned long)u64Cr4);
+    }
+}
+
+int
+cpu_smep_is_enabled(void)
+{
+    if (g_fSmepOn != 0 && (read_cr4() & CR4_SMEP) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int
+cpu_smap_is_enabled(void)
+{
+    if (g_fSmapOn != 0 && (read_cr4() & CR4_SMAP) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+u64
+vmm_harden_audit_user_bits(void)
+{
+    u64 *pPml4 = harden_pml4_base();
+    u64 u64Remain;
+
+    g_stats.u64AuditCalls++;
+    /* Audit walk must not bump walk/skip counters from a prior harden. */
+    {
+        u64 u64W = g_stats.u64WalkedLeaves;
+        u64 u64S = g_stats.u64SkippedUserBand;
+        u64 u64T = g_stats.u64StraddleLarge;
+
+        u64Remain = walk_harden_pml4(pPml4, 0);
+        /* Restore walk diagnostics from mutate pass; audit uses remain only. */
+        g_stats.u64WalkedLeaves = u64W;
+        g_stats.u64SkippedUserBand = u64S;
+        g_stats.u64StraddleLarge = u64T;
+    }
+    g_stats.u64AuditRemainU = u64Remain;
+    if (u64Remain == 0) {
+        g_stats.u64SoftPass++;
+        kprintf("smep: audit residual_u=0 soft PASS\n");
+    } else {
+        g_stats.u64SoftFail++;
+        kprintf("smep: audit residual_u=%lu soft FAIL\n",
+                (unsigned long)u64Remain);
+    }
+    return u64Remain;
 }
 
 /*
- * Walk identity PD (boot 0..4GiB). Clear U on any present mapping whose
- * VA is outside the Linux personality user window (G-MAP-1, G-MAP-2).
- * Large pages: clear U on whole 2MiB if base VA is outside user band.
- * 4K: clear U if page VA < USER_BASE or >= USER_END.
+ * Walk kernel CR3 page tables. Clear U on any present mapping whose VA is
+ * outside the Linux personality user window (G-MAP-1, G-MAP-2) or in the
+ * kernel half (HHDM / high). Large pages: clear U when wholly outside;
+ * soft-count straddles (G-MAP-4 soft residual).
  */
 void
 vmm_harden_kernel_maps(void)
 {
-    u64 *pPml4 = phys_to_virt(read_cr3() & PTE_ADDR_MASK);
-    u64 *pPdpt;
-    u64 *pPd;
-    u64 *pPt;
-    u32 i3, i2, i1;
-    u64 u64Cleared = 0;
+    u64 *pPml4 = harden_pml4_base();
+    u64 u64Cleared;
+    u64 u64Remain;
 
-    if ((pPml4[0] & PTE_P) == 0) {
-        kprintf("vmm: harden: no PML4[0]\n");
+    g_stats.u64HardenCalls++;
+
+    if (pPml4 == NULL) {
+        g_stats.u64SoftFail++;
+        kprintf("smep: harden soft FAIL (null pml4)\n");
         return;
     }
-    pPdpt = phys_to_virt(pPml4[0] & PTE_ADDR_MASK);
-
-    for (i3 = 0; i3 < 4; i3++) {
-        if ((pPdpt[i3] & PTE_P) == 0) {
-            continue;
-        }
-        if ((pPdpt[i3] & PTE_PS) != 0) {
-            continue; /* 1G — skip */
-        }
-        pPd = phys_to_virt(pPdpt[i3] & PTE_ADDR_MASK);
-        for (i2 = 0; i2 < 512; i2++) {
-            u64 u64Va2m = ((u64)i3 << 30) | ((u64)i2 << 21);
-
-            if ((pPd[i2] & PTE_P) == 0) {
-                continue;
-            }
-            if ((pPd[i2] & PTE_PS) != 0) {
-                /* 2MiB page — clear U if wholly outside user window */
-                if (u64Va2m + (1ull << 21) <= GJ_USER_VA_BASE ||
-                    u64Va2m >= GJ_USER_VA_END) {
-                    if (pPd[i2] & PTE_U) {
-                        pPd[i2] &= ~PTE_U;
-                        u64Cleared++;
-                    }
-                }
-                continue;
-            }
-            pPt = phys_to_virt(pPd[i2] & PTE_ADDR_MASK);
-            for (i1 = 0; i1 < 512; i1++) {
-                u64 u64Va = u64Va2m | ((u64)i1 << 12);
-
-                if ((pPt[i1] & PTE_P) == 0) {
-                    continue;
-                }
-                if (u64Va >= GJ_USER_VA_BASE && u64Va < GJ_USER_VA_END) {
-                    continue; /* leave product user pages */
-                }
-                if (pPt[i1] & PTE_U) {
-                    pPt[i1] &= ~PTE_U;
-                    u64Cleared++;
-                }
-            }
-        }
+    if ((pPml4[0] & PTE_P) == 0 && (pPml4[256] & PTE_P) == 0) {
+        /* No low identity and no HHDM — still soft-walk for any slots. */
+        kprintf("smep: harden: no PML4[0]/PML4[256] (walk all soft)\n");
     }
-    /* Reload CR3 to flush TLB */
-    {
-        u64 u64Cr3 = read_cr3();
 
-        __asm__ volatile ("mov %0, %%cr3" : : "r"(u64Cr3) : "memory");
+    (void)walk_harden_pml4(pPml4, 1);
+    reload_cr3();
+
+    u64Cleared = g_stats.u64Cleared4k + g_stats.u64Cleared2m +
+                 g_stats.u64Cleared1g;
+    u64Remain = vmm_harden_audit_user_bits();
+
+    kprintf("smep: harden cleared=%lu (4k=%lu 2m=%lu 1g=%lu) walked=%lu "
+            "ux=%lu straddle=%lu residual_u=%lu soft %s\n",
+            (unsigned long)u64Cleared,
+            (unsigned long)g_stats.u64Cleared4k,
+            (unsigned long)g_stats.u64Cleared2m,
+            (unsigned long)g_stats.u64Cleared1g,
+            (unsigned long)g_stats.u64WalkedLeaves,
+            (unsigned long)g_stats.u64UxCleared,
+            (unsigned long)g_stats.u64StraddleLarge,
+            (unsigned long)u64Remain,
+            (u64Remain == 0) ? "PASS" : "FAIL");
+    kprintf("smep: stats calls=%lu audit=%lu smep_on=%lu smap_on=%lu\n",
+            (unsigned long)g_stats.u64HardenCalls,
+            (unsigned long)g_stats.u64AuditCalls,
+            (unsigned long)g_stats.u64SmepOn,
+            (unsigned long)g_stats.u64SmapOn);
+}
+
+void
+smep_stats_get(struct gj_smep_stats *pOut)
+{
+    if (pOut == NULL) {
+        return;
     }
-    kprintf("vmm: harden cleared USER on %lu kernel PTE/PDE(s)\n",
-            (unsigned long)u64Cleared);
+    /* Soft mirrors from live flags / CR4. */
+    g_stats.u64SmepOn = cpu_smep_is_enabled() ? 1ull : 0ull;
+    g_stats.u64SmapOn = cpu_smap_is_enabled() ? 1ull : 0ull;
+    *pOut = g_stats;
+}
+
+void
+smep_stats_reset(void)
+{
+    u64 u64Smep = cpu_smep_is_enabled() ? 1ull : 0ull;
+    u64 u64Smap = cpu_smap_is_enabled() ? 1ull : 0ull;
+
+    memset(&g_stats, 0, sizeof(g_stats));
+    g_stats.u64SmepOn = u64Smep;
+    g_stats.u64SmapOn = u64Smap;
 }

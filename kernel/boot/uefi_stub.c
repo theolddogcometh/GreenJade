@@ -12,6 +12,16 @@
  * g_BootInfo lives in the PE image BSS so it survives ExitBootServices;
  * the pointer passed to kmain_uefi remains valid under the identity map.
  *
+ * Soft product surface (COM1, freestanding — no kprintf link):
+ *   Soft = greppable markers + classify; never hard-fails product when
+ *   optional GOP is absent. Memmap soft REJECT still proceeds to EBS so
+ *   partial boots remain diagnosable.
+ *
+ * Grep markers (prefix GJ-EFI:):
+ *   GJ-EFI: GOP soft PASS|SKIP …
+ *   GJ-EFI: memmap soft PASS|REJECT …
+ *   GJ-EFI: handoff soft PASS|PARTIAL …
+ *
  * Built as PE32+ EFI_APPLICATION via ld -mi386pep (see scripts/build-efi.sh).
  * Multiboot2 greenjade.elf does not link this file (dev-only P-BOOT-2).
  *
@@ -261,6 +271,158 @@ com1_puts(const char *szMsg)
         }
         com1_putc(*szMsg++);
     }
+}
+
+/* Freestanding decimal / hex for soft markers (no libc). */
+static void
+com1_put_u64_dec(u64 u64Val)
+{
+    char aBuf[20];
+    u32 i = 0;
+    u32 j;
+
+    if (u64Val == 0) {
+        com1_putc('0');
+        return;
+    }
+    while (u64Val > 0 && i < sizeof(aBuf)) {
+        aBuf[i++] = (char)('0' + (u64Val % 10ull));
+        u64Val /= 10ull;
+    }
+    for (j = i; j > 0; j--) {
+        com1_putc(aBuf[j - 1u]);
+    }
+}
+
+static void
+com1_put_u64_hex(u64 u64Val)
+{
+    static const char aHex[] = "0123456789abcdef";
+    u32 iNibble;
+    int fStarted = 0;
+
+    com1_puts("0x");
+    for (iNibble = 0; iNibble < 16u; iNibble++) {
+        u32 u32Shift = 60u - (iNibble * 4u);
+        u8 u8Dig = (u8)((u64Val >> u32Shift) & 0xfull);
+
+        if (u8Dig != 0 || fStarted || iNibble == 15u) {
+            fStarted = 1;
+            com1_putc(aHex[u8Dig]);
+        }
+    }
+}
+
+/* Soft: reclaimable EFI types after EBS (match gj/boot_info.h / kmain_uefi). */
+static int
+efi_type_usable_soft(u32 u32Type)
+{
+    if (u32Type == EfiLoaderCode || u32Type == EfiLoaderData ||
+        u32Type == EfiBootServicesCode || u32Type == EfiBootServicesData ||
+        u32Type == EfiConventionalMemory || u32Type == EfiACPIReclaimMemory) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Soft walk of EFI memory map in g_aMemMapScratch.
+ * Emits GJ-EFI: memmap soft PASS|REJECT …  (never aborts).
+ */
+static void
+soft_memmap_marker(u64 u64MapBytes, u64 u64DescSize)
+{
+    u64 u64Off;
+    u64 cDescs = 0;
+    u64 cUsableDescs = 0;
+    u64 cUsablePages = 0;
+    u64 cConvPages = 0;
+    u64 u64Stride;
+
+    if (u64MapBytes == 0) {
+        com1_puts("GJ-EFI: memmap soft REJECT present=0 bytes=0\n");
+        return;
+    }
+    u64Stride = u64DescSize;
+    if (u64Stride < sizeof(struct efi_memory_descriptor)) {
+        u64Stride = sizeof(struct efi_memory_descriptor);
+    }
+    for (u64Off = 0; u64Off + u64Stride <= u64MapBytes; u64Off += u64Stride) {
+        const struct efi_memory_descriptor *pMd =
+            (const struct efi_memory_descriptor *)(void *)(g_aMemMapScratch +
+                                                          u64Off);
+        u32 u32T = pMd->u32Type;
+        u64 u64Pages = pMd->u64Pages;
+
+        cDescs++;
+        if (u64Pages == 0 || !efi_type_usable_soft(u32T)) {
+            continue;
+        }
+        cUsableDescs++;
+        cUsablePages += u64Pages;
+        if (u32T == EfiConventionalMemory) {
+            cConvPages += u64Pages;
+        }
+    }
+    if (cUsablePages == 0) {
+        com1_puts("GJ-EFI: memmap soft REJECT descs=");
+        com1_put_u64_dec(cDescs);
+        com1_puts(" usable=0 desc_size=");
+        com1_put_u64_dec(u64Stride);
+        com1_puts(" bytes=");
+        com1_put_u64_dec(u64MapBytes);
+        com1_puts("\n");
+        return;
+    }
+    /* Grep: GJ-EFI: memmap soft PASS */
+    com1_puts("GJ-EFI: memmap soft PASS descs=");
+    com1_put_u64_dec(cDescs);
+    com1_puts(" usable_descs=");
+    com1_put_u64_dec(cUsableDescs);
+    com1_puts(" usable_pages=");
+    com1_put_u64_dec(cUsablePages);
+    com1_puts(" usable_mib=");
+    com1_put_u64_dec((cUsablePages * 4096ull) / (1024ull * 1024ull));
+    com1_puts(" conv_pages=");
+    com1_put_u64_dec(cConvPages);
+    com1_puts(" desc_size=");
+    com1_put_u64_dec(u64Stride);
+    com1_puts("\n");
+}
+
+/*
+ * Soft handoff summary after EBS, before kmain_uefi jump.
+ * Grep: GJ-EFI: handoff soft PASS|PARTIAL
+ */
+static void
+soft_handoff_marker(u64 u64Entry)
+{
+    u32 u32Flags = g_BootInfo.u32Flags;
+    int fPartial = (u64Entry == 0) ||
+                   ((u32Flags & GJ_BOOT_F_MEMMAP) == 0) ||
+                   ((u32Flags & GJ_BOOT_F_KERNEL_IMG) == 0);
+
+    if (fPartial) {
+        com1_puts("GJ-EFI: handoff soft PARTIAL flags=");
+    } else {
+        com1_puts("GJ-EFI: handoff soft PASS flags=");
+    }
+    com1_put_u64_hex((u64)u32Flags);
+    com1_puts(" entry=");
+    com1_put_u64_hex(u64Entry);
+    com1_puts(" kernel=");
+    com1_put_u64_hex(g_BootInfo.u64KernelPhys);
+    com1_puts("+");
+    com1_put_u64_hex(g_BootInfo.u64KernelBytes);
+    com1_puts(" map=");
+    com1_put_u64_hex(g_BootInfo.u64MemMap);
+    com1_puts(" map_bytes=");
+    com1_put_u64_dec(g_BootInfo.u64MemMapBytes);
+    com1_puts(" fb=");
+    com1_put_u64_hex(g_BootInfo.u64FbBase);
+    com1_puts(" rsdp=");
+    com1_put_u64_hex(g_BootInfo.u64Rsdp);
+    com1_puts("\n");
 }
 
 static void
@@ -686,7 +848,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
         g_BootInfo.u32Flags |= GJ_BOOT_F_KERNEL_IMG;
     }
 
-    /* Optional GOP fill for early desktop FB (kernel may ignore). */
+    /* Optional GOP fill for early desktop FB (kernel may ignore). Soft markers. */
     {
         static struct efi_guid gGop = {
             0x9042a9deu, 0x23dcu, 0x4a38u,
@@ -696,19 +858,46 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
             struct efi_guid *, void *, void **);
         loc_t pfnLoc = (loc_t)pBS->aFn[BS_LocateProtocol];
         struct efi_gop *pGop = NULL;
+        int fGopOk = 0;
 
         if (pfnLoc != NULL &&
             pfnLoc(&gGop, NULL, (void **)&pGop) == EFI_SUCCESS && pGop != NULL &&
             pGop->pMode != NULL && pGop->pMode->pInfo != NULL &&
-            pGop->pMode->paFrameBuffer != 0) {
+            pGop->pMode->paFrameBuffer != 0 &&
+            pGop->pMode->pInfo->u32HRes != 0 &&
+            pGop->pMode->pInfo->u32VRes != 0) {
+            u32 u32Pps = pGop->pMode->pInfo->u32PixelsPerScanLine;
+            u32 u32PixFmt = pGop->pMode->pInfo->u32PixelFormat;
+
             g_BootInfo.u64FbBase = (u64)pGop->pMode->paFrameBuffer;
             g_BootInfo.u32FbWidth = pGop->pMode->pInfo->u32HRes;
             g_BootInfo.u32FbHeight = pGop->pMode->pInfo->u32VRes;
-            g_BootInfo.u32FbPitch =
-                pGop->pMode->pInfo->u32PixelsPerScanLine * 4u;
+            /* Soft: assume 32 bpp BGRA/RGBX product path (OVMF default). */
+            g_BootInfo.u32FbPitch = u32Pps * 4u;
             g_BootInfo.u32FbBpp = 32;
             g_BootInfo.u32Flags |= GJ_BOOT_F_FB;
+            fGopOk = 1;
             com1_puts("GJ-EFI: GOP framebuffer captured\n");
+            /* Grep: GJ-EFI: GOP soft PASS */
+            com1_puts("GJ-EFI: GOP soft PASS base=");
+            com1_put_u64_hex(g_BootInfo.u64FbBase);
+            com1_puts(" ");
+            com1_put_u64_dec((u64)g_BootInfo.u32FbWidth);
+            com1_puts("x");
+            com1_put_u64_dec((u64)g_BootInfo.u32FbHeight);
+            com1_puts(" pitch=");
+            com1_put_u64_dec((u64)g_BootInfo.u32FbPitch);
+            com1_puts(" bpp=32 pps=");
+            com1_put_u64_dec((u64)u32Pps);
+            com1_puts(" pixfmt=");
+            com1_put_u64_dec((u64)u32PixFmt);
+            com1_puts(" fb_bytes=");
+            com1_put_u64_dec((u64)pGop->pMode->cbFrameBuffer);
+            com1_puts("\n");
+        }
+        if (!fGopOk) {
+            /* Optional path — soft SKIP, not a product failure. */
+            com1_puts("GJ-EFI: GOP soft SKIP (no usable framebuffer)\n");
         }
     }
 
@@ -765,6 +954,8 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     g_BootInfo.u64MemMapBytes = u64MapSize;
     g_BootInfo.u64MemDescSize = u64DescSize; /* EFI MD stride; not Multiboot */
     g_BootInfo.u32Flags |= GJ_BOOT_F_MEMMAP;
+    /* Soft classify before EBS (map still in PE BSS scratch). */
+    soft_memmap_marker(u64MapSize, u64DescSize);
 
     st = bs_exit_boot_services(pBS, hImage, u64MapKey);
     if (st != EFI_SUCCESS) {
@@ -780,6 +971,8 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
         g_BootInfo.u64MemMapBytes = u64MapSize;
         g_BootInfo.u64MemDescSize = u64DescSize;
         g_BootInfo.u32Flags |= GJ_BOOT_F_MEMMAP;
+        /* Soft re-classify after map key refresh. */
+        soft_memmap_marker(u64MapSize, u64DescSize);
         st = bs_exit_boot_services(pBS, hImage, u64MapKey);
         if (st != EFI_SUCCESS) {
             com1_puts("GJ-EFI: ExitBootServices fail (after retry)\n");
@@ -788,6 +981,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     }
 
     com1_puts("GJ-EFI: ExitBootServices ok\n");
+    soft_handoff_marker(u64Entry);
 
     if (u64Entry == 0) {
         /* Load failed earlier; stay halted with EBS already done. */

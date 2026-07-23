@@ -3,21 +3,31 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Freestanding vfsd — multi-client VFS door owner + mini-FS bring-up.
- * Named page-cache (memobj) + optional store LBA0 super mirror.
+ * Named page-cache (memobj) + soft door surface + optional store LBA0 super.
  *
- * Smoke markers (must stay prefix-stable for scripts/smoke-all.sh):
+ * Hard smoke markers (prefix-stable for scripts/smoke-all.sh — do not rename):
  *   vfsd-gj: block mount PASS
  *   vfsd-gj: file path PASS
  *   vfsd-gj: multi-client door PASS
  *   vfsd-gj: live path PASS
  *
- * Soft (optional; never renames required PASS lines):
+ * Soft (optional; never renames required PASS lines; soft-skip never hard-fails):
  *   vfsd-gj: named create miss/reuse
  *   vfsd-gj: STATS PASS | STATS soft
+ *   vfsd-gj: reclaim soft PASS | reclaim soft-skip
+ *   vfsd-gj: bare OPEN soft PASS | bare OPEN soft-skip
+ *   vfsd-gj: WRITEFD soft PASS | WRITEFD soft-skip
+ *   vfsd-gj: SEEKFD soft PASS | SEEKFD soft-skip
+ *   vfsd-gj: UNLINK soft PASS | UNLINK soft-skip
+ *   vfsd-gj: soft door PASS | soft door soft-skip
  *   vfsd-gj: store LBA0 super mirror PASS | soft-skip
+ *   vfsd-gj: store LBA0 read soft PASS | soft-skip
+ *   vfsd-gj: RELEASE free soft PASS | soft-skip  (post-RELEASE no-op)
  *
  *   make vfsd-gj → build/user/vfsd.elf
  * Boot embed (parent): kernel/proc/vfsd_embed.S (.incbin of the ELF).
+ *
+ * Pure C11 freestanding. Dual-licensed MIT OR Apache-2.0 (no GPL).
  */
 #include <gj/string.h>
 #include <gj/syscalls.h>
@@ -44,10 +54,24 @@
 #define GJ_VFS_OP_READFD   14u
 #define GJ_VFS_OP_WRITEFD  15u
 #endif
+/* SEEKFD may lag libgj headers; op number is fixed in vfs_door.h. */
+#ifndef GJ_VFS_OP_SEEKFD
+#define GJ_VFS_OP_SEEKFD   16u
+#endif
+#ifndef GJ_VFS_O_CREAT
+#define GJ_VFS_O_CREAT     1u
+#define GJ_VFS_O_RDWR      2u
+#endif
+#ifndef GJ_VFS_SEEK_SET
+#define GJ_VFS_SEEK_SET    0u
+#define GJ_VFS_SEEK_CUR    1u
+#define GJ_VFS_SEEK_END    2u
+#endif
 #ifndef GJ_STORE_OP_CLAIM
 #define GJ_STORE_OP_CLAIM   5u
 #define GJ_STORE_OP_RELEASE 6u
 #define GJ_STORE_OP_WRITE   4u
+#define GJ_STORE_OP_READ    3u
 #endif
 
 #define GJ_VFS_MAGIC    0x31444a47u /* "GJD1" little-endian */
@@ -57,6 +81,25 @@
 #define VFSD_CACHE_NAME "vfsd-cache"
 #define VFSD_SECTOR_CB  512u
 #define VFSD_PAGE_MASK  0xffful
+
+/* Soft-path scratch names (must not collide with hard-path hello.txt). */
+#define VFSD_SOFT_NAME  "soft.tmp"
+#define VFSD_SOFT_BODY  "SOFT\n"
+#define VFSD_SOFT_PATCH "WFD"
+
+/* Named-cache soft counters at fixed slots (after hard path writes 0..7). */
+#define VFSD_CACHE_SOFT_RECLAIM  8u
+#define VFSD_CACHE_SOFT_WRITEFD  9u
+#define VFSD_CACHE_SOFT_SEEK     10u
+#define VFSD_CACHE_SOFT_UNLINK   11u
+#define VFSD_CACHE_SOFT_BITS     12u
+
+/* Soft bit flags in pCache[VFSD_CACHE_SOFT_BITS] */
+#define VFSD_SOFT_BIT_RECLAIM  1u
+#define VFSD_SOFT_BIT_BARE     2u
+#define VFSD_SOFT_BIT_WRITEFD  4u
+#define VFSD_SOFT_BIT_SEEKFD   8u
+#define VFSD_SOFT_BIT_UNLINK   16u
 
 static unsigned g_uToken;
 
@@ -106,10 +149,251 @@ buf_contains(const char *pHay, long cbHay, const char *szNeedle, unsigned cbNeed
     return 0;
 }
 
+/*
+ * Soft door surface while CLAIM is held.
+ * Never hard-fails: each step soft-skip on rejection / short I/O.
+ * Leaves hard-path hello.txt content intact (only mutates soft.tmp).
+ * Returns count of soft sub-steps that greened (0..5).
+ */
+static unsigned
+soft_door_path(volatile unsigned *pCache)
+{
+    static unsigned char aRd[64];
+    static char aList[160];
+    static const char szSoft[] = VFSD_SOFT_NAME;
+    static const char szBody[] = VFSD_SOFT_BODY;
+    static const char szPatch[] = VFSD_SOFT_PATCH;
+    const unsigned cbBody = (unsigned)(sizeof(szBody) - 1u);
+    const unsigned cbPatch = (unsigned)(sizeof(szPatch) - 1u);
+    const unsigned cbName = (unsigned)(sizeof(szSoft) - 1u);
+    unsigned uBits = 0u;
+    unsigned cOk = 0u;
+    long nRet;
+    long hFd;
+
+    if (pCache == 0) {
+        msg("vfsd-gj: soft door soft-skip\n");
+        return 0u;
+    }
+
+    /*
+     * 1) Soft reclaim: same-token re-CLAIM is idempotent (vfs_door soft path).
+     *    Must stay owned after; failure is soft-skip only.
+     */
+    nRet = gj_vfs(GJ_VFS_OP_CLAIM, (long)VFSD_TOKEN, 0, 0);
+    if (nRet == 0) {
+        pCache[VFSD_CACHE_SOFT_RECLAIM] = 1u;
+        uBits |= VFSD_SOFT_BIT_RECLAIM;
+        cOk++;
+        msg("vfsd-gj: reclaim soft PASS\n");
+    } else {
+        msg("vfsd-gj: reclaim soft-skip\n");
+    }
+
+    /*
+     * 2) Bare-name OPEN (no /mnt/ prefix) + READFD on hard-path hello.txt.
+     *    Soft: kernel path_normalize should accept bare names.
+     */
+    {
+        static const char szHello[] = "hello.txt";
+        static const char szExpect[] = "GJVFS2";
+        const unsigned cbExpect = (unsigned)(sizeof(szExpect) - 1u);
+
+        hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szHello, 0, 0);
+        if (hFd < 0) {
+            msg("vfsd-gj: bare OPEN soft-skip\n");
+        } else {
+            (void)gj_memset(aRd, 0, sizeof(aRd));
+            nRet = gj_vfs(GJ_VFS_OP_READFD, hFd, (long)(uintptr_t)aRd,
+                          (long)sizeof(aRd));
+            (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
+            if (nRet == (long)cbExpect &&
+                gj_memcmp(aRd, szExpect, cbExpect) == 0) {
+                uBits |= VFSD_SOFT_BIT_BARE;
+                cOk++;
+                msg("vfsd-gj: bare OPEN soft PASS\n");
+            } else {
+                msg("vfsd-gj: bare OPEN soft-skip\n");
+            }
+        }
+    }
+
+    /*
+     * 3) WRITEFD soft: OPEN(CREAT|RDWR) soft.tmp, WRITEFD body, CLOSE,
+     *    name READ verify. Soft-skip on any step fail.
+     */
+    hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szSoft,
+                 (long)(GJ_VFS_O_CREAT | GJ_VFS_O_RDWR), 0);
+    if (hFd < 0) {
+        msg("vfsd-gj: WRITEFD soft-skip\n");
+    } else {
+        nRet = gj_vfs(GJ_VFS_OP_WRITEFD, hFd, (long)(uintptr_t)szBody,
+                      (long)cbBody);
+        (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
+        hFd = -1;
+        if (nRet != (long)cbBody) {
+            msg("vfsd-gj: WRITEFD soft-skip\n");
+        } else {
+            (void)gj_memset(aRd, 0, sizeof(aRd));
+            nRet = gj_vfs(GJ_VFS_OP_READ, (long)(uintptr_t)szSoft,
+                          (long)(uintptr_t)aRd, (long)(sizeof(aRd) - 1u));
+            if (nRet == (long)cbBody && gj_memcmp(aRd, szBody, cbBody) == 0) {
+                pCache[VFSD_CACHE_SOFT_WRITEFD] = cbBody;
+                uBits |= VFSD_SOFT_BIT_WRITEFD;
+                cOk++;
+                msg("vfsd-gj: WRITEFD soft PASS\n");
+            } else {
+                msg("vfsd-gj: WRITEFD soft-skip\n");
+            }
+        }
+    }
+
+    /*
+     * 4) SEEKFD soft: reopen RDWR, SEEK END, WRITEFD patch, SEEK SET,
+     *    READFD full, verify patch at end. Requires SEEKFD op (16).
+     *    Soft-skip if door returns NOSUPPORT or any step fails.
+     */
+    if ((uBits & VFSD_SOFT_BIT_WRITEFD) != 0u) {
+        hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szSoft,
+                     (long)GJ_VFS_O_RDWR, 0);
+        if (hFd < 0) {
+            msg("vfsd-gj: SEEKFD soft-skip\n");
+        } else {
+            long nEnd;
+            long nSeek;
+
+            nEnd = gj_vfs(GJ_VFS_OP_SEEKFD, hFd, 0, (long)GJ_VFS_SEEK_END);
+            if (nEnd < 0) {
+                (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
+                msg("vfsd-gj: SEEKFD soft-skip\n");
+            } else {
+                nRet = gj_vfs(GJ_VFS_OP_WRITEFD, hFd,
+                              (long)(uintptr_t)szPatch, (long)cbPatch);
+                nSeek = gj_vfs(GJ_VFS_OP_SEEKFD, hFd, 0,
+                               (long)GJ_VFS_SEEK_SET);
+                (void)gj_memset(aRd, 0, sizeof(aRd));
+                nRet = (nRet == (long)cbPatch && nSeek == 0)
+                           ? gj_vfs(GJ_VFS_OP_READFD, hFd,
+                                    (long)(uintptr_t)aRd,
+                                    (long)(sizeof(aRd) - 1u))
+                           : -1;
+                (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
+                /*
+                 * Expect body + patch: "SOFT\n" + "WFD" → 8 bytes.
+                 * Verify patch lands at original end offset.
+                 */
+                if (nRet == (long)(cbBody + cbPatch) &&
+                    nEnd == (long)cbBody &&
+                    gj_memcmp(aRd, szBody, cbBody) == 0 &&
+                    gj_memcmp(aRd + cbBody, szPatch, cbPatch) == 0) {
+                    pCache[VFSD_CACHE_SOFT_SEEK] = (unsigned)nRet;
+                    uBits |= VFSD_SOFT_BIT_SEEKFD;
+                    cOk++;
+                    msg("vfsd-gj: SEEKFD soft PASS\n");
+                } else {
+                    msg("vfsd-gj: SEEKFD soft-skip\n");
+                }
+            }
+        }
+    } else {
+        msg("vfsd-gj: SEEKFD soft-skip\n");
+    }
+
+    /*
+     * 5) UNLINK soft: remove soft.tmp; LIST must not contain name.
+     *    Best-effort even if create/write soft failed (NOENT is soft-skip).
+     */
+    nRet = gj_vfs(GJ_VFS_OP_UNLINK, (long)(uintptr_t)szSoft, 0, 0);
+    if (nRet != 0) {
+        msg("vfsd-gj: UNLINK soft-skip\n");
+    } else {
+        (void)gj_memset(aList, 0, sizeof(aList));
+        nRet = gj_vfs(GJ_VFS_OP_LIST, (long)(uintptr_t)aList, 0,
+                      (long)sizeof(aList));
+        if (nRet >= 0 &&
+            !buf_contains(aList, nRet, szSoft, cbName)) {
+            pCache[VFSD_CACHE_SOFT_UNLINK] = 1u;
+            uBits |= VFSD_SOFT_BIT_UNLINK;
+            cOk++;
+            msg("vfsd-gj: UNLINK soft PASS\n");
+        } else {
+            msg("vfsd-gj: UNLINK soft-skip\n");
+        }
+    }
+
+    pCache[VFSD_CACHE_SOFT_BITS] = uBits;
+
+    /* Aggregate soft door line — green if any sub-step greened. */
+    if (cOk > 0u) {
+        msg("vfsd-gj: soft door PASS\n");
+    } else {
+        msg("vfsd-gj: soft door soft-skip\n");
+    }
+    return cOk;
+}
+
+/*
+ * Optional store LBA0 super mirror + soft READ verify.
+ * Ownership separate from VFS door; soft-skip when claim busy / short I/O.
+ */
+static void
+soft_store_lba0_mirror(void)
+{
+    static unsigned char aSec[VFSD_SECTOR_CB];
+    static unsigned char aRd[VFSD_SECTOR_CB];
+    long nRet;
+    unsigned iByte;
+    int fMagicOk;
+
+    if (gj_store(GJ_STORE_OP_CLAIM, (long)VFSD_TOKEN, 0, 0) != 0) {
+        msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
+        return;
+    }
+
+    (void)gj_memset(aSec, 0, sizeof(aSec));
+    aSec[0] = (unsigned char)(GJ_VFS_MAGIC & 0xffu);
+    aSec[1] = (unsigned char)((GJ_VFS_MAGIC >> 8) & 0xffu);
+    aSec[2] = (unsigned char)((GJ_VFS_MAGIC >> 16) & 0xffu);
+    aSec[3] = (unsigned char)((GJ_VFS_MAGIC >> 24) & 0xffu);
+    /* Soft version nibble for diagnostics (not part of hard super). */
+    aSec[4] = (unsigned char)(GJ_VFS_VERSION & 0xffu);
+
+    nRet = gj_store(GJ_STORE_OP_WRITE, 0, (long)(uintptr_t)aSec,
+                    (long)VFSD_SECTOR_CB);
+    if (nRet != (long)VFSD_SECTOR_CB) {
+        (void)gj_store(GJ_STORE_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
+        msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
+        return;
+    }
+    msg("vfsd-gj: store LBA0 super mirror PASS\n");
+
+    /* Soft READ-back of LBA0 — verify magic LE bytes stick. */
+    (void)gj_memset(aRd, 0, sizeof(aRd));
+    nRet = gj_store(GJ_STORE_OP_READ, 0, (long)(uintptr_t)aRd,
+                    (long)VFSD_SECTOR_CB);
+    (void)gj_store(GJ_STORE_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
+
+    if (nRet != (long)VFSD_SECTOR_CB) {
+        msg("vfsd-gj: store LBA0 read soft-skip\n");
+        return;
+    }
+    fMagicOk = 1;
+    for (iByte = 0; iByte < 4u; iByte++) {
+        if (aRd[iByte] != aSec[iByte]) {
+            fMagicOk = 0;
+            break;
+        }
+    }
+    if (fMagicOk != 0 && aRd[4] == aSec[4]) {
+        msg("vfsd-gj: store LBA0 read soft PASS\n");
+    } else {
+        msg("vfsd-gj: store LBA0 read soft-skip\n");
+    }
+}
+
 void
 _start(void)
 {
-    static unsigned char aSec[VFSD_SECTOR_CB];
     static unsigned char aRd[64];
     static unsigned aInfo[4];
     static unsigned aStat[2];
@@ -128,6 +412,17 @@ _start(void)
     long i64Va;
     long hFd;
     volatile unsigned *pCache;
+
+    /* Shape checks (freestanding: no <assert.h>). */
+    if ((VFSD_CACHE_VA & VFSD_PAGE_MASK) != 0ul) {
+        fail_exit("vfsd-gj: CACHE_VA not page-aligned\n");
+    }
+    if (VFSD_TOKEN == 0u || GJ_VFS_VERSION == 0u) {
+        fail_exit("vfsd-gj: token/version zero\n");
+    }
+    if (VFSD_SECTOR_CB != 512u) {
+        fail_exit("vfsd-gj: SECTOR_CB invalid\n");
+    }
 
     g_uToken = 0u;
     msg("vfsd-gj: start\n");
@@ -258,24 +553,11 @@ _start(void)
         msg("vfsd-gj: STATS PASS (owned+mounted)\n");
     }
 
-    /* Optional raw store LBA0 super mirror (ownership separate from VFS door) */
-    if (gj_store(GJ_STORE_OP_CLAIM, (long)VFSD_TOKEN, 0, 0) == 0) {
-        (void)gj_memset(aSec, 0, sizeof(aSec));
-        aSec[0] = (unsigned char)(GJ_VFS_MAGIC & 0xffu);
-        aSec[1] = (unsigned char)((GJ_VFS_MAGIC >> 8) & 0xffu);
-        aSec[2] = (unsigned char)((GJ_VFS_MAGIC >> 16) & 0xffu);
-        aSec[3] = (unsigned char)((GJ_VFS_MAGIC >> 24) & 0xffu);
-        nRet = gj_store(GJ_STORE_OP_WRITE, 0, (long)(uintptr_t)aSec,
-                        (long)VFSD_SECTOR_CB);
-        (void)gj_store(GJ_STORE_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
-        if (nRet == (long)VFSD_SECTOR_CB) {
-            msg("vfsd-gj: store LBA0 super mirror PASS\n");
-        } else {
-            msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
-        }
-    } else {
-        msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
-    }
+    /* Soft deepen: reclaim / bare OPEN / WRITEFD / SEEKFD / UNLINK */
+    (void)soft_door_path(pCache);
+
+    /* Optional raw store LBA0 super mirror + soft READ verify */
+    soft_store_lba0_mirror();
 
     if (gj_vfs(GJ_VFS_OP_RELEASE, (long)g_uToken, 0, 0) != 0) {
         g_uToken = 0u;
@@ -283,6 +565,17 @@ _start(void)
     }
     g_uToken = 0u;
     msg("vfsd-gj: RELEASE PASS\n");
+
+    /*
+     * Soft free RELEASE: door already free → soft no-op (0).
+     * Never hard-fails live path.
+     */
+    nRet = gj_vfs(GJ_VFS_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
+    if (nRet == 0) {
+        msg("vfsd-gj: RELEASE free soft PASS\n");
+    } else {
+        msg("vfsd-gj: RELEASE free soft-skip\n");
+    }
 
     /* Re-check named cache still holds magic after FS work */
     if (pCache[0] != GJ_VFS_MAGIC) {

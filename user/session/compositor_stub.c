@@ -32,5 +32,6 @@ main(void)
            "(make sessiond-gj)\n");
     printf("session-compositor: door ops PRESENT..MAP_SCANOUT = 1..9 "
            "(stable)\n");
+    printf("session-compositor: soft reclaim + multi-frame + free path\n");
     return 0;
 }

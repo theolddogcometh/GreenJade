@@ -8,6 +8,15 @@
  * for "GJUEFI1\0" + 8-byte entry, then jumps there with a filled gj_boot_info.
  * Multiboot2 / QEMU -kernel does not use this path (dev-only; boot.S → kmain).
  *
+ * Soft handoff surface (observe from stub + kernel, not Multiboot)
+ * ----------------------------------------------------------------
+ *   GJUEFI1             — 8-byte magic incl. NUL; loader scan key
+ *   u64Entry            — absolute long-mode kmain_uefi address
+ *   gj_boot_info        — filled by stub: memmap, optional GOP/RSDP, image span
+ *   soft markers        — see boot_info.h / uefi_stub.c / identity_map.c:
+ *                           GJ-EFI: GOP|memmap|handoff soft …
+ *                           boot: handoff|memmap|GOP|identity soft …
+ *
  * Pure C11 freestanding; dual MIT OR Apache-2.0.
  */
 #include <gj/boot_info.h>
@@ -28,8 +37,11 @@ struct gj_uefi_hdr {
  *
  * Do not use e_entry alone: Multiboot ELFs may place a 32-bit trampoline
  * there; GJUEFI1 always points at the long-mode product entry.
+ *
+ * Align 16 so the 8-byte scan step in uefi_stub cannot straddle a partial
+ * magic across an unaligned boundary in awkward link layouts.
  */
-__attribute__((section(".rodata.gj_uefi"), used))
+__attribute__((section(".rodata.gj_uefi"), used, aligned(16)))
 const struct gj_uefi_hdr g_GjUefiHdr = {
     { 'G', 'J', 'U', 'E', 'F', 'I', '1', '\0' },
     (u64)(gj_vaddr_t)kmain_uefi,

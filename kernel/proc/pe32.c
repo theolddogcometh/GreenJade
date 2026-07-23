@@ -3,8 +3,9 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Minimal PE32/PE32+ header + section load (clean-room MS PE format).
- * Pure C dual-license; no Wine/GPL paste. CS32 int 0x80 smokes exercise
- * mmap2 / path / vfs surfaces; greppable "pe32: … PASS" markers stay stable.
+ * Pure C dual-license; no Wine/GPL paste. Soft load path: validate, soft VA,
+ * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
+ * greppable "pe32: … PASS" markers stay stable.
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -83,7 +84,7 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
     pOut->u16SizeOfOptional = cbOpt;
     pOut->u32E_lfanew = e_lfanew;
     if (optMagic == OPT_PE32) {
-        /* Need optional header through Subsystem (offset 92 from opt start) */
+        /* Need optional header through Subsystem (offset 68 from opt start) */
         if (cbLen - e_lfanew < 24u + 96u) {
             return -1;
         }
@@ -91,8 +92,24 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
         pOut->u32EntryRva = rd32(p + e_lfanew + 40);
         pOut->u32ImageBase32 = rd32(p + e_lfanew + 52);
         pOut->u64ImageBase = pOut->u32ImageBase32;
+        pOut->u32SectionAlign = rd32(p + e_lfanew + 56);
+        pOut->u32FileAlign = rd32(p + e_lfanew + 60);
         pOut->u32SizeOfImage = rd32(p + e_lfanew + 80);
+        pOut->u32SizeOfHeaders = rd32(p + e_lfanew + 84);
         pOut->u16Subsystem = rd16(p + e_lfanew + 92);
+        /* DllCharacteristics at opt+70 = e_lfanew+94 */
+        pOut->u16DllChars = rd16(p + e_lfanew + 94);
+        /*
+         * Soft data directories when SizeOfOptionalHeader covers them:
+         * PE32 DataDirectory at opt+96 = e_lfanew+120; entry 1=IMPORT, 5=BASERELOC.
+         */
+        if ((u32)cbOpt >= 96u + 6u * 8u &&
+            cbLen - e_lfanew >= 24u + 96u + 6u * 8u) {
+            pOut->u32ImportRva = rd32(p + e_lfanew + 120u + 1u * 8u);
+            pOut->u32ImportSize = rd32(p + e_lfanew + 120u + 1u * 8u + 4u);
+            pOut->u32RelocRva = rd32(p + e_lfanew + 120u + 5u * 8u);
+            pOut->u32RelocSize = rd32(p + e_lfanew + 120u + 5u * 8u + 4u);
+        }
     } else if (optMagic == OPT_PE32P) {
         if (cbLen - e_lfanew < 24u + 112u) {
             return -1;
@@ -102,12 +119,29 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
         pOut->u64ImageBase = (u64)rd32(p + e_lfanew + 48) |
                              ((u64)rd32(p + e_lfanew + 52) << 32);
         pOut->u32ImageBase32 = (u32)pOut->u64ImageBase;
+        pOut->u32SectionAlign = rd32(p + e_lfanew + 56);
+        pOut->u32FileAlign = rd32(p + e_lfanew + 60);
         pOut->u32SizeOfImage = rd32(p + e_lfanew + 80);
+        pOut->u32SizeOfHeaders = rd32(p + e_lfanew + 84);
         pOut->u16Subsystem = rd16(p + e_lfanew + 92);
+        pOut->u16DllChars = rd16(p + e_lfanew + 94);
+        /* PE32+ DataDirectory at opt+112 = e_lfanew+136 */
+        if ((u32)cbOpt >= 112u + 6u * 8u &&
+            cbLen - e_lfanew >= 24u + 112u + 6u * 8u) {
+            pOut->u32ImportRva = rd32(p + e_lfanew + 136u + 1u * 8u);
+            pOut->u32ImportSize = rd32(p + e_lfanew + 136u + 1u * 8u + 4u);
+            pOut->u32RelocRva = rd32(p + e_lfanew + 136u + 5u * 8u);
+            pOut->u32RelocSize = rd32(p + e_lfanew + 136u + 5u * 8u + 4u);
+        }
     } else {
         return -1;
     }
     if (machine != MACH_I386 && machine != MACH_AMD64) {
+        return -1;
+    }
+    /* Soft machine/magic pairing: PE32↔i386, PE32+↔amd64 (reject cross) */
+    if ((pOut->u8IsPe32 && machine != MACH_I386) ||
+        (!pOut->u8IsPe32 && machine != MACH_AMD64)) {
         return -1;
     }
     if (nSec == 0 || nSec > GJ_PE32_MAX_SECTIONS) {
@@ -115,6 +149,15 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
     }
     /* SizeOfImage must be non-zero and within stage budget (1 MiB) */
     if (pOut->u32SizeOfImage == 0 || pOut->u32SizeOfImage > 1024u * 1024u) {
+        return -1;
+    }
+    /* Soft: SizeOfHeaders must not exceed SizeOfImage when present */
+    if (pOut->u32SizeOfHeaders != 0 &&
+        pOut->u32SizeOfHeaders > pOut->u32SizeOfImage) {
+        return -1;
+    }
+    /* Soft: entry must land inside image (0 entry allowed for DLL soft) */
+    if (pOut->u32EntryRva != 0 && pOut->u32EntryRva >= pOut->u32SizeOfImage) {
         return -1;
     }
     pOut->u32Ready = 1;
@@ -194,11 +237,19 @@ pe32_image_stage(const void *pFile, u32 cbFile,
     pIn = (const u8 *)pFile;
     pOut = (u8 *)pImage;
     memset(pOut, 0, cbImage);
-    /* Copy PE headers up through section table (SizeOfHeaders-ish) */
+    /*
+     * Soft header span: prefer SizeOfHeaders when in-range; else derive from
+     * NT + optional + section table (classic PE layout).
+     */
     hdrEnd = pInfo->u32E_lfanew + 24u + (u32)pInfo->u16SizeOfOptional +
              (u32)pInfo->u16NumSections * 40u;
     if (hdrEnd < pInfo->u32E_lfanew) {
         return -1; /* wrap */
+    }
+    if (pInfo->u32SizeOfHeaders != 0 &&
+        pInfo->u32SizeOfHeaders <= pInfo->u32SizeOfImage &&
+        pInfo->u32SizeOfHeaders >= hdrEnd) {
+        hdrEnd = pInfo->u32SizeOfHeaders;
     }
     if (hdrEnd > cbFile) {
         hdrEnd = cbFile;
@@ -206,27 +257,50 @@ pe32_image_stage(const void *pFile, u32 cbFile,
     if (hdrEnd > cbImage) {
         hdrEnd = cbImage;
     }
+    if (hdrEnd > pInfo->u32SizeOfImage) {
+        hdrEnd = pInfo->u32SizeOfImage;
+    }
     memcpy(pOut, pIn, hdrEnd);
     for (i = 0; i < u32NSec; i++) {
         u32 va = pSec[i].u32VirtAddr;
         u32 raw = pSec[i].u32RawPtr;
         u32 n = pSec[i].u32RawSize;
         u32 vs = pSec[i].u32VirtSize;
+        u32 nCopy;
 
-        if (n == 0) {
+        if (n == 0 && vs == 0) {
+            continue; /* pure empty / soft bss-less */
+        }
+        /* Soft: clamp raw copy to min(raw, virt) when virt non-zero (BSS tail) */
+        nCopy = n;
+        if (vs != 0 && nCopy > vs) {
+            nCopy = vs;
+        }
+        if (nCopy == 0) {
+            /* Virt-only (BSS): already zero-filled by memset */
+            if (vs != 0 && (vs > cbImage || va > cbImage - vs ||
+                            va >= pInfo->u32SizeOfImage ||
+                            vs > pInfo->u32SizeOfImage - va)) {
+                return -1;
+            }
             continue;
         }
         /* Overflow-safe bounds: raw/va ranges must fit file and image */
-        if (n > cbFile || raw > cbFile - n) {
+        if (nCopy > cbFile || raw > cbFile - nCopy) {
             return -1;
         }
-        if (n > cbImage || va > cbImage - n) {
+        if (nCopy > cbImage || va > cbImage - nCopy) {
             return -1;
         }
-        if (vs != 0 && (vs > cbImage || va > cbImage - vs)) {
+        if (va >= pInfo->u32SizeOfImage ||
+            nCopy > pInfo->u32SizeOfImage - va) {
             return -1;
         }
-        memcpy(pOut + va, pIn + raw, n);
+        if (vs != 0 && (vs > cbImage || va > cbImage - vs ||
+                        vs > pInfo->u32SizeOfImage - va)) {
+            return -1;
+        }
+        memcpy(pOut + va, pIn + raw, nCopy);
     }
     return 0;
 }
@@ -299,6 +373,253 @@ pe32_map_user(const void *pImage, u32 cbImage, u64 u64VaBase,
 }
 
 int
+pe32_load_soft_validate(const struct gj_pe32_info *pInfo,
+                        const struct gj_pe32_section *pSec, u32 u32NSec)
+{
+    u32 i;
+    u32 cbImg;
+
+    if (pInfo == NULL || !pInfo->u32Ready) {
+        return -1;
+    }
+    cbImg = pInfo->u32SizeOfImage;
+    if (cbImg == 0 || cbImg > 1024u * 1024u) {
+        return -1;
+    }
+    /* Soft: EXE should have a non-zero entry; DLL entry 0 is soft-ok */
+    if (!pInfo->u8IsDll && pInfo->u32EntryRva == 0) {
+        return -1;
+    }
+    if (pInfo->u32EntryRva != 0 && pInfo->u32EntryRva >= cbImg) {
+        return -1;
+    }
+    if (u32NSec > GJ_PE32_MAX_SECTIONS) {
+        return -1;
+    }
+    if (u32NSec > 0 && pSec == NULL) {
+        return -1;
+    }
+    for (i = 0; i < u32NSec; i++) {
+        u32 va = pSec[i].u32VirtAddr;
+        u32 vs = pSec[i].u32VirtSize;
+        u32 rs = pSec[i].u32RawSize;
+        u32 span;
+
+        /* Soft: section VA must land in image; empty span ok */
+        if (va >= cbImg) {
+            return -1;
+        }
+        span = vs ? vs : rs;
+        if (span != 0) {
+            if (span > cbImg - va) {
+                return -1;
+            }
+        }
+        /* Soft: raw size alone must not claim past image when used as span */
+        if (vs == 0 && rs != 0 && rs > cbImg - va) {
+            return -1;
+        }
+    }
+    /* Soft: reloc directory bounds when present */
+    if (pInfo->u32RelocSize != 0) {
+        if (pInfo->u32RelocRva >= cbImg ||
+            pInfo->u32RelocSize > cbImg - pInfo->u32RelocRva) {
+            return -1;
+        }
+    }
+    /* Soft: import directory bounds when present (probe only) */
+    if (pInfo->u32ImportSize != 0) {
+        if (pInfo->u32ImportRva >= cbImg ||
+            pInfo->u32ImportSize > cbImg - pInfo->u32ImportRva) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+u64
+pe32_load_soft_va(const struct gj_pe32_info *pInfo)
+{
+    u64 u64Pref;
+
+    /* High free band used by all PE smokes; stable greppable map path. */
+    if (pInfo == NULL || !pInfo->u32Ready) {
+        return 0x50000000ull;
+    }
+    u64Pref = pInfo->u64ImageBase;
+    /*
+     * Soft: honor preferred base only when already in high user band and
+     * page-aligned. Classic 0x400000 falls back (avoids low identity clash).
+     */
+    if (u64Pref >= 0x50000000ull && u64Pref < 0x0000800000000000ull &&
+        (u64Pref & 0xfffull) == 0ull) {
+        /* Soft wrap check for SizeOfImage */
+        if (u64Pref + (u64)pInfo->u32SizeOfImage > u64Pref) {
+            return u64Pref;
+        }
+    }
+    return 0x50000000ull;
+}
+
+int
+pe32_soft_relocate(void *pImage, u32 cbImage,
+                   const struct gj_pe32_info *pInfo, u64 u64VaBase)
+{
+    u8 *pImg;
+    u32 u32Off;
+    u32 u32End;
+    u64 u64Delta;
+    u64 u64Pref;
+
+    if (pImage == NULL || pInfo == NULL || !pInfo->u32Ready || cbImage == 0) {
+        return -1;
+    }
+    if (cbImage < pInfo->u32SizeOfImage) {
+        return -1;
+    }
+    u64Pref = pInfo->u64ImageBase;
+    u64Delta = u64VaBase - u64Pref;
+    /* Soft: already at preferred — nothing to fix up */
+    if (u64Delta == 0) {
+        return 0;
+    }
+    /* Soft: no reloc directory → fixed-base image; allow high-VA smoke map */
+    if (pInfo->u32RelocRva == 0 || pInfo->u32RelocSize < 8u) {
+        return 0;
+    }
+    if (pInfo->u32RelocRva >= cbImage ||
+        pInfo->u32RelocSize > cbImage - pInfo->u32RelocRva) {
+        return -1;
+    }
+    pImg = (u8 *)pImage;
+    u32Off = pInfo->u32RelocRva;
+    u32End = pInfo->u32RelocRva + pInfo->u32RelocSize;
+    while (u32Off + 8u <= u32End) {
+        u32 u32PageRva = rd32(pImg + u32Off);
+        u32 u32BlockSize = rd32(pImg + u32Off + 4);
+        u32 u32Entries;
+        u32 i;
+
+        if (u32BlockSize < 8u) {
+            return -1; /* corrupt */
+        }
+        if (u32BlockSize > u32End - u32Off) {
+            return -1;
+        }
+        u32Entries = (u32BlockSize - 8u) / 2u;
+        for (i = 0; i < u32Entries; i++) {
+            u16 u16Ent = rd16(pImg + u32Off + 8u + i * 2u);
+            u16 u16Type = (u16)(u16Ent >> 12);
+            u16 u16Ofs = (u16)(u16Ent & 0x0fffu);
+            u32 u32Fix = u32PageRva + (u32)u16Ofs;
+
+            if (u16Type == 0) {
+                continue; /* IMAGE_REL_BASED_ABSOLUTE */
+            }
+            if (u16Type == 3) {
+                /* IMAGE_REL_BASED_HIGHLOW — 32-bit */
+                u32 u32Val;
+
+                if (u32Fix > cbImage - 4u) {
+                    return -1;
+                }
+                u32Val = rd32(pImg + u32Fix);
+                u32Val = (u32)(u32Val + (u32)u64Delta);
+                pImg[u32Fix + 0] = (u8)(u32Val);
+                pImg[u32Fix + 1] = (u8)(u32Val >> 8);
+                pImg[u32Fix + 2] = (u8)(u32Val >> 16);
+                pImg[u32Fix + 3] = (u8)(u32Val >> 24);
+            } else if (u16Type == 10) {
+                /* IMAGE_REL_BASED_DIR64 — PE32+ */
+                u64 u64Val;
+                u32 lo, hi;
+
+                if (u32Fix > cbImage - 8u) {
+                    return -1;
+                }
+                lo = rd32(pImg + u32Fix);
+                hi = rd32(pImg + u32Fix + 4);
+                u64Val = (u64)lo | ((u64)hi << 32);
+                u64Val += u64Delta;
+                pImg[u32Fix + 0] = (u8)(u64Val);
+                pImg[u32Fix + 1] = (u8)(u64Val >> 8);
+                pImg[u32Fix + 2] = (u8)(u64Val >> 16);
+                pImg[u32Fix + 3] = (u8)(u64Val >> 24);
+                pImg[u32Fix + 4] = (u8)(u64Val >> 32);
+                pImg[u32Fix + 5] = (u8)(u64Val >> 40);
+                pImg[u32Fix + 6] = (u8)(u64Val >> 48);
+                pImg[u32Fix + 7] = (u8)(u64Val >> 56);
+            } else if (u16Type == 1 || u16Type == 2) {
+                /* HIGH / LOW — soft 16-bit halves */
+                u16 u16Val;
+
+                if (u32Fix > cbImage - 2u) {
+                    return -1;
+                }
+                u16Val = rd16(pImg + u32Fix);
+                if (u16Type == 1) {
+                    u16Val = (u16)(u16Val + (u16)(u64Delta >> 16));
+                } else {
+                    u16Val = (u16)(u16Val + (u16)u64Delta);
+                }
+                pImg[u32Fix + 0] = (u8)(u16Val);
+                pImg[u32Fix + 1] = (u8)(u16Val >> 8);
+            } else {
+                /* Soft: unknown reloc type — skip (do not fail smoke PE) */
+                continue;
+            }
+        }
+        u32Off += u32BlockSize;
+        /* Soft: align block walk to 4 when odd padding present */
+        if ((u32Off & 3u) != 0) {
+            u32Off = (u32Off + 3u) & ~3u;
+        }
+    }
+    return 0;
+}
+
+int
+pe32_load_soft_exec(const void *pFile, u32 cbFile, i32 *pExitCode)
+{
+    struct gj_pe32_info info;
+    struct gj_pe32_section aSec[GJ_PE32_MAX_SECTIONS];
+    static u8 aSoftImg[0x8000];
+    int nSec;
+
+    if (pFile == NULL || cbFile < 64u) {
+        return -1;
+    }
+    if (pe32_parse(pFile, cbFile, &info) != 0) {
+        return -1;
+    }
+    /* Soft-exec path is i386 PE32 only (interpreter is 32-bit). */
+    if (!info.u8IsPe32 || info.u16Machine != MACH_I386) {
+        return -1;
+    }
+    nSec = pe32_parse_sections(pFile, cbFile, &info, aSec, GJ_PE32_MAX_SECTIONS);
+    if (nSec < 0) {
+        return -1;
+    }
+    if (pe32_load_soft_validate(&info, aSec, (u32)nSec) != 0) {
+        return -1;
+    }
+    if (info.u32SizeOfImage == 0 || info.u32SizeOfImage > sizeof(aSoftImg)) {
+        return -1;
+    }
+    if (pe32_image_stage(pFile, cbFile, &info, aSec, (u32)nSec, aSoftImg,
+                         info.u32SizeOfImage) != 0) {
+        return -1;
+    }
+    /* Soft rebase to high VA (no AS map); reloc soft-skip when empty. */
+    if (pe32_soft_relocate(aSoftImg, info.u32SizeOfImage, &info,
+                           pe32_load_soft_va(&info)) != 0) {
+        return -1;
+    }
+    return pe32_i386_soft_exec(aSoftImg, info.u32SizeOfImage, info.u32EntryRva,
+                               pExitCode);
+}
+
+int
 pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
                   struct gj_pe32_load *pOut)
 {
@@ -308,7 +629,6 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
     int nSec;
     u64 vaBase;
     u64 u64Saved;
-    u32 i;
     u32 stackPages = 4;
 
     if (pProc == NULL || pFile == NULL || pOut == NULL) {
@@ -335,15 +655,26 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
         cpu_load_cr3(u64Saved);
         return -1;
     }
+    /* Soft load validate before staging (entry/sec/dir bounds). */
+    if (pe32_load_soft_validate(&info, aSec, (u32)nSec) != 0) {
+        kprintf("pe32: load_process soft_validate FAIL\n");
+        cpu_load_cr3(u64Saved);
+        return -1;
+    }
     if (pe32_image_stage(pFile, cbFile, &info, aSec, (u32)nSec, aImage,
                          info.u32SizeOfImage) != 0) {
         kprintf("pe32: load_process stage FAIL\n");
         cpu_load_cr3(u64Saved);
         return -1;
     }
+    /* Soft VA: preferred when high, else 0x50000000 (smoke-stable). */
+    vaBase = pe32_load_soft_va(&info);
+    if (pe32_soft_relocate(aImage, info.u32SizeOfImage, &info, vaBase) != 0) {
+        kprintf("pe32: load_process soft_reloc FAIL\n");
+        cpu_load_cr3(u64Saved);
+        return -1;
+    }
     cpu_load_cr3(u64Saved);
-    /* Prefer high free VA; avoid low identity (0x400000). */
-    vaBase = 0x50000000ull;
     if (process_as_ensure(pProc) != GJ_OK) {
         kprintf("pe32: load_process as_ensure FAIL\n");
         return -1;
@@ -357,7 +688,7 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
         cpu_load_cr3(u64Saved);
         return -1;
     }
-    /* Stack below image or above image end */
+    /* Stack above image end (+ guard page gap) */
     {
         u64 stackBase = vaBase + info.u32SizeOfImage + GJ_PAGE_SIZE;
         u32 p;
@@ -389,7 +720,6 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
     pOut->u64ImageVa = vaBase;
     pOut->u64Entry = vaBase + (u64)info.u32EntryRva;
     pOut->u32Ready = 1;
-    (void)i;
     kprintf("pe32: load_process entry=0x%lx stack=0x%lx image=0x%lx\n",
             (unsigned long)pOut->u64Entry, (unsigned long)pOut->u64StackTop,
             (unsigned long)vaBase);
@@ -758,13 +1088,12 @@ pe32_wow64_smoke(void)
         return -1;
     }
     kprintf("pe32: wow64 i386 stage ok entry_rva=0x%x\n", info.u32EntryRva);
-    /* Soft-execute i386 int80 exit payload (no real 32-bit CS; NR1 exit) */
+    /* Soft load path: parse+stage+validate+reloc+soft-exec (no AS map) */
     {
         i32 code = -1;
         static u8 aIretStack[256];
 
-        if (pe32_i386_soft_exec(aImage, (u32)sizeof(aImage), info.u32EntryRva,
-                                &code) == 0 &&
+        if (pe32_load_soft_exec(aPe32, (u32)sizeof(aPe32), &code) == 0 &&
             code == 0) {
             kprintf("pe32: i386 soft-exec PASS\n");
         } else {
@@ -895,9 +1224,10 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                     i32 *pExitCode)
 {
     /*
-     * Minimal i386 interpreter for PE smoke payloads (clean-room).
+     * Minimal i386 interpreter for PE smoke / load soft paths (clean-room).
      * Not a full CPU; int 0x80 subset mirrors trap_dispatch CS32 for
-     * exit/mmap2/path-ish NRs used by soft-exec and soft-iretq smokes.
+     * exit/mmap2/path-ish NRs used by soft-exec, soft-iretq, and load_soft_exec.
+     * Soft stack (64 slots) deepens push/pop/call/ret for PE prologue stubs.
      */
     const u8 *p;
     u32 ip;
@@ -905,21 +1235,28 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
     u32 ebx = 0;
     u32 ecx = 0;
     u32 edx = 0;
+    u32 esi = 0;
+    u32 edi = 0;
+    u32 ebp = 0;
     u32 steps;
+    u32 aStack[64];
+    u32 u32Sp = 64; /* grows down; empty at top */
+    u8 u8Zf = 1;
 
     if (pImage == NULL || cbImage == 0 || u32EntryRva >= cbImage) {
         return -1;
     }
     p = (const u8 *)pImage;
     ip = u32EntryRva;
-    for (steps = 0; steps < 64u; steps++) {
+    memset(aStack, 0, sizeof(aStack));
+    for (steps = 0; steps < 256u; steps++) {
         u8 op;
 
         if (ip >= cbImage) {
             return -1;
         }
         op = p[ip];
-        if (op == 0x90) { /* nop */
+        if (op == 0x90 || op == 0x66) { /* nop / data16 prefix soft-ignore */
             ip++;
             continue;
         }
@@ -929,6 +1266,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             eax = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
                   ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            u8Zf = (eax == 0) ? 1u : 0u;
             ip += 5;
             continue;
         }
@@ -938,6 +1276,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             ecx = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
                   ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            u8Zf = (ecx == 0) ? 1u : 0u;
             ip += 5;
             continue;
         }
@@ -947,6 +1286,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             edx = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
                   ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            u8Zf = (edx == 0) ? 1u : 0u;
             ip += 5;
             continue;
         }
@@ -956,52 +1296,264 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             ebx = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
                   ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            u8Zf = (ebx == 0) ? 1u : 0u;
             ip += 5;
             continue;
         }
-        if (op == 0x31 && ip + 1 < cbImage && p[ip + 1] == 0xdb) {
-            /* xor ebx, ebx */
-            ebx = 0;
+        if (op == 0xbe) { /* mov esi, imm32 — soft load prologues */
+            if (ip + 5 > cbImage) {
+                return -1;
+            }
+            esi = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                  ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            ip += 5;
+            continue;
+        }
+        if (op == 0xbf) { /* mov edi, imm32 */
+            if (ip + 5 > cbImage) {
+                return -1;
+            }
+            edi = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                  ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            ip += 5;
+            continue;
+        }
+        if (op == 0xbd) { /* mov ebp, imm32 */
+            if (ip + 5 > cbImage) {
+                return -1;
+            }
+            ebp = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                  ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            ip += 5;
+            continue;
+        }
+        if (op == 0x31 && ip + 1 < cbImage) {
+            u8 mod = p[ip + 1];
+
+            if (mod == 0xdb) {
+                ebx = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc0) {
+                eax = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc9) {
+                ecx = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xd2) {
+                edx = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xf6) {
+                esi = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xff) {
+                edi = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xed) {
+                ebp = 0;
+                u8Zf = 1;
+                ip += 2;
+                continue;
+            }
+        }
+        if (op == 0x89 && ip + 1 < cbImage) {
+            u8 mod = p[ip + 1];
+
+            if (mod == 0xc3) {
+                ebx = eax;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc1) {
+                ecx = eax;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc2) {
+                edx = eax;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc6) {
+                esi = eax;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc7) {
+                edi = eax;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xe5) {
+                /* mov ebp, esp — soft: use stack depth as esp-shaped */
+                ebp = u32Sp * 4u;
+                ip += 2;
+                continue;
+            }
+        }
+        if (op == 0x8b && ip + 1 < cbImage) {
+            u8 mod = p[ip + 1];
+
+            /* Soft reg-reg mov only (modrm mod=11b) */
+            if ((mod & 0xc0u) == 0xc0u) {
+                u32 u32Src = 0;
+                u8 rm = (u8)(mod & 7u);
+                u8 reg = (u8)((mod >> 3) & 7u);
+
+                if (rm == 0) {
+                    u32Src = eax;
+                } else if (rm == 1) {
+                    u32Src = ecx;
+                } else if (rm == 2) {
+                    u32Src = edx;
+                } else if (rm == 3) {
+                    u32Src = ebx;
+                } else if (rm == 5) {
+                    u32Src = ebp;
+                } else if (rm == 6) {
+                    u32Src = esi;
+                } else if (rm == 7) {
+                    u32Src = edi;
+                }
+                if (reg == 0) {
+                    eax = u32Src;
+                } else if (reg == 1) {
+                    ecx = u32Src;
+                } else if (reg == 2) {
+                    edx = u32Src;
+                } else if (reg == 3) {
+                    ebx = u32Src;
+                } else if (reg == 5) {
+                    ebp = u32Src;
+                } else if (reg == 6) {
+                    esi = u32Src;
+                } else if (reg == 7) {
+                    edi = u32Src;
+                }
+                ip += 2;
+                continue;
+            }
+        }
+        if (op == 0x01 && ip + 1 < cbImage && p[ip + 1] == 0xc3) {
+            /* add ebx, eax */
+            ebx += eax;
+            u8Zf = (ebx == 0) ? 1u : 0u;
             ip += 2;
             continue;
         }
-        if (op == 0x31 && ip + 1 < cbImage && p[ip + 1] == 0xc0) {
-            /* xor eax, eax */
-            eax = 0;
+        if (op == 0x29 && ip + 1 < cbImage && p[ip + 1] == 0xc3) {
+            /* sub ebx, eax */
+            ebx -= eax;
+            u8Zf = (ebx == 0) ? 1u : 0u;
             ip += 2;
             continue;
         }
-        if (op == 0x31 && ip + 1 < cbImage && p[ip + 1] == 0xc9) {
-            /* xor ecx, ecx */
-            ecx = 0;
-            ip += 2;
-            continue;
+        if (op == 0x83 && ip + 2 < cbImage) {
+            u8 mod = p[ip + 1];
+            i8 i8Imm = (i8)p[ip + 2];
+
+            /* Soft: add/sub reg, imm8 for eax/ebx/ecx/edx (modrm reg-form) */
+            if (mod == 0xc0) {
+                eax = (u32)((i32)eax + (i32)i8Imm);
+                u8Zf = (eax == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
+            if (mod == 0xc3) {
+                ebx = (u32)((i32)ebx + (i32)i8Imm);
+                u8Zf = (ebx == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
+            if (mod == 0xc1) {
+                ecx = (u32)((i32)ecx + (i32)i8Imm);
+                u8Zf = (ecx == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
+            if (mod == 0xc2) {
+                edx = (u32)((i32)edx + (i32)i8Imm);
+                u8Zf = (edx == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
+            if (mod == 0xe8) {
+                /* sub eax, imm8 */
+                eax = (u32)((i32)eax - (i32)i8Imm);
+                u8Zf = (eax == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
+            if (mod == 0xeb) {
+                ebx = (u32)((i32)ebx - (i32)i8Imm);
+                u8Zf = (ebx == 0) ? 1u : 0u;
+                ip += 3;
+                continue;
+            }
         }
-        if (op == 0x31 && ip + 1 < cbImage && p[ip + 1] == 0xd2) {
-            /* xor edx, edx */
-            edx = 0;
-            ip += 2;
-            continue;
-        }
-        if (op == 0x89 && ip + 1 < cbImage && p[ip + 1] == 0xc3) {
-            /* mov ebx, eax */
-            ebx = eax;
-            ip += 2;
-            continue;
-        }
-        if (op == 0x89 && ip + 1 < cbImage && p[ip + 1] == 0xc1) {
-            /* mov ecx, eax */
-            ecx = eax;
-            ip += 2;
-            continue;
+        if (op == 0x85 && ip + 1 < cbImage) {
+            u8 mod = p[ip + 1];
+
+            /* test reg,reg soft ZF */
+            if (mod == 0xc0) {
+                u8Zf = (eax == 0) ? 1u : 0u;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xdb) {
+                u8Zf = (ebx == 0) ? 1u : 0u;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xc9) {
+                u8Zf = (ecx == 0) ? 1u : 0u;
+                ip += 2;
+                continue;
+            }
+            if (mod == 0xd2) {
+                u8Zf = (edx == 0) ? 1u : 0u;
+                ip += 2;
+                continue;
+            }
         }
         if (op == 0x40) { /* inc eax (i386) */
             eax++;
+            u8Zf = (eax == 0) ? 1u : 0u;
             ip++;
             continue;
         }
         if (op == 0x48) { /* dec eax (i386) */
             eax--;
+            u8Zf = (eax == 0) ? 1u : 0u;
+            ip++;
+            continue;
+        }
+        if (op == 0x43) { /* inc ebx */
+            ebx++;
+            u8Zf = (ebx == 0) ? 1u : 0u;
+            ip++;
+            continue;
+        }
+        if (op == 0x4b) { /* dec ebx */
+            ebx--;
+            u8Zf = (ebx == 0) ? 1u : 0u;
             ip++;
             continue;
         }
@@ -1015,21 +1567,222 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             ip = (u32)((i32)ip + 2 + (i32)rel);
             continue;
         }
-        if (op == 0x50) { /* push eax — stack ignored in soft-exec */
+        if (op == 0xe9) { /* jmp near rel32 — soft load long branch */
+            i32 rel;
+
+            if (ip + 5 > cbImage) {
+                return -1;
+            }
+            rel = (i32)((u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                        ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24));
+            ip = (u32)((i32)ip + 5 + rel);
+            continue;
+        }
+        if (op == 0x74) { /* jz/je rel8 */
+            i8 rel;
+
+            if (ip + 2 > cbImage) {
+                return -1;
+            }
+            rel = (i8)p[ip + 1];
+            if (u8Zf) {
+                ip = (u32)((i32)ip + 2 + (i32)rel);
+            } else {
+                ip += 2;
+            }
+            continue;
+        }
+        if (op == 0x75) { /* jnz/jne rel8 */
+            i8 rel;
+
+            if (ip + 2 > cbImage) {
+                return -1;
+            }
+            rel = (i8)p[ip + 1];
+            if (!u8Zf) {
+                ip = (u32)((i32)ip + 2 + (i32)rel);
+            } else {
+                ip += 2;
+            }
+            continue;
+        }
+        if (op == 0xe8) { /* call rel32 — soft push return */
+            i32 rel;
+            u32 u32Ret;
+
+            if (ip + 5 > cbImage) {
+                return -1;
+            }
+            if (u32Sp == 0) {
+                return -1; /* soft stack overflow */
+            }
+            rel = (i32)((u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                        ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24));
+            u32Ret = ip + 5u;
+            u32Sp--;
+            aStack[u32Sp] = u32Ret;
+            ip = (u32)((i32)ip + 5 + rel);
+            continue;
+        }
+        if (op == 0x6a) { /* push imm8 */
+            i8 i8Imm;
+
+            if (ip + 2 > cbImage || u32Sp == 0) {
+                return -1;
+            }
+            i8Imm = (i8)p[ip + 1];
+            u32Sp--;
+            aStack[u32Sp] = (u32)(i32)i8Imm;
+            ip += 2;
+            continue;
+        }
+        if (op == 0x68) { /* push imm32 */
+            u32 u32Imm;
+
+            if (ip + 5 > cbImage || u32Sp == 0) {
+                return -1;
+            }
+            u32Imm = (u32)p[ip + 1] | ((u32)p[ip + 2] << 8) |
+                     ((u32)p[ip + 3] << 16) | ((u32)p[ip + 4] << 24);
+            u32Sp--;
+            aStack[u32Sp] = u32Imm;
+            ip += 5;
+            continue;
+        }
+        if (op == 0x50) { /* push eax */
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = eax;
             ip++;
             continue;
         }
-        if (op == 0x51 || op == 0x52 || op == 0x53) {
-            /* push ecx/edx/ebx */
+        if (op == 0x51) {
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = ecx;
             ip++;
             continue;
         }
-        if (op == 0x58 || op == 0x59 || op == 0x5a || op == 0x5b) {
-            /* pop e*x */
+        if (op == 0x52) {
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = edx;
             ip++;
             continue;
         }
-        if (op == 0xc3) { /* ret — treat as success if eax already exit-shaped */
+        if (op == 0x53) {
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = ebx;
+            ip++;
+            continue;
+        }
+        if (op == 0x55) { /* push ebp — PE frame setup soft */
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = ebp;
+            ip++;
+            continue;
+        }
+        if (op == 0x56 || op == 0x57) {
+            if (u32Sp == 0) {
+                return -1;
+            }
+            u32Sp--;
+            aStack[u32Sp] = (op == 0x56) ? esi : edi;
+            ip++;
+            continue;
+        }
+        if (op == 0x58) {
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            eax = aStack[u32Sp];
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0x59) {
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            ecx = aStack[u32Sp];
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0x5a) {
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            edx = aStack[u32Sp];
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0x5b) {
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            ebx = aStack[u32Sp];
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0x5d) { /* pop ebp */
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            ebp = aStack[u32Sp];
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0x5e || op == 0x5f) {
+            if (u32Sp >= 64u) {
+                return -1;
+            }
+            if (op == 0x5e) {
+                esi = aStack[u32Sp];
+            } else {
+                edi = aStack[u32Sp];
+            }
+            u32Sp++;
+            ip++;
+            continue;
+        }
+        if (op == 0xc9) { /* leave: mov esp,ebp; pop ebp — soft depth */
+            u32Sp = ebp / 4u;
+            if (u32Sp > 64u) {
+                u32Sp = 64u;
+            }
+            if (u32Sp >= 64u) {
+                ebp = 0;
+            } else {
+                ebp = aStack[u32Sp];
+                u32Sp++;
+            }
+            ip++;
+            continue;
+        }
+        if (op == 0xc3) { /* ret — soft pop return or exit-shaped success */
+            if (u32Sp < 64u) {
+                ip = aStack[u32Sp];
+                u32Sp++;
+                if (ip < cbImage) {
+                    continue;
+                }
+            }
             if (pExitCode != NULL) {
                 *pExitCode = (i32)eax;
             }
@@ -1053,27 +1806,33 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             if (eax == 4u) {
                 /* write(fd, buf, len) — return len in eax */
                 eax = edx;
+                u8Zf = (eax == 0) ? 1u : 0u;
                 continue;
             }
             if (eax == 3u) {
                 eax = 0; /* read → EOF */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 5u) {
                 eax = 3; /* open(path,…) soft fd; path not dereferenced */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 6u || eax == 91u || eax == 125u || eax == 243u ||
                 eax == 54u) {
                 eax = 0; /* close/munmap/mprotect/set_thread_area/ioctl */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 20u) {
                 eax = 1; /* getpid */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 24u || eax == 47u || eax == 199u || eax == 200u) {
                 eax = 0; /* getuid/getgid family */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 45u) {
@@ -1083,39 +1842,59 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 } else {
                     eax = ebx;
                 }
+                u8Zf = 0;
                 continue;
             }
             if (eax == 192u || eax == 90u) {
                 /* mmap2 (192) / old mmap (90): synthetic anon VA (hw band) */
                 eax = 0x57000000u;
+                u8Zf = 0;
                 continue;
             }
             if (eax == 122u || eax == 240u || eax == 265u || eax == 42u) {
                 eax = 0; /* uname/futex/clock_gettime/pipe ok */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 102u) {
                 eax = 20; /* socketcall SYS_SOCKET → fd */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 41u) {
                 eax = ebx + 1; /* dup */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 63u) {
                 eax = ecx; /* dup2 */
+                u8Zf = (eax == 0) ? 1u : 0u;
                 continue;
             }
             if (eax == 224u) {
                 eax = 1; /* gettid */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 2u || eax == 120u || eax == 190u) {
                 eax = 2; /* fork/clone/vfork → fake child pid */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 220u || eax == 141u) {
                 eax = 32; /* getdents* — synthetic bytes */
+                u8Zf = 0;
+                continue;
+            }
+            if (eax == 7u || eax == 114u) {
+                /* waitpid/wait4 soft: no children → -ECHILD shape as 0 */
+                eax = 0;
+                u8Zf = 1;
+                continue;
+            }
+            if (eax == 162u || eax == 142u) {
+                eax = 0; /* nanosleep / select soft ok */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 11u || eax == 174u || eax == 175u || eax == 172u ||
@@ -1134,32 +1913,39 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
                 eax == 296u || eax == 300u || eax == 301u || eax == 302u ||
                 eax == 303u || eax == 304u || eax == 305u || eax == 307u) {
                 eax = 0; /* execve/sig/prctl/poll/fcntl/fstat/TLS/IPC/FS/at ok */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 258u) {
                 eax = 1; /* set_tid_address → tid */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 355u) {
                 eax = edx ? edx : 0; /* getrandom length-shaped */
+                u8Zf = (eax == 0) ? 1u : 0u;
                 continue;
             }
             if (eax == 78u || eax == 116u || eax == 12u || eax == 19u) {
                 eax = 0; /* gettimeofday/sysinfo/chdir/lseek */
+                u8Zf = 1;
                 continue;
             }
             if (eax == 13u) {
                 eax = 1; /* time → seconds */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 183u) {
                 eax = 5; /* getcwd nbytes */
+                u8Zf = 0;
                 continue;
             }
             if (eax == 33u || eax == 38u || eax == 10u || eax == 39u ||
                 eax == 76u || eax == 75u || eax == 64u || eax == 65u ||
                 eax == 66u || eax == 118u || eax == 145u || eax == 146u) {
                 eax = 0; /* access/rename/unlink/mkdir/rlimit/pgrp/fsync/iov */
+                u8Zf = 1;
                 continue;
             }
             kprintf("pe32: i386 soft-exec int80 nr=%u unsupported\n", eax);
@@ -1169,7 +1955,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             /* syscall — treat as x86_64 exit if eax==60 */
             if (eax == 60u) {
                 if (pExitCode != NULL) {
-                    *pExitCode = (i32)ebx; /* incomplete; smoke uses edi */
+                    *pExitCode = (i32)edi; /* x64 exit uses edi; soft prefer */
                 }
                 return 0;
             }
@@ -1186,8 +1972,6 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
             }
             return -1;
         }
-        (void)ecx;
-        (void)edx;
         kprintf("pe32: i386 soft-exec unknown op=0x%x at rva=0x%x\n", op, ip);
         return -1;
     }

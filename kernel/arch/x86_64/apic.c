@@ -4,6 +4,8 @@
  *
  * Minimal xAPIC memory-mapped local APIC (clean-room SDM).
  * Calibrated against PIT; product mono clock prefers APIC timer (vector 48).
+ * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
+ * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -50,6 +52,10 @@ static volatile u32        g_u32TlbExpect;
 #define LAPIC_DIV_16       0x3u
 #define LAPIC_DIV_FACTOR   16u
 
+/* Multi-sample calibrate: two ~50 ms windows when stable (100 Hz PIT). */
+#define APIC_CAL_SAMPLES_MAX  2u
+#define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
+
 static volatile u32 *g_pLapic;
 static int            g_fReady;
 static int            g_fCalibrated;
@@ -58,6 +64,20 @@ static volatile u64   g_aCpuTicks[GJ_CPU_STATIC_MAX];
 static u64            g_u64BusHz;      /* timer counts per second (after /16) */
 static u64            g_u64NsecPerTick;
 static u32            g_u32PeriodInit;
+
+/* Soft cal observability (sticky). */
+static u32            g_u32CalStatus = GJ_APIC_CAL_NONE;
+static u32            g_u32CalAttempts;
+static u32            g_u32CalOk;
+static u32            g_u32CalFail;
+static u32            g_u32CalSamples;
+static u32            g_u32CalPitTicks;
+static u32            g_u32CalElapsed;
+static u32            g_u32CalAlignSpins;
+static u32            g_u32CalWaitSpins;
+static u64            g_u64BusHzSample0;
+static u64            g_u64BusHzSample1;
+static u32            g_u32HzProgrammed;
 
 extern void irq_stub_apic_timer(void);
 extern void irq_stub_ipi_resched(void);
@@ -121,6 +141,13 @@ lapic_r(u32 u32Off)
     return g_pLapic ? g_pLapic[u32Off / 4] : 0;
 }
 
+static void
+cal_fail(u32 u32Status)
+{
+    g_u32CalStatus = u32Status;
+    g_u32CalFail++;
+}
+
 void
 apic_timer_irq(void)
 {
@@ -162,6 +189,18 @@ apic_init(void)
     g_u64BusHz = 0;
     g_u64NsecPerTick = 0;
     g_u32PeriodInit = 0;
+    g_u32CalStatus = GJ_APIC_CAL_NONE;
+    g_u32CalAttempts = 0;
+    g_u32CalOk = 0;
+    g_u32CalFail = 0;
+    g_u32CalSamples = 0;
+    g_u32CalPitTicks = 0;
+    g_u32CalElapsed = 0;
+    g_u32CalAlignSpins = 0;
+    g_u32CalWaitSpins = 0;
+    g_u64BusHzSample0 = 0;
+    g_u64BusHzSample1 = 0;
+    g_u32HzProgrammed = 0;
     u64Base = rdmsr(IA32_APIC_BASE_MSR);
     if ((u64Base & APIC_BASE_ENABLE) == 0) {
         u64Base |= APIC_BASE_ENABLE;
@@ -301,24 +340,19 @@ apic_ready(void)
     return g_fReady;
 }
 
-int
-apic_calibrate(void)
+/*
+ * One PIT-aligned measurement window. Returns bus_hz sample or 0 on fail.
+ * Updates soft spin/elapsed fields for the last window attempted.
+ */
+static u64
+apic_cal_sample(u32 u32WaitTicks, u32 *pPitDelta, u32 *pElapsed)
 {
     u64 u64J0;
     u64 u64J1;
     u32 u32Cur;
     u32 u32Elapsed;
     u32 u32Spins;
-    const u32 u32WaitTicks = 10u; /* 100 ms at 100 Hz */
     const u32 u32InitMax = 0xffffffffu;
-
-    if (!g_fReady || !timer_ready()) {
-        return -1;
-    }
-
-    /* Mask APIC timer; one-shot mode for measurement */
-    lapic_w(LAPIC_TIMER_LVT, LAPIC_TIMER_MASKED | LAPIC_TIMER_ONESHOT | LAPIC_TIMER_VEC);
-    lapic_w(LAPIC_TIMER_DIV, LAPIC_DIV_16);
 
     /* Align to a PIT tick boundary */
     u64J0 = timer_jiffies();
@@ -327,44 +361,138 @@ apic_calibrate(void)
         u32Spins++;
         __asm__ volatile ("pause");
     }
+    g_u32CalAlignSpins = u32Spins;
     if (timer_jiffies() == u64J0) {
-        kprintf("apic: calibrate failed (PIT not ticking)\n");
-        return -1;
+        return 0;
     }
 
     /* Start countdown from max */
     lapic_w(LAPIC_TIMER_INIT, u32InitMax);
     u64J0 = timer_jiffies();
     u32Spins = 0;
-    while ((timer_jiffies() - u64J0) < u32WaitTicks && u32Spins < 500000000u) {
+    while ((timer_jiffies() - u64J0) < (u64)u32WaitTicks &&
+           u32Spins < 500000000u) {
         u32Spins++;
         __asm__ volatile ("pause");
     }
     u32Cur = lapic_r(LAPIC_TIMER_CUR);
     u64J1 = timer_jiffies();
     lapic_w(LAPIC_TIMER_INIT, 0); /* stop */
+    g_u32CalWaitSpins = u32Spins;
 
     if (u64J1 <= u64J0 || u32Cur >= u32InitMax) {
-        kprintf("apic: calibrate failed j0=%lu j1=%lu cur=0x%x\n",
-                (unsigned long)u64J0, (unsigned long)u64J1, u32Cur);
-        return -1;
+        return 0;
     }
 
     u32Elapsed = u32InitMax - u32Cur;
+    if (pPitDelta != NULL) {
+        *pPitDelta = (u32)(u64J1 - u64J0);
+    }
+    if (pElapsed != NULL) {
+        *pElapsed = u32Elapsed;
+    }
     /*
      * u32Elapsed counts over (j1-j0) PIT ticks at GJ_TIMER_HZ.
      * bus_hz = elapsed * GJ_TIMER_HZ / (j1-j0)
      */
-    g_u64BusHz = ((u64)u32Elapsed * (u64)GJ_TIMER_HZ) / (u64J1 - u64J0);
-    if (g_u64BusHz < 1000ull) {
-        kprintf("apic: calibrate bus_hz too low %lu\n",
-                (unsigned long)g_u64BusHz);
+    return ((u64)u32Elapsed * (u64)GJ_TIMER_HZ) / (u64J1 - u64J0);
+}
+
+int
+apic_calibrate(void)
+{
+    u64 u64Hz0;
+    u64 u64Hz1;
+    u64 u64Hz;
+    u32 u32Pit0;
+    u32 u32Pit1;
+    u32 u32El0;
+    u32 u32El1;
+    u32 u32Samples;
+
+    g_u32CalAttempts++;
+    g_u64BusHzSample0 = 0;
+    g_u64BusHzSample1 = 0;
+    g_u32CalSamples = 0;
+
+    if (!g_fReady || !timer_ready()) {
+        cal_fail(GJ_APIC_CAL_FAIL_RDY);
+        kprintf("apic: calibrate failed (not ready apic=%d timer=%d)\n",
+                g_fReady, timer_ready());
+        return -1;
+    }
+
+    /* Mask APIC timer; one-shot mode for measurement */
+    lapic_w(LAPIC_TIMER_LVT, LAPIC_TIMER_MASKED | LAPIC_TIMER_ONESHOT | LAPIC_TIMER_VEC);
+    lapic_w(LAPIC_TIMER_DIV, LAPIC_DIV_16);
+
+    u32Pit0 = 0;
+    u32El0 = 0;
+    u64Hz0 = apic_cal_sample(APIC_CAL_WAIT_TICKS, &u32Pit0, &u32El0);
+    if (u64Hz0 == 0) {
+        /* Align budget exhausted → PIT not advancing; else countdown/window. */
+        if (g_u32CalAlignSpins >= 100000000u) {
+            cal_fail(GJ_APIC_CAL_FAIL_PIT);
+            kprintf("apic: calibrate failed (PIT not ticking) align_spins=%u\n",
+                    (unsigned)g_u32CalAlignSpins);
+        } else {
+            cal_fail(GJ_APIC_CAL_FAIL_CUR);
+            kprintf("apic: calibrate failed sample0 (cur/window) "
+                    "align=%u wait=%u pit=%u el=%u\n",
+                    (unsigned)g_u32CalAlignSpins, (unsigned)g_u32CalWaitSpins,
+                    (unsigned)u32Pit0, (unsigned)u32El0);
+        }
+        return -1;
+    }
+    g_u64BusHzSample0 = u64Hz0;
+    u32Samples = 1;
+
+    /* Second sample when first looked sane (deepen observability + average). */
+    u32Pit1 = 0;
+    u32El1 = 0;
+    u64Hz1 = apic_cal_sample(APIC_CAL_WAIT_TICKS, &u32Pit1, &u32El1);
+    if (u64Hz1 != 0) {
+        g_u64BusHzSample1 = u64Hz1;
+        u32Samples = 2;
+        u64Hz = (u64Hz0 / 2ull) + (u64Hz1 / 2ull);
+        g_u32CalPitTicks = u32Pit0 + u32Pit1;
+        g_u32CalElapsed = u32El0 + u32El1;
+    } else {
+        u64Hz = u64Hz0;
+        g_u32CalPitTicks = u32Pit0;
+        g_u32CalElapsed = u32El0;
+        kprintf("apic: cal sample1 skipped/fail; using sample0 only\n");
+    }
+    g_u32CalSamples = u32Samples;
+
+    if (u64Hz < 1000ull) {
+        cal_fail(GJ_APIC_CAL_FAIL_HZ);
+        kprintf("apic: calibrate bus_hz too low %lu samples=%u s0=%lu s1=%lu\n",
+                (unsigned long)u64Hz, (unsigned)u32Samples,
+                (unsigned long)g_u64BusHzSample0,
+                (unsigned long)g_u64BusHzSample1);
         g_u64BusHz = 0;
         return -1;
     }
+    if (g_u32CalPitTicks == 0 || g_u32CalElapsed == 0) {
+        cal_fail(GJ_APIC_CAL_FAIL_WIN);
+        kprintf("apic: calibrate degenerate window pit=%u el=%u\n",
+                (unsigned)g_u32CalPitTicks, (unsigned)g_u32CalElapsed);
+        g_u64BusHz = 0;
+        return -1;
+    }
+
+    g_u64BusHz = u64Hz;
     g_fCalibrated = 1;
-    kprintf("apic: calibrated bus_hz=%lu (div16, %lu PIT ticks)\n",
-            (unsigned long)g_u64BusHz, (unsigned long)(u64J1 - u64J0));
+    g_u32CalStatus = GJ_APIC_CAL_OK;
+    g_u32CalOk++;
+    kprintf("apic: calibrated bus_hz=%lu (div16, samples=%u pit_ticks=%u "
+            "elapsed=%u align=%u wait=%u s0=%lu s1=%lu)\n",
+            (unsigned long)g_u64BusHz, (unsigned)u32Samples,
+            (unsigned)g_u32CalPitTicks, (unsigned)g_u32CalElapsed,
+            (unsigned)g_u32CalAlignSpins, (unsigned)g_u32CalWaitSpins,
+            (unsigned long)g_u64BusHzSample0,
+            (unsigned long)g_u64BusHzSample1);
     return 0;
 }
 
@@ -389,6 +517,7 @@ apic_timer_hz(u32 u32Hz)
         return;
     }
 
+    g_u32HzProgrammed = u32Hz;
     if (g_fCalibrated && g_u64BusHz != 0) {
         u32Init = (u32)(g_u64BusHz / (u64)u32Hz);
     } else {
@@ -409,10 +538,12 @@ apic_timer_hz(u32 u32Hz)
 
     if (g_fCalibrated) {
         timer_set_apic_source(g_u64NsecPerTick);
-        kprintf("apic: timer %u Hz init=%u nsec/tick=%lu (mono=APIC)\n",
-                u32Hz, u32Init, (unsigned long)g_u64NsecPerTick);
+        kprintf("apic: timer %u Hz init=%u nsec/tick=%lu bus_hz=%lu (mono=APIC)\n",
+                u32Hz, u32Init, (unsigned long)g_u64NsecPerTick,
+                (unsigned long)g_u64BusHz);
     } else {
-        kprintf("apic: timer ~%u Hz init=%u (uncalibrated)\n", u32Hz, u32Init);
+        kprintf("apic: timer ~%u Hz init=%u (uncalibrated status=%u)\n",
+                u32Hz, u32Init, (unsigned)g_u32CalStatus);
     }
 }
 
@@ -441,6 +572,99 @@ u32
 apic_timer_init_count(void)
 {
     return g_u32PeriodInit;
+}
+
+u32
+apic_timer_cur_count(void)
+{
+    if (!g_fReady) {
+        return 0;
+    }
+    return lapic_r(LAPIC_TIMER_CUR);
+}
+
+void
+apic_cal_soft_snapshot(struct gj_apic_cal_soft *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    pOut->u32Status = g_u32CalStatus;
+    pOut->u32Attempts = g_u32CalAttempts;
+    pOut->u32Ok = g_u32CalOk;
+    pOut->u32Fail = g_u32CalFail;
+    pOut->u32Samples = g_u32CalSamples;
+    pOut->u32PitTicks = g_u32CalPitTicks;
+    pOut->u32Elapsed = g_u32CalElapsed;
+    pOut->u32AlignSpins = g_u32CalAlignSpins;
+    pOut->u32WaitSpins = g_u32CalWaitSpins;
+    pOut->u64BusHz = g_u64BusHz;
+    pOut->u64BusHzSample0 = g_u64BusHzSample0;
+    pOut->u64BusHzSample1 = g_u64BusHzSample1;
+    pOut->u64NsecPerTick = g_u64NsecPerTick;
+    pOut->u32PeriodInit = g_u32PeriodInit;
+    pOut->u32HzProgrammed = g_u32HzProgrammed;
+    pOut->u64BspTicks = g_u64Ticks;
+    pOut->u32Calibrated = g_fCalibrated ? 1u : 0u;
+    pOut->u32Ready = g_fReady ? 1u : 0u;
+}
+
+void
+apic_cal_soft_log(void)
+{
+    struct gj_apic_cal_soft stCal;
+    const char *szSt;
+    const char *szVerdict;
+
+    apic_cal_soft_snapshot(&stCal);
+
+    switch (stCal.u32Status) {
+    case GJ_APIC_CAL_OK:
+        szSt = "OK";
+        break;
+    case GJ_APIC_CAL_FAIL_RDY:
+        szSt = "FAIL_RDY";
+        break;
+    case GJ_APIC_CAL_FAIL_PIT:
+        szSt = "FAIL_PIT";
+        break;
+    case GJ_APIC_CAL_FAIL_CUR:
+        szSt = "FAIL_CUR";
+        break;
+    case GJ_APIC_CAL_FAIL_HZ:
+        szSt = "FAIL_HZ";
+        break;
+    case GJ_APIC_CAL_FAIL_WIN:
+        szSt = "FAIL_WIN";
+        break;
+    default:
+        szSt = "NONE";
+        break;
+    }
+
+    kprintf("apic: cal soft status=%s attempts=%u ok=%u fail=%u samples=%u "
+            "pit_ticks=%u elapsed=%u align=%u wait=%u bus_hz=%lu s0=%lu s1=%lu "
+            "npt=%lu init=%u hz=%u bsp_ticks=%lu ready=%u cal=%u\n",
+            szSt, (unsigned)stCal.u32Attempts, (unsigned)stCal.u32Ok,
+            (unsigned)stCal.u32Fail, (unsigned)stCal.u32Samples,
+            (unsigned)stCal.u32PitTicks, (unsigned)stCal.u32Elapsed,
+            (unsigned)stCal.u32AlignSpins, (unsigned)stCal.u32WaitSpins,
+            (unsigned long)stCal.u64BusHz,
+            (unsigned long)stCal.u64BusHzSample0,
+            (unsigned long)stCal.u64BusHzSample1,
+            (unsigned long)stCal.u64NsecPerTick,
+            (unsigned)stCal.u32PeriodInit, (unsigned)stCal.u32HzProgrammed,
+            (unsigned long)stCal.u64BspTicks,
+            (unsigned)stCal.u32Ready, (unsigned)stCal.u32Calibrated);
+
+    if (stCal.u32Status == GJ_APIC_CAL_OK && stCal.u64BusHz != 0) {
+        szVerdict = "PASS";
+    } else if (stCal.u32Status == GJ_APIC_CAL_NONE) {
+        szVerdict = "NONE";
+    } else {
+        szVerdict = "FAIL";
+    }
+    kprintf("apic: cal soft %s\n", szVerdict);
 }
 
 void

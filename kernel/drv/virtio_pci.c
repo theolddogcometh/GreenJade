@@ -5,9 +5,19 @@
  * Clean-room virtio-pci modern transport + virtqueues (OASIS virtio 1.1).
  * No Linux virtio source. Dual MIT OR Apache-2.0 only.
  *
+ * Soft product depth (common-cfg, features, queue setup):
+ *   - modern common-cfg cap walk + soft reset
+ *   - feature read/write helpers + soft negotiate ladder
+ *   - queue soft size clamp, disable-before-setup, enable verify
+ *
  * Greppable product markers (prefix-stable):
  *   virtio: scan PASS
  *   virtio: modern common@
+ *   virtio: features
+ *   virtio: features soft
+ *   virtio: q soft
+ *   virtio: q%u size=
+ *   virtio: driver_ok
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -26,23 +36,23 @@
 #define PCI_CAP_PTR  0x34u
 #define PCI_CAP_ID_VNDR 0x09u
 
-/* virtio_pci_common_cfg offsets */
-#define VIRTIO_PCI_COMMON_DFSELECT   0
-#define VIRTIO_PCI_COMMON_DF         4
-#define VIRTIO_PCI_COMMON_GFSELECT   8
-#define VIRTIO_PCI_COMMON_GF         12
-#define VIRTIO_PCI_COMMON_MSIX       16
-#define VIRTIO_PCI_COMMON_NUMQ       18
-#define VIRTIO_PCI_COMMON_STATUS     20
-#define VIRTIO_PCI_COMMON_CFGGEN     21
-#define VIRTIO_PCI_COMMON_Q_SELECT   22
-#define VIRTIO_PCI_COMMON_Q_SIZE     24
-#define VIRTIO_PCI_COMMON_Q_MSIX     26
-#define VIRTIO_PCI_COMMON_Q_ENABLE   28
-#define VIRTIO_PCI_COMMON_Q_NOFF     30
-#define VIRTIO_PCI_COMMON_Q_DESC     32
-#define VIRTIO_PCI_COMMON_Q_DRIVER   40
-#define VIRTIO_PCI_COMMON_Q_DEVICE   48
+/* Local aliases to public GJ_VIRTIO_PCI_COMMON_* (keep body greppable). */
+#define VIRTIO_PCI_COMMON_DFSELECT   GJ_VIRTIO_PCI_COMMON_DFSELECT
+#define VIRTIO_PCI_COMMON_DF         GJ_VIRTIO_PCI_COMMON_DF
+#define VIRTIO_PCI_COMMON_GFSELECT   GJ_VIRTIO_PCI_COMMON_GFSELECT
+#define VIRTIO_PCI_COMMON_GF         GJ_VIRTIO_PCI_COMMON_GF
+#define VIRTIO_PCI_COMMON_MSIX       GJ_VIRTIO_PCI_COMMON_MSIX
+#define VIRTIO_PCI_COMMON_NUMQ       GJ_VIRTIO_PCI_COMMON_NUMQ
+#define VIRTIO_PCI_COMMON_STATUS     GJ_VIRTIO_PCI_COMMON_STATUS
+#define VIRTIO_PCI_COMMON_CFGGEN     GJ_VIRTIO_PCI_COMMON_CFGGEN
+#define VIRTIO_PCI_COMMON_Q_SELECT   GJ_VIRTIO_PCI_COMMON_Q_SELECT
+#define VIRTIO_PCI_COMMON_Q_SIZE     GJ_VIRTIO_PCI_COMMON_Q_SIZE
+#define VIRTIO_PCI_COMMON_Q_MSIX     GJ_VIRTIO_PCI_COMMON_Q_MSIX
+#define VIRTIO_PCI_COMMON_Q_ENABLE   GJ_VIRTIO_PCI_COMMON_Q_ENABLE
+#define VIRTIO_PCI_COMMON_Q_NOFF     GJ_VIRTIO_PCI_COMMON_Q_NOFF
+#define VIRTIO_PCI_COMMON_Q_DESC     GJ_VIRTIO_PCI_COMMON_Q_DESC
+#define VIRTIO_PCI_COMMON_Q_DRIVER   GJ_VIRTIO_PCI_COMMON_Q_DRIVER
+#define VIRTIO_PCI_COMMON_Q_DEVICE   GJ_VIRTIO_PCI_COMMON_Q_DEVICE
 
 static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
@@ -216,6 +226,116 @@ mmio_w64(volatile u8 *p, u64 u64V)
     }
 }
 
+/* ---- common-cfg feature helpers (soft; greppable) -------------------- */
+
+static u64
+common_features_read(struct gj_virtio_dev *pDev, int fGuest)
+{
+    volatile u8 *pCommon;
+    u32 u32Sel;
+    u32 u32Val;
+    u32 u32Lo;
+    u32 u32Hi;
+
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return 0;
+    }
+    pCommon = pDev->pCommon;
+    if (fGuest) {
+        u32Sel = VIRTIO_PCI_COMMON_GFSELECT;
+        u32Val = VIRTIO_PCI_COMMON_GF;
+    } else {
+        u32Sel = VIRTIO_PCI_COMMON_DFSELECT;
+        u32Val = VIRTIO_PCI_COMMON_DF;
+    }
+    mmio_w32(pCommon + u32Sel, 0);
+    u32Lo = mmio_r32(pCommon + u32Val);
+    mmio_w32(pCommon + u32Sel, 1);
+    u32Hi = mmio_r32(pCommon + u32Val);
+    return ((u64)u32Hi << 32) | (u64)u32Lo;
+}
+
+static void
+common_features_write_guest(struct gj_virtio_dev *pDev, u64 u64Drv)
+{
+    volatile u8 *pCommon;
+
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return;
+    }
+    pCommon = pDev->pCommon;
+    mmio_w32(pCommon + VIRTIO_PCI_COMMON_GFSELECT, 0);
+    mmio_w32(pCommon + VIRTIO_PCI_COMMON_GF, (u32)u64Drv);
+    mmio_w32(pCommon + VIRTIO_PCI_COMMON_GFSELECT, 1);
+    mmio_w32(pCommon + VIRTIO_PCI_COMMON_GF, (u32)(u64Drv >> 32));
+}
+
+/* Soft power-of-two size clamp into [1, u16Max] (0 if max is 0). */
+static u16
+q_soft_size(u16 u16Want, u16 u16Max)
+{
+    u16 u16P2;
+
+    if (u16Max == 0) {
+        return 0;
+    }
+    if (u16Want == 0) {
+        u16Want = 1;
+    }
+    if (u16Want > u16Max) {
+        u16Want = u16Max;
+    }
+    /* Round down to power of two within max (virtio queue_size requirement). */
+    u16P2 = 1;
+    while ((u16)(u16P2 << 1) <= u16Want && (u16)(u16P2 << 1) <= u16Max &&
+           (u16P2 << 1) != 0) {
+        u16P2 = (u16)(u16P2 << 1);
+    }
+    if (u16P2 > u16Max) {
+        /* max itself may not be power-of-two on broken hosts — soft clamp */
+        u16P2 = 1;
+        while ((u16)(u16P2 << 1) <= u16Max && (u16P2 << 1) != 0) {
+            u16P2 = (u16)(u16P2 << 1);
+        }
+    }
+    return u16P2;
+}
+
+static void
+q_ring_free(struct gj_virtq *pQ)
+{
+    if (pQ == NULL) {
+        return;
+    }
+    if (pQ->paDesc != 0) {
+        pmm_free(pQ->paDesc);
+        pQ->paDesc = 0;
+        pQ->pDesc = NULL;
+    }
+    if (pQ->paAvail != 0) {
+        pmm_free(pQ->paAvail);
+        pQ->paAvail = 0;
+        pQ->pAvail = NULL;
+    }
+    if (pQ->paUsed != 0) {
+        pmm_free(pQ->paUsed);
+        pQ->paUsed = 0;
+        pQ->pUsed = NULL;
+    }
+}
+
+static gj_paddr_t
+alloc_zero_page(void)
+{
+    gj_paddr_t pa = pmm_alloc();
+
+    if (pa == 0) {
+        return 0;
+    }
+    memset((void *)hhdm_to_virt(pa), 0, GJ_PAGE_SIZE);
+    return pa;
+}
+
 void
 virtio_init(void)
 {
@@ -345,6 +465,16 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
         return GJ_ERR_INVAL;
     }
 
+    pDev->fModern = 0;
+    pDev->u64FeaturesDev = 0;
+    pDev->u64FeaturesDrv = 0;
+    pDev->pCommon = NULL;
+    pDev->pNotify = NULL;
+    pDev->pIsr = NULL;
+    pDev->pDevice = NULL;
+    pDev->u32NotifyMult = 0;
+    pDev->u32NumQueues = 0;
+
     /* Enable memory + bus master before touching BARs */
     u16Cmd = pci_read16(pDev->u8Bus, pDev->u8Slot, pDev->u8Func, PCI_CMD);
     u16Cmd |= (u16)(PCI_CMD_MEM | PCI_CMD_BUS);
@@ -410,16 +540,41 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
         return GJ_ERR_NOSUPPORT;
     }
 
-    /* Device reset; wait until status reads zero */
+    /* Soft device reset; wait until status reads zero */
+    virtio_reset(pDev);
+    pDev->u32NumQueues = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_NUMQ);
+    pDev->fModern = 1;
+    kprintf("virtio: %x:%x modern common@%p queues=%u notify_mult=%u"
+            " isr=%u devcfg=%u\n",
+            (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
+            (void *)pDev->pCommon, pDev->u32NumQueues,
+            (unsigned)pDev->u32NotifyMult,
+            pDev->pIsr != NULL ? 1u : 0u,
+            pDev->pDevice != NULL ? 1u : 0u);
+    return GJ_OK;
+}
+
+void
+virtio_reset(struct gj_virtio_dev *pDev)
+{
+    u32 iSpin;
+
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return;
+    }
     mmio_w8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS, 0);
-    while (mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS) != 0) {
+    for (iSpin = 0; iSpin < GJ_VIRTIO_RESET_SPINS; iSpin++) {
+        if (mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS) == 0) {
+            break;
+        }
         __asm__ volatile ("pause");
     }
-    pDev->u32NumQueues = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_NUMQ);
-    kprintf("virtio: %x:%x modern common@%p queues=%u\n",
-            (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
-            (void *)pDev->pCommon, pDev->u32NumQueues);
-    return GJ_OK;
+    pDev->u64FeaturesDev = 0;
+    pDev->u64FeaturesDrv = 0;
+    if (mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS) != 0) {
+        kprintf("virtio: reset soft timeout status=0x%x\n",
+                (unsigned)mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS));
+    }
 }
 
 void
@@ -439,65 +594,188 @@ virtio_get_status(struct gj_virtio_dev *pDev)
     return mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS);
 }
 
+void
+virtio_driver_ok(struct gj_virtio_dev *pDev)
+{
+    u8 u8St;
+
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return;
+    }
+    u8St = (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
+                GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK);
+    virtio_set_status(pDev, u8St);
+    kprintf("virtio: driver_ok %x:%x status=0x%x features=0x%lx\n",
+            (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
+            (unsigned)virtio_get_status(pDev),
+            (unsigned long)pDev->u64FeaturesDrv);
+}
+
+u8
+virtio_isr_read(struct gj_virtio_dev *pDev)
+{
+    if (pDev == NULL || pDev->pIsr == NULL) {
+        return 0;
+    }
+    return mmio_r8(pDev->pIsr);
+}
+
+u8
+virtio_config_generation(struct gj_virtio_dev *pDev)
+{
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return 0;
+    }
+    return mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_CFGGEN);
+}
+
+u64
+virtio_features_device(struct gj_virtio_dev *pDev)
+{
+    return common_features_read(pDev, 0);
+}
+
+u64
+virtio_features_driver(struct gj_virtio_dev *pDev)
+{
+    return common_features_read(pDev, 1);
+}
+
+u64
+virtio_features_negotiated(struct gj_virtio_dev *pDev)
+{
+    if (pDev == NULL) {
+        return 0;
+    }
+    return pDev->u64FeaturesDrv;
+}
+
+int
+virtio_features_has(struct gj_virtio_dev *pDev, u64 u64Bit)
+{
+    if (pDev == NULL || u64Bit == 0) {
+        return 0;
+    }
+    return (pDev->u64FeaturesDrv & u64Bit) != 0 ? 1 : 0;
+}
+
 gj_status_t
 virtio_negotiate(struct gj_virtio_dev *pDev, u64 u64WantFeatures)
 {
-    u32 u32Lo;
-    u32 u32Hi;
     u64 u64Dev;
     u64 u64Drv;
 
     if (pDev == NULL || pDev->pCommon == NULL) {
         return GJ_ERR_INVAL;
     }
+
+    /*
+     * Soft reset first — OASIS requires reset before re-init; also makes
+     * feature ladders (retry with smaller want masks) correct.
+     */
+    virtio_reset(pDev);
+
     virtio_set_status(pDev, GJ_VIRTIO_S_ACKNOWLEDGE);
     virtio_set_status(pDev, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER));
 
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_DFSELECT, 0);
-    u32Lo = mmio_r32(pDev->pCommon + VIRTIO_PCI_COMMON_DF);
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_DFSELECT, 1);
-    u32Hi = mmio_r32(pDev->pCommon + VIRTIO_PCI_COMMON_DF);
-    u64Dev = ((u64)u32Hi << 32) | u32Lo;
+    u64Dev = common_features_read(pDev, 0);
     u64Drv = u64Dev & u64WantFeatures;
 
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_GFSELECT, 0);
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_GF, (u32)u64Drv);
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_GFSELECT, 1);
-    mmio_w32(pDev->pCommon + VIRTIO_PCI_COMMON_GF, (u32)(u64Drv >> 32));
+    common_features_write_guest(pDev, u64Drv);
 
     virtio_set_status(pDev, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                  GJ_VIRTIO_S_FEATURES_OK));
     if ((virtio_get_status(pDev) & GJ_VIRTIO_S_FEATURES_OK) == 0) {
-        kprintf("virtio: FEATURES_OK rejected\n");
+        kprintf("virtio: FEATURES_OK rejected want=0x%lx dev=0x%lx\n",
+                (unsigned long)u64WantFeatures, (unsigned long)u64Dev);
+        virtio_set_status(pDev, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
+                                     GJ_VIRTIO_S_FAILED));
+        pDev->u64FeaturesDev = u64Dev;
+        pDev->u64FeaturesDrv = 0;
         return GJ_ERR_NOSUPPORT;
     }
-    kprintf("virtio: features dev=0x%lx drv=0x%lx\n",
-            (unsigned long)u64Dev, (unsigned long)u64Drv);
+
+    /* Soft snapshot from programmed guest features (read-back). */
+    pDev->u64FeaturesDev = u64Dev;
+    pDev->u64FeaturesDrv = common_features_read(pDev, 1);
+    if (pDev->u64FeaturesDrv == 0) {
+        pDev->u64FeaturesDrv = u64Drv; /* soft: some hosts omit GF read-back */
+    }
+    kprintf("virtio: features dev=0x%lx drv=0x%lx want=0x%lx v1=%u\n",
+            (unsigned long)pDev->u64FeaturesDev,
+            (unsigned long)pDev->u64FeaturesDrv,
+            (unsigned long)u64WantFeatures,
+            (unsigned)((pDev->u64FeaturesDrv & GJ_VIRTIO_F_VERSION_1) != 0));
     return GJ_OK;
 }
 
-static gj_paddr_t
-alloc_zero_pages(u32 cPages)
+gj_status_t
+virtio_negotiate_soft(struct gj_virtio_dev *pDev, const u64 *pWants, u32 cWants,
+                      u64 *pOutDrv)
 {
-    gj_paddr_t paFirst = 0;
     u32 i;
+    gj_status_t st;
+    u64 u64Last = 0;
 
-    for (i = 0; i < cPages; i++) {
-        gj_paddr_t pa = pmm_alloc();
-
-        if (pa == 0) {
-            return 0;
-        }
-        memset((void *)hhdm_to_virt(pa), 0, GJ_PAGE_SIZE);
-        if (i == 0) {
-            paFirst = pa;
-        } else if (pa != paFirst + (gj_paddr_t)i * GJ_PAGE_SIZE) {
-            /* Need contiguous — for small queues single page is enough */
-            pmm_free(pa);
-            return 0;
-        }
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return GJ_ERR_INVAL;
     }
-    return paFirst;
+    /* Soft default ladder when caller omits masks: V1 then transitional empty. */
+    {
+        static const u64 aDefault[] = {
+            GJ_VIRTIO_F_VERSION_1,
+            0
+        };
+        const u64 *pTry = pWants;
+        u32 cTry = cWants;
+
+        if (pTry == NULL || cTry == 0) {
+            pTry = aDefault;
+            cTry = 2;
+        }
+
+        for (i = 0; i < cTry; i++) {
+            u64Last = pTry[i];
+            st = virtio_negotiate(pDev, u64Last);
+            if (st == GJ_OK) {
+                kprintf("virtio: features soft step=%u/%u want=0x%lx drv=0x%lx\n",
+                        (unsigned)(i + 1), (unsigned)cTry,
+                        (unsigned long)u64Last,
+                        (unsigned long)pDev->u64FeaturesDrv);
+                if (pOutDrv != NULL) {
+                    *pOutDrv = pDev->u64FeaturesDrv;
+                }
+                return GJ_OK;
+            }
+        }
+        cWants = cTry;
+    }
+    kprintf("virtio: features soft FAIL steps=%u last_want=0x%lx\n",
+            (unsigned)cWants, (unsigned long)u64Last);
+    if (pOutDrv != NULL) {
+        *pOutDrv = 0;
+    }
+    return GJ_ERR_NOSUPPORT;
+}
+
+u16
+virtio_q_max_size(struct gj_virtio_dev *pDev, u16 u16QIdx)
+{
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return 0;
+    }
+    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
+    return mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SIZE);
+}
+
+void
+virtio_q_disable(struct gj_virtio_dev *pDev, u16 u16QIdx)
+{
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return;
+    }
+    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
+    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 0);
 }
 
 gj_status_t
@@ -505,10 +783,11 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
                u16 u16Size)
 {
     u16 u16Max;
-    u32 cbDesc;
-    u32 cbAvail;
-    u32 cbUsed;
-    gj_paddr_t pa;
+    u16 u16Want;
+    u16 u16Enabled;
+    gj_paddr_t paDesc;
+    gj_paddr_t paAvail;
+    gj_paddr_t paUsed;
 
     if (pDev == NULL || pQ == NULL || pDev->pCommon == NULL) {
         return GJ_ERR_INVAL;
@@ -516,75 +795,83 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
     if (u16Size == 0 || u16Size > GJ_VIRTQ_MAX_SIZE) {
         return GJ_ERR_INVAL;
     }
+    if (pDev->u32NumQueues != 0 && (u32)u16QIdx >= pDev->u32NumQueues) {
+        kprintf("virtio: q soft idx=%u beyond num_queues=%u\n",
+                (unsigned)u16QIdx, pDev->u32NumQueues);
+        return GJ_ERR_NOSUPPORT;
+    }
+
     memset(pQ, 0, sizeof(*pQ));
     pQ->pDev = pDev;
     pQ->u16QueueIdx = u16QIdx;
+    u16Want = u16Size;
 
+    /* Soft: disable before reprogramming (safe re-setup / probe retry). */
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
+    mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 0);
+
     u16Max = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SIZE);
     if (u16Max == 0) {
+        kprintf("virtio: q soft idx=%u max_size=0 (absent)\n",
+                (unsigned)u16QIdx);
         return GJ_ERR_NOSUPPORT;
     }
-    if (u16Size > u16Max) {
-        u16Size = u16Max;
-    }
-    /* power of two */
-    {
-        u16 u16P2 = 1;
 
-        while (u16P2 < u16Size) {
-            u16P2 = (u16)(u16P2 << 1);
+    u16Size = q_soft_size(u16Want, u16Max);
+    if (u16Size == 0 || u16Size > GJ_VIRTQ_MAX_SIZE) {
+        /* Soft: also clamp to our ring struct limit */
+        if (u16Max >= GJ_VIRTQ_MAX_SIZE) {
+            u16Size = q_soft_size(GJ_VIRTQ_MAX_SIZE, GJ_VIRTQ_MAX_SIZE);
+        } else {
+            u16Size = q_soft_size(u16Max, u16Max);
         }
-        if (u16P2 > u16Max) {
-            u16P2 = u16Max;
-        }
-        u16Size = u16P2;
     }
+    if (u16Size > GJ_VIRTQ_MAX_SIZE) {
+        u16Size = q_soft_size(GJ_VIRTQ_MAX_SIZE, GJ_VIRTQ_MAX_SIZE);
+    }
+    if (u16Size == 0) {
+        return GJ_ERR_NOSUPPORT;
+    }
+    if (u16Size != u16Want) {
+        kprintf("virtio: q soft idx=%u size clamp want=%u -> %u (max=%u)\n",
+                (unsigned)u16QIdx, (unsigned)u16Want, (unsigned)u16Size,
+                (unsigned)u16Max);
+    }
+
     pQ->u16Size = u16Size;
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SIZE, u16Size);
 
-    cbDesc = (u32)u16Size * (u32)sizeof(struct gj_virtq_desc);
-    cbAvail = (u32)(sizeof(u16) * 2u + sizeof(u16) * u16Size + sizeof(u16));
-    cbUsed = (u32)(sizeof(u16) * 2u + sizeof(struct gj_virtq_used_elem) * u16Size +
-                   sizeof(u16));
-    /* Pack into consecutive pages */
-    {
-        u32 cbTotal = cbDesc + cbAvail + 4096u + cbUsed; /* align used */
-        u32 cPages = (cbTotal + GJ_PAGE_SIZE - 1) / GJ_PAGE_SIZE;
-        u32 i;
-
-        /* Prefer page-by-page non-contiguous layout in three regions */
-        pa = pmm_alloc();
-        if (pa == 0) {
-            return GJ_ERR_NOMEM;
+    /*
+     * Three dedicated pages: desc | avail | used (soft non-contiguous OK).
+     * Free any partial alloc on soft failure.
+     */
+    paDesc = alloc_zero_page();
+    paAvail = alloc_zero_page();
+    paUsed = alloc_zero_page();
+    if (paDesc == 0 || paAvail == 0 || paUsed == 0) {
+        if (paDesc != 0) {
+            pmm_free(paDesc);
         }
-        memset((void *)hhdm_to_virt(pa), 0, GJ_PAGE_SIZE);
-        pQ->paDesc = pa;
-        pQ->pDesc = (struct gj_virtq_desc *)hhdm_to_virt(pa);
-
-        pa = pmm_alloc();
-        if (pa == 0) {
-            return GJ_ERR_NOMEM;
+        if (paAvail != 0) {
+            pmm_free(paAvail);
         }
-        memset((void *)hhdm_to_virt(pa), 0, GJ_PAGE_SIZE);
-        pQ->paAvail = pa;
-        pQ->pAvail = (struct gj_virtq_avail *)hhdm_to_virt(pa);
-
-        pa = pmm_alloc();
-        if (pa == 0) {
-            return GJ_ERR_NOMEM;
+        if (paUsed != 0) {
+            pmm_free(paUsed);
         }
-        memset((void *)hhdm_to_virt(pa), 0, GJ_PAGE_SIZE);
-        pQ->paUsed = pa;
-        pQ->pUsed = (struct gj_virtq_used *)hhdm_to_virt(pa);
-        (void)cPages;
-        (void)i;
-        (void)alloc_zero_pages;
+        kprintf("virtio: q soft idx=%u nomem\n", (unsigned)u16QIdx);
+        return GJ_ERR_NOMEM;
     }
+    pQ->paDesc = paDesc;
+    pQ->pDesc = (struct gj_virtq_desc *)hhdm_to_virt(paDesc);
+    pQ->paAvail = paAvail;
+    pQ->pAvail = (struct gj_virtq_avail *)hhdm_to_virt(paAvail);
+    pQ->paUsed = paUsed;
+    pQ->pUsed = (struct gj_virtq_used *)hhdm_to_virt(paUsed);
 
     /* Free list of descriptors */
     pQ->u16NumFree = u16Size;
     pQ->u16FreeHead = 0;
+    pQ->u16LastUsed = 0;
     {
         u16 i;
 
@@ -600,9 +887,18 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
     pQ->u16NotifyOff = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_NOFF);
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 1);
 
-    kprintf("virtio: q%u size=%u desc=0x%lx notify_off=%u\n",
-            (unsigned)u16QIdx, (unsigned)u16Size, (unsigned long)pQ->paDesc,
-            (unsigned)pQ->u16NotifyOff);
+    /* Soft enable verify */
+    u16Enabled = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE);
+    if (u16Enabled == 0) {
+        kprintf("virtio: q soft idx=%u enable rejected\n", (unsigned)u16QIdx);
+        q_ring_free(pQ);
+        memset(pQ, 0, sizeof(*pQ));
+        return GJ_ERR_IO;
+    }
+
+    kprintf("virtio: q%u size=%u max=%u desc=0x%lx notify_off=%u soft ok\n",
+            (unsigned)u16QIdx, (unsigned)u16Size, (unsigned)u16Max,
+            (unsigned long)pQ->paDesc, (unsigned)pQ->u16NotifyOff);
     return GJ_OK;
 }
 

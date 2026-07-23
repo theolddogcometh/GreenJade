@@ -1,7 +1,7 @@
 # vfsd (product)
 
 Userspace VFS door host for GreenJade — multi-client mini-FS ownership,
-named page-cache, and freestanding bring-up smoke.
+named page-cache, and freestanding bring-up smoke (hard + soft door surface).
 
 ## License
 
@@ -24,7 +24,7 @@ Product code: **MIT OR Apache-2.0**.
 
 | Path | Role |
 |------|------|
-| `vfsd_gj.c` | `_start` freestanding VFS door bring-up |
+| `vfsd_gj.c` | `_start` freestanding VFS door bring-up + soft deepen |
 | `README.md` | This file |
 
 Source of truth under this tree: `vfsd_gj.c` only.
@@ -37,8 +37,15 @@ Source of truth under this tree: `vfsd_gj.c` only.
 4. **File path** — CREATE / READ / WRITE / STAT / LIST on door names
 5. **OPENFD** — `/mnt/…` OPEN + READFD + CLOSE
 6. **STATS** (soft if door rejects) — while claimed: owned=1, mounted=1
-7. Optional **store** LBA0 super-block mirror (separate store-door claim)
-8. **RELEASE** door; re-check named cache magic → `live path PASS`
+7. **Soft door deepen** (never hard-fails live path):
+   - same-token **re-CLAIM** (idempotent reclaim)
+   - bare-name OPEN + READFD on `hello.txt`
+   - **WRITEFD** via `OPEN(CREAT|RDWR)` on `soft.tmp`
+   - **SEEKFD** END → WRITEFD patch → SEEK SET → READFD verify
+   - **UNLINK** `soft.tmp` + LIST absence check
+   - aggregate `soft door PASS` if any sub-step greened
+8. Optional **store** LBA0 super-block mirror + soft READ verify
+9. **RELEASE** door; soft free RELEASE no-op; re-check named cache → `live path PASS`
 
 Boot embed (parent tree): `kernel/proc/vfsd_embed.S` (`.incbin` of the ELF).
 
@@ -68,9 +75,18 @@ vfsd-gj: file path PASS (create/read/write/stat/list)
 vfsd-gj: multi-client door PASS (CLAIM owned)
 vfsd-gj: openfd PASS (/mnt + READFD)
 vfsd-gj: STATS PASS (owned+mounted)       (or STATS soft)
+vfsd-gj: reclaim soft PASS                (or reclaim soft-skip)
+vfsd-gj: bare OPEN soft PASS              (or bare OPEN soft-skip)
+vfsd-gj: WRITEFD soft PASS                (or WRITEFD soft-skip)
+vfsd-gj: SEEKFD soft PASS                 (or SEEKFD soft-skip)
+vfsd-gj: UNLINK soft PASS                 (or UNLINK soft-skip)
+vfsd-gj: soft door PASS                   (or soft door soft-skip)
 vfsd-gj: store LBA0 super mirror PASS     (optional; store door free)
 vfsd-gj: store LBA0 super mirror soft-skip (optional; claim busy / short write)
+vfsd-gj: store LBA0 read soft PASS        (optional; after successful write)
+vfsd-gj: store LBA0 read soft-skip        (optional; short read / magic miss)
 vfsd-gj: RELEASE PASS
+vfsd-gj: RELEASE free soft PASS           (or RELEASE free soft-skip)
 vfsd-gj: live path PASS (door+mini-FS+named cache)
 ```
 
@@ -86,15 +102,25 @@ vfsd-gj: live path PASS (door+mini-FS+named cache)
 | `openfd PASS` | `/mnt/…` OPEN + READFD + CLOSE |
 | `STATS PASS` | Door stats: owned=1, mounted=1 while claimed |
 | `STATS soft` | STATS op rejected; live path still green |
+| `reclaim soft PASS` | Same-token re-CLAIM idempotent soft |
+| `bare OPEN soft PASS` | Bare-name OPEN + READFD on hard-path file |
+| `WRITEFD soft PASS` | CREAT\|RDWR OPEN + WRITEFD + name READ verify |
+| `SEEKFD soft PASS` | SEEK END/SET + WRITEFD patch + READFD integrity |
+| `UNLINK soft PASS` | Unlink soft.tmp; LIST no longer contains name |
+| `soft door PASS` | Aggregate: ≥1 soft sub-step greened |
+| `soft door soft-skip` | No soft sub-step greened (live path still green) |
 | `store LBA0 super mirror PASS` | Optional store WRITE of super magic at LBA0 |
 | `store LBA0 super mirror soft-skip` | Store claim busy or short WRITE (non-fatal) |
+| `store LBA0 read soft PASS` | Soft READ-back of LBA0 magic + version nibble |
+| `store LBA0 read soft-skip` | Short READ or magic mismatch (non-fatal) |
 | `RELEASE PASS` | Door released cleanly |
+| `RELEASE free soft PASS` | Second RELEASE while free (kernel soft no-op) |
 | `live path PASS` | Aggregate: door + mini-FS + named cache sticky |
 
 Failure lines use the same `vfsd-gj:` prefix with **fail** (e.g.
 `CLAIM fail`, `file read fail`, `MOUNT super verify fail`,
 `named cache sticky fail`) and `exit(1)`. Hard fail after CLAIM always
-releases the door token.
+releases the door token. Soft steps never call `fail_exit`.
 
 ### Kernel markers (not from this directory)
 
@@ -111,26 +137,28 @@ Via `gj_vfs(op, a1, a2, a3)` / `GJ_SYS_VFS` — opcodes must match
 `kernel/include/gj/vfs_door.h` / `user/libgj/include/gj/syscalls.h`
 (**do not renumber**).
 
-| op | name | args |
-|----|------|------|
-| 1  | CLAIM | token |
-| 2  | RELEASE | token |
-| 3  | FORMAT | — |
-| 4  | MOUNT | optional `u32[4]` → magic, ver, files, data0 |
-| 5  | CREATE | name, data, bytes → inode index ≥0 |
-| 6  | READ | name, buf, max → bytes |
-| 7  | WRITE | name, data, bytes → bytes written |
-| 8  | UNLINK | name (available; not required on hard path) |
-| 9  | STAT | name, `u32[2]` → size, data_lba |
-| 10 | LIST | buf, 0, buf size → bytes (names + `\n`) |
-| 11 | STATS | `u32[4]` → calls, files, owned, mounted |
-| 12 | OPEN | path (`/mnt/foo` or `foo`), flags |
-| 13 | CLOSE | door fd |
-| 14 | READFD | door fd, buf, max |
-| 15 | WRITEFD | door fd, buf, len (available; not required on hard path) |
+| op | name | args | hard / soft |
+|----|------|------|-------------|
+| 1  | CLAIM | token | hard + soft reclaim |
+| 2  | RELEASE | token | hard + soft free no-op |
+| 3  | FORMAT | — | hard |
+| 4  | MOUNT | optional `u32[4]` → magic, ver, files, data0 | hard |
+| 5  | CREATE | name, data, bytes → inode index ≥0 | hard |
+| 6  | READ | name, buf, max → bytes | hard (+ soft WRITEFD verify) |
+| 7  | WRITE | name, data, bytes → bytes written | hard |
+| 8  | UNLINK | name | soft (`soft.tmp`) |
+| 9  | STAT | name, `u32[2]` → size, data_lba | hard |
+| 10 | LIST | buf, 0, buf size → bytes (names + `\n`) | hard (+ soft UNLINK) |
+| 11 | STATS | `u32[4]` → calls, files, owned, mounted | soft-tolerant |
+| 12 | OPEN | path (`/mnt/foo` or `foo`), flags | hard `/mnt` + soft bare |
+| 13 | CLOSE | door fd | hard + soft |
+| 14 | READFD | door fd, buf, max | hard + soft |
+| 15 | WRITEFD | door fd, buf, len | soft |
+| 16 | SEEKFD | door fd, off, whence (SET/CUR/END) | soft |
 
 Also uses named memobj (`gj_memobj_create_named` / `gj_memobj_map_named`) and
-optional store door (`GJ_STORE_OP_CLAIM` / `WRITE` / `RELEASE`) for LBA0 mirror.
+optional store door (`GJ_STORE_OP_CLAIM` / `WRITE` / `READ` / `RELEASE`) for
+LBA0 mirror + soft read-back.
 
 Constants in `vfsd_gj.c`:
 
@@ -141,6 +169,10 @@ Constants in `vfsd_gj.c`:
 | `VFSD_TOKEN` | `0x56465344` | CLAIM / RELEASE / store claim ("VFSD") |
 | `VFSD_CACHE_VA` | `0x34000000` | Preferred named-map VA |
 | `VFSD_CACHE_NAME` | `vfsd-cache` | Named memobj key |
+| `VFSD_SOFT_NAME` | `soft.tmp` | Soft WRITEFD/SEEKFD/UNLINK scratch |
+
+Named-cache soft slots (after hard `pCache[0..7]`): reclaim / WRITEFD cb /
+SEEKFD total / UNLINK flag / soft bit-mask.
 
 ## Build
 

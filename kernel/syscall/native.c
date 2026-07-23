@@ -15,6 +15,7 @@
  *
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  */
+#include <gj/cap.h>
 #include <gj/cold_ipc.h>
 #include <gj/door.h>
 #include <gj/error.h>
@@ -774,6 +775,64 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
             va = memobj_map_named(pProc, szName, pRegs->u64Arg1, u32Prot);
         }
         pRegs->i64Ret = (i64)(u64)va;
+        break;
+    }
+    case GJ_SYS_CAP_MINT:
+    case GJ_SYS_CAP_COPY:
+    case GJ_SYS_CAP_MOVE:
+    case GJ_SYS_CAP_REVOKE:
+    case GJ_SYS_CAP_IDENT: {
+        /*
+         * Cap ops on current process CNode (Scheme A).
+         * MINT:  arg0=srcSlot arg1=srcGen arg2=rights → slot|gen in ret
+         * COPY:  arg0=srcSlot arg1=srcGen arg2=rights → slot|gen
+         * MOVE:  arg0=srcSlot arg1=srcGen → slot|gen
+         * REVOKE:arg0=slot arg1=gen → 0 or -errno
+         * IDENT: arg0=slot arg1=gen → type in low16, rights in next16
+         */
+        struct gj_process *pProc = g_pLinuxProc;
+        struct gj_cnode *pCnode;
+        struct gj_cap_ref out;
+        struct gj_cap_resolved res;
+        gj_status_t st;
+
+        if (pProc == NULL || pProc->pCnode == NULL) {
+            pRegs->i64Ret = GJ_ERR_INVAL;
+            break;
+        }
+        pCnode = pProc->pCnode;
+        memset(&out, 0, sizeof(out));
+        if (pRegs->u64Nr == GJ_SYS_CAP_IDENT) {
+            st = gj_cap_resolve(pCnode, pRegs->u64Arg0, (u32)pRegs->u64Arg1,
+                                &res);
+            if (st != GJ_OK) {
+                pRegs->i64Ret = st;
+            } else {
+                pRegs->i64Ret = (i64)((u32)res.u16Type |
+                                      ((u32)res.u16Rights << 16));
+            }
+            break;
+        }
+        if (pRegs->u64Nr == GJ_SYS_CAP_REVOKE) {
+            st = gj_cap_delete(pCnode, pRegs->u64Arg0, (u32)pRegs->u64Arg1);
+            pRegs->i64Ret = st;
+            break;
+        }
+        if (pRegs->u64Nr == GJ_SYS_CAP_MOVE) {
+            st = gj_cap_move(pCnode, pRegs->u64Arg0, (u32)pRegs->u64Arg1, &out);
+        } else if (pRegs->u64Nr == GJ_SYS_CAP_COPY) {
+            st = gj_cap_copy(pCnode, pRegs->u64Arg0, (u32)pRegs->u64Arg1,
+                             (u16)pRegs->u64Arg2, &out);
+        } else {
+            st = gj_cap_mint(pCnode, pRegs->u64Arg0, (u32)pRegs->u64Arg1,
+                             (u16)pRegs->u64Arg2, pCnode, &out);
+        }
+        if (st != GJ_OK) {
+            pRegs->i64Ret = st;
+        } else {
+            pRegs->i64Ret = (i64)((out.u64Slot & 0xffffffffull) |
+                                  ((u64)out.u32SlotGen << 32));
+        }
         break;
     }
     default:

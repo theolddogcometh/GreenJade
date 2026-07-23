@@ -8,13 +8,23 @@
 
 #include <gj/types.h>
 
-#define GJ_IORING_OP_NOP    0u
-#define GJ_IORING_OP_READV  1u
-#define GJ_IORING_OP_WRITEV 2u
-#define GJ_IORING_OP_FSYNC  3u
-#define GJ_IORING_OP_CLOSE  19u
-#define GJ_IORING_OP_READ   22u
-#define GJ_IORING_OP_WRITE  23u
+#define GJ_IORING_OP_NOP              0u
+#define GJ_IORING_OP_READV            1u
+#define GJ_IORING_OP_WRITEV           2u
+#define GJ_IORING_OP_FSYNC            3u
+#define GJ_IORING_OP_SYNC_FILE_RANGE  8u
+#define GJ_IORING_OP_TIMEOUT         11u
+#define GJ_IORING_OP_CLOSE           19u
+#define GJ_IORING_OP_READ            22u
+#define GJ_IORING_OP_WRITE           23u
+#define GJ_IORING_OP_FADVISE         24u
+#define GJ_IORING_OP_MADVISE         25u
+
+/* Register opcodes (Linux uapi subset). */
+#define GJ_IORING_REGISTER_BUFFERS     0u
+#define GJ_IORING_REGISTER_FILES       2u
+#define GJ_IORING_UNREGISTER_FILES     3u
+#define GJ_IORING_REGISTER_EVENTFD     4u
 
 /* Public mmap offsets (Linux uapi). */
 #define GJ_IORING_OFF_SQ_RING  0ull

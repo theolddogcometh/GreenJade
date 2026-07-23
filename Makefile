@@ -7,7 +7,9 @@ KERNEL   := $(BUILD)/greenjade.elf
 CC       ?= gcc
 LD       ?= ld
 
+# Header deps: -MMD -MP write build/**/*.d so process.h layout changes rebuild.
 CFLAGS   := -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
+	-MMD -MP \
             -fno-pic -mno-red-zone -mcmodel=kernel \
             -mno-sse -mno-sse2 -mno-mmx -mgeneral-regs-only \
             -Wall -Wextra -Werror \
@@ -15604,6 +15606,9 @@ $(BUILD)/%.o: %.c
 $(BUILD)/%.o: %.S
 	@mkdir -p $(dir $@)
 	$(CC) $(ASFLAGS) -c -o $@ $<
+
+# Auto-generated header dependencies (from -MMD -MP)
+-include $(OBJS:.o=.d)
 
 run: $(KERNEL)
 	chmod +x scripts/run-qemu.sh

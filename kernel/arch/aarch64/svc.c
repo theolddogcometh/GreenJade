@@ -50,27 +50,54 @@ extern void aarch64_uart_put_hex(unsigned long v);
  */
 #define A64_NR_io_setup           0u
 #define A64_NR_io_destroy         1u
+#define A64_NR_io_submit          2u
+#define A64_NR_io_cancel          3u
+#define A64_NR_io_getevents       4u
 #define A64_NR_ioctl             29u
 #define A64_NR_openat            56u
 #define A64_NR_close             57u
+#define A64_NR_lseek             62u
 #define A64_NR_read              63u
 #define A64_NR_write             64u
+#define A64_NR_readv             65u
 #define A64_NR_writev            66u
+#define A64_NR_pread64           67u
+#define A64_NR_pwrite64          68u
+#define A64_NR_ppoll             73u
 #define A64_NR_exit              93u
 #define A64_NR_exit_group        94u
 #define A64_NR_nanosleep        101u
+#define A64_NR_getitimer        102u
+#define A64_NR_setitimer        103u
 #define A64_NR_clock_gettime    113u
+#define A64_NR_clock_getres     114u
+#define A64_NR_clock_nanosleep  115u
 #define A64_NR_sched_yield      124u
 #define A64_NR_rt_sigaction     134u
+#define A64_NR_rt_sigprocmask   135u
 #define A64_NR_rt_sigreturn     139u
+#define A64_NR_socket           198u
+#define A64_NR_bind             200u
+#define A64_NR_listen           201u
+#define A64_NR_accept           202u
+#define A64_NR_connect          203u
 #define A64_NR_uname            160u
 #define A64_NR_getpid           172u
 #define A64_NR_gettid           178u
+#define A64_NR_futex            98u
+#define A64_NR_set_tid_address  96u
 #define A64_NR_brk              214u
 #define A64_NR_munmap           215u
+#define A64_NR_mremap           216u
 #define A64_NR_clone            220u
 #define A64_NR_mmap             222u
+#define A64_NR_fadvise64        223u
 #define A64_NR_mprotect         226u
+#define A64_NR_msync            227u
+#define A64_NR_madvise           233u
+#define A64_NR_io_uring_setup   425u
+#define A64_NR_io_uring_enter   426u
+#define A64_NR_io_uring_register 427u
 
 /* Soft stub table size: sparse NR space; use sentinel-terminated list. */
 struct a64_nr_stub {
@@ -83,29 +110,56 @@ struct a64_nr_stub {
  * implementations land. Order is by NR for greppability, not hot-path.
  */
 static const struct a64_nr_stub g_aNrStub[] = {
-    { A64_NR_io_setup,      "io_setup" },
-    { A64_NR_io_destroy,    "io_destroy" },
-    { A64_NR_ioctl,         "ioctl" },
-    { A64_NR_openat,        "openat" },
-    { A64_NR_close,         "close" },
-    { A64_NR_read,          "read" },
-    { A64_NR_write,         "write" },
-    { A64_NR_writev,        "writev" },
-    { A64_NR_exit,          "exit" },
-    { A64_NR_exit_group,    "exit_group" },
-    { A64_NR_nanosleep,     "nanosleep" },
-    { A64_NR_clock_gettime, "clock_gettime" },
-    { A64_NR_sched_yield,   "sched_yield" },
-    { A64_NR_rt_sigaction,  "rt_sigaction" },
-    { A64_NR_rt_sigreturn,  "rt_sigreturn" },
-    { A64_NR_uname,         "uname" },
-    { A64_NR_getpid,        "getpid" },
-    { A64_NR_gettid,        "gettid" },
-    { A64_NR_brk,           "brk" },
-    { A64_NR_munmap,        "munmap" },
-    { A64_NR_clone,         "clone" },
-    { A64_NR_mmap,          "mmap" },
-    { A64_NR_mprotect,      "mprotect" },
+    { A64_NR_io_setup,          "io_setup" },
+    { A64_NR_io_destroy,        "io_destroy" },
+    { A64_NR_io_submit,         "io_submit" },
+    { A64_NR_io_cancel,         "io_cancel" },
+    { A64_NR_io_getevents,      "io_getevents" },
+    { A64_NR_ioctl,             "ioctl" },
+    { A64_NR_openat,            "openat" },
+    { A64_NR_close,             "close" },
+    { A64_NR_lseek,             "lseek" },
+    { A64_NR_read,              "read" },
+    { A64_NR_write,             "write" },
+    { A64_NR_readv,             "readv" },
+    { A64_NR_writev,            "writev" },
+    { A64_NR_pread64,           "pread64" },
+    { A64_NR_pwrite64,          "pwrite64" },
+    { A64_NR_ppoll,             "ppoll" },
+    { A64_NR_exit,              "exit" },
+    { A64_NR_exit_group,        "exit_group" },
+    { A64_NR_set_tid_address,   "set_tid_address" },
+    { A64_NR_futex,             "futex" },
+    { A64_NR_nanosleep,         "nanosleep" },
+    { A64_NR_getitimer,         "getitimer" },
+    { A64_NR_setitimer,         "setitimer" },
+    { A64_NR_clock_gettime,     "clock_gettime" },
+    { A64_NR_clock_getres,      "clock_getres" },
+    { A64_NR_clock_nanosleep,   "clock_nanosleep" },
+    { A64_NR_sched_yield,       "sched_yield" },
+    { A64_NR_rt_sigaction,      "rt_sigaction" },
+    { A64_NR_rt_sigprocmask,    "rt_sigprocmask" },
+    { A64_NR_rt_sigreturn,      "rt_sigreturn" },
+    { A64_NR_uname,             "uname" },
+    { A64_NR_getpid,            "getpid" },
+    { A64_NR_gettid,            "gettid" },
+    { A64_NR_socket,            "socket" },
+    { A64_NR_bind,              "bind" },
+    { A64_NR_listen,            "listen" },
+    { A64_NR_accept,            "accept" },
+    { A64_NR_connect,           "connect" },
+    { A64_NR_brk,               "brk" },
+    { A64_NR_munmap,            "munmap" },
+    { A64_NR_mremap,            "mremap" },
+    { A64_NR_clone,             "clone" },
+    { A64_NR_mmap,              "mmap" },
+    { A64_NR_fadvise64,         "fadvise64" },
+    { A64_NR_mprotect,          "mprotect" },
+    { A64_NR_msync,             "msync" },
+    { A64_NR_madvise,           "madvise" },
+    { A64_NR_io_uring_setup,    "io_uring_setup" },
+    { A64_NR_io_uring_enter,    "io_uring_enter" },
+    { A64_NR_io_uring_register, "io_uring_register" },
 };
 
 static unsigned long g_cSvc;
@@ -195,6 +249,15 @@ aarch64_svc_selftest(void)
     if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
         aarch64_uart_puts("aarch64: svc soft FAIL (stub)\n");
     }
+    /* Deepen: futex + io_uring NRs must hit table (still -ENOSYS). */
+    r0 = aarch64_linux_nr_stub(A64_NR_futex);
+    r1 = aarch64_linux_nr_stub(A64_NR_io_uring_setup);
+    if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
+        aarch64_uart_puts("aarch64: svc soft FAIL (deep stub)\n");
+    }
+    /* Unknown high NR → miss path. */
+    r0 = aarch64_linux_nr_stub(9000ul);
+    (void)r0;
 
     aarch64_uart_puts("aarch64: svc count=");
     aarch64_uart_put_hex(g_cSvc);
@@ -202,8 +265,11 @@ aarch64_svc_selftest(void)
     aarch64_uart_put_hex(g_cStubHit);
     aarch64_uart_puts(" stub_miss=");
     aarch64_uart_put_hex(g_cStubMiss);
+    aarch64_uart_puts(" nrs=");
+    aarch64_uart_put_hex((unsigned long)(sizeof(g_aNrStub) / sizeof(g_aNrStub[0])));
     aarch64_uart_puts("\n");
     aarch64_uart_puts("aarch64: svc PASS\n");
+    aarch64_uart_puts("aarch64: svc NR dispatch deepen PASS\n");
 }
 
 unsigned long

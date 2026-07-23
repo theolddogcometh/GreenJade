@@ -254,11 +254,49 @@ void gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
                         u64 u64Slot);
 
 /**
- * Soft quota hooks — hierarchical accounts land later (M2.2).
- * pAccount NULL or unwired ⇒ GJ_OK (no charge). Grep: cap:quota soft
+ * Soft process slot quota ledger (flat, not hierarchical yet).
+ * Attach via gj_cap_quota_attach. Grep: cap:quota
+ */
+struct gj_cap_quota {
+    u32 u32Limit; /* max occupied slots charged */
+    u32 u32Used;  /* currently charged */
+    u32 u32Exhaust; /* times charge returned QUOTA */
+    u32 u32Pad;
+};
+
+void gj_cap_quota_init(struct gj_cap_quota *pQ, u32 u32Limit);
+void gj_cap_quota_attach(struct gj_cnode *pCnode, struct gj_cap_quota *pQ);
+u32  gj_cap_quota_used(const struct gj_cap_quota *pQ);
+u32  gj_cap_quota_limit(const struct gj_cap_quota *pQ);
+
+/**
+ * Soft quota hooks. pAccount NULL ⇒ GJ_OK (no charge).
+ * Real account: charge/refund one slot; GJ_ERR_QUOTA on exhaust.
  */
 gj_status_t gj_cap_quota_slot_charge(void *pAccount);
 gj_status_t gj_cap_quota_slot_refund(void *pAccount);
+
+/**
+ * Mint: derive a new slot in pDstCnode from src handle with rights ⊆ src.
+ * Requires MINT on source. Wires soft CDT edge from edge pool.
+ */
+gj_status_t gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot,
+                        u32 u32SrcGen, u16 u16Rights,
+                        struct gj_cnode *pDstCnode, struct gj_cap_ref *pOut);
+
+/** Copy: same object, new slot; requires GRANT on source. */
+gj_status_t gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
+                        u16 u16Rights, struct gj_cap_ref *pOut);
+
+/**
+ * Move: install into new slot then invalidate source (same object).
+ * Requires GRANT on source. CDT edge retargeted to new slot.
+ */
+gj_status_t gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
+                        struct gj_cap_ref *pOut);
+
+/** Delete/invalidate one slot (structured); refunds quota + CDT unlink. */
+gj_status_t gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen);
 
 /**
  * Deferred invalidate helper: scan pCnode for slots pointing at pObj and

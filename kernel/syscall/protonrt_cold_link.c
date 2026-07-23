@@ -610,6 +610,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_socket:
+        /* Soft multi-server confine: INET promise gates ambient sockets. */
+        if (g_pLinuxProc != NULL &&
+            !gj_process_promise_ok(g_pLinuxProc, GJ_PROMISE_INET)) {
+            return -LINUX_EACCES;
+        }
         return net_lo_socket((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
                              (int)pRegs->u64Arg2);
 
@@ -2118,6 +2123,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          */
         u64 u64Path = (pRegs->u64Nr == LINUX_NR_execveat) ? pRegs->u64Arg1
                                                            : pRegs->u64Arg0;
+
+        if (g_pLinuxProc != NULL &&
+            !gj_process_promise_ok(g_pLinuxProc, GJ_PROMISE_EXEC)) {
+            return -LINUX_EACCES;
+        }
         i64 i64Fd;
         i64 n;
         static u8 aImg[16384];

@@ -47,6 +47,13 @@ struct gj_process {
     /* Linux personality / JIT (docs/LINUX_ABI_HYBRID.md · PROTON) */
     u32                  u32Personality; /* 0 native, 1 linux */
     u32                  u32Jit;         /* CapJit: allow W|X mprotect */
+    /*
+     * Soft multi-server confine (OpenBSD promises-shaped bitmask).
+     * u32Confined=0 ⇒ ambient authority (bring-up). When set, checks
+     * gj_process_promise_ok() before ambient-style ops. Grep: confine soft
+     */
+    u32                  u32Confined;
+    u32                  u32Promises;
     u64                  u64Cr3;         /* 0 = use BSP/boot CR3 (G-AS-1) */
     u64                  u64AnonNext;    /* per-AS mmap cursor */
     /* Last execve image facts (auxv / dynlinker handoff — G-ELF) */
@@ -136,6 +143,21 @@ gj_status_t gj_process_handle_fault(struct gj_process *pProc, u64 u64FaultVa,
 
 /** CapJit: allow simultaneous WRITE|EXEC on user maps for this process. */
 void gj_process_set_jit(struct gj_process *pProc, int fEnable);
+
+/* Soft confine promise bits (OpenBSD-shaped names; clean-room values). */
+#define GJ_PROMISE_STDIO   (1u << 0)
+#define GJ_PROMISE_RPATH   (1u << 1)
+#define GJ_PROMISE_WPATH   (1u << 2)
+#define GJ_PROMISE_CPATH   (1u << 3)
+#define GJ_PROMISE_INET    (1u << 4)
+#define GJ_PROMISE_PROC    (1u << 5)
+#define GJ_PROMISE_EXEC    (1u << 6)
+#define GJ_PROMISE_ALL     0xffffffffu
+
+/** Drop ambient: set confined + promises mask (monotonic drop later). */
+void gj_process_confine(struct gj_process *pProc, u32 u32Promises);
+/** 1 if not confined or promise bit present. */
+int  gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise);
 int  gj_process_has_jit(const struct gj_process *pProc);
 
 /* ---- Linux wait4 reaper (interim; product: PROCESS caps G-PROC-5) -------- */

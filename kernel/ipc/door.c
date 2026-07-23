@@ -21,6 +21,7 @@
 #include <gj/process.h>
 #include <gj/string.h>
 #include <gj/thread.h>
+#include <gj/timer.h>
 
 /* Block tags on the door wait object (must match wake sites). */
 #define DOOR_TAG_SERVER 1u /* server waiting for a request */
@@ -203,8 +204,30 @@ door_on_thread_exit(struct gj_thread *pThr)
     }
 }
 
+void
+door_set_badge(struct gj_door *pDoor, u32 u32Badge)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    pDoor->u32Badge = u32Badge;
+}
+
+u32
+door_get_badge(const struct gj_door *pDoor)
+{
+    return pDoor != NULL ? pDoor->u32Badge : 0u;
+}
+
 i64
 door_call(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
+{
+    return door_call_timeout(pDoor, pRegs, 0);
+}
+
+i64
+door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
+                  u64 u64DeadlineMonoNsec)
 {
     struct gj_thread *pCur;
     struct gj_thread *pExpected;
@@ -226,6 +249,12 @@ door_call(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
         if (!door_live(pDoor)) {
             return -LINUX_EIO;
         }
+        /* No mono clock yet, or deadline already past → timeout (no hang). */
+        if (u64DeadlineMonoNsec != 0 &&
+            (!timer_ready() ||
+             timer_mono_nsec() >= u64DeadlineMonoNsec)) {
+            return -LINUX_ETIMEDOUT;
+        }
         pExpected = NULL;
         if (__atomic_compare_exchange_n(&pDoor->pClient, &pExpected, pCur, 0,
                                         __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
@@ -242,10 +271,6 @@ door_call(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
             }
         }
         thread_block(pDoor, DOOR_TAG_SLOT);
-        /*
-         * Publish BLOCKED before re-check so a concurrent release cannot
-         * lose the wakeup (wake after block registration is observed).
-         */
         if (pDoor->pClient == NULL || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_SLOT, 1);
         }
@@ -275,8 +300,16 @@ door_call(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
             door_release_client_slot(pDoor, pCur);
             return -LINUX_EIO;
         }
+        if (u64DeadlineMonoNsec != 0 &&
+            (!timer_ready() ||
+             timer_mono_nsec() >= u64DeadlineMonoNsec)) {
+            pDoor->u32HasReq = 0;
+            pDoor->u32HasReply = 0;
+            door_release_client_slot(pDoor, pCur);
+            pDoor->u64Aborts++;
+            return -LINUX_ETIMEDOUT;
+        }
         thread_block(pDoor, DOOR_TAG_CLIENT);
-        /* Close lost-wakeup window with reply/abort vs block. */
         if (pDoor->u32HasReply || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
         }

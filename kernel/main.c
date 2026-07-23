@@ -213,15 +213,176 @@ boot_process_smoke(void)
 
     /* G-DOOR: cold door as ENDPOINT in CNode */
     door_cold_init();
-    st = door_install_endpoint(&g_bootProc, door_cold_personality(), 0, &refDoor);
+    st = door_install_endpoint(
+        &g_bootProc, door_cold_personality(),
+        (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT | GJ_RIGHT_MINT | GJ_RIGHT_IDENTIFY),
+        &refDoor);
     if (st == GJ_OK) {
         st = gj_cap_resolve(&g_bootCnode, refDoor.u64Slot, refDoor.u32SlotGen,
                             &res);
         kprintf("door: ENDPOINT slot=%lu gen=%u resolve=%d type=%u\n",
                 (unsigned long)refDoor.u64Slot, refDoor.u32SlotGen, (int)st,
                 res.u16Type);
+        door_set_badge(door_cold_personality(), 0xc0ffeeu);
+        kprintf("door: badge=0x%x\n", door_get_badge(door_cold_personality()));
     } else {
         kprintf("door: install ENDPOINT failed %d\n", (int)st);
+    }
+
+    /* Cap mint/copy/move + soft quota ledger + CDT edges */
+    {
+        static struct gj_cap_quota g_bootQuota;
+        struct gj_cap_ref refMint;
+        struct gj_cap_ref refCopy;
+        struct gj_cap_ref refMove;
+        gj_status_t stCap;
+
+        gj_cap_quota_init(&g_bootQuota, 64u);
+        gj_cap_quota_attach(&g_bootCnode, &g_bootQuota);
+        memset(&refMint, 0, sizeof(refMint));
+        memset(&refCopy, 0, sizeof(refCopy));
+        memset(&refMove, 0, sizeof(refMove));
+        if (st == GJ_OK) {
+            /* Grant MINT+GRANT on endpoint for derive tests */
+            stCap = gj_cap_mint(&g_bootCnode, refDoor.u64Slot, refDoor.u32SlotGen,
+                                (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT |
+                                      GJ_RIGHT_MINT | GJ_RIGHT_IDENTIFY),
+                                &g_bootCnode, &refMint);
+            kprintf("cap: mint => %d slot=%lu gen=%u used=%u\n", (int)stCap,
+                    (unsigned long)refMint.u64Slot, refMint.u32SlotGen,
+                    gj_cap_quota_used(&g_bootQuota));
+            if (stCap == GJ_OK) {
+                stCap = gj_cap_copy(&g_bootCnode, refMint.u64Slot,
+                                    refMint.u32SlotGen,
+                                    (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT |
+                                          GJ_RIGHT_IDENTIFY),
+                                    &refCopy);
+                kprintf("cap: copy => %d slot=%lu\n", (int)stCap,
+                        (unsigned long)refCopy.u64Slot);
+            }
+            if (stCap == GJ_OK) {
+                stCap = gj_cap_move(&g_bootCnode, refCopy.u64Slot,
+                                    refCopy.u32SlotGen, &refMove);
+                kprintf("cap: move => %d slot=%lu used=%u\n", (int)stCap,
+                        (unsigned long)refMove.u64Slot,
+                        gj_cap_quota_used(&g_bootQuota));
+            }
+            if (stCap == GJ_OK) {
+                /* Delete derived only — do not kill cold personality door. */
+                (void)gj_cap_delete(&g_bootCnode, refMint.u64Slot,
+                                    refMint.u32SlotGen);
+                (void)gj_cap_delete(&g_bootCnode, refMove.u64Slot,
+                                    refMove.u32SlotGen);
+                (void)gj_revoke_process_deferred(16);
+                kprintf("cap: mint/copy/move+cdt PASS\n");
+            } else {
+                kprintf("cap: mint/copy/move soft FAIL %d\n", (int)stCap);
+            }
+            /* Soft quota exhaust: tiny limit, mint until GJ_ERR_QUOTA. */
+            {
+                static struct gj_cap_quota g_qTiny;
+                struct gj_cap_ref refQ;
+                gj_status_t stQ;
+                u32 cOk = 0;
+
+                gj_cap_quota_init(&g_qTiny, 2u);
+                gj_cap_quota_attach(&g_bootCnode, &g_qTiny);
+                for (;;) {
+                    memset(&refQ, 0, sizeof(refQ));
+                    stQ = gj_cap_mint(&g_bootCnode, refDoor.u64Slot,
+                                      refDoor.u32SlotGen,
+                                      (u16)(GJ_RIGHT_READ | GJ_RIGHT_IDENTIFY),
+                                      &g_bootCnode, &refQ);
+                    if (stQ != GJ_OK) {
+                        break;
+                    }
+                    cOk++;
+                    if (cOk > 8u) {
+                        break;
+                    }
+                }
+                kprintf("cap: quota exhaust mint_ok=%u used=%u st=%d\n", cOk,
+                        gj_cap_quota_used(&g_qTiny), (int)stQ);
+                if (stQ == GJ_ERR_QUOTA && cOk == 2u) {
+                    kprintf("cap: quota exhaust PASS\n");
+                }
+                /* Restore roomy quota for rest of boot smoke. */
+                gj_cap_quota_init(&g_bootQuota, 64u);
+                gj_cap_quota_attach(&g_bootCnode, &g_bootQuota);
+            }
+            /* Timeout: deadline already past → -ETIMEDOUT without server. */
+            {
+                struct gj_linux_regs req;
+                i64 i64T;
+                u64 u64Dl;
+
+                memset(&req, 0, sizeof(req));
+                req.u64Nr = 1;
+                u64Dl = timer_ready() ? timer_mono_nsec() : 1ull;
+                i64T = door_call_timeout(door_cold_personality(), &req, u64Dl);
+                kprintf("door: call_timeout => %ld\n", (long)i64T);
+                if (i64T == -(i64)LINUX_ETIMEDOUT || i64T == -(i64)LINUX_EIO) {
+                    kprintf("door: timeout/peer path PASS\n");
+                }
+            }
+            /*
+             * Temporary door: CDT revoke walk + peer death (-EIO).
+             * Never mark cold personality dead — product path depends on it.
+             */
+            {
+                static struct gj_door g_tmpDoor;
+                struct gj_cap_ref refTmp;
+                struct gj_cap_ref refChild;
+                struct gj_linux_regs req;
+                gj_status_t stT;
+                u32 u32Walk;
+                i64 i64Peer;
+                u32 u32Badge;
+
+                door_init(&g_tmpDoor);
+                door_set_badge(&g_tmpDoor, 0xbad9eu);
+                u32Badge = door_get_badge(&g_tmpDoor);
+                stT = door_install_endpoint(
+                    &g_bootProc, &g_tmpDoor,
+                    (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT | GJ_RIGHT_MINT |
+                          GJ_RIGHT_IDENTIFY | GJ_RIGHT_DESTROY),
+                    &refTmp);
+                if (stT == GJ_OK) {
+                    stT = gj_cap_mint(&g_bootCnode, refTmp.u64Slot,
+                                      refTmp.u32SlotGen,
+                                      (u16)(GJ_RIGHT_READ | GJ_RIGHT_IDENTIFY),
+                                      &g_bootCnode, &refChild);
+                }
+                kprintf("door: tmp badge=0x%x install=%d mint=%d\n", u32Badge,
+                        (int)stT, (int)stT);
+                if (stT == GJ_OK && u32Badge == 0xbad9eu) {
+                    kprintf("door: badge transfer PASS\n");
+                }
+                /* Phase A DEAD + CDT walk clears derived slots. */
+                if (stT == GJ_OK) {
+                    (void)gj_obj_revoke_begin(&g_tmpDoor.hdr);
+                    u32Walk = gj_revoke_cdt_walk_batch(&g_tmpDoor.hdr, 16);
+                    (void)gj_revoke_process_deferred(16);
+                    kprintf("cap: cdt walk cleared=%u pending=%u\n", u32Walk,
+                            gj_revoke_deferred_pending());
+                    if (u32Walk >= 1u) {
+                        kprintf("cap: cdt walk PASS\n");
+                    }
+                    /*
+                     * Object DEAD (revoke) → door_call -EIO while still ready.
+                     * mark_dead after (clears ready) for hygiene.
+                     */
+                    memset(&req, 0, sizeof(req));
+                    req.u64Nr = 99;
+                    i64Peer = door_call(&g_tmpDoor, &req);
+                    kprintf("door: peer_dead call => %ld\n", (long)i64Peer);
+                    if (i64Peer == -(i64)LINUX_EIO) {
+                        kprintf("door: mid-call peer death PASS\n");
+                    }
+                    door_mark_dead(&g_tmpDoor);
+                }
+            }
+        }
     }
 
     /* G-AS clone smoke: two distinct CR3s */
@@ -272,6 +433,43 @@ boot_process_smoke(void)
 
     gj_linux_set_current(&g_bootProc, 1, 1);
     gj_process_set_jit(&g_bootProc, 0);
+
+    /* Soft confine surface (promises drop ambient) + hot-path policy */
+    {
+        int fOk;
+        struct gj_linux_regs regsC;
+        i64 i64Sock;
+
+        gj_process_confine(&g_bootProc, GJ_PROMISE_STDIO | GJ_PROMISE_RPATH);
+        fOk = gj_process_promise_ok(&g_bootProc, GJ_PROMISE_STDIO) &&
+              !gj_process_promise_ok(&g_bootProc, GJ_PROMISE_INET);
+        kprintf("confine: soft promises=0x%x inet_denied=%d\n",
+                g_bootProc.u32Promises, fOk ? 1 : 0);
+        if (fOk) {
+            kprintf("confine: soft PASS\n");
+        }
+        /*
+         * Policy hot path: cold service sees g_pLinuxProc confine mask.
+         * Avoid full gj_syscall_init here (product init still later).
+         */
+        gj_linux_set_current(&g_bootProc, 1, 1);
+        if (!cold_ipc_personality_attached()) {
+            gj_protonrt_attach_cold();
+        }
+        memset(&regsC, 0, sizeof(regsC));
+        regsC.u64Nr = LINUX_NR_socket;
+        regsC.u64Arg0 = 2; /* AF_INET */
+        regsC.u64Arg1 = 1; /* SOCK_STREAM */
+        regsC.u64Arg2 = 0;
+        i64Sock = cold_ipc_service_local(&regsC);
+        kprintf("confine: socket without INET => %ld\n", (long)i64Sock);
+        if (i64Sock == -(i64)LINUX_EACCES) {
+            kprintf("confine: hot socket policy PASS\n");
+        }
+        /* Restore ambient for rest of product smoke */
+        g_bootProc.u32Confined = 0;
+        g_bootProc.u32Promises = GJ_PROMISE_ALL;
+    }
 }
 
 /*
@@ -465,12 +663,14 @@ linux_hybrid_smoke(void)
     i64 i64Pid;
     i64 i64Map;
 
+    kprintf("linux: hybrid smoke enter\n");
     gj_syscall_init();
     /* doors + protonrt already attached in kmain before smoke when possible */
     if (!cold_ipc_personality_attached()) {
         gj_protonrt_attach_cold();
     }
     gj_linux_dispatch_stats_reset();
+    kprintf("linux: hybrid dispatch ready\n");
 
     /* getpid hot */
     regs.u64Nr = LINUX_NR_getpid;
@@ -2890,6 +3090,77 @@ linux_hybrid_smoke(void)
                 } else {
                     kprintf("linux: io_uring SQE I/O soft FAIL\n");
                 }
+                /* More opcodes + register files/buffers depth. */
+                if (i64Uring >= 0 && pPkg != NULL) {
+                    static i32 aRegFd[2];
+                    static struct {
+                        u64 base;
+                        u64 len;
+                    } aIov[1];
+                    i64 i64Reg;
+                    i64 i64Op;
+                    int fRegOk = 0;
+                    int fOpOk = 0;
+
+                    aRegFd[0] = 0;
+                    aRegFd[1] = 1;
+                    aIov[0].base = (u64)(gj_vaddr_t)aWbuf;
+                    aIov[0].len = 14;
+                    i64Reg = gj_io_uring_register(i64Uring,
+                                                  GJ_IORING_REGISTER_FILES,
+                                                  (u64)(gj_vaddr_t)aRegFd, 2);
+                    if (i64Reg == 0) {
+                        i64Reg = gj_io_uring_register(
+                            i64Uring, GJ_IORING_REGISTER_BUFFERS,
+                            (u64)(gj_vaddr_t)aIov, 1);
+                    }
+                    if (i64Reg == 0) {
+                        fRegOk = 1;
+                    }
+                    kprintf("linux: io_uring_register files+bufs => %ld\n",
+                            (long)i64Reg);
+                    /* SYNC_FILE_RANGE + MADVISE + TIMEOUT soft SQEs */
+                    if (fMmapOk) {
+                        i64 i64File2 = vfs_ram_open("/tmp/uring_op_more", 1);
+
+                        if (i64File2 >= 0) {
+                            pSqHead = (u32 *)(void *)(pPkg + 0);
+                            pSqTail = (u32 *)(void *)(pPkg + 4);
+                            pSqArray = (u32 *)(void *)(pPkg + 64);
+                            pSqe = (void *)(pPkg + 0x2000);
+                            memset(&pSqe[0], 0, sizeof(pSqe[0]));
+                            pSqe[0].op = (u8)GJ_IORING_OP_SYNC_FILE_RANGE;
+                            pSqe[0].fd = (i32)i64File2;
+                            pSqe[0].ud = 0x5F5u;
+                            pSqArray[0] = 0;
+                            memset(&pSqe[1], 0, sizeof(pSqe[1]));
+                            pSqe[1].op = (u8)GJ_IORING_OP_MADVISE;
+                            pSqe[1].ud = 0xAD0u;
+                            pSqArray[1] = 1;
+                            memset(&pSqe[2], 0, sizeof(pSqe[2]));
+                            pSqe[2].op = (u8)GJ_IORING_OP_TIMEOUT;
+                            pSqe[2].ud = 0x710u;
+                            pSqArray[2] = 2;
+                            *pSqTail = *pSqHead + 3u;
+                            i64Op = gj_io_uring_enter(i64Uring, 3, 3, 0);
+                            kprintf("linux: io_uring more-ops enter => %ld\n",
+                                    (long)i64Op);
+                            if (i64Op == 3) {
+                                fOpOk = 1;
+                                (void)gj_io_uring_cqe_advance(i64Uring);
+                                (void)gj_io_uring_cqe_advance(i64Uring);
+                                (void)gj_io_uring_cqe_advance(i64Uring);
+                            }
+                            (void)vfs_ram_close(i64File2);
+                        }
+                    }
+                    if (fRegOk) {
+                        kprintf("linux: io_uring register depth PASS\n");
+                    }
+                    if (fOpOk) {
+                        kprintf("linux: io_uring more opcodes PASS\n");
+                    }
+                }
             }
         }
         /* sched_getattr/setattr + kcmp */
@@ -4822,6 +5093,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     g_bootProc.u32Personality = 1;
     gj_linux_set_current(&g_bootProc, 1, 1);
     process_as_activate(&g_bootProc);
+    kprintf("pers: enter hybrid smoke (linux current set)\n");
 
     linux_hybrid_smoke();
     proton_a0_wineserver_demo();

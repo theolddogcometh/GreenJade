@@ -34,6 +34,8 @@ gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
     gj_space_fault_init(&pProc->fault);
     pProc->u32Personality = 1; /* LINUX default for game path */
     pProc->u32Jit = 0;
+    pProc->u32Confined = 0; /* ambient until gj_process_confine */
+    pProc->u32Promises = GJ_PROMISE_ALL;
     pProc->u64Cr3 = 0; /* inherit until per-process AS (G-AS-1) */
     pProc->u64AnonNext = 0x0000000040000000ull;
     pProc->u64ExecEntry = 0;
@@ -62,6 +64,29 @@ gj_process_set_jit(struct gj_process *pProc, int fEnable)
     }
     /* G-JIT-4: u32Jit is cache of GJ_RIGHT_JIT authority */
     pProc->u32Jit = fEnable ? 1u : 0u;
+}
+
+void
+gj_process_confine(struct gj_process *pProc, u32 u32Promises)
+{
+    if (pProc == NULL) {
+        return;
+    }
+    /* Soft: set confined; promises are the allowed ambient set. */
+    pProc->u32Confined = 1u;
+    pProc->u32Promises = u32Promises;
+}
+
+int
+gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise)
+{
+    if (pProc == NULL) {
+        return 0;
+    }
+    if (pProc->u32Confined == 0u) {
+        return 1; /* ambient */
+    }
+    return (pProc->u32Promises & u32Promise) != 0u ? 1 : 0;
 }
 
 int

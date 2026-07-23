@@ -48,9 +48,20 @@ void door_init(struct gj_door *pDoor);
  * Returns reply status (Linux-style negative errno on error).
  *   -LINUX_ENOSYS  null / not ready / no thread context
  *   -LINUX_EIO     object DEAD / peer dead (G-PERS-3 / G-DOOR-4)
- *   -LINUX_ETIMEDOUT only if aborted without sticky peer-dead (rare)
+ *   -LINUX_ETIMEDOUT mono deadline expired (see door_call_timeout)
  */
 i64 door_call(struct gj_door *pDoor, struct gj_linux_regs *pRegs);
+
+/**
+ * door_call with absolute mono deadline (ns). u64DeadlineMonoNsec==0 → no
+ * timeout (same as door_call). On expiry: drop client slot, -ETIMEDOUT.
+ */
+i64 door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
+                      u64 u64DeadlineMonoNsec);
+
+/** Set server-authoritative badge observed by clients (G-DOOR badge). */
+void door_set_badge(struct gj_door *pDoor, u32 u32Badge);
+u32  door_get_badge(const struct gj_door *pDoor);
 
 /**
  * Server: block until request, copy into *pRegs.

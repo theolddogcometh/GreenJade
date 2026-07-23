@@ -42,13 +42,17 @@
 
 #define IORING_FEAT_SINGLE_MMAP  (1u << 0)
 
-#define IORING_OP_NOP       0u
-#define IORING_OP_READV     1u
-#define IORING_OP_WRITEV    2u
-#define IORING_OP_FSYNC     3u
-#define IORING_OP_CLOSE     19u
-#define IORING_OP_READ      22u
-#define IORING_OP_WRITE     23u
+#define IORING_OP_NOP              0u
+#define IORING_OP_READV            1u
+#define IORING_OP_WRITEV           2u
+#define IORING_OP_FSYNC            3u
+#define IORING_OP_SYNC_FILE_RANGE  8u
+#define IORING_OP_TIMEOUT         11u
+#define IORING_OP_CLOSE           19u
+#define IORING_OP_READ            22u
+#define IORING_OP_WRITE           23u
+#define IORING_OP_FADVISE         24u
+#define IORING_OP_MADVISE         25u
 
 /* mmap offsets (public Linux uapi) */
 #define IORING_OFF_SQ_RING  0ull
@@ -161,6 +165,9 @@ struct gj_io_cq_ctrl_pkg {
     struct gj_io_uring_cqe cqes[GJ_IORING_ENTRIES * 2u];
 };
 
+#define GJ_IORING_REG_FILES_MAX 16u
+#define GJ_IORING_REG_BUFS_MAX  8u
+
 struct gj_io_uring_ring {
     u8  u8Used;
     u8  u8Mapped; /* package exposed / mmap ready */
@@ -170,6 +177,13 @@ struct gj_io_uring_ring {
     u32 u32Dropped;
     u32 u32Overflow;
     u32 u32SqeIoOk;
+    /* Soft register tables (depth for fixed-file / buffer ops later). */
+    u32 u32RegFiles;
+    u32 u32RegBufs;
+    u32 u32RegEventfd;
+    i32 aRegFiles[GJ_IORING_REG_FILES_MAX];
+    u64 aRegBufAddr[GJ_IORING_REG_BUFS_MAX];
+    u32 aRegBufLen[GJ_IORING_REG_BUFS_MAX];
     /* Kernel package (page-aligned). */
     u8  aPkg[PKG_SIZE] __attribute__((aligned(4096)));
     u64 u64UserMapVa; /* 0 if only kernel-visible; else user VA of package */
@@ -339,9 +353,22 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_NOP:
         return 0;
     case IORING_OP_FSYNC:
+    case IORING_OP_SYNC_FILE_RANGE:
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
+        /* Soft: accept fsync / sync_file_range as success when fd live. */
+        return 0;
+    case IORING_OP_TIMEOUT:
+        /* Soft timeout SQE: complete immediately (no timer wait yet). */
+        return 0;
+    case IORING_OP_FADVISE:
+        if (!vfs_ram_fd_ok((i64)i32Fd)) {
+            return -LINUX_EBADF;
+        }
+        return 0;
+    case IORING_OP_MADVISE:
+        /* Soft madvise: no-op success (range not walked). */
         return 0;
     case IORING_OP_CLOSE:
         return (i32)vfs_ram_close((i64)i32Fd);
@@ -783,16 +810,81 @@ i64
 gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
 {
     struct gj_io_uring_ring *pR = ring_from_fd(i64Fd);
+    u32 i;
+    u32 n;
 
-    (void)u64Arg;
-    (void)u32NrArgs;
     if (pR == NULL) {
         return -LINUX_EBADF;
     }
-    if (u32Opcode == IORING_REGISTER_BUFFERS ||
-        u32Opcode == IORING_REGISTER_FILES ||
-        u32Opcode == IORING_UNREGISTER_FILES ||
-        u32Opcode == IORING_REGISTER_EVENTFD) {
+    if (u32Opcode == IORING_REGISTER_BUFFERS) {
+        /*
+         * Soft: accept buffer registration. u64Arg may be user iovec array;
+         * we only store first few base/len pairs when in-kernel smoke.
+         */
+        n = u32NrArgs;
+        if (n > GJ_IORING_REG_BUFS_MAX) {
+            n = GJ_IORING_REG_BUFS_MAX;
+        }
+        if (u64Arg != 0 && n > 0u) {
+            for (i = 0; i < n; i++) {
+                struct {
+                    u64 base;
+                    u64 len;
+                } iov;
+
+                memset(&iov, 0, sizeof(iov));
+                if (user_range_ok(u64Arg + (u64)i * sizeof(iov),
+                                  sizeof(iov))) {
+                    if (copy_from_user(&iov, u64Arg + (u64)i * sizeof(iov),
+                                       sizeof(iov)) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    memcpy(&iov,
+                           (const void *)(gj_vaddr_t)(u64Arg +
+                                                      (u64)i * sizeof(iov)),
+                           sizeof(iov));
+                }
+                pR->aRegBufAddr[i] = iov.base;
+                pR->aRegBufLen[i] = (u32)iov.len;
+            }
+        }
+        pR->u32RegBufs = n;
+        return 0;
+    }
+    if (u32Opcode == IORING_REGISTER_FILES) {
+        n = u32NrArgs;
+        if (n > GJ_IORING_REG_FILES_MAX) {
+            n = GJ_IORING_REG_FILES_MAX;
+        }
+        if (u64Arg != 0 && n > 0u) {
+            for (i = 0; i < n; i++) {
+                i32 fd = -1;
+
+                if (user_range_ok(u64Arg + (u64)i * sizeof(i32),
+                                  sizeof(i32))) {
+                    if (copy_from_user(&fd, u64Arg + (u64)i * sizeof(i32),
+                                       sizeof(i32)) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    fd = ((const i32 *)(gj_vaddr_t)u64Arg)[i];
+                }
+                pR->aRegFiles[i] = fd;
+            }
+        }
+        pR->u32RegFiles = n;
+        return 0;
+    }
+    if (u32Opcode == IORING_UNREGISTER_FILES) {
+        pR->u32RegFiles = 0;
+        memset(pR->aRegFiles, 0xff, sizeof(pR->aRegFiles));
+        return 0;
+    }
+    if (u32Opcode == IORING_REGISTER_EVENTFD) {
+        pR->u32RegEventfd = 1u;
+        (void)u64Arg;
+        (void)u32NrArgs;
         return 0;
     }
     return -LINUX_ENOSYS;

@@ -25,6 +25,9 @@ build/hwtest-keys/
 .DS_Store
 .vscode/
 .idea/
+__pycache__/
+*.pyc
+*.pyo
 
 # QEMU / OVMF local caches
 *.fd

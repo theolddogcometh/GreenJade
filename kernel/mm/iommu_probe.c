@@ -4,6 +4,7 @@
  *
  * Scan RSDP → RSDT/XSDT for DMAR (Intel) or IVRS (AMD) signatures.
  * Inventory + software enforce windows + hand-off to VT-d table builder.
+ * Deep DMAR structure soft inventory (DRHD/RMRR/ATSR/RHSA) for soft-probe.
  * Clean-room; dual-licensed pure C (not a GPL VT-d driver paste).
  */
 #include <gj/boot_info.h>
@@ -20,14 +21,32 @@
 #define IOMMU_DMAR_HDR_MIN   48u
 #define IOMMU_RSDP_REV_XSDT  2u
 
+/* DMAR remapping structure types (ACPI DMAR public layout) */
+#define IOMMU_DMAR_DRHD  0u
+#define IOMMU_DMAR_RMRR  1u
+#define IOMMU_DMAR_ATSR  2u
+#define IOMMU_DMAR_RHSA  3u
+/* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
+
 static struct gj_iommu_info g_Info;
 static int g_fProbed;
 static int g_fEnforce;
 static struct gj_iommu_window g_aWin[GJ_IOMMU_MAX_WINDOWS];
 static u32 g_u32Denies;
 
+/* Soft DMAR structure inventory (fed to VT-d soft-probe) */
+static u32 g_cDrhd;
+static u32 g_cRmrr;
+static u32 g_cAtsr;
+static u32 g_cRhsa;
+static u32 g_cOther;
+static u32 g_cDrhdAccepted; /* page-aligned non-zero bases handed to VT-d */
+static u64 g_u64RmrrFirstBase;
+static u64 g_u64RmrrFirstLimit;
+
 static void iommu_dmar_parse(u8 *pDmar, u32 u32MapMax);
 static void iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb);
+static void iommu_soft_probe_handoff(void);
 
 static int
 sig_n(const void *p, const char *sz, u32 cb)
@@ -85,6 +104,26 @@ bdf_ok(u8 u8Bus, u8 u8Slot, u8 u8Func)
     return 1;
 }
 
+/** Publish DMAR inventory + run VT-d soft-probe / domain soft smoke. */
+static void
+iommu_soft_probe_handoff(void)
+{
+    iommu_vtd_soft_dmar_inventory(g_cDrhd, g_cRmrr, g_cAtsr, g_cRhsa, g_cOther);
+    if (g_cDrhd != 0 || g_cRmrr != 0 || g_cAtsr != 0 || g_cRhsa != 0 ||
+        g_cOther != 0) {
+        kprintf("iommu: DMAR soft inv drhd=%u/%u rmrr=%u atsr=%u rhsa=%u "
+                "other=%u\n",
+                g_cDrhdAccepted, g_cDrhd, g_cRmrr, g_cAtsr, g_cRhsa, g_cOther);
+    }
+    if (g_u64RmrrFirstBase != 0 || g_u64RmrrFirstLimit != 0) {
+        kprintf("iommu: RMRR soft first base=0x%lx limit=0x%lx\n",
+                (unsigned long)g_u64RmrrFirstBase,
+                (unsigned long)g_u64RmrrFirstLimit);
+    }
+    (void)iommu_vtd_soft_probe();
+    (void)iommu_vtd_domain_soft_smoke();
+}
+
 void
 iommu_probe(void)
 {
@@ -100,6 +139,14 @@ iommu_probe(void)
     g_fEnforce = 0;
     g_u32Denies = 0;
     memset(g_aWin, 0, sizeof(g_aWin));
+    g_cDrhd = 0;
+    g_cRmrr = 0;
+    g_cAtsr = 0;
+    g_cRhsa = 0;
+    g_cOther = 0;
+    g_cDrhdAccepted = 0;
+    g_u64RmrrFirstBase = 0;
+    g_u64RmrrFirstLimit = 0;
 
     pBi = boot_info_get();
     if (pBi != NULL) {
@@ -109,6 +156,7 @@ iommu_probe(void)
         kprintf("iommu: probe skip (no RSDP)\n");
         kprintf("iommu: probe PASS\n");
         (void)iommu_vtd_smoke();
+        iommu_soft_probe_handoff();
         return;
     }
     pRsdp = (u8 *)pa_map(u64RsdpPa);
@@ -118,6 +166,7 @@ iommu_probe(void)
                 (unsigned long)u64RsdpPa);
         kprintf("iommu: probe PASS\n");
         (void)iommu_vtd_smoke();
+        iommu_soft_probe_handoff();
         return;
     }
     /* ACPI 1.0: RSDT @16; ACPI 2.0+: XSDT @24 if revision >= 2 */
@@ -158,6 +207,7 @@ iommu_probe(void)
     kprintf("iommu: probe PASS\n");
     /* Always construct VT-d tables for production path bring-up */
     (void)iommu_vtd_smoke();
+    iommu_soft_probe_handoff();
 }
 
 /**
@@ -211,6 +261,9 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
             g_Info.u8Vendor = GJ_IOMMU_VENDOR_INTEL;
             g_Info.u32Units++;
             if (u32Tlen != 0) {
+                /* Host address width @36, flags @37 (public DMAR header) */
+                kprintf("iommu: DMAR haw=%u flags=0x%x len=%u\n",
+                        (u32)pT[36], (u32)pT[37], u32Tlen);
                 iommu_dmar_parse(pT, u32Tlen);
             }
         } else if (sig_n(pT, "IVRS", 4u)) {
@@ -222,9 +275,11 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
 }
 
 /**
- * Walk DMAR remapping structures for DRHD (type 0) register base.
+ * Walk DMAR remapping structures for soft inventory + DRHD register base.
  * DMAR header is 48 bytes; structures follow with type/length headers.
  * u32MapMax is the validated DMAR length (already clamped).
+ *
+ * Types (public ACPI DMAR): 0 DRHD, 1 RMRR, 2 ATSR, 3 RHSA, …
  */
 static void
 iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
@@ -247,17 +302,60 @@ iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
                     u32Off, (u32)u16Slen);
             break;
         }
-        if (u16Type == 0 && u16Slen >= 16u) {
-            /* DRHD: flags@4, size@5, segment@6, register_base@8 */
-            u64 u64Base = *(u64 *)(void *)(pDmar + u32Off + 8);
+        if (u16Type == IOMMU_DMAR_DRHD) {
+            g_cDrhd++;
+            if (u16Slen >= 16u) {
+                /* DRHD: flags@4, size@5, segment@6, register_base@8 */
+                u8 u8Flags = pDmar[u32Off + 4];
+                u16 u16Seg = *(u16 *)(void *)(pDmar + u32Off + 6);
+                u64 u64Base = *(u64 *)(void *)(pDmar + u32Off + 8);
 
-            if (u64Base != 0 && (u64Base & 0xfffull) == 0) {
-                /* page-aligned MMIO base only */
-                iommu_vtd_set_drhd(u64Base);
-            } else if (u64Base != 0) {
-                kprintf("iommu: DRHD base unaligned skip=0x%lx\n",
-                        (unsigned long)u64Base);
+                kprintf("iommu: DRHD soft seg=%u flags=0x%x base=0x%lx\n",
+                        (u32)u16Seg, (u32)u8Flags, (unsigned long)u64Base);
+                if (u64Base != 0 && (u64Base & 0xfffull) == 0) {
+                    /* page-aligned MMIO base only; first wins in set_drhd */
+                    iommu_vtd_set_drhd(u64Base);
+                    g_cDrhdAccepted++;
+                } else if (u64Base != 0) {
+                    kprintf("iommu: DRHD base unaligned skip=0x%lx\n",
+                            (unsigned long)u64Base);
+                }
             }
+        } else if (u16Type == IOMMU_DMAR_RMRR) {
+            g_cRmrr++;
+            /* RMRR: segment@6, base@8, limit@16 (public layout, min 24) */
+            if (u16Slen >= 24u) {
+                u64 u64Base = *(u64 *)(void *)(pDmar + u32Off + 8);
+                u64 u64Limit = *(u64 *)(void *)(pDmar + u32Off + 16);
+
+                if (g_u64RmrrFirstBase == 0 && g_u64RmrrFirstLimit == 0) {
+                    g_u64RmrrFirstBase = u64Base;
+                    g_u64RmrrFirstLimit = u64Limit;
+                }
+                kprintf("iommu: RMRR soft base=0x%lx limit=0x%lx\n",
+                        (unsigned long)u64Base, (unsigned long)u64Limit);
+            }
+        } else if (u16Type == IOMMU_DMAR_ATSR) {
+            g_cAtsr++;
+            if (u16Slen >= 8u) {
+                u8 u8Flags = pDmar[u32Off + 4];
+                u16 u16Seg = *(u16 *)(void *)(pDmar + u32Off + 6);
+
+                kprintf("iommu: ATSR soft seg=%u flags=0x%x\n", (u32)u16Seg,
+                        (u32)u8Flags);
+            }
+        } else if (u16Type == IOMMU_DMAR_RHSA) {
+            g_cRhsa++;
+            /* RHSA: register_base@4, proximity@12 (min 16) */
+            if (u16Slen >= 16u) {
+                u64 u64Base = *(u64 *)(void *)(pDmar + u32Off + 4);
+                u32 u32Prox = *(u32 *)(void *)(pDmar + u32Off + 12);
+
+                kprintf("iommu: RHSA soft base=0x%lx prox=%u\n",
+                        (unsigned long)u64Base, u32Prox);
+            }
+        } else {
+            g_cOther++;
         }
         u32Off += u16Slen;
     }

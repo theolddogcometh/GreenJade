@@ -2,11 +2,14 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room virtio-net: RX q0 + TX q1 + bounce pool for UDX ring push (OASIS).
+ * Clean-room virtio-net: multi-buffer RX pool + 2-desc TX soft + bounce pool
+ * for UDX ring push (OASIS). Features logging + soft stats counters.
  * No Linux virtio source. Dual MIT OR Apache-2.0 only.
  *
  * Greppable product markers (prefix-stable):
  *   virtio-net: ready PASS
+ *   virtio-net: features
+ *   virtio-net: multi-buf
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -20,6 +23,12 @@
 #define VIRTIO_NET_F_MAC       (1ull << 5)
 #define VIRTIO_NET_F_STATUS    (1ull << 16)
 #define VIRTIO_NET_F_MRG_RXBUF (1ull << 15)
+
+/* Local common-cfg offsets (read negotiated features; match virtio_pci) */
+#define NET_PCI_COMMON_DFSELECT 0
+#define NET_PCI_COMMON_DF       4
+#define NET_PCI_COMMON_GFSELECT 8
+#define NET_PCI_COMMON_GF       12
 
 /* Device config (MAC + link status); only first fields used */
 struct virtio_net_config {
@@ -42,21 +51,82 @@ static struct gj_virtio_dev *g_pNet;
 static struct gj_virtq       g_qRx; /* queue 0 */
 static struct gj_virtq       g_qTx; /* queue 1 */
 static int                   g_fReady;
-static u32                   g_u32TxCount;
-static u32                   g_u32RxCount;
-static u8                    g_aTxBuf[2048] __attribute__((aligned(16)));
-static u8                    g_aRxBuf[2048] __attribute__((aligned(16)));
+static struct gj_virtio_net_stats g_Stats;
+
+/* Soft multi-buffer RX: N slots, one desc each, all posted at probe */
+static u8  g_aRxSlot[GJ_VIRTIO_NET_RX_N][GJ_VIRTIO_NET_RX_SZ]
+    __attribute__((aligned(16)));
+static u8  g_aRxSlotLive[GJ_VIRTIO_NET_RX_N]; /* 1 = on device */
+/* desc head → RX slot (0xff free); set at post, consumed on poll_id */
+static u8  g_aRxHeadSlot[GJ_VIRTQ_MAX_SIZE];
+
+/* Kernel TX: 2-desc soft chain (hdr | payload) + single-desc fallback pack */
+static struct virtio_net_hdr g_TxHdr __attribute__((aligned(16)));
+static u8                    g_aTxPayload[1518] __attribute__((aligned(16)));
+static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
+
 /* Bounce pool for userspace AVAIL_PUSH (ring programming path) */
 #define GJ_NET_BOUNCE_N 8u
 #define GJ_NET_BOUNCE_SZ 2048u
 static u8                    g_aBounce[GJ_NET_BOUNCE_N][GJ_NET_BOUNCE_SZ]
     __attribute__((aligned(16)));
 static u8                    g_aBounceUsed[GJ_NET_BOUNCE_N];
-static u32                   g_u32AvailPushes;
-static u32                   g_u32UserRingPushes;
-static int                   g_fRxPosted;
 static u8                    g_aMac[6];
 static int                   g_fHaveMac;
+
+/* ---- tiny MMIO helpers (feature snapshot only; no virtio_pci edits) ---- */
+static u32
+net_mmio_r32(volatile u8 *p)
+{
+    return p ? *(volatile u32 *)p : 0;
+}
+
+static void
+net_mmio_w32(volatile u8 *p, u32 u32V)
+{
+    if (p) {
+        *(volatile u32 *)p = u32V;
+    }
+}
+
+static u64
+net_read_features(struct gj_virtio_dev *pDev, int fGuest)
+{
+    volatile u8 *pCommon;
+    u32 u32Lo;
+    u32 u32Hi;
+    u32 u32Sel;
+    u32 u32Val;
+
+    if (pDev == NULL || pDev->pCommon == NULL) {
+        return 0;
+    }
+    pCommon = pDev->pCommon;
+    if (fGuest) {
+        u32Sel = NET_PCI_COMMON_GFSELECT;
+        u32Val = NET_PCI_COMMON_GF;
+    } else {
+        u32Sel = NET_PCI_COMMON_DFSELECT;
+        u32Val = NET_PCI_COMMON_DF;
+    }
+    net_mmio_w32(pCommon + u32Sel, 0);
+    u32Lo = net_mmio_r32(pCommon + u32Val);
+    net_mmio_w32(pCommon + u32Sel, 1);
+    u32Hi = net_mmio_r32(pCommon + u32Val);
+    return ((u64)u32Hi << 32) | (u64)u32Lo;
+}
+
+static void
+net_log_features(u64 u64Dev, u64 u64Drv)
+{
+    kprintf("virtio-net: features dev=0x%lx drv=0x%lx"
+            " mac=%u status=%u mrg=%u v1=%u\n",
+            (unsigned long)u64Dev, (unsigned long)u64Drv,
+            (unsigned)((u64Drv & VIRTIO_NET_F_MAC) != 0),
+            (unsigned)((u64Drv & VIRTIO_NET_F_STATUS) != 0),
+            (unsigned)((u64Drv & VIRTIO_NET_F_MRG_RXBUF) != 0),
+            (unsigned)((u64Drv & GJ_VIRTIO_F_VERSION_1) != 0));
+}
 
 /* Translate kernel buffer VA → guest physical (identity fallback). */
 static gj_paddr_t
@@ -93,22 +163,111 @@ read_mac(struct gj_virtio_dev *pDev)
     g_fHaveMac = 1;
 }
 
+static void
+stats_reset(void)
+{
+    memset(&g_Stats, 0, sizeof(g_Stats));
+}
+
+static void
+net_kick(struct gj_virtq *pQ)
+{
+    virtio_q_kick(pQ);
+    g_Stats.u32Kicks++;
+}
+
 /*
- * Probe path: find first net → modern PCI caps → features → RX/TX qs → post RX.
- * Leaves g_fReady=0 and g_pNet=NULL on any hard failure.
+ * Post one free RX slot (device-write). Returns 0 on success, -1 on fail.
+ * Soft multi-buffer: caller refills until pool or free descs exhaust.
+ */
+static int
+rx_post_slot(u32 u32Slot)
+{
+    int head;
+    gj_paddr_t pa;
+
+    if (u32Slot >= GJ_VIRTIO_NET_RX_N || g_aRxSlotLive[u32Slot]) {
+        return -1;
+    }
+    memset(g_aRxSlot[u32Slot], 0, GJ_VIRTIO_NET_RX_SZ);
+    pa = buf_phys(g_aRxSlot[u32Slot]);
+    head = virtio_q_add(&g_qRx, pa, GJ_VIRTIO_NET_RX_SZ, 1);
+    if (head < 0) {
+        g_Stats.u32RxPostFail++;
+        return -1;
+    }
+    if ((u32)head < GJ_VIRTQ_MAX_SIZE) {
+        g_aRxHeadSlot[head] = (u8)u32Slot;
+    }
+    g_aRxSlotLive[u32Slot] = 1;
+    g_Stats.u32RxPosted++;
+    return 0;
+}
+
+/* Post every free slot; returns number newly posted. */
+static u32
+rx_post_all(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < GJ_VIRTIO_NET_RX_N; i++) {
+        if (!g_aRxSlotLive[i] && rx_post_slot(i) == 0) {
+            c++;
+        }
+    }
+    return c;
+}
+
+/*
+ * Claim RX completion: map used head → slot, mark free for refill.
+ * Returns slot index or -1 if mapping missing (still free descs via poll).
+ */
+static int
+rx_claim_head(u32 u32Head)
+{
+    u8 u8Slot;
+
+    if (u32Head >= GJ_VIRTQ_MAX_SIZE) {
+        return -1;
+    }
+    u8Slot = g_aRxHeadSlot[u32Head];
+    g_aRxHeadSlot[u32Head] = 0xff;
+    if (u8Slot >= GJ_VIRTIO_NET_RX_N) {
+        return -1;
+    }
+    if (g_aRxSlotLive[u8Slot]) {
+        g_aRxSlotLive[u8Slot] = 0;
+        if (g_Stats.u32RxPosted > 0) {
+            g_Stats.u32RxPosted--;
+        }
+    }
+    return (int)u8Slot;
+}
+
+/*
+ * Probe path: find first net → modern PCI caps → features → RX/TX qs →
+ * multi-buffer RX post. Leaves g_fReady=0 and g_pNet=NULL on any hard failure.
  */
 int
 virtio_net_probe(void)
 {
     u32 i;
     u32 c;
+    u32 cPosted;
     gj_status_t st;
     u64 u64Want;
+    u64 u64Dev;
+    u64 u64Drv;
 
     g_pNet = NULL;
     g_fReady = 0;
-    g_fRxPosted = 0;
     g_fHaveMac = 0;
+    stats_reset();
+    memset(g_aRxSlotLive, 0, sizeof(g_aRxSlotLive));
+    memset(g_aRxHeadSlot, 0xff, sizeof(g_aRxHeadSlot));
+    memset(g_aBounceUsed, 0, sizeof(g_aBounceUsed));
+
     c = virtio_dev_count();
     /* kind==1, transitional 0x1000, or modern net device ID */
     for (i = 0; i < c; i++) {
@@ -133,17 +292,32 @@ virtio_net_probe(void)
         g_pNet = NULL;
         return -1;
     }
-    /* Prefer MAC+STATUS+V1; fall back to V1 only */
-    u64Want = GJ_VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS;
+
+    /*
+     * Soft feature ladder: prefer MAC+STATUS+MRG_RXBUF+V1, then without MRG,
+     * then V1 only. Snapshot dev/guest features after a successful negotiate.
+     */
+    u64Want = GJ_VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS |
+              VIRTIO_NET_F_MRG_RXBUF;
     st = virtio_negotiate(g_pNet, u64Want);
     if (st != GJ_OK) {
-        st = virtio_negotiate(g_pNet, GJ_VIRTIO_F_VERSION_1);
+        u64Want = GJ_VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS;
+        st = virtio_negotiate(g_pNet, u64Want);
         if (st != GJ_OK) {
-            kprintf("virtio-net: negotiate failed %d\n", (int)st);
-            g_pNet = NULL;
-            return -1;
+            st = virtio_negotiate(g_pNet, GJ_VIRTIO_F_VERSION_1);
+            if (st != GJ_OK) {
+                kprintf("virtio-net: negotiate failed %d\n", (int)st);
+                g_pNet = NULL;
+                return -1;
+            }
         }
     }
+    u64Dev = net_read_features(g_pNet, 0);
+    u64Drv = net_read_features(g_pNet, 1);
+    g_Stats.u64FeaturesDev = u64Dev;
+    g_Stats.u64Features = u64Drv;
+    net_log_features(u64Dev, u64Drv);
+
     read_mac(g_pNet);
     /* RX=0, TX=1 */
     st = virtio_q_setup(g_pNet, &g_qRx, 0, 64);
@@ -158,14 +332,16 @@ virtio_net_probe(void)
         g_pNet = NULL;
         return -1;
     }
-    /* Post one RX buffer (device-write); TX still works if this fails */
-    memset(g_aRxBuf, 0, sizeof(g_aRxBuf));
-    if (virtio_q_add(&g_qRx, buf_phys(g_aRxBuf), sizeof(g_aRxBuf), 1) >= 0) {
-        g_fRxPosted = 1;
-        virtio_q_kick(&g_qRx);
+
+    /* Soft multi-buffer: post full RX pool (device-write) before DRIVER_OK */
+    cPosted = rx_post_all();
+    if (cPosted > 0) {
+        net_kick(&g_qRx);
     } else {
         kprintf("virtio-net: initial RX post failed (tx-only until retry)\n");
     }
+    kprintf("virtio-net: multi-buf rx_slots=%u posted=%u tx_chain=2desc\n",
+            (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)cPosted);
 
     virtio_set_status(g_pNet, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                    GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK));
@@ -189,73 +365,285 @@ virtio_net_ready(void)
     return g_fReady;
 }
 
+/*
+ * Kernel TX soft multi-buffer: prefer 2-desc chain (hdr device-R + payload
+ * device-R). Fall back to single contiguous pack if the queue has only one
+ * free descriptor.
+ */
 int
 virtio_net_tx(const void *pFrame, u32 cbLen)
 {
-    struct virtio_net_hdr *pHdr;
-    u32 cbTotal;
-    gj_paddr_t pa;
+    gj_paddr_t paHdr;
+    gj_paddr_t paPay;
+    i32 i32Done;
+    int fMulti = 0;
 
     if (!g_fReady || pFrame == NULL || cbLen == 0 || cbLen > 1514) {
+        if (g_fReady) {
+            g_Stats.u32TxFail++;
+        }
         return -1;
     }
-    memset(g_aTxBuf, 0, sizeof(g_aTxBuf));
-    pHdr = (struct virtio_net_hdr *)(void *)g_aTxBuf;
-    memset(pHdr, 0, sizeof(*pHdr));
-    memcpy(g_aTxBuf + sizeof(*pHdr), pFrame, cbLen);
-    cbTotal = (u32)sizeof(*pHdr) + cbLen;
-    pa = buf_phys(g_aTxBuf);
-    if (virtio_q_add(&g_qTx, pa, cbTotal, 0) < 0) {
-        return -1;
+
+    /* Reap completed TX to free multi-desc chains */
+    {
+        u32 n = virtio_q_reap(&g_qTx, 8);
+
+        g_Stats.u32Reaps += n;
     }
-    virtio_q_kick(&g_qTx);
-    (void)virtio_q_poll(&g_qTx, 1000000u);
-    g_u32TxCount++;
+
+    memset(&g_TxHdr, 0, sizeof(g_TxHdr));
+    /* V1 hdr: num_buffers unused on TX; leave 0 */
+    memcpy(g_aTxPayload, pFrame, cbLen);
+    paHdr = buf_phys(&g_TxHdr);
+    paPay = buf_phys(g_aTxPayload);
+
+    if (g_qTx.u16NumFree >= 2 &&
+        virtio_q_add2(&g_qTx, paHdr, (u32)sizeof(g_TxHdr), 0, paPay, cbLen,
+                      0) >= 0) {
+        fMulti = 1;
+        g_Stats.u32TxMulti++;
+    } else {
+        /* Single-desc fallback: hdr+payload packed */
+        struct virtio_net_hdr *pHdr;
+        u32 cbTotal;
+        gj_paddr_t pa;
+
+        memset(g_aTxPack, 0, sizeof(g_aTxPack));
+        pHdr = (struct virtio_net_hdr *)(void *)g_aTxPack;
+        memset(pHdr, 0, sizeof(*pHdr));
+        memcpy(g_aTxPack + sizeof(*pHdr), pFrame, cbLen);
+        cbTotal = (u32)sizeof(*pHdr) + cbLen;
+        pa = buf_phys(g_aTxPack);
+        if (virtio_q_add(&g_qTx, pa, cbTotal, 0) < 0) {
+            g_Stats.u32TxFail++;
+            return -1;
+        }
+        g_Stats.u32TxSingle++;
+    }
+
+    net_kick(&g_qTx);
+    i32Done = virtio_q_poll(&g_qTx, 1000000u);
+    if (i32Done < 0) {
+        /*
+         * Soft: count timeout but keep historical success return — device may
+         * complete asynchronously; queue still holds the chain until reap.
+         */
+        g_Stats.u32TxTimeout++;
+    } else {
+        g_Stats.u32Reaps++;
+    }
+    (void)fMulti;
+    g_Stats.u32TxCount++;
+    g_Stats.u64TxBytes += (u64)cbLen;
     return 0;
 }
 
 u32
 virtio_net_tx_count(void)
 {
-    return g_u32TxCount;
+    return g_Stats.u32TxCount;
 }
 
+/*
+ * Soft multi-buffer RX: poll one used head, map to slot, copy Ethernet
+ * payload. If MRG_RXBUF and num_buffers>1, soft-merge subsequent used
+ * buffers (each carries its own virtio_net_hdr per OASIS). Refill pool.
+ */
 i32
 virtio_net_rx(void *pOut, u32 cbMax)
 {
     i32 i32Len;
+    u32 u32Id;
+    int nSlot;
     u32 cbPayload;
+    u32 cbCopied = 0;
+    u16 u16NumBuf = 1;
     struct virtio_net_hdr *pHdr;
+    u8 *pSlot;
+    u32 iMerge;
 
     if (!g_fReady || pOut == NULL) {
         return -1;
     }
-    i32Len = virtio_q_poll(&g_qRx, 1000u);
+
+    i32Len = virtio_q_poll_id(&g_qRx, 1000u, &u32Id);
     if (i32Len < 0) {
+        g_Stats.u32RxEmpty++;
+        /* Opportunistic refill if pool drained */
+        if (g_Stats.u32RxPosted < GJ_VIRTIO_NET_RX_N) {
+            if (rx_post_all() > 0) {
+                net_kick(&g_qRx);
+            }
+        }
         return 0;
     }
-    g_fRxPosted = 0;
-    g_u32RxCount++;
-    pHdr = (struct virtio_net_hdr *)(void *)g_aRxBuf;
+    g_Stats.u32Reaps++;
+    nSlot = rx_claim_head(u32Id);
+    if (nSlot < 0) {
+        /* Mapping miss: drop payload, still refill */
+        g_Stats.u32RxDrop++;
+        if (rx_post_all() > 0) {
+            net_kick(&g_qRx);
+        }
+        return 0;
+    }
+
+    pSlot = g_aRxSlot[nSlot];
+    pHdr = (struct virtio_net_hdr *)(void *)pSlot;
     if ((u32)i32Len <= sizeof(*pHdr)) {
         cbPayload = 0;
+        g_Stats.u32RxDrop++;
     } else {
         cbPayload = (u32)i32Len - (u32)sizeof(*pHdr);
     }
+
+    /* Soft MRG_RXBUF: first buffer carries total buffer count */
+    if ((g_Stats.u64Features & VIRTIO_NET_F_MRG_RXBUF) != 0 &&
+        pHdr->u16NumBuffers > 1) {
+        u16NumBuf = pHdr->u16NumBuffers;
+        if (u16NumBuf > GJ_VIRTIO_NET_RX_N) {
+            u16NumBuf = (u16)GJ_VIRTIO_NET_RX_N;
+        }
+    } else if (pHdr->u16NumBuffers > 1) {
+        /* V1 may still set num_buffers=1; tolerate soft multi without feature */
+        u16NumBuf = pHdr->u16NumBuffers;
+        if (u16NumBuf > GJ_VIRTIO_NET_RX_N) {
+            u16NumBuf = (u16)GJ_VIRTIO_NET_RX_N;
+        }
+    }
+
     if (cbPayload > cbMax) {
+        /* Truncate first segment; count as soft drop fragment */
+        g_Stats.u32RxDrop++;
         cbPayload = cbMax;
     }
     if (cbPayload > 0) {
-        memcpy(pOut, g_aRxBuf + sizeof(*pHdr), cbPayload);
+        memcpy(pOut, pSlot + sizeof(*pHdr), cbPayload);
+        cbCopied = cbPayload;
     }
-    /* Repost RX buffer */
-    memset(g_aRxBuf, 0, sizeof(g_aRxBuf));
-    if (virtio_q_add(&g_qRx, buf_phys(g_aRxBuf), sizeof(g_aRxBuf), 1) >= 0) {
-        g_fRxPosted = 1;
-        virtio_q_kick(&g_qRx);
+
+    /* Merge remaining buffers of the same frame (soft multi-buffer) */
+    for (iMerge = 1; iMerge < (u32)u16NumBuf && cbCopied < cbMax; iMerge++) {
+        i32 i32Seg;
+        u32 u32SegId;
+        int nSeg;
+        u32 cbSeg;
+        u8 *pSeg;
+        struct virtio_net_hdr *pSegHdr;
+
+        i32Seg = virtio_q_poll_id(&g_qRx, 10000u, &u32SegId);
+        if (i32Seg < 0) {
+            g_Stats.u32RxDrop++;
+            break;
+        }
+        g_Stats.u32Reaps++;
+        nSeg = rx_claim_head(u32SegId);
+        if (nSeg < 0) {
+            g_Stats.u32RxDrop++;
+            continue;
+        }
+        pSeg = g_aRxSlot[nSeg];
+        pSegHdr = (struct virtio_net_hdr *)(void *)pSeg;
+        if ((u32)i32Seg <= sizeof(*pSegHdr)) {
+            /* Empty or hdr-only segment */
+            (void)pSegHdr;
+            continue;
+        }
+        cbSeg = (u32)i32Seg - (u32)sizeof(*pSegHdr);
+        if (cbSeg > cbMax - cbCopied) {
+            g_Stats.u32RxDrop++;
+            cbSeg = cbMax - cbCopied;
+        }
+        if (cbSeg > 0) {
+            memcpy((u8 *)pOut + cbCopied, pSeg + sizeof(*pSegHdr), cbSeg);
+            cbCopied += cbSeg;
+        }
     }
-    (void)pHdr;
-    return (i32)cbPayload;
+    if (u16NumBuf > 1 && cbCopied > 0) {
+        g_Stats.u32RxMerge++;
+    }
+
+    if (cbCopied > 0) {
+        g_Stats.u32RxCount++;
+        g_Stats.u64RxBytes += (u64)cbCopied;
+    }
+
+    /* Refill multi-buffer RX pool */
+    if (rx_post_all() > 0) {
+        net_kick(&g_qRx);
+    }
+    return (i32)cbCopied;
+}
+
+u32
+virtio_net_rx_count(void)
+{
+    return g_Stats.u32RxCount;
+}
+
+u32
+virtio_net_tx_fail_count(void)
+{
+    return g_Stats.u32TxFail;
+}
+
+u32
+virtio_net_tx_timeout_count(void)
+{
+    return g_Stats.u32TxTimeout;
+}
+
+u32
+virtio_net_rx_drop_count(void)
+{
+    return g_Stats.u32RxDrop;
+}
+
+u32
+virtio_net_kick_count(void)
+{
+    return g_Stats.u32Kicks;
+}
+
+u32
+virtio_net_rx_posted(void)
+{
+    return g_Stats.u32RxPosted;
+}
+
+u64
+virtio_net_tx_bytes(void)
+{
+    return g_Stats.u64TxBytes;
+}
+
+u64
+virtio_net_rx_bytes(void)
+{
+    return g_Stats.u64RxBytes;
+}
+
+u64
+virtio_net_features(void)
+{
+    return g_fReady ? g_Stats.u64Features : 0;
+}
+
+u64
+virtio_net_features_dev(void)
+{
+    return g_fReady ? g_Stats.u64FeaturesDev : 0;
+}
+
+int
+virtio_net_stats(struct gj_virtio_net_stats *pOut)
+{
+    if (pOut == NULL) {
+        return -1;
+    }
+    *pOut = g_Stats;
+    return 0;
 }
 
 int
@@ -301,7 +689,7 @@ virtio_net_kick_q(u16 u16Which)
     if (u16Which > 1) {
         return -1;
     }
-    virtio_q_kick(pQ);
+    net_kick(pQ);
     return 0;
 }
 
@@ -399,12 +787,14 @@ virtio_net_desc_alloc(u16 u16Which)
 {
     struct gj_virtq *pQ;
     int head;
+    u32 n;
 
     if (!g_fReady || u16Which > 1) {
         return -1;
     }
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
-    (void)virtio_q_reap(pQ, 8);
+    n = virtio_q_reap(pQ, 8);
+    g_Stats.u32Reaps += n;
     head = virtio_q_alloc_desc(pQ);
     return head;
 }
@@ -432,13 +822,13 @@ virtio_net_user_avail(u16 u16Which, u16 u16Head, int fFlags)
             return -1;
         }
     }
-    g_u32UserRingPushes++;
-    g_u32AvailPushes++;
+    g_Stats.u32UserRingPushes++;
+    g_Stats.u32AvailPushes++;
     if (fKick) {
-        virtio_q_kick(pQ);
+        net_kick(pQ);
     }
     if (u16Which == 1) {
-        g_u32TxCount++;
+        g_Stats.u32TxCount++;
     }
     return 0;
 }
@@ -480,12 +870,6 @@ virtio_net_bounce_pa(u32 u32Slot)
     return bounce_phys(u32Slot);
 }
 
-u32
-virtio_net_rx_count(void)
-{
-    return g_u32RxCount;
-}
-
 static int
 bounce_alloc(void)
 {
@@ -522,6 +906,7 @@ virtio_net_avail_push(u16 u16Which, const void *pBuf, u32 cbLen, int fWrite,
     u8 *pB;
     gj_paddr_t pa;
     int head;
+    u32 n;
 
     if (!g_fReady || pBuf == NULL || cbLen == 0 || cbLen > GJ_NET_BOUNCE_SZ) {
         return -1;
@@ -531,11 +916,13 @@ virtio_net_avail_push(u16 u16Which, const void *pBuf, u32 cbLen, int fWrite,
     }
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
     /* Reap completed to free descs */
-    (void)virtio_q_reap(pQ, 8);
+    n = virtio_q_reap(pQ, 8);
+    g_Stats.u32Reaps += n;
     bounce_free_all_if_idle();
     slot = bounce_alloc();
     if (slot < 0) {
-        (void)virtio_q_reap(pQ, 16);
+        n = virtio_q_reap(pQ, 16);
+        g_Stats.u32Reaps += n;
         bounce_free_all_if_idle();
         slot = bounce_alloc();
         if (slot < 0) {
@@ -564,12 +951,12 @@ virtio_net_avail_push(u16 u16Which, const void *pBuf, u32 cbLen, int fWrite,
         g_aBounceUsed[slot] = 0;
         return -1;
     }
-    g_u32AvailPushes++;
+    g_Stats.u32AvailPushes++;
     if (fKick) {
-        virtio_q_kick(pQ);
+        net_kick(pQ);
     }
     if (u16Which == 1) {
-        g_u32TxCount++;
+        g_Stats.u32TxCount++;
     }
     return 0;
 }
@@ -578,14 +965,38 @@ u32
 virtio_net_used_reap(u16 u16Which, u32 u32Max)
 {
     struct gj_virtq *pQ;
-    u32 n;
+    u32 n = 0;
+    u32 u32Limit;
 
     if (!g_fReady || u16Which > 1) {
         return 0;
     }
+    u32Limit = u32Max ? u32Max : 8u;
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
-    n = virtio_q_reap(pQ, u32Max ? u32Max : 8u);
-    bounce_free_all_if_idle();
+    if (u16Which == 0) {
+        /*
+         * RX multi-buffer: must claim head→slot before descs free so the
+         * soft pool stays coherent (payload discarded on pure reap).
+         */
+        while (n < u32Limit) {
+            u32 u32Id;
+            i32 i32Len = virtio_q_poll_id(&g_qRx, 1, &u32Id);
+
+            if (i32Len < 0) {
+                break;
+            }
+            (void)rx_claim_head(u32Id);
+            n++;
+        }
+        g_Stats.u32Reaps += n;
+        if (rx_post_all() > 0) {
+            net_kick(&g_qRx);
+        }
+    } else {
+        n = virtio_q_reap(pQ, u32Limit);
+        g_Stats.u32Reaps += n;
+        bounce_free_all_if_idle();
+    }
     return n;
 }
 
@@ -604,11 +1015,11 @@ virtio_net_q_free(u16 u16Which)
 u32
 virtio_net_avail_pushes(void)
 {
-    return g_u32AvailPushes;
+    return g_Stats.u32AvailPushes;
 }
 
 u32
 virtio_net_user_ring_pushes(void)
 {
-    return g_u32UserRingPushes;
+    return g_Stats.u32UserRingPushes;
 }

@@ -11,7 +11,8 @@
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
- *            "vmm: COW break" "vmm: map_device_uc" "vmm: ensure_identity_rw"
+ *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
+ *            "vmm: ensure_identity_rw" (… soft PASS)
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -53,6 +54,18 @@ static u64  g_u64HhdmMapped;
 static struct gj_cow_ref g_aCowRef[GJ_COW_REF_MAX];
 static u32               g_cCowLive;
 static u32               g_cCowFrees;
+/* Lifetime / soft-path observability (G-AS + soft CAP). */
+static u32               g_cAsCreate;
+static u32               g_cAsDestroy;
+static u32               g_cAsLive;
+static u32               g_cCowBreak;
+static u32               g_cCowShareOk;
+static u32               g_cCowShareFull;
+static u32               g_cCowTable;
+static u32               g_cMapDeviceUc;
+static u32               g_cMapDeviceUcPages;
+static u32               g_cEnsureIdCall;
+static u32               g_cEnsureIdFix;
 
 static u64
 read_cr3(void)
@@ -95,6 +108,7 @@ cow_ref_share(gj_paddr_t pa)
     iSlot = cow_ref_find(pa);
     if (iSlot >= 0) {
         g_aCowRef[iSlot].cRef++;
+        g_cCowShareOk++;
         return 0;
     }
     for (i = 0; i < GJ_COW_REF_MAX; i++) {
@@ -103,9 +117,11 @@ cow_ref_share(gj_paddr_t pa)
             g_aCowRef[i].pa = pa;
             g_aCowRef[i].cRef = 2; /* parent + child */
             g_cCowLive++;
+            g_cCowShareOk++;
             return 0;
         }
     }
+    g_cCowShareFull++;
     return -1; /* table full — caller may still share (leak risk) */
 }
 
@@ -419,12 +435,18 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
     u64 u64End;
     u64 *pPdpt = NULL;
     u64 *pPd = NULL;
+    u32 cNew = 0;
+    u32 cHad = 0;
 
     if (g_pKernelPml4 == NULL || cb == 0 || pVaOut == NULL) {
+        kprintf("vmm: map_device_uc soft reject inval pa=0x%lx cb=0x%lx\n",
+                (unsigned long)pa, (unsigned long)cb);
         return GJ_ERR_INVAL;
     }
     if ((u64)pa >= GJ_DEVICE_MMIO_SPAN ||
         (u64)pa + cb > GJ_DEVICE_MMIO_SPAN) {
+        kprintf("vmm: map_device_uc soft reject span pa=0x%lx cb=0x%lx\n",
+                (unsigned long)pa, (unsigned long)cb);
         return GJ_ERR_INVAL;
     }
     u64Pa = (u64)pa & ~((1ull << 21) - 1);
@@ -441,6 +463,8 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
         if ((g_pKernelPml4[u64I4] & PTE_P) == 0) {
             paTbl = alloc_table();
             if (paTbl == 0) {
+                kprintf("vmm: map_device_uc soft nomem pa=0x%lx\n",
+                        (unsigned long)pa);
                 return GJ_ERR_NOMEM;
             }
             g_pKernelPml4[u64I4] = paTbl | PTE_P | PTE_W;
@@ -452,11 +476,14 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
         if ((pPdpt[u64I3] & PTE_P) == 0) {
             paTbl = alloc_table();
             if (paTbl == 0) {
+                kprintf("vmm: map_device_uc soft nomem pa=0x%lx\n",
+                        (unsigned long)pa);
                 return GJ_ERR_NOMEM;
             }
             pPdpt[u64I3] = paTbl | PTE_P | PTE_W;
             pPd = phys_to_virt(paTbl);
         } else if ((pPdpt[u64I3] & PTE_PS) != 0) {
+            cHad++;
             continue;
         } else {
             pPd = phys_to_virt(pPdpt[u64I3] & PTE_ADDR_MASK);
@@ -466,6 +493,9 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
             /* PCD|PWT uncacheable-ish device; PS 2 MiB */
             pPd[u64I2] = (u64Pa & PTE_ADDR_MASK) | PTE_P | PTE_W | PTE_PS |
                          PTE_NX | (1ull << 4) | (1ull << 3);
+            cNew++;
+        } else {
+            cHad++;
         }
     }
     {
@@ -473,8 +503,13 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
 
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Cr3) : "memory");
     }
-    kprintf("vmm: map_device_uc pa=0x%lx va=0x%lx PASS\n", (unsigned long)pa,
-            (unsigned long)*pVaOut);
+    g_cMapDeviceUc++;
+    g_cMapDeviceUcPages += cNew;
+    /* Soft CAP greppable (AHCI/NVMe BAR probes). */
+    kprintf("vmm: map_device_uc pa=0x%lx va=0x%lx cb=0x%lx pages=%u had=%u "
+            "total=%u soft PASS\n",
+            (unsigned long)pa, (unsigned long)*pVaOut, (unsigned long)cb, cNew,
+            cHad, g_cMapDeviceUc);
     return GJ_OK;
 }
 
@@ -504,12 +539,15 @@ vmm_as_create(void)
     u64 *pDst;
     u64 *pSrc;
     u32 u32I4;
+    u32 cShared = 0;
 
     if (g_pKernelPml4 == NULL) {
+        kprintf("vmm: as_create fail no_template\n");
         return 0;
     }
     paPml4 = alloc_table();
     if (paPml4 == 0) {
+        kprintf("vmm: as_create fail nomem live=%u\n", g_cAsLive);
         return 0;
     }
     pDst = phys_to_virt(paPml4);
@@ -518,10 +556,16 @@ vmm_as_create(void)
     for (u32I4 = 0; u32I4 < 512; u32I4++) {
         /* Share kernel half (and identity) by pointer; COW on map. */
         pDst[u32I4] = pSrc[u32I4];
+        if ((pSrc[u32I4] & PTE_P) != 0) {
+            cShared++;
+        }
     }
 
-    kprintf("vmm: as_create cr3=0x%lx (shared lower, COW on map)\n",
-            (unsigned long)paPml4);
+    g_cAsCreate++;
+    g_cAsLive++;
+    kprintf("vmm: as_create cr3=0x%lx shared_slots=%u live=%u total=%u "
+            "(shared lower, COW on map) PASS\n",
+            (unsigned long)paPml4, cShared, g_cAsLive, g_cAsCreate);
     return (u64)paPml4;
 }
 
@@ -563,6 +607,7 @@ cow_table_entry(u64 *pEntry, u64 u64KerEntry)
     memcpy(pDst, pSrc, GJ_PAGE_SIZE);
     /* keep flags from original entry; new physical table */
     *pEntry = (paNew & PTE_ADDR_MASK) | (*pEntry & ~PTE_ADDR_MASK);
+    g_cCowTable++;
     (void)u64KerEntry;
     return GJ_OK;
 }
@@ -586,11 +631,15 @@ vmm_as_destroy(u64 u64Cr3)
     u32 cLeaf = 0;
     u32 cCowDrop = 0;
     u32 cPrivFree = 0;
+    u32 cTables = 0;
+    u32 cSharedSkip = 0;
     u64 *pPdpt;
     u64 *pPd;
     u64 *pPt;
 
     if (u64Cr3 == 0 || u64Cr3 == g_u64KernelCr3) {
+        kprintf("vmm: as_destroy reject cr3=0x%lx (kernel/zero)\n",
+                (unsigned long)u64Cr3);
         return GJ_ERR_INVAL;
     }
     pPml4 = phys_to_virt(u64Cr3 & PTE_ADDR_MASK);
@@ -601,6 +650,7 @@ vmm_as_destroy(u64 u64Cr3)
             continue;
         }
         if (pKer != NULL && pPml4[u32I4] == pKer[u32I4]) {
+            cSharedSkip++;
             continue; /* shared */
         }
         pPdpt = phys_to_virt(pPml4[u32I4] & PTE_ADDR_MASK);
@@ -615,6 +665,7 @@ vmm_as_destroy(u64 u64Cr3)
                 u64 *pKerPdpt = phys_to_virt(pKer[u32I4] & PTE_ADDR_MASK);
 
                 if (pPdpt[u32I3] == pKerPdpt[u32I3]) {
+                    cSharedSkip++;
                     continue;
                 }
                 if ((pKerPdpt[u32I3] & PTE_P) != 0 &&
@@ -639,6 +690,7 @@ vmm_as_destroy(u64 u64Cr3)
                     u64KerPdEnt = pKerPd[u32I2];
                 }
                 if (u64KerPdEnt != 0 && pPd[u32I2] == u64KerPdEnt) {
+                    cSharedSkip++;
                     continue; /* shared PT with kernel */
                 }
                 if (u64KerPdEnt != 0 && (u64KerPdEnt & PTE_P) != 0 &&
@@ -688,17 +740,26 @@ vmm_as_destroy(u64 u64Cr3)
                     cLeaf++;
                 }
                 pmm_free(pPd[u32I2] & PTE_ADDR_MASK);
+                cTables++;
             }
             pmm_free(pPdpt[u32I3] & PTE_ADDR_MASK);
+            cTables++;
         }
         pmm_free(pPml4[u32I4] & PTE_ADDR_MASK);
+        cTables++;
     }
     pmm_free(u64Cr3 & PTE_ADDR_MASK);
-    if (cLeaf > 0) {
-        kprintf("vmm: as_destroy leaf=%u priv=%u cow_drop=%u live=%u "
-                "frees=%u PASS\n",
-                cLeaf, cPrivFree, cCowDrop, g_cCowLive, g_cCowFrees);
+    cTables++; /* PML4 */
+    g_cAsDestroy++;
+    if (g_cAsLive > 0) {
+        g_cAsLive--;
     }
+    /* Always greppable (leaf may be 0 for empty smoke AS). */
+    kprintf("vmm: as_destroy leaf=%u priv=%u cow_drop=%u tables=%u "
+            "shared_skip=%u live=%u frees=%u as_live=%u tbl_cow=%u "
+            "cr3=0x%lx PASS\n",
+            cLeaf, cPrivFree, cCowDrop, cTables, cSharedSkip, g_cCowLive,
+            g_cCowFrees, g_cAsLive, g_cCowTable, (unsigned long)u64Cr3);
     return GJ_OK;
 }
 
@@ -996,13 +1057,20 @@ vmm_protect_page(gj_vaddr_t va, u32 u32Prot)
     return GJ_OK;
 }
 
+/*
+ * Repair identity R/W leaves under the active CR3. Writes *pFixed when set.
+ * Soft path: never panic; caller logs greppable ensure_identity_rw soft PASS.
+ */
 static gj_status_t
-ensure_identity_rw_active(gj_vaddr_t va, size_t cb)
+ensure_identity_rw_active(gj_vaddr_t va, size_t cb, u32 *pFixed)
 {
     gj_vaddr_t vaEnd;
     gj_vaddr_t vaPage;
     u32 cFix = 0;
 
+    if (pFixed != NULL) {
+        *pFixed = 0;
+    }
     if (cb == 0) {
         return GJ_OK;
     }
@@ -1030,9 +1098,8 @@ ensure_identity_rw_active(gj_vaddr_t va, size_t cb)
             cFix++;
         }
     }
-    if (cFix > 0) {
-        kprintf("vmm: ensure_identity_rw va=0x%lx cb=%lu fixed=%u PASS\n",
-                (unsigned long)va, (unsigned long)cb, cFix);
+    if (pFixed != NULL) {
+        *pFixed = cFix;
     }
     return GJ_OK;
 }
@@ -1042,25 +1109,46 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
 {
     u64 u64Saved;
     gj_status_t st;
+    u32 cFixKer = 0;
+    u32 cFixAct = 0;
+    int fDual = 0;
 
     if (g_u64KernelCr3 == 0 || cb == 0) {
+        kprintf("vmm: ensure_identity_rw soft reject va=0x%lx cb=%lu\n",
+                (unsigned long)va, (unsigned long)cb);
         return GJ_ERR_INVAL;
     }
+    g_cEnsureIdCall++;
     u64Saved = read_cr3();
     /* Repair kernel template first (shared lower tables when not COWed). */
     __asm__ volatile("mov %0, %%cr3" : : "r"(g_u64KernelCr3) : "memory");
-    st = ensure_identity_rw_active(va, cb);
+    st = ensure_identity_rw_active(va, cb, &cFixKer);
     if (st != GJ_OK) {
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
+        kprintf("vmm: ensure_identity_rw soft nomem va=0x%lx cb=%lu\n",
+                (unsigned long)va, (unsigned long)cb);
         return st;
     }
     /* Private AS may hold a COWed PT with RO leaves — repair active too. */
     if ((u64Saved & PTE_ADDR_MASK) != (g_u64KernelCr3 & PTE_ADDR_MASK)) {
+        fDual = 1;
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
-        st = ensure_identity_rw_active(va, cb);
+        st = ensure_identity_rw_active(va, cb, &cFixAct);
+        if (st != GJ_OK) {
+            kprintf("vmm: ensure_identity_rw soft nomem dual va=0x%lx "
+                    "cb=%lu\n",
+                    (unsigned long)va, (unsigned long)cb);
+            return st;
+        }
     } else {
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
     }
+    g_cEnsureIdFix += cFixKer + cFixAct;
+    /* Soft greppable always (fixed may be 0). */
+    kprintf("vmm: ensure_identity_rw va=0x%lx cb=%lu fixed=%u ker=%u act=%u "
+            "dual=%d total_fix=%u calls=%u soft PASS\n",
+            (unsigned long)va, (unsigned long)cb, cFixKer + cFixAct, cFixKer,
+            cFixAct, fDual, g_cEnsureIdFix, g_cEnsureIdCall);
     return st;
 }
 
@@ -1214,6 +1302,8 @@ vmm_cow_break_page(gj_vaddr_t va)
     paSrc = u64Pte & PTE_ADDR_MASK;
     paDst = pmm_alloc();
     if (paDst == 0) {
+        kprintf("vmm: COW break va=0x%lx nomem live=%u\n", (unsigned long)va,
+                g_cCowLive);
         return GJ_ERR_NOMEM;
     }
     u64Saved = read_cr3();
@@ -1226,14 +1316,28 @@ vmm_cow_break_page(gj_vaddr_t va)
     u64Flags = (u64Pte & ~(PTE_ADDR_MASK | PTE_COW)) | PTE_W | PTE_P;
     *pPte = (paDst & PTE_ADDR_MASK) | u64Flags;
     vmm_tlb_flush_page(va);
+    g_cCowBreak++;
     /* Drop shared ref on old frame; free if last */
-    if (cow_ref_drop(paSrc, 1) == 0) {
-        pmm_free(paSrc);
-        kprintf("vmm: COW break va=0x%lx pa=0x%lx free_old PASS\n",
-                (unsigned long)va, (unsigned long)paDst);
-    } else {
-        kprintf("vmm: COW break va=0x%lx pa=0x%lx PASS\n", (unsigned long)va,
-                (unsigned long)paDst);
+    {
+        u32 u32Rem = cow_ref_drop(paSrc, 1);
+        int fFreeOld = 0;
+
+        if (u32Rem == 0) {
+            pmm_free(paSrc);
+            fFreeOld = 1;
+            kprintf("vmm: COW break va=0x%lx pa=0x%lx old=0x%lx free_old "
+                    "rem=%u live=%u frees=%u breaks=%u PASS\n",
+                    (unsigned long)va, (unsigned long)paDst,
+                    (unsigned long)paSrc, u32Rem, g_cCowLive, g_cCowFrees,
+                    g_cCowBreak);
+        } else {
+            kprintf("vmm: COW break va=0x%lx pa=0x%lx old=0x%lx rem=%u "
+                    "live=%u frees=%u breaks=%u PASS\n",
+                    (unsigned long)va, (unsigned long)paDst,
+                    (unsigned long)paSrc, u32Rem, g_cCowLive, g_cCowFrees,
+                    g_cCowBreak);
+        }
+        (void)fFreeOld;
     }
     return GJ_OK;
 }
@@ -1255,6 +1359,8 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
     u32 u32I2;
     u32 u32I1;
     u32 cCopy = 0;
+    u32 cCow = 0;
+    u32 cRoCopy = 0;
     u32 u32Limit = u32Max ? u32Max : 256u;
 
     if (pCopied != NULL) {
@@ -1262,9 +1368,12 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
     }
     if (u64SrcCr3 == 0 || u64DstCr3 == 0 ||
         (u64SrcCr3 & ~0xfffull) == (u64DstCr3 & ~0xfffull)) {
+        kprintf("vmm: as_clone_user reject src=0x%lx dst=0x%lx\n",
+                (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3);
         return GJ_ERR_INVAL;
     }
     if (g_pKernelPml4 == NULL) {
+        kprintf("vmm: as_clone_user reject no_template\n");
         return GJ_ERR_INVAL;
     }
 
@@ -1421,6 +1530,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                             }
                         }
                         cCopy++;
+                        cCow++;
                         /* Back to src walk CR3 for next PTE via phys tables */
                         __asm__ volatile("mov %0, %%cr3"
                                          :
@@ -1438,6 +1548,9 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                         if (pCopied != NULL) {
                             *pCopied = cCopy;
                         }
+                        kprintf("vmm: as_clone_user nomem pages=%u cow=%u "
+                                "rocopy=%u\n",
+                                cCopy, cCow, cRoCopy);
                         return GJ_ERR_NOMEM;
                     }
                     /* Copy frame under kernel CR3 (identity/HHDM) */
@@ -1474,6 +1587,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                         return GJ_ERR_NOMEM;
                     }
                     cCopy++;
+                    cRoCopy++;
                     /* Restore src walk CR3 for next PTE read via phys_to_virt
                      * of tables (tables are accessed via phys, not walk_pte) */
                     __asm__ volatile("mov %0, %%cr3"
@@ -1489,8 +1603,9 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
     if (pCopied != NULL) {
         *pCopied = cCopy;
     }
-    kprintf("vmm: as_clone_user src=0x%lx dst=0x%lx pages=%u cow_live=%u\n",
-            (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3, cCopy,
-            g_cCowLive);
+    kprintf("vmm: as_clone_user src=0x%lx dst=0x%lx pages=%u cow=%u rocopy=%u "
+            "cow_live=%u share_ok=%u share_full=%u tbl_cow=%u PASS\n",
+            (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3, cCopy, cCow,
+            cRoCopy, g_cCowLive, g_cCowShareOk, g_cCowShareFull, g_cCowTable);
     return GJ_OK;
 }

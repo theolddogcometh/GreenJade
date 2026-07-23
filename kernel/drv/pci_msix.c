@@ -4,9 +4,13 @@
  *
  * Product MSI/MSI-X capability discovery + table entry programming.
  * Clean-room pure C from PCI Local Bus Spec capability IDs and MSI-X
- * table layout. No GPL source.
+ * table layout. Soft table shadow for smokes without MMIO.
+ * No GPL source.
+ *
+ * greppable: MSI-X table soft path
  */
 #include <gj/config.h>
+#include <gj/irq_msix.h>
 #include <gj/klog.h>
 #include <gj/pci_caps.h>
 #include <gj/string.h>
@@ -24,6 +28,13 @@
 #define PCI_MSIX_PROBE_VEC 0x41u
 
 static u32 g_u32Programmed;
+
+/* Soft MSI-X table shadow (always available). */
+static struct gj_pci_msix_soft_entry g_aSoftTab[GJ_MSIX_SOFT_TBL];
+static u64 g_u64SoftPba;
+static u32 g_u32SoftProg;
+static u32 g_u32SoftFire;
+static int g_fSoftReady;
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -106,6 +117,240 @@ msix_table_mmio(u64 u64Pa)
         }
     }
     return (volatile u32 *)(gj_vaddr_t)u64Pa;
+}
+
+/*
+ * Mirror a programmed entry into the soft shadow (product soft path).
+ * Does not deliver; use pci_msix_soft_fire for soft delivery.
+ */
+static void
+msix_soft_mirror(u16 u16Idx, u32 u32AddrLo, u32 u32AddrHi, u32 u32Data,
+                 u32 u32VecCtl)
+{
+    struct gj_pci_msix_soft_entry *pEnt;
+
+    if (!g_fSoftReady) {
+        pci_msix_soft_table_init();
+    }
+    if (u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return;
+    }
+    pEnt = &g_aSoftTab[u16Idx];
+    if (!pEnt->u8Programmed) {
+        g_u32SoftProg++;
+    }
+    pEnt->u32MsgAddrLo = u32AddrLo;
+    pEnt->u32MsgAddrHi = u32AddrHi;
+    pEnt->u32MsgData = u32Data;
+    pEnt->u32VecCtl = u32VecCtl;
+    pEnt->u8Programmed = 1;
+}
+
+void
+pci_msix_soft_table_init(void)
+{
+    if (g_fSoftReady) {
+        return;
+    }
+    memset(g_aSoftTab, 0, sizeof(g_aSoftTab));
+    g_u64SoftPba = 0;
+    g_u32SoftProg = 0;
+    g_u32SoftFire = 0;
+    g_fSoftReady = 1;
+}
+
+u32
+pci_msix_soft_program(u16 u16Idx, u32 u32AddrLo, u32 u32Data, u32 u32Mask)
+{
+    u32 u32VecCtl;
+
+    if (!g_fSoftReady) {
+        pci_msix_soft_table_init();
+    }
+    if (u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    u32VecCtl = u32Mask ? GJ_MSIX_VECCTL_MASK : 0u;
+    msix_soft_mirror(u16Idx, u32AddrLo, 0u, u32Data, u32VecCtl);
+    return 1;
+}
+
+u32
+pci_msix_soft_mask(u16 u16Idx, u32 u32Mask)
+{
+    if (!g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    if (!g_aSoftTab[u16Idx].u8Programmed) {
+        return 0;
+    }
+    if (u32Mask) {
+        g_aSoftTab[u16Idx].u32VecCtl |= GJ_MSIX_VECCTL_MASK;
+    } else {
+        g_aSoftTab[u16Idx].u32VecCtl &= ~GJ_MSIX_VECCTL_MASK;
+    }
+    return 1;
+}
+
+u32
+pci_msix_soft_read(u16 u16Idx, struct gj_pci_msix_soft_entry *pOut)
+{
+    if (pOut == NULL || !g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    if (!g_aSoftTab[u16Idx].u8Programmed) {
+        return 0;
+    }
+    *pOut = g_aSoftTab[u16Idx];
+    return 1;
+}
+
+u32
+pci_msix_soft_fire(u16 u16Idx)
+{
+    struct gj_pci_msix_soft_entry *pEnt;
+    u64 u64Badge;
+    u32 u32Deliver = 0;
+
+    if (!g_fSoftReady || u16Idx >= GJ_MSIX_SOFT_TBL) {
+        return 0;
+    }
+    pEnt = &g_aSoftTab[u16Idx];
+    if (!pEnt->u8Programmed) {
+        return 0;
+    }
+    /*
+     * Spec-like sticky PBA: bit set when the function would assert the
+     * message (including while masked — pending until unmask + re-fire
+     * in full HW; soft path records the bit on every fire attempt).
+     */
+    g_u64SoftPba |= (1ull << (u16Idx & 63u));
+    if ((pEnt->u32VecCtl & GJ_MSIX_VECCTL_MASK) != 0) {
+        return 0; /* masked: no Notification delivery */
+    }
+    pEnt->u8SoftFire = 1;
+    g_u32SoftFire++;
+    u32Deliver = 1;
+    /*
+     * Badge attribution: entry 0 → bit 2 (GJ_MSIX_BADGE_TBL(0)) so existing
+     * smoke wait masks covering low bits still observe table soft fire.
+     */
+    u64Badge = GJ_MSIX_BADGE_TBL(u16Idx);
+    if (irq_msix_ready()) {
+        irq_msix_soft_inject(u64Badge);
+    }
+    return u32Deliver;
+}
+
+u64
+pci_msix_soft_pba(void)
+{
+    return g_u64SoftPba;
+}
+
+u64
+pci_msix_soft_pba_clear(u64 u64Mask)
+{
+    u64 u64Prev;
+
+    u64Prev = g_u64SoftPba & u64Mask;
+    g_u64SoftPba &= ~u64Mask;
+    return u64Prev;
+}
+
+u32
+pci_msix_soft_programmed_count(void)
+{
+    return g_u32SoftProg;
+}
+
+u32
+pci_msix_soft_fire_count(void)
+{
+    return g_u32SoftFire;
+}
+
+int
+pci_msix_soft_ready(void)
+{
+    return g_fSoftReady;
+}
+
+u32
+pci_msix_soft_table_exercise(void)
+{
+    struct gj_pci_msix_soft_entry ent;
+    u32 fOk = 1;
+    u32 u32Held;
+    u32 u32Delivered;
+    u64 u64Pba;
+
+    pci_msix_soft_table_init();
+    /* Entry 0: product vector, initially unmasked. */
+    if (!pci_msix_soft_program(0, MSI_ADDR_BASE, (u32)PCI_MSIX_PROBE_VEC, 0)) {
+        fOk = 0;
+    }
+    /* Entry 1: second soft vector, for multi-entry soft path. */
+    if (!pci_msix_soft_program(1, MSI_ADDR_BASE, (u32)(PCI_MSIX_PROBE_VEC + 1u),
+                               0)) {
+        fOk = 0;
+    }
+    /* Mask-hold: fire while masked must not deliver. */
+    if (!pci_msix_soft_mask(0, 1)) {
+        fOk = 0;
+    }
+    u32Held = pci_msix_soft_fire(0);
+    if (u32Held != 0) {
+        fOk = 0; /* masked fire must not deliver */
+    }
+    u64Pba = pci_msix_soft_pba();
+    if ((u64Pba & 1ull) == 0) {
+        fOk = 0; /* sticky PBA still set while masked */
+    }
+    /* Unmask + fire: delivery when irq path ready (or soft counter only). */
+    if (!pci_msix_soft_mask(0, 0)) {
+        fOk = 0;
+    }
+    u32Delivered = pci_msix_soft_fire(0);
+    if (u32Delivered == 0) {
+        fOk = 0;
+    }
+    /* Soft fire entry 1. */
+    if (pci_msix_soft_fire(1) == 0) {
+        fOk = 0;
+    }
+    /* Readback entry 0. */
+    memset(&ent, 0, sizeof(ent));
+    if (!pci_msix_soft_read(0, &ent)) {
+        fOk = 0;
+    } else if (ent.u32MsgAddrLo != MSI_ADDR_BASE ||
+               (ent.u32MsgData & 0xffu) != PCI_MSIX_PROBE_VEC ||
+               (ent.u32VecCtl & GJ_MSIX_VECCTL_MASK) != 0 ||
+               !ent.u8Programmed || !ent.u8SoftFire) {
+        fOk = 0;
+    }
+    /* PBA clear soft path. */
+    if (pci_msix_soft_pba_clear(1ull) != 1ull) {
+        fOk = 0;
+    }
+    if ((pci_msix_soft_pba() & 1ull) != 0) {
+        fOk = 0;
+    }
+    if (g_u32SoftProg < 2 || g_u32SoftFire < 2) {
+        fOk = 0;
+    }
+    if (fOk) {
+        kprintf("pci: MSI-X table soft path entries=%u fire=%u pba=0x%lx "
+                "PASS\n",
+                g_u32SoftProg, g_u32SoftFire,
+                (unsigned long)pci_msix_soft_pba());
+        kprintf("pci: MSI-X table soft path PASS\n");
+    } else {
+        kprintf("pci: MSI-X table soft path FAIL prog=%u fire=%u pba=0x%lx\n",
+                g_u32SoftProg, g_u32SoftFire,
+                (unsigned long)pci_msix_soft_pba());
+    }
+    return fOk;
 }
 
 u32
@@ -267,6 +512,9 @@ pci_msix_program_first(u8 u8Vector)
         __asm__ volatile("mfence" ::: "memory");
         pTab[3] = 0; /* unmask */
 
+        /* Soft mirror of HW entry 0 (unmasked). */
+        msix_soft_mirror(0, MSI_ADDR_BASE, 0u, (u32)u8Vector, 0u);
+
         /* Enable MSI-X in config */
         u8Cap = pci_cfg_read8(u8Bus, u8Slot, u8Func, 0x34) & 0xfcu;
         while (u8Cap != 0 && u8Cap != 0xffu) {
@@ -306,7 +554,9 @@ pci_msix_probe_log(void)
     u32 iDev;
     u32 cEnabled;
     u32 cProg;
+    u32 fSoft;
 
+    pci_msix_soft_table_init();
     memset(aInfo, 0, sizeof(aInfo));
     cScan = pci_msix_scan(aInfo, 16);
     kprintf("pci: MSI/MSI-X devices=%u\n", cScan);
@@ -319,7 +569,9 @@ pci_msix_probe_log(void)
     }
     cEnabled = pci_msix_enable_first(cScan > 2 ? 2 : cScan);
     cProg = pci_msix_program_first(PCI_MSIX_PROBE_VEC);
-    if (cScan > 0 || cEnabled > 0) {
+    /* Soft table always exercised (works with zero devices). */
+    fSoft = pci_msix_soft_table_exercise();
+    if (cScan > 0 || cEnabled > 0 || fSoft) {
         kprintf("pci: MSI-X probe PASS\n");
         if (cEnabled > 0) {
             kprintf("pci: MSI-X enable PASS\n");

@@ -9,7 +9,13 @@
  *
  * Ownership: token 0 means kernel interim owns policy; non-zero means a
  * userspace sessiond claimed the door. Claim is re-entrant for the same
- * token (idempotent), BUSY for a different token.
+ * token (idempotent reclaim soft), BUSY for a different token. RELEASE
+ * when free is soft 0.
+ *
+ * Soft present/input:
+ *   PRESENT / PRESENT_FB usable without claim (smokes); multi-frame soft
+ *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
+ *   when virtio-input is absent (empty ring).
  *
  * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
  * branch is for early kernel smokes that pass HHDM/static buffers.
@@ -32,6 +38,8 @@ static int g_fInit;
 static u32 g_u32Calls;
 static u32 g_u32OwnerToken; /* 0 = kernel interim owns */
 static u32 g_u32UserPresents;
+static u32 g_u32Claims;     /* successful first claims */
+static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
 void
 session_door_init(void)
@@ -40,7 +48,9 @@ session_door_init(void)
     g_u32Calls = 0;
     g_u32OwnerToken = 0;
     g_u32UserPresents = 0;
-    kprintf("session_door: init (present+input+claim)\n");
+    g_u32Claims = 0;
+    g_u32Reclaims = 0;
+    kprintf("session_door: init (present+input+claim soft)\n");
 }
 
 int
@@ -53,6 +63,19 @@ u32
 session_door_owner_token(void)
 {
     return g_u32OwnerToken;
+}
+
+u32
+session_door_claim_count(void)
+{
+    /* Soft diagnostics: first claims + idempotent reclaims. */
+    return g_u32Claims + g_u32Reclaims;
+}
+
+u32
+session_door_user_presents(void)
+{
+    return g_u32UserPresents;
 }
 
 /**
@@ -146,15 +169,21 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
             return GJ_ERR_BUSY; /* another sessiond */
         }
+        /* Soft reclaim: same token re-CLAIM is idempotent (no re-log). */
+        if (g_u32OwnerToken == (u32)u64Arg1) {
+            g_u32Reclaims++;
+            return 0;
+        }
         g_u32OwnerToken = (u32)u64Arg1;
+        g_u32Claims++;
         kprintf("session_door: CLAIM token=0x%x (userspace owns scanout)\n",
                 g_u32OwnerToken);
         return 0;
 
     case GJ_SESS_OP_RELEASE:
-        /* arg1 must match claim token when owned. */
+        /* Soft free path: already unowned → 0 (no token match required). */
         if (g_u32OwnerToken == 0) {
-            return 0; /* already free */
+            return 0;
         }
         if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
             return GJ_ERR_INVAL;
@@ -166,12 +195,16 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_SESS_OP_PRESENT:
         /*
          * Present kernel interim scanout. When claimed, sessiond prefers
-         * PRESENT_FB; this path remains for bring-up tools.
+         * PRESENT_FB; this path remains for bring-up tools (soft ok).
+         * Soft multi-frame: use present_n(1) path bookkeeping via present().
          */
         if (!session_compositor_ready()) {
             return GJ_ERR_NODEV;
         }
-        return session_compositor_present() == 0 ? 0 : GJ_ERR_IO;
+        if (session_compositor_present() != 0) {
+            return GJ_ERR_IO;
+        }
+        return 0;
 
     case GJ_SESS_OP_DISPLAY_INFO: {
         /* arg1 → u32[2] {w, h} */
@@ -189,6 +222,7 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
 
     case GJ_SESS_OP_INPUT_POLL:
+        /* Soft: always 0; empty hub when virtio-input absent. */
         session_input_poll();
         return 0;
 
@@ -202,6 +236,7 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             return GJ_ERR_INVAL;
         }
         memset(&ev, 0, sizeof(ev));
+        /* pop soft-refills once (lazy fan-in) inside session_input_pop. */
         fGot = session_input_pop(&ev);
         if (!fGot) {
             return 0;
@@ -220,11 +255,11 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          *   [1] input events pushed (lifetime)
          *   [2] door call count
          *   [3] flags: bit0 ready, bit1 input ready, bit2 owned,
-         *              bits 8..15 pending input (capped 255)
+         *              bits 8..15 pending input (capped 255),
+         *              bit16 drop sticky, bit17 user PRESENT_FB,
+         *              bit18 multi-frame soft, bit19 reclaim soft
          *   [4] owner token
          * Wire size stays 5 for sessiond / smoke ABI stability.
-         * g_u32UserPresents and session_input_dropped() are retained
-         * for kernel diagnostics (pending packed into flags).
          */
         u32 aSt[5];
         u32 u32Pend;
@@ -247,7 +282,11 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
                  /* bit16: any input drop observed (sticky observability) */
                  (session_input_dropped() != 0 ? (1u << 16) : 0u) |
                  /* bit17: any user PRESENT_FB success */
-                 (g_u32UserPresents != 0 ? (1u << 17) : 0u);
+                 (g_u32UserPresents != 0 ? (1u << 17) : 0u) |
+                 /* bit18: multi-frame soft (2+ user presents) */
+                 (g_u32UserPresents >= 2u ? (1u << 18) : 0u) |
+                 /* bit19: reclaim soft observed */
+                 (g_u32Reclaims != 0 ? (1u << 19) : 0u);
         aSt[4] = g_u32OwnerToken;
         st = sess_copy_out(u64Arg1, aSt, sizeof(aSt));
         return st;
@@ -299,6 +338,7 @@ session_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          * When compositor ready: blit top-left into scanout with correct
          * source/dest strides, then present. Else direct virtio-gpu present
          * with a small static temp for user buffers.
+         * Soft multi-frame: each success bumps g_u32UserPresents (bit18).
          */
         u32 u32ReqW = (u32)u64Arg1;
         u32 u32ReqH = (u32)u64Arg2;

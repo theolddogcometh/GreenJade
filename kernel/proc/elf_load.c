@@ -32,6 +32,8 @@
 
 #define DT_NULL     0
 #define DT_NEEDED   1
+#define DT_PLTRELSZ 2
+#define DT_HASH     4
 #define DT_STRTAB   5
 #define DT_SYMTAB   6
 #define DT_RELA     7
@@ -39,13 +41,12 @@
 #define DT_RELAENT  9
 #define DT_STRSZ    10
 #define DT_SYMENT   11
+#define DT_SONAME   14
 #define DT_REL      17
 #define DT_RELSZ    18
 #define DT_RELENT   19
-#define DT_JMPREL   23
-#define DT_PLTRELSZ 2
 #define DT_PLTREL   20
-#define DT_HASH     4
+#define DT_JMPREL   23
 /* GNU hash tag (LSB) */
 #define DT_GNU_HASH 0x6ffffef5ll
 
@@ -77,18 +78,24 @@ struct elf64_sym {
     u64 u64Size;
 } __attribute__((packed));
 
-/* Loaded DT_NEEDED objects for cross-object symbol search */
+/* Loaded DT_NEEDED objects for cross-object symbol search (kernel SO registry) */
 struct gj_elf_so {
     u8   u8Used;
-    u8   u8Pad[3];
+    u8   u8HasHash;    /* DT_HASH present */
+    u8   u8HasGnu;     /* DT_GNU_HASH present */
+    u8   u8Pad;
     u32  cbImg;
+    u32  u32NameHash;  /* SysV hash of szName (registry key) */
+    u32  u32SoHash;    /* SysV hash of szSoname if set */
     u64  u64Bias;
-    u64  u64Symtab; /* pre-bias VA */
+    u64  u64Symtab;    /* pre-bias VA */
     u64  u64Strtab;
+    u64  u64Strsz;
     u64  u64Hash;
     u64  u64GnuHash;
     u64  u64Syment;
-    char szName[64];
+    char szName[64];   /* DT_NEEDED basename */
+    char szSoname[64]; /* DT_SONAME when present */
     u8   aImg[GJ_ELF_SO_IMG];
 };
 
@@ -175,6 +182,51 @@ interp_copy(char *szDst, size_t cbDst, const u8 *pSrc, u64 cbSrc)
         szDst[i] = (char)pSrc[i];
     }
     szDst[i] = '\0';
+}
+
+/*
+ * INTERP soft normalize: relative path → /lib/<name>. Absolute unchanged.
+ * Keeps absolute product paths (/lib/ld-gj.so.1) intact.
+ */
+static void
+elf_interp_soft_norm(char *sz, size_t cb)
+{
+    char aTmp[GJ_ELF_INTERP_MAX];
+    size_t i;
+    size_t n = 0;
+
+    if (sz == NULL || cb == 0 || sz[0] == '\0' || sz[0] == '/') {
+        return;
+    }
+    aTmp[n++] = '/';
+    aTmp[n++] = 'l';
+    aTmp[n++] = 'i';
+    aTmp[n++] = 'b';
+    aTmp[n++] = '/';
+    for (i = 0; sz[i] != '\0' && n + 1 < sizeof(aTmp) && n + 1 < cb; i++) {
+        aTmp[n++] = sz[i];
+    }
+    aTmp[n] = '\0';
+    for (i = 0; i <= n && i < cb; i++) {
+        sz[i] = aTmp[i];
+    }
+}
+
+int
+elf_interp_soft_ok(const char *szInterp)
+{
+    size_t i;
+
+    if (szInterp == NULL || szInterp[0] != '/') {
+        return 0;
+    }
+    for (i = 0; i < GJ_ELF_INTERP_MAX - 1u && szInterp[i] != '\0'; i++) {
+        /* reject control chars soft */
+        if ((u8)szInterp[i] < 0x20u) {
+            return 0;
+        }
+    }
+    return (i > 1 && szInterp[i] == '\0') ? 1 : 0;
 }
 
 /*
@@ -366,7 +418,11 @@ elf_fill_probe(const void *pImage, u64 cb, struct gj_elf_info *pInfo,
             interp_copy(pInfo->szInterp, sizeof(pInfo->szInterp),
                         (const u8 *)pImage + pPh->u64Offset, pPh->u64Filesz);
             if (pInfo->szInterp[0] != '\0') {
+                elf_interp_soft_norm(pInfo->szInterp, sizeof(pInfo->szInterp));
                 pInfo->u32Flags |= GJ_ELF_INFO_HAS_INTERP;
+                if (elf_interp_soft_ok(pInfo->szInterp)) {
+                    pInfo->u32Flags |= GJ_ELF_INFO_INTERP_SOFT;
+                }
             }
             continue;
         }
@@ -412,6 +468,9 @@ elf_probe_image(const void *pImage, u64 cb, struct gj_elf_info *pInfo)
                                                            : "(none)");
         if (pInfo->u16Needed > 0) {
             kprintf("elf: DT_NEEDED[0]=%s\n", pInfo->aNeeded[0]);
+        }
+        if ((pInfo->u32Flags & GJ_ELF_INFO_INTERP_SOFT) != 0) {
+            kprintf("elf: INTERP soft probe %s PASS\n", pInfo->szInterp);
         }
     }
     return st;
@@ -470,8 +529,8 @@ sym_name_eq(const char *szA, const char *szB)
     return szA[i] == szB[i];
 }
 
-static u32
-elf_sysv_hash(const char *szName)
+u32
+elf_sysv_hash_name(const char *szName)
 {
     u32 u32H = 0;
     u32 u32G;
@@ -488,6 +547,27 @@ elf_sysv_hash(const char *szName)
         u32H &= ~u32G;
     }
     return u32H;
+}
+
+u32
+elf_gnu_hash_name(const char *szName)
+{
+    u32 u32H = 5381u;
+
+    if (szName == NULL) {
+        return 0;
+    }
+    while (*szName != '\0') {
+        u32H = (u32H << 5) + u32H + (u32)(u8)*szName++;
+    }
+    return u32H;
+}
+
+/* Internal alias — keep call sites greppable as elf_sysv_hash via wrap */
+static u32
+elf_sysv_hash(const char *szName)
+{
+    return elf_sysv_hash_name(szName);
 }
 
 static u64
@@ -525,9 +605,60 @@ elf_so_clear(void)
 
     for (i = 0; i < GJ_ELF_SO_MAX; i++) {
         g_aSo[i].u8Used = 0;
+        g_aSo[i].u8HasHash = 0;
+        g_aSo[i].u8HasGnu = 0;
         g_aSo[i].cbImg = 0;
+        g_aSo[i].u32NameHash = 0;
+        g_aSo[i].u32SoHash = 0;
+        g_aSo[i].szName[0] = '\0';
+        g_aSo[i].szSoname[0] = '\0';
+        g_aSo[i].u64Hash = 0;
+        g_aSo[i].u64GnuHash = 0;
+        g_aSo[i].u64Symtab = 0;
+        g_aSo[i].u64Strtab = 0;
+        g_aSo[i].u64Strsz = 0;
     }
     g_cSo = 0;
+}
+
+u32
+elf_so_registry_count(void)
+{
+    return g_cSo;
+}
+
+int
+elf_so_registry_find(const char *szName, u64 *pBias, u32 *pcb)
+{
+    u32 i;
+    u32 u32H;
+
+    if (szName == NULL || szName[0] == '\0') {
+        return 0;
+    }
+    u32H = elf_sysv_hash_name(szName);
+    for (i = 0; i < GJ_ELF_SO_MAX; i++) {
+        struct gj_elf_so *pSo = &g_aSo[i];
+
+        if (!pSo->u8Used) {
+            continue;
+        }
+        /* Fast path: name-hash match then string compare */
+        if ((pSo->u32NameHash == u32H && sym_name_eq(pSo->szName, szName)) ||
+            (pSo->u32SoHash != 0 && pSo->u32SoHash == u32H &&
+             sym_name_eq(pSo->szSoname, szName)) ||
+            sym_name_eq(pSo->szName, szName) ||
+            (pSo->szSoname[0] != '\0' && sym_name_eq(pSo->szSoname, szName))) {
+            if (pBias != NULL) {
+                *pBias = pSo->u64Bias;
+            }
+            if (pcb != NULL) {
+                *pcb = pSo->cbImg;
+            }
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /*
@@ -657,14 +788,7 @@ elf_gnu_hash_lookup(const u8 *pImg, u64 cb, const struct elf64_ehdr *pEh,
     pBuckets = (const u32 *)(pBloom + u32BloomSize);
     pChain = pBuckets + u32Nbuckets;
 
-    /* DJB hash used by GNU hash */
-    u32H = 5381u;
-    {
-        const char *p = szName;
-        while (*p != '\0') {
-            u32H = (u32H << 5) + u32H + (u32)(u8)*p++;
-        }
-    }
+    u32H = elf_gnu_hash_name(szName);
     /* Bloom filter (x86_64: 64-bit words) — both bits must be set */
     if (u32BloomSize > 0) {
         u64Word = pBloom[(u32H / 64u) % u32BloomSize];
@@ -762,7 +886,10 @@ elf_symtab_scan(const u8 *pImg, u64 cb, const struct elf64_ehdr *pEh,
     return 0;
 }
 
-/* Search all loaded SOs by hash then linear. */
+/*
+ * Search SO registry: GNU hash first (modern default), then SysV DT_HASH,
+ * then linear SYMTAB scan. Prefer GNU so dual-hash SOs hit bloom path.
+ */
 static int
 elf_lookup_in_sos(const char *szName, u64 *pVal)
 {
@@ -779,19 +906,19 @@ elf_lookup_in_sos(const char *szName, u64 *pVal)
             continue;
         }
         pEh = (const struct elf64_ehdr *)pSo->aImg;
-        if (pSo->u64Hash != 0 &&
-            elf_hash_lookup(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
-                            pSo->u64Hash, pSo->u64Symtab, pSo->u64Strtab,
-                            pSo->u64Syment, szName, pVal)) {
-            kprintf("elf: hash resolve %s in %s PASS\n", szName, pSo->szName);
-            return 1;
-        }
         if (pSo->u64GnuHash != 0 &&
             elf_gnu_hash_lookup(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
                                 pSo->u64GnuHash, pSo->u64Symtab, pSo->u64Strtab,
                                 pSo->u64Syment, szName, pVal)) {
             kprintf("elf: gnu-hash resolve %s in %s PASS\n", szName,
                     pSo->szName);
+            return 1;
+        }
+        if (pSo->u64Hash != 0 &&
+            elf_hash_lookup(pSo->aImg, pSo->cbImg, pEh, pSo->u64Bias,
+                            pSo->u64Hash, pSo->u64Symtab, pSo->u64Strtab,
+                            pSo->u64Syment, szName, pVal)) {
+            kprintf("elf: hash resolve %s in %s PASS\n", szName, pSo->szName);
             return 1;
         }
         if (pSo->u64Symtab != 0 && pSo->u64Strtab != 0 &&
@@ -866,7 +993,7 @@ elf_resolve_sym(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
     return 0;
 }
 
-/* Parse dynamic tags for SO registry (hash/sym/str). */
+/* Parse dynamic tags for SO registry (hash/sym/str/soname). */
 static void
 elf_so_fill_dyn(struct gj_elf_so *pSo, const void *pImage, u64 cb,
                 const struct elf64_ehdr *pEh)
@@ -875,13 +1002,19 @@ elf_so_fill_dyn(struct gj_elf_so *pSo, const void *pImage, u64 cb,
     u64 u64DynOff = 0;
     u64 u64DynSz = 0;
     u64 u64Off;
+    u64 u64SoNameOff = ~0ull;
     const struct elf64_dyn *pDyn;
 
     pSo->u64Symtab = 0;
     pSo->u64Strtab = 0;
+    pSo->u64Strsz = 0;
     pSo->u64Hash = 0;
     pSo->u64GnuHash = 0;
     pSo->u64Syment = sizeof(struct elf64_sym);
+    pSo->u8HasHash = 0;
+    pSo->u8HasGnu = 0;
+    pSo->szSoname[0] = '\0';
+    pSo->u32SoHash = 0;
 
     for (i = 0; i < pEh->u16Phnum; i++) {
         const struct elf64_phdr *pPh;
@@ -907,12 +1040,34 @@ elf_so_fill_dyn(struct gj_elf_so *pSo, const void *pImage, u64 cb,
             pSo->u64Symtab = pDyn->u64Val;
         } else if (pDyn->i64Tag == DT_STRTAB) {
             pSo->u64Strtab = pDyn->u64Val;
+        } else if (pDyn->i64Tag == DT_STRSZ) {
+            pSo->u64Strsz = pDyn->u64Val;
         } else if (pDyn->i64Tag == DT_SYMENT) {
             pSo->u64Syment = pDyn->u64Val;
         } else if (pDyn->i64Tag == DT_HASH) {
             pSo->u64Hash = pDyn->u64Val;
+            pSo->u8HasHash = 1;
         } else if (pDyn->i64Tag == DT_GNU_HASH) {
             pSo->u64GnuHash = pDyn->u64Val;
+            pSo->u8HasGnu = 1;
+        } else if (pDyn->i64Tag == DT_SONAME) {
+            u64SoNameOff = pDyn->u64Val;
+        }
+    }
+    /* Resolve DT_SONAME through STRTAB when both present */
+    if (u64SoNameOff != ~0ull && pSo->u64Strtab != 0) {
+        u64 u64FileOff =
+            va_to_file_off(pImage, cb, pEh, pSo->u64Strtab + u64SoNameOff);
+
+        if (u64FileOff != ~0ull && u64FileOff < cb) {
+            if (pSo->u64Strsz == 0 || u64SoNameOff < pSo->u64Strsz) {
+                interp_copy(pSo->szSoname, sizeof(pSo->szSoname),
+                            (const u8 *)pImage + u64FileOff,
+                            sizeof(pSo->szSoname));
+                if (pSo->szSoname[0] != '\0') {
+                    pSo->u32SoHash = elf_sysv_hash_name(pSo->szSoname);
+                }
+            }
         }
     }
 }
@@ -1217,52 +1372,120 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
     return GJ_OK;
 }
 
+u64
+elf_auxv_get(const u64 *pPairs, u32 cPairs, u64 u64Key)
+{
+    u32 i;
+
+    if (pPairs == NULL || cPairs == 0) {
+        return 0;
+    }
+    for (i = 0; i < cPairs; i++) {
+        if (pPairs[i * 2u] == GJ_AT_NULL) {
+            break;
+        }
+        if (pPairs[i * 2u] == u64Key) {
+            return pPairs[i * 2u + 1u];
+        }
+    }
+    return 0;
+}
+
+u32
+elf_auxv_push(u64 *pPairs, u32 cPairs, u32 cMax, u64 u64Key, u64 u64Val)
+{
+    if (pPairs == NULL || cMax == 0) {
+        return cPairs;
+    }
+    /* Reserve last slot for AT_NULL when pushing non-NULL */
+    if (u64Key != GJ_AT_NULL && cPairs + 1u >= cMax) {
+        return cPairs;
+    }
+    if (cPairs >= cMax) {
+        return cPairs;
+    }
+    pPairs[cPairs * 2u] = u64Key;
+    pPairs[cPairs * 2u + 1u] = u64Val;
+    return cPairs + 1u;
+}
+
+int
+elf_auxv_set(u64 *pPairs, u32 *pCPairs, u32 cMax, u64 u64Key, u64 u64Val)
+{
+    u32 i;
+    u32 n;
+
+    if (pPairs == NULL || pCPairs == NULL || cMax == 0 || u64Key == GJ_AT_NULL) {
+        return 0;
+    }
+    n = *pCPairs;
+    for (i = 0; i < n; i++) {
+        if (pPairs[i * 2u] == GJ_AT_NULL) {
+            break;
+        }
+        if (pPairs[i * 2u] == u64Key) {
+            pPairs[i * 2u + 1u] = u64Val;
+            return 1;
+        }
+    }
+    if (n + 1u >= cMax) {
+        return 0;
+    }
+    pPairs[n * 2u] = u64Key;
+    pPairs[n * 2u + 1u] = u64Val;
+    *pCPairs = n + 1u;
+    return 1;
+}
+
 void
 elf_fill_auxv(struct gj_process *pProc, const struct gj_elf_info *pMain,
               const struct gj_elf_info *pInterp)
 {
     u32 n = 0;
     u64 u64ExecFn = 0;
+    u64 u64Base;
 
     if (pProc == NULL || pMain == NULL) {
         return;
     }
     memset(pProc->aAuxv, 0, sizeof(pProc->aAuxv));
-    /* AT_EXECFN points at path string inside handoff page once published */
+    /* AT_EXECFN / AT_RANDOM point into handoff page once published */
     u64ExecFn = GJ_LD_HANDOFF_VA +
                 (u64)__builtin_offsetof(struct gj_ld_handoff, szPath);
+    u64Base = pInterp != NULL ? pInterp->u64Base : 0;
 
-#define AUX_PUSH(k, v)                                                         \
-    do {                                                                       \
-        if (n + 1u < GJ_PROC_AUXV_MAX) {                                       \
-            pProc->aAuxv[n * 2u] = (u64)(k);                                   \
-            pProc->aAuxv[n * 2u + 1u] = (u64)(v);                              \
-            n++;                                                               \
-        }                                                                      \
-    } while (0)
-
-    AUX_PUSH(GJ_AT_PHDR, pMain->u64PhdrVa);
-    AUX_PUSH(GJ_AT_PHENT, pMain->u16Phentsize);
-    AUX_PUSH(GJ_AT_PHNUM, pMain->u16Phnum);
-    AUX_PUSH(GJ_AT_PAGESZ, GJ_PAGE_SIZE);
-    AUX_PUSH(GJ_AT_BASE, pInterp != NULL ? pInterp->u64Base : 0);
-    AUX_PUSH(GJ_AT_FLAGS, 0);
-    AUX_PUSH(GJ_AT_ENTRY, pMain->u64Entry);
-    AUX_PUSH(GJ_AT_UID, 0);
-    AUX_PUSH(GJ_AT_EUID, 0);
-    AUX_PUSH(GJ_AT_GID, 0);
-    AUX_PUSH(GJ_AT_EGID, 0);
-    AUX_PUSH(GJ_AT_SECURE, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_PHDR,
+                      pMain->u64PhdrVa);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_PHENT,
+                      pMain->u16Phentsize);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_PHNUM,
+                      pMain->u16Phnum);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_PAGESZ,
+                      GJ_PAGE_SIZE);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_BASE, u64Base);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_FLAGS, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_ENTRY,
+                      pMain->u64Entry);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_UID, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_EUID, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_GID, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_EGID, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_CLKTCK, 100);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_SECURE, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_HWCAP, 0);
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_RANDOM,
+                      GJ_LD_RANDOM_VA);
     if (pProc->szExecPath[0] != '\0') {
-        AUX_PUSH(GJ_AT_EXECFN, u64ExecFn);
+        n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_EXECFN,
+                          u64ExecFn);
     }
-    AUX_PUSH(GJ_AT_NULL, 0);
-#undef AUX_PUSH
+    n = elf_auxv_push(pProc->aAuxv, n, GJ_PROC_AUXV_MAX, GJ_AT_NULL, 0);
 
     pProc->cAuxv = n;
-    kprintf("elf: auxv pairs=%u phdr=0x%lx entry=0x%lx base=0x%lx\n", n,
-            (unsigned long)pMain->u64PhdrVa, (unsigned long)pMain->u64Entry,
-            (unsigned long)(pInterp != NULL ? pInterp->u64Base : 0));
+    kprintf("elf: auxv pairs=%u phdr=0x%lx entry=0x%lx base=0x%lx random=0x%lx "
+            "PASS\n",
+            n, (unsigned long)pMain->u64PhdrVa, (unsigned long)pMain->u64Entry,
+            (unsigned long)u64Base, (unsigned long)GJ_LD_RANDOM_VA);
 }
 
 u32
@@ -1320,18 +1543,25 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
                     g_aSo[iSlot].u64Bias = so.u64Bias;
                     path_copy_n(g_aSo[iSlot].szName, sizeof(g_aSo[iSlot].szName),
                                 pInfo->aNeeded[iNeeded]);
+                    g_aSo[iSlot].u32NameHash =
+                        elf_sysv_hash_name(g_aSo[iSlot].szName);
                     pEhSo = (const struct elf64_ehdr *)g_aSo[iSlot].aImg;
                     elf_so_fill_dyn(&g_aSo[iSlot], g_aSo[iSlot].aImg, (u64)nRead,
                                     pEhSo);
                     cLoaded++;
                     g_cSo = cLoaded;
                     kprintf("elf: SO map %s entry=0x%lx bias=0x%lx "
-                            "hash=0x%lx gnu=0x%lx sym=0x%lx PASS\n",
+                            "hash=0x%lx gnu=0x%lx sym=0x%lx nh=0x%x PASS\n",
                             szPath, (unsigned long)so.u64Entry,
                             (unsigned long)so.u64Bias,
                             (unsigned long)g_aSo[iSlot].u64Hash,
                             (unsigned long)g_aSo[iSlot].u64GnuHash,
-                            (unsigned long)g_aSo[iSlot].u64Symtab);
+                            (unsigned long)g_aSo[iSlot].u64Symtab,
+                            g_aSo[iSlot].u32NameHash);
+                    if (g_aSo[iSlot].szSoname[0] != '\0') {
+                        kprintf("elf: SO soname %s -> %s\n",
+                                g_aSo[iSlot].szName, g_aSo[iSlot].szSoname);
+                    }
                 } else {
                     kprintf("elf: SO map %s FAIL\n", szPath);
                 }
@@ -1340,7 +1570,24 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
         }
     }
     if (cLoaded > 0) {
+        u32 cHash = 0;
+        u32 cGnu = 0;
+        u32 s;
+
+        for (s = 0; s < GJ_ELF_SO_MAX; s++) {
+            if (!g_aSo[s].u8Used) {
+                continue;
+            }
+            if (g_aSo[s].u8HasHash) {
+                cHash++;
+            }
+            if (g_aSo[s].u8HasGnu) {
+                cGnu++;
+            }
+        }
         kprintf("elf: DT_NEEDED SO map n=%u PASS\n", cLoaded);
+        kprintf("elf: SO registry n=%u hash=%u gnu=%u PASS\n", cLoaded, cHash,
+                cGnu);
     }
     return cLoaded;
 }
@@ -1366,6 +1613,12 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
         u64Entry = pInterp->u64Entry;
         pProc->u64InterpEntry = pInterp->u64Entry;
         pProc->u64StartEntry = u64Entry;
+        /* Soft INTERP path log (absolute /lib/… after normalize) */
+        if ((pMain->u32Flags & GJ_ELF_INFO_INTERP_SOFT) != 0 ||
+            elf_interp_soft_ok(pMain->szInterp)) {
+            kprintf("elf: INTERP soft ok %s PASS\n",
+                    pMain->szInterp[0] != '\0' ? pMain->szInterp : "(anon)");
+        }
         cRepl = thread_exec_replace(pProc, u64Entry, u64Stack);
         /*
          * Product: if no existing user thr to rewrite, spawn a live ring-3
@@ -1386,6 +1639,12 @@ elf_apply_interp_first(struct gj_process *pProc, const struct gj_elf_info *pMain
         kprintf("linux: execve INTERP-first entry=0x%lx sp=0x%lx thr=%u PASS\n",
                 (unsigned long)u64Entry, (unsigned long)u64Stack, cRepl);
         return GJ_OK;
+    }
+    /* INTERP soft miss: path present but dynlinker not loaded → main entry */
+    if ((pMain->u32Flags & GJ_ELF_INFO_HAS_INTERP) != 0 &&
+        (pInterp == NULL || pInterp->u64Entry == 0)) {
+        kprintf("elf: INTERP soft defer main entry=0x%lx PASS\n",
+                (unsigned long)pMain->u64Entry);
     }
     /* No INTERP: start at main */
     u64Entry = pMain->u64Entry;
@@ -1509,6 +1768,84 @@ publish_vfs_blob(const char *szPath, const void *pData, size_t cb)
     cpu_load_cr3(u64Saved);
 }
 
+/*
+ * Deterministic 16-byte AT_RANDOM seed (freestanding; not CSPRNG).
+ * Mixes entry/base so distinct exec images differ in userspace probes.
+ */
+static void
+elf_seed_random16(u8 *pOut, u64 u64A, u64 u64B)
+{
+    u64 a = u64A ^ 0x6a09e667f3bcc909ull;
+    u64 b = u64B ^ 0xbb67ae8584caa73bull;
+    u32 i;
+
+    if (pOut == NULL) {
+        return;
+    }
+    for (i = 0; i < 16u; i++) {
+        a = a * 6364136223846793005ull + 1ull;
+        b ^= a;
+        b = (b << 7) | (b >> 57);
+        pOut[i] = (u8)(b >> ((i & 7u) * 8u));
+    }
+}
+
+void
+elf_handoff_fill(struct gj_ld_handoff *pHo, const char *szPath,
+                 const struct gj_elf_info *pMain,
+                 const struct gj_elf_info *pInterp, const u64 *pAuxv, u32 cAuxv)
+{
+    u32 i;
+    u32 cCopy;
+
+    if (pHo == NULL || pMain == NULL) {
+        return;
+    }
+    memset(pHo, 0, sizeof(*pHo));
+    pHo->u64Magic = GJ_LD_HANDOFF_MAGIC;
+    pHo->u64Entry = pMain->u64Entry;
+    pHo->u64Interp = pInterp != NULL ? pInterp->u64Entry : 0;
+    pHo->u64Base = pInterp != NULL ? pInterp->u64Base : 0;
+    pHo->u64Phdr = pMain->u64PhdrVa;
+    pHo->u64Phent = pMain->u16Phentsize;
+    pHo->u64Phnum = pMain->u16Phnum;
+    pHo->u64Pagesz = GJ_PAGE_SIZE;
+    pHo->u64Stack = GJ_LD_STACK_VA;
+    pHo->u32Flags = pMain->u32Flags;
+    pHo->cSymReloc = pMain->u32SymRelocs;
+    pHo->cSo = 0;
+    for (i = 0; i < GJ_ELF_SO_MAX && i < GJ_LD_SO_MAX; i++) {
+        if (!g_aSo[i].u8Used) {
+            continue;
+        }
+        pHo->aSo[pHo->cSo].u64Bias = g_aSo[i].u64Bias;
+        pHo->aSo[pHo->cSo].cbImg = g_aSo[i].cbImg;
+        pHo->aSo[pHo->cSo].u32NameHash = g_aSo[i].u32NameHash;
+        /* Basename = DT_NEEDED (ld-gj opens /lib/<name>); soname is registry-only */
+        path_copy_n(pHo->aSo[pHo->cSo].szName, sizeof(pHo->aSo[pHo->cSo].szName),
+                    g_aSo[i].szName);
+        pHo->cSo++;
+    }
+    cCopy = cAuxv;
+    if (cCopy > GJ_AUXV_MAX) {
+        cCopy = GJ_AUXV_MAX;
+    }
+    pHo->cAuxv = cCopy;
+    if (pAuxv != NULL) {
+        for (i = 0; i < cCopy * 2u && i < GJ_AUXV_MAX * 2u; i++) {
+            pHo->aAuxv[i] = pAuxv[i];
+        }
+    }
+    if (szPath != NULL && szPath[0] != '\0') {
+        path_copy_n(pHo->szPath, sizeof(pHo->szPath), szPath);
+    }
+    if (pMain->szInterp[0] != '\0') {
+        path_copy_n(pHo->szInterp, sizeof(pHo->szInterp), pMain->szInterp);
+    } else if (pInterp != NULL && pInterp->szInterp[0] != '\0') {
+        path_copy_n(pHo->szInterp, sizeof(pHo->szInterp), pInterp->szInterp);
+    }
+}
+
 gj_status_t
 elf_publish_handoff(struct gj_process *pProc, const char *szPath,
                     const struct gj_elf_info *pMain,
@@ -1522,51 +1859,22 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     u32 cCopy;
     u64 *pStack;
     u32 o;
+    const char *szUsePath;
 
     if (pProc == NULL || pMain == NULL) {
         return GJ_ERR_INVAL;
     }
-    memset(&ho, 0, sizeof(ho));
-    ho.u64Magic = GJ_LD_HANDOFF_MAGIC;
-    ho.u64Entry = pMain->u64Entry;
-    ho.u64Interp = pInterp != NULL ? pInterp->u64Entry : 0;
-    ho.u64Base = pInterp != NULL ? pInterp->u64Base : 0;
-    ho.u64Phdr = pMain->u64PhdrVa;
-    ho.u64Phent = pMain->u16Phentsize;
-    ho.u64Phnum = pMain->u16Phnum;
-    ho.u64Pagesz = GJ_PAGE_SIZE;
-    ho.u32Flags = pMain->u32Flags;
-    ho.cSymReloc = pMain->u32SymRelocs;
-    ho.cSo = 0;
-    for (i = 0; i < GJ_ELF_SO_MAX && i < GJ_LD_SO_MAX; i++) {
-        if (!g_aSo[i].u8Used) {
-            continue;
-        }
-        ho.aSo[ho.cSo].u64Bias = g_aSo[i].u64Bias;
-        ho.aSo[ho.cSo].cbImg = g_aSo[i].cbImg;
-        path_copy_n(ho.aSo[ho.cSo].szName, sizeof(ho.aSo[ho.cSo].szName),
-                    g_aSo[i].szName);
-        ho.cSo++;
-    }
-    ho.cAuxv = pProc->cAuxv;
-    cCopy = pProc->cAuxv;
-    if (cCopy > GJ_AUXV_MAX) {
-        cCopy = GJ_AUXV_MAX;
-    }
-    for (i = 0; i < cCopy * 2u && i < GJ_AUXV_MAX * 2u; i++) {
-        ho.aAuxv[i] = pProc->aAuxv[i];
-    }
     if (szPath != NULL && szPath[0] != '\0') {
-        path_copy_n(ho.szPath, sizeof(ho.szPath), szPath);
         path_copy_n(pProc->szExecPath, sizeof(pProc->szExecPath), szPath);
+        szUsePath = szPath;
     } else if (pProc->szExecPath[0] != '\0') {
-        path_copy_n(ho.szPath, sizeof(ho.szPath), pProc->szExecPath);
+        szUsePath = pProc->szExecPath;
+    } else {
+        szUsePath = NULL;
     }
-    if (pMain->szInterp[0] != '\0') {
-        path_copy_n(ho.szInterp, sizeof(ho.szInterp), pMain->szInterp);
-    } else if (pInterp != NULL && pInterp->szInterp[0] != '\0') {
-        path_copy_n(ho.szInterp, sizeof(ho.szInterp), pInterp->szInterp);
-    }
+
+    elf_handoff_fill(&ho, szUsePath, pMain, pInterp, pProc->aAuxv, pProc->cAuxv);
+    cCopy = ho.cAuxv;
 
     /*
      * INTERP-first stack block (SysV): argc, argv[], NULL, envp NULL, auxv...
@@ -1592,6 +1900,12 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     cpu_load_cr3(vmm_kernel_cr3());
     memset((void *)(gj_vaddr_t)pa, 0, GJ_PAGE_SIZE);
     memcpy((void *)(gj_vaddr_t)pa, &ho, sizeof(ho));
+    /* AT_RANDOM 16 bytes at GJ_LD_RANDOM_OFF on handoff page */
+    {
+        u8 *pRnd = (u8 *)(gj_vaddr_t)pa + (size_t)GJ_LD_RANDOM_OFF;
+
+        elf_seed_random16(pRnd, ho.u64Entry, ho.u64Base ^ ((u64)ho.cSo << 32));
+    }
 
     /* Build stack page under kernel CR3 */
     memset((void *)(gj_vaddr_t)paStack, 0, GJ_PAGE_SIZE);
@@ -1661,10 +1975,11 @@ elf_publish_handoff(struct gj_process *pProc, const char *szPath,
     }
 
     kprintf("elf: handoff va=0x%lx entry=0x%lx base=0x%lx path=%s sym=%u "
-            "so=%u\n",
+            "so=%u random=0x%lx PASS\n",
             (unsigned long)GJ_LD_HANDOFF_VA, (unsigned long)ho.u64Entry,
             (unsigned long)ho.u64Base,
-            ho.szPath[0] != '\0' ? ho.szPath : "(none)", ho.cSymReloc, ho.cSo);
+            ho.szPath[0] != '\0' ? ho.szPath : "(none)", ho.cSymReloc, ho.cSo,
+            (unsigned long)GJ_LD_RANDOM_VA);
     return GJ_OK;
 }
 
@@ -1727,6 +2042,21 @@ elf_ld_handoff_verify(struct gj_process *pProc)
     }
     if (ho.cSymReloc > 0 || (ho.u32Flags & GJ_ELF_INFO_SYM_OK) != 0) {
         kprintf("ld-gj: symbol reloc ready n=%u\n", ho.cSymReloc);
+    }
+    if (ho.cSo > 0) {
+        kprintf("ld-gj: SO registry handoff n=%u hash0=0x%x\n", ho.cSo,
+                ho.aSo[0].u32NameHash);
+    }
+    /* Soft probe AT_RANDOM mapping on handoff page */
+    {
+        gj_paddr_t paRnd =
+            vmm_virt_to_phys((gj_vaddr_t)(GJ_LD_RANDOM_VA & ~0xfffull));
+
+        if (paRnd != 0 && elf_auxv_get(ho.aAuxv, ho.cAuxv, GJ_AT_RANDOM) ==
+                              GJ_LD_RANDOM_VA) {
+            kprintf("elf: auxv AT_RANDOM ready 0x%lx PASS\n",
+                    (unsigned long)GJ_LD_RANDOM_VA);
+        }
     }
     kprintf("ld-gj: handoff PASS\n");
     return GJ_OK;

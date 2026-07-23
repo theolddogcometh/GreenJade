@@ -8,10 +8,12 @@
  *
  * Greppable serial markers (kernel/mm/vmm.c):
  *   vmm: HHDM base=
- *   vmm: as_create cr3=
- *   vmm: as_destroy leaf=
- *   vmm: COW break
- *   vmm: map_device_uc
+ *   vmm: as_create cr3= … live= total= PASS
+ *   vmm: as_destroy leaf= … priv= cow_drop= tables= … PASS
+ *   vmm: COW break … free_old|PASS  (also live=/frees=)
+ *   vmm: as_clone_user … cow= rocopy= cow_live=
+ *   vmm: map_device_uc … pages= soft PASS
+ *   vmm: ensure_identity_rw … fixed= dual= soft PASS
  */
 #pragma once
 
@@ -41,16 +43,21 @@ int        hhdm_ready(void);
 /**
  * Create a new address space: allocate PML4, share kernel half of template,
  * empty user half (G-AS-1, G-AS-2). Returns CR3 physical address or 0.
+ * Logs greppable `vmm: as_create cr3=` with live/total counters.
  */
 u64 vmm_as_create(void);
 
-/** Destroy a private AS (frees user page tables + PML4; not the boot AS). */
+/**
+ * Destroy a private AS (frees user page tables + PML4; not the boot AS).
+ * Always logs greppable `vmm: as_destroy leaf=` (leaf may be 0).
+ */
 gj_status_t vmm_as_destroy(u64 u64Cr3);
 
 /**
  * Clone private non-identity user 4K pages from src CR3 into dst CR3.
  * Skips kernel-shared table subtrees and identity (PA==VA) leftovers.
  * Caps copies at u32Max (0 → default 256). Writes count to *pCopied if set.
+ * Logs cow= vs rocopy= share counts and cow_live=.
  */
 gj_status_t vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max,
                                     u32 *pCopied);
@@ -58,6 +65,7 @@ gj_status_t vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max,
 /**
  * Break a COW leaf under the *active* CR3 (write-fault path).
  * Returns GJ_OK if broken; GJ_ERR_NOENT if not a COW page.
+ * Logs greppable `vmm: COW break` with free_old / rem / live.
  */
 gj_status_t vmm_cow_break_page(gj_vaddr_t va);
 
@@ -103,6 +111,7 @@ u64 vmm_read_pte(gj_vaddr_t va);
  * Force identity R/W (kernel, non-user) mappings for [va, va+cb).
  * Repairs both the kernel template CR3 and the active CR3 when they differ.
  * Use before kernel BSS/image stores when a private AS may have left leaves RO.
+ * Soft-path greppable: `vmm: ensure_identity_rw … soft PASS` (always).
  */
 gj_status_t vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb);
 
@@ -116,5 +125,6 @@ gj_status_t vmm_map_device(gj_paddr_t pa, u64 cb);
 /**
  * Map device MMIO into the dedicated high UC window (GJ_DEVICE_MMIO_BASE+PA).
  * Safe for T1 soft CAP when BAR is in low physical space. Writes *pVaOut.
+ * Soft-path greppable: `vmm: map_device_uc … soft PASS` (or soft reject).
  */
 gj_status_t vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut);

@@ -6,8 +6,15 @@
  *
  * Dispatched via GJ_SYS_SESSION (arg0 = opcode). Ownership token 0 means
  * the kernel interim owns policy; a non-zero claim means sessiond owns
- * scanout policy. Claim is idempotent for the same token; a different
- * token returns GJ_ERR_BUSY.
+ * scanout policy.
+ *
+ * Soft paths (bring-up / product smoke):
+ *   CLAIM is idempotent for the same 32-bit token (reclaim soft);
+ *   a different token returns GJ_ERR_BUSY. RELEASE when free is soft 0.
+ *   PRESENT / PRESENT_FB remain usable without claim for smokes; sessiond
+ *   prefers the owned PRESENT_FB path. Multi-frame soft: consecutive
+ *   successful PRESENT_FB is counted (frame gen via compositor).
+ *   INPUT_POLL/POP soft-skip cleanly when virtio-input is absent.
  *
  * User pointers: copy_{to,from}_user when the range is in the user VA
  * window; early kernel smokes may pass HHDM/static buffers.
@@ -27,18 +34,25 @@
  *   [1] input events pushed (lifetime)
  *   [2] door call count
  *   [3] flags: bit0 compositor ready, bit1 input ready, bit2 owned,
- *              bits 8..15 pending input count (0..255)
+ *              bits 8..15 pending input count (0..255),
+ *              bit16 sticky input drop observed,
+ *              bit17 any user PRESENT_FB success,
+ *              bit18 multi-frame soft (user presents ≥ 2),
+ *              bit19 reclaim soft observed (same-token re-CLAIM)
  *   [4] owner token (0 = kernel interim)
+ * Wire size stays 5 for sessiond / smoke ABI stability.
  */
 #define GJ_SESS_OP_STATS        5u
 /**
  * Present user framebuffer: arg1=w arg2=h arg3=user BGRA ptr (stride=w*4).
  * Clips to scanout; blits top-left with correct source/dest strides.
+ * Soft multi-frame: successive successful PRESENT_FB bump user present
+ * count and compositor frame gen (second+ frames set STATS bit18).
  */
 #define GJ_SESS_OP_PRESENT_FB   6u
-/** Claim ownership (sessiond): arg1=token (non-zero, 32-bit). */
+/** Claim ownership (sessiond): arg1=token (non-zero, 32-bit). Soft reclaim. */
 #define GJ_SESS_OP_CLAIM        7u
-/** Release ownership: arg1=token matching claim. */
+/** Release ownership: arg1=token matching claim. Soft free when unowned. */
 #define GJ_SESS_OP_RELEASE      8u
 /**
  * Map scanout FB (interim VA hint, not a true userspace map):
@@ -57,3 +71,12 @@ int session_door_owned(void);
 
 /** Current owner token, or 0 if kernel interim owns policy. */
 u32 session_door_owner_token(void);
+
+/**
+ * Soft diagnostics: successful first claims + idempotent reclaims.
+ * greppable: session_door claim soft
+ */
+u32 session_door_claim_count(void);
+
+/** Lifetime successful user PRESENT_FB count (multi-frame soft base). */
+u32 session_door_user_presents(void);

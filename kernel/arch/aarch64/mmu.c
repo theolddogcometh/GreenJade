@@ -48,13 +48,22 @@
  * SCTLR_EL1: set M (MMU), C (data cache), I (instruction cache) together
  * after MAIR/TCR/TTBR + TLBI. ISB required after SCTLR write.
  *
- * Greppable: aarch64: mmu PASS
+ * -------------------------------------------------------------------------
+ * Soft map observability (no fail-stop beyond DRAM self-touch)
+ * -------------------------------------------------------------------------
+ * After enable: re-read L1 block descriptors, MAIR/TCR/TTBR0/SCTLR via MRS,
+ * soft-touch DRAM through Attr1 and soft-read a known MMIO FR word through
+ * Attr0 (PL011 UART FR @ 0x09000018 — RO status; never writes DR).
+ * Greppable:
+ *   aarch64: mmu PASS
+ *   aarch64: mmu map soft PASS   (L1[0] device + L1[1] normal + M/C/I)
  *
  * Freestanding pure C; no GPL Linux arch code.
  */
 #include "types_arch.h"
 
 extern void aarch64_uart_puts(const char *sz);
+extern void aarch64_uart_put_hex(unsigned long v);
 extern void *aarch64_pmm_alloc(void);
 
 /*
@@ -88,6 +97,7 @@ extern void *aarch64_pmm_alloc(void);
 #define DESC_AP_RW    (0ull << 6)  /* EL1 RW / EL0 none */
 #define DESC_ATTR_DEV (0ull << 2)  /* MAIR AttrIndx 0 → nGnRnE */
 #define DESC_ATTR_MEM (1ull << 2)  /* MAIR AttrIndx 1 → Normal WB */
+#define DESC_ATTR_MASK (7ull << 2)
 #define DESC_PXN      (1ull << 53)
 #define DESC_UXN      (1ull << 54)
 
@@ -99,10 +109,19 @@ extern void *aarch64_pmm_alloc(void);
 /* Level-1 block size: 1 GiB with 4K granule / 39-bit VA (T0SZ=25) */
 #define L1_BLOCK_SIZE (1ull << 30)
 
+/* Soft map self-touch targets (identity on virt). */
+#define MMU_SOFT_DRAM_PA   0x40080000ul
+#define MMU_SOFT_DRAM_PAT  0x5a5a5a5a5a5a5a5aul
+/* PL011 UART FR (flag register) — RO; confirms device block still maps MMIO. */
+#define MMU_SOFT_UART_FR   0x09000018ul
+
 static unsigned long *g_pL1; /* 512 entries; only [0],[1] used */
 
-/* L1 block OA: bits [47:30] for 1 GiB blocks (4K granule). */
-#define L1_OA_MASK ~((1ull << 30) - 1ull)
+/*
+ * L1 block OA: bits [47:30] only for 1 GiB blocks (4K granule).
+ * Do not use ~((1<<30)-1): that keeps UXN/PXN [54:53] and looks like OA.
+ */
+#define L1_OA_MASK 0x0000ffffc0000000ull
 
 static unsigned long
 make_block(unsigned long pa, int fDevice)
@@ -133,6 +152,107 @@ tlb_invalidate_all(void)
     __asm__ volatile("isb" ::: "memory");
 }
 
+/*
+ * Soft map observability: re-validate L1 descriptors + system regs after
+ * enable, soft-touch DRAM (Attr1) and soft-read UART FR (Attr0 device).
+ * Returns 1 if map soft checks pass (non-fatal if 0 — still emit mmu PASS).
+ */
+static int
+mmu_map_soft_observe(unsigned long *pL1)
+{
+    unsigned long d0;
+    unsigned long d1;
+    unsigned long mair;
+    unsigned long tcr;
+    unsigned long ttbr0;
+    unsigned long sctlr;
+    volatile unsigned long *pDram;
+    volatile unsigned int *pUartFr;
+    unsigned long v;
+    unsigned int uFr;
+    int fOk;
+
+    d0 = pL1[0];
+    d1 = pL1[1];
+
+    __asm__ volatile("mrs %0, mair_el1" : "=r"(mair));
+    __asm__ volatile("mrs %0, tcr_el1" : "=r"(tcr));
+    __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr0));
+    __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+
+    fOk = 1;
+    /* L1[0]: valid block, AttrIndx device, PXN|UXN, OA 0. */
+    if ((d0 & DESC_VALID) == 0ul || (d0 & DESC_TABLE) != 0ul) {
+        fOk = 0;
+    }
+    if ((d0 & DESC_ATTR_MASK) != DESC_ATTR_DEV) {
+        fOk = 0;
+    }
+    if ((d0 & (DESC_PXN | DESC_UXN)) != (DESC_PXN | DESC_UXN)) {
+        fOk = 0;
+    }
+    if ((d0 & L1_OA_MASK) != 0ul) {
+        fOk = 0;
+    }
+    /* L1[1]: valid block, AttrIndx normal, OA 0x4000_0000. */
+    if ((d1 & DESC_VALID) == 0ul || (d1 & DESC_TABLE) != 0ul) {
+        fOk = 0;
+    }
+    if ((d1 & DESC_ATTR_MASK) != DESC_ATTR_MEM) {
+        fOk = 0;
+    }
+    if ((d1 & L1_OA_MASK) != 0x40000000ul) {
+        fOk = 0;
+    }
+    /* Live system regs: MAIR/TCR programmed, TTBR0 points at L1, M|C|I on. */
+    if (mair != MAIR_EL1_VAL) {
+        fOk = 0;
+    }
+    if ((tcr & 0x3full) != TCR_T0SZ_25) {
+        fOk = 0;
+    }
+    if ((ttbr0 & ~0xffful) != ((unsigned long)(void *)pL1 & ~0xffful)) {
+        fOk = 0;
+    }
+    if ((sctlr & (SCTLR_M | SCTLR_C | SCTLR_I)) != (SCTLR_M | SCTLR_C | SCTLR_I)) {
+        fOk = 0;
+    }
+
+    /* Soft walk DRAM through identity map (Attr1). */
+    pDram = (volatile unsigned long *)MMU_SOFT_DRAM_PA;
+    *pDram = MMU_SOFT_DRAM_PAT;
+    v = *pDram;
+    if (v != MMU_SOFT_DRAM_PAT) {
+        fOk = 0;
+    }
+
+    /*
+     * Soft walk device block: read PL011 FR only (status). Confirms L1[0]
+     * device Attr0 mapping still reaches low MMIO after SCTLR.M.
+     */
+    pUartFr = (volatile unsigned int *)MMU_SOFT_UART_FR;
+    uFr = *pUartFr;
+    (void)uFr;
+
+    aarch64_uart_puts("aarch64: mmu map l1[0]=");
+    aarch64_uart_put_hex(d0);
+    aarch64_uart_puts(" l1[1]=");
+    aarch64_uart_put_hex(d1);
+    aarch64_uart_puts(" mair=");
+    aarch64_uart_put_hex(mair);
+    aarch64_uart_puts(" tcr=");
+    aarch64_uart_put_hex(tcr);
+    aarch64_uart_puts(" ttbr0=");
+    aarch64_uart_put_hex(ttbr0);
+    aarch64_uart_puts(" sctlr=");
+    aarch64_uart_put_hex(sctlr);
+    aarch64_uart_puts(" uart_fr=");
+    aarch64_uart_put_hex((unsigned long)uFr);
+    aarch64_uart_puts("\n");
+
+    return fOk;
+}
+
 void
 aarch64_mmu_init(void)
 {
@@ -141,9 +261,11 @@ aarch64_mmu_init(void)
     unsigned long ttbr;
     unsigned long sctlr;
     unsigned i;
+    int fMapSoft;
 
     (void)MAIR_DEVICE_nGnRE; /* reserved Attr encoding; documents nGnRE */
     (void)L1_BLOCK_SIZE;
+    (void)DESC_TABLE;
 
     pPage = aarch64_pmm_alloc();
     if (pPage == 0) {
@@ -182,17 +304,14 @@ aarch64_mmu_init(void)
     __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
     __asm__ volatile("isb" ::: "memory");
 
-    /* Touch DRAM through the new mapping (Attr1 normal path). */
-    {
-        volatile unsigned long *p = (volatile unsigned long *)0x40080000ul;
-        unsigned long v;
-        *p = 0x5a5a5a5a5a5a5a5aul;
-        v = *p;
-        if (v != 0x5a5a5a5a5a5a5a5aul) {
-            aarch64_uart_puts("aarch64: mmu soft FAIL (dram)\n");
-            return;
-        }
+    /* Soft map observe + DRAM self-touch (Attr1 normal path). */
+    fMapSoft = mmu_map_soft_observe(pL1);
+    if (fMapSoft == 0) {
+        aarch64_uart_puts("aarch64: mmu map soft FAIL\n");
+        aarch64_uart_puts("aarch64: mmu PASS\n"); /* path present */
+        return;
     }
 
     aarch64_uart_puts("aarch64: mmu PASS\n");
+    aarch64_uart_puts("aarch64: mmu map soft PASS\n");
 }

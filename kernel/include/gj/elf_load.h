@@ -41,23 +41,28 @@ struct gj_elf_info {
 #define GJ_ELF_INFO_HAS_DYNAMIC 8u
 #define GJ_ELF_INFO_RELOC_OK    16u
 #define GJ_ELF_INFO_SYM_OK      32u /* GLOB_DAT/JUMP_SLOT applied */
+/* INTERP path present and soft-ok (absolute); dynlinker may still be embed */
+#define GJ_ELF_INFO_INTERP_SOFT 64u
 
 /* Linux AT_* (clean-room numbers for auxv handoff) */
-#define GJ_AT_NULL    0u
-#define GJ_AT_PHDR    3u
-#define GJ_AT_PHENT   4u
-#define GJ_AT_PHNUM   5u
-#define GJ_AT_PAGESZ  6u
-#define GJ_AT_BASE    7u
-#define GJ_AT_FLAGS   8u
-#define GJ_AT_ENTRY   9u
-#define GJ_AT_UID     11u
-#define GJ_AT_EUID    12u
-#define GJ_AT_GID     13u
-#define GJ_AT_EGID    14u
-#define GJ_AT_SECURE  23u
-#define GJ_AT_RANDOM  25u
-#define GJ_AT_EXECFN  31u
+#define GJ_AT_NULL     0u
+#define GJ_AT_PHDR     3u
+#define GJ_AT_PHENT    4u
+#define GJ_AT_PHNUM    5u
+#define GJ_AT_PAGESZ   6u
+#define GJ_AT_BASE     7u
+#define GJ_AT_FLAGS    8u
+#define GJ_AT_ENTRY    9u
+#define GJ_AT_UID      11u
+#define GJ_AT_EUID     12u
+#define GJ_AT_GID      13u
+#define GJ_AT_EGID     14u
+#define GJ_AT_PLATFORM 15u
+#define GJ_AT_HWCAP    16u
+#define GJ_AT_CLKTCK   17u
+#define GJ_AT_SECURE   23u
+#define GJ_AT_RANDOM   25u
+#define GJ_AT_EXECFN   31u
 
 /*
  * Fixed user VA for dynlinker handoff page (ld-gj reads this after INTERP load).
@@ -66,6 +71,9 @@ struct gj_elf_info {
 #define GJ_LD_HANDOFF_VA    0x000000006ff00000ull
 #define GJ_LD_STACK_VA      0x000000006ff01000ull /* argc/argv/env/auxv block */
 #define GJ_LD_HANDOFF_MAGIC 0x444c4a47ull /* 'GJLD' little-endian */
+/* 16-byte AT_RANDOM blob on handoff page (past sizeof(gj_ld_handoff) ~1016) */
+#define GJ_LD_RANDOM_OFF    0x400ull
+#define GJ_LD_RANDOM_VA     (GJ_LD_HANDOFF_VA + GJ_LD_RANDOM_OFF)
 
 #define GJ_LD_SO_MAX 4u
 
@@ -73,8 +81,8 @@ struct gj_elf_info {
 struct gj_ld_so_ent {
     u64  u64Bias;       /* load bias (base for ET_DYN) */
     u32  cbImg;         /* file image size (if staged) */
-    u32  u32Pad;
-    char szName[56];    /* soname e.g. libgj-so.so.1 */
+    u32  u32NameHash;   /* SysV hash of szName (was pad; ld-gj ignores) */
+    char szName[56];    /* basename / soname e.g. libgj-so.so.1 */
 };
 
 struct gj_ld_handoff {
@@ -157,3 +165,51 @@ gj_status_t elf_publish_handoff(struct gj_process *pProc, const char *szPath,
  * Returns GJ_OK when magic/entry/phdr look live.
  */
 gj_status_t elf_ld_handoff_verify(struct gj_process *pProc);
+
+/* ---- deepen helpers: hash / SO registry / INTERP soft / auxv ---- */
+
+/** SysV ELF hash (DT_HASH). */
+u32 elf_sysv_hash_name(const char *szName);
+
+/** GNU hash (DJB; DT_GNU_HASH). */
+u32 elf_gnu_hash_name(const char *szName);
+
+/**
+ * Look up auxv key in flat key/value pairs. Returns value or 0 if absent.
+ * cPairs is number of pairs (not elements).
+ */
+u64 elf_auxv_get(const u64 *pPairs, u32 cPairs, u64 u64Key);
+
+/**
+ * Set or replace auxv key; appends if missing. *pCPairs updated.
+ * Returns 1 on success, 0 if full / bad args. Does not leave trailing AT_NULL.
+ */
+int elf_auxv_set(u64 *pPairs, u32 *pCPairs, u32 cMax, u64 u64Key, u64 u64Val);
+
+/**
+ * Append one key/value pair. Returns new pair count (unchanged if full).
+ */
+u32 elf_auxv_push(u64 *pPairs, u32 cPairs, u32 cMax, u64 u64Key, u64 u64Val);
+
+/**
+ * Pack handoff fields (no map). Copies SO registry + auxv pairs into *pHo.
+ */
+void elf_handoff_fill(struct gj_ld_handoff *pHo, const char *szPath,
+                      const struct gj_elf_info *pMain,
+                      const struct gj_elf_info *pInterp, const u64 *pAuxv,
+                      u32 cAuxv);
+
+/** Number of live SO registry slots after elf_load_needed_sos. */
+u32 elf_so_registry_count(void);
+
+/**
+ * Find mapped SO by basename or DT_SONAME. Fills *pBias / *pcb when non-NULL.
+ * Returns 1 if found.
+ */
+int elf_so_registry_find(const char *szName, u64 *pBias, u32 *pcb);
+
+/**
+ * INTERP soft gate: non-empty absolute path, fits GJ_ELF_INTERP_MAX-1.
+ * Relative paths fail (caller may soft-normalize first).
+ */
+int elf_interp_soft_ok(const char *szInterp);

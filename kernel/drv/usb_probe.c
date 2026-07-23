@@ -4,11 +4,14 @@
  *
  * Product T1 HCL: USB host controller PCI class probe — clean-room pure C.
  * Enumerate class 0C:03 (serial bus / USB); log UHCI/OHCI/EHCI/xHCI by prog-if.
- * Enumerate only — no HC init, no IRQ, no transfer rings (HID parse later).
- * No GPL source; public PCI class codes only.
+ * Soft identify: BAR0 resolve + optional CAPLENGTH/HCIVERSION MMIO read for
+ * EHCI/xHCI (and HcRevision for OHCI) via vmm_map_device_uc. No HC init,
+ * no IRQ, no transfer rings (HID parse later). No GPL source; public PCI
+ * class codes + HC capability register layouts only.
  */
 #include <gj/klog.h>
 #include <gj/types.h>
+#include <gj/vmm.h>
 
 /* PCI class / subclass: serial bus / USB */
 #define USB_PCI_CLASS    0x0cu
@@ -64,8 +67,92 @@ usb_if_name(u8 u8Pif)
 }
 
 /**
- * Scan PCI for USB host controllers. Returns total HC count.
- * Always logs a greppable product line (smoke: "usb: probe").
+ * Resolve BAR0 physical base (32-/64-bit mem) or I/O base.
+ * *pfIo set for I/O BAR (UHCI). *pf64 set for 64-bit mem BAR.
+ */
+static u64
+usb_bar0_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pfIo,
+            int *pf64)
+{
+    u32 u32Lo = pci_cfg_read(u8Bus, u8Slot, u8Func, 0x10);
+    u64 paBar;
+
+    if (pBarRaw != NULL) {
+        *pBarRaw = u32Lo;
+    }
+    if (pfIo != NULL) {
+        *pfIo = 0;
+    }
+    if (pf64 != NULL) {
+        *pf64 = 0;
+    }
+    if ((u32Lo & 1u) != 0) {
+        /* I/O BAR: base in bits 15:2 (classic UHCI) */
+        if (pfIo != NULL) {
+            *pfIo = 1;
+        }
+        return (u64)(u32Lo & ~0x3u);
+    }
+    paBar = (u64)(u32Lo & ~0xfu);
+    if (((u32Lo >> 1) & 3u) == 2u) {
+        u32 u32Hi = pci_cfg_read(u8Bus, u8Slot, u8Func, 0x14);
+
+        paBar |= ((u64)u32Hi << 32);
+        if (pf64 != NULL) {
+            *pf64 = 1;
+        }
+    }
+    return paBar;
+}
+
+/**
+ * Soft identify MMIO HC capability head (OHCI/EHCI/xHCI). Read-only.
+ */
+static void
+usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
+{
+    gj_vaddr_t vaMap = 0;
+    gj_status_t stMap;
+
+    kprintf("usb: bar0 mem soft path PASS pa=0x%lx\n",
+            (unsigned long)paBar);
+    stMap = vmm_map_device_uc((gj_paddr_t)paBar, 0x1000, &vaMap);
+    if (stMap != GJ_OK) {
+        kprintf("usb: bar0 map soft fail st=%d\n", (int)stMap);
+        return;
+    }
+    {
+        volatile u32 *pReg = (volatile u32 *)(gj_vaddr_t)vaMap;
+        u32 u32D0 = pReg[0];
+
+        if (u8Pif == USB_PIF_OHCI) {
+            /* HcRevision @ 0x00 */
+            kprintf("usb: identify OHCI HcRevision=0x%x soft PASS\n", u32D0);
+        } else if (u8Pif == USB_PIF_EHCI || u8Pif == USB_PIF_XHCI) {
+            /* CAPLENGTH @ byte0; HCIVERSION @ bytes 2–3 (public layout) */
+            u8 u8CapLen = (u8)(u32D0 & 0xffu);
+            u16 u16HciVer = (u16)((u32D0 >> 16) & 0xffffu);
+
+            kprintf("usb: identify %s CAPLENGTH=%u HCIVERSION=0x%04x soft "
+                    "PASS\n",
+                    usb_if_name(u8Pif), (unsigned)u8CapLen,
+                    (unsigned)u16HciVer);
+            if (u8Pif == USB_PIF_XHCI) {
+                u32 u32Hcs1 = pReg[1]; /* HCSPARAMS1 @ 0x04 */
+
+                kprintf("usb: identify xHCI HCSPARAMS1=0x%x soft PASS\n",
+                        u32Hcs1);
+            }
+        } else {
+            kprintf("usb: identify mmio d0=0x%x soft PASS\n", u32D0);
+        }
+    }
+}
+
+/**
+ * Scan PCI for USB host controllers. Soft BAR map + cap-head identify.
+ * Returns total HC count. Always logs a greppable product line (smoke:
+ * "usb: probe").
  */
 u32
 usb_probe_scan(void)
@@ -81,10 +168,15 @@ usb_probe_scan(void)
             for (u8Func = 0; u8Func < 8; u8Func++) {
                 u32 u32Id = pci_cfg_read(u8Bus, u8Slot, u8Func, 0);
                 u32 u32ClassReg;
+                u32 u32BarRaw = 0;
                 u8 u8Base;
                 u8 u8Sub;
                 u8 u8Pif;
                 u16 u16Vendor;
+                u16 u16Device;
+                int fIo = 0;
+                int f64 = 0;
+                u64 paBar;
 
                 u16Vendor = (u16)(u32Id & 0xffffu);
                 if (u16Vendor == 0xffffu) {
@@ -93,6 +185,7 @@ usb_probe_scan(void)
                     }
                     continue;
                 }
+                u16Device = (u16)((u32Id >> 16) & 0xffffu);
                 u32ClassReg = pci_cfg_read(u8Bus, u8Slot, u8Func, 0x08);
                 u8Base = (u8)((u32ClassReg >> 24) & 0xffu);
                 u8Sub = (u8)((u32ClassReg >> 16) & 0xffu);
@@ -100,8 +193,24 @@ usb_probe_scan(void)
                 if (u8Base != USB_PCI_CLASS || u8Sub != USB_PCI_SUBCLASS) {
                     continue;
                 }
+                paBar = usb_bar0_pa(u8Bus, u8Slot, u8Func, &u32BarRaw, &fIo,
+                                    &f64);
                 kprintf("usb: probe %u:%u.%u %s vendor=0x%04x PASS\n", u8Bus,
                         u8Slot, u8Func, usb_if_name(u8Pif), u16Vendor);
+                kprintf("usb: identify %u:%u.%u %s id=%04x:%04x bar0=0x%x "
+                        "pa=0x%lx %s soft PASS\n",
+                        u8Bus, u8Slot, u8Func, usb_if_name(u8Pif), u16Vendor,
+                        u16Device, u32BarRaw, (unsigned long)paBar,
+                        fIo != 0 ? "io" : (f64 != 0 ? "mem64" : "mem32"));
+                if (fIo != 0) {
+                    /* UHCI: I/O BAR only — no MMIO soft map */
+                    kprintf("usb: bar0 io soft path PASS base=0x%lx\n",
+                            (unsigned long)paBar);
+                } else if (paBar != 0) {
+                    usb_soft_identify_mmio(u8Pif, paBar);
+                } else {
+                    kprintf("usb: bar0 empty soft skip\n");
+                }
                 cFound++;
                 if (u8Pif == USB_PIF_XHCI) {
                     cXhci++;

@@ -10,6 +10,9 @@
  *   - g_u32W/H are clamped to a small tile (≤ GJ_COMP_MAX_DIM) for bring-up
  * session_door / sessiond claim ownership of *policy*; this module still
  * holds the physical scanout until a full userspace compositor lands.
+ *
+ * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
+ * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  */
 #include <gj/compositor.h>
 #include <gj/config.h>
@@ -32,8 +35,12 @@ static u32        g_u32W;
 static u32        g_u32H;
 static u32        g_u32Stride;
 static u32        g_u32Presents;
+static u32        g_u32Multi;     /* soft: presents after first ok */
+static u32        g_u32FrameGen;  /* soft: bumps each ok present */
+static u32        g_u32SoftIdx;   /* soft double-buffer index 0/1 */
 static int        g_fReady;
 static int        g_fLoggedPresent; /* quiet hot path after first success */
+static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /**
  * Allocate scanout, fill a jade-ish gradient, mark ready.
@@ -56,7 +63,11 @@ session_compositor_init(void)
 
     g_fReady = 0;
     g_fLoggedPresent = 0;
+    g_fLoggedMulti = 0;
     g_u32Presents = 0;
+    g_u32Multi = 0;
+    g_u32FrameGen = 0;
+    g_u32SoftIdx = 0;
     g_paScanout = 0;
     g_pScanout = NULL;
     g_u32W = 0;
@@ -125,9 +136,33 @@ session_compositor_init(void)
     (void)u32Pages;
 
     g_fReady = 1;
-    kprintf("compositor: scanout %ux%u pa=0x%lx ready\n", g_u32W, g_u32H,
-            (unsigned long)g_paScanout);
+    kprintf("compositor: scanout %ux%u pa=0x%lx ready (multi-frame soft)\n",
+            g_u32W, g_u32H, (unsigned long)g_paScanout);
     return 0;
+}
+
+/**
+ * Bookkeep a successful flip: present count, frame gen, soft index, multi.
+ */
+static void
+comp_note_ok_present(void)
+{
+    g_u32Presents++;
+    g_u32FrameGen++;
+    g_u32SoftIdx ^= 1u;
+    if (g_u32Presents > 1u) {
+        g_u32Multi++;
+        if (!g_fLoggedMulti) {
+            g_fLoggedMulti = 1;
+            /* greppable: compositor: multi-frame soft */
+            kprintf("compositor: multi-frame soft gen=%u idx=%u\n",
+                    g_u32FrameGen, g_u32SoftIdx);
+        }
+    }
+    if (!g_fLoggedPresent) {
+        g_fLoggedPresent = 1;
+        kprintf("compositor: present ok (quiet after first)\n");
+    }
 }
 
 /**
@@ -145,19 +180,60 @@ session_compositor_present(void)
     }
     st = virtio_gpu_present(g_u32W, g_u32H, g_pScanout, g_u32Stride);
     if (st == 0) {
-        g_u32Presents++;
-        if (!g_fLoggedPresent) {
-            g_fLoggedPresent = 1;
-            kprintf("compositor: present ok (quiet after first)\n");
-        }
+        comp_note_ok_present();
     }
     return st;
+}
+
+int
+session_compositor_present_n(u32 u32N)
+{
+    u32 i;
+    u32 u32Ok = 0;
+    int stLast = -1;
+
+    if (!g_fReady) {
+        return -1;
+    }
+    if (u32N == 0) {
+        u32N = 1;
+    }
+    if (u32N > GJ_COMP_MULTI_MAX) {
+        u32N = GJ_COMP_MULTI_MAX;
+    }
+    for (i = 0; i < u32N; i++) {
+        stLast = session_compositor_present();
+        if (stLast == 0) {
+            u32Ok++;
+        } else {
+            break; /* stop soft batch on first backend reject */
+        }
+    }
+    return u32Ok != 0 ? 0 : stLast;
 }
 
 u32
 session_compositor_present_count(void)
 {
     return g_u32Presents;
+}
+
+u32
+session_compositor_multi_count(void)
+{
+    return g_u32Multi;
+}
+
+u32
+session_compositor_frame_gen(void)
+{
+    return g_u32FrameGen;
+}
+
+u32
+session_compositor_soft_index(void)
+{
+    return g_u32SoftIdx & 1u;
 }
 
 int

@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 22 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 23 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -21,7 +21,7 @@
  *   pmm_core: soft path      — surface catalog + product non-claims
  *   pmm_core: soft geom      — Wave 19 page/span geometry
  *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=22 stamp + area count
+ *   pmm_core: soft deepen    — wave=23 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 22 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 22u
+/* Wave 23 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 23u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -174,7 +174,7 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
             "(soft inventory only; not hierarchical pmm)\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft exclusive — Wave 22 exclusive deepen */
+    /* Grep: pmm_core: soft exclusive — Wave 23 exclusive deepen */
     kprintf("pmm_core: soft exclusive multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 order0=1 wave=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
@@ -278,19 +278,34 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)PMM_CORE_SOFT_WAVE);
             /*
-             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: pmm_core: soft retphase — Wave 22 return-phase honesty */
+            /* Grep: pmm_core: soft retphase — Wave 22 return-phase honesty (kept) */
             kprintf("pmm_core: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retphase honesty; Soft≠product; not bar3)\n",
                     (unsigned)PMM_CORE_SOFT_WAVE);
-            /* Grep: pmm_core: soft retbadge — Wave 22 exclusive badge stamp */
+            /* Grep: pmm_core: soft retbadge — Wave 22 badge stamp (kept) */
             kprintf("pmm_core: soft retbadge exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)PMM_CORE_SOFT_WAVE);
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+            */
+            /* Grep: pmm_core: soft rettoken — Wave 23 return-token honesty */
+            kprintf("pmm_core: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(rettoken honesty; Soft≠product; not bar3)\n",
+                    (unsigned)PMM_CORE_SOFT_WAVE);
+            /* Grep: pmm_core: soft retcrest — Wave 23 exclusive crest stamp */
+            kprintf("pmm_core: soft retcrest exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retcrest stamp; Soft≠product)\n",
                     (unsigned)PMM_CORE_SOFT_WAVE);
     kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",

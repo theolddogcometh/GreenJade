@@ -6082,7 +6082,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
     /*
      * Soft stats smoke inventory — greppable product markers only.
-     * Wave 22 exclusive deepen: soft inventory + path + capacity +
+     * Wave 23 exclusive deepen: soft inventory + path + capacity +
      * surfaces + catalog + note + honesty + deepen. Never blocks M0.
      * Grep: soft: stats smoke
      *        soft: inventory
@@ -6104,8 +6104,8 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         u32 cHit = 0;
         u32 cSerial;
         u32 cWow64;
-        /* Wave 22 soft inventory stamp (file-local; never product gate). */
-        enum { MAIN_SOFT_SMOKE_WAVE = 22u, MAIN_SOFT_SMOKE_AREAS = 24u };
+        /* Wave 23 soft inventory stamp (file-local; never product gate). */
+        enum { MAIN_SOFT_SMOKE_WAVE = 23u, MAIN_SOFT_SMOKE_AREAS = 26u };
 
         kprintf("soft: stats smoke begin wave=%u areas=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
@@ -6174,7 +6174,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         kprintf("soft: surfaces count=%u "
                 "names=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,deepen,PASS wave=%u\n",
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,deepen,PASS wave=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_AREAS,
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
@@ -6182,12 +6182,12 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         kprintf("soft: catalog wave=%u areas=%u "
                 "surfaces=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,deepen,PASS\n",
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,deepen,PASS\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
                 (unsigned)MAIN_SOFT_SMOKE_AREAS);
 
         /* Grep: soft: note (Wave 20 deepen) */
-        kprintf("soft: note milestone=wave22 exclusive=1 soft_only=1 "
+        kprintf("soft: note milestone=wave23 exclusive=1 soft_only=1 "
                 "not_bar3=1 hit=%u wow64_calls=%u wave=%u\n",
                 cHit, cWow64, (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
@@ -6205,7 +6205,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         /* Grep: soft: retmap — Wave 19 return-surface map */
         kprintf("soft: retmap begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,deepen,PASS "
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,deepen,PASS "
                 "product_gate=0 never_blocks_m0=1 wave=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
@@ -6255,24 +6255,39 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                         "(retmark stamp; Soft≠product)\n",
                         (unsigned)MAIN_SOFT_SMOKE_WAVE);
                 /*
-                 * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+                 * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
                  * Return surfaces only — soft inventory; never hard-gates product paths.
                  * Soft≠product; not bar3.
                 */
-                /* Grep: soft: retphase — Wave 22 return-phase honesty */
+                /* Grep: soft: retphase — Wave 22 return-phase honesty (kept) */
                 kprintf("soft: retphase soft_only=1 product_gate=0 soft_ne_product=1 "
                         "never_blocks_m0=1 wave=%u "
                         "(retphase honesty; Soft≠product; not bar3)\n",
                         (unsigned)MAIN_SOFT_SMOKE_WAVE);
-                /* Grep: soft: retbadge — Wave 22 exclusive badge stamp */
+                /* Grep: soft: retbadge — Wave 22 badge stamp (kept) */
                 kprintf("soft: retbadge exclusive=1 soft_ne_product=1 "
                         "product_kernel=OPEN bar3=0 wave=%u "
                         "(retbadge stamp; Soft≠product)\n",
                         (unsigned)MAIN_SOFT_SMOKE_WAVE);
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+                */
+                /* Grep: soft: rettoken — Wave 23 return-token honesty */
+                kprintf("soft: rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+                        "never_blocks_m0=1 wave=%u "
+                        "(rettoken honesty; Soft≠product; not bar3)\n",
+                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
+                /* Grep: soft: retcrest — Wave 23 exclusive crest stamp */
+                kprintf("soft: retcrest exclusive=1 soft_ne_product=1 "
+                        "product_kernel=OPEN bar3=0 wave=%u "
+                        "(retcrest stamp; Soft≠product)\n",
+                        (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
         /* Grep: soft: deepen wave */
         kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "
-                "(Wave 22 exclusive; not bar3)\n",
+                "(Wave 23 exclusive; not bar3)\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
                 (unsigned)MAIN_SOFT_SMOKE_AREAS,
                 cHit, cWow64);

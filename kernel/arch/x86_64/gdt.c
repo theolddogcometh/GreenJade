@@ -51,7 +51,7 @@
  *   "gdt: soft retmap …" — Wave 17 return-surface map (kept)
  *   gdt: soft return rate — Wave 19 ok/fail rate lamps
  *   gdt: soft retcode    — Wave 19 retcode catalog
- *   "gdt: soft deepen …"   — wave=22 areas stamp
+ *   "gdt: soft deepen …"   — wave=23 areas stamp
  * Soft never hard-gates boot. No bar3 claim.
  * greppable: gdt: soft
  * greppable: gdt: soft deepen
@@ -148,7 +148,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE     22u   /* Wave 22 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE     23u   /* Wave 23 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -770,19 +770,34 @@ gdt_soft_inventory(void)
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)GJ_GDT_SOFT_WAVE);
             /*
-             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: gdt: soft retphase — Wave 22 return-phase honesty */
+            /* Grep: gdt: soft retphase — Wave 22 return-phase honesty (kept) */
             kprintf("gdt: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retphase honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_GDT_SOFT_WAVE);
-            /* Grep: gdt: soft retbadge — Wave 22 exclusive badge stamp */
+            /* Grep: gdt: soft retbadge — Wave 22 badge stamp (kept) */
             kprintf("gdt: soft retbadge exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)GJ_GDT_SOFT_WAVE);
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+            */
+            /* Grep: gdt: soft rettoken — Wave 23 return-token honesty */
+            kprintf("gdt: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(rettoken honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_GDT_SOFT_WAVE);
+            /* Grep: gdt: soft retcrest — Wave 23 exclusive crest stamp */
+            kprintf("gdt: soft retcrest exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retcrest stamp; Soft≠product)\n",
                     (unsigned)GJ_GDT_SOFT_WAVE);
     kprintf("gdt: soft deepen wave=%u areas="
             "inventory,slots,user,tss,lamps,counters,star,path,"

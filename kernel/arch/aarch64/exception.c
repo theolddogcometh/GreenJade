@@ -22,7 +22,7 @@
  *   aarch64: exception soft daif=… i_held=… el=…
  *   aarch64: exception soft PASS | FAIL
  *
- * Soft inventory deepen (Wave 22 exclusive; this unit only):
+ * Soft inventory deepen (Wave 23 exclusive; this unit only):
  *   Multi-line greppable areas under "aarch64: exception soft …":
  *     inventory | vbar | class | counts | daif | banks | gates | path | deepen
  *   Banks soft: CurrentEL SP_ELx / SP_EL0 / Lower AArch64 / Lower AArch32
@@ -39,7 +39,7 @@
  *            aarch64: exception soft surf …
  *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=22 …
+ *            aarch64: exception soft deepen wave=23 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -77,9 +77,9 @@
 #define EXC_SOFT_DAIF_A_BIT     (1ul << 8)
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
-/* Wave 22 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE   22u
-#define EXC_SOFT_AREAS 20u
+/* Wave 23 soft inventory stamp (file-local; never product gate). */
+#define EXC_SOFT_WAVE   23u
+#define EXC_SOFT_AREAS 22u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -362,20 +362,35 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
 
     
 /*
- * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: soft retphase — Wave 22 return-phase honesty */
+/* Grep: aarch64: soft retphase — Wave 22 return-phase honesty (kept) */
 aarch64_uart_puts("aarch64: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
               "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retphase honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: soft retbadge — Wave 22 exclusive badge stamp */
+/* Grep: aarch64: soft retbadge — Wave 22 badge stamp (kept) */
 aarch64_uart_puts("aarch64: soft retbadge exclusive=1 soft_ne_product=1 "
               "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retbadge stamp; Soft!=product)\n");
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: soft rettoken — Wave 23 return-token honesty */
+aarch64_uart_puts("aarch64: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+              "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (rettoken honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retcrest — Wave 23 exclusive crest stamp */
+aarch64_uart_puts("aarch64: soft retcrest exclusive=1 soft_ne_product=1 "
+              "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retcrest stamp; Soft!=product)\n");
 /* Grep: aarch64: exception soft deepen */
     aarch64_uart_puts("aarch64: exception soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
@@ -391,7 +406,7 @@ aarch64_uart_puts(" (retbadge stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: exception soft exclusive — Wave 22 exclusive deepen */
+    /* Grep: aarch64: exception soft exclusive — Wave 23 exclusive deepen */
     aarch64_uart_puts("aarch64: exception soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);

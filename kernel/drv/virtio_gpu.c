@@ -40,7 +40,7 @@
  *   virtio-gpu: soft honesty …      (Wave 15)
  *   virtio-gpu: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-gpu: soft retcode    — Wave 19 retcode catalog
- *   virtio-gpu: soft deepen wave=22 …
+ *   virtio-gpu: soft deepen wave=23 …
  *   virtio-gpu: soft PASS|NODEV|PARTIAL
  *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
  *
@@ -86,9 +86,9 @@
  */
 #define VIRTIO_GPU_MAX_MEM_ENTRIES             256u
 
-/* Wave 22 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define GPU_SOFT_WAVE  22u
-#define GPU_SOFT_AREAS 42u
+/* Wave 23 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define GPU_SOFT_WAVE  23u
+#define GPU_SOFT_AREAS 44u
 
 /* ---- wire structs (packed, OASIS layout) --------------------------------- */
 struct virtio_gpu_ctrl_hdr {
@@ -963,7 +963,7 @@ gpu_soft_inventory(const char *szVia)
             "(retcode catalog; Soft≠product)\n",
             (unsigned)GPU_SOFT_WAVE);
 
-    /* Grep: virtio-gpu: soft deepen wave (Wave 22 stamp) */
+    /* Grep: virtio-gpu: soft deepen wave (Wave 23 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -1010,19 +1010,34 @@ gpu_soft_inventory(const char *szVia)
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)GPU_SOFT_WAVE);
             /*
-             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: virtio-gpu: soft retphase — Wave 22 return-phase honesty */
+            /* Grep: virtio-gpu: soft retphase — Wave 22 return-phase honesty (kept) */
             kprintf("virtio-gpu: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retphase honesty; Soft≠product; not bar3)\n",
                     (unsigned)GPU_SOFT_WAVE);
-            /* Grep: virtio-gpu: soft retbadge — Wave 22 exclusive badge stamp */
+            /* Grep: virtio-gpu: soft retbadge — Wave 22 badge stamp (kept) */
             kprintf("virtio-gpu: soft retbadge exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)GPU_SOFT_WAVE);
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+            */
+            /* Grep: virtio-gpu: soft rettoken — Wave 23 return-token honesty */
+            kprintf("virtio-gpu: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(rettoken honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GPU_SOFT_WAVE);
+            /* Grep: virtio-gpu: soft retcrest — Wave 23 exclusive crest stamp */
+            kprintf("virtio-gpu: soft retcrest exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retcrest stamp; Soft≠product)\n",
                     (unsigned)GPU_SOFT_WAVE);
     kprintf("virtio-gpu: soft deepen wave=%u areas=%u via=%s ready=%u "
             "present=%u have_res=%u cmd_ok=%u log_n=%u "

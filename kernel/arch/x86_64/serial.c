@@ -22,8 +22,8 @@
  * (no putchar flood). Soft ≠ IRQ console, ≠ bar3, ≠ product TTY.
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
- * Wave 22 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=22
+ * Wave 23 exclusive deepen, prefix-stable):
+ *   serial: soft inventory … wave=23
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -47,7 +47,7 @@
  *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
  *   serial: soft return rate — Wave 19 ok/fail rate lamps
  *   serial: soft retcode    — Wave 19 retcode catalog
- *   serial: soft deepen …     — wave=22 areas stamp
+ *   serial: soft deepen …     — wave=23 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   serial: soft return …     — Wave 17 API return surfaces (kept)
  *   serial: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -123,7 +123,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 22u
+#define UART_SOFT_WAVE 23u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -1030,19 +1030,34 @@ serial_soft_log(void)
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)UART_SOFT_WAVE);
             /*
-             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: serial: soft retphase — Wave 22 return-phase honesty */
+            /* Grep: serial: soft retphase — Wave 22 return-phase honesty (kept) */
             kprintf("serial: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retphase honesty; Soft≠product; not bar3)\n",
                     (unsigned)UART_SOFT_WAVE);
-            /* Grep: serial: soft retbadge — Wave 22 exclusive badge stamp */
+            /* Grep: serial: soft retbadge — Wave 22 badge stamp (kept) */
             kprintf("serial: soft retbadge exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)UART_SOFT_WAVE);
+/*
+ * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+            */
+            /* Grep: serial: soft rettoken — Wave 23 return-token honesty */
+            kprintf("serial: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(rettoken honesty; Soft≠product; not bar3)\n",
+                    (unsigned)UART_SOFT_WAVE);
+            /* Grep: serial: soft retcrest — Wave 23 exclusive crest stamp */
+            kprintf("serial: soft retcrest exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retcrest stamp; Soft≠product)\n",
                     (unsigned)UART_SOFT_WAVE);
     kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"

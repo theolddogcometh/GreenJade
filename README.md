@@ -28,19 +28,6 @@ If you just cloned the repo: you only need a normal toolchain and QEMU.
 
 ---
 
-## Do third parties need the gitignored files?
-
-**No.** `.gitignore` deliberately omits **generated** artifacts so the repo stays source-only:
-
-| Pattern (examples) | What it is | Third-party need? |
-|--------------------|------------|-------------------|
-| `build/` | Entire output tree | **No** — `make` recreates it |
-| `*.o`, `*.a`, `*.so` | Object files / archives | **No** — compiler/linker produce them |
-| `*.elf`, `*.bin` | Kernel / user ELFs, raw blobs | **No** — linked from source |
-| `*.img`, `*.iso` | Install / live images | **No** — `make install-img` / `live-iso` |
-| `tools/`, `*.rpm` | Local toolchains / packages | **No** — optional host tooling |
-| Steam stage trees | Lab-host Valve fetch | **No** — optional; see [STEAM_HWTEST](docs/STEAM_HWTEST.md) |
-
 **What you *do* need on the host:**
 
 - `gcc` or `clang`, `ld` (binutils), `make`

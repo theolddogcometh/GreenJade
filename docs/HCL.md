@@ -99,25 +99,41 @@ make live-iso
 
 Parallel waves **soft shipped** (kernel / media / continuum graph only). **Open bars stay open.**
 
-**Soft stamp:** continuum **makefile_max=14900** on tree (`graph_batch14900.c` wired; CREATE-ONLY decades). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**.
+**Soft stamp (Wave 9):** continuum **makefile_max=15100** soft only (`graph_batch15100.c` parent wire / CREATE-ONLY decades when present on tree). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+
+### Soft probes ≠ full HCL product (Wave 9 honesty)
+
+HCL soft probes and continuum growth are **not** a product HCL certification:
+
+| Soft surface | What it is | What it is **not** |
+|--------------|------------|--------------------|
+| PCI class / CAP / GHC / status **soft probes** (NVMe, AHCI, USB HC, PS/2, virtio-scsi INQUIRY, …) | Bring-up greppable path; optional map via `vmm_map_device_uc` when present | Documented T1+ **product** install matrix; full driver stack; certified real-hw support |
+| T0 virtio + OVMF CI (`make smoke`) | Virtual HCL gate | Real-DUT HCL product close |
+| Continuum **makefile_max=15100** | CREATE-ONLY soft graph high-water only | Runtime ABI product; Steam client; Deck Top 50; bar3 |
+| Media `STATUS=READY` / `steam-bar3-check` | Host/media bootstrap inventory | Client launch; title try; HCL product bar |
+| Kernel smokes (io_uring min, HDA multi-stream, 768G soak, aarch64 M0, VT-d soft, …) | Surface soft ship | Full HCL tier product; bar3; game I/O/audio |
+
+**Hard rule:** never promote soft probes, continuum **15100**, or media READY to “HCL product complete,” T1+ certified, or **bar3 closed**. Open bars below stay open.
 
 ### Soft shipped (not product bars)
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid` / `hda_client`
 - Residual **#UD** closed
-- Continuum **makefile_max=14900** (soft graph only — not Steam client; parallel-wave CREATE-ONLY decades)
+- Continuum **makefile_max=15100** (soft graph only — not Steam client; parallel-wave CREATE-ONLY decades; **not** full HCL product)
 - **io_uring** soft surface shipped (`io_uring_min.c`; `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`) — vfs_ram/kernel smoke, **not** game I/O
 - **GJ_MEM=768G** hierarchical `soak_tib` **PASS** on host class **≥1TiB** — product bar still **≥ 1 TiB** full path when host allows
 - **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`; shared C + PSCI smokes) — separate arch tree; not Deck/x86 product kernel
 - **HDA multi-stream** kernel **PASS** — not Steam/game audio
 - Media `STATUS=READY` / host soft check READY = bootstrap tree on media only — **not** client run
+- T1 soft probes (NVMe CAP, AHCI GHC, USB HC class, PS/2 status) = **probe only** — **not** T1 product HCL close
 
 ### Open bars (do not claim done)
 
-- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**)
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**; soft probes / continuum 15100 do **not** close)
 - Deck Top 50 title runs — all **NOT-TRIED** (no titles tried; claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
 - Steam/game audio / title matrix fill — **open** (blocked on bar3 client run)
+- **Full HCL product** (documented T1+ real-hw install matrix beyond soft probes) — **open**
 
 ## Related docs
 

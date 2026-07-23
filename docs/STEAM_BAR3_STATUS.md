@@ -3,15 +3,19 @@
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-07-23 |
+| **Wave** | GreenJade Wave 9 (honesty refresh) |
 | **Bar3** | **OPEN** |
+| **Deck Top 50** | **NOT-TRIED × 50** (no title PASS) |
 | **Soft inventory** | **READY** (host media only — `./scripts/steam-bar3-check.sh`) |
+| **Soft continuum** | **≠ bar3** (CREATE-ONLY graph wire; not client run) |
 | **Companion** | [STEAM_HWTEST.md](STEAM_HWTEST.md) · [HCL.md](HCL.md) · [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) |
 
 **Bar3** = real-DUT path where Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`.  
 Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 
-**Soft stamp (2026-07-23):** host media **READY** (`build/steam-stage/steam/STATUS`, tree/stage/rootfs hits agree).  
-**Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. No title PASS invented from host scripts. Media READY ≠ client run ≠ Top-50.
+**Soft stamp (2026-07-23 / Wave 9):** host media **READY** (`build/steam-stage/steam/STATUS`, tree/stage/rootfs hits agree).  
+**Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. No title PASS invented from host scripts.  
+**Media READY ≠ client run ≠ Top-50.** Soft continuum (`makefile_max=15100`, parallel waves) **≠ bar3**.
 
 ---
 
@@ -24,6 +28,7 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | **MISSING** | Host soft check | No stage tree yet (`scripts/steam-bar3-check.sh`) |
 | **NOT-TRIED** | **Matrix title rows only** | No Deck Top 50 title has been launched on GreenJade |
 | **host-prep / fetch / stage PASS** | Lab-host scripts only | Extract, copy, or pack succeeded — **not** client run |
+| **soft continuum** | libcgj graph parent wire only | CREATE-ONLY freestanding TUs / makefile lines — **not** bar3 |
 
 | Claim | Allowed? |
 |-------|----------|
@@ -32,8 +37,9 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | “Top-50 PASS because kernel smokes green” | **No** |
 | “Titles tried” without a client launch | **No** — rows stay **NOT-TRIED** |
 | “Bar3 closed by continuum / io_uring / 768G / aarch64” | **No** |
+| “Soft continuum makefile_max closes bar3” | **No** — continuum ≠ bar3 |
 
-**Hard rule:** never mark Top-50 rows `PASS` (or off `NOT-TRIED`) from host stage/`STATUS=READY`, continuum soft gates, or kernel ship gates alone.
+**Hard rule:** never mark Top-50 rows `PASS` (or off `NOT-TRIED`) from host stage/`STATUS=READY`, continuum soft gates, or kernel ship gates alone. **No false PASS.**
 
 ---
 
@@ -70,7 +76,7 @@ Soft inventory (agent honesty) includes: file counts (capped), launcher kind, bo
 | **io_uring min rings** | **shipped PASS** | `io_uring: min rings ready`; setup/enter/register soft surface; **not** full SQE for games |
 | **768GiB hierarchical soak** | **PASS** | `GJ_MEM=768G` / `soak_tib`; product bar still **≥ 1 TiB** when host allows; **not** Steam |
 | **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke` (exceptions→virtio-mmio); separate arch tree; **not** Deck/x86 product path |
-| Continuum soft graph | **soft** | parallel waves → **makefile_max=14900**; CREATE-ONLY soft gates only; **not** client run |
+| Continuum soft graph | **soft** | parallel waves → **makefile_max=15100**; CREATE-ONLY soft gates only; **soft continuum ≠ bar3**; **not** client run |
 
 ---
 
@@ -83,10 +89,11 @@ Soft inventory (agent honesty) includes: file counts (capped), launcher kind, bo
 | Steam Runtime first-run / net + ABI | **open** |
 | GPU / audio / input for client & games | **open** (kernel surfaces partial only) |
 | Full 1 TiB host soak | **open** (separate from bar3) |
+| Soft continuum (graph wire only) | **soft** — **not** a bar3 closer |
 | **Deck Top 50** title rows | **NOT-TRIED** × 50 — claim level **targeting only** |
 
 No bar3 titles have been tried. Matrix remains **NOT-TRIED: 50**.  
-**Bar3 is OPEN.**
+**Bar3 is OPEN.** Soft continuum ≠ bar3. No false PASS.
 
 ---
 

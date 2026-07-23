@@ -5,8 +5,9 @@
  * Freestanding storaged — product block host over the kernel store door.
  *
  * Live path (order fixed for smoke greps):
- *   CLAIM → soft door surface → WRITE/READ sector smoke → soft multi-I/O →
- *   UDX ring EXPORT/MAP/STATE/KICK → RELEASE → soft free → live path PASS
+ *   CLAIM → soft door surface → WRITE/READ sector smoke →
+ *   UDX ring EXPORT/MAP/STATE/KICK → RELEASE → soft free →
+ *   soft inventory (Wave 9) → live path PASS
  *
  * Store-door ops used here (must match kernel/include/gj/store_door.h and
  * the GJ_STORE_OP_* subset in user/libgj/include/gj/syscalls.h):
@@ -40,6 +41,16 @@
  *   storaged-gj: ring MAP fail (soft)
  *   storaged-gj: ring soft-skip (no virtio-blk)
  *   storaged-gj: free soft PASS | free soft-skip
+ *
+ * Soft inventory (Wave 9 exclusive deepen — greppable "storaged-gj: soft …"):
+ *   storaged-gj: soft inventory door_ok=… door_skip=… free_ok=… free_skip=…
+ *                ring_ok=… ring_skip=…
+ *   storaged-gj: soft door reclaim=… cap=… stats=… queue=… multi=… flush=…
+ *                rstate=… bits=…
+ *   storaged-gj: soft free release=… own=… bits=…
+ *   storaged-gj: soft ring export=… map=… state=… kick=… ready=… free=… bits=…
+ *   storaged-gj: soft stats ok=… skip=… door_bits=… free_bits=… ring_bits=…
+ * Diagnostics only — never hard-fail the live path; not a bar3 / FS claim.
  *
  *   make storaged-gj → build/user/storaged.elf
  * Boot embed (parent tree): kernel/proc/storaged_embed.S (.incbin of the ELF).
@@ -79,7 +90,7 @@
 /* Store-door ownership token (storaged product claim; non-zero). */
 #define STORE_TOKEN   0x510e0002u
 
-/* Soft sub-step bits (aggregate soft door PASS if any greened). */
+/* Soft door sub-step bits (aggregate soft door PASS if any greened). */
 #define SOFT_BIT_RECLAIM  (1u << 0)
 #define SOFT_BIT_CAP      (1u << 1)
 #define SOFT_BIT_STATS    (1u << 2)
@@ -87,6 +98,16 @@
 #define SOFT_BIT_MULTI    (1u << 4)
 #define SOFT_BIT_FLUSH    (1u << 5)
 #define SOFT_BIT_RSTATE   (1u << 6)
+
+/* Soft free-path bits (Wave 9 inventory). */
+#define SOFT_FREE_RELEASE (1u << 0)
+#define SOFT_FREE_OWN     (1u << 1)
+
+/* Soft ring-path bits (Wave 9 inventory). */
+#define SOFT_RING_EXPORT  (1u << 0)
+#define SOFT_RING_MAP     (1u << 1)
+#define SOFT_RING_STATE   (1u << 2)
+#define SOFT_RING_KICK    (1u << 3)
 
 /*
  * Layout mirrors kernel gj_virtq_export / udx_virtq_export.
@@ -112,6 +133,25 @@ struct vq_export {
 
 /* Non-zero while CLAIM holds the door; cleared on RELEASE or fail_exit. */
 static unsigned g_uToken;
+
+/*
+ * Soft inventory tallies (Wave 9 exclusive deepen).
+ * Wrap-OK counters; diagnostics only — never gate live path PASS.
+ * greppable: storaged-gj: soft
+ */
+static unsigned g_cSoftDoorOk;
+static unsigned g_cSoftDoorSkip;
+static unsigned g_uSoftDoorBits;
+static unsigned g_cSoftFreeOk;
+static unsigned g_cSoftFreeSkip;
+static unsigned g_uSoftFreeBits;
+static unsigned g_cSoftRingOk;
+static unsigned g_cSoftRingSkip;
+static unsigned g_uSoftRingBits;
+/* Last soft CAP / RING_STATE snapshots for inventory lines. */
+static unsigned long g_uSoftCapSectors;
+static unsigned g_uSoftRingFree;
+static unsigned g_uSoftRingReady;
 
 static void
 msg(const char *sz)
@@ -265,10 +305,179 @@ msg_rstate_soft(const unsigned *aSt)
 }
 
 /*
+ * Soft inventory dump (Wave 9 exclusive deepen).
+ * Greppable prefix: "storaged-gj: soft …"
+ * Pure observation — always soft; never gates live path PASS.
+ *
+ *   storaged-gj: soft inventory …
+ *   storaged-gj: soft door …
+ *   storaged-gj: soft free …
+ *   storaged-gj: soft ring …
+ *   storaged-gj: soft stats …
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[192];
+    unsigned o;
+    unsigned cOk;
+    unsigned cSkip;
+
+    cOk = g_cSoftDoorOk + g_cSoftFreeOk + g_cSoftRingOk;
+    cSkip = g_cSoftDoorSkip + g_cSoftFreeSkip + g_cSoftRingSkip;
+
+    /* Grep: storaged-gj: soft inventory */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft inventory door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorSkip);
+    append_s(aLine, sizeof(aLine), &o, " free_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeOk);
+    append_s(aLine, sizeof(aLine), &o, " free_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeSkip);
+    append_s(aLine, sizeof(aLine), &o, " ring_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftRingOk);
+    append_s(aLine, sizeof(aLine), &o, " ring_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftRingSkip);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: storaged-gj: soft door */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft door reclaim=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_RECLAIM) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " cap=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_CAP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_STATS) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " queue=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_QUEUE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " multi=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_MULTI) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " flush=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_FLUSH) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " rstate=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_BIT_RSTATE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDoorBits);
+    append_s(aLine, sizeof(aLine), &o, " sectors=");
+    append_u(aLine, sizeof(aLine), &o, g_uSoftCapSectors);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: storaged-gj: soft free */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft free release=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFreeBits & SOFT_FREE_RELEASE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " own=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFreeBits & SOFT_FREE_OWN) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: storaged-gj: soft ring */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft ring export=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftRingBits & SOFT_RING_EXPORT) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " map=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftRingBits & SOFT_RING_MAP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " state=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftRingBits & SOFT_RING_STATE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " kick=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftRingBits & SOFT_RING_KICK) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " ready=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftRingReady);
+    append_s(aLine, sizeof(aLine), &o, " free=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftRingFree);
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftRingBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: storaged-gj: soft stats (rollup) */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "storaged-gj: soft stats ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDoorBits);
+    append_s(aLine, sizeof(aLine), &o, " free_bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFreeBits);
+    append_s(aLine, sizeof(aLine), &o, " ring_bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftRingBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+}
+
+/* Note one soft door sub-step outcome into Wave 9 inventory counters. */
+static void
+soft_door_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftDoorBits |= uBit;
+        if (g_cSoftDoorOk < 0xffffffffu) {
+            g_cSoftDoorOk++;
+        }
+    } else if (g_cSoftDoorSkip < 0xffffffffu) {
+        g_cSoftDoorSkip++;
+    }
+}
+
+/* Note one soft free sub-step outcome into Wave 9 inventory counters. */
+static void
+soft_free_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftFreeBits |= uBit;
+        if (g_cSoftFreeOk < 0xffffffffu) {
+            g_cSoftFreeOk++;
+        }
+    } else if (g_cSoftFreeSkip < 0xffffffffu) {
+        g_cSoftFreeSkip++;
+    }
+}
+
+/* Note one soft ring sub-step outcome into Wave 9 inventory counters. */
+static void
+soft_ring_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftRingBits |= uBit;
+        if (g_cSoftRingOk < 0xffffffffu) {
+            g_cSoftRingOk++;
+        }
+    } else if (g_cSoftRingSkip < 0xffffffffu) {
+        g_cSoftRingSkip++;
+    }
+}
+
+/*
  * Soft door surface while CLAIM is held (and a light RING_STATE peek).
  * Never hard-fails: each step soft-skips on rejection / short I/O.
  * Leaves hard-path smoke LBA 2 alone (only mutates soft LBA 3..4).
  * Returns count of soft sub-steps that greened.
+ * Tallies Wave 9 soft inventory (storaged-gj: soft …).
  */
 static unsigned
 soft_door_path(void)
@@ -279,7 +488,6 @@ soft_door_path(void)
     static unsigned aQ[4];
     static unsigned aRs[2];
     static unsigned long long u64Cap;
-    unsigned uBits = 0u;
     unsigned cOk = 0u;
     unsigned iByte;
     long nRet;
@@ -290,10 +498,11 @@ soft_door_path(void)
      */
     nRet = gj_store(GJ_STORE_OP_CLAIM, (long)STORE_TOKEN, 0, 0);
     if (nRet == 0) {
-        uBits |= SOFT_BIT_RECLAIM;
+        soft_door_note(SOFT_BIT_RECLAIM, 1);
         cOk++;
         msg("storaged-gj: reclaim soft PASS\n");
     } else {
+        soft_door_note(SOFT_BIT_RECLAIM, 0);
         msg("storaged-gj: reclaim soft-skip\n");
     }
 
@@ -304,10 +513,12 @@ soft_door_path(void)
     u64Cap = 0ull;
     nRet = gj_store(GJ_STORE_OP_CAP, (long)(uintptr_t)&u64Cap, 0, 0);
     if (nRet == 0 && u64Cap > 0ull) {
-        uBits |= SOFT_BIT_CAP;
+        soft_door_note(SOFT_BIT_CAP, 1);
         cOk++;
+        g_uSoftCapSectors = (unsigned long)u64Cap;
         msg_cap_soft(u64Cap);
     } else {
+        soft_door_note(SOFT_BIT_CAP, 0);
         msg("storaged-gj: CAP soft-skip\n");
     }
 
@@ -317,10 +528,11 @@ soft_door_path(void)
     aStats[0] = aStats[1] = aStats[2] = 0u;
     nRet = gj_store(GJ_STORE_OP_STATS, (long)(uintptr_t)aStats, 0, 0);
     if (nRet == 0) {
-        uBits |= SOFT_BIT_STATS;
+        soft_door_note(SOFT_BIT_STATS, 1);
         cOk++;
         msg_stats_soft(aStats);
     } else {
+        soft_door_note(SOFT_BIT_STATS, 0);
         msg("storaged-gj: STATS soft-skip\n");
     }
 
@@ -332,10 +544,11 @@ soft_door_path(void)
     aQ[0] = aQ[1] = aQ[2] = aQ[3] = 0u;
     nRet = gj_store(GJ_STORE_OP_QUEUE_INFO, (long)(uintptr_t)aQ, 0, 0);
     if (nRet == 0) {
-        uBits |= SOFT_BIT_QUEUE;
+        soft_door_note(SOFT_BIT_QUEUE, 1);
         cOk++;
         msg_queue_soft(aQ);
     } else {
+        soft_door_note(SOFT_BIT_QUEUE, 0);
         msg("storaged-gj: QUEUE soft-skip\n");
     }
 
@@ -350,16 +563,18 @@ soft_door_path(void)
     nRet = gj_store(GJ_STORE_OP_WRITE, (long)SOFT_LBA, (long)(uintptr_t)aW,
                     (long)SOFT_BYTES);
     if (nRet != (long)SOFT_BYTES) {
+        soft_door_note(SOFT_BIT_MULTI, 0);
         msg("storaged-gj: multi-sector soft-skip\n");
     } else {
         nRet = gj_store(GJ_STORE_OP_READ, (long)SOFT_LBA, (long)(uintptr_t)aR,
                         (long)SOFT_BYTES);
         if (nRet == (long)SOFT_BYTES &&
             gj_memcmp(aR, aW, SOFT_BYTES) == 0) {
-            uBits |= SOFT_BIT_MULTI;
+            soft_door_note(SOFT_BIT_MULTI, 1);
             cOk++;
             msg("storaged-gj: multi-sector soft PASS\n");
         } else {
+            soft_door_note(SOFT_BIT_MULTI, 0);
             msg("storaged-gj: multi-sector soft-skip\n");
         }
     }
@@ -370,10 +585,11 @@ soft_door_path(void)
      */
     nRet = gj_store(GJ_STORE_OP_FLUSH, 0, 0, 0);
     if (nRet == 0) {
-        uBits |= SOFT_BIT_FLUSH;
+        soft_door_note(SOFT_BIT_FLUSH, 1);
         cOk++;
         msg("storaged-gj: FLUSH soft PASS\n");
     } else {
+        soft_door_note(SOFT_BIT_FLUSH, 0);
         msg("storaged-gj: FLUSH soft-skip\n");
     }
 
@@ -384,15 +600,17 @@ soft_door_path(void)
     aRs[0] = aRs[1] = 0u;
     nRet = gj_store(GJ_STORE_OP_RING_STATE, (long)(uintptr_t)aRs, 0, 0);
     if (nRet == 0) {
-        uBits |= SOFT_BIT_RSTATE;
+        soft_door_note(SOFT_BIT_RSTATE, 1);
         cOk++;
+        g_uSoftRingFree = aRs[0];
+        g_uSoftRingReady = aRs[1];
         msg_rstate_soft(aRs);
     } else {
+        soft_door_note(SOFT_BIT_RSTATE, 0);
         msg("storaged-gj: RING_STATE soft-skip\n");
     }
 
     /* Aggregate soft door line — green if any sub-step greened. */
-    (void)uBits;
     if (cOk > 0u) {
         msg("storaged-gj: soft door PASS\n");
     } else {
@@ -404,6 +622,7 @@ soft_door_path(void)
 /*
  * Soft free path after RELEASE: already-unowned RELEASE is 0; QUEUE owned
  * should drop. Never hard-fails live path.
+ * Tallies Wave 9 soft inventory (storaged-gj: soft …).
  */
 static void
 soft_free_path(void)
@@ -415,22 +634,27 @@ soft_free_path(void)
     /* Soft free RELEASE: door returns 0 when unowned (no token match). */
     nRet = gj_store(GJ_STORE_OP_RELEASE, (long)STORE_TOKEN, 0, 0);
     if (nRet == 0) {
+        soft_free_note(SOFT_FREE_RELEASE, 1);
         cOk++;
         msg("storaged-gj: free RELEASE soft PASS\n");
     } else {
+        soft_free_note(SOFT_FREE_RELEASE, 0);
         msg("storaged-gj: free RELEASE soft-skip\n");
     }
 
     aQ[0] = aQ[1] = aQ[2] = aQ[3] = 0u;
     nRet = gj_store(GJ_STORE_OP_QUEUE_INFO, (long)(uintptr_t)aQ, 0, 0);
     if (nRet == 0 && aQ[3] == 0u) {
+        soft_free_note(SOFT_FREE_OWN, 1);
         cOk++;
         msg_queue_soft(aQ);
         msg("storaged-gj: free own soft PASS\n");
     } else if (nRet == 0) {
+        soft_free_note(SOFT_FREE_OWN, 0);
         msg_queue_soft(aQ);
         msg("storaged-gj: free own soft-skip\n");
     } else {
+        soft_free_note(SOFT_FREE_OWN, 0);
         msg("storaged-gj: free own soft-skip\n");
     }
 
@@ -441,13 +665,73 @@ soft_free_path(void)
     }
 }
 
+/*
+ * Soft UDX ring path: EXPORT → MAP → RING_STATE → KICK.
+ * Soft-skip without virtio-blk (or on MAP fail). Never hard-fails live path.
+ * On full success, emits hard-smoke substring "ring map PASS".
+ * Tallies Wave 9 soft inventory (storaged-gj: soft …).
+ */
+static void
+soft_ring_path(void)
+{
+    static struct vq_export ex;
+    static unsigned aSt[2]; /* [0]=free, [1]=ready — RING_STATE */
+    long nRet;
+
+    (void)gj_memset(&ex, 0, sizeof(ex));
+    aSt[0] = 0u;
+    aSt[1] = 0u;
+
+    nRet = gj_store(GJ_STORE_OP_EXPORT_RING, (long)(uintptr_t)&ex, 0, 0);
+    if (nRet != 0) {
+        soft_ring_note(SOFT_RING_EXPORT, 0);
+        soft_ring_note(SOFT_RING_MAP, 0);
+        soft_ring_note(SOFT_RING_STATE, 0);
+        soft_ring_note(SOFT_RING_KICK, 0);
+        msg("storaged-gj: ring EXPORT soft-skip\n");
+        return;
+    }
+    soft_ring_note(SOFT_RING_EXPORT, 1);
+
+    if (!export_ready(&ex)) {
+        soft_ring_note(SOFT_RING_MAP, 0);
+        soft_ring_note(SOFT_RING_STATE, 0);
+        soft_ring_note(SOFT_RING_KICK, 0);
+        msg("storaged-gj: ring soft-skip (no virtio-blk)\n");
+        return;
+    }
+
+    if (gj_store(GJ_STORE_OP_MAP_RING, (long)RING_VA,
+                 (long)(uintptr_t)&ex, 0) != 0) {
+        soft_ring_note(SOFT_RING_MAP, 0);
+        soft_ring_note(SOFT_RING_STATE, 0);
+        soft_ring_note(SOFT_RING_KICK, 0);
+        msg("storaged-gj: ring MAP fail (soft)\n");
+        return;
+    }
+    soft_ring_note(SOFT_RING_MAP, 1);
+
+    /* Best-effort state snapshot + notify; failures stay soft. */
+    if (gj_store(GJ_STORE_OP_RING_STATE, (long)(uintptr_t)aSt, 0, 0) == 0) {
+        soft_ring_note(SOFT_RING_STATE, 1);
+        g_uSoftRingFree = aSt[0];
+        g_uSoftRingReady = aSt[1];
+    } else {
+        soft_ring_note(SOFT_RING_STATE, 0);
+    }
+    if (gj_store(GJ_STORE_OP_KICK, 0, 0, 0) == 0) {
+        soft_ring_note(SOFT_RING_KICK, 1);
+    } else {
+        soft_ring_note(SOFT_RING_KICK, 0);
+    }
+    msg("storaged-gj: ring map PASS\n");
+}
+
 void
 _start(void)
 {
     static unsigned char aW[SECTOR_BYTES];
     static unsigned char aR[SECTOR_BYTES];
-    static struct vq_export ex;
-    static unsigned aSt[2]; /* [0]=free, [1]=ready — RING_STATE */
     unsigned iByte;
     long nRet;
 
@@ -505,28 +789,11 @@ _start(void)
     msg("storaged-gj: READ PASS\n");
 
     /*
-     * UDX ring hand-off: EXPORT → MAP → RING_STATE → KICK.
+     * UDX ring hand-off: EXPORT → MAP → RING_STATE → KICK (soft inventory).
      * Soft-skip entire ring path without virtio-blk (or on MAP fail).
      * Hard path never fails the live smoke solely for ring absence.
      */
-    (void)gj_memset(&ex, 0, sizeof(ex));
-    aSt[0] = 0u;
-    aSt[1] = 0u;
-
-    nRet = gj_store(GJ_STORE_OP_EXPORT_RING, (long)(uintptr_t)&ex, 0, 0);
-    if (nRet != 0) {
-        msg("storaged-gj: ring EXPORT soft-skip\n");
-    } else if (!export_ready(&ex)) {
-        msg("storaged-gj: ring soft-skip (no virtio-blk)\n");
-    } else if (gj_store(GJ_STORE_OP_MAP_RING, (long)RING_VA,
-                        (long)(uintptr_t)&ex, 0) != 0) {
-        msg("storaged-gj: ring MAP fail (soft)\n");
-    } else {
-        /* Best-effort state snapshot + notify; failures stay soft. */
-        (void)gj_store(GJ_STORE_OP_RING_STATE, (long)(uintptr_t)aSt, 0, 0);
-        (void)gj_store(GJ_STORE_OP_KICK, 0, 0, 0);
-        msg("storaged-gj: ring map PASS\n");
-    }
+    soft_ring_path();
 
     if (gj_store(GJ_STORE_OP_RELEASE, (long)g_uToken, 0, 0) != 0) {
         g_uToken = 0u;
@@ -537,6 +804,12 @@ _start(void)
 
     /* Soft free path after ownership drop — never aborts live path. */
     soft_free_path();
+
+    /*
+     * Wave 9 exclusive soft inventory rollup (greppable "storaged-gj: soft …").
+     * Emitted after all soft sub-paths; never gates live path PASS.
+     */
+    soft_inventory_log();
 
     msg("storaged-gj: live path PASS\n");
     gj_exit(0);

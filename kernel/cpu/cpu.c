@@ -8,6 +8,9 @@
  * Soft deepen (boot telemetry only — not hot-path locks):
  *   Static vs dyn online counts, OOM/reject/idempotent counters,
  *   max online id, last dyn PA/pages, GS sanity, greppable cpu_soft_log.
+ *   Wave 9 complementary (file-local): publish static/dyn, GS init,
+ *   HHDM vs identity dyn path, reject class split, walk/kgs probes,
+ *   extra "cpu: soft counters|probe" lines — primary PASS line stable.
  */
 #include <gj/cpu.h>
 #include <gj/gdt.h>
@@ -41,6 +44,25 @@ static u32 g_u32SoftLastInitId;
 static u32 g_u32SoftLastPages;
 static u64 g_u64SoftLastDynPa;
 
+/*
+ * Complementary soft counters (Wave 9 deepen — file-local only).
+ * Never hard-gate bring-up; wrap-OK; do not reshape primary PASS fields.
+ */
+static u32 g_u32SoftPublishStatic; /* successful static-pool AP publishes */
+static u32 g_u32SoftPublishDyn;    /* successful dyn-pool AP publishes */
+static u32 g_u32SoftGsInit;        /* cpu_gs_init entries with non-null pCpu */
+static u32 g_u32SoftBspInit;       /* cpu_init_bsp entries */
+static u32 g_u32SoftLogN;          /* cpu_soft_log emissions */
+static u32 g_u32SoftDynHhdm;       /* dyn VA via HHDM path */
+static u32 g_u32SoftDynIdent;      /* dyn VA via identity / low PA */
+static u32 g_u32SoftDynPagesSum;   /* cumulative pages of successful dyn allocs */
+static u32 g_u32SoftRejectBsp;     /* reject: id == 0 (BSP via init_ap) */
+static u32 g_u32SoftRejectOob;     /* reject: id >= GJ_MAX_CPUS */
+static u32 g_u32SoftZeroPages;     /* defensive cPages==0 rejects */
+static u32 g_u32SoftDynReuse;      /* dyn slot pointer present, was offline */
+static u32 g_u32SoftNullVa;        /* null-VA guard trips after PMM map */
+static u32 g_u32SoftIdMatchFail;   /* published slot with u32CpuId != index */
+
 static u64
 rdmsr(u32 u32Msr)
 {
@@ -56,6 +78,18 @@ wrmsr(u32 u32Msr, u64 u64Val)
     u32 u32Hi = (u32)(u64Val >> 32);
     __asm__ volatile ("wrmsr" : : "c"(u32Msr), "a"(u32Lo), "d"(u32Hi));
     (void)rdmsr;
+}
+
+/** Soft: saturate-increment a sticky u32 counter (wrap-OK diagnostics). */
+static void
+cpu_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
 }
 
 /** Soft: mark slot published — bump max online id. */
@@ -100,6 +134,59 @@ cpu_soft_count_dyn(void)
 }
 
 /**
+ * Soft: count dyn table entries that hold a non-null pointer
+ * (allocated; may or may not be online).
+ */
+static u32
+cpu_soft_count_dyn_ptrs(void)
+{
+    u32 i;
+    u32 u32N = 0;
+
+    for (i = GJ_CPU_STATIC_MAX; i < GJ_MAX_CPUS; i++) {
+        if (g_apCpuDyn[i] != NULL) {
+            u32N++;
+        }
+    }
+    return u32N;
+}
+
+/**
+ * Soft: count published slots whose u32CpuId does not match the slot index.
+ * Should stay 0 after correct init paths.
+ */
+static u32
+cpu_soft_count_id_mismatch(void)
+{
+    u32 i;
+    u32 u32N = 0;
+    struct gj_cpu *pCpu;
+
+    for (i = 0; i < GJ_CPU_STATIC_MAX; i++) {
+        if (g_aCpus[i].u32Online != 0 && g_aCpus[i].u32CpuId != i) {
+            u32N++;
+        }
+    }
+    for (i = GJ_CPU_STATIC_MAX; i < GJ_MAX_CPUS; i++) {
+        pCpu = g_apCpuDyn[i];
+        if (pCpu != NULL && pCpu->u32Online != 0 && pCpu->u32CpuId != i) {
+            u32N++;
+        }
+    }
+    return u32N;
+}
+
+/**
+ * Soft: 1 if MSR_KERNEL_GS_BASE is zero (expected kernel GS after swapgs
+ * contract on product BSP after cpu_gs_init).
+ */
+static int
+cpu_soft_kgs_zero(void)
+{
+    return rdmsr(MSR_KERNEL_GS_BASE) == 0 ? 1 : 0;
+}
+
+/**
  * Soft: true if va matches a published online percpu (static or dyn).
  * Used by GS sanity probe — walks pool, not hot path.
  */
@@ -139,6 +226,7 @@ cpu_gs_init(struct gj_cpu *pCpu)
     if (pCpu == NULL) {
         return;
     }
+    cpu_soft_inc(&g_u32SoftGsInit);
     wrmsr(MSR_GS_BASE, (u64)(gj_vaddr_t)pCpu);
     wrmsr(MSR_KERNEL_GS_BASE, 0);
 }
@@ -148,6 +236,7 @@ cpu_init_bsp(void)
 {
     struct gj_cpu *pCpu = &g_aCpus[0];
 
+    cpu_soft_inc(&g_u32SoftBspInit);
     memset(pCpu, 0, sizeof(*pCpu));
     pCpu->u32CpuId = 0;
     pCpu->u32Online = 1;
@@ -165,7 +254,21 @@ cpu_init_bsp(void)
     g_u32SoftLastInitId = 0;
     g_u32SoftLastPages = 0;
     g_u64SoftLastDynPa = 0;
+    /* Complementary Wave 9 counters (keep bsp_init/log sticky across reset). */
+    g_u32SoftPublishStatic = 0;
+    g_u32SoftPublishDyn = 0;
+    g_u32SoftGsInit = 0;
+    g_u32SoftDynHhdm = 0;
+    g_u32SoftDynIdent = 0;
+    g_u32SoftDynPagesSum = 0;
+    g_u32SoftRejectBsp = 0;
+    g_u32SoftRejectOob = 0;
+    g_u32SoftZeroPages = 0;
+    g_u32SoftDynReuse = 0;
+    g_u32SoftNullVa = 0;
+    g_u32SoftIdMatchFail = 0;
     cpu_soft_note_online(0);
+    cpu_soft_inc(&g_u32SoftPublishStatic); /* BSP is static slot 0 */
     cpu_gs_init(pCpu);
     /* Greppable: cpu: BSP ... */
     kprintf("cpu: BSP id=0 percpu=%p kstack=%lx cr3=%lx static_max=%u max=%u\n",
@@ -181,13 +284,17 @@ cpu_init_ap(u32 u32CpuId)
     struct gj_cpu *pCpu;
     u32 cPages;
     gj_paddr_t paBase;
+    int fDyn = 0;
 
     g_u32SoftLastInitId = u32CpuId;
 
     /* Reject BSP (handled by cpu_init_bsp) and out-of-range design ceiling. */
     if (u32CpuId == 0 || u32CpuId >= GJ_MAX_CPUS) {
-        if (g_u32SoftReject < 0xffffffffu) {
-            g_u32SoftReject++;
+        cpu_soft_inc(&g_u32SoftReject);
+        if (u32CpuId == 0) {
+            cpu_soft_inc(&g_u32SoftRejectBsp);
+        } else {
+            cpu_soft_inc(&g_u32SoftRejectOob);
         }
         /* Greppable: cpu: soft reject */
         kprintf("cpu: soft reject id=%u (bsp_or_oob) reject=%u\n",
@@ -198,9 +305,7 @@ cpu_init_ap(u32 u32CpuId)
         pCpu = &g_aCpus[u32CpuId];
         /* Idempotent: never re-memset a live online percpu (pCurrent/GS). */
         if (pCpu->u32Online != 0) {
-            if (g_u32SoftIdempotent < 0xffffffffu) {
-                g_u32SoftIdempotent++;
-            }
+            cpu_soft_inc(&g_u32SoftIdempotent);
             /* Greppable: cpu: soft idempotent */
             kprintf("cpu: soft idempotent id=%u kind=%u n=%u\n",
                     u32CpuId, GJ_CPU_SOFT_KIND_STATIC, g_u32SoftIdempotent);
@@ -213,32 +318,32 @@ cpu_init_ap(u32 u32CpuId)
          * reachable via low identity map or HHDM (once hhdm_ready()).
          * Reuse a published dyn slot on re-entry; never install a null VA.
          */
+        fDyn = 1;
         pCpu = g_apCpuDyn[u32CpuId];
         if (pCpu != NULL && pCpu->u32Online != 0) {
-            if (g_u32SoftIdempotent < 0xffffffffu) {
-                g_u32SoftIdempotent++;
-            }
+            cpu_soft_inc(&g_u32SoftIdempotent);
             /* Greppable: cpu: soft idempotent */
             kprintf("cpu: soft idempotent id=%u kind=%u n=%u\n",
                     u32CpuId, GJ_CPU_SOFT_KIND_DYN, g_u32SoftIdempotent);
             return; /* already published */
+        }
+        if (pCpu != NULL) {
+            /* Pointer retained from a prior offline/unfinished path. */
+            cpu_soft_inc(&g_u32SoftDynReuse);
         }
         if (pCpu == NULL) {
             cPages = (u32)((sizeof(struct gj_cpu) + GJ_PAGE_SIZE - 1) /
                            GJ_PAGE_SIZE);
             g_u32SoftLastPages = cPages;
             if (cPages == 0) {
-                if (g_u32SoftReject < 0xffffffffu) {
-                    g_u32SoftReject++;
-                }
+                cpu_soft_inc(&g_u32SoftReject);
+                cpu_soft_inc(&g_u32SoftZeroPages);
                 return; /* defensive: sizeof edge */
             }
             paBase = pmm_alloc_pages(cPages);
             /* pmm_alloc_pages → 0 on OOM: leave AP without GS percpu. */
             if (paBase == 0) {
-                if (g_u32SoftOom < 0xffffffffu) {
-                    g_u32SoftOom++;
-                }
+                cpu_soft_inc(&g_u32SoftOom);
                 /* Greppable: cpu: ... PMM percpu alloc fail */
                 kprintf("cpu: AP id=%u PMM percpu alloc fail pages=%u "
                         "oom=%u soft\n",
@@ -248,19 +353,25 @@ cpu_init_ap(u32 u32CpuId)
             if (hhdm_ready() || paBase >= 0x100000000ull) {
                 pCpu = (struct gj_cpu *)(gj_vaddr_t)(GJ_HHDM_BASE +
                                                      (u64)paBase);
+                cpu_soft_inc(&g_u32SoftDynHhdm);
             } else {
                 pCpu = (struct gj_cpu *)(gj_vaddr_t)paBase;
+                cpu_soft_inc(&g_u32SoftDynIdent);
             }
             if (pCpu == NULL) {
-                if (g_u32SoftReject < 0xffffffffu) {
-                    g_u32SoftReject++;
-                }
+                cpu_soft_inc(&g_u32SoftReject);
+                cpu_soft_inc(&g_u32SoftNullVa);
                 return; /* unreachable; keeps null-VA guard explicit */
             }
             g_apCpuDyn[u32CpuId] = pCpu;
             g_u64SoftLastDynPa = (u64)paBase;
             if (g_u32DynPercpu < GJ_MAX_CPUS) {
                 g_u32DynPercpu++;
+            }
+            if (g_u32SoftDynPagesSum <= 0xffffffffu - cPages) {
+                g_u32SoftDynPagesSum += cPages;
+            } else {
+                g_u32SoftDynPagesSum = 0xffffffffu;
             }
             /* Greppable: cpu: ... PMM percpu pa= */
             kprintf("cpu: AP id=%u PMM percpu pa=0x%lx pages=%u dyn=%u\n",
@@ -280,6 +391,11 @@ cpu_init_ap(u32 u32CpuId)
         g_u32NOnline++;
     }
     cpu_soft_note_online(u32CpuId);
+    if (fDyn) {
+        cpu_soft_inc(&g_u32SoftPublishDyn);
+    } else {
+        cpu_soft_inc(&g_u32SoftPublishStatic);
+    }
     /* Greppable: cpu: AP id=... online= */
     kprintf("cpu: AP id=%u percpu=%p online=%u dyn=%u kind=%u soft\n",
             u32CpuId, (void *)pCpu, g_u32NOnline, g_u32DynPercpu,
@@ -426,10 +542,28 @@ cpu_soft_log(void)
     struct gj_cpu_soft stSoft;
     u32 i;
     u32 u32Kind;
+    u32 u32Walk;
+    u32 u32DynPtrs;
+    u32 u32IdMis;
+    u32 u32WalkMatch;
+    u32 u32KgsZero;
+    u32 u32PagesPer;
     struct gj_cpu *pCpu;
     const char *szVerdict;
 
+    cpu_soft_inc(&g_u32SoftLogN);
     cpu_soft_snapshot(&stSoft);
+
+    u32Walk = stSoft.u32StaticOnline + stSoft.u32DynOnline;
+    u32DynPtrs = cpu_soft_count_dyn_ptrs();
+    u32IdMis = cpu_soft_count_id_mismatch();
+    if (u32IdMis > g_u32SoftIdMatchFail) {
+        g_u32SoftIdMatchFail = u32IdMis; /* sticky high-water of mismatches */
+    }
+    u32WalkMatch = (u32Walk == stSoft.u32Online) ? 1u : 0u;
+    u32KgsZero = cpu_soft_kgs_zero() ? 1u : 0u;
+    u32PagesPer = (u32)((sizeof(struct gj_cpu) + GJ_PAGE_SIZE - 1) /
+                        GJ_PAGE_SIZE);
 
     /*
      * Verdict (soft product inventory):
@@ -437,6 +571,7 @@ cpu_soft_log(void)
      *   PASS    — multi-CPU published, no OOM
      *   PARTIAL — some online + OOM or dyn alloc without matching online
      *   DEGRADED— OOM or reject with only BSP / inconsistent online
+     * Primary fields/order frozen for smoke greps — do not reorder.
      */
     if (stSoft.u32Oom != 0 && stSoft.u32Online <= 1u) {
         szVerdict = "DEGRADED";
@@ -452,6 +587,7 @@ cpu_soft_log(void)
     /*
      * Greppable soft pool line (product / smoke inventory):
      *   cpu: soft PASS|UP|PARTIAL|DEGRADED online=… static=… dyn=… …
+     * Field order stable — complementary data goes on lines below.
      */
     kprintf("cpu: soft %s online=%u static=%u dyn=%u dyn_alloc=%u oom=%u "
             "reject=%u idem=%u max_id=%u last_id=%u last_pa=0x%lx "
@@ -463,6 +599,26 @@ cpu_soft_log(void)
             stSoft.u32LastPages, stSoft.u32PercpuBytes, stSoft.u32GsSane,
             stSoft.u32StaticMax, stSoft.u32MaxCpus);
 
+    /*
+     * Complementary greppable inventory (Wave 9) — never alters PASS line.
+     *   cpu: soft counters …
+     *   cpu: soft probe …
+     */
+    kprintf("cpu: soft counters pub_static=%u pub_dyn=%u gs_init=%u "
+            "bsp_init=%u log_n=%u hhdm=%u ident=%u pages_sum=%u "
+            "rej_bsp=%u rej_oob=%u zero_pages=%u dyn_reuse=%u null_va=%u\n",
+            g_u32SoftPublishStatic, g_u32SoftPublishDyn, g_u32SoftGsInit,
+            g_u32SoftBspInit, g_u32SoftLogN, g_u32SoftDynHhdm,
+            g_u32SoftDynIdent, g_u32SoftDynPagesSum, g_u32SoftRejectBsp,
+            g_u32SoftRejectOob, g_u32SoftZeroPages, g_u32SoftDynReuse,
+            g_u32SoftNullVa);
+    kprintf("cpu: soft probe walk=%u walk_match=%u dyn_ptrs=%u id_mis=%u "
+            "id_mis_hwm=%u kgs_zero=%u pages_per=%u gs_sane=%u online=%u "
+            "dyn_alloc=%u\n",
+            u32Walk, u32WalkMatch, u32DynPtrs, u32IdMis,
+            g_u32SoftIdMatchFail, u32KgsZero, u32PagesPer, stSoft.u32GsSane,
+            stSoft.u32Online, stSoft.u32DynAlloc);
+
     /* Per-slot soft detail: published slots only (cap-bounded walk). */
     for (i = 0; i <= stSoft.u32MaxOnlineId && i < GJ_MAX_CPUS; i++) {
         u32Kind = cpu_soft_kind(i);
@@ -473,6 +629,7 @@ cpu_soft_log(void)
         if (pCpu == NULL) {
             continue;
         }
+        /* Greppable: cpu: soft slot= — field order stable. */
         kprintf("cpu: soft slot=%u kind=%u kstack=0x%lx cr3=0x%lx thr=%p "
                 "online=%u\n",
                 i, u32Kind, (unsigned long)pCpu->u64KernelRsp,

@@ -10,6 +10,15 @@
  * Soft deepen (boot telemetry only — not hot-path locks):
  *   Per-slot status / phase / ready-wait spins; cumulative ap_run ok/fail.
  *   smp_bringup_soft_log greps PASS|PARTIAL|UP + x2APIC ICR soft summary.
+ *
+ * Wave 9 soft SMP inventory (product / smoke — greppable prefix):
+ *   smp: soft PASS|PARTIAL|UP|NONE …
+ *   smp: soft inventory …
+ *   smp: soft slot=… status=… phase=…
+ *   smp: soft ap_run …
+ *   smp: soft madt …
+ *   smp: soft phases …
+ * Never hard-gates product; wrap-OK counters and kprintf only.
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -851,7 +860,8 @@ smp_start_aps(void)
      * Greppable inventory summary (soft):
      *   smp: start_aps tried=… ok=… online=… cpu_online=…
      *   smp: inventory …
-     *   smp: bringup soft …
+     *   smp: soft …          (Wave 9 soft SMP inventory)
+     *   smp: bringup soft …  (legacy soft bring-up lines)
      */
     kprintf("smp: start_aps tried=%u ok=%u online=%u cpu_online=%u\n",
             u32Tried, u32Ok, g_Smp.u32NOnline, cpu_online_count());
@@ -932,6 +942,15 @@ smp_bringup_soft_log(void)
     struct gj_smp_bringup_soft stSoft;
     u32 i;
     u32 u32Cap;
+    u32 u32MadtEn;
+    u32 u32StOnline;
+    u32 u32StTimeout;
+    u32 u32StFail;
+    u32 u32StNone;
+    u32 u32PhMax;
+    u32 u32PhSched;
+    u32 u32Headroom;
+    u32 aPhHist[7];
     const char *szVerdict;
 
     smp_bringup_soft_snapshot(&stSoft);
@@ -947,8 +966,103 @@ smp_bringup_soft_log(void)
         szVerdict = "NONE";
     }
 
+    /* MADT enabled count + per-slot status/phase tallies (cap-bounded). */
+    u32MadtEn = 0;
+    for (i = 0; i < g_Smp.u32NLocalApic && i < GJ_SMP_MAX_APICS; i++) {
+        if (g_Smp.aEnabled[i]) {
+            u32MadtEn++;
+        }
+    }
+    u32StOnline = 0;
+    u32StTimeout = 0;
+    u32StFail = 0;
+    u32StNone = 0;
+    u32PhMax = 0;
+    u32PhSched = 0;
+    for (i = 0; i < 7u; i++) {
+        aPhHist[i] = 0;
+    }
+    for (i = 0; i < u32Cap && i < GJ_CPU_STATIC_MAX; i++) {
+        u32 u32St = smp_bringup_soft_slot(i);
+        u32 u32Ph = smp_bringup_soft_phase(i);
+
+        if (u32St == GJ_SMP_SOFT_SLOT_ONLINE) {
+            u32StOnline++;
+        } else if (u32St == GJ_SMP_SOFT_SLOT_TIMEOUT) {
+            u32StTimeout++;
+        } else if (u32St == GJ_SMP_SOFT_SLOT_FAIL) {
+            u32StFail++;
+        } else {
+            u32StNone++;
+        }
+        if (u32Ph > u32PhMax) {
+            u32PhMax = u32Ph;
+        }
+        if (u32Ph == GJ_SMP_AP_PHASE_SCHED) {
+            u32PhSched++;
+        }
+        if (u32Ph < 7u) {
+            aPhHist[u32Ph]++;
+        }
+    }
+    if (u32Cap > stSoft.u32Online) {
+        u32Headroom = u32Cap - stSoft.u32Online;
+    } else {
+        u32Headroom = 0;
+    }
+
     /*
-     * Greppable soft bring-up line (product / smoke inventory):
+     * Wave 9 greppable soft SMP inventory (product / smoke):
+     *   smp: soft PASS|PARTIAL|UP|NONE …
+     *   smp: soft inventory …
+     *   smp: soft madt …
+     *   smp: soft phases …
+     *   smp: soft ap_run …
+     *   smp: soft slot=…
+     */
+    kprintf("smp: soft %s tried=%u ok=%u timeout=%u skipped=%u "
+            "online=%u cap=%u sched_ready=%u headroom=%u "
+            "last_spins=%u last_apic=%u last_slot=%u\n",
+            szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
+            stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,
+            stSoft.u32SchedReady, u32Headroom, stSoft.u32LastSpins,
+            stSoft.u32LastApicId, stSoft.u32LastSlot);
+    kprintf("smp: soft inventory detected=%u online=%u bringup_cap=%u "
+            "cpu_online=%u dyn_percpu=%u status_online=%u status_to=%u "
+            "status_fail=%u status_none=%u ph_max=%u ph_sched=%u\n",
+            smp_cpu_count_detected(), stSoft.u32Online, stSoft.u32Cap,
+            cpu_online_count(), cpu_dyn_percpu_count(), u32StOnline,
+            u32StTimeout, u32StFail, u32StNone, u32PhMax, u32PhSched);
+    kprintf("smp: soft madt has=%u local=%u enabled=%u bsp_id=%u x2ids=%d "
+            "x2apic=%d stack_slots=%u static_max=%u\n",
+            g_Smp.fHasMadt ? 1u : 0u, g_Smp.u32NLocalApic, u32MadtEn,
+            g_Smp.u32BspApicId, g_Smp.fX2ApicIds, x2apic_enabled(),
+            (u32)GJ_AP_STACK_SLOTS, (u32)GJ_CPU_STATIC_MAX);
+    kprintf("smp: soft phases none=%u entry=%u percpu=%u x2apic=%u "
+            "timer=%u idle=%u sched=%u\n",
+            aPhHist[0], aPhHist[1], aPhHist[2], aPhHist[3], aPhHist[4],
+            aPhHist[5], aPhHist[6]);
+    kprintf("smp: soft ap_run ok=%u fail=%u timeout=%u\n",
+            stSoft.u32ApRunOk, stSoft.u32ApRunFail, stSoft.u32ApRunTimeout);
+
+    /* Per-slot soft detail (cap-bounded; skip pure NONE beyond BSP). */
+    for (i = 0; i < u32Cap && i < GJ_CPU_STATIC_MAX; i++) {
+        u32 u32St = smp_bringup_soft_slot(i);
+        u32 u32Ph = smp_bringup_soft_phase(i);
+
+        if (i > 0 && u32St == GJ_SMP_SOFT_SLOT_NONE && u32Ph == 0) {
+            continue;
+        }
+        kprintf("smp: soft slot=%u status=%u phase=%u spins=%u "
+                "apic=%u sched=%u online=%u\n",
+                i, u32St, u32Ph, smp_bringup_soft_spins(i),
+                smp_apic_id_for_cpu(i),
+                (i == 0 || g_aApSchedReady[i] != 0) ? 1u : 0u,
+                smp_cpu_online(i) ? 1u : 0u);
+    }
+
+    /*
+     * Legacy greppable soft bring-up lines (kept for existing smoke greps):
      *   smp: bringup soft PASS|PARTIAL|UP|NONE tried=… ok=… …
      */
     kprintf("smp: bringup soft %s tried=%u ok=%u timeout=%u skipped=%u "
@@ -961,7 +1075,6 @@ smp_bringup_soft_log(void)
     kprintf("smp: bringup soft ap_run ok=%u fail=%u timeout=%u\n",
             stSoft.u32ApRunOk, stSoft.u32ApRunFail, stSoft.u32ApRunTimeout);
 
-    /* Per-slot soft detail (cap-bounded; skip pure NONE beyond first few). */
     for (i = 0; i < u32Cap && i < GJ_CPU_STATIC_MAX; i++) {
         u32 u32St = smp_bringup_soft_slot(i);
         u32 u32Ph = smp_bringup_soft_phase(i);

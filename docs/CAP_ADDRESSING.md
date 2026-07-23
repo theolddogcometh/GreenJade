@@ -2,14 +2,15 @@
 
 | Field | Value |
 |-------|--------|
-| **Document** | Cap addressing v1.6 |
-| **Status** | **Accepted** for x86_64 product path |
+| **Document** | Cap addressing v1.7 |
+| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 9 honesty only |
 | **Handle ABI** | **Scheme A** — `u64` slot index + separate generation |
 | **Slot 0** | **Root meta** — **kernel ops only**; process + CNode identity; empty until bootstrap |
 | **Fault/pager** | **Region → memory object → pager**; PCB **default pager** fallback ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1) |
 | **CNode scope** | **One CNode per process** — all threads in that process **share** it |
 | **PROCESS** | Typed **task port** minted to parent on spawn — not root meta |
-| **Companion** | [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (game tier; overrides Apple on conflict) · [IMPLEMENTATION.md](IMPLEMENTATION.md) |
+| **Honesty (Wave 9)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (§9) |
+| **Companion** | [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (game tier; overrides Apple on conflict) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
 
@@ -270,4 +271,68 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 
 ---
 
-*Accepted x86_64 capability addressing v1.5 — + fault cookie, multi-page cluster, client-owned FRAME, per-space fault lock.*
+## 9. Honesty bounds — soft cap surface vs product (Wave 9 · 2026-07-23)
+
+**Additive only.** Scheme A, root meta (K1–K6), one CNode per process, PROCESS mint-to-parent, fault/pager registration, rights, and the resolve algorithm in §§1–8 stay **Accepted**. This section is an honesty ledger: what is greppable **soft cap surface** on the tree vs what remains **product-open**. It does **not** re-litigate the handle ABI or close any product bar.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Accepted** | Addressing design frozen for x86_64 — ship toward these rules |
+| **Soft cap surface** | Scheme A resolve/install, mint/copy/move, soft CDT/quota/trylock, root-meta bootstrap, PROCESS parent mint — greppable / bring-up strength |
+| **Product multi-server confine** | Full multi-server drop-ambient security product (servers + clients confined by caps/promises end-to-end) — **open** |
+| **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+### 9.1 Soft cap surface (honest bound — may claim soft only)
+
+| Soft surface | What shipped / greppable means | What it does **not** mean |
+|--------------|--------------------------------|---------------------------|
+| **Scheme A handle** | `(u64 slot, u32 gen)` resolve path; null gen=0; gen mismatch → stale | Universal `gj_cap_resolve` on every product op; packed-u64 never “also OK” |
+| **Root meta slot 0** | Bootstrap install + identify; kernel ops only (K1–K6) | Factory for process/CNode caps; ambient identity transfer |
+| **One CNode / process** | Shared table; alloc skips slot 0 | Nested `GJ_CAP_CNODE` product; per-thread private tables |
+| **mint / copy / move / delete** | Soft path + CDT edge hooks; greppable e.g. `cap: mint/copy/move+cdt PASS` | Full product CDT everywhere; IPC cap-transfer K complete |
+| **Soft CDT + try-lock** | Edge list, deferred walk, soft `u32SoftLock` (R2 stub); greps `cap:cdt*` | Full R2 product try-lock under load; accounting-complete revoke audit closed |
+| **Soft slot quota** | Flat/hierarchical ledger; NULL account no-op; greppable e.g. `cap: quota exhaust PASS` | Zone-like product ledgers for every object class |
+| **PROCESS task port** | Parent mint on spawn (not root meta) | Full rights matrix product-hard for all callers |
+| **Revoke DEAD/gen first** | Phase A fail-closed + deferred hygiene hooks | Stop-the-world never; full Phase C reclaim product under all pins |
+| **Confine / promises soft** | Process bitmask gates some ambient-style Linux paths (`confine soft`) | **Product multi-server confine closed** |
+
+**Hard rule:** soft greppable `PASS` lines and design **Accepted** are **bring-up / agent honesty**, not “capability product shipped” and not “multi-server confine done.”
+
+### 9.2 Product multi-server confine — **open**
+
+| Item | State |
+|------|--------|
+| Soft cap surface (this doc §§1–8 + `kernel/cap/*`) | Present — soft / greppable |
+| Soft confine / promise gates on some paths | Soft only — not product seal |
+| Live server embeds (`vfsd`, `sessiond`, `netstackd`, …) | Skeleton / door bring-up ≠ full confine product |
+| **Full multi-server confine product** | **Open** — soft cap surface does **not** close it |
+| Bootstrap seal (drop ambient retype / broad authority) | **Open** (companion security docs) |
+| Cap transfer on IPC (copy/move K caps, all-or-nothing) | **Open** / incomplete product path |
+
+Soft cap surface and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement. Product multi-server confine stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md)).
+
+### 9.3 Explicit non-claims (Wave 9)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Scheme A / root meta / one CNode design **Accepted**” | **Yes** — this document §§1–8 |
+| “Soft cap surface greppable (mint/CDT/quota/root meta)” | **Yes** — with soft bound in §9.1 |
+| “Soft cap surface = product multi-server confine closed” | **No** |
+| “All revoke / CDT / quota / IPC transfer product-complete” | **No** |
+| “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
+| “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
+| Any **bar3** closed claim from cap addressing alone | **No** |
+
+**Bar3 remains OPEN** (client + matrix). This Wave 9 edit is honesty-only: **soft cap surface vs product multi-server confine open; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
+
+### 9.4 Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) — CDT/revoke/quota remaining vs soft  
+- [TODO.md](TODO.md) — multi-server confine / CDT try-lock product / cap transfer open boxes  
+- [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) — soft surface ≠ product bar  
+
+---
+
+*Accepted x86_64 capability addressing v1.7 — Scheme A, root meta, fault cookie / multi-page cluster, per-space fault lock.*  
+*§9 Wave 9 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*

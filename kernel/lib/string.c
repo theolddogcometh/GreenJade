@@ -7,8 +7,108 @@
  *
  * Callers must pass valid pointers (and non-NULL where a buffer is required).
  * No heap, no locale, no I/O - safe for early boot and freestanding builds.
+ *
+ * Soft string helper inventory (Wave 9 exclusive; greppable; hot path clean):
+ *   string: soft inventory helpers=14 groups=2
+ *   string: soft mem memset memcpy memmove memcmp memchr
+ *   string: soft str strlen strnlen strcmp strncmp strlcpy strlcat strchr strrchr strstr
+ *   string: soft policy freestanding pure_c no_heap no_locale no_io
+ *   string: soft counts none
+ *   string: soft hot_path clean
+ *
+ * Call counts intentionally omitted: memset/memcpy/etc. stay freestanding
+ * early-boot hot path with no counter traffic. Inventory is source + rodata
+ * only (see string_soft_inventory / string_soft_helper_count).
  */
 #include <gj/string.h>
+
+/*
+ * Product soft inventory blob (rodata). Never consulted by the helpers.
+ * Grep: string: soft
+ */
+static const char g_szStringSoftInventory[] =
+    "string: soft inventory helpers=14 groups=2 "
+    "mem=memset,memcpy,memmove,memcmp,memchr "
+    "str=strlen,strnlen,strcmp,strncmp,strlcpy,strlcat,strchr,strrchr,strstr "
+    "policy=freestanding,pure_c,no_heap,no_locale,no_io "
+    "counts=none hot_path=clean";
+
+/* Soft helper name table (order matches public soft set; cold only). */
+static const char *const g_apszStringSoftHelpers[] = {
+    "memset",
+    "memcpy",
+    "memmove",
+    "memcmp",
+    "memchr",
+    "strlen",
+    "strnlen",
+    "strcmp",
+    "strncmp",
+    "strlcpy",
+    "strlcat",
+    "strchr",
+    "strrchr",
+    "strstr",
+};
+
+enum {
+    STRING_SOFT_HELPERS = 14,
+    STRING_SOFT_MEM = 5,
+    STRING_SOFT_STR = 9
+};
+
+/*
+ * Cold soft inventory accessor — not used by any hot helper.
+ * Returns the greppable "string: soft …" product line (NUL-terminated).
+ */
+const char *
+string_soft_inventory(void)
+{
+    return g_szStringSoftInventory;
+}
+
+/*
+ * Cold soft inventory: total helper count in the freestanding soft set.
+ * Grep: string: soft helpers=
+ */
+unsigned
+string_soft_helper_count(void)
+{
+    return (unsigned)STRING_SOFT_HELPERS;
+}
+
+/*
+ * Cold soft inventory: mem-* group size (memset..memchr).
+ * Grep: string: soft mem
+ */
+unsigned
+string_soft_mem_count(void)
+{
+    return (unsigned)STRING_SOFT_MEM;
+}
+
+/*
+ * Cold soft inventory: str-* group size (strlen..strstr).
+ * Grep: string: soft str
+ */
+unsigned
+string_soft_str_count(void)
+{
+    return (unsigned)STRING_SOFT_STR;
+}
+
+/*
+ * Cold soft inventory: helper name by index, or NULL if out of range.
+ * Does not allocate; points at static literals only.
+ */
+const char *
+string_soft_helper_name(unsigned uIndex)
+{
+    if (uIndex >= (unsigned)STRING_SOFT_HELPERS) {
+        return NULL;
+    }
+    return g_apszStringSoftHelpers[uIndex];
+}
 
 void *
 memset(void *pDst, int nFill, size_t cbCount)
@@ -255,3 +355,5 @@ strstr(const char *szHay, const char *szNeedle)
     }
     return NULL;
 }
+
+/* string: soft inventory end helpers=14 counts=none hot_path=clean */

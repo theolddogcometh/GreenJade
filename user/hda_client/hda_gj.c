@@ -9,6 +9,13 @@
  * soft underrun + mono format + reclaim re-OPEN + reject probe). Soft
  * steps never hard-fail the live path.
  *
+ * Soft inventory (Wave 9 exclusive deepen):
+ *   - Cumulative soft sub-step ok/skip; door open/write/start/tick/stats
+ *   - Soft played-byte sum; underrun / reject / mono / reclaim lamps
+ *   greppable: "hda_client: soft …"
+ *   greppable: "hda-gj: soft …"
+ * Diagnostics only — never gates live path PASS.
+ *
  * Smoke markers (must stay prefix-stable for greppable live logs):
  *   hda_client-gj: OPEN PASS
  *   hda_client-gj: WRITE PASS
@@ -31,6 +38,10 @@
  *   hda_client-gj: soft reject PASS | soft reject soft-skip
  *   hda_client-gj: stats soft q=… p=… u=…
  *   hda_client-gj: soft suite PASS | soft suite soft-skip
+ *   hda_client: soft suite ok=… skip=…
+ *   hda_client: soft door open=… write=… start=… tick=… stats=… close=…
+ *   hda_client: soft played=… underrun=… reject=… mono=… reclaim=…
+ *   hda-gj: soft suite|door|played twin inventory lines
  *
  * Fail lines: hda_client-gj: <tag> fail ret=<n>
  *
@@ -91,6 +102,31 @@ enum {
     HDA_ST_UNDERRUNS = 2,
     HDA_ST_COUNT     = 3
 };
+
+/*
+ * Soft product inventory (Wave 9 exclusive). Cumulative for this process.
+ * greppable: hda_client: soft …
+ * greppable: hda-gj: soft …
+ * Never hard-gates live path.
+ */
+static unsigned g_cSoftOk;         /* soft sub-steps greened */
+static unsigned g_cSoftSkip;       /* soft sub-steps soft-skipped */
+static unsigned g_cSoftOpenOk;     /* soft OPEN success */
+static unsigned g_cSoftOpenMiss;   /* soft OPEN miss */
+static unsigned g_cSoftWriteOk;    /* soft WRITE full accept */
+static unsigned g_cSoftWriteMiss;  /* soft WRITE miss/short */
+static unsigned g_cSoftStartOk;    /* soft START success */
+static unsigned g_cSoftStartMiss;  /* soft START miss */
+static unsigned g_cSoftTickOk;     /* soft TICK accepted (>=0) */
+static unsigned g_cSoftTickMiss;   /* soft TICK miss (<0) */
+static unsigned g_cSoftStatsOk;    /* soft STATS success */
+static unsigned g_cSoftStatsMiss;  /* soft STATS miss */
+static unsigned g_cSoftClose;      /* soft CLOSE best-effort calls */
+static unsigned g_cSoftPlayed;     /* cumulative soft TICK bytes (wrap OK) */
+static unsigned g_cSoftUnderrun;   /* soft underrun sub-step PASS */
+static unsigned g_cSoftReject;     /* soft reject sub-step PASS */
+static unsigned g_cSoftMono;       /* soft mono sub-step PASS */
+static unsigned g_cSoftReclaim;    /* soft reclaim sub-step PASS */
 
 static void
 msg(const char *sz)
@@ -237,6 +273,7 @@ static void
 soft_close(void)
 {
     (void)gj_hda_stream(GJ_HDA_OP_CLOSE, 0, 0, 0);
+    g_cSoftClose++;
 }
 
 /*
@@ -251,7 +288,10 @@ soft_open_stereo(const char *tag)
     n = gj_hda_stream(GJ_HDA_OP_OPEN, (long)GJ_HDA_CHANNELS_STEREO,
                       (long)GJ_HDA_RATE_48K, (long)GJ_HDA_BITS_16);
     if (n != 0) {
+        g_cSoftOpenMiss++;
         msg_fail_ret(tag, n);
+    } else {
+        g_cSoftOpenOk++;
     }
     return n;
 }
@@ -263,16 +303,178 @@ soft_stats(const char *tag, unsigned *aSt)
     long n;
 
     if (aSt == 0) {
+        g_cSoftStatsMiss++;
         return -1;
     }
     aSt[HDA_ST_QUEUED] = aSt[HDA_ST_PLAYED] = aSt[HDA_ST_UNDERRUNS] = 0;
     n = gj_hda_stream(GJ_HDA_OP_STATS, (long)(uintptr_t)aSt, 0, 0);
     if (n != 0) {
+        g_cSoftStatsMiss++;
         msg_fail_ret(tag, n);
         return n;
     }
+    g_cSoftStatsOk++;
     msg_stats(tag, aSt);
     return 0;
+}
+
+/* Soft WRITE note: full accept → ok, else miss. */
+static void
+soft_note_write(long nRet, unsigned cbExpect)
+{
+    if (nRet == (long)cbExpect) {
+        g_cSoftWriteOk++;
+    } else {
+        g_cSoftWriteMiss++;
+    }
+}
+
+/* Soft START note. */
+static void
+soft_note_start(long nRet)
+{
+    if (nRet == 0) {
+        g_cSoftStartOk++;
+    } else {
+        g_cSoftStartMiss++;
+    }
+}
+
+/* Soft TICK note: tally played bytes when ret >= 0. */
+static void
+soft_note_tick(long nPlayed)
+{
+    if (nPlayed < 0) {
+        g_cSoftTickMiss++;
+    } else {
+        g_cSoftTickOk++;
+        g_cSoftPlayed += (unsigned)nPlayed;
+    }
+}
+
+/* Soft sub-step aggregate lamp. */
+static void
+soft_note_step(int fOk)
+{
+    if (fOk) {
+        g_cSoftOk++;
+    } else {
+        g_cSoftSkip++;
+    }
+}
+
+/*
+ * Greppable soft inventory (Wave 9). Twin prefixes for product/agent greps:
+ *   hda_client: soft suite|door|played …
+ *   hda-gj: soft suite|door|played …
+ * Pure observation — always soft; does not gate live path.
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[160];
+    unsigned o;
+
+    /* Grep: hda_client: soft suite */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft suite ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft door */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft door open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenOk);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(g_cSoftOpenOk + g_cSoftOpenMiss));
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftWriteOk);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(g_cSoftWriteOk + g_cSoftWriteMiss));
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStartOk);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(g_cSoftStartOk + g_cSoftStartMiss));
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftTickOk);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(g_cSoftTickOk + g_cSoftTickMiss));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsOk);
+    append_s(aLine, sizeof(aLine), &o, "/");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(g_cSoftStatsOk + g_cSoftStatsMiss));
+    append_s(aLine, sizeof(aLine), &o, " close=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClose);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft played (lamps) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
+    append_s(aLine, sizeof(aLine), &o, " underrun=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftUnderrun);
+    append_s(aLine, sizeof(aLine), &o, " reject=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Twin prefix: hda-gj: soft … (agent-friendly alias) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft suite ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft door open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenOk);
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftWriteOk);
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStartOk);
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftTickOk);
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsOk);
+    append_s(aLine, sizeof(aLine), &o, " close=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClose);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
+    append_s(aLine, sizeof(aLine), &o, " underrun=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftUnderrun);
+    append_s(aLine, sizeof(aLine), &o, " reject=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
 }
 
 /*
@@ -302,6 +504,7 @@ soft_multi_op_stats(void)
     }
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
                       (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
     if (n != (long)sizeof(aTone)) {
         msg_fail_ret("soft WRITE", n);
         soft_close();
@@ -310,6 +513,7 @@ soft_multi_op_stats(void)
     }
 
     n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
     if (n != 0) {
         msg_fail_ret("soft START", n);
         soft_close();
@@ -318,6 +522,7 @@ soft_multi_op_stats(void)
     }
 
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_FRAMES, 0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft TICK", nPlayed);
 
     /* STATS soft-miss still soft-PASS (never hard-fails). */
@@ -349,6 +554,7 @@ soft_partial_tick(void)
     fill_pcm(aTone, (unsigned)sizeof(aTone), 8u);
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
                       (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
     if (n != (long)sizeof(aTone)) {
         msg_fail_ret("soft partial WRITE", n);
         soft_close();
@@ -357,6 +563,7 @@ soft_partial_tick(void)
     }
 
     n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
     if (n != 0) {
         msg_fail_ret("soft partial START", n);
         soft_close();
@@ -365,6 +572,7 @@ soft_partial_tick(void)
     }
 
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_PART_TICK1, 0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft partial TICK1", nPlayed);
     if (nPlayed != (long)HDA_SOFT_PART_TICK1_B) {
         msg_fail_ret("soft partial TICK1", nPlayed);
@@ -390,6 +598,7 @@ soft_partial_tick(void)
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK,
                             (long)(HDA_SOFT_PART_FRAMES - HDA_SOFT_PART_TICK1),
                             0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft partial TICK2", nPlayed);
     if (nPlayed != (long)uLeft) {
         msg_fail_ret("soft partial TICK2", nPlayed);
@@ -436,6 +645,7 @@ soft_multi_write(void)
 
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aChunkA,
                       (long)sizeof(aChunkA), 0);
+    soft_note_write(n, (unsigned)sizeof(aChunkA));
     if (n != (long)sizeof(aChunkA)) {
         msg_fail_ret("soft multi-write WRITE1", n);
         soft_close();
@@ -444,6 +654,7 @@ soft_multi_write(void)
     }
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aChunkB,
                       (long)sizeof(aChunkB), 0);
+    soft_note_write(n, (unsigned)sizeof(aChunkB));
     if (n != (long)sizeof(aChunkB)) {
         msg_fail_ret("soft multi-write WRITE2", n);
         soft_close();
@@ -460,6 +671,7 @@ soft_multi_write(void)
     }
 
     n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
     if (n != 0) {
         msg_fail_ret("soft multi-write START", n);
         soft_close();
@@ -469,6 +681,7 @@ soft_multi_write(void)
 
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK,
                             (long)(HDA_SOFT_CHUNK_FRAMES * 2u), 0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft multi-write TICK", nPlayed);
     if (nPlayed != (long)(sizeof(aChunkA) + sizeof(aChunkB))) {
         msg_fail_ret("soft multi-write TICK", nPlayed);
@@ -509,6 +722,7 @@ soft_underrun_cycle(void)
     fill_pcm(aTone, (unsigned)sizeof(aTone), 16u);
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
                       (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
     if (n != (long)sizeof(aTone)) {
         msg_fail_ret("soft underrun WRITE", n);
         soft_close();
@@ -517,6 +731,7 @@ soft_underrun_cycle(void)
     }
 
     n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
     if (n != 0) {
         msg_fail_ret("soft underrun START", n);
         soft_close();
@@ -525,6 +740,7 @@ soft_underrun_cycle(void)
     }
 
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_FRAMES, 0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft underrun TICK", nPlayed);
     if (nPlayed != (long)sizeof(aTone)) {
         msg_fail_ret("soft underrun TICK", nPlayed);
@@ -534,7 +750,8 @@ soft_underrun_cycle(void)
     }
 
     /* Empty ring → underrun counter must rise. */
-    (void)gj_hda_stream(GJ_HDA_OP_TICK, 8, 0, 0);
+    nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, 8, 0, 0);
+    soft_note_tick(nPlayed);
     if (soft_stats("soft underrun", aSt) != 0 ||
         aSt[HDA_ST_UNDERRUNS] == 0u) {
         soft_close();
@@ -543,6 +760,7 @@ soft_underrun_cycle(void)
     }
 
     soft_close();
+    g_cSoftUnderrun++;
     msg("hda_client-gj: soft underrun PASS\n");
     return 1;
 }
@@ -563,16 +781,19 @@ soft_mono_format(void)
     n = gj_hda_stream(GJ_HDA_OP_OPEN, (long)GJ_HDA_CHANNELS_MONO,
                       (long)GJ_HDA_RATE_48K, (long)GJ_HDA_BITS_16);
     if (n != 0) {
+        g_cSoftOpenMiss++;
         msg_fail_ret("soft mono OPEN", n);
         msg("hda_client-gj: soft mono soft-skip\n");
         return 0;
     }
+    g_cSoftOpenOk++;
 
     for (i = 0; i < sizeof(aTone); i++) {
         aTone[i] = (unsigned char)((i & 8u) ? 0x30u : 0xd0u);
     }
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
                       (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
     if (n != (long)sizeof(aTone)) {
         msg_fail_ret("soft mono WRITE", n);
         soft_close();
@@ -581,6 +802,7 @@ soft_mono_format(void)
     }
 
     n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
     if (n != 0) {
         msg_fail_ret("soft mono START", n);
         soft_close();
@@ -589,6 +811,7 @@ soft_mono_format(void)
     }
 
     nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_MONO_FRAMES, 0, 0);
+    soft_note_tick(nPlayed);
     msg_tick("soft mono TICK", nPlayed);
     if (nPlayed != (long)sizeof(aTone)) {
         msg_fail_ret("soft mono TICK", nPlayed);
@@ -599,6 +822,7 @@ soft_mono_format(void)
 
     (void)soft_stats("soft mono", aSt);
     soft_close();
+    g_cSoftMono++;
     msg("hda_client-gj: soft mono PASS\n");
     return 1;
 }
@@ -622,6 +846,7 @@ soft_reclaim_reopen(void)
     fill_pcm(aTone, (unsigned)sizeof(aTone), 4u);
     n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
                       (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
     if (n != (long)sizeof(aTone)) {
         msg_fail_ret("soft reclaim WRITE", n);
         soft_close();
@@ -633,11 +858,13 @@ soft_reclaim_reopen(void)
     n = gj_hda_stream(GJ_HDA_OP_OPEN, (long)GJ_HDA_CHANNELS_STEREO,
                       (long)GJ_HDA_RATE_48K, (long)GJ_HDA_BITS_16);
     if (n != 0) {
+        g_cSoftOpenMiss++;
         msg_fail_ret("soft reclaim re-OPEN", n);
         soft_close();
         msg("hda_client-gj: soft reclaim soft-skip\n");
         return 0;
     }
+    g_cSoftOpenOk++;
 
     if (soft_stats("soft reclaim", aSt) != 0 ||
         aSt[HDA_ST_QUEUED] != 0u || aSt[HDA_ST_PLAYED] != 0u) {
@@ -647,6 +874,7 @@ soft_reclaim_reopen(void)
     }
 
     soft_close();
+    g_cSoftReclaim++;
     msg("hda_client-gj: soft reclaim PASS\n");
     return 1;
 }
@@ -665,20 +893,25 @@ soft_reject_inval(void)
                       (long)GJ_HDA_BITS_16);
     if (n == 0) {
         /* Unexpected accept — clean up and soft-skip (do not hard-fail). */
+        g_cSoftOpenOk++; /* door accepted; wrong for reject probe */
         soft_close();
         msg("hda_client-gj: soft reject soft-skip\n");
         return 0;
     }
+    g_cSoftOpenMiss++; /* expected reject tallied as open-miss */
 
     /* Also probe illegal bit depth (not 8/16/32). */
     nBits = gj_hda_stream(GJ_HDA_OP_OPEN, (long)GJ_HDA_CHANNELS_STEREO,
                           (long)GJ_HDA_RATE_48K, 24);
     if (nBits == 0) {
+        g_cSoftOpenOk++;
         soft_close();
         msg("hda_client-gj: soft reject soft-skip\n");
         return 0;
     }
+    g_cSoftOpenMiss++;
 
+    g_cSoftReject++;
     msg("hda_client-gj: soft reject PASS\n");
     return 1;
 }
@@ -692,16 +925,40 @@ static void
 soft_suite(void)
 {
     unsigned cOk = 0;
+    int fStep;
 
     msg("hda_client-gj: soft suite start\n");
 
-    cOk += (unsigned)soft_multi_op_stats();
-    cOk += (unsigned)soft_partial_tick();
-    cOk += (unsigned)soft_multi_write();
-    cOk += (unsigned)soft_underrun_cycle();
-    cOk += (unsigned)soft_mono_format();
-    cOk += (unsigned)soft_reclaim_reopen();
-    cOk += (unsigned)soft_reject_inval();
+    fStep = soft_multi_op_stats();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_partial_tick();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_multi_write();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_underrun_cycle();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_mono_format();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_reclaim_reopen();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_reject_inval();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    /* Wave 9 soft inventory — greppable hda_client: soft / hda-gj: soft. */
+    soft_inventory_log();
 
     if (cOk > 0u) {
         msg("hda_client-gj: soft suite PASS\n");

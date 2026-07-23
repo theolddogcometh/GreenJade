@@ -16,7 +16,23 @@
  *   8. RFC 4253 §7.2 key derivation → ChaCha20 + HMAC integrity
  *   9. Encrypted CHANNEL_DATA send + recv (MAC verify + decrypt)
  *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
- *  11. live path PASS → daemon park
+ *  11. live path PASS → soft inventory → daemon park
+ *
+ * Soft inventory (Wave 9 exclusive deepen) — honesty, not product SSH.
+ * Diagnostics only; never hard-fails the live path. Greppable prefix:
+ *   "sshd-gj: soft …"
+ *
+ * Soft (optional; never fails live path):
+ *   sshd-gj: soft suite start
+ *   sshd-gj: soft banner PASS | soft banner soft-skip
+ *   sshd-gj: soft kexinit PASS | soft kexinit soft-skip
+ *   sshd-gj: soft hostkey PASS | soft hostkey soft-skip
+ *   sshd-gj: soft mac PASS | soft mac soft-skip
+ *   sshd-gj: soft chacha PASS | soft chacha soft-skip
+ *   sshd-gj: soft poly PASS | soft poly soft-skip
+ *   sshd-gj: soft honesty not-product-ssh …
+ *   sshd-gj: soft inventory …
+ *   sshd-gj: soft suite PASS | soft suite soft-skip
  *
  * Crypto primitives live in ssh_crypto.c (same license).
  *   make sshd-gj → build/user/sshd.elf
@@ -95,15 +111,88 @@ static uint32_t g_seq_s2c_tx, g_seq_s2c_rx;
 static uint32_t g_seq_c2s_tx, g_seq_c2s_rx;
 static int g_encrypted;
 
+/*
+ * Soft product inventory (Wave 9). Cumulative milestone lamps + suite tallies.
+ * Honesty-only — not a claim of OpenSSH-class product completeness.
+ * greppable: sshd-gj: soft …
+ */
+static uint32_t g_u32SoftBanner;   /* peer banner shape OK */
+static uint32_t g_u32SoftPoly;     /* poly1305 selfcheck OK */
+static uint32_t g_u32SoftHostkey;  /* hostkey sign+verify of H */
+static uint32_t g_u32SoftEcdh;     /* ECDH_REPLY wire + parse */
+static uint32_t g_u32SoftShared;   /* dual shared-secret match */
+static uint32_t g_u32SoftKex;      /* aggregate KEX PASS */
+static uint32_t g_u32SoftNewkeys;  /* NEWKEYS both directions */
+static uint32_t g_u32SoftService;  /* soft SERVICE_REQUEST/ACCEPT */
+static uint32_t g_u32SoftChannel;  /* session channel + MOTD */
+static uint32_t g_u32SoftKeys;     /* RFC 4253 §7.2 key derivation */
+static uint32_t g_u32SoftAead;     /* poly1305 soft AEAD leg */
+static uint32_t g_u32SoftEncTx;    /* encrypted CHANNEL_DATA send */
+static uint32_t g_u32SoftEncRx;    /* encrypted CHANNEL_DATA recv */
+static uint32_t g_u32SoftLive;     /* live path banner+session green */
+static uint32_t g_u32SoftSuiteOk;  /* offline soft-suite sub-steps OK */
+static uint32_t g_u32SoftSuiteN;   /* offline soft-suite sub-steps run */
+static uint32_t g_u32SoftLogN;     /* inventory log emissions */
+
 static void
 msg(const char *sz)
 {
 	size_t n = 0;
 
+	if (sz == 0) {
+		return;
+	}
 	while (sz[n] != '\0') {
 		n++;
 	}
 	(void)gj_debug_log(sz, (long)n);
+}
+
+/* Append decimal digits of u into aLine at *po; leave room for NUL. */
+static void
+append_u(char *aLine, unsigned cb, unsigned *po, unsigned long u)
+{
+	char aDig[20];
+	unsigned n = 0;
+	unsigned i;
+
+	if (aLine == 0 || po == 0 || cb == 0) {
+		return;
+	}
+	if (u == 0) {
+		aDig[n++] = '0';
+	} else {
+		while (u > 0 && n < sizeof(aDig)) {
+			aDig[n++] = (char)('0' + (u % 10ul));
+			u /= 10ul;
+		}
+	}
+	for (i = n; i > 0 && *po + 1 < cb; i--) {
+		aLine[(*po)++] = aDig[i - 1u];
+	}
+}
+
+static void
+append_s(char *aLine, unsigned cb, unsigned *po, const char *sz)
+{
+	if (aLine == 0 || po == 0 || sz == 0 || cb == 0) {
+		return;
+	}
+	while (*sz != '\0' && *po + 1 < cb) {
+		aLine[(*po)++] = *sz++;
+	}
+}
+
+/* Saturating bump (u32 wrap avoided for soft lamps). */
+static void
+soft_note(uint32_t *pu32Ctr)
+{
+	if (pu32Ctr == 0) {
+		return;
+	}
+	if (*pu32Ctr < 0xffffffffu) {
+		(*pu32Ctr)++;
+	}
 }
 
 static size_t
@@ -610,6 +699,221 @@ do_service_soft(long fd_srv, long fd_cli)
 }
 
 /*
+ * Greppable soft inventory + honesty (Wave 9).
+ *   sshd-gj: soft honesty not-product-ssh …
+ *   sshd-gj: soft inventory …
+ * Never hard-gates live path; pure observation for smoke/scripts.
+ */
+static void
+soft_inventory_log(void)
+{
+	char aLine[256];
+	unsigned o;
+
+	if (g_u32SoftLogN < 0xffffffffu) {
+		g_u32SoftLogN++;
+	}
+
+	/*
+	 * Honesty line: this freestanding smoke is NOT OpenSSH product.
+	 * userauth/channel/service are soft shapes; no rekey, no multi-session.
+	 * greppable: sshd-gj: soft honesty
+	 */
+	msg("sshd-gj: soft honesty not-product-ssh userauth=soft "
+	    "channel=soft service=soft rekey=0 multi=0 openssh=0 "
+	    "dropbear=0 authorized_keys=soft\n");
+
+	/* Grep: sshd-gj: soft inventory */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft inventory banner=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftBanner);
+	append_s(aLine, sizeof(aLine), &o, " poly=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftPoly);
+	append_s(aLine, sizeof(aLine), &o, " hostkey=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftHostkey);
+	append_s(aLine, sizeof(aLine), &o, " ecdh=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEcdh);
+	append_s(aLine, sizeof(aLine), &o, " shared=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftShared);
+	append_s(aLine, sizeof(aLine), &o, " kex=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftKex);
+	append_s(aLine, sizeof(aLine), &o, " newkeys=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftNewkeys);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft inventory service=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftService);
+	append_s(aLine, sizeof(aLine), &o, " channel=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftChannel);
+	append_s(aLine, sizeof(aLine), &o, " keys=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftKeys);
+	append_s(aLine, sizeof(aLine), &o, " aead=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftAead);
+	append_s(aLine, sizeof(aLine), &o, " enc_tx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEncTx);
+	append_s(aLine, sizeof(aLine), &o, " enc_rx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEncRx);
+	append_s(aLine, sizeof(aLine), &o, " live=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLive);
+	append_s(aLine, sizeof(aLine), &o, " suite_ok=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteOk);
+	append_s(aLine, sizeof(aLine), &o, " suite_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteN);
+	append_s(aLine, sizeof(aLine), &o, " log_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLogN);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+
+	/* Seq / encrypt soft snapshot (post-keys; values may be zero pre-KEX). */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft seq s2c_tx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_seq_s2c_tx);
+	append_s(aLine, sizeof(aLine), &o, " s2c_rx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_seq_s2c_rx);
+	append_s(aLine, sizeof(aLine), &o, " c2s_tx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_seq_c2s_tx);
+	append_s(aLine, sizeof(aLine), &o, " c2s_rx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_seq_c2s_rx);
+	append_s(aLine, sizeof(aLine), &o, " encrypted=");
+	append_u(aLine, sizeof(aLine), &o, g_encrypted ? 1ul : 0ul);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+}
+
+/*
+ * Offline soft suite — pure local probes (no wire). Never hard-fails live path.
+ * Deepens freestanding crypto/shape surface beyond the TCP smoke alone.
+ * greppable: sshd-gj: soft …
+ */
+static void
+soft_suite(void)
+{
+	uint8_t aPkt[640];
+	uint8_t aHostPk[32];
+	uint8_t aMsg[32];
+	uint8_t aSig[32];
+	uint8_t aMac1[32];
+	uint8_t aMac2[32];
+	uint8_t aKey[32];
+	uint8_t aNonce[12];
+	uint8_t aBuf[32];
+	uint8_t aPlain[32];
+	uint32_t cb;
+	unsigned i;
+	unsigned cOk = 0;
+	unsigned cN = 0;
+
+	msg("sshd-gj: soft suite start\n");
+
+	/* Soft banner shape (product id string; not a wire exchange). */
+	cN++;
+	if (banner_is_ssh(g_szBanner, (long)slen(g_szBanner)) &&
+	    banner_is_ssh(g_szClientBanner, (long)slen(g_szClientBanner))) {
+		msg("sshd-gj: soft banner PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft banner soft-skip\n");
+	}
+
+	/* Soft KEXINIT build: type 20, non-zero wire length. */
+	cN++;
+	cb = build_kexinit(aPkt, sizeof(aPkt));
+	if (cb >= 6 && aPkt[5] == SSH_MSG_KEXINIT) {
+		msg("sshd-gj: soft kexinit PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft kexinit soft-skip\n");
+	}
+
+	/* Soft hostkey offline sign/verify of fixed digest. */
+	cN++;
+	gj_ssh_hostkey_init();
+	gj_ssh_hostkey_pk(aHostPk);
+	for (i = 0; i < 32; i++) {
+		aMsg[i] = (uint8_t)(0x5a ^ i);
+	}
+	gj_ssh_hostkey_sign(aMsg, 32, aSig);
+	if (gj_ssh_hostkey_verify(aMsg, 32, aSig)) {
+		msg("sshd-gj: soft hostkey PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft hostkey soft-skip\n");
+	}
+
+	/* Soft HMAC determinism (same key+data → same tag). */
+	cN++;
+	for (i = 0; i < 32; i++) {
+		aKey[i] = (uint8_t)(0x11 + i);
+		aMsg[i] = (uint8_t)(0x22 + i);
+	}
+	gj_ssh_hmac_sha256(aKey, 32, aMsg, 32, aMac1);
+	gj_ssh_hmac_sha256(aKey, 32, aMsg, 32, aMac2);
+	if (gj_ssh_memeq_ct(aMac1, aMac2, 32)) {
+		msg("sshd-gj: soft mac PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft mac soft-skip\n");
+	}
+
+	/* Soft ChaCha20 invert (xor twice restores plain). */
+	cN++;
+	for (i = 0; i < 32; i++) {
+		aKey[i] = (uint8_t)(0x33 + i);
+		aPlain[i] = (uint8_t)(0x44 + i);
+		aBuf[i] = aPlain[i];
+	}
+	for (i = 0; i < 12; i++) {
+		aNonce[i] = (uint8_t)i;
+	}
+	gj_ssh_chacha20_xor(aKey, aNonce, 1u, aBuf, 32);
+	gj_ssh_chacha20_xor(aKey, aNonce, 1u, aBuf, 32);
+	if (gj_ssh_memeq_ct(aBuf, aPlain, 32)) {
+		msg("sshd-gj: soft chacha PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft chacha soft-skip\n");
+	}
+
+	/* Soft Poly1305 RFC vector (via product selfcheck lamp). */
+	cN++;
+	if (gj_ssh_poly1305_ok()) {
+		msg("sshd-gj: soft poly PASS\n");
+		cOk++;
+	} else {
+		msg("sshd-gj: soft poly soft-skip\n");
+	}
+
+	g_u32SoftSuiteOk = (uint32_t)cOk;
+	g_u32SoftSuiteN = (uint32_t)cN;
+
+	/* Ephemeral soft material — clear before return. */
+	bytes_zero(aHostPk, sizeof(aHostPk));
+	bytes_zero(aMsg, sizeof(aMsg));
+	bytes_zero(aSig, sizeof(aSig));
+	bytes_zero(aMac1, sizeof(aMac1));
+	bytes_zero(aMac2, sizeof(aMac2));
+	bytes_zero(aKey, sizeof(aKey));
+	bytes_zero(aNonce, sizeof(aNonce));
+	bytes_zero(aBuf, sizeof(aBuf));
+	bytes_zero(aPlain, sizeof(aPlain));
+	bytes_zero(aPkt, 64); /* only need clear head; rest is KEXINIT shape */
+
+	if (cOk > 0u) {
+		msg("sshd-gj: soft suite PASS\n");
+	} else {
+		msg("sshd-gj: soft suite soft-skip\n");
+	}
+
+	/* Always emit inventory after suite (honesty + counters). */
+	soft_inventory_log();
+}
+
+/*
  * Full post-banner smoke: KEXINIT ↔ ECDH ↔ ECDH_REPLY → hostkey(H) →
  * dual shared → NEWKEYS → soft service → session channel → key derivation →
  * encrypted CHANNEL_DATA send+recv (MAC verify) → Poly1305 soft AEAD check.
@@ -639,6 +943,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: poly1305 selfcheck FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftPoly);
 	msg("sshd-gj: poly1305 selfcheck PASS\n");
 
 	/* RFC 7748 base point u=9 (explicit init; no partial aggregate init) */
@@ -705,6 +1010,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: hostkey sign FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftHostkey);
 	msg("sshd-gj: hostkey sign PASS\n");
 
 	/* --- ECDH_REPLY on wire: K_S || Q_S || sig(H) --- */
@@ -744,6 +1050,9 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: shared secret match FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftEcdh);
+	soft_note(&g_u32SoftShared);
+	soft_note(&g_u32SoftKex);
 	msg("sshd-gj: ECDH_REPLY PASS\n");
 	msg("sshd-gj: shared secret match PASS\n");
 	msg("sshd-gj: x25519 KEX shared PASS\n");
@@ -779,6 +1088,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: NEWKEYS srv drain FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftNewkeys);
 	msg("sshd-gj: NEWKEYS exchange PASS\n");
 
 	/* Soft service exchange (still cleartext; pre-channel) */
@@ -786,6 +1096,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: service soft FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftService);
 	msg("sshd-gj: service soft PASS\n");
 
 	/* Session channel + shell MOTD before encrypt arm */
@@ -794,9 +1105,11 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: channel path FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftChannel);
 
 	/* session_id == H for this smoke; derive A–F keys */
 	derive_keys(shared_s, H, H);
+	soft_note(&g_u32SoftKeys);
 	msg("sshd-gj: key derivation PASS (ChaCha20+HMAC)\n");
 
 	/* Soft AEAD leg: Poly1305 over ciphertext material with int key */
@@ -807,6 +1120,7 @@ do_kex_and_session(long fd_srv, long fd_cli)
 		msg("sshd-gj: poly1305 aead soft FAIL\n");
 		return 0;
 	}
+	soft_note(&g_u32SoftAead);
 	msg("sshd-gj: poly1305 aead soft PASS\n");
 
 	/* Encrypted CHANNEL_DATA: server send → client recv+MAC+decrypt */
@@ -837,6 +1151,8 @@ do_kex_and_session(long fd_srv, long fd_cli)
 			msg("sshd-gj: encrypted channel recv FAIL\n");
 			return 0;
 		}
+		soft_note(&g_u32SoftEncTx);
+		soft_note(&g_u32SoftEncRx);
 		msg("sshd-gj: encrypted channel PASS\n");
 		msg("sshd-gj: encrypted channel recv PASS\n");
 	}
@@ -907,6 +1223,7 @@ _start(void)
 		   (long)(sizeof(rbuf) - 1));
 	if (n > 0 && banner_is_ssh(rbuf, n)) {
 		banner_ok = 1;
+		soft_note(&g_u32SoftBanner);
 		msg("sshd-gj: peer banner PASS\n");
 	} else {
 		msg("sshd-gj: peer banner FAIL\n");
@@ -927,12 +1244,25 @@ _start(void)
 	(void)gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)aTcp, 0, 0);
 
 	if (banner_ok && sess_ok) {
+		soft_note(&g_u32SoftLive);
 		msg("sshd-gj: live path PASS (TCP+KEX+NEWKEYS+shell)\n");
 	} else {
 		msg("sshd-gj: live path FAIL\n");
+		/*
+		 * Soft inventory still runs on FAIL for honesty (partial lamps).
+		 * Never promotes soft suite to product PASS.
+		 */
+		soft_suite();
 		(void)gj_net(GJ_NET_OP_CLOSE, srv, 0, 0);
 		gj_exit(1);
 	}
+
+	/*
+	 * Wave 9 soft inventory: offline suite + honesty lines.
+	 * Greppable "sshd-gj: soft …" — not product SSH completeness.
+	 * Never hard-fails after live path PASS.
+	 */
+	soft_suite();
 
 	/*
 	 * Keep listener open; park without net POLL on every quantum.

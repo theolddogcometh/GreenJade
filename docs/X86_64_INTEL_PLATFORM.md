@@ -7,8 +7,11 @@
 | **Scope** | How GreenJade **uses Intel-class PC/server hardware** — not OS philosophy |
 | **OS design** | Still [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md), [CAP_ADDRESSING.md](CAP_ADDRESSING.md), [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) |
 | **Heritage** | Intel SDM / platform firmware / VT-d / Linux-oriented platform practice — **under GreenJade law** |
+| **Honesty** | **2026-07-23 Wave 9** — soft vs product IOMMU/platform open (§14); **no product claim**; **no bar3 claim** |
 
 This profile does **not** replace Solaris-first OS design or L4-style capabilities. It defines the **platform contract** for x86_64 machines (especially Intel, and compatible AMD where noted).
+
+**Soft stamp (Wave 9):** greppable IOMMU / VT-d / platform smokes on tree are **bring-up honesty only**. They do **not** close production DMA policy (P-DMA-*), full platform product, or Steam **bar3**. See §14.
 
 ---
 
@@ -178,4 +181,75 @@ Profile: x86_64-intel-desktop / workstation
 
 ---
 
-*Normative x86_64 Intel-class platform profile for Project GreenJade.*
+## 14. Honesty refresh — soft vs product (Wave 9 · 2026-07-23)
+
+**Additive only.** Profile rules in §§1–13 stay **Accepted** (normative platform contract). This section is an honesty ledger: what is **soft** on the tree vs what remains **open** for product IOMMU / platform. It does **not** re-litigate architecture or weaken P-DMA production defaults.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Accepted** | Normative platform rule frozen for x86_64 product path — ship toward these rules |
+| **Soft** | Partial / greppable / bring-up path exists; **not** full product close of the rule |
+| **Open** | Rule accepted; code / enforcement / product path still incomplete or not default |
+| **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+### 14.1 Soft does not close product platform (or bar3)
+
+| Soft surface (tree / host) | Closes product IOMMU / P-DMA? | Closes product platform? | Closes bar3? |
+|----------------------------|-------------------------------|--------------------------|--------------|
+| `iommu: probe PASS` / DMAR soft inventory | **No** | **No** | **No** |
+| `iommu: enforce PASS` / software window table | **No** (software enforce ≠ production hardware default) | **No** | **No** |
+| `iommu: vtd * PASS` (tables, TE path, identity grant soft) | **No** | **No** | **No** |
+| Dev/QEMU soft-allow missing IOMMU (P-DMA-5) | **No** — explicit **non**-production | **No** | **No** |
+| Continuum **makefile_max** CREATE-ONLY graph decades | **No** | **No** | **No** |
+| Host Steam media inventory **READY** | **No** | **No** | **No** |
+| Kernel smokes (virtio T0, HDA, io_uring min, 768G soak, aarch64 M0) | **No** | **No** (may soft-touch related surfaces) | **No** |
+| Profile **Accepted** in this file | Decisions only | Decisions only | **No** |
+
+**Hard rule:** never claim “product IOMMU closed,” “no open bus-master product default shipped,” “platform product complete,” bar3 closed, or Deck Top 50 title PASS from greppable `iommu:*` / soft continuum / media `STATUS=READY` / design **Accepted** alone. Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — this profile does not promote those rows.
+
+### 14.2 IOMMU / DMA ledger (normative → ship honesty)
+
+| Rule | Normative (Accepted) | Soft on tree (honest bound) | Remaining product (do not claim done) |
+|------|----------------------|-----------------------------|----------------------------------------|
+| **P-DMA-1** | VT-d for production bus-master when present | DMAR probe + VT-d table/TE soft (`iommu: vtd * PASS`, CAP soft synthetic when no live DRHD) | Full VT-d programming as production default on real DUT with working remapping |
+| **P-DMA-2** | DMA as **window caps**; program remapping only through that path | Software window grant / count + identity grant soft; syscall enforce toggle | `create_window` as true window **cap**; remapping only via cap path end-to-end |
+| **P-DMA-3** | Revoke: **disable IOMMU window in hardware first**, then free frames | Soft window table / TE arm path; not full Phase A HW-first product | Destroy/revoke **HW-first** on real remapping hardware; align revoke §1.1 product |
+| **P-DMA-4** | Production: **no open bus-master** without working IOMMU window | Soft `iommu_busmaster_ok` enforce smoke; bring-up may leave enforce off after smoke | Production desktop/workstation class: enforce on by default; no free-form bus-master |
+| **P-DMA-5** | Dev/QEMU may soft-allow missing IOMMU **with warning** — **not** production default | Soft-allow / synthetic CAP paths exist for bring-up | Keep production default hard; never promote soft-allow to product DoD |
+| **P-DMA-6** | AMD-Vi portability on same abstract window API | Not product-claimed | After Intel VT-d product path |
+
+### 14.3 Other platform areas (soft bound vs product open)
+
+| Area | Soft on tree (honest bound) | Remaining product (open) |
+|------|-----------------------------|--------------------------|
+| **Boot (P-BOOT)** | Multiboot2 + OVMF UEFI bring-up; UEFI path soft | UEFI primary as sole product DoD; Secure Boot / measured launch optional profile not required for T0 |
+| **IRQ (P-IRQ)** | x2APIC / MSI-X soft paths; hard IRQ minimal policy | Product steady-state: no 8259; MSI-X preference documented for T1+ |
+| **Memory (P-MEM)** | 4-level paging; hierarchical freelist; 768 GiB soak soft PASS on capable hosts | Product **≥ 1 TiB** capable PMM path; LA57 when needed; HHDM covering all RAM product |
+| **SMP / NUMA (P-SMP)** | SMP AP bring-up soft; `GJ_MAX_CPUS` ceiling | NUMA-aware zones from SRAT/SLIT product; large logical CPU product path |
+| **Time (P-TIME)** | Mono path for security timeouts (policy) | Invariant TSC preference + APIC deadline product backbone on class |
+| **Hardening (§10)** | NX / SMEP / SMAP / W^X soft enforcement paths | KASLR product; CET tier-2 later (unchanged) |
+| **Drivers (P-DRV)** | T0 virtio + UDX host soft; live embeds | T1+ HCL product matrix; no GPL Intel Linux import (unchanged law) |
+
+### 14.4 Explicit non-claims (Wave 9)
+
+| Claim | Allowed? |
+|-------|----------|
+| “x86_64 Intel platform profile **Accepted**” | **Yes** — this document §§1–13 |
+| “Soft IOMMU probe / enforce / VT-d TE greppable” | **Yes** — with soft bound (§14.2) |
+| “Product IOMMU / no open bus-master production default closed” | **No** |
+| “P-DMA-5 soft-allow is production default” | **No** — explicitly non-production |
+| “Continuum / media READY / kernel smokes close platform product” | **No** |
+| “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
+| “bar3 closed” | **No** — **bar3 remains OPEN** (client + matrix) |
+
+### 14.5 Related honesty surfaces
+
+- [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §12 / §19 — IOMMU API design + Wave 8 remaining ledger  
+- [HCL.md](HCL.md) — T0 VT-d soft row; open bars  
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [TODO.md](TODO.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md) — coding boxes / soft stamp  
+
+---
+
+*Normative x86_64 Intel-class platform profile for Project GreenJade.*  
+*Wave 9 honesty (§14): soft IOMMU/platform ≠ product close; production no open bus-master still **open**; **bar3 remains OPEN**.*

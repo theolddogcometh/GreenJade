@@ -11,11 +11,16 @@
  *   - Post-harden residual-U audit → greppable soft PASS/FAIL
  *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
  *
+ * Soft deepen (Wave 9 exclusive): soft SMEP/map inventory + greppable
+ * "smep: soft …" logs (map U axes, leaf sizes, CR4/CPUID, harden stats).
+ * Diagnostics only — never hard-gate boot; wrap OK.
+ *
  * greppable: smep: harden
  * greppable: smep: SMEP
  * greppable: smep: SMAP
  * greppable: smep: audit
  * greppable: smep: stats
+ * greppable: smep: soft
  * greppable: SMEP_HARDEN_STATS
  */
 #include <gj/config.h>
@@ -44,6 +49,28 @@
 static struct gj_smep_stats g_stats;
 static int                  g_fSmepOn;
 static int                  g_fSmapOn;
+
+/*
+ * Soft map inventory axes (file-local; Wave 9 exclusive).
+ * Snapshotted over the last mutate harden walk; wrap OK; never hard-gate.
+ * greppable: smep: soft
+ */
+static u64 g_u64SoftMapPresent;      /* present leaves visited (mutate) */
+static u64 g_u64SoftMapLeaf4k;       /* present 4K leaves */
+static u64 g_u64SoftMapLeaf2m;       /* present 2MiB PS leaves */
+static u64 g_u64SoftMapLeaf1g;       /* present 1GiB PS leaves */
+static u64 g_u64SoftMapUKernelHalf;  /* present U leaves in kernel half */
+static u64 g_u64SoftMapULowOutside;  /* present U low, wholly outside user */
+static u64 g_u64SoftMapUUserBand;    /* present U wholly inside user band */
+static u64 g_u64SoftMapUStraddle;    /* present U on user-band straddle */
+static u64 g_u64SoftMapAlreadySuper; /* present !U (already supervisor) */
+static u64 g_u64SoftInvLogs;         /* smep_soft_inventory emissions */
+
+/* Soft helpers defined after leaf_must_clear_u / CR4/CPUID statics. */
+static void smep_soft_map_reset(void);
+static void smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb,
+                                    int fKernelHalf, int fSize);
+static void smep_soft_inventory(const char *szWhere);
 
 /**
  * Page-table walk VA for a physical table frame.
@@ -201,6 +228,165 @@ leaf_must_clear_u(u64 u64Va, u64 u64Cb, int fKernelHalf, int *pStraddle)
 }
 
 /**
+ * Soft: reset map-inventory tallies before a mutate harden walk.
+ * greppable: smep: soft map
+ */
+static void
+smep_soft_map_reset(void)
+{
+    g_u64SoftMapPresent = 0;
+    g_u64SoftMapLeaf4k = 0;
+    g_u64SoftMapLeaf2m = 0;
+    g_u64SoftMapLeaf1g = 0;
+    g_u64SoftMapUKernelHalf = 0;
+    g_u64SoftMapULowOutside = 0;
+    g_u64SoftMapUUserBand = 0;
+    g_u64SoftMapUStraddle = 0;
+    g_u64SoftMapAlreadySuper = 0;
+}
+
+/**
+ * Soft: classify one present leaf for map inventory (pre-clear snapshot).
+ * fSize: 0=4K, 1=2M, 2=1G. Call only on mutate harden walks.
+ * greppable: smep: soft map
+ */
+static void
+smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
+                        int fSize)
+{
+    int fStraddle = 0;
+    int fMustClear;
+
+    g_u64SoftMapPresent++;
+    if (fSize == 2) {
+        g_u64SoftMapLeaf1g++;
+    } else if (fSize == 1) {
+        g_u64SoftMapLeaf2m++;
+    } else {
+        g_u64SoftMapLeaf4k++;
+    }
+
+    if ((u64Entry & PTE_U) == 0) {
+        g_u64SoftMapAlreadySuper++;
+        return;
+    }
+
+    fMustClear = leaf_must_clear_u(u64Va, u64Cb, fKernelHalf, &fStraddle);
+    if (fMustClear != 0) {
+        if (fKernelHalf != 0) {
+            g_u64SoftMapUKernelHalf++;
+        } else {
+            g_u64SoftMapULowOutside++;
+        }
+    } else if (fStraddle != 0) {
+        g_u64SoftMapUStraddle++;
+    } else {
+        g_u64SoftMapUUserBand++;
+    }
+}
+
+/**
+ * Greppable soft SMEP/map inventory dump (product / smoke).
+ * Prefix-stable markers (smep: soft …):
+ *   smep: soft inventory  — stage + harden/audit soft pass surface
+ *   smep: soft map        — leaf U axes + clear/walk residual snapshot
+ *   smep: soft cr4        — CR4.SMEP/SMAP + CPUID.7 feature bits
+ *   smep: soft stats      — aggregate counters (mirror of g_stats)
+ *
+ * Never allocates; safe from boot harden / enable paths.
+ * greppable: smep: soft
+ */
+static void
+smep_soft_inventory(const char *szWhere)
+{
+    u64 u64Cr4;
+    u32 u32Ebx;
+    u64 u64Cleared;
+    int fSmepBit;
+    int fSmapBit;
+    int fCpuidSmep;
+    int fCpuidSmap;
+
+    g_u64SoftInvLogs++;
+    if (szWhere == NULL) {
+        szWhere = "path";
+    }
+
+    u64Cr4 = read_cr4();
+    u32Ebx = cpuid7_ebx();
+    fSmepBit = ((u64Cr4 & CR4_SMEP) != 0) ? 1 : 0;
+    fSmapBit = ((u64Cr4 & CR4_SMAP) != 0) ? 1 : 0;
+    fCpuidSmep = ((u32Ebx & CPUID7_EBX_SMEP) != 0) ? 1 : 0;
+    fCpuidSmap = ((u32Ebx & CPUID7_EBX_SMAP) != 0) ? 1 : 0;
+    u64Cleared = g_stats.u64Cleared4k + g_stats.u64Cleared2m +
+                 g_stats.u64Cleared1g;
+
+    /* Grep: smep: soft inventory */
+    kprintf("smep: soft inventory via=%s harden=%lu audit=%lu "
+            "pass=%lu fail=%lu residual_u=%lu logs=%lu "
+            "g_map=1..4 p_mem6=smep+smap user_band=[0x%llx,0x%llx)\n",
+            szWhere,
+            (unsigned long)g_stats.u64HardenCalls,
+            (unsigned long)g_stats.u64AuditCalls,
+            (unsigned long)g_stats.u64SoftPass,
+            (unsigned long)g_stats.u64SoftFail,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned long)g_u64SoftInvLogs,
+            (unsigned long long)GJ_USER_VA_BASE,
+            (unsigned long long)GJ_USER_VA_END);
+
+    /* Grep: smep: soft map */
+    kprintf("smep: soft map present=%lu leaf4k=%lu leaf2m=%lu leaf1g=%lu "
+            "u_kernel=%lu u_low_out=%lu u_user=%lu u_straddle=%lu "
+            "already_super=%lu cleared=%lu (4k=%lu 2m=%lu 1g=%lu) "
+            "ux=%lu residual_u=%lu walked=%lu skip_user=%lu "
+            "straddle_large=%lu\n",
+            (unsigned long)g_u64SoftMapPresent,
+            (unsigned long)g_u64SoftMapLeaf4k,
+            (unsigned long)g_u64SoftMapLeaf2m,
+            (unsigned long)g_u64SoftMapLeaf1g,
+            (unsigned long)g_u64SoftMapUKernelHalf,
+            (unsigned long)g_u64SoftMapULowOutside,
+            (unsigned long)g_u64SoftMapUUserBand,
+            (unsigned long)g_u64SoftMapUStraddle,
+            (unsigned long)g_u64SoftMapAlreadySuper,
+            (unsigned long)u64Cleared,
+            (unsigned long)g_stats.u64Cleared4k,
+            (unsigned long)g_stats.u64Cleared2m,
+            (unsigned long)g_stats.u64Cleared1g,
+            (unsigned long)g_stats.u64UxCleared,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned long)g_stats.u64WalkedLeaves,
+            (unsigned long)g_stats.u64SkippedUserBand,
+            (unsigned long)g_stats.u64StraddleLarge);
+
+    /* Grep: smep: soft cr4 */
+    kprintf("smep: soft cr4 cr4=0x%lx smep_bit=%d smap_bit=%d "
+            "smep_on=%d smap_on=%d cpuid7_smep=%d cpuid7_smap=%d "
+            "skip_smep=%lu skip_smap=%lu\n",
+            (unsigned long)u64Cr4, fSmepBit, fSmapBit,
+            g_fSmepOn, g_fSmapOn, fCpuidSmep, fCpuidSmap,
+            (unsigned long)g_stats.u64SmepSkip,
+            (unsigned long)g_stats.u64SmapSkip);
+
+    /* Grep: smep: soft stats */
+    kprintf("smep: soft stats harden=%lu audit=%lu cleared=%lu "
+            "walked=%lu ux=%lu residual_u=%lu soft_pass=%lu soft_fail=%lu "
+            "smep_on=%lu smap_on=%lu inv_logs=%lu\n",
+            (unsigned long)g_stats.u64HardenCalls,
+            (unsigned long)g_stats.u64AuditCalls,
+            (unsigned long)u64Cleared,
+            (unsigned long)g_stats.u64WalkedLeaves,
+            (unsigned long)g_stats.u64UxCleared,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned long)g_stats.u64SoftPass,
+            (unsigned long)g_stats.u64SoftFail,
+            (unsigned long)(cpu_smep_is_enabled() ? 1ull : 0ull),
+            (unsigned long)(cpu_smap_is_enabled() ? 1ull : 0ull),
+            (unsigned long)g_u64SoftInvLogs);
+}
+
+/**
  * Clear U on one leaf entry; update soft counters.
  * fSize: 0=4K, 1=2M, 2=1G.
  */
@@ -270,6 +456,10 @@ walk_harden_pml4(u64 *pPml4, int fMutate)
             if ((pPdpt[u32I3] & PTE_PS) != 0) {
                 /* 1GiB page */
                 g_stats.u64WalkedLeaves++;
+                if (fMutate != 0) {
+                    smep_soft_map_note_leaf(pPdpt[u32I3], u64Va1g,
+                                            1ull << 30, fKernelHalf, 2);
+                }
                 if (leaf_must_clear_u(u64Va1g, 1ull << 30, fKernelHalf,
                                       &fStraddle) != 0) {
                     if (fMutate != 0) {
@@ -302,6 +492,10 @@ walk_harden_pml4(u64 *pPml4, int fMutate)
                     /* 2MiB page */
                     g_stats.u64WalkedLeaves++;
                     fStraddle = 0;
+                    if (fMutate != 0) {
+                        smep_soft_map_note_leaf(pPd[u32I2], u64Va2m,
+                                                1ull << 21, fKernelHalf, 1);
+                    }
                     if (leaf_must_clear_u(u64Va2m, 1ull << 21, fKernelHalf,
                                           &fStraddle) != 0) {
                         if (fMutate != 0) {
@@ -330,6 +524,11 @@ walk_harden_pml4(u64 *pPml4, int fMutate)
                     }
                     g_stats.u64WalkedLeaves++;
                     fStraddle = 0;
+                    if (fMutate != 0) {
+                        smep_soft_map_note_leaf(pPt[u32I1], u64Va,
+                                                (u64)GJ_PAGE_SIZE,
+                                                fKernelHalf, 0);
+                    }
                     if (leaf_must_clear_u(u64Va, (u64)GJ_PAGE_SIZE,
                                           fKernelHalf, &fStraddle) != 0) {
                         if (fMutate != 0) {
@@ -379,6 +578,8 @@ cpu_enable_smep(void)
         g_fSmepOn = 0;
         g_stats.u64SmepOn = 0;
         kprintf("smep: SMEP soft skip (CPUID.7 no SMEP)\n");
+        /* greppable: smep: soft */
+        smep_soft_inventory("smep_skip");
         return;
     }
     u64Cr4 = read_cr4();
@@ -390,12 +591,16 @@ cpu_enable_smep(void)
         g_stats.u64SmepOn = 1;
         kprintf("smep: SMEP enabled CR4=0x%lx soft PASS\n",
                 (unsigned long)u64Cr4);
+        /* greppable: smep: soft */
+        smep_soft_inventory("smep_enable");
     } else {
         g_fSmepOn = 0;
         g_stats.u64SmepOn = 0;
         g_stats.u64SoftFail++;
         kprintf("smep: SMEP soft FAIL CR4=0x%lx (bit not sticky)\n",
                 (unsigned long)u64Cr4);
+        /* greppable: smep: soft */
+        smep_soft_inventory("smep_fail");
     }
 }
 
@@ -410,6 +615,8 @@ cpu_enable_smap(void)
         g_fSmapOn = 0;
         g_stats.u64SmapOn = 0;
         kprintf("smep: SMAP soft skip (CPUID.7 no SMAP)\n");
+        /* greppable: smep: soft */
+        smep_soft_inventory("smap_skip");
         return;
     }
     u64Cr4 = read_cr4();
@@ -424,12 +631,16 @@ cpu_enable_smap(void)
         user_access_smap_enabled();
         kprintf("smep: SMAP enabled CR4=0x%lx; copy_* STAC/CLAC soft PASS\n",
                 (unsigned long)u64Cr4);
+        /* greppable: smep: soft */
+        smep_soft_inventory("smap_enable");
     } else {
         g_fSmapOn = 0;
         g_stats.u64SmapOn = 0;
         g_stats.u64SoftFail++;
         kprintf("smep: SMAP soft FAIL CR4=0x%lx (bit not sticky)\n",
                 (unsigned long)u64Cr4);
+        /* greppable: smep: soft */
+        smep_soft_inventory("smap_fail");
     }
 }
 
@@ -496,10 +707,14 @@ vmm_harden_kernel_maps(void)
     u64 u64Remain;
 
     g_stats.u64HardenCalls++;
+    /* Wave 9: soft map inventory snapshot for this mutate walk. */
+    smep_soft_map_reset();
 
     if (pPml4 == NULL) {
         g_stats.u64SoftFail++;
         kprintf("smep: harden soft FAIL (null pml4)\n");
+        /* greppable: smep: soft */
+        smep_soft_inventory("harden_null");
         return;
     }
     if ((pPml4[0] & PTE_P) == 0 && (pPml4[256] & PTE_P) == 0) {
@@ -530,6 +745,8 @@ vmm_harden_kernel_maps(void)
             (unsigned long)g_stats.u64AuditCalls,
             (unsigned long)g_stats.u64SmepOn,
             (unsigned long)g_stats.u64SmapOn);
+    /* greppable: smep: soft inventory / map / cr4 / stats */
+    smep_soft_inventory("harden");
 }
 
 void
@@ -553,4 +770,7 @@ smep_stats_reset(void)
     memset(&g_stats, 0, sizeof(g_stats));
     g_stats.u64SmepOn = u64Smep;
     g_stats.u64SmapOn = u64Smap;
+    /* Map inventory axes are independent of g_stats; clear with reset. */
+    smep_soft_map_reset();
+    g_u64SoftInvLogs = 0;
 }

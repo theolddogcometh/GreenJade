@@ -21,6 +21,14 @@
  *   A concurrent door_recv that already sampled HasReq may still copy req and
  *   later reply into a freed slot — reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
+ *
+ * Soft door call inventory (Wave 9 exclusive deepen):
+ *   - Call path: enter / claim / reply / eio / etimedout / enosys / slot_wait
+ *   - Recv path: enter / ok / peer_dead / inval / block
+ *   - Reply path: enter / ok / stale / not_ready
+ *   - Abort / cancel / thr_exit soft notes + cold product snapshot
+ *   greppable: "door: soft …"
+ *   Never hard-gates; diagnostics only (wrap OK).
  */
 #include <gj/cap.h>
 #include <gj/door.h>
@@ -40,8 +48,181 @@
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
 
+/*
+ * Soft product inventory (Wave 9). Cumulative path tallies across all doors
+ * that enter this module. Live/product counters remain per-door (door_stats).
+ * greppable: door: soft …
+ */
+static u64 g_u64SoftCallEnter;     /* door_call_timeout entries */
+static u64 g_u64SoftCallClaim;     /* single-flight slot claims */
+static u64 g_u64SoftCallReply;     /* terminal via HasReply arm */
+static u64 g_u64SoftCallEio;       /* -EIO terminal arms */
+static u64 g_u64SoftCallEtimedout; /* -ETIMEDOUT terminal arms */
+static u64 g_u64SoftCallEnosys;    /* -ENOSYS terminal arms */
+static u64 g_u64SoftCallSlotWait;  /* contender tag-3 block entries */
+static u64 g_u64SoftCallClientWait;/* in-flight client tag-2 blocks */
+static u64 g_u64SoftRecvEnter;     /* door_recv entries */
+static u64 g_u64SoftRecvOk;        /* request delivered to server */
+static u64 g_u64SoftRecvPeerDead;  /* PEER_DEAD terminal */
+static u64 g_u64SoftRecvInval;     /* INVAL terminal */
+static u64 g_u64SoftRecvBlock;     /* server tag-1 block entries */
+static u64 g_u64SoftReplyEnter;    /* door_reply entries */
+static u64 g_u64SoftReplyOk;       /* reply posted + client woken */
+static u64 g_u64SoftReplyStale;    /* pClient==NULL drop */
+static u64 g_u64SoftReplyNotReady; /* null / !ready drop */
+static u64 g_u64SoftAbort;         /* door_abort_waiters */
+static u64 g_u64SoftCancel;        /* door_cancel_inflight */
+static u64 g_u64SoftThrExit;       /* door_on_thread_exit entries */
+static u64 g_u64SoftThrExitClient; /* thr-exit cleared client slot */
+static u64 g_u64SoftThrExitServer; /* thr-exit cleared server role */
+static u64 g_u64SoftInstallOk;     /* door_install_endpoint success */
+static u64 g_u64SoftInstallFail;   /* install reject (inval/nodev/cap) */
+static u64 g_u64SoftLogN;          /* inventory log emissions */
+static u8  g_fSoftOnce;            /* one-shot after first call activity */
+
 static void door_release_client_slot(struct gj_door *pDoor,
                                      struct gj_thread *pCur);
+static int  door_live(const struct gj_door *pDoor);
+static void door_soft_inc(u64 *pCtr);
+static void door_soft_inventory_log(const struct gj_door *pDoor);
+static void door_soft_maybe_once(void);
+
+/** Soft: bump path tally (u64 wrap is fine for telemetry). */
+static void
+door_soft_inc(u64 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Greppable soft door call inventory (product / smoke).
+ *   door: soft call enter=… claim=… reply=… eio=… etimedout=… enosys=…
+ *        slot_wait=… client_wait=…
+ *   door: soft recv enter=… ok=… peer_dead=… inval=… block=…
+ *   door: soft reply enter=… ok=… stale=… not_ready=…
+ *   door: soft abort=… cancel=… thr_exit=… thr_cli=… thr_srv=…
+ *        install_ok=… install_fail=… log_n=…
+ *   door: soft cold ready=… live=… peer_dead=… calls=… replies=…
+ *        aborts=… timeouts=… badge=0x… last_badge=0x… mask=0x…
+ * greppable: door: soft
+ */
+static void
+door_soft_inventory_log(const struct gj_door *pDoor)
+{
+    const struct gj_door *pSnap;
+    u32                   u32Ready;
+    u32                   u32Live;
+    u32                   u32PeerDead;
+    u32                   u32Badge;
+    u32                   u32LastBadge;
+    u64                   u64Calls;
+    u64                   u64Replies;
+    u64                   u64Aborts;
+    u64                   u64Timeouts;
+    u64                   u64Mask;
+
+    door_soft_inc(&g_u64SoftLogN);
+
+    /* Grep: door: soft call */
+    kprintf("door: soft call enter=%lu claim=%lu reply=%lu eio=%lu "
+            "etimedout=%lu enosys=%lu slot_wait=%lu client_wait=%lu\n",
+            (unsigned long)g_u64SoftCallEnter,
+            (unsigned long)g_u64SoftCallClaim,
+            (unsigned long)g_u64SoftCallReply,
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
+            (unsigned long)g_u64SoftCallSlotWait,
+            (unsigned long)g_u64SoftCallClientWait);
+
+    /* Grep: door: soft recv */
+    kprintf("door: soft recv enter=%lu ok=%lu peer_dead=%lu inval=%lu "
+            "block=%lu\n",
+            (unsigned long)g_u64SoftRecvEnter,
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftRecvPeerDead,
+            (unsigned long)g_u64SoftRecvInval,
+            (unsigned long)g_u64SoftRecvBlock);
+
+    /* Grep: door: soft reply */
+    kprintf("door: soft reply enter=%lu ok=%lu stale=%lu not_ready=%lu\n",
+            (unsigned long)g_u64SoftReplyEnter,
+            (unsigned long)g_u64SoftReplyOk,
+            (unsigned long)g_u64SoftReplyStale,
+            (unsigned long)g_u64SoftReplyNotReady);
+
+    /* Grep: door: soft abort / cancel / thr_exit / install */
+    kprintf("door: soft abort=%lu cancel=%lu thr_exit=%lu thr_cli=%lu "
+            "thr_srv=%lu install_ok=%lu install_fail=%lu log_n=%lu\n",
+            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
+            (unsigned long)g_u64SoftThrExit,
+            (unsigned long)g_u64SoftThrExitClient,
+            (unsigned long)g_u64SoftThrExitServer,
+            (unsigned long)g_u64SoftInstallOk,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftLogN);
+
+    /*
+     * Snapshot optional door (caller) else cold personality when inited.
+     * Pure diagnostics — does not create or re-init a door.
+     */
+    pSnap = pDoor;
+    if (pSnap == NULL && g_fColdInited) {
+        pSnap = &g_doorCold;
+    }
+    if (pSnap != NULL) {
+        u32Ready = pSnap->u32Ready;
+        u32Live = door_live(pSnap) ? 1u : 0u;
+        u32PeerDead = pSnap->u32PeerDead;
+        u32Badge = pSnap->u32Badge;
+        u32LastBadge = pSnap->u32LastBadge;
+        u64Calls = pSnap->u64Calls;
+        u64Replies = pSnap->u64Replies;
+        u64Aborts = pSnap->u64Aborts;
+        u64Timeouts = pSnap->u64Timeouts;
+        u64Mask = pSnap->u64BadgeMask;
+    } else {
+        u32Ready = 0;
+        u32Live = 0;
+        u32PeerDead = 0;
+        u32Badge = 0;
+        u32LastBadge = 0;
+        u64Calls = 0;
+        u64Replies = 0;
+        u64Aborts = 0;
+        u64Timeouts = 0;
+        u64Mask = 0;
+    }
+
+    /* Grep: door: soft cold */
+    kprintf("door: soft cold ready=%u live=%u peer_dead=%u calls=%lu "
+            "replies=%lu aborts=%lu timeouts=%lu badge=0x%x last_badge=0x%x "
+            "mask=0x%lx\n",
+            u32Ready, u32Live, u32PeerDead, (unsigned long)u64Calls,
+            (unsigned long)u64Replies, (unsigned long)u64Aborts,
+            (unsigned long)u64Timeouts, u32Badge, u32LastBadge,
+            (unsigned long)u64Mask);
+}
+
+/**
+ * After first product call activity, print soft inventory once (mirrors
+ * futex/sched soft-stats-once). Safe from call return paths only.
+ */
+static void
+door_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u64SoftCallEnter == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    door_soft_inventory_log(NULL);
+}
 
 static int
 door_live(const struct gj_door *pDoor)
@@ -80,6 +261,7 @@ door_cancel_inflight(struct gj_door *pDoor, struct gj_thread *pCur)
     if (pDoor == NULL) {
         return;
     }
+    door_soft_inc(&g_u64SoftCancel);
     /*
      * HasReq must be 0 before pClient is cleared so a server woken on the
      * original post does not re-consume a cancelled request after re-check.
@@ -119,6 +301,8 @@ door_cold_init(void)
      */
     kprintf("door: cold personality ready=%u state=%u (ENDPOINT)\n",
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
+    /* Grep: door: soft (baseline inventory after cold init) */
+    door_soft_inventory_log(&g_doorCold);
 }
 
 struct gj_door *
@@ -149,24 +333,40 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
     if (pTimeouts != NULL) {
         *pTimeouts = (pDoor != NULL) ? pDoor->u64Timeouts : 0;
     }
+    /*
+     * Emit soft inventory on stats read so bring-up smoke also greps
+     * door: soft call/recv/reply lines (mirrors file_lock_count).
+     * greppable: door: soft
+     */
+    door_soft_inventory_log(pDoor);
 }
 
 gj_status_t
 door_install_endpoint(struct gj_process *pProc, struct gj_door *pDoor,
                       u16 u16Rights, struct gj_cap_ref *pOutRef)
 {
+    gj_status_t st;
+
     if (pProc == NULL || pDoor == NULL || pOutRef == NULL ||
         pProc->pCnode == NULL) {
+        door_soft_inc(&g_u64SoftInstallFail);
         return GJ_ERR_INVAL;
     }
     if (!door_live(pDoor)) {
+        door_soft_inc(&g_u64SoftInstallFail);
         return GJ_ERR_NODEV;
     }
     if (u16Rights == 0) {
         u16Rights = (u16)(GJ_RIGHT_READ | GJ_RIGHT_GRANT | GJ_RIGHT_IDENTIFY);
     }
-    return gj_cap_alloc_install(pProc->pCnode, (u16)GJ_CAP_ENDPOINT, u16Rights,
-                                &pDoor->hdr, pOutRef);
+    st = gj_cap_alloc_install(pProc->pCnode, (u16)GJ_CAP_ENDPOINT, u16Rights,
+                              &pDoor->hdr, pOutRef);
+    if (st == GJ_OK) {
+        door_soft_inc(&g_u64SoftInstallOk);
+    } else {
+        door_soft_inc(&g_u64SoftInstallFail);
+    }
+    return st;
 }
 
 /*
@@ -192,6 +392,7 @@ door_abort_waiters(struct gj_door *pDoor)
     if (pDoor == NULL) {
         return;
     }
+    door_soft_inc(&g_u64SoftAbort);
     pDoor->u32PeerDead = 1;
     pDoor->u64Aborts++;
     /*
@@ -237,6 +438,7 @@ door_on_thread_exit(struct gj_thread *pThr)
     if (pThr == NULL || pDoor == NULL) {
         return;
     }
+    door_soft_inc(&g_u64SoftThrExit);
     /* Drop client slot if this thr owns single-flight call. */
     pExpected = pThr;
     if (__atomic_compare_exchange_n(&pDoor->pClient, &pExpected, NULL, 0,
@@ -245,6 +447,7 @@ door_on_thread_exit(struct gj_thread *pThr)
          * Same HasReq/HasReply clear order as mid-call timeout: cancel before
          * slot is visible as free to contenders.
          */
+        door_soft_inc(&g_u64SoftThrExitClient);
         pDoor->u32HasReq = 0;
         pDoor->u32HasReply = 0;
         pDoor->i64Reply = -(i64)LINUX_EIO;
@@ -255,6 +458,7 @@ door_on_thread_exit(struct gj_thread *pThr)
     }
     /* Drop server role so cold_ipc falls back to sync service. */
     if (pDoor->pServer == pThr) {
+        door_soft_inc(&g_u64SoftThrExitServer);
         pDoor->pServer = NULL;
         (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
@@ -311,20 +515,30 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
     struct gj_thread *pExpected;
     i64               i64Ret;
 
+    door_soft_inc(&g_u64SoftCallEnter);
+
     if (pDoor == NULL || pRegs == NULL || !pDoor->u32Ready) {
+        door_soft_inc(&g_u64SoftCallEnosys);
+        door_soft_maybe_once();
         return -LINUX_ENOSYS;
     }
     if (!door_live(pDoor)) {
+        door_soft_inc(&g_u64SoftCallEio);
+        door_soft_maybe_once();
         return -LINUX_EIO; /* peer/object not live (PEER_DEAD) */
     }
     pCur = thread_current();
     if (pCur == NULL) {
+        door_soft_inc(&g_u64SoftCallEnosys);
+        door_soft_maybe_once();
         return -LINUX_ENOSYS;
     }
 
     /* Single-flight: CAS-claim client slot; contenders block (G-COLD-3). */
     for (;;) {
         if (!door_live(pDoor)) {
+            door_soft_inc(&g_u64SoftCallEio);
+            door_soft_maybe_once();
             return -LINUX_EIO;
         }
         /* No mono clock yet, or deadline already past → timeout (no hang). */
@@ -332,6 +546,8 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             (!timer_ready() ||
              timer_mono_nsec() >= u64DeadlineMonoNsec)) {
             pDoor->u64Timeouts++;
+            door_soft_inc(&g_u64SoftCallEtimedout);
+            door_soft_maybe_once();
             return -LINUX_ETIMEDOUT;
         }
         pExpected = NULL;
@@ -349,6 +565,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
                 continue;
             }
         }
+        door_soft_inc(&g_u64SoftCallSlotWait);
         thread_block(pDoor, DOOR_TAG_SLOT);
         if (pDoor->pClient == NULL || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_SLOT, 1);
@@ -356,6 +573,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
         schedule();
     }
 
+    door_soft_inc(&g_u64SoftCallClaim);
     pDoor->req = *pRegs;
     pDoor->u32HasReq = 1;
     pDoor->u32HasReply = 0;
@@ -376,12 +594,20 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             pDoor->u32HasReq = 0;
             door_snapshot_last_badge(pDoor);
             door_release_client_slot(pDoor, pCur);
+            door_soft_inc(&g_u64SoftCallReply);
+            /* Synthetic peer-dead reply still greps under eio as well. */
+            if (i64Ret == -(i64)LINUX_EIO) {
+                door_soft_inc(&g_u64SoftCallEio);
+            }
+            door_soft_maybe_once();
             return i64Ret;
         }
         if (!door_live(pDoor)) {
             /* Peer death mid-wait: drop flight; last badge still useful. */
             door_snapshot_last_badge(pDoor);
             door_cancel_inflight(pDoor, pCur);
+            door_soft_inc(&g_u64SoftCallEio);
+            door_soft_maybe_once();
             return -LINUX_EIO;
         }
         if (u64DeadlineMonoNsec != 0 &&
@@ -394,8 +620,11 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
              */
             door_cancel_inflight(pDoor, pCur);
             pDoor->u64Timeouts++;
+            door_soft_inc(&g_u64SoftCallEtimedout);
+            door_soft_maybe_once();
             return -LINUX_ETIMEDOUT;
         }
+        door_soft_inc(&g_u64SoftCallClientWait);
         thread_block(pDoor, DOOR_TAG_CLIENT);
         if (pDoor->u32HasReply || !door_live(pDoor)) {
             (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
@@ -409,29 +638,37 @@ door_recv(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
 {
     struct gj_thread *pCur;
 
+    door_soft_inc(&g_u64SoftRecvEnter);
+
     if (pDoor == NULL || pRegs == NULL || !pDoor->u32Ready) {
+        door_soft_inc(&g_u64SoftRecvInval);
         return (int)GJ_ERR_INVAL;
     }
     if (!door_live(pDoor)) {
+        door_soft_inc(&g_u64SoftRecvPeerDead);
         return (int)GJ_ERR_PEER_DEAD;
     }
     pCur = thread_current();
     if (pCur == NULL) {
+        door_soft_inc(&g_u64SoftRecvInval);
         return (int)GJ_ERR_INVAL;
     }
 
     for (;;) {
         if (!door_live(pDoor)) {
             pDoor->pServer = NULL;
+            door_soft_inc(&g_u64SoftRecvPeerDead);
             return (int)GJ_ERR_PEER_DEAD;
         }
         if (pDoor->u32HasReq) {
             *pRegs = pDoor->req;
             pDoor->u32HasReq = 0;
             pDoor->pServer = NULL;
+            door_soft_inc(&g_u64SoftRecvOk);
             return 0;
         }
         pDoor->pServer = pCur;
+        door_soft_inc(&g_u64SoftRecvBlock);
         thread_block(pDoor, DOOR_TAG_SERVER);
         /* Request or death may have landed between check and BLOCKED. */
         if (pDoor->u32HasReq || !door_live(pDoor)) {
@@ -445,15 +682,20 @@ door_recv(struct gj_door *pDoor, struct gj_linux_regs *pRegs)
 void
 door_reply(struct gj_door *pDoor, i64 i64Ret)
 {
+    door_soft_inc(&g_u64SoftReplyEnter);
+
     if (pDoor == NULL || !pDoor->u32Ready) {
+        door_soft_inc(&g_u64SoftReplyNotReady);
         return;
     }
     /* Stale reply: no in-flight client owns the slot — drop. */
     if (pDoor->pClient == NULL) {
+        door_soft_inc(&g_u64SoftReplyStale);
         return;
     }
     pDoor->i64Reply = i64Ret;
     pDoor->u32HasReply = 1;
     pDoor->u64Replies++;
+    door_soft_inc(&g_u64SoftReplyOk);
     (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
 }

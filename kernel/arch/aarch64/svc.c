@@ -23,6 +23,7 @@
  *   2. aarch64_linux_nr_stub(nr) — table lookup → -ENOSYS for known NRs
  *   3. aarch64_linux_nr_soft(nr) — soft getpid/gettid return path
  *   4. Selftest exercises stub table + soft getpid without full reg frame
+ *   5. Soft SVC inventory — greppable "aarch64: svc soft …" (Wave 9)
  *
  * Next product step (still in-arch): widen the exception frame to save
  * x0–x18, pass a soft reg struct into try_handle, read NR from x8, call
@@ -32,6 +33,10 @@
  * Greppable: aarch64: svc PASS
  *            aarch64: svc NR dispatch deepen PASS
  *            aarch64: svc getpid soft PASS
+ *            aarch64: svc soft count=… stub_hit=… soft_hit=… nrs=…
+ *            aarch64: svc soft nrs=… soft_nrs=… ordered=… ec=… enosys=…
+ *            aarch64: svc soft have getpid=… gettid=… write=… futex=…
+ *            aarch64: svc soft PASS | FAIL
  */
 #include "types_arch.h"
 
@@ -312,6 +317,175 @@ aarch64_svc_try_handle(unsigned long u64Vec, unsigned long esr,
     return 0;
 }
 
+/*
+ * Soft SVC inventory (Wave 9 exclusive deepen).
+ * Walks the in-arch NR stub table, tallies soft-covered NRs, checks
+ * non-decreasing NR order and key deepen presence, then emits greppable
+ * "aarch64: svc soft …" lines. Pure C; no shared dispatch, no new objects.
+ *
+ * Soft PASS gates (all required):
+ *   - SVC64 count non-zero after selftest probe (fSvcCountOk)
+ *   - stub ENOSYS exercise OK (fStubOk)
+ *   - deep stub ENOSYS exercise OK (fDeepOk)
+ *   - soft getpid/gettid return shape OK (fGetpidOk)
+ *   - table non-empty, ordered, soft NRs present, deepen NRs present
+ *   - g_cSoftHit >= 2 (both soft NRs exercised)
+ *
+ * Returns 1 on soft PASS, 0 on soft FAIL.
+ */
+static int
+svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
+{
+    unsigned i;
+    unsigned cNrs;
+    unsigned cSoftNrs;
+    unsigned uPrev;
+    unsigned fOrdered;
+    unsigned fHaveGetpid;
+    unsigned fHaveGettid;
+    unsigned fHaveWrite;
+    unsigned fHaveFutex;
+    unsigned fHaveIouring;
+    unsigned fHaveClone3;
+    unsigned fHaveGetrandom;
+    unsigned fHaveEpoll;
+    unsigned fHavePipe2;
+    int fTableOk;
+    int fOk;
+
+    cNrs = (unsigned)(sizeof(g_aNrStub) / sizeof(g_aNrStub[0]));
+    cSoftNrs = 0u;
+    fOrdered = 1u;
+    fHaveGetpid = 0u;
+    fHaveGettid = 0u;
+    fHaveWrite = 0u;
+    fHaveFutex = 0u;
+    fHaveIouring = 0u;
+    fHaveClone3 = 0u;
+    fHaveGetrandom = 0u;
+    fHaveEpoll = 0u;
+    fHavePipe2 = 0u;
+    uPrev = 0u;
+
+    for (i = 0u; i < cNrs; i++) {
+        unsigned uNr = g_aNrStub[i].uNr;
+
+        if (i > 0u && uNr < uPrev) {
+            fOrdered = 0u;
+        }
+        uPrev = uNr;
+
+        if (uNr == A64_NR_getpid) {
+            fHaveGetpid = 1u;
+            cSoftNrs++;
+        } else if (uNr == A64_NR_gettid) {
+            fHaveGettid = 1u;
+            cSoftNrs++;
+        } else if (uNr == A64_NR_write) {
+            fHaveWrite = 1u;
+        } else if (uNr == A64_NR_futex) {
+            fHaveFutex = 1u;
+        } else if (uNr == A64_NR_io_uring_setup) {
+            fHaveIouring = 1u;
+        } else if (uNr == A64_NR_clone3) {
+            fHaveClone3 = 1u;
+        } else if (uNr == A64_NR_getrandom) {
+            fHaveGetrandom = 1u;
+        } else if (uNr == A64_NR_epoll_pwait) {
+            fHaveEpoll = 1u;
+        } else if (uNr == A64_NR_pipe2) {
+            fHavePipe2 = 1u;
+        }
+    }
+
+    /*
+     * Greppable counter inventory (post selftest exercise).
+     * Pattern: aarch64: svc soft …
+     */
+    aarch64_uart_puts("aarch64: svc soft count=");
+    aarch64_uart_put_hex(g_cSvc);
+    aarch64_uart_puts(" stub_hit=");
+    aarch64_uart_put_hex(g_cStubHit);
+    aarch64_uart_puts(" stub_miss=");
+    aarch64_uart_put_hex(g_cStubMiss);
+    aarch64_uart_puts(" soft_hit=");
+    aarch64_uart_put_hex(g_cSoftHit);
+    aarch64_uart_puts(" sync_other=");
+    aarch64_uart_put_hex(g_cSyncOther);
+    aarch64_uart_puts("\n");
+
+    /* Greppable table / ABI soft inventory. */
+    aarch64_uart_puts("aarch64: svc soft nrs=");
+    aarch64_uart_put_hex((unsigned long)cNrs);
+    aarch64_uart_puts(" soft_nrs=");
+    aarch64_uart_put_hex((unsigned long)cSoftNrs);
+    aarch64_uart_puts(" ordered=");
+    aarch64_uart_put_hex((unsigned long)fOrdered);
+    aarch64_uart_puts(" ec=");
+    aarch64_uart_put_hex((unsigned long)ESR_EC_SVC64);
+    aarch64_uart_puts(" enosys=");
+    aarch64_uart_put_hex((unsigned long)LINUX_ENOSYS);
+    aarch64_uart_puts(" pid=");
+    aarch64_uart_put_hex((unsigned long)A64_SOFT_PID);
+    aarch64_uart_puts(" tid=");
+    aarch64_uart_put_hex((unsigned long)A64_SOFT_TID);
+    aarch64_uart_puts(" getpid_nr=");
+    aarch64_uart_put_hex((unsigned long)A64_NR_getpid);
+    aarch64_uart_puts(" gettid_nr=");
+    aarch64_uart_put_hex((unsigned long)A64_NR_gettid);
+    aarch64_uart_puts("\n");
+
+    /* Greppable key-NR presence inventory (deepen coverage). */
+    aarch64_uart_puts("aarch64: svc soft have getpid=");
+    aarch64_uart_put_hex((unsigned long)fHaveGetpid);
+    aarch64_uart_puts(" gettid=");
+    aarch64_uart_put_hex((unsigned long)fHaveGettid);
+    aarch64_uart_puts(" write=");
+    aarch64_uart_put_hex((unsigned long)fHaveWrite);
+    aarch64_uart_puts(" futex=");
+    aarch64_uart_put_hex((unsigned long)fHaveFutex);
+    aarch64_uart_puts(" iouring=");
+    aarch64_uart_put_hex((unsigned long)fHaveIouring);
+    aarch64_uart_puts(" clone3=");
+    aarch64_uart_put_hex((unsigned long)fHaveClone3);
+    aarch64_uart_puts(" getrandom=");
+    aarch64_uart_put_hex((unsigned long)fHaveGetrandom);
+    aarch64_uart_puts(" epoll=");
+    aarch64_uart_put_hex((unsigned long)fHaveEpoll);
+    aarch64_uart_puts(" pipe2=");
+    aarch64_uart_put_hex((unsigned long)fHavePipe2);
+    aarch64_uart_puts(" count_ok=");
+    aarch64_uart_put_hex(fSvcCountOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" stub_ok=");
+    aarch64_uart_put_hex(fStubOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" deep_ok=");
+    aarch64_uart_put_hex(fDeepOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" getpid_ok=");
+    aarch64_uart_put_hex(fGetpidOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts("\n");
+
+    fTableOk = 0;
+    if (cNrs > 0u && fOrdered != 0u && cSoftNrs == 2u &&
+        fHaveGetpid != 0u && fHaveGettid != 0u && fHaveWrite != 0u &&
+        fHaveFutex != 0u && fHaveIouring != 0u && fHaveClone3 != 0u &&
+        fHaveGetrandom != 0u && fHaveEpoll != 0u && fHavePipe2 != 0u) {
+        fTableOk = 1;
+    }
+
+    fOk = 0;
+    if (fSvcCountOk != 0 && fStubOk != 0 && fDeepOk != 0 &&
+        fGetpidOk != 0 && fTableOk != 0 && g_cSoftHit >= 2ul) {
+        fOk = 1;
+    }
+
+    if (fOk != 0) {
+        aarch64_uart_puts("aarch64: svc soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: svc soft FAIL\n");
+    }
+    return fOk;
+}
+
 void
 aarch64_svc_selftest(void)
 {
@@ -319,9 +493,18 @@ aarch64_svc_selftest(void)
     long r1;
     long rSoft;
     unsigned cNrs;
+    int fSvcCountOk;
+    int fStubOk;
+    int fDeepOk;
     int fGetpidOk;
+    int fInvSoft;
 
     cNrs = (unsigned)(sizeof(g_aNrStub) / sizeof(g_aNrStub[0]));
+    fSvcCountOk = 0;
+    fStubOk = 1;
+    fDeepOk = 1;
+    fGetpidOk = 0;
+    fInvSoft = 0;
 
     /*
      * Issue SVC #0 from EL1 — valid; ESR EC=SVC64. Vector is Current EL SPx
@@ -330,9 +513,12 @@ aarch64_svc_selftest(void)
     __asm__ volatile("svc #0" ::: "memory");
     if (g_cSvc == 0ul) {
         aarch64_uart_puts("aarch64: svc soft FAIL (no count)\n");
+        /* Still emit inventory + path presence for greppable soft FAIL. */
+        (void)svc_soft_inventory(0, 0, 0, 0);
         aarch64_uart_puts("aarch64: svc PASS\n"); /* still mark path present */
         return;
     }
+    fSvcCountOk = 1;
 
     /*
      * Soft-exercise Linux NR stub table (in-arch only). write remains
@@ -342,6 +528,7 @@ aarch64_svc_selftest(void)
     r1 = aarch64_linux_nr_stub(A64_NR_write);
     if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
         aarch64_uart_puts("aarch64: svc soft FAIL (stub)\n");
+        fStubOk = 0;
     }
 
     /* Soft getpid return path (positive PID, not -ENOSYS). */
@@ -362,22 +549,26 @@ aarch64_svc_selftest(void)
     r1 = aarch64_linux_nr_stub(A64_NR_io_uring_setup);
     if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
         aarch64_uart_puts("aarch64: svc soft FAIL (deep stub)\n");
+        fDeepOk = 0;
     }
     r0 = aarch64_linux_nr_stub(A64_NR_clone3);
     r1 = aarch64_linux_nr_stub(A64_NR_getrandom);
     if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
         aarch64_uart_puts("aarch64: svc soft FAIL (deep stub2)\n");
+        fDeepOk = 0;
     }
     /* epoll + pipe2 hot path NRs (table coverage deepen). */
     r0 = aarch64_linux_nr_stub(A64_NR_epoll_pwait);
     r1 = aarch64_linux_nr_stub(A64_NR_pipe2);
     if (r0 != -(long)LINUX_ENOSYS || r1 != -(long)LINUX_ENOSYS) {
         aarch64_uart_puts("aarch64: svc soft FAIL (deep stub3)\n");
+        fDeepOk = 0;
     }
     /* Unknown high NR → miss path. */
     r0 = aarch64_linux_nr_stub(9000ul);
     (void)r0;
 
+    /* Legacy one-line summary (kept greppable for existing smoke detail). */
     aarch64_uart_puts("aarch64: svc count=");
     aarch64_uart_put_hex(g_cSvc);
     aarch64_uart_puts(" stub_hit=");
@@ -389,6 +580,11 @@ aarch64_svc_selftest(void)
     aarch64_uart_puts(" nrs=");
     aarch64_uart_put_hex((unsigned long)cNrs);
     aarch64_uart_puts("\n");
+
+    /* Wave 9 soft inventory under "aarch64: svc soft …". */
+    fInvSoft = svc_soft_inventory(fSvcCountOk, fStubOk, fDeepOk, fGetpidOk);
+    (void)fInvSoft;
+
     aarch64_uart_puts("aarch64: svc PASS\n");
     aarch64_uart_puts("aarch64: svc NR dispatch deepen PASS\n");
     if (fGetpidOk) {

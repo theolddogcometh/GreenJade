@@ -11,7 +11,14 @@
  *   USER map flags    — memobj_sanitize_user_prot always forces U
  *   named lifecycle   — publish/unlink independent of last map
  *
+ * Soft memobj inventory (Wave 9 exclusive deepen):
+ *   - Live pool / named / pages / mapped snaps; pool+named peaks
+ *   - Cumulative create / map / unmap / destroy / reclaim / USER sanitize
+ *   - Region soft full/reuse/overlap + share + named create/unlink
+ *   greppable: "memobj: soft …"
+ *
  * Grep markers:
+ *   memobj: soft
  *   memobj: named
  *   memobj: share
  *   memobj: region table soft
@@ -30,31 +37,110 @@
 #include <gj/vmm.h>
 
 #define GJ_MEMOBJ_POOL 32
+#define GJ_NAMED_MAX   16
 
 static struct gj_memobj g_aMemobjPool[GJ_MEMOBJ_POOL];
 static u8               g_aMemobjUsed[GJ_MEMOBJ_POOL];
 
-/* Soft observability counters (never hard-fail product). */
+/* Named shareable registry (Proton A0 / wine-shm) — early for soft inventory. */
+struct memobj_named_slot {
+    u8                u8Used;
+    char              szName[GJ_MEMOBJ_NAME_MAX];
+    struct gj_memobj *pObj;
+};
+
+static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
+
+/*
+ * Soft product inventory (Wave 9). Cumulative unless noted live/peak.
+ * greppable: memobj: soft …
+ */
+static u32 g_u32SoftPoolUsed;     /* live pool slots (scan) */
+static u32 g_u32SoftPoolFree;     /* free pool slots (scan) */
+static u32 g_u32SoftPoolPeak;     /* high-water pool used */
+static u32 g_u32SoftNamedUsed;    /* live named slots (scan) */
+static u32 g_u32SoftNamedFree;    /* free named slots (scan) */
+static u32 g_u32SoftNamedPeak;    /* high-water named used */
+static u32 g_u32SoftPagesOwned;   /* sum cPages over live pool objs */
+static u32 g_u32SoftMappedTotal;  /* sum cMapped over live pool objs */
+static u32 g_u32SoftInvSamples;   /* inventory dump count */
+static u8  g_fSoftInvOnce;        /* one-shot deep dump after activity */
+
+/* Soft event counters (never hard-fail product). */
 static u32 g_cSoftRegionFull;
 static u32 g_cSoftRegionReuse;
 static u32 g_cSoftRegionOverlap;
 static u32 g_cSoftShareMaps;
 static u32 g_cSoftNamedCreate;
 static u32 g_cSoftNamedUnlink;
+static u32 g_cSoftNamedTableFull;
+static u32 g_cSoftCreateAnonOk;
+static u32 g_cSoftCreateAnonFail;
+static u32 g_cSoftCreateNamedFail;
+static u32 g_cSoftMapAnonOk;
+static u32 g_cSoftMapAnonFail;
+static u32 g_cSoftMapShareOk;
+static u32 g_cSoftMapShareFail;
+static u32 g_cSoftMapNamedOk;
+static u32 g_cSoftMapNamedFail;
+static u32 g_cSoftUnmapRegion;
+static u32 g_cSoftUnmapOrphan;
+static u32 g_cSoftDestroy;
+static u32 g_cSoftReclaim;
+static u32 g_cSoftUserMap;
+static u32 g_cSoftLookupNamedHit;
+static u32 g_cSoftLookupNamedMiss;
+
+static void soft_inventory_scan(void);
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+static void soft_pool_peak_note(void);
+static void soft_named_peak_note(void);
 
 void
 memobj_init(void)
 {
     memset(g_aMemobjPool, 0, sizeof(g_aMemobjPool));
     memset(g_aMemobjUsed, 0, sizeof(g_aMemobjUsed));
+    memset(g_aNamed, 0, sizeof(g_aNamed));
+    g_u32SoftPoolUsed = 0;
+    g_u32SoftPoolFree = (u32)GJ_MEMOBJ_POOL;
+    g_u32SoftPoolPeak = 0;
+    g_u32SoftNamedUsed = 0;
+    g_u32SoftNamedFree = (u32)GJ_NAMED_MAX;
+    g_u32SoftNamedPeak = 0;
+    g_u32SoftPagesOwned = 0;
+    g_u32SoftMappedTotal = 0;
+    g_u32SoftInvSamples = 0;
+    g_fSoftInvOnce = 0;
     g_cSoftRegionFull = 0;
     g_cSoftRegionReuse = 0;
     g_cSoftRegionOverlap = 0;
     g_cSoftShareMaps = 0;
     g_cSoftNamedCreate = 0;
     g_cSoftNamedUnlink = 0;
-    kprintf("memobj: init pool=%u named_max soft region_table=%u\n",
-            (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_PROC_REGION_MAX);
+    g_cSoftNamedTableFull = 0;
+    g_cSoftCreateAnonOk = 0;
+    g_cSoftCreateAnonFail = 0;
+    g_cSoftCreateNamedFail = 0;
+    g_cSoftMapAnonOk = 0;
+    g_cSoftMapAnonFail = 0;
+    g_cSoftMapShareOk = 0;
+    g_cSoftMapShareFail = 0;
+    g_cSoftMapNamedOk = 0;
+    g_cSoftMapNamedFail = 0;
+    g_cSoftUnmapRegion = 0;
+    g_cSoftUnmapOrphan = 0;
+    g_cSoftDestroy = 0;
+    g_cSoftReclaim = 0;
+    g_cSoftUserMap = 0;
+    g_cSoftLookupNamedHit = 0;
+    g_cSoftLookupNamedMiss = 0;
+    kprintf("memobj: init pool=%u named_max=%u soft region_table=%u\n",
+            (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX,
+            (unsigned)GJ_PROC_REGION_MAX);
+    /* Grep: memobj: soft (baseline inventory after init) */
+    soft_inventory_log();
 }
 
 static struct gj_memobj *
@@ -150,6 +236,8 @@ memobj_sanitize_user_prot(u32 u32Prot)
         u32Out = GJ_VMM_PROT_READ;
     }
     u32Out |= GJ_VMM_PROT_USER;
+    g_cSoftUserMap++;
+    /* Greppable: memobj: USER map */
     return u32Out;
 }
 
@@ -315,10 +403,12 @@ memobj_create_anon(u32 cPages)
     gj_paddr_t pa;
 
     if (cPages == 0 || cPages > GJ_MEMOBJ_MAX_PAGES) {
+        g_cSoftCreateAnonFail++;
         return NULL;
     }
     pObj = pool_alloc();
     if (pObj == NULL) {
+        g_cSoftCreateAnonFail++;
         return NULL;
     }
     pObj->u32Kind = (u32)GJ_MEMOBJ_ANON;
@@ -334,11 +424,14 @@ memobj_create_anon(u32 cPages)
                 pObj->aPa[iPage] = 0;
             }
             pool_free(pObj);
+            g_cSoftCreateAnonFail++;
             return NULL;
         }
         pObj->aPa[iPage] = pa;
         memobj_zero_frame(pa);
     }
+    soft_pool_peak_note();
+    g_cSoftCreateAnonOk++;
     return pObj;
 }
 
@@ -370,6 +463,7 @@ memobj_destroy(struct gj_memobj *pObj)
     pObj->u32Flags = 0;
     pObj->u32Kind = 0;
     pool_free(pObj);
+    g_cSoftDestroy++;
 }
 
 /**
@@ -388,6 +482,7 @@ memobj_maybe_reclaim(struct gj_memobj *pObj)
     if ((pObj->u32Flags & GJ_MEMOBJ_F_NAMED) != 0) {
         return; /* still published — G-MO-3 / wine-shm sticky */
     }
+    g_cSoftReclaim++;
     memobj_destroy(pObj);
 }
 
@@ -566,27 +661,34 @@ memobj_map_anon(struct gj_process *pProc, u64 u64Hint, size_t cbLen,
     gj_vaddr_t vaBase;
 
     if (pProc == NULL || cbLen == 0) {
+        g_cSoftMapAnonFail++;
         return 0;
     }
     cbAligned = (cbLen + GJ_PAGE_SIZE - 1) & ~(size_t)(GJ_PAGE_SIZE - 1);
     cPages = (u32)(cbAligned / GJ_PAGE_SIZE);
     if (cPages == 0 || cPages > GJ_MEMOBJ_MAX_PAGES) {
+        g_cSoftMapAnonFail++;
         return 0;
     }
     if (fFixed && (u64Hint & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
+        g_cSoftMapAnonFail++;
         return 0;
     }
 
     pObj = memobj_create_anon(cPages);
     if (pObj == NULL) {
+        g_cSoftMapAnonFail++;
         return 0;
     }
     /* Private anon: not shareable until elevated (named path does that). */
     vaBase = memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 0);
     if (vaBase == 0) {
         memobj_destroy(pObj);
+        g_cSoftMapAnonFail++;
         return 0;
     }
+    g_cSoftMapAnonOk++;
+    soft_inventory_maybe_once();
     return vaBase;
 }
 
@@ -594,12 +696,22 @@ gj_vaddr_t
 memobj_map_share(struct gj_process *pProc, struct gj_memobj *pObj, u64 u64Hint,
                  u32 u32Prot, int fFixed)
 {
+    gj_vaddr_t vaBase;
+
     if (pObj == NULL) {
+        g_cSoftMapShareFail++;
         return 0;
     }
     /* Elevate to shareable for multi-map (G-MO-3). */
     pObj->u32Flags |= GJ_MEMOBJ_F_SHAREABLE;
-    return memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 1);
+    vaBase = memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 1);
+    if (vaBase == 0) {
+        g_cSoftMapShareFail++;
+        return 0;
+    }
+    g_cSoftMapShareOk++;
+    soft_inventory_maybe_once();
+    return vaBase;
 }
 
 gj_status_t
@@ -644,6 +756,7 @@ memobj_unmap(struct gj_process *pProc, gj_vaddr_t va, size_t cbLen)
                 memobj_maybe_reclaim(pObj);
             }
             fFound = 1;
+            g_cSoftUnmapRegion++;
             break;
         }
     }
@@ -663,6 +776,7 @@ memobj_unmap(struct gj_process *pProc, gj_vaddr_t va, size_t cbLen)
                 pmm_free(pa & ~(gj_paddr_t)(GJ_PAGE_SIZE - 1));
             }
         }
+        g_cSoftUnmapOrphan++;
     }
 
     cpu_load_cr3(u64SavedCr3);
@@ -670,16 +784,6 @@ memobj_unmap(struct gj_process *pProc, gj_vaddr_t va, size_t cbLen)
 }
 
 /* ---- Named shareable objects (Proton A0 / wine-shm) --------------------- */
-
-#define GJ_NAMED_MAX 16
-
-struct named_slot {
-    u8                u8Used;
-    char              szName[GJ_MEMOBJ_NAME_MAX];
-    struct gj_memobj *pObj;
-};
-
-static struct named_slot g_aNamed[GJ_NAMED_MAX];
 
 static int
 name_eq(const char *szA, const char *szB)
@@ -766,13 +870,16 @@ memobj_create_named(const char *szName, u32 cPages)
     u32 iSlot;
 
     if (!name_ok(szName)) {
+        g_cSoftCreateNamedFail++;
         return NULL;
     }
     if (memobj_lookup_named(szName) != NULL) {
+        g_cSoftCreateNamedFail++;
         return NULL; /* EEXIST — wine-shm re-create soft-misses at caller */
     }
     pObj = memobj_create_anon(cPages);
     if (pObj == NULL) {
+        g_cSoftCreateNamedFail++;
         return NULL;
     }
     pObj->u32Kind = (u32)GJ_MEMOBJ_NAMED;
@@ -784,6 +891,7 @@ memobj_create_named(const char *szName, u32 cPages)
             name_copy(g_aNamed[iSlot].szName, szName);
             g_aNamed[iSlot].pObj = pObj;
             g_cSoftNamedCreate++;
+            soft_named_peak_note();
             /* Greppable: memobj: named  (+ wine-shm when name matches) */
             kprintf("memobj: named \"%s\" pages=%u shareable=1 (soft #%u)\n",
                     g_aNamed[iSlot].szName, cPages,
@@ -794,9 +902,12 @@ memobj_create_named(const char *szName, u32 cPages)
                 kprintf("memobj: wine-shm named path \"%s\" ok\n",
                         g_aNamed[iSlot].szName);
             }
+            soft_inventory_maybe_once();
             return pObj;
         }
     }
+    g_cSoftNamedTableFull++;
+    g_cSoftCreateNamedFail++;
     memobj_destroy(pObj);
     return NULL;
 }
@@ -807,14 +918,17 @@ memobj_lookup_named(const char *szName)
     u32 iSlot;
 
     if (szName == NULL || szName[0] == '\0') {
+        g_cSoftLookupNamedMiss++;
         return NULL;
     }
     for (iSlot = 0; iSlot < GJ_NAMED_MAX; iSlot++) {
         if (g_aNamed[iSlot].u8Used &&
             name_eq(g_aNamed[iSlot].szName, szName)) {
+            g_cSoftLookupNamedHit++;
             return g_aNamed[iSlot].pObj;
         }
     }
+    g_cSoftLookupNamedMiss++;
     return NULL;
 }
 
@@ -859,12 +973,14 @@ memobj_map_named(struct gj_process *pProc, const char *szName, u64 u64Hint,
 
     pObj = memobj_lookup_named(szName);
     if (pObj == NULL || pProc == NULL || pObj->cPages == 0) {
+        g_cSoftMapNamedFail++;
         return 0;
     }
     /* Explicit hint ⇒ fixed VA (winesrv 0x50000000 / 0x60000000 path). */
     fFixed = (u64Hint != 0) ? 1 : 0;
     vaBase = memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 1);
     if (vaBase != 0) {
+        g_cSoftMapNamedOk++;
         /* Greppable: memobj: named map */
         kprintf("memobj: named map \"%s\" va=0x%lx pages=%u cMapped=%u\n",
                 szName, (unsigned long)vaBase, pObj->cPages, pObj->cMapped);
@@ -874,11 +990,170 @@ memobj_map_named(struct gj_process *pProc, const char *szName, u64 u64Hint,
             kprintf("memobj: wine-shm map \"%s\" va=0x%lx\n", szName,
                     (unsigned long)vaBase);
         }
+        soft_inventory_maybe_once();
+    } else {
+        g_cSoftMapNamedFail++;
     }
     return vaBase;
 }
 
-/* ---- Soft observability ------------------------------------------------- */
+/* ---- Soft observability / Wave 9 inventory ------------------------------ */
+
+/**
+ * Note live pool high-water. Walk is tiny (GJ_MEMOBJ_POOL); call after alloc.
+ */
+static void
+soft_pool_peak_note(void)
+{
+    u32 iSlot;
+    u32 cUsed = 0;
+
+    for (iSlot = 0; iSlot < GJ_MEMOBJ_POOL; iSlot++) {
+        if (g_aMemobjUsed[iSlot]) {
+            cUsed++;
+        }
+    }
+    if (cUsed > g_u32SoftPoolPeak) {
+        g_u32SoftPoolPeak = cUsed;
+    }
+}
+
+/**
+ * Note live named high-water. Call after successful publish.
+ */
+static void
+soft_named_peak_note(void)
+{
+    u32 iSlot;
+    u32 cUsed = 0;
+
+    for (iSlot = 0; iSlot < GJ_NAMED_MAX; iSlot++) {
+        if (g_aNamed[iSlot].u8Used) {
+            cUsed++;
+        }
+    }
+    if (cUsed > g_u32SoftNamedPeak) {
+        g_u32SoftNamedPeak = cUsed;
+    }
+}
+
+/**
+ * Walk pool + named tables; refresh live snaps + peaks.
+ * Pure read of slot used bits / cPages / cMapped — safe anytime after init.
+ */
+static void
+soft_inventory_scan(void)
+{
+    u32 iSlot;
+    u32 cPool = 0;
+    u32 cNamed = 0;
+    u32 cPages = 0;
+    u32 cMapped = 0;
+
+    for (iSlot = 0; iSlot < GJ_MEMOBJ_POOL; iSlot++) {
+        if (g_aMemobjUsed[iSlot]) {
+            cPool++;
+            cPages += g_aMemobjPool[iSlot].cPages;
+            cMapped += g_aMemobjPool[iSlot].cMapped;
+        }
+    }
+    for (iSlot = 0; iSlot < GJ_NAMED_MAX; iSlot++) {
+        if (g_aNamed[iSlot].u8Used) {
+            cNamed++;
+        }
+    }
+
+    g_u32SoftPoolUsed = cPool;
+    g_u32SoftPoolFree = (cPool < (u32)GJ_MEMOBJ_POOL)
+                            ? ((u32)GJ_MEMOBJ_POOL - cPool)
+                            : 0u;
+    g_u32SoftNamedUsed = cNamed;
+    g_u32SoftNamedFree = (cNamed < (u32)GJ_NAMED_MAX)
+                             ? ((u32)GJ_NAMED_MAX - cNamed)
+                             : 0u;
+    g_u32SoftPagesOwned = cPages;
+    g_u32SoftMappedTotal = cMapped;
+    if (cPool > g_u32SoftPoolPeak) {
+        g_u32SoftPoolPeak = cPool;
+    }
+    if (cNamed > g_u32SoftNamedPeak) {
+        g_u32SoftNamedPeak = cNamed;
+    }
+    g_u32SoftInvSamples++;
+}
+
+/**
+ * Greppable soft memobj inventory (product / smoke).
+ *   memobj: soft pool …
+ *   memobj: soft named …
+ *   memobj: soft region …
+ *   memobj: soft create …
+ *   memobj: soft map …
+ *   memobj: soft unmap …
+ * greppable: memobj: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    soft_inventory_scan();
+
+    /* Grep: memobj: soft pool */
+    kprintf("memobj: soft pool used=%u free=%u peak=%u pages=%u mapped=%u "
+            "slots=%u samples=%u\n",
+            g_u32SoftPoolUsed, g_u32SoftPoolFree, g_u32SoftPoolPeak,
+            g_u32SoftPagesOwned, g_u32SoftMappedTotal,
+            (unsigned)GJ_MEMOBJ_POOL, g_u32SoftInvSamples);
+
+    /* Grep: memobj: soft named */
+    kprintf("memobj: soft named used=%u free=%u peak=%u create=%u unlink=%u "
+            "table_full=%u lookup_hit=%u lookup_miss=%u max=%u\n",
+            g_u32SoftNamedUsed, g_u32SoftNamedFree, g_u32SoftNamedPeak,
+            g_cSoftNamedCreate, g_cSoftNamedUnlink, g_cSoftNamedTableFull,
+            g_cSoftLookupNamedHit, g_cSoftLookupNamedMiss,
+            (unsigned)GJ_NAMED_MAX);
+
+    /* Grep: memobj: soft region */
+    kprintf("memobj: soft region full=%u reuse=%u overlap=%u "
+            "region_max=%u share_maps=%u\n",
+            g_cSoftRegionFull, g_cSoftRegionReuse, g_cSoftRegionOverlap,
+            (unsigned)GJ_PROC_REGION_MAX, g_cSoftShareMaps);
+
+    /* Grep: memobj: soft create */
+    kprintf("memobj: soft create anon_ok=%u anon_fail=%u named_fail=%u "
+            "destroy=%u reclaim=%u\n",
+            g_cSoftCreateAnonOk, g_cSoftCreateAnonFail, g_cSoftCreateNamedFail,
+            g_cSoftDestroy, g_cSoftReclaim);
+
+    /* Grep: memobj: soft map */
+    kprintf("memobj: soft map anon_ok=%u anon_fail=%u share_ok=%u "
+            "share_fail=%u named_ok=%u named_fail=%u user_map=%u\n",
+            g_cSoftMapAnonOk, g_cSoftMapAnonFail, g_cSoftMapShareOk,
+            g_cSoftMapShareFail, g_cSoftMapNamedOk, g_cSoftMapNamedFail,
+            g_cSoftUserMap);
+
+    /* Grep: memobj: soft unmap */
+    kprintf("memobj: soft unmap region=%u orphan=%u (soft; not bar3)\n",
+            g_cSoftUnmapRegion, g_cSoftUnmapOrphan);
+}
+
+/**
+ * After first product create/map activity, print soft inventory once
+ * (mirrors futex/sched soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_cSoftCreateAnonOk == 0 && g_cSoftNamedCreate == 0 &&
+        g_cSoftMapAnonOk == 0 && g_cSoftMapShareOk == 0 &&
+        g_cSoftMapNamedOk == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
 
 gj_paddr_t
 memobj_page_pa(const struct gj_memobj *pObj, u32 iPage)
@@ -892,29 +1167,19 @@ memobj_page_pa(const struct gj_memobj *pObj, u32 iPage)
 void
 memobj_soft_stats(u32 *pNamedUsed, u32 *pPoolUsed, u32 *pMappedTotal)
 {
-    u32 iSlot;
-    u32 cNamed = 0;
-    u32 cPool = 0;
-    u32 cMapped = 0;
+    /*
+     * Emit soft inventory on stats read so bring-up smoke can grep
+     * "memobj: soft …" without a dedicated syscall.
+     */
+    soft_inventory_log();
 
-    for (iSlot = 0; iSlot < GJ_NAMED_MAX; iSlot++) {
-        if (g_aNamed[iSlot].u8Used) {
-            cNamed++;
-        }
-    }
-    for (iSlot = 0; iSlot < GJ_MEMOBJ_POOL; iSlot++) {
-        if (g_aMemobjUsed[iSlot]) {
-            cPool++;
-            cMapped += g_aMemobjPool[iSlot].cMapped;
-        }
-    }
     if (pNamedUsed != NULL) {
-        *pNamedUsed = cNamed;
+        *pNamedUsed = g_u32SoftNamedUsed;
     }
     if (pPoolUsed != NULL) {
-        *pPoolUsed = cPool;
+        *pPoolUsed = g_u32SoftPoolUsed;
     }
     if (pMappedTotal != NULL) {
-        *pMappedTotal = cMapped;
+        *pMappedTotal = g_u32SoftMappedTotal;
     }
 }

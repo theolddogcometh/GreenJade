@@ -17,7 +17,7 @@
  *   optional GOP is absent. Memmap soft REJECT still proceeds to EBS so
  *   partial boots remain diagnosable.
  *
- * Wave 16 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
+ * Wave 17 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
  *   GJ-EFI: soft inventory  — master surface + wave stamp
  *   GJ-EFI: soft path       — P-BOOT-1/3/4 claim + soft_never_gates
  *   GJ-EFI: soft honesty    — explicit non-claims (not Multiboot; not bar3)
@@ -34,8 +34,8 @@
  *   GJ-EFI: soft magic      — Wave 15 handoff magic lamps
  *   GJ-EFI: soft geometry   — Wave 15 FB pitch/bpp soft math
  *   GJ-EFI: soft publish    — Wave 15 handoff publish lamps
- *   GJ-EFI: soft catalog    — Wave 16 area name rollup
- *   GJ-EFI: soft deepen     — wave=16 stamp + area catalog
+ *   GJ-EFI: soft catalog    — Wave 17 area name rollup
+ *   GJ-EFI: soft deepen     — wave=17 stamp + area catalog
  *   GJ-EFI: soft PASS|PARTIAL — close marker (soft readiness only)
  *
  * Legacy companion markers (still emitted; prefix-stable):
@@ -88,7 +88,7 @@ typedef u64 efi_uintn_t;
 #define EfiMemoryMappedIOPort 12u
 
 /* Wave 15 soft inventory stamp (observability only; never gates product). */
-#define GJ_EFI_SOFT_WAVE       16u
+#define GJ_EFI_SOFT_WAVE       17u
 
 struct efi_table_header {
     u64 u64Signature;
@@ -973,28 +973,38 @@ soft_wave14_inventory(u64 u64Entry)
     com1_puts(" soft PASS\n");
     cAreas++;
 
-    /* Grep: GJ-EFI: soft surfaces (Wave 16 deepen) */
-    com1_puts("GJ-EFI: soft surfaces count=15 wave=");
+    /* Grep: GJ-EFI: soft surfaces (Wave 17 deepen) */
+    com1_puts("GJ-EFI: soft surfaces count=16 wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts(" names=honesty,inventory,path,handoff,memmap,"
               "gop,flags,contract,magic,geometry,publish,catalog,"
-              "surfaces,note,deepen\n");
+              "surfaces,note,return,deepen\n");
 
-    /* Grep: GJ-EFI: soft note (Wave 16 deepen) */
-    com1_puts("GJ-EFI: soft note milestone=wave16 exclusive=1 "
+    /* Grep: GJ-EFI: soft note (Wave 17 deepen) */
+    com1_puts("GJ-EFI: soft note milestone=wave17 exclusive=1 "
               "soft_only=1 not_bar3=1 not-multiboot wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts("\n");
 
-    /* Grep: GJ-EFI: soft catalog — Wave 16 area name rollup. */
+    /* Grep: GJ-EFI: soft catalog — Wave 17 area name rollup. */
     com1_puts("GJ-EFI: soft catalog honesty,inventory,path,handoff,memmap,"
               "gop,flags,kernel,rsdp,load,ebs,stats,contract,magic,"
-              "geometry,publish,catalog wave=");
+              "geometry,publish,catalog,return wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts(" areas_expect=17 soft PASS\n");
     cAreas++;
 
-    /* Grep: GJ-EFI: soft deepen wave (Wave 16 stamp; areas = prior soft lines). */
+    /* Grep: GJ-EFI: soft return (Wave 17 deepen) */
+    com1_puts("GJ-EFI: soft return handoff=");
+    com1_puts(szHandoff);
+    com1_puts(" memmap=");
+    com1_puts(szMemmap);
+    com1_puts(" soft_never_gates=1 product_gate=0 wave=");
+    com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
+    com1_puts("\n");
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft deepen wave (Wave 17 stamp; areas = prior soft lines). */
     com1_puts("GJ-EFI: soft deepen wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts(" areas=");

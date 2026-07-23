@@ -11,7 +11,7 @@
  *   USER map flags    — memobj_sanitize_user_prot always forces U
  *   named lifecycle   — publish/unlink independent of last map
  *
- * Soft memobj inventory (Wave 16 exclusive deepen):
+ * Soft memobj inventory (Wave 17 exclusive deepen):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live pool / named / pages / mapped snaps; pool+named+pages+mapped peaks
  *   - Kind / flags / multi-map / idle live snaps (pool walk)
@@ -19,8 +19,8 @@
  *   - Region soft full/reuse/overlap + share + named create/unlink
  *   - AS ensure + wine-shm soft path tallies + honesty path catalog
  *   - Design / lookup / page_pa / share / reclaim / lamps (Wave 15)
- *   - Wave 16: surfaces / window / prot / OPEN return surfaces
- *   - Stats rollup + deepen wave=16 stamp + PASS/PARTIAL/INIT/NONE
+ *   - Wave 17: surfaces / window / prot / OPEN return surfaces
+ *   - Stats rollup + deepen wave=17 stamp + PASS/PARTIAL/INIT/NONE
  *   greppable: "memobj: soft …"
  *   Soft ≠ product.
  *
@@ -29,7 +29,7 @@
  *   memobj: soft region | create | map | unmap | USER | as | wine
  *   memobj: soft design | lookup | page_pa | share | reclaim | lamps
  *   memobj: soft path | stats | surfaces | window | prot | OPEN
- *   memobj: soft deepen wave=16
+ *   memobj: soft deepen wave=17
  *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
@@ -62,13 +62,13 @@ struct memobj_named_slot {
 
 static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
 
-/* Wave 16 soft inventory stamp (file-local; never product gate). */
-#define MEMOBJ_SOFT_WAVE 16u
+/* Wave 17 soft inventory stamp (file-local; never product gate). */
+#define MEMOBJ_SOFT_WAVE 17u
 /* Catalog areas prior to deepen (honesty..OPEN). Soft ≠ product. */
-#define MEMOBJ_SOFT_AREAS 26u
+#define MEMOBJ_SOFT_AREAS 28u
 
 /*
- * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 17 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: memobj: soft surfaces
  */
 #define MEMOBJ_SOFT_SURF_HONESTY   (1u << 0)
@@ -109,7 +109,7 @@ static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
      MEMOBJ_SOFT_SURF_WINDOW | MEMOBJ_SOFT_SURF_PROT | MEMOBJ_SOFT_SURF_OPEN)
 
 /*
- * Soft product inventory (Wave 16 exclusive). Cumulative unless noted live/peak.
+ * Soft product inventory (Wave 17 exclusive). Cumulative unless noted live/peak.
  * Diagnostics only — never hard-gate create/map/unmap policy.
  * Soft ≠ product. greppable: memobj: soft …
  */
@@ -1315,11 +1315,11 @@ soft_inventory_scan(void)
  *   memobj: soft lamps      — Wave 15 readiness lamps
  *   memobj: soft path       — honesty catalog (FILE cold OPEN)
  *   memobj: soft stats      — rollup tallies for agent greps
- *   memobj: soft surfaces   — Wave 16 return-surface catalog
- *   memobj: soft window     — Wave 16 user VA window geometry
- *   memobj: soft prot       — Wave 16 sanitize prot surface
- *   memobj: soft OPEN       — Wave 16 FILE/product OPEN honesty
- *   memobj: soft deepen     — wave=16 stamp + area count
+ *   memobj: soft surfaces   — Wave 17 return-surface catalog
+ *   memobj: soft window     — Wave 17 user VA window geometry
+ *   memobj: soft prot       — Wave 17 sanitize prot surface
+ *   memobj: soft OPEN       — Wave 17 FILE/product OPEN honesty
+ *   memobj: soft deepen     — wave=17 stamp + area count
  *   memobj: soft PASS|PARTIAL|INIT|NONE | inventory PASS
  * greppable: memobj: soft
  * Honesty: soft inventory only — not product / not bar3 / not 1TiB product /
@@ -1611,7 +1611,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 17: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: memobj: soft surfaces
      */
     kprintf("memobj: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -1623,7 +1623,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 16: user VA window geometry (G-MAP-2 soft).
+     * Wave 17: user VA window geometry (G-MAP-2 soft).
      * Grep: memobj: soft window
      */
     kprintf("memobj: soft window va_base=0x%lx va_end=0x%lx "
@@ -1635,7 +1635,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 16: sanitize prot surface (USER force + default-R).
+     * Wave 17: sanitize prot surface (USER force + default-R).
      * Grep: memobj: soft prot
      */
     kprintf("memobj: soft prot sanitize=%u default_r=%u force_u=1 "
@@ -1646,7 +1646,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Wave 16: explicit OPEN honesty (FILE / product remain OPEN).
+     * Wave 17: explicit OPEN honesty (FILE / product remain OPEN).
      * Grep: memobj: soft OPEN
      */
     kprintf("memobj: soft OPEN file_kind=OPEN product_tib=0 bar3=OPEN "
@@ -1655,11 +1655,35 @@ soft_inventory_log(void)
             (unsigned)MEMOBJ_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: memobj: soft deepen wave (Wave 16 stamp; areas = prior soft lines). */
+    /*
+     * Grep: memobj: soft return rate
+     * Wave 17 return-surface rate lamps (map/create ok vs fail).
+     */
+    kprintf("memobj: soft return rate "
+            "map_ok=%u map_fail=%u create_ok=%u "
+            "pool=%u named=%u multi_peak=%u logs=%u wave=%u "
+            "(return rate; Soft≠product; not 1TiB product; not bar3)\n",
+            cMapOk, cMapFail, cCreateOk,
+            g_u32SoftPoolUsed, g_u32SoftNamedUsed, g_u32SoftMultiMapPeak,
+            g_u32SoftInvSamples, (unsigned)MEMOBJ_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Grep: memobj: soft retcode
+     * Wave 17 retcode catalog for map/create/pool soft return classes.
+     */
+    kprintf("memobj: soft retcode "
+            "map_ok=1 map_fail=1 create_ok=1 pool=1 named=1 "
+            "user_map=1 prot=1 file_kind=OPEN product_tib=0 wave=%u "
+            "(retcode catalog; Soft≠product; soft≠product)\n",
+            (unsigned)MEMOBJ_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: memobj: soft deepen wave (Wave 17 stamp; areas = prior soft lines). */
     kprintf("memobj: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "pool=%u named=%u map_ok=%u create_ok=%u multi_peak=%u "
             "surf=0x%x product_tib=0 bar3=OPEN file_kind=OPEN "
-            "(Wave 16 exclusive; soft; not product; not bar3; "
+            "(Wave 17 exclusive; soft; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)MEMOBJ_SOFT_WAVE, cAreas, (unsigned)MEMOBJ_SOFT_AREAS,
             g_u32SoftInvSamples, g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk,

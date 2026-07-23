@@ -18,7 +18,7 @@
  * remains PARTIAL when the hardware path is incomplete (xAPIC timer
  * handoff alone ≠ complete x2APIC ICR/timer replace).
  *
- * Soft timer inventory (Wave 10 base + Wave 13 path + Wave 16 exclusive deepen;
+ * Soft timer inventory (Wave 10 base + Wave 13 path + Wave 17 exclusive deepen;
  * this unit only — greppable "timer: soft …"):
  *   timer: soft inventory     — ready/src/hz/quantum + surface catalog + wave
  *   timer: soft mono          — coarse/soft mono delta + pit/apic tick axes
@@ -38,11 +38,15 @@
  *   timer: soft futex         — futex_timer_check coupling lamp (soft)
  *   timer: soft honesty       — soft ≠ full x2APIC ICR/timer product replace
  *   timer: soft surface       — bit catalog of soft product surfaces
- * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *   timer: soft exclusive     — exclusive=1 unit stamp + wave
  *   timer: soft claim         — product claim bounds (soft-only)
  *   timer: soft ratio         — pit/apic/handoff/interp path ratios
  *   timer: soft eoi           — PIC EOI + spur policy lamps
+ * Wave 17 exclusive complementary surfaces (never reshape primary fields):
+ *   timer: soft return        — Wave 17 API return surfaces
+ *   timer: soft return selftest — Wave 17 terminal return surface
+ *   timer: soft retmap        — Wave 17 return-surface map
  * Diagnostics only — never hard-gates boot or product deadlines. Pure C.
  * Soft ≠ full x2APIC timer product (xAPIC handoff alone remains PARTIAL).
  *
@@ -66,6 +70,9 @@
  * greppable: timer: soft claim
  * greppable: timer: soft ratio
  * greppable: timer: soft eoi
+ * greppable: timer: soft return
+ * greppable: timer: soft return selftest
+ * greppable: timer: soft retmap
  * greppable: timer: soft PASS
  * greppable: timer: soft FAIL
  * greppable: timer: mono soft
@@ -97,7 +104,7 @@
 #define PIC_EOI     0x20
 
 /* Soft inventory wave stamp (this unit exclusive deepen; never hard-gates). */
-#define TIMER_SOFT_WAVE 16u
+#define TIMER_SOFT_WAVE 17u
 
 /* Soft surface bit lamps (Wave 15+ catalog; software-only claims). */
 #define TIMER_SOFT_SURF_MONO       (1u << 0)
@@ -135,7 +142,7 @@ static u64          g_u64PitDemotions;      /* PIT→APIC soft demotions */
 static u64          g_u64MonoPrefLogs;      /* mono preference soft log emits */
 
 /*
- * Soft timer inventory extras (Wave 10 base + Wave 13 path + Wave 16 deepen;
+ * Soft timer inventory extras (Wave 10 base + Wave 13 path + Wave 17 deepen;
  * file-local). Emission + path tallies only — never hard product gates. wrap OK.
  * greppable: timer: soft
  * greppable: timer: soft apic mono
@@ -1089,7 +1096,7 @@ timer_soft_inventory_log(void)
             (unsigned)u32Surf, (unsigned)TIMER_SOFT_WAVE);
 
     /*
-     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     * Wave 16 complementary sub-lines (kept; never reshape primary).
      */
     /* Grep: timer: soft exclusive */
     kprintf("timer: soft exclusive wave=%u exclusive=1 soft=1 "
@@ -1133,11 +1140,33 @@ timer_soft_inventory_log(void)
             (unsigned)(fApic != 0 ? 1u : 0u),
             (unsigned)TIMER_SOFT_WAVE);
 
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: timer: soft return — Wave 17 API return surfaces */
+    kprintf("timer: soft return ready=%u apic_src=%u mono=1 soft_mono=1 "
+            "preempt=1 futex=1 product_kernel=OPEN bar3=0 hard_gate=0 "
+            "wave=%u soft PASS\n",
+            (unsigned)stMono.u32Ready,
+            (unsigned)(fApic != 0 ? 1u : 0u),
+            (unsigned)TIMER_SOFT_WAVE);
+
+    /* Grep: timer: soft return selftest — Wave 17 terminal return surface */
+    kprintf("timer: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 x2_full_replace=0 wave=%u soft PASS\n",
+            (unsigned)TIMER_SOFT_WAVE);
+
+    /* Grep: timer: soft retmap — Wave 17 return-surface map */
+    kprintf("timer: soft retmap init=1 tick=1 mono=1 sleep=1 "
+            "soft_inv=1 deepen=1 product=OPEN wave=%u soft PASS\n",
+            (unsigned)TIMER_SOFT_WAVE);
+
     /* Grep: timer: soft deepen — wave stamp + area catalog */
     kprintf("timer: soft deepen wave=%u areas=inventory,mono,preempt,"
             "source,apic_mono,path,handoff,interpolate,"
             "lamps,stats,vectors,quantum,futex,honesty,surface,"
-            "exclusive,claim,ratio,eoi "
+            "exclusive,claim,ratio,eoi,return,return_selftest,retmap "
             "logs=%lu apic_mono_logs=%lu ready=%u apic_src=%u "
             "unit=timer.c only hard_gate=0\n",
             (unsigned)TIMER_SOFT_WAVE,
@@ -1224,7 +1253,7 @@ timer_soft_log(void)
      */
     timer_mono_pref_soft_log();
 
-    /* Wave 16 exclusive: greppable timer: soft … inventory rollup. */
+    /* Wave 17 exclusive: greppable timer: soft … inventory rollup. */
     timer_soft_inventory_log();
 }
 

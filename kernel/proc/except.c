@@ -12,11 +12,12 @@
  *   take:     soft claim pending; resume path separate (EXCEPT_TAG_FAULT)
  * One-slot port (product: queue / SEH chain). Pure C freestanding.
  *
- * Soft product inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 17 exclusive deepen; this unit only):
  *   - Register / unregister / deliver / take / drop / wait / resume tallies
  *   - Fail-closed + one-slot overwrite + wake budget diagnostics
  *   - Wave 15: rebind, wait-race self-wake, handler/count query, smoke, deepen
  *   - Wave 16: return-path catalog + surface area stamp
+ *   - Wave 17: ret_surface terminal classes + product_kernel=OPEN
  *   Never hard-gates; wrap OK. Soft ≠ bar3.
  * Greppable prefix (product / agent greps):
  *   "except: soft …"
@@ -27,13 +28,13 @@
 #include <gj/string.h>
 #include <gj/thread.h>
 
-/* ---- soft product inventory (Wave 16; greppable "except: soft …") -------- */
+/* ---- soft product inventory (Wave 17; greppable "except: soft …") -------- */
 
 /*
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 16u
+#define GJ_EXCEPT_SOFT_WAVE 17u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -93,7 +94,7 @@ except_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable soft exception-port inventory (product / smoke). Wave 16 deepen.
+ * Greppable soft exception-port inventory (product / smoke). Wave 17 deepen.
  *   except: soft inventory …
  *   except: soft register …
  *   except: soft deliver …
@@ -104,8 +105,9 @@ except_soft_inc(u32 *pCtr)
  *   except: soft query …
  *   except: soft smoke …
  *   except: soft capacity …  (wake_max/slot/tag lamps)
- *   except: soft return …    (Wave 16 return-path catalog)
- *   except: soft surface …   (Wave 16 area catalog)
+ *   except: soft return …    (Wave 17 return-path catalog)
+ *   except: soft ret_surface … (Wave 17 terminal return classes)
+ *   except: soft surface …   (Wave 17 area catalog)
  *   except: soft deepen …
  *   except: soft path …
  * greppable: except: soft
@@ -178,26 +180,35 @@ soft_inventory_log(void)
 
     /*
      * Grep: except: soft return
-     * Wave 16 return-path catalog — bind/deliver/take/drop/wait outcomes.
-     * Soft ≠ SEH product / bar3 gate.
+     * Wave 17 return-path catalog — bind/deliver/take/drop/wait outcomes.
+     * Soft ≠ SEH product / bar3 gate. product_kernel=OPEN.
      */
     kprintf("except: soft return bind=%u thr0=%u reg_dead=%u reg_null=%u "
             "del_ok=%u del_nlive=%u del_dead=%u del_null=%u "
             "take_hit=%u take_empty=%u take_inval=%u drop_hit=%u "
             "drop_empty=%u wait_pending=%u wait_nlive=%u wait_null=%u "
-            "smoke_pass=%u smoke_fail=%u wave=%u\n",
+            "smoke_pass=%u smoke_fail=%u resume=%u rebind=%u "
+            "product_kernel=OPEN wave=%u\n",
             g_u32SoftRegBind, g_u32SoftRegThr0, g_u32SoftRegDead,
             g_u32SoftRegNull, g_u32SoftDelOk, g_u32SoftDelNlive,
             g_u32SoftDelDead, g_u32SoftDelNull, g_u32SoftTakeHit,
             g_u32SoftTakeEmpty, g_u32SoftTakeInval, g_u32SoftDropHit,
             g_u32SoftDropEmpty, g_u32SoftWaitPending, g_u32SoftWaitNlive,
             g_u32SoftWaitNull, g_u32SoftSmokePass, g_u32SoftSmokeFail,
+            g_u32SoftResumeEnter, g_u32SoftRegRebind,
             GJ_EXCEPT_SOFT_WAVE);
 
-    /* Grep: except: soft surface — Wave 16 area catalog */
+    /* Grep: except: soft ret_surface — Wave 17 terminal return classes */
+    kprintf("except: soft ret_surface reg=bind|thr0|dead|null "
+            "del=ok|nlive|dead|null take=hit|empty|inval drop=hit|empty "
+            "wait=pending|nlive|null smoke=pass|fail resume rebind "
+            "product_kernel=OPEN areas=16 wave=%u\n",
+            GJ_EXCEPT_SOFT_WAVE);
+
+    /* Grep: except: soft surface — Wave 17 area catalog */
     kprintf("except: soft surface inventory,register,deliver,take,drop,"
-            "wait,resume,query,smoke,capacity,path,return,surface,"
-            "deepen areas=14 wave=%u\n",
+            "wait,resume,query,smoke,capacity,path,return,ret_surface,"
+            "surface,deepen areas=16 wave=%u\n",
             GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft deepen */

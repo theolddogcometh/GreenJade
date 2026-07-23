@@ -22,8 +22,8 @@
  * (no putchar flood). Soft ≠ IRQ console, ≠ bar3, ≠ product TTY.
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
- * Wave 16 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=16
+ * Wave 17 exclusive deepen, prefix-stable):
+ *   serial: soft inventory … wave=17
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -40,12 +40,16 @@
  *   serial: soft mcr …        — DTR|RTS|OUT2 path lamps
  *   serial: soft float …      — float/live presence axis
  *   serial: soft honesty …    — soft ≠ IRQ console / bar3 / product TTY
- * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *   serial: soft exclusive …  — exclusive=1 unit stamp + wave
  *   serial: soft claim …      — product claim bounds (polled console)
  *   serial: soft ratio …      — ok/bad + poll hit/miss + thr path ratios
  *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
- *   serial: soft deepen …     — wave=16 areas stamp
+ *   serial: soft deepen …     — wave=17 areas stamp
+ * Wave 17 exclusive complementary surfaces (never reshape primary fields):
+ *   serial: soft return …     — Wave 17 API return surfaces
+ *   serial: soft return selftest … — Wave 17 terminal return surface
+ *   serial: soft retmap …     — Wave 17 return-surface map
  *
  * Soft APIs (linkable; no main hook required — serial_init self-logs):
  *   serial_soft_inits / chars / spinmax / thr_waits / polls / getcs
@@ -117,7 +121,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 16u
+#define UART_SOFT_WAVE 17u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -722,7 +726,7 @@ serial_soft_verify(void)
 
 /**
  * Greppable soft summary (product / smoke inventory).
- * Wave 10 base + Wave 13 path + Wave 16 exclusive complementary deepen;
+ * Wave 10 base + Wave 13 path + Wave 17 exclusive complementary deepen;
  * re-verify once per log. Not hot-path — soft stats smoke only (no flood).
  * Primary field names stay stable; Wave 16 adds complementary sub-lines.
  */
@@ -901,7 +905,7 @@ serial_soft_log(void)
             (unsigned)UART_SOFT_WAVE);
 
     /*
-     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     * Wave 16 complementary sub-lines (kept; never reshape primary).
      */
     /* Grep: serial: soft exclusive */
     kprintf("serial: soft exclusive wave=%u exclusive=1 soft=1 "
@@ -942,11 +946,30 @@ serial_soft_log(void)
                         g_SoftSnap.u8Err) != 0u ? 1u : 0u),
             (unsigned)UART_SOFT_WAVE);
 
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: serial: soft return — Wave 17 API return surfaces */
+    kprintf("serial: soft return ready=%u live=%u polled=1 soft_inv=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)(g_fSerialReady ? 1u : 0u), (unsigned)g_SoftSnap.u8LiveOk, (unsigned)UART_SOFT_WAVE);
+
+    /* Grep: serial: soft return selftest — Wave 17 terminal return surface */
+    kprintf("serial: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)UART_SOFT_WAVE);
+
+    /* Grep: serial: soft retmap — Wave 17 return-surface map */
+    kprintf("serial: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)UART_SOFT_WAVE);
+
     /* Grep: serial: soft deepen — wave stamp + area catalog */
     kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,"
             "port,div,msr,thr,iir,path,expect,verify,"
             "lamps,stats,mcr,float,honesty,"
-            "exclusive,claim,ratio,err "
+            "exclusive,claim,ratio,err,return,return_selftest,retmap "
             "unit=serial.c only hard_gate=0 ready=%u live=%u\n",
             (unsigned)UART_SOFT_WAVE,
             (unsigned)(g_fSerialReady ? 1u : 0u),

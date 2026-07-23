@@ -11,7 +11,8 @@
  * When the ring is full the oldest event is dropped — latency over fidelity
  * for the interim keyboard/pointer path. Drop count is retained for STATS.
  *
- * Soft input hub inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft input hub inventory (Wave 17 exclusive deepen; this unit only):
+ *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - Ring capacity / live pending / peak / free + drop-oldest policy
  *   - Fan-in src tallies (virtio live + soft inject slot)
  *   - Poll: enter / nodev / ready / drain / idle / cap-hit / burst peaks
@@ -21,7 +22,7 @@
  *   - Ready flip + query accessor soft samples
  *   - Ratio / balance / avg burst / peak occ% / wrap / verdict surfaces
  *   - Wave 15 base: honesty / capacity / wrap / catalog / deepen
- *   - Wave 16: headroom / surface / terminal lamps (twin prefixes)
+ *   - Wave 16 base: headroom / surface / terminal lamps (twin prefixes)
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *   Soft ≠ desktop/compositor product bar.
  * Greppable twin prefixes (product / agent greps):
@@ -40,8 +41,8 @@
 #define GJ_INPUT_RING 64u
 /* Cap one poll burst so a stuck backend cannot spin the door forever. */
 #define GJ_INPUT_POLL_MAX 256u
-/* Wave 16 deepen stamp (file-local; never hard-gates). */
-#define GJ_INPUT_SOFT_WAVE 16u
+/* Wave 17 deepen stamp (file-local; never hard-gates). */
+#define GJ_INPUT_SOFT_WAVE 17u
 
 static struct gj_input_event g_aRing[GJ_INPUT_RING];
 static u32 g_u32Head;
@@ -54,7 +55,7 @@ static u32 g_aPushedSrc[GJ_INPUT_SRC_MAX];
 static int g_fReady;
 
 /*
- * Soft product inventory (Wave 16 exclusive deepen).
+ * Soft product inventory (Wave 17 exclusive deepen).
  * Cumulative unless noted live/peak. Never hard-gates.
  * greppable: input_hub: soft … / input: soft …
  */
@@ -159,7 +160,7 @@ soft_note_ready(int fNow)
 
 /**
  * Greppable soft input hub inventory (product / smoke).
- * Twin prefixes so either agent grep works (Wave 16 deepen):
+ * Twin prefixes so either agent grep works (Wave 17 deepen):
  *   input_hub: soft honesty|inventory|ring|fan-in|poll|push|pop|enqueue|
  *              drop|lazy|ready|ev|stats|query|ratio|balance|peaks|
  *              capacity|wrap|headroom|surface|terminal|catalog|path|
@@ -262,7 +263,7 @@ soft_inventory_log(void)
 
     /*
      * Primary prefix: input_hub: soft …
-     * Wave 16 deepen adds headroom/surface/terminal + prior surfaces.
+     * Wave 17 deepen adds headroom/surface/terminal + prior surfaces.
      */
     /* Grep: input_hub: soft honesty */
     kprintf("input_hub: soft honesty interim_ring=1 desktop_product=OPEN "
@@ -408,14 +409,14 @@ soft_inventory_log(void)
             g_u32SoftSaneRepair);
     cAreas++;
 
-    /* Grep: input_hub: soft headroom — Wave 16 live slack lamps. */
+    /* Grep: input_hub: soft headroom — Wave 17 live slack lamps. */
     kprintf("input_hub: soft headroom free=%u pending=%u peak=%u "
             "ring=%u occ_pct=%u peak_occ=%u drop_bp=%u wave=%u\n",
             u32Free, u32Pending, u32Peak, GJ_INPUT_RING, u32OccPct,
             g_u32SoftPeakOccPct, u32DropRatio, GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft surface — Wave 16 surface bit lamps. */
+    /* Grep: input_hub: soft surface — Wave 17 surface bit lamps. */
     kprintf("input_hub: soft surface ready=%u virtio_live=%u pending=%u "
             "pushed=%u popped=%u dropped=%u enqueue=%u "
             "surf=0x%x wave=%u\n",
@@ -433,7 +434,7 @@ soft_inventory_log(void)
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft terminal — Wave 16 outcome rollup. */
+    /* Grep: input_hub: soft terminal — Wave 17 outcome rollup. */
     kprintf("input_hub: soft terminal push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u soft %s wave=%u\n",
             g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
@@ -445,8 +446,8 @@ soft_inventory_log(void)
     kprintf("input_hub: soft catalog honesty,inventory,ring,fan-in,poll,"
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
-            "catalog,path,deepen "
-            "wave=%u areas_expect=25 soft PASS\n",
+            "catalog,return,path,deepen "
+            "wave=%u areas_expect=26 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
@@ -458,7 +459,16 @@ soft_inventory_log(void)
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: input_hub: soft deepen — Wave 16 stamp + area count. */
+    /* Grep: input_hub: soft return — Wave 17 API return surfaces */
+    kprintf("input_hub: soft return push_ok=%u push_rej=%u pop_hit=%u "
+            "pop_empty=%u pop_null=%u enq=%u drop=%u ready=%u "
+            "product_desktop=OPEN wave=%u\n",
+            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
+            g_u32SoftPopEmpty, g_u32SoftPopNull, g_u32SoftEnqueue,
+            g_u32SoftDropOld, u32Ready, GJ_INPUT_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: input_hub: soft deepen — Wave 17 stamp + area count. */
     kprintf("input_hub: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u pushed=%u pop_hit=%u enqueue=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",
@@ -473,7 +483,7 @@ soft_inventory_log(void)
 
     /*
      * Twin prefix: input: soft … (agent-friendly alias; same tallies).
-     * Wave 16: headroom/surface/terminal + prior surfaces mirrored here too.
+     * Wave 16 base: headroom/surface/terminal + prior surfaces mirrored here too.
      */
     /* Grep: input: soft honesty */
     kprintf("input: soft honesty interim_ring=1 desktop_product=OPEN "
@@ -600,13 +610,13 @@ soft_inventory_log(void)
             u32Head, g_u32SoftHeadWrap, g_u32SoftEnqFull, g_u32SoftDropOld,
             g_u32SoftSaneRepair);
 
-    /* Grep: input: soft headroom (Wave 16 twin) */
+    /* Grep: input: soft headroom (Wave 17 twin) */
     kprintf("input: soft headroom free=%u pending=%u peak=%u "
             "ring=%u occ_pct=%u peak_occ=%u drop_bp=%u wave=%u\n",
             u32Free, u32Pending, u32Peak, GJ_INPUT_RING, u32OccPct,
             g_u32SoftPeakOccPct, u32DropRatio, GJ_INPUT_SOFT_WAVE);
 
-    /* Grep: input: soft surface (Wave 16 twin) */
+    /* Grep: input: soft surface (Wave 17 twin) */
     kprintf("input: soft surface ready=%u virtio_live=%u pending=%u "
             "pushed=%u popped=%u dropped=%u enqueue=%u "
             "surf=0x%x wave=%u\n",
@@ -623,7 +633,7 @@ soft_inventory_log(void)
                 ((g_u32SoftEnqueue != 0u) ? (1u << 6) : 0u),
             GJ_INPUT_SOFT_WAVE);
 
-    /* Grep: input: soft terminal (Wave 16 twin) */
+    /* Grep: input: soft terminal (Wave 17 twin) */
     kprintf("input: soft terminal push_ok=%u push_rej=%u pop_hit=%u "
             "pop_empty=%u pop_null=%u enq=%u drop=%u soft %s wave=%u\n",
             g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
@@ -634,8 +644,8 @@ soft_inventory_log(void)
     kprintf("input: soft catalog honesty,inventory,ring,fan-in,poll,"
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
-            "catalog,path,deepen "
-            "wave=%u areas_expect=25 soft PASS\n",
+            "catalog,return,path,deepen "
+            "wave=%u areas_expect=26 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
 
     /* Grep: input: soft path */
@@ -644,6 +654,14 @@ soft_inventory_log(void)
             "wave=%u (soft inventory; not bar3; not desktop product)\n",
             GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX,
             GJ_INPUT_SOFT_WAVE);
+
+    /* Grep: input: soft return — Wave 17 twin return surfaces */
+    kprintf("input: soft return push_ok=%u push_rej=%u pop_hit=%u "
+            "pop_empty=%u pop_null=%u enq=%u drop=%u ready=%u "
+            "product_desktop=OPEN wave=%u\n",
+            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPopHit,
+            g_u32SoftPopEmpty, g_u32SoftPopNull, g_u32SoftEnqueue,
+            g_u32SoftDropOld, u32Ready, GJ_INPUT_SOFT_WAVE);
 
     /* Grep: input: soft deepen */
     kprintf("input: soft deepen wave=%u areas=%u verdict=%s "

@@ -18,7 +18,7 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 16 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 17 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
@@ -37,8 +37,10 @@
  *   notify: soft query             — accessor sample tallies
  *   notify: soft capacity          — multi_max / tag / heap lamps
  *   notify: soft catalog           — path surface catalog (impl vs not)
- *   notify: soft return            — Wave 16 wait|install|wake return surfaces
- *   notify: soft deepen            — wave=16 areas stamp
+ *   notify: soft return            — Wave 17 wait|install|wake return surfaces
+ *   notify: soft return rate       — Wave 17 wait|install|wake rate lamps
+ *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
+ *   notify: soft deepen            — wave=17 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -72,16 +74,16 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
-#define NOTIFY_SOFT_DEEPEN_WAVE  16u
-/* +return surface over Wave 15 fixed greppable categories. */
-#define NOTIFY_SOFT_DEEPEN_AREAS 24u
+/* Wave 17 exclusive soft deepen stamp (greppable wave=17). */
+#define NOTIFY_SOFT_DEEPEN_WAVE  17u
+/* +return rate|retcode over Wave 16 return surfaces. */
+#define NOTIFY_SOFT_DEEPEN_AREAS 26u
 
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped on product return paths; never hard-gate behavior.
  * Pulse path is IRQ-callable → atomic RMW only (no kprintf).
- * Wave 16 deepen: pulse/wait splits + multi + badge + install + query +
+ * Wave 17 deepen: pulse/wait splits + multi + badge + install + query +
  * msix + capacity + catalog + outcome + path + return surfaces.
  * Soft multi-waiter ≠ multi-process notify product.
  * Soft ≠ MIG REPLY product.
@@ -115,8 +117,8 @@ struct notify_soft_stats {
     u64 u64WaitRegister;     /* first soft multi-waiter register */
     u64 u64WaitNoThr;        /* block requested but pCur == NULL */
     u64 u64WaitLoop;         /* wait loop iterations (soft) */
-    u64 u64WaitRetBits;      /* Wave 16: wait returned non-zero badge */
-    u64 u64WaitRetZero;      /* Wave 16: wait returned 0 (dead/miss) */
+    u64 u64WaitRetBits;      /* Wave 17: wait returned non-zero badge */
+    u64 u64WaitRetZero;      /* Wave 17: wait returned 0 (dead/miss) */
     u64 u64Poll;             /* notify_poll entries */
     u64 u64Abort;            /* notify_abort_waiter */
     u64 u64AbortWake;        /* abort issued multi-wake */
@@ -292,7 +294,7 @@ notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
 }
 
 /**
- * Greppable soft pulse/wait inventory + Wave 16 deepen surfaces.
+ * Greppable soft pulse/wait inventory + Wave 17 deepen surfaces.
  * Called from notify_msix_init and once after first wait activity.
  * Never allocates; not for hard-IRQ (kprintf only from product paths).
  * Soft multi-waiter ≠ multi-process notify product (multi_proc=0).
@@ -467,7 +469,7 @@ notify_soft_log(void)
     /*
      * Catalog lines (prefix-stable): declare multi-waiter capacity and the
      * pulse/wait soft path surface so smoke/scripts can grep product depth
-     * without parsing C. Wave 16 deepen splits pulse/wait/multi/badge/
+     * without parsing C. Wave 17 deepen splits pulse/wait/multi/badge/
      * install/abort/msix/query/capacity/catalog/outcome/path/return.
      * Soft multi-waiter ≠ multi-process notify product.
      * Soft ≠ MIG REPLY product.
@@ -522,7 +524,7 @@ notify_soft_log(void)
             (unsigned long)s.u64WaitLoop,
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft pulse — path tallies (Wave 16 deepen) */
+    /* Grep: notify: soft pulse — path tallies (Wave 17 deepen) */
     kprintf("notify: soft pulse enter=%lu hit=%lu dead=%lu "
             "dead_null=%lu dead_ready=%lu dead_state=%lu "
             "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu "
@@ -557,7 +559,7 @@ notify_soft_log(void)
             (unsigned long)s.u64PulseDeadState,
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft wait — path tallies (Wave 16 deepen) */
+    /* Grep: notify: soft wait — path tallies (Wave 17 deepen) */
     kprintf("notify: soft wait enter=%lu hit=%lu park=%lu poll_miss=%lu "
             "dead=%lu dead_enter=%lu dead_loop=%lu cas_retry=%lu "
             "self_wake=%lu mask_any=%lu block=%lu noblock=%lu "
@@ -642,7 +644,7 @@ notify_soft_log(void)
 
     /*
      * Grep: notify: soft return
-     * Wave 16 public return-surface: wait badge / install status / wake.
+     * Wave 17 public return-surface: wait badge / install status / wake.
      * Soft multi-waiter ≠ multi-process notify product.
      * Soft ≠ MIG REPLY product.
      */
@@ -797,7 +799,40 @@ notify_soft_log(void)
             (unsigned long)s.u64MsixInit,
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft deepen wave (Wave 16 stamp) */
+    /*
+     * Grep: notify: soft return rate
+     * Wave 17 return-surface rate lamps (soft ≠ product multi-process).
+     */
+    kprintf("notify: soft return rate "
+            "wait_bits=%lu wait_zero=%lu "
+            "install_ok=%lu install_fail=%lu "
+            "wake_calls=%lu wake_zero=%lu "
+            "wait_hit=%lu wait_dead=%lu "
+            "wave=%u (return rate; Soft≠product; soft≠multi-process notify; "
+            "not bar3)\n",
+            (unsigned long)s.u64WaitRetBits,
+            (unsigned long)s.u64WaitRetZero,
+            (unsigned long)s.u64InstallOk,
+            (unsigned long)s.u64InstallFail,
+            (unsigned long)s.u64MultiWakeCalls,
+            (unsigned long)s.u64MultiWakeZero,
+            (unsigned long)s.u64WaitHit,
+            (unsigned long)s.u64WaitDead,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: notify: soft retcode
+     * Wave 17 retcode catalog for wait badge / install / wake classes.
+     */
+    kprintf("notify: soft retcode "
+            "wait_bits=1 wait_zero=1 wait_hit=1 wait_poll_miss=1 wait_dead=1 "
+            "install_ok=1 install_null=1 install_dead=1 install_cap=1 "
+            "wake_calls=1 wake_sum=1 wake_zero=1 "
+            "multi_proc=0 soft_ne_multi_proc=1 soft_ne_mig_reply=1 wave=%u "
+            "(retcode catalog; Soft≠product; soft≠multi-process notify)\n",
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /* Grep: notify: soft deepen wave (Wave 17 stamp) */
     kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
             "wait_enter=%lu multi_calls=%lu msix_init=%lu "
             "ret_wait_bits=%lu ret_wait_zero=%lu ret_inst_ok=%lu "
@@ -1017,7 +1052,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
         /* greppable: notify: soft wait dead */
         notify_soft_inc(&g_soft.u64WaitDead);
         notify_soft_inc(&g_soft.u64WaitDeadEnter);
-        notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 16 return */
+        notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 17 return */
         return 0;
     }
     /* mask==0 means "any badge" — greppable: NOTIFY_BADGE_WAIT */
@@ -1039,7 +1074,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
             /* greppable: notify: soft wait dead */
             notify_soft_inc(&g_soft.u64WaitDead);
             notify_soft_inc(&g_soft.u64WaitDeadLoop);
-            notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 16 return */
+            notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 17 return */
             notify_soft_log_once();
             return 0;
         }
@@ -1060,7 +1095,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
                 }
                 /* greppable: notify: soft wait hit */
                 notify_soft_inc(&g_soft.u64WaitHit);
-                notify_soft_inc(&g_soft.u64WaitRetBits); /* Wave 16 return */
+                notify_soft_inc(&g_soft.u64WaitRetBits); /* Wave 17 return */
                 notify_soft_log_once();
                 return u64Got;
             }
@@ -1082,7 +1117,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
             }
             /* greppable: notify: soft wait poll miss */
             notify_soft_inc(&g_soft.u64WaitPollMiss);
-            notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 16 return */
+            notify_soft_inc(&g_soft.u64WaitRetZero); /* Wave 17 return */
             notify_soft_log_once();
             return 0;
         }

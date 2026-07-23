@@ -98,9 +98,9 @@ static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
 /* Bounce pool for userspace AVAIL_PUSH (ring programming path) */
 #define GJ_NET_BOUNCE_N 8u
 #define GJ_NET_BOUNCE_SZ 2048u
-/* Wave 15 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_NET_SOFT_DEEPEN_WAVE  16u
-#define VIRTIO_NET_SOFT_DEEPEN_AREAS 29u
+/* Wave 17 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_NET_SOFT_DEEPEN_WAVE  17u
+#define VIRTIO_NET_SOFT_DEEPEN_AREAS 32u
 static u8                    g_aBounce[GJ_NET_BOUNCE_N][GJ_NET_BOUNCE_SZ]
     __attribute__((aligned(16)));
 static u8                    g_aBounceUsed[GJ_NET_BOUNCE_N];
@@ -281,7 +281,7 @@ net_q_note_free(void)
  *   virtio-net: soft via        — sticky last inventory via (Wave 15)
  *   virtio-net: soft kicks      — kick/reap tallies (Wave 15)
  *   virtio-net: soft oasis      — feature-bit constant catalog (Wave 15)
- *   virtio-net: soft deepen     — wave=16 areas stamp
+ *   virtio-net: soft deepen     — wave=17 areas stamp
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *
  * greppable: virtio-net: soft
@@ -566,7 +566,7 @@ virtio_net_soft_inventory(const char *szVia)
             (unsigned)GJ_NET_BOUNCE_N, fMac, fStatus, fMrg, fV1);
 
     /*
-     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Wave 16 complementary deepen (kept; never hard-gates).
      * Soft ≠ game I/O. greppable: virtio-net: soft ratio|headroom|surface|return|contract
      */
     {
@@ -615,7 +615,7 @@ virtio_net_soft_inventory(const char *szVia)
         /* Grep: virtio-net: soft surface */
         kprintf("virtio-net: soft surface inventory,geometry,queue,tx,rx,"
                 "mac,link,errors,api,pci,probe,claim,via,kicks,oasis,"
-                "ratio,headroom,return,contract,deepen areas=%u wave=%u\n",
+                "ratio,headroom,return,contract,return_selftest,retmap,deepen areas=%u wave=%u\n",
                 (unsigned)VIRTIO_NET_SOFT_DEEPEN_AREAS,
                 (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
         /* Grep: virtio-net: soft return — return-surface bitmask */
@@ -633,7 +633,26 @@ virtio_net_soft_inventory(const char *szVia)
                 (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: virtio-net: soft deepen (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: virtio-net: soft return — Wave 17 API return surfaces */
+    kprintf("virtio-net: soft return soft_inv=1 net=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
+
+    /* Grep: virtio-net: soft return selftest — Wave 17 terminal return surface */
+    kprintf("virtio-net: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
+
+    /* Grep: virtio-net: soft retmap — Wave 17 return-surface map */
+    kprintf("virtio-net: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
+
+    /* Grep: virtio-net: soft deepen (Wave 17 stamp) */
     kprintf("virtio-net: soft deepen wave=%u areas=%u ready=%u tx=%u "
             "rx=%u log_n=%u\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE,

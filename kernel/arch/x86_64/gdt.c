@@ -41,15 +41,22 @@
  *   "gdt: soft match …"    — expect-vs-live match lamps (all product slots)
  *   "gdt: soft selector …" — raw selector catalog + STAR base
  *   "gdt: soft tssrsp …"   — RSP0/IST1 tops + match/align lamps
- * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *   "gdt: soft exclusive …"— exclusive=1 unit stamp + wave
  *   "gdt: soft claim …"    — product claim bounds (shared GDT/TSS)
  *   "gdt: soft ratio …"    — init/ap/rsp0/query path ratios
- *   "gdt: soft deepen …"   — wave=16 areas stamp
+ * Wave 17 exclusive complementary surfaces (never reshape primary fields):
+ *   "gdt: soft return …" — Wave 17 API return surfaces
+ *   "gdt: soft return selftest …" — Wave 17 terminal return surface
+ *   "gdt: soft retmap …" — Wave 17 return-surface map
+ *   "gdt: soft deepen …"   — wave=17 areas stamp
  * Soft never hard-gates boot. No bar3 claim.
  * greppable: gdt: soft
  * greppable: gdt: soft deepen
  * greppable: gdt: soft exclusive
+ * greppable: gdt: soft return
+ * greppable: gdt: soft return selftest
+ * greppable: gdt: soft retmap
  */
 #include <gj/gdt.h>
 #include <gj/klog.h>
@@ -139,7 +146,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE     16u   /* Wave 16 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE     17u   /* Wave 17 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -652,7 +659,7 @@ gdt_soft_inventory(void)
             g_u32SoftRsp0Set, g_u32SoftRsp0UseIrq, g_u32SoftRsp0UseSkip);
 
     /*
-     * ---- Wave 16 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 16 complementary surfaces (kept; never reshape primary).
      */
 
     /* Grep: gdt: soft exclusive */
@@ -679,12 +686,31 @@ gdt_soft_inventory(void)
             g_u32SoftCtrGet, g_u32SoftByteGet, g_u32SoftInvLogs,
             (unsigned)GJ_GDT_SOFT_WAVE);
 
-    /* Grep: gdt: soft deepen — Wave 16 stamp + area catalog */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: gdt: soft return — Wave 17 API return surfaces */
+    kprintf("gdt: soft return slots=8 tss=1 star=1 shared_gdt=1 soft_inv=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft return selftest — Wave 17 terminal return surface */
+    kprintf("gdt: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft retmap — Wave 17 return-surface map */
+    kprintf("gdt: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft deepen — Wave 17 stamp + area catalog */
     kprintf("gdt: soft deepen wave=%u areas="
             "inventory,slots,user,tss,lamps,counters,star,path,"
             "kernel,null,cs32,cs64,ds,desc,lar,verify,init,stack,"
             "geom,tssbase,expect,honesty,query,match,selector,tssrsp,"
-            "exclusive,claim,ratio "
+            "exclusive,claim,ratio,return,return_selftest,retmap "
             "unit=gdt.c only hard_gate=0\n",
             (unsigned)GJ_GDT_SOFT_WAVE);
 

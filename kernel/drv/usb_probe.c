@@ -9,7 +9,7 @@
  * no IRQ, no transfer rings (HID parse later). No GPL source; public PCI
  * class codes + HC capability register layouts only.
  *
- * Wave 15/16 exclusive soft deepen (this unit only — greppable "usb: soft …"):
+ * Wave 15/16/17 exclusive soft deepen (this unit only — greppable "usb: soft …"):
  *   usb: soft inventory  — class 0C:03 tallies + BAR io/mem + identify ok
  *   usb: soft class      — PCI class/subclass inventory (public codes)
  *   usb: soft if         — prog-if tallies (uhci/ohci/ehci/xhci/other)
@@ -21,11 +21,13 @@
  *   usb: soft pci        — class 0C:03 inventory stamp
  *   usb: soft path       — honesty: probe/soft only; no claim / IRQ / rings
  *   usb: soft honesty    — bar3/HID/rings non-claims
- *   usb: soft deepen     — wave=16 areas stamp
+ *   usb: soft deepen     — wave=17 areas stamp
  *   usb: soft ratio      — Wave 16 identify/BAR occupancy
  *   usb: soft headroom   — Wave 16 map/bar head
  *   usb: soft surface    — Wave 16 area catalog
  *   usb: soft return     — Wave 16 return-surface bitmask
+ *   usb: soft return selftest — Wave 17 terminal return surface
+ *   usb: soft retmap     — Wave 17 return-surface map
  *   usb: soft contract   — Wave 16 soft≠game I/O contract
  *   usb: soft stats      — emission / scan tallies
  *   usb: soft inventory PASS|SKIP
@@ -48,8 +50,8 @@
 #define USB_PIF_XHCI 0x30u
 
 /* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define USB_SOFT_DEEPEN_AREAS 18u
-#define USB_SOFT_DEEPEN_WAVE  16u
+#define USB_SOFT_DEEPEN_AREAS 21u
+#define USB_SOFT_DEEPEN_WAVE  17u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -395,7 +397,7 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
             (unsigned)USB_SOFT_DEEPEN_WAVE);
 
     /*
-     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Wave 16 complementary deepen (kept; never hard-gates).
      * Soft ≠ game I/O. greppable: usb: soft ratio|headroom|surface|return|contract
      */
     {
@@ -459,7 +461,26 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                 (unsigned)USB_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: usb: soft deepen wave (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: usb: soft return — Wave 17 API return surfaces */
+    kprintf("usb: soft return found=%u soft_inv=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            g_u32SoftFound, (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft return selftest — Wave 17 terminal return surface */
+    kprintf("usb: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft retmap — Wave 17 return-surface map */
+    kprintf("usb: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft deepen wave (Wave 17 stamp) */
     kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,

@@ -7,7 +7,7 @@
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
  *
- * Soft product inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 17 exclusive deepen; this unit only):
  * greppable: "process: soft …"
  *   process: soft inventory …
  *   process: soft stats …
@@ -22,16 +22,17 @@
  *   process: soft jit …
  *   process: soft promise …
  *   process: soft path …
- *   process: soft return …  (Wave 16 return-path catalog)
- *   process: soft surface … (Wave 16 area catalog)
- *   process: soft deepen wave=16 …
+ *   process: soft return …  (Wave 17 return-path catalog)
+ *   process: soft ret_surface … (Wave 17 terminal return classes)
+ *   process: soft surface … (Wave 17 area catalog)
+ *   process: soft deepen wave=17 …
  *   process: soft PASS|PARTIAL
- *   Apple §13 bootstrap seal checklist (wave=16 stamp):
+ *   Apple §13 bootstrap seal checklist (wave=17 stamp):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=16 …
- *   G-PROC-5 death tallies (wave=16 stamp):
- *     process: death … / process: death deepen wave=16 …
+ *     process: bootstrap seal soft deepen wave=17 …
+ *   G-PROC-5 death tallies (wave=17 stamp):
+ *     process: death … / process: death deepen wave=17 …
  *
  * Honesty: soft inventory only — not product multi-server seal, not Apple §13
  * closed, not bar3. Death cleanup ≠ bootstrap seal product.
@@ -48,10 +49,10 @@
 #include <gj/thread.h>
 #include <gj/vmm.h>
 
-/* ---- Wave 16 exclusive soft inventory (this unit only) ------------------ */
-#define GJ_PROCESS_SOFT_WAVE   16u
-#define GJ_PROCESS_SOFT_AREAS  20u /* greppable inventory area count */
-#define GJ_SEAL_SOFT_WAVE      16u /* Apple s13 seal checklist stamp */
+/* ---- Wave 17 exclusive soft inventory (this unit only) ------------------ */
+#define GJ_PROCESS_SOFT_WAVE   17u
+#define GJ_PROCESS_SOFT_AREAS  22u /* greppable inventory area count */
+#define GJ_SEAL_SOFT_WAVE      17u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
 /* Forward: wait table lives later; soft census snapshots used/zombie/free. */
@@ -135,7 +136,7 @@ process_soft_inc(u32 *pCtr)
 }
 
 /*
- * Greppable Wave 16 soft process inventory (product / smoke).
+ * Greppable Wave 17 soft process inventory (product / smoke).
  * Prefix-stable: "process: soft …". Never hard-gates.
  * greppable: process: soft
  */
@@ -264,25 +265,34 @@ process_soft_inventory(const char *szVia)
 
     /*
      * Grep: process: soft return
-     * Wave 16 return-path catalog — init/seal/pager/fault/wait/fork outcomes.
-     * Soft ≠ multi-server seal / bar3 product gate.
+     * Wave 17 return-path catalog — init/seal/pager/fault/wait/fork outcomes.
+     * Soft ≠ multi-server seal / bar3 product gate. product_kernel=OPEN.
      */
     kprintf("process: soft return init_ok=%u init_null=%u root_ok=%u "
             "root_fail=%u root_busy=%u pager_set=%u pager_fail=%u "
             "fault_no_pager=%u fault_wx=%u fault_busy=%u "
             "wait_reg_ok=%u wait_reg_full=%u wait_echild=%u "
-            "fork_ok=%u fork_full=%u fork_as_fail=%u wave=%u\n",
+            "fork_ok=%u fork_full=%u fork_as_fail=%u death=%u "
+            "confine=%u product_kernel=OPEN wave=%u\n",
             g_u32SoftInitOk, g_u32SoftInitNull, g_u32SoftRootMetaOk,
             g_u32SoftRootMetaFail, g_u32SoftRootMetaBusy, g_u32SoftPagerSetOk,
             g_u32SoftPagerSetFail, g_u32SoftFaultNoPager, g_u32SoftFaultWxDeny,
             g_u32SoftFaultBusy, g_u32SoftWaitRegOk, g_u32SoftWaitRegFull,
             g_u32SoftWait4Echild, g_u32SoftForkOk, g_u32SoftForkFull,
-            g_u32SoftForkAsFail, GJ_PROCESS_SOFT_WAVE);
+            g_u32SoftForkAsFail, g_u32SoftDeathEnter, g_u32SoftConfineN,
+            GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft surface — Wave 16 area catalog */
+    /* Grep: process: soft ret_surface — Wave 17 terminal return classes */
+    kprintf("process: soft ret_surface init=ok|null root=ok|fail|busy "
+            "pager=set|fail fault=no_pager|wx|busy wait=reg_ok|reg_full|echild "
+            "fork=ok|full|as_fail death confine product_kernel=OPEN "
+            "areas=%u wave=%u\n",
+            GJ_PROCESS_SOFT_AREAS, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft surface — Wave 17 area catalog */
     kprintf("process: soft surface inventory,stats,init,seal,confine,"
             "pager,fault,wait,death,fork,jit,promise,path,return,"
-            "surface,deepen,PASS,bootstrap_seal,death_tallies,"
+            "ret_surface,surface,deepen,PASS,bootstrap_seal,death_tallies,"
             "headroom areas=%u wave=%u\n",
             GJ_PROCESS_SOFT_AREAS, GJ_PROCESS_SOFT_WAVE);
 

@@ -6082,7 +6082,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
     /*
      * Soft stats smoke inventory — greppable product markers only.
-     * Wave 16 exclusive deepen: soft inventory + path + capacity +
+     * Wave 17 exclusive deepen: soft inventory + path + capacity +
      * surfaces + catalog + note + honesty + deepen. Never blocks M0.
      * Grep: soft: stats smoke
      *        soft: inventory
@@ -6092,6 +6092,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
      *        soft: catalog
      *        soft: note
      *        soft: honesty
+     *        soft: return
      *        soft: deepen
      *        gj_linux_nr_class_soft_log / gj_native_dispatch_stats_soft
      *        gj_syscall_entry_stats_soft
@@ -6102,8 +6103,8 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         u32 cHit = 0;
         u32 cSerial;
         u32 cWow64;
-        /* Wave 16 soft inventory stamp (file-local; never product gate). */
-        enum { MAIN_SOFT_SMOKE_WAVE = 16u, MAIN_SOFT_SMOKE_AREAS = 13u };
+        /* Wave 17 soft inventory stamp (file-local; never product gate). */
+        enum { MAIN_SOFT_SMOKE_WAVE = 17u, MAIN_SOFT_SMOKE_AREAS = 15u };
 
         kprintf("soft: stats smoke begin wave=%u areas=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
@@ -6168,36 +6169,41 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
                 wow64_map_hits(), wow64_thunk_hits(),
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
-        /* Grep: soft: surfaces (Wave 16 deepen) */
+        /* Grep: soft: surfaces (Wave 17 deepen) */
         kprintf("soft: surfaces count=%u "
                 "names=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "deepen,PASS wave=%u\n",
+                "return,deepen,PASS wave=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_AREAS,
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
-        /* Grep: soft: catalog (Wave 16 deepen) */
+        /* Grep: soft: catalog (Wave 17 deepen) */
         kprintf("soft: catalog wave=%u areas=%u "
                 "surfaces=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "deepen,PASS\n",
+                "return,deepen,PASS\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
                 (unsigned)MAIN_SOFT_SMOKE_AREAS);
 
-        /* Grep: soft: note (Wave 16 deepen) */
-        kprintf("soft: note milestone=wave16 exclusive=1 soft_only=1 "
+        /* Grep: soft: note (Wave 17 deepen) */
+        kprintf("soft: note milestone=wave17 exclusive=1 soft_only=1 "
                 "not_bar3=1 hit=%u wow64_calls=%u wave=%u\n",
                 cHit, cWow64, (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
-        /* Grep: soft: honesty (Wave 16 deepen) */
+        /* Grep: soft: honesty (Wave 17 deepen) */
         kprintf("soft: honesty hybrid=M0_smoke open=1 bar3=0 "
                 "product_gate=0 soft_only=1 wave=%u "
                 "(soft inventory; never blocks M0)\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
+        /* Grep: soft: return (Wave 17 deepen) */
+        kprintf("soft: return hit=%u serial=%u wow64_calls=%u "
+                "product_gate=0 never_blocks_m0=1 wave=%u\n",
+                cHit, cSerial, cWow64, (unsigned)MAIN_SOFT_SMOKE_WAVE);
+
         /* Grep: soft: deepen wave */
         kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "
-                "(Wave 16 exclusive; not bar3)\n",
+                "(Wave 17 exclusive; not bar3)\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
                 (unsigned)MAIN_SOFT_SMOKE_AREAS,
                 cHit, cWow64);

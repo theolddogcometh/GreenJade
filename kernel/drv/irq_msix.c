@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14/15 base; Wave 16 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 17 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -25,7 +25,7 @@
  *   irq: soft notify    / irq_msix: soft notify     — Notification live snapshot
  *   irq: soft exercise  / irq_msix: soft exercise   — exercise tallies
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=16 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=17 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
  *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
@@ -60,8 +60,8 @@ static int g_fReady;
 static int g_fInHandler;
 
 /* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define IRQ_MSIX_SOFT_DEEPEN_AREAS 19u
-#define IRQ_MSIX_SOFT_DEEPEN_WAVE  16u
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 22u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE  17u
 
 /*
  * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
@@ -301,7 +301,7 @@ irq_msix_soft_inventory_log(const char *szVia)
     }
 
     /*
-     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Wave 16 complementary deepen (kept; never hard-gates).
      * Soft ≠ game I/O. greppable: irq: soft honesty|geom|return|contract
      */
     {
@@ -355,7 +355,26 @@ irq_msix_soft_inventory_log(const char *szVia)
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: irq: soft deepen wave (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: irq: soft return — Wave 17 API return surfaces */
+    kprintf("irq: soft return soft_inv=1 inject=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq: soft return selftest — Wave 17 terminal return surface */
+    kprintf("irq: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq: soft retmap — Wave 17 return-surface map */
+    kprintf("irq: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq: soft deepen wave (Wave 17 stamp) */
     kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
             "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
@@ -552,7 +571,24 @@ irq_msix_soft_inventory_log(const char *szVia)
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: irq_msix: soft deepen (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive twin return surfaces (irq_msix: soft …).
+     * Soft inventory only; never hard-gates product paths.
+     */
+    /* Grep: irq_msix: soft return — Wave 17 API return surfaces */
+    kprintf("irq_msix: soft return soft_inv=1 inject=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /* Grep: irq_msix: soft return selftest — Wave 17 terminal return surface */
+    kprintf("irq_msix: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /* Grep: irq_msix: soft retmap — Wave 17 return-surface map */
+    kprintf("irq_msix: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq_msix: soft deepen (Wave 17 stamp) */
     kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,

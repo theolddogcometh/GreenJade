@@ -11,12 +11,12 @@
  *   - Post-harden residual-U audit → greppable soft PASS/FAIL
  *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
  *
- * Soft deepen (Wave 9 base; Wave 16 exclusive deepen): soft SMEP/map
+ * Soft deepen (Wave 9 base; Wave 17 exclusive deepen): soft SMEP/map
  * inventory + greppable "smep: soft …" logs (map U axes, leaf sizes,
  * CR4/CPUID, harden stats, honesty/path/deepen stamps).
  * Diagnostics only — never hard-gate boot; wrap OK.
  *
- * Wave 16 soft inventory deepen (prefix-stable; greppable: smep: soft):
+ * Wave 17 soft inventory deepen (prefix-stable; greppable: smep: soft):
  *   "smep: soft honesty …"    explicit non-claims (not full G-MAP product)
  *   "smep: soft inventory …"  stage + harden/audit soft pass surface
  *   "smep: soft map …"        leaf U axes + clear/walk residual snapshot
@@ -25,13 +25,13 @@
  *   "smep: soft enable …"     SMEP/SMAP enable/skip soft path catalog
  *   "smep: soft path …"       surface catalog + honesty open lamps
  *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
- *   "smep: soft deepen …"     wave=16 stamp + area count
+ *   "smep: soft deepen …"     wave=17 stamp + area count
  *   "smep: soft lamps …"      CR4/CPUID readiness lamps
  *   "smep: soft band …"       Wave 15 user-band geometry
- *   "smep: soft surfaces …"   Wave 16 return-surface catalog
- *   "smep: soft walk …"       Wave 16 PML4 walk surface
- *   "smep: soft OPEN …"       Wave 16 G-MAP/P-MEM-6 OPEN honesty
- *   "smep: soft gmap …"       Wave 16 G-MAP-1..4 soft axes
+ *   "smep: soft surfaces …"   Wave 17 return-surface catalog
+ *   "smep: soft walk …"       Wave 17 PML4 walk surface
+ *   "smep: soft OPEN …"       Wave 17 G-MAP/P-MEM-6 OPEN honesty
+ *   "smep: soft gmap …"       Wave 17 G-MAP-1..4 soft axes
  * Honesty: soft inventory only — not product G-MAP complete; not bar3;
  *          soft ≠ product.
  *
@@ -80,14 +80,14 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
-/* Wave 16 soft inventory stamp (file-local; never product gate). */
-#define SMEP_SOFT_WAVE 16u
+/* Wave 17 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 17u
 
 /* Soft inventory greppable area count (honesty..gmap; deepen excluded). */
-#define SMEP_SOFT_AREAS 14u
+#define SMEP_SOFT_AREAS 16u
 
 /*
- * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 17 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: smep: soft surfaces
  */
 #define SMEP_SOFT_SURF_HONESTY   (1u << 0)
@@ -116,7 +116,7 @@ static int                  g_fSmepOn;
 static int                  g_fSmapOn;
 
 /*
- * Soft map inventory axes (file-local; Wave 9 + Wave 16 exclusive).
+ * Soft map inventory axes (file-local; Wave 9 + Wave 17 exclusive).
  * Snapshotted over the last mutate harden walk; wrap OK; never hard-gate.
  * greppable: smep: soft
  */
@@ -374,12 +374,12 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
  *   smep: soft enable     — SMEP/SMAP enable/skip soft path
  *   smep: soft path       — surface catalog + honesty open lamps
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
- *   smep: soft deepen     — wave=16 stamp + area count
+ *   smep: soft deepen     — wave=17 stamp + area count
  *   smep: soft lamps      — CR4/CPUID readiness lamps
- *   smep: soft surfaces   — Wave 16 return-surface catalog
- *   smep: soft walk       — Wave 16 PML4 walk surface
- *   smep: soft OPEN       — Wave 16 G-MAP/P-MEM-6 OPEN honesty
- *   smep: soft gmap       — Wave 16 G-MAP-1..4 soft axes
+ *   smep: soft surfaces   — Wave 17 return-surface catalog
+ *   smep: soft walk       — Wave 17 PML4 walk surface
+ *   smep: soft OPEN       — Wave 17 G-MAP/P-MEM-6 OPEN honesty
+ *   smep: soft gmap       — Wave 17 G-MAP-1..4 soft axes
  *
  * Never allocates; safe from boot harden / enable paths.
  * Honesty: soft inventory ≠ product G-MAP complete; not bar3; soft ≠ product.
@@ -564,7 +564,7 @@ smep_soft_inventory(const char *szWhere)
     u32Areas++;
 
     /*
-     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 17: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: smep: soft surfaces
      */
     kprintf("smep: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -576,7 +576,7 @@ smep_soft_inventory(const char *szWhere)
     u32Areas++;
 
     /*
-     * Wave 16: PML4 walk surface (observe-only).
+     * Wave 17: PML4 walk surface (observe-only).
      * Grep: smep: soft walk
      */
     kprintf("smep: soft walk walked=%lu present=%lu cleared=%lu "
@@ -595,7 +595,7 @@ smep_soft_inventory(const char *szWhere)
     u32Areas++;
 
     /*
-     * Wave 16: G-MAP / P-MEM-6 remain OPEN.
+     * Wave 17: G-MAP / P-MEM-6 remain OPEN.
      * Grep: smep: soft OPEN
      */
     kprintf("smep: soft OPEN product_gmap=OPEN product_pmem6=OPEN "
@@ -605,7 +605,7 @@ smep_soft_inventory(const char *szWhere)
     u32Areas++;
 
     /*
-     * Wave 16: G-MAP-1..4 soft axes (shape only).
+     * Wave 17: G-MAP-1..4 soft axes (shape only).
      * Grep: smep: soft gmap
      */
     kprintf("smep: soft gmap g1_clear_u=1 g2_user_band=1 g3_smep=1 "
@@ -621,12 +621,41 @@ smep_soft_inventory(const char *szWhere)
     u32Areas++;
 
     /*
+     * Grep: smep: soft return rate
+     * Wave 17 return-surface rate lamps (walk/clear residual).
+     */
+    kprintf("smep: soft return rate "
+            "walked=%lu present=%lu cleared=%lu residual_u=%lu "
+            "u_kernel=%lu u_user=%lu logs=%lu wave=%u "
+            "(return rate; Soft≠product G-MAP; soft≠product; not bar3)\n",
+            (unsigned long)g_stats.u64WalkedLeaves,
+            (unsigned long)g_u64SoftMapPresent,
+            (unsigned long)u64Cleared,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned long)g_u64SoftMapUKernelHalf,
+            (unsigned long)g_u64SoftMapUUserBand,
+            (unsigned long)g_u64SoftInvLogs,
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
+
+    /*
+     * Grep: smep: soft retcode
+     * Wave 17 retcode catalog for map/walk/gmap soft return classes.
+     */
+    kprintf("smep: soft retcode "
+            "map=1 walk=1 clear_u=1 residual=1 enable=1 gmap=1 "
+            "product_gmap=OPEN product_pmem6=OPEN wave=%u "
+            "(retcode catalog; Soft≠product G-MAP; soft≠product)\n",
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
+
+    /*
      * Grep: smep: soft deepen wave
      * areas tracks prior soft lines this emission (honesty..gmap).
      */
     kprintf("smep: soft deepen wave=%u areas=%u via=%s logs=%lu "
             "catalog=%u residual_u=%lu surf=0x%x "
-            "(Wave 16 exclusive; not product G-MAP; not bar3; soft≠product)\n",
+            "(Wave 17 exclusive; not product G-MAP; not bar3; soft≠product)\n",
             (unsigned)SMEP_SOFT_WAVE,
             (unsigned)u32Areas,
             szWhere,

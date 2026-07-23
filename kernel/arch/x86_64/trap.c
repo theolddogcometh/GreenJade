@@ -8,7 +8,7 @@
  * Soft deepen: greppable #PF COW path logs + trap soft stats (trap.h).
  * Keep vmm "COW break" strings untouched; except_port_deliver path unchanged.
  *
- * Soft trap inventory (Wave 13 base + Wave 16 exclusive complementary deepen;
+ * Soft trap inventory (Wave 13 base + Wave 17 exclusive complementary deepen;
  * this unit only):
  *   Lifetime classify / #PF COW / PE32 / except-or-kill tallies (gj_trap_stats).
  *   File-local resume/halt/last-frame/rate lamps (never hard-gate).
@@ -32,16 +32,23 @@
  *     trap: soft frame …    — last full frame lamps (err/rip/cs/rsp/ss/rflags)
  *     trap: soft vec …      — last vector class + name lamp
  *     trap: soft mile …     — power-of-two milestone / quiet / skip rollup
- * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 16 complementary surfaces (kept; never reshape primary fields):
  *     trap: soft exclusive …— exclusive=1 unit stamp + wave
  *     trap: soft claim …    — product claim bounds (classify+pe32+cow)
  *     trap: soft ratio …    — class/outcome/resume/halt path ratios
+ * Wave 17 exclusive complementary surfaces (never reshape primary fields):
+ *     trap: soft return …   — Wave 17 API return surfaces
+ *     trap: soft return selftest … — Wave 17 terminal return surface
+ *     trap: soft retmap …   — Wave 17 return-surface map
  *   Emissions only at power-of-two trap_dispatch milestones, hard-capped at
  *   TRAP_SOFT_LOG_MAX. Explicit trap_stats_soft() always dumps (smoke path).
  *   Never hard-gates product policy. Pure C. Soft ≠ bar3.
  * Grep: trap: soft · trap: #PF soft
  * greppable: trap: soft deepen
  * greppable: trap: soft exclusive
+ * greppable: trap: soft return
+ * greppable: trap: soft return selftest
+ * greppable: trap: soft retmap
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -208,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    16u
+#define TRAP_SOFT_WAVE    17u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -260,10 +267,10 @@ read_cr2(void)
  *   trap: soft halt       — kernel / null frame halt entries
  *   trap: soft rate       — milestone / quiet / force / skip rollup
  *   trap: soft path       — product claim + honesty
- *   trap: soft deepen     — Wave 16 stamp line
+ *   trap: soft deepen     — Wave 17 stamp line
  * Wave 15 complementary (kept; never reshape primary):
  *   trap: soft honesty / api / frame / vec / mile
- * Wave 16 exclusive complementary (never reshape primary):
+ * Wave 16 complementary (kept) + Wave 17 return surfaces:
  *   trap: soft exclusive / claim / ratio
  *
  * Never allocates; never hard-gates. Diagnostics only (wrap OK).
@@ -518,7 +525,7 @@ trap_soft_inventory_log(void)
             u32AtCap);
 
     /*
-     * ---- Wave 16 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 16 complementary surfaces (kept; never reshape primary).
      */
 
     /* Grep: trap: soft exclusive */
@@ -555,12 +562,32 @@ trap_soft_inventory_log(void)
             g_u32SoftLogged,
             (unsigned)TRAP_SOFT_WAVE);
 
+    /*
+     * ---- Wave 17 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: trap: soft return — Wave 17 API return surfaces */
+    kprintf("trap: soft return classify=1 pe32=1 cow=1 except=1 "
+            "stats_get=1 stats_reset=1 soft_inv=1 product_kernel=OPEN "
+            "bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft return selftest — Wave 17 terminal return surface */
+    kprintf("trap: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 rate_limited=1 wave=%u soft PASS\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft retmap — Wave 17 return-surface map */
+    kprintf("trap: soft retmap dispatch=1 resume=1 halt=1 kill=1 "
+            "soft_inv=1 deepen=1 product=OPEN wave=%u soft PASS\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
     /* Grep: trap: soft deepen */
     kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"
             "honesty,api,frame,vec,mile,"
-            "exclusive,claim,ratio "
+            "exclusive,claim,ratio,return,return_selftest,retmap "
             "unit=trap.c only rate_limited=1\n",
             (unsigned)TRAP_SOFT_WAVE);
 }

@@ -24,7 +24,7 @@
  *                  (grep: futex: robust set/get/exit)
  *
  * Soft wait/wake inventory (file-local sticky counters; never hard-gate).
- * Wave 16 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 17 exclusive deepen — greppable prefix-stable serial markers
  * (futex: soft …); diagnostics only, never hard-gate product:
  *   futex: soft wait inventory   — capacity + path catalog at init
  *   futex: soft wake inventory   — wake/bitset/timer/cancel catalog at init
@@ -60,11 +60,12 @@
  *   futex: soft peak             — table peak rollup
  *   futex: soft g_fut            — G-FUT-1/2/3 + bitset/robust honesty
  *   futex: soft match            — key+bitset AND match surface
- *   futex: soft return           — Wave 16 wait/wake return-path catalog
- *   futex: soft ratio            — Wave 16 basis-point outcome rollup
- *   futex: soft surface          — Wave 16 area catalog
- *   futex: soft headroom         — Wave 16 free waiter/robust slots
- *   futex: soft deepen           — wave=16 areas stamp
+ *   futex: soft return           — Wave 17 wait/wake return-path catalog
+ *   futex: soft ret_surface      — Wave 17 terminal return class catalog
+ *   futex: soft ratio            — Wave 17 basis-point outcome rollup
+ *   futex: soft surface          — Wave 17 area catalog
+ *   futex: soft headroom         — Wave 17 free waiter/robust slots
+ *   futex: soft deepen           — wave=17 areas stamp
  * greppable: futex: soft
  * Soft only — does NOT claim product RR / full preemption complete.
  *
@@ -147,10 +148,10 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
-#define FUTEX_SOFT_DEEPEN_WAVE  16u
+/* Wave 17 exclusive soft deepen stamp (greppable wave=17). */
+#define FUTEX_SOFT_DEEPEN_WAVE  17u
 /* Fixed greppable categories emitted under "futex: soft …". */
-#define FUTEX_SOFT_DEEPEN_AREAS 30u
+#define FUTEX_SOFT_DEEPEN_AREAS 32u
 
 /*
  * Soft wait/wake sticky counters (wrap OK; diagnostics only).
@@ -374,8 +375,8 @@ futex_soft_note_claim(void)
  * Greppable soft wait/wake inventory + path/table/key/robust deepen.
  * Called from futex_init and once after first wait/wake activity.
  * Never allocates; safe from non-IRQ product paths.
- * Wave 16 exclusive: wave=16 stamp + claim/peak/g_fut/match/einval +
- * return/ratio/surface/headroom areas.
+ * Wave 17 exclusive: wave=17 stamp + claim/peak/g_fut/match/einval +
+ * return/ret_surface/ratio/surface/headroom areas.
  * greppable: futex: soft wait inventory
  * greppable: futex: soft wake inventory
  * greppable: futex: soft wait
@@ -784,14 +785,14 @@ futex_soft_log(void)
 
     /*
      * Grep: futex: soft return
-     * Wave 16 return-path catalog — wait/wake terminal outcomes.
-     * Soft ≠ product RR / preemption / bar3.
+     * Wave 17 return-path catalog — wait/wake terminal outcomes.
+     * Soft ≠ product RR / preemption / bar3. product_kernel=OPEN.
      */
     kprintf("futex: soft return wait_ok=%lu wait_eagain=%lu "
             "wait_etimedout=%lu wait_enomem=%lu wait_einval=%lu "
             "wait_cancel=%lu wake_hit=%lu wake_miss=%lu wake_einval=%lu "
             "wake_zero=%lu key_fault=%lu key_align=%lu robust_set_fail=%lu "
-            "wave=%u\n",
+            "timer_reap=%lu thr_cancel=%lu product_kernel=OPEN wave=%u\n",
             (unsigned long)g_soft.u64WaitOk,
             (unsigned long)g_soft.u64WaitEagain,
             (unsigned long)g_soft.u64WaitEtimedout,
@@ -805,9 +806,17 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64KeySharedFault,
             (unsigned long)g_soft.u64KeyAlignFail,
             (unsigned long)g_soft.u64RobustSetFail,
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned long)g_soft.u64ThrCancel,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+    /* Grep: futex: soft ret_surface — Wave 17 terminal return classes */
+    kprintf("futex: soft ret_surface wait=ok|eagain|etimedout|enomem|einval|cancel "
+            "wake=hit|miss|einval|zero key=fault|align robust=set_fail "
+            "timer=reap thr=cancel product_kernel=OPEN areas=%u wave=%u\n",
+            (unsigned)FUTEX_SOFT_DEEPEN_AREAS,
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft ratio — Wave 16 basis-point outcome rollup */
+    /* Grep: futex: soft ratio — Wave 17 basis-point outcome rollup */
     {
         u32 u32WaitOkBp;
         u32 u32WakeHitBp;
@@ -856,16 +865,16 @@ futex_soft_log(void)
             (unsigned)GJ_FUTEX_ROBUST_SLOTS, g_u32SoftUsed, g_u32SoftWaiting,
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft surface — Wave 16 area catalog */
+    /* Grep: futex: soft surface — Wave 17 area catalog */
     kprintf("futex: soft surface wait,wake,stats,table,key,robust,path,"
             "timer,thr,slot,capacity,catalog,claim,peak,g_fut,match,"
-            "return,ratio,surface,headroom,einval,outcome,eagain,"
+            "return,ret_surface,ratio,surface,headroom,einval,outcome,eagain,"
             "etimedout,bitset,inventory,deepen,PASS,cancel,park "
             "areas=%u wave=%u\n",
             (unsigned)FUTEX_SOFT_DEEPEN_AREAS,
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft deepen wave (Wave 16 stamp) */
+    /* Grep: futex: soft deepen wave (Wave 17 stamp) */
     kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE,

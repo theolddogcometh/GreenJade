@@ -11,7 +11,7 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 17 exclusive deepen; this unit only):
  * greppable: "user: soft …" | "user_task: soft …"
  *   user: soft inventory …
  *   user: soft stats …
@@ -21,9 +21,10 @@
  *   user: soft recheck …
  *   user: soft catalog …
  *   user: soft va …          (dual-window VA geometry)
- *   user: soft return …      (Wave 16 return-path catalog)
- *   user: soft surface …     (Wave 16 area catalog)
- *   user: soft deepen wave=16 …
+ *   user: soft return …      (Wave 17 return-path catalog)
+ *   user: soft ret_surface … (Wave 17 terminal return classes)
+ *   user: soft surface …     (Wave 17 area catalog)
+ *   user: soft deepen wave=17 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -63,8 +64,8 @@ extern char gj_protonrt_user_blob_end[];
 static int g_fUserMapped;
 static int g_fPersMapped;
 
-/* ---- Soft map / enter counters (grep: user: soft …) Wave 16 ----------- */
-#define GJ_USER_SOFT_WAVE 16u
+/* ---- Soft map / enter counters (grep: user: soft …) Wave 17 ----------- */
+#define GJ_USER_SOFT_WAVE 17u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -234,13 +235,14 @@ user_soft_inventory(const char *szVia)
 
     /*
      * Grep: user: soft return
-     * Wave 16 return-path catalog — map/enter/layout/recheck outcomes.
-     * Soft ≠ bar3 / product ring3 gate.
+     * Wave 17 return-path catalog — map/enter/layout/recheck outcomes.
+     * Soft ≠ bar3 / product ring3 gate. product_kernel=OPEN.
      */
     kprintf("user: soft return ring3_ok=%u ring3_fail=%u pers_ok=%u "
             "pers_fail=%u enter_ok=%u enter_skip=%u soft_ok=%u "
             "soft_bad=%u layout_fail=%u as_fail=%u install_fail=%u "
-            "stack_fail=%u recheck_pass=%u recheck_fail=%u wave=%u\n",
+            "stack_fail=%u recheck_pass=%u recheck_fail=%u "
+            "product_kernel=OPEN wave=%u\n",
             g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk, g_cPersMapFail,
             g_cEnterOk, g_cEnterSkip, g_cRing3Soft + g_cPersSoft,
             g_cRing3SoftBad + g_cPersSoftBad,
@@ -252,9 +254,16 @@ user_soft_inventory(const char *szVia)
             g_u32SoftRecheckFailRing3 + g_u32SoftRecheckFailPers,
             GJ_USER_SOFT_WAVE);
 
-    /* Grep: user: soft surface — Wave 16 area catalog */
+    /* Grep: user: soft ret_surface — Wave 17 terminal return classes */
+    kprintf("user: soft ret_surface map=ring3_ok|ring3_fail|pers_ok|pers_fail "
+            "enter=ok|skip soft=ok|bad layout|as|install|stack=fail "
+            "recheck=pass|fail product_kernel=OPEN areas=14 wave=%u\n",
+            GJ_USER_SOFT_WAVE);
+
+    /* Grep: user: soft surface — Wave 17 area catalog */
     kprintf("user: soft surface inventory,stats,map,layout,enter,recheck,"
-            "catalog,va,path,return,surface,deepen areas=12 wave=%u\n",
+            "catalog,va,path,return,ret_surface,surface,deepen "
+            "areas=14 wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user: soft deepen */
@@ -282,9 +291,14 @@ user_soft_inventory(const char *szVia)
 
     /* Grep: user_task: soft return */
     kprintf("user_task: soft return ring3_ok=%u ring3_fail=%u pers_ok=%u "
-            "pers_fail=%u enter_ok=%u enter_skip=%u soft_bad=%u wave=%u\n",
+            "pers_fail=%u enter_ok=%u enter_skip=%u soft_bad=%u "
+            "product_kernel=OPEN wave=%u\n",
             g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk, g_cPersMapFail,
             g_cEnterOk, g_cEnterSkip, g_cRing3SoftBad + g_cPersSoftBad,
+            GJ_USER_SOFT_WAVE);
+    /* Grep: user_task: soft ret_surface */
+    kprintf("user_task: soft ret_surface map=ring3|pers enter=ok|skip "
+            "soft_bad product_kernel=OPEN wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user_task: soft deepen */

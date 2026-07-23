@@ -7,7 +7,7 @@
  * ledger, death-cleanup soft note (product multi-server confine OPEN).
  * Grep: confine: expose soft | confine: ledger soft | confine: death soft
  *
- * Soft inventory (Wave 14 base + Wave 16 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14 base + Wave 17 exclusive deepen; this unit only):
  *   protonrt: soft inventory|enter|fs|net|proc|time|mem|other|confine|
  *             attach|path|rates|honesty|catalog|deepen|PASS …
  *   cold_link: soft … (twin prefix)
@@ -81,9 +81,9 @@ static u8  g_u8DeathSoftOnce;
 static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
 
 /* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define GJ_PROTONRT_SOFT_WAVE  16u
+#define GJ_PROTONRT_SOFT_WAVE  17u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_PROTONRT_SOFT_AREAS 19u
+#define GJ_PROTONRT_SOFT_AREAS 20u
 
 /*
  * Soft NR group buckets for cold personality enter tallies (Wave 15).
@@ -100,7 +100,7 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 16 exclusive deepen).
+ * Soft product inventory (Wave 17 exclusive deepen).
  * greppable: protonrt: soft … / cold_link: soft …
  */
 static u64 g_u64PrtSoftEnter;                 /* protonrt_service entries */
@@ -304,7 +304,7 @@ protonrt_soft_note_enter(u64 u64Nr)
 }
 
 /**
- * Greppable soft cold personality inventory (Wave 16 exclusive deepen).
+ * Greppable soft cold personality inventory (Wave 17 exclusive deepen).
  * Twin prefixes: protonrt: soft … / cold_link: soft …
  * greppable: protonrt: soft
  * greppable: cold_link: soft
@@ -419,7 +419,7 @@ protonrt_soft_inventory_log(void)
             "(cold personality soft inventory; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft rates (Wave 16 deepen) */
+    /* Grep: protonrt: soft rates (Wave 17 deepen) */
     {
         u64 u64BpFs;
         u64 u64BpNet;
@@ -446,35 +446,47 @@ protonrt_soft_inventory_log(void)
                 (unsigned)GJ_PROTONRT_SOFT_WAVE);
     }
 
-    /* Grep: protonrt: soft honesty (Wave 16 deepen) */
+    /* Grep: protonrt: soft honesty (Wave 17 deepen) */
     kprintf("protonrt: soft honesty hybrid=OptionC open=1 bar3=0 "
             "product_linux_abi=open soft_only=1 multi_server=OPEN "
             "wave=%u (cold personality soft; never closes hybrid)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft surfaces (Wave 16 deepen) */
+    /* Grep: protonrt: soft surfaces (Wave 17 deepen) */
     kprintf("protonrt: soft surfaces count=%u wave=%u "
             "names=inventory,path,rates,honesty,catalog,surfaces,note,"
             "deepen,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft note (Wave 16 deepen) */
-    kprintf("protonrt: soft note milestone=wave16 exclusive=1 "
+    /* Grep: protonrt: soft note (Wave 17 deepen) */
+    kprintf("protonrt: soft note milestone=wave17 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: protonrt: soft catalog (Wave 16 deepen) */
+    /* Grep: protonrt: soft catalog (Wave 17 deepen) */
     kprintf("protonrt: soft catalog wave=%u areas=%u "
             "surfaces=inventory,enter,fs,net,proc,time,mem,other,"
-            "confine,attach,path,rates,honesty,catalog,deepen,PASS\n",
+            "confine,attach,path,rates,honesty,catalog,return,deepen,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS);
 
-    /* Grep: protonrt: soft deepen wave (Wave 16 stamp) */
+    /* Grep: protonrt: soft return (Wave 17 deepen) */
+    kprintf("protonrt: soft return enter=%llu null=%llu attach=%llu "
+            "confine_deny=%u expose_full=%u path_deny=%llu "
+            "product_gate=0 wave=%u\n",
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftNull,
+            (unsigned long long)g_u64PrtSoftAttach,
+            g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny,
+            (unsigned)g_u64PrtSoftExposeFull,
+            (unsigned long long)g_u64PrtSoftPathDeny,
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft deepen wave (Wave 17 stamp) */
     kprintf("protonrt: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
             "fs=%llu net=%llu proc=%llu confine_deny=%u "
-            "(Wave 16 exclusive; cold link soft; not bar3)\n",
+            "(Wave 17 exclusive; cold link soft; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned long long)g_u64PrtSoftLogN,
@@ -537,7 +549,7 @@ protonrt_soft_inventory_log(void)
             "bar3=open wave=%u (soft inventory; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: cold_link: soft rates (Wave 16 deepen) */
+    /* Grep: cold_link: soft rates (Wave 17 deepen) */
     {
         u64 u64BpFs;
         u64 u64BpOther;
@@ -560,22 +572,31 @@ protonrt_soft_inventory_log(void)
                 (unsigned)GJ_PROTONRT_SOFT_WAVE);
     }
 
-    /* Grep: cold_link: soft honesty (Wave 16 deepen) */
+    /* Grep: cold_link: soft honesty (Wave 17 deepen) */
     kprintf("cold_link: soft honesty hybrid=OptionC open=1 bar3=0 "
             "product_linux_abi=open soft_only=1 multi_server=OPEN "
             "wave=%u (soft inventory; never closes hybrid)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: cold_link: soft catalog (Wave 16 deepen) */
+    /* Grep: cold_link: soft catalog (Wave 17 deepen) */
     kprintf("cold_link: soft catalog wave=%u areas=%u "
             "surfaces=inventory,enter,confine,path,rates,honesty,"
-            "catalog,deepen,PASS\n",
+            "catalog,return,deepen,PASS\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS);
 
-    /* Grep: cold_link: soft deepen wave (Wave 16 stamp) */
+    /* Grep: cold_link: soft return (Wave 17 deepen) */
+    kprintf("cold_link: soft return enter=%llu null=%llu attach=%llu "
+            "confine_deny=%u product_gate=0 wave=%u\n",
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftNull,
+            (unsigned long long)g_u64PrtSoftAttach,
+            g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny,
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: cold_link: soft deepen wave (Wave 17 stamp) */
     kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
-            "(Wave 16 exclusive; cold link soft; not bar3)\n",
+            "(Wave 17 exclusive; cold link soft; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned long long)g_u64PrtSoftLogN,

@@ -40,7 +40,7 @@
  *   virtio-input: soft types …       (Wave 15)
  *   virtio-input: soft kicks …       (Wave 15)
  *   virtio-input: soft honesty …     (Wave 15)
- *   virtio-input: soft deepen wave=16 …
+ *   virtio-input: soft deepen wave=17 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -86,9 +86,9 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MIN 0
 #define VI_ABS_SOFT_MAX 32767
 
-/* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define VI_SOFT_WAVE  16u
-#define VI_SOFT_AREAS 30u
+/* Wave 17 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define VI_SOFT_WAVE  17u
+#define VI_SOFT_AREAS 33u
 
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
@@ -732,7 +732,7 @@ soft_inventory(const char *szVia)
             (unsigned)VI_SOFT_WAVE, (unsigned)VI_SOFT_AREAS);
 
     /*
-     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Wave 16 complementary deepen (kept; never hard-gates).
      * Soft ≠ game I/O. greppable: virtio-input: soft ratio|headroom|surface|return|contract
      */
     {
@@ -778,7 +778,7 @@ soft_inventory(const char *szVia)
         /* Grep: virtio-input: soft surface */
         kprintf("virtio-input: soft surface inventory,geometry,queue,events,"
                 "poll,slots,claim,via,ready,types,kicks,honesty,ratio,"
-                "headroom,return,contract,deepen areas=%u wave=%u\n",
+                "headroom,return,contract,return_selftest,retmap,deepen areas=%u wave=%u\n",
                 (unsigned)VI_SOFT_AREAS, (unsigned)VI_SOFT_WAVE);
         /* Grep: virtio-input: soft return — return-surface bitmask */
         kprintf("virtio-input: soft return surf=0x%x ready=%u events=%u "
@@ -794,7 +794,26 @@ soft_inventory(const char *szVia)
                 (unsigned)VI_SOFT_WAVE);
     }
 
-    /* Grep: virtio-input: soft deepen wave (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: virtio-input: soft return — Wave 17 API return surfaces */
+    kprintf("virtio-input: soft return soft_inv=1 input=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)VI_SOFT_WAVE);
+
+    /* Grep: virtio-input: soft return selftest — Wave 17 terminal return surface */
+    kprintf("virtio-input: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)VI_SOFT_WAVE);
+
+    /* Grep: virtio-input: soft retmap — Wave 17 return-surface map */
+    kprintf("virtio-input: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)VI_SOFT_WAVE);
+
+    /* Grep: virtio-input: soft deepen wave (Wave 17 stamp) */
     kprintf("virtio-input: soft deepen wave=%u areas=%u via=%s ready=%u "
             "events=%u polls=%u posted=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

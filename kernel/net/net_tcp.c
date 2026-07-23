@@ -20,7 +20,8 @@
  *   segs = TX segments + RX segments seen by net_tcp_input
  *   rtx  = successful last-segment retransmits from net_tcp_poll
  *
- * Soft inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft inventory (Wave 17 exclusive deepen; this unit only):
+ *   - soft return: API return-surface catalog (product_*=OPEN)
  *   Lifetime path / ring / multi-seg / rtx / TW tallies (struct tcp_soft).
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
  *     net: tcp soft inventory …  — live table + caps + wave
@@ -39,7 +40,7 @@
  *     net: tcp soft stats …      — aggregate path tallies
  *     net: tcp soft path …       — honesty: soft inventory ≠ bar3
  *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
- *     net: tcp soft deepen …     — wave=16 stamp + area count
+ *     net: tcp soft deepen …     — wave=17 stamp + area count
  *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
  *     net: tcp soft PASS …
  *   Twin prefix also emitted: "net_tcp: soft …".
@@ -79,11 +80,11 @@
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
-/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
-#define TCP_SOFT_DEEPEN_WAVE  16u
+/* Wave 17 exclusive soft deepen stamp (greppable wave=17). */
+#define TCP_SOFT_DEEPEN_WAVE  17u
 /* inventory sock bind life xfer input poll ring multi state capacity
  * catalog outcome stats path headroom surface ratio PASS slot deepen = 21 */
-#define TCP_SOFT_DEEPEN_AREAS 21u
+#define TCP_SOFT_DEEPEN_AREAS 22u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -155,7 +156,7 @@ static u16 g_u16IpId;
 /*
  * Soft product inventory counters — wrap OK; diagnostics only; never
  * hard-gate product paths. Grep: net: tcp soft / net_tcp: soft
- * Wave 16 deepen: multi-line path dumps, capacity/catalog/outcome,
+ * Wave 17 deepen: multi-line path dumps, capacity/catalog/outcome,
  * rate-limit lamps, deepen stamp, PASS. Soft ≠ bar3.
  */
 struct tcp_soft {
@@ -330,7 +331,7 @@ tcp_soft_event_ok(void)
 }
 
 /*
- * Greppable soft product inventory + path dumps (Wave 16 exclusive).
+ * Greppable soft product inventory + path dumps (Wave 17 exclusive).
  * Prefix-stable: "net: tcp soft …" and twin "net_tcp: soft …".
  * fForce: include per-live-slot detail (init / emfile / stats / rtx-poll).
  * Cadence dumps skip slots after TCP_SOFT_SLOT_LOGS to avoid flood.
@@ -720,7 +721,7 @@ tcp_soft_print(int fForce)
 		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
 		u32Wave);
 
-	/* Grep: net: tcp soft headroom — Wave 16 live slack lamps. */
+	/* Grep: net: tcp soft headroom — Wave 17 live slack lamps. */
 	kprintf("net: tcp soft headroom free=%u used=%u max=%u estab=%u "
 		"listen=%u hwm=%llu rtx_live=%u wave=%u\n",
 		cFree, cUsed, (unsigned)TCP_MAX, cEstab, cListen,
@@ -732,7 +733,7 @@ tcp_soft_print(int fForce)
 		cFree, cUsed, (unsigned)TCP_MAX, cEstab,
 		(unsigned long long)s.u64HwmUsed, u32Wave);
 
-	/* Grep: net: tcp soft surface — Wave 16 surface bit lamps. */
+	/* Grep: net: tcp soft surface — Wave 17 surface bit lamps. */
 	kprintf("net: tcp soft surface used=%u estab=%u listen=%u loop=%u "
 		"multi=%u rtx=%u surf=0x%x wave=%u\n",
 		cUsed != 0u ? 1u : 0u, cEstab != 0u ? 1u : 0u,
@@ -774,7 +775,24 @@ tcp_soft_print(int fForce)
 			u32OccBp, u32EstabBp, cUsed, cEstab, u32Wave);
 	}
 
-	/* Grep: net: tcp soft deepen (Wave 16 stamp) */
+	/* Grep: net: tcp soft return — Wave 17 API return surfaces */
+	kprintf("net: tcp soft return sock_ok=%llu sock_fail=%llu "
+		"bind_ok=%llu listen_ok=%llu conn_ok=%llu accept_ok=%llu "
+		"send_ok=%llu recv_ok=%llu close_ok=%llu product_tcp=OPEN wave=%u\n",
+		(unsigned long long)s.u64SockOk, (unsigned long long)s.u64SockFail,
+		(unsigned long long)s.u64BindOk, (unsigned long long)s.u64ListenOk,
+		(unsigned long long)s.u64ConnOk, (unsigned long long)s.u64AcceptOk,
+		(unsigned long long)s.u64SendOk, (unsigned long long)s.u64RecvOk,
+		(unsigned long long)s.u64CloseOk, u32Wave);
+	/* Grep: net_tcp: soft return (twin) */
+	kprintf("net_tcp: soft return sock=%llu bind=%llu listen=%llu "
+		"conn=%llu send=%llu recv=%llu product_tcp=OPEN wave=%u\n",
+		(unsigned long long)s.u64SockOk, (unsigned long long)s.u64BindOk,
+		(unsigned long long)s.u64ListenOk, (unsigned long long)s.u64ConnOk,
+		(unsigned long long)s.u64SendOk, (unsigned long long)s.u64RecvOk,
+		u32Wave);
+
+	/* Grep: net: tcp soft deepen (Wave 17 stamp) */
 	kprintf("net: tcp soft deepen wave=%u areas=%u used=%u estab=%u "
 		"ops=%llu multi=%llu logs=%u skip=%llu "
 		"event_n=%u event_skip=%llu ok=1 skip_hard=0\n",

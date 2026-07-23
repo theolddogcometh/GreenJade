@@ -7,7 +7,7 @@
  * Does not enable IRQs, translate, write commands, or drain the input
  * buffer (smoke-safe). No GPL source; public 8042 layout only.
  *
- * Wave 15/16 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
+ * Wave 15/16/17 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
  *   ps2: soft inventory  — dual status + port + float/stable + wave stamp
  *   ps2: soft flags      — full 8-bit status field inventory
  *   ps2: soft bits       — per-bit soft PASS lamps (public layout)
@@ -23,11 +23,13 @@
  *   ps2: soft path       — honesty: no IRQ/translate/drain/cmd
  *   ps2: soft honesty    — bar3/product-input non-claims
  *   ps2: soft identify   — float-aware soft identify PASS
- *   ps2: soft deepen     — wave=16 areas stamp
+ *   ps2: soft deepen     — wave=17 areas stamp
  *   ps2: soft ratio      — Wave 16 status occupancy lamps
  *   ps2: soft headroom   — Wave 16 dual-sample head
  *   ps2: soft surface    — Wave 16 area catalog
  *   ps2: soft return     — Wave 16 return-surface bitmask
+ *   ps2: soft return selftest — Wave 17 terminal return surface
+ *   ps2: soft retmap     — Wave 17 return-surface map
  *   ps2: soft contract   — Wave 16 soft≠game I/O contract
  *   ps2: soft stats      — emission tallies
  *   ps2: soft inventory PASS|SKIP
@@ -57,8 +59,8 @@
 #define PS2_IRQ_AUX 12u
 
 /* Wave 16 deepen area count (fixed greppable categories in inventory log). */
-#define PS2_SOFT_DEEPEN_AREAS 22u
-#define PS2_SOFT_DEEPEN_WAVE  16u
+#define PS2_SOFT_DEEPEN_AREAS 25u
+#define PS2_SOFT_DEEPEN_WAVE  17u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -327,7 +329,7 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
     }
 
     /*
-     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Wave 16 complementary deepen (kept; never hard-gates).
      * Soft ≠ game I/O. greppable: ps2: soft ratio|headroom|surface|return|contract
      */
     {
@@ -393,7 +395,26 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
                 (unsigned)PS2_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: ps2: soft deepen wave (Wave 16 stamp) */
+    /*
+     * Wave 17 exclusive complementary sub-lines (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     */
+    /* Grep: ps2: soft return — Wave 17 API return surfaces */
+    kprintf("ps2: soft return via=portio soft_inv=1 "
+            "product_kernel=OPEN bar3=0 hard_gate=0 wave=%u soft PASS\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft return selftest — Wave 17 terminal return surface */
+    kprintf("ps2: soft return selftest inv_ret=1 product_kernel=OPEN "
+            "multi_server=0 bar3=0 wave=%u soft PASS\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft retmap — Wave 17 return-surface map */
+    kprintf("ps2: soft retmap soft_inv=1 deepen=1 product=OPEN "
+            "wave=%u soft PASS\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft deepen wave (Wave 17 stamp) */
     kprintf("ps2: soft deepen wave=%u areas=%u via=portio float=%u "
             "stable=%u channel=%s state=%s ok=%u skip=%u\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE, (unsigned)PS2_SOFT_DEEPEN_AREAS,

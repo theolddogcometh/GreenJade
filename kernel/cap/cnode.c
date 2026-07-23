@@ -23,7 +23,7 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Soft inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft inventory (Wave 17 exclusive deepen; this unit only):
  *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
  *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
  *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
@@ -34,9 +34,11 @@
  *   cap: cdt soft pool       — alloc/free/miss churn
  *   cap: cdt soft type       — type catalog; REPLY scaffold-only honesty
  *   cap: cdt soft path       — surface catalog + non-claims
- *   cap: cdt soft return     — Wave 16 public return-surface (gj_status buckets)
+ *   cap: cdt soft return     — Wave 17 public return-surface (gj_status buckets)
  *   cap: cdt soft return install|mint|copy|move|delete|alloc — per-API ret
- *   cap: cdt soft deepen     — wave=16 areas stamp
+ *   cap: cdt soft return rate — Wave 17 ok/fail rate lamps (return surface)
+ *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
+ *   cap: cdt soft deepen     — wave=17 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
  * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
@@ -47,10 +49,10 @@
 #include <gj/klog.h>
 #include <gj/types.h>
 
-/* Wave 16 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE  16u
-/* +return (+return install|mint|copy|move|delete|alloc) over Wave 15 set */
-#define GJ_CDT_SOFT_AREAS 14u
+/* Wave 17 deepen stamp (file-local; never hard-gates). */
+#define GJ_CDT_SOFT_WAVE  17u
+/* +return rate|retcode over Wave 16 return surfaces */
+#define GJ_CDT_SOFT_AREAS 16u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -69,7 +71,7 @@ static void cdt_soft_inventory_maybe_once(void);
 static void cdt_soft_inc(u32 *pCtr);
 
 /*
- * Wave 16 soft path tallies (file-local; wrap OK; never hard-gate).
+ * Wave 17 soft path tallies (file-local; wrap OK; never hard-gate).
  * Placed early so resolve/trylock/install can instrument without forward
  * static issues. Grep: cap: cdt soft resolve|trylock|install|return
  */
@@ -87,15 +89,15 @@ static u32 g_u32SoftUnlock;         /* gj_cnode_unlock releases */
 static u32 g_u32SoftInstEnter;      /* gj_cap_slot_install entries */
 static u32 g_u32SoftInstOk;         /* install success */
 static u32 g_u32SoftInstFail;       /* install reject (any arm) */
-static u32 g_u32SoftInstFailInval;  /* Wave 16: install → GJ_ERR_INVAL */
-static u32 g_u32SoftInstFailDead;   /* Wave 16: install → GJ_ERR_DEAD */
-static u32 g_u32SoftInstFailPerm;   /* Wave 16: install → GJ_ERR_PERM */
-static u32 g_u32SoftInstFailBusy;   /* Wave 16: install → GJ_ERR_BUSY */
-static u32 g_u32SoftInstFailQuota;  /* Wave 16: install → GJ_ERR_QUOTA */
+static u32 g_u32SoftInstFailInval;  /* Wave 17: install → GJ_ERR_INVAL */
+static u32 g_u32SoftInstFailDead;   /* Wave 17: install → GJ_ERR_DEAD */
+static u32 g_u32SoftInstFailPerm;   /* Wave 17: install → GJ_ERR_PERM */
+static u32 g_u32SoftInstFailBusy;   /* Wave 17: install → GJ_ERR_BUSY */
+static u32 g_u32SoftInstFailQuota;  /* Wave 17: install → GJ_ERR_QUOTA */
 static u32 g_u32SoftInstReplyType;  /* type==GJ_CAP_REPLY scaffold installs */
 static u32 g_u32SoftInvLogs;        /* soft inventory dump emissions */
-static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 16 rollup */
-/* Wave 16: public API return-surface buckets (mint/copy/move/delete/alloc). */
+static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 17 rollup */
+/* Wave 17: public API return-surface buckets (mint/copy/move/delete/alloc). */
 static u32 g_u32SoftRetMintOk;
 static u32 g_u32SoftRetMintFail;
 static u32 g_u32SoftRetMintInval;
@@ -395,7 +397,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     if (pCnode == NULL || pObj == NULL || pOutRef == NULL ||
         pCnode->pSlots == NULL) {
         cdt_soft_inc(&g_u32SoftInstFail);
-        cdt_soft_inc(&g_u32SoftInstFailInval); /* Wave 16 return surface */
+        cdt_soft_inc(&g_u32SoftInstFailInval); /* Wave 17 return surface */
         return GJ_ERR_INVAL;
     }
     if (pCnode->cSlots == 0 || u64Slot >= pCnode->cSlots) {
@@ -893,7 +895,7 @@ cdt_soft_tally_log(void)
 }
 
 /**
- * Wave 16 greppable soft inventory dump (never hard-gates product).
+ * Wave 17 greppable soft inventory dump (never hard-gates product).
  * Prefix-stable family: "cap: cdt soft …"
  * Honesty: soft ≠ GJ_CAP_REPLY product / full CDT mutex product /
  * Soft ≠ MIG REPLY product.
@@ -956,7 +958,7 @@ cdt_soft_inventory_log(void)
 
     /*
      * Grep: cap: cdt soft return
-     * Wave 16 public return-surface: gj_status buckets across CNode APIs.
+     * Wave 17 public return-surface: gj_status buckets across CNode APIs.
      * Soft ≠ MIG REPLY product / full CDT mutex product.
      */
     kprintf("cap: cdt soft return resolve_ok=%u resolve_fail=%u "
@@ -973,7 +975,7 @@ cdt_soft_inventory_log(void)
             g_u32SoftRetDelFail, g_u32SoftRetAllocOk, g_u32SoftRetAllocFail,
             GJ_CDT_SOFT_WAVE);
 
-    /* Grep: cap: cdt soft return install — Wave 16 status split */
+    /* Grep: cap: cdt soft return install — Wave 17 status split */
     kprintf("cap: cdt soft return install ok=%u fail=%u inval=%u dead=%u "
             "perm=%u busy=%u quota=%u wave=%u\n",
             g_u32SoftInstOk, g_u32SoftInstFail, g_u32SoftInstFailInval,
@@ -1025,14 +1027,54 @@ cdt_soft_inventory_log(void)
     /* Grep: cap: cdt soft path */
     kprintf("cap: cdt soft path resolve=1 install=1 mint=1 copy=1 move=1 "
             "delete=1 trylock=soft_u32SoftLock quota=soft_hier "
-            "cdt_pool=%u empty_edge_audit=soft return_surface=1 "
+            "cdt_pool=%u empty_edge_audit=soft return_surface=1 return_rate=1 retcode=1 "
             "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
             "wave=%u (soft inventory; not bar3; soft != GJ_CAP_REPLY "
             "product; soft != MIG REPLY product; soft != full CDT mutex "
             "product)\n",
             GJ_CDT_EDGE_POOL, GJ_CDT_SOFT_WAVE);
 
-    /* Grep: cap: cdt soft deepen wave (Wave 16 stamp) */
+    /*
+     * Grep: cap: cdt soft return rate
+     * Wave 17 return-surface rate lamps (ok vs fail; soft ≠ product).
+     */
+    kprintf("cap: cdt soft return rate "
+            "resolve_ok=%u resolve_fail=%u "
+            "inst_ok=%u inst_fail=%u "
+            "mint_ok=%u mint_fail=%u "
+            "copy_ok=%u copy_fail=%u "
+            "move_ok=%u move_fail=%u "
+            "del_ok=%u del_fail=%u "
+            "alloc_ok=%u alloc_fail=%u "
+            "wave=%u (return rate; Soft≠product; soft≠MIG REPLY product; "
+            "not bar3)\n",
+            g_u32SoftResOk,
+            g_u32SoftResInval + g_u32SoftResNoent + g_u32SoftResStale +
+                g_u32SoftResLiveFail,
+            g_u32SoftInstOk, g_u32SoftInstFail,
+            g_u32SoftRetMintOk, g_u32SoftRetMintFail,
+            g_u32SoftRetCopyOk, g_u32SoftRetCopyFail,
+            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail,
+            g_u32SoftRetDelOk, g_u32SoftRetDelFail,
+            g_u32SoftRetAllocOk, g_u32SoftRetAllocFail,
+            GJ_CDT_SOFT_WAVE);
+
+    /*
+     * Grep: cap: cdt soft retcode
+     * Wave 17 observed gj_status retcode catalog (return surface).
+     * Soft ≠ product; codes are soft lamps not ABI claims.
+     */
+    kprintf("cap: cdt soft retcode "
+            "ok=1 inval=1 noent=1 perm=1 dead=1 stale=1 busy=1 quota=1 "
+            "live_fail=1 other=1 "
+            "mint_other=%u copy_other=%u move_other=%u del_other=%u "
+            "alloc_other=%u wave=%u "
+            "(retcode catalog; Soft≠product; soft≠MIG REPLY product)\n",
+            g_u32SoftRetMintOther, g_u32SoftRetCopyOther,
+            g_u32SoftRetMoveOther, g_u32SoftRetDelOther,
+            g_u32SoftRetAllocOther, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft deepen wave (Wave 17 stamp) */
     kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
             "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "
             "move_ok=%u ret_mint_ok=%u ret_copy_ok=%u ret_move_ok=%u "
@@ -1052,7 +1094,7 @@ cdt_soft_inventory_log(void)
 }
 
 /**
- * Emit Wave 16 soft inventory once after first meaningful CNode activity.
+ * Emit Wave 17 soft inventory once after first meaningful CNode activity.
  * Avoids spam; greppable surface lands on first install/resolve/wire.
  */
 static void
@@ -1650,7 +1692,7 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
         cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
         /*
-         * Soft delete edge coverage (Wave 16 deepen).
+         * Soft delete edge coverage (Wave 17 deepen).
          * Grep: cap: cdt delete
          */
         kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "

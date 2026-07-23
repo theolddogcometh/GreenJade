@@ -14,7 +14,8 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 16 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 17 exclusive deepen; this unit only):
+ *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
  *     shrink / clamp(zero|max) / fallback + last pages/bytes snap
  *   - Present path: enter / ok / fail_ready / fail_backend + live
@@ -26,7 +27,7 @@
  *   - Paint / reinit / ratio / last / size-null / fb-null soft surfaces
  *   - Geom + path honesty catalog + soft verdict INIT|PASS|PARTIAL
  *   - Wave 15 base: honesty / multi / backend / scanout / catalog / deepen
- *   - Wave 16: capacity / headroom / surface lamps
+ *   - Wave 16 base: capacity / headroom / surface lamps
  *   greppable: "compositor: soft …"
  *   greppable: "compositor: soft deepen"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
@@ -47,8 +48,8 @@
 #define GJ_COMP_MIN_W      32u
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
-/* Wave 16 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE  16u
+/* Wave 17 deepen stamp (file-local; never hard-gates). */
+#define GJ_COMP_SOFT_WAVE  17u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -64,7 +65,7 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 16 exclusive deepen). Cumulative unless noted
+ * Soft product inventory (Wave 17 exclusive deepen). Cumulative unless noted
  * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
@@ -157,7 +158,7 @@ soft_note_peaks(void)
 }
 
 /**
- * Greppable soft compositor inventory (product / smoke; Wave 16 deepen).
+ * Greppable soft compositor inventory (product / smoke; Wave 17 deepen).
  *   compositor: soft honesty …
  *   compositor: soft inventory …
  *   compositor: soft init …
@@ -374,7 +375,7 @@ soft_inventory_log(void)
             u32Stride, GJ_COMP_BPP, u32Ready != 0u ? "PASS" : "INIT");
     cAreas++;
 
-    /* Grep: compositor: soft capacity — Wave 16 design-constant lamps. */
+    /* Grep: compositor: soft capacity — Wave 17 design-constant lamps. */
     kprintf("compositor: soft capacity max_dim=%u fallback=%ux%u min=%ux%u "
             "bpp=%u multi_max=%u soft_idx=1 batch=present_n soft PASS "
             "wave=%u\n",
@@ -383,7 +384,7 @@ soft_inventory_log(void)
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: compositor: soft headroom — Wave 16 live slack lamps. */
+    /* Grep: compositor: soft headroom — Wave 17 live slack lamps. */
     kprintf("compositor: soft headroom presents=%u peak_presents=%u "
             "multi=%u peak_multi=%u gen=%u peak_gen=%u batch_peak=%u "
             "ok_bp=%u wave=%u\n",
@@ -392,7 +393,7 @@ soft_inventory_log(void)
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: compositor: soft surface — Wave 16 surface bit lamps. */
+    /* Grep: compositor: soft surface — Wave 17 surface bit lamps. */
     kprintf("compositor: soft surface ready=%u gpu=%u pa=%u fb=%u "
             "present_ok=%u batch_ok=%u multi=%u init_ok=%u "
             "surf=0x%x wave=%u\n",
@@ -409,11 +410,11 @@ soft_inventory_log(void)
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: compositor: soft catalog — area name rollup (Wave 16). */
+    /* Grep: compositor: soft catalog — area name rollup (Wave 17). */
     kprintf("compositor: soft catalog honesty,inventory,init,present,batch,"
             "geom,paint,peaks,query,ratio,last,multi,backend,scanout,"
-            "capacity,headroom,surface,catalog,path,deepen "
-            "wave=%u areas_expect=20 soft PASS\n",
+            "capacity,headroom,surface,return,catalog,path,deepen "
+            "wave=%u areas_expect=21 soft PASS\n",
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
@@ -424,7 +425,18 @@ soft_inventory_log(void)
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: compositor: soft deepen — Wave 16 stamp + area count. */
+    /* Grep: compositor: soft return — Wave 17 API return surfaces */
+    kprintf("compositor: soft return init_ok=%u init_idem=%u init_fail_gpu=%u "
+            "init_fail_pmm=%u present_ok=%u present_fail_rdy=%u "
+            "present_fail_be=%u batch_ok=%u batch_partial=%u ready=%u "
+            "product_desktop=OPEN wave=%u\n",
+            g_u32SoftInitOk, g_u32SoftInitIdem, g_u32SoftInitFailGpu,
+            g_u32SoftInitFailPmm, g_u32SoftPresentOk, g_u32SoftPresentFailRdy,
+            g_u32SoftPresentFailBe, g_u32SoftBatchOk, g_u32SoftBatchPartial,
+            u32Ready, GJ_COMP_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: compositor: soft deepen — Wave 17 stamp + area count. */
     kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",

@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 16 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 17 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -20,9 +20,9 @@
  *   coop: soft mono        — next_id monotonic across creates
  *   coop: soft align       — SP 16-byte aligned at create
  *   coop: soft path        — surface catalog + non-claims
- *   coop: soft geom        — Wave 16 max_thr/stack/frame geometry
- *   coop: soft return      — Wave 16 API return surfaces + product_kernel=OPEN
- *   coop: soft deepen      — wave=16 stamp + area count
+ *   coop: soft geom        — Wave 17 max_thr/stack/frame geometry
+ *   coop: soft return      — Wave 17 API return surfaces + product_kernel=OPEN
+ *   coop: soft deepen      — wave=17 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
@@ -30,8 +30,8 @@
 #include <gj/sched_coop.h>
 #include <gj/string.h>
 
-/* Wave 16 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 16u
+/* Wave 17 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 17u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -47,7 +47,7 @@ static struct gj_coop_thr g_aThr[GJ_COOP_MAX_THR];
 static u32 g_u32Cur;
 static u32 g_u32NextId = 1;
 static int g_fInited;
-/* Wave 16: soft inventory emission counter (observability only). */
+/* Wave 17: soft inventory emission counter (observability only). */
 static u32 g_cSoftInvLogs;
 
 /* Soft selftest scratch (volatile — observed across yield/switch). */
@@ -135,7 +135,7 @@ gj_coop_create(gj_coop_entry_fn pfn, void *pArg)
     pSp[10] = 0; /* x29 */
     pSp[11] = (u64)(gj_vaddr_t)(void *)coop_trampoline; /* x30 */
     p->u64Sp = (u64)(gj_vaddr_t)(void *)pSp;
-    /* Soft SP align lamp (Wave 16): AAPCS64 requires 16-byte SP. */
+    /* Soft SP align lamp (Wave 17): AAPCS64 requires 16-byte SP. */
     if ((p->u64Sp & 0xful) == 0ul) {
         g_u32SelftestSpAlign = 1;
     } else {
@@ -224,7 +224,7 @@ gj_coop_current_id(void)
     return g_aThr[g_u32Cur].u32Id;
 }
 
-/* Soft slot census (Wave 16 inventory). */
+/* Soft slot census (Wave 17 inventory). */
 static void
 soft_slot_census(u32 *pUnused, u32 *pRunnable, u32 *pRunning, u32 *pExited)
 {
@@ -262,7 +262,7 @@ soft_slot_census(u32 *pUnused, u32 *pRunnable, u32 *pRunning, u32 *pExited)
 }
 
 /*
- * Wave 16 greppable soft inventory dump (never hard-gates boot).
+ * Wave 17 greppable soft inventory dump (never hard-gates boot).
  * Prefix-stable: "coop: soft …". greppable: coop: soft
  */
 static void
@@ -287,9 +287,20 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
      * greppable: coop: soft honesty
      */
     kprintf("coop: soft honesty cooperative=1 preemptive=0 smp=0 "
-            "bar3=0 max_thr=%u stack=%u wave=%u "
+            "bar3=0 multi_server=0 confine=0 product_kernel=OPEN "
+            "max_thr=%u stack=%u wave=%u "
             "(soft inventory only; not product sched)\n",
             (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
+            (unsigned)COOP_SOFT_WAVE);
+
+    /* Grep: coop: soft exclusive — Wave 17 exclusive deepen */
+    kprintf("coop: soft exclusive wave=%u multi_server=0 confine=0 bar3=0 "
+            "product_kernel=OPEN soft_only=1 preemptive=0 smp=0\n",
+            (unsigned)COOP_SOFT_WAVE);
+
+    /* Grep: coop: soft open — Wave 17 open-lamp rollup */
+    kprintf("coop: soft open multi_server=0 confine=0 bar3=0 "
+            "product_kernel=OPEN soft_only=1 wave=%u\n",
             (unsigned)COOP_SOFT_WAVE);
 
     /* Grep: coop: soft inventory */
@@ -315,14 +326,14 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
             "current_id=1 selftest=1 preemptive=0 smp=0 bar3=0 wave=%u\n",
             (unsigned)COOP_SOFT_WAVE);
 
-    /* Grep: coop: soft geom (Wave 16 max_thr/stack/frame) */
+    /* Grep: coop: soft geom (Wave 17 max_thr/stack/frame) */
     kprintf("coop: soft geom max_thr=%u stack=%u frame_words=12 "
             "sp_align=16 thr_bytes=%u boot_id=0 wave=%u\n",
             (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
             (unsigned)sizeof(struct gj_coop_thr),
             (unsigned)COOP_SOFT_WAVE);
 
-    /* Grep: coop: soft return — Wave 16 API return surfaces */
+    /* Grep: coop: soft return — Wave 17 API return surfaces */
     kprintf("coop: soft return create_id=1 yield_void=1 exit_void=1 "
             "current_id=1 selftest_bool=1 inv_ret=%u surf=0x%x "
             "product_kernel=OPEN wave=%u\n",
@@ -385,7 +396,7 @@ selftest_quick_exit(void *pArg)
 }
 
 /*
- * Soft deepen Wave 16: boot id, null create, solo yield, arg+id handoff,
+ * Soft deepen Wave 17: boot id, null create, solo yield, arg+id handoff,
  * SP align, EXITED slot reuse, two-thr yield RR, capacity fill+reclaim,
  * next_id monotonic, soft inventory. Returns 1 on PASS.
  */
@@ -685,7 +696,7 @@ soft_out:
                 (unsigned)COOP_SOFT_WAVE);
     }
 
-    /* Grep: coop: soft return selftest — Wave 16 terminal return surface */
+    /* Grep: coop: soft return selftest — Wave 17 terminal return surface */
     kprintf("coop: soft return selftest_ret=%d surf=0x%x areas=%u "
             "product_kernel=OPEN wave=%u\n",
             fOk, u32Surf, cAreas, (unsigned)COOP_SOFT_WAVE);

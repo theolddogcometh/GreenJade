@@ -7,13 +7,14 @@
  * Also hosts pipes, eventfd, epoll, timerfd, signalfd, pidfd, inotify for
  * the Linux ABI bring-up path — independent of vfs_door product mini-FS.
  *
- * Soft ram inventory (Wave 12 base; Wave 14 deepen; Wave 16 exclusive):
+ * Soft ram inventory (Wave 12 base; Wave 14 deepen; Wave 17 exclusive):
+ *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - Live files/fds/pipes/specials + mount lamps; peaks for files + fds
  *   - Cumulative open/close/read/write/lseek + path + special create ops
  *   - Soft deny tallies by errno shape (noent/badf/inval/nospc/mfile/…)
  *   - Wave 14: attr/alloc/sync/xfer/kind peaks + soft ok/fail + last + PASS
  *   - Wave 15 base: ratio|headroom|surface|deepen
- *   - Wave 16 exclusive: capacity|geom|terminal (wave=16 areas=21)
+ *   - Wave 17 exclusive: capacity|geom|terminal|return (wave=17 areas=22)
  *   greppable: "vfs_ram: soft …"
  */
 #include <gj/klog.h>
@@ -638,7 +639,7 @@ soft_inventory_log(void)
     /* Grep: vfs_ram: soft inventory */
     kprintf("vfs_ram: soft inventory seeded=%u files=%u fds=%u pipes=%u "
             "eventfd=%u epoll=%u timerfd=%u signalfd=%u inotify=%u "
-            "sym=%u blk=%u scsi=%u samples=%u wave=16\n",
+            "sym=%u blk=%u scsi=%u samples=%u wave=17\n",
             g_u32SoftSeeded, u32Files, u32Fds, u32Pipes, u32Ev, u32Ep, u32Tmr,
             u32Sig, u32Ino, u32Sym, g_fBlkMounted ? 1u : 0u,
             g_fScsiMounted ? 1u : 0u, u32Samples);
@@ -705,7 +706,7 @@ soft_inventory_log(void)
      */
     /* Grep: vfs_ram: soft total */
     kprintf("vfs_ram: soft total ok=%u fail=%u occ_pct=%u fd_occ=%u "
-            "logs=%u wave=16\n",
+            "logs=%u wave=17\n",
             g_u32SoftOk, g_u32SoftFail, u32OccPct, u32FdOcc, u32Samples);
 
     /* Grep: vfs_ram: soft attr */
@@ -764,7 +765,7 @@ soft_inventory_log(void)
     /* Grep: vfs_ram: soft catalog */
     kprintf("vfs_ram: soft catalog eventfd_max=%u epoll_max=%u "
             "timerfd_max=%u signalfd_max=%u inotify_max=%u "
-            "inotify_watch=%u pipe_buf=%u wave=16\n",
+            "inotify_watch=%u pipe_buf=%u wave=17\n",
             VFS_MAX_EVENTFD, VFS_MAX_EPOLL, VFS_MAX_TIMERFD,
             VFS_MAX_SIGNALFD, VFS_MAX_INOTIFY, VFS_INOTIFY_WATCH,
             VFS_PIPE_BUF);
@@ -775,9 +776,9 @@ soft_inventory_log(void)
             g_u32SoftFilesPeak, g_u32SoftFdPeak, g_u32SoftPipePeak,
             g_u32SoftEventfdPeak, g_u32SoftEpollPeak, g_u32SoftTimerfdPeak,
             g_u32SoftSignalfdPeak, g_u32SoftInotifyPeak, g_u32SoftSymPeak);
-    /* Grep: vfs_ram: soft peak_w16 — Wave 16 exclusive twin (field-stable w15). */
+    /* Grep: vfs_ram: soft peak_w16 — Wave 17 exclusive twin (field-stable w15). */
     kprintf("vfs_ram: soft peak_w16 files=%u fds=%u pipes=%u eventfd=%u "
-            "epoll=%u timerfd=%u signalfd=%u inotify=%u sym=%u wave=16\n",
+            "epoll=%u timerfd=%u signalfd=%u inotify=%u sym=%u wave=17\n",
             g_u32SoftFilesPeak, g_u32SoftFdPeak, g_u32SoftPipePeak,
             g_u32SoftEventfdPeak, g_u32SoftEpollPeak, g_u32SoftTimerfdPeak,
             g_u32SoftSignalfdPeak, g_u32SoftInotifyPeak, g_u32SoftSymPeak);
@@ -786,11 +787,11 @@ soft_inventory_log(void)
     kprintf("vfs_ram: soft path cold_linux=1 ramfs+specials=1 "
             "attr=chmod|fchmod|utimens alloc=fallocate|punch|ftrunc "
             "xfer=read|write|pread|pwrite|sendfile|copy_range "
-            "notify=epoll|inotify|poll wave=16 "
+            "notify=epoll|inotify|poll wave=17 "
             "(soft inventory; not bar3)\n");
 
     /*
-     * Wave 16 exclusive deepen (complementary; primary lines field-stable).
+     * Wave 17 exclusive deepen (complementary; primary lines field-stable).
      * greppable: vfs_ram: soft ratio|headroom|surface|deepen
      */
     {
@@ -812,34 +813,42 @@ soft_inventory_log(void)
         }
         /* Grep: vfs_ram: soft ratio */
         kprintf("vfs_ram: soft ratio occ_pct=%u fd_occ=%u ok_bp=%u "
-                "fail_bp=%u files=%u fds=%u wave=16\n",
+                "fail_bp=%u files=%u fds=%u wave=17\n",
                 u32OccPct, u32FdOcc, u32OkBp, u32FailBp, u32Files, u32Fds);
         /* Grep: vfs_ram: soft headroom */
         kprintf("vfs_ram: soft headroom file_head=%u fd_head=%u "
-                "max_files=%u max_fds=%u pipes=%u wave=16\n",
+                "max_files=%u max_fds=%u pipes=%u wave=17\n",
                 u32FileHead, u32FdHead, (u32)VFS_MAX_FILES,
                 (u32)VFS_MAX_FDS, u32Pipes);
         /* Grep: vfs_ram: soft surface */
         kprintf("vfs_ram: soft surface inventory,layout,fd,name,special,"
                 "mount,deny,peak,total,attr,alloc,sync,xfer,statx,notify,"
-                "kind,catalog,ratio,headroom,capacity,geom,terminal,deepen "
-                "areas=21 wave=16\n");
-        /* Grep: vfs_ram: soft capacity — Wave 16 design-constant lamps. */
+                "kind,catalog,ratio,headroom,capacity,geom,terminal,return,deepen "
+                "areas=22 wave=17\n");
+        /* Grep: vfs_ram: soft capacity — Wave 17 design-constant lamps. */
         kprintf("vfs_ram: soft capacity max_files=%u max_fds=%u max_data=%u "
-                "max_pipes=%u pipe_buf=%u path=%u wave=16\n",
+                "max_pipes=%u pipe_buf=%u path=%u wave=17\n",
                 (u32)VFS_MAX_FILES, (u32)VFS_MAX_FDS, (u32)VFS_MAX_DATA,
                 (u32)VFS_MAX_PIPES, (u32)VFS_PIPE_BUF, (u32)VFS_MAX_PATH);
         /* Grep: vfs_ram: soft geom — Wave 16 table geometry lamps. */
         kprintf("vfs_ram: soft geom files=%u fds=%u pipes=%u free_file=%u "
-                "free_fd=%u seeded=%u wave=16\n",
+                "free_fd=%u seeded=%u wave=17\n",
                 u32Files, u32Fds, u32Pipes, u32FileHead, u32FdHead,
                 g_u32SoftSeeded);
-        /* Grep: vfs_ram: soft terminal — Wave 16 outcome rollup. */
+        /* Grep: vfs_ram: soft terminal — Wave 17 outcome rollup. */
         kprintf("vfs_ram: soft terminal ok=%u fail=%u files=%u fds=%u "
-                "seeded=%u soft PASS wave=16\n",
+                "seeded=%u soft PASS wave=17\n",
                 g_u32SoftOk, g_u32SoftFail, u32Files, u32Fds, g_u32SoftSeeded);
+        /* Grep: vfs_ram: soft return — Wave 17 API return surfaces */
+        kprintf("vfs_ram: soft return ok=%u fail=%u files=%u fds=%u "
+                "seeded=%u open=%u close=%u read=%u write=%u "
+                "product_vfs_ram=OPEN wave=17\n",
+                g_u32SoftOk, g_u32SoftFail, u32Files, u32Fds, g_u32SoftSeeded,
+                g_u32SoftOpenOk, g_u32SoftCloseOk, g_u32SoftReadOk,
+                g_u32SoftWriteOk);
+
         /* Grep: vfs_ram: soft deepen */
-        kprintf("vfs_ram: soft deepen wave=16 areas=21 seeded=%u files=%u "
+        kprintf("vfs_ram: soft deepen wave=17 areas=22 seeded=%u files=%u "
                 "fds=%u ok=%u fail=%u logs=%u\n",
                 g_u32SoftSeeded, u32Files, u32Fds, g_u32SoftOk, g_u32SoftFail,
                 u32Samples);
@@ -851,9 +860,9 @@ soft_inventory_log(void)
      */
     fSoftPass = 1;
     kprintf("vfs_ram: soft inventory PASS seeded=%u files=%u fds=%u "
-            "logs=%u wave=16\n",
+            "logs=%u wave=17\n",
             g_u32SoftSeeded, u32Files, u32Fds, u32Samples);
-    kprintf("vfs_ram: soft PASS seeded=%u wave=16\n", g_u32SoftSeeded);
+    kprintf("vfs_ram: soft PASS seeded=%u wave=17\n", g_u32SoftSeeded);
     (void)fSoftPass;
 }
 

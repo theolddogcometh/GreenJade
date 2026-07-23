@@ -6,7 +6,7 @@
  * G-PTR-*: range must sit in product user window, be present, and U=1.
  * Soft deepen: write-intent (W|COW), page-chunk SMAP window, soft stats.
  *
- * Soft copy_from/to_user inventory (Wave 9 base; Wave 16 exclusive deepen):
+ * Soft copy_from/to_user inventory (Wave 9 base; Wave 17 exclusive deepen):
  *   - Cumulative from/to/load/store ok|fault|inval + byte totals
  *   - Soft peaks / last transfer sizes (diagnostics only; wrap OK)
  *   - SMAP STAC/CLAC + page-chunk counters
@@ -14,7 +14,7 @@
  *   - Zero-len early returns + pages/chunk peak soft
  *   greppable: "user_copy: soft …"
  *
- * Wave 16 soft inventory deepen (prefix-stable; greppable: user_copy: soft):
+ * Wave 17 soft inventory deepen (prefix-stable; greppable: user_copy: soft):
  *   "user_copy: soft honesty …"   explicit non-claims (not SEH / full SMAP)
  *   "user_copy: soft inventory …" rollup + wave stamp
  *   "user_copy: soft from_ok=…"   bulk from/to terminal status (legacy)
@@ -26,13 +26,15 @@
  *   "user_copy: soft zero …"      zero-length early-return soft tallies
  *   "user_copy: soft path …"      surface catalog + honesty open lamps
  *   "user_copy: soft stats …"     aggregate rollup
- *   "user_copy: soft deepen …"    wave=16 stamp + area count
+ *   "user_copy: soft deepen …"    wave=17 stamp + area count
  *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
  *   "user_copy: soft window …"    Wave 15 user VA / max copy geometry
- *   "user_copy: soft surfaces …"  Wave 16 return-surface catalog
- *   "user_copy: soft return …"    Wave 16 ok/fault/inval return taxonomy
- *   "user_copy: soft intent …"    Wave 16 read/write intent surface
- *   "user_copy: soft OPEN …"      Wave 16 SEH/SMAP OPEN honesty
+ *   "user_copy: soft surfaces …"  Wave 17 return-surface catalog
+ *   "user_copy: soft return …"    Wave 17 ok/fault/inval return taxonomy
+ *   "user_copy: soft return rate …" Wave 17 ok/fail rate lamps
+ *   "user_copy: soft retcode …"  Wave 17 retcode catalog
+ *   "user_copy: soft intent …"    Wave 17 read/write intent surface
+ *   "user_copy: soft OPEN …"      Wave 17 SEH/SMAP OPEN honesty
  * Honesty: soft inventory only — not product SEH / full SMAP claim; not bar3;
  *          soft ≠ product.
  */
@@ -49,14 +51,14 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
-/* Wave 16 soft inventory stamp (file-local; never product gate). */
-#define USER_COPY_SOFT_WAVE 16u
+/* Wave 17 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 17u
 
 /* Soft inventory greppable area count (honesty..OPEN; deepen excluded). */
-#define USER_COPY_SOFT_AREAS 16u
+#define USER_COPY_SOFT_AREAS 18u
 
 /*
- * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Wave 17 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
  * greppable: user_copy: soft surfaces
  */
 #define USER_COPY_SOFT_SURF_HONESTY   (1u << 0)
@@ -144,12 +146,12 @@ static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
  *   user_copy: soft zero       — zero-len early returns
  *   user_copy: soft path       — surface catalog + open lamps
  *   user_copy: soft stats      — aggregate rollup
- *   user_copy: soft deepen     — wave=16 stamp + areas
+ *   user_copy: soft deepen     — wave=17 stamp + areas
  *   user_copy: soft lamps      — SMAP readiness lamps
- *   user_copy: soft surfaces   — Wave 16 return-surface catalog
- *   user_copy: soft return     — Wave 16 ok/fault/inval return taxonomy
- *   user_copy: soft intent     — Wave 16 read/write intent surface
- *   user_copy: soft OPEN       — Wave 16 SEH/SMAP OPEN honesty
+ *   user_copy: soft surfaces   — Wave 17 return-surface catalog
+ *   user_copy: soft return     — Wave 17 ok/fault/inval return taxonomy
+ *   user_copy: soft intent     — Wave 17 read/write intent surface
+ *   user_copy: soft OPEN       — Wave 17 SEH/SMAP OPEN honesty
  *
  * Never allocates; safe from SMAP notify / stats get/reset.
  * Honesty: soft inventory only — not product SEH / full SMAP; not bar3;
@@ -405,7 +407,7 @@ user_copy_soft_inventory_log(void)
     u32Areas++;
 
     /*
-     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Wave 17: return-surface catalog (surf bitmask; soft ≠ product).
      * Grep: user_copy: soft surfaces
      */
     kprintf("user_copy: soft surfaces surf=0x%x catalog=%u areas_live=%u "
@@ -417,7 +419,7 @@ user_copy_soft_inventory_log(void)
     u32Areas++;
 
     /*
-     * Wave 16: ok/fault/inval return taxonomy (copy path returns).
+     * Wave 17: ok/fault/inval return taxonomy (copy path returns).
      * Grep: user_copy: soft return
      */
     kprintf("user_copy: soft return from_ok=%llu from_fault=%llu "
@@ -440,7 +442,7 @@ user_copy_soft_inventory_log(void)
     u32Areas++;
 
     /*
-     * Wave 16: read/write intent surface (W|COW soft).
+     * Wave 17: read/write intent surface (W|COW soft).
      * Grep: user_copy: soft intent
      */
     kprintf("user_copy: soft intent read_call=%llu write_call=%llu "
@@ -455,7 +457,7 @@ user_copy_soft_inventory_log(void)
     u32Areas++;
 
     /*
-     * Wave 16: SEH / full SMAP remain OPEN.
+     * Wave 17: SEH / full SMAP remain OPEN.
      * Grep: user_copy: soft OPEN
      */
     kprintf("user_copy: soft OPEN product_seh=OPEN full_smap=OPEN "
@@ -476,12 +478,42 @@ user_copy_soft_inventory_log(void)
             (unsigned long long)u64Logs);
 
     /*
+     * Grep: user_copy: soft return rate
+     * Wave 17 return-surface rate lamps (ok vs fault/inval).
+     */
+    kprintf("user_copy: soft return rate "
+            "from_ok=%llu from_fail=%llu to_ok=%llu to_fail=%llu "
+            "load_ok=%llu load_fail=%llu store_ok=%llu store_fault=%llu "
+            "wave=%u (return rate; Soft≠product SEH; soft≠product; not bar3)\n",
+            (unsigned long long)u64FromOk,
+            (unsigned long long)(u64FromFault + u64FromInval),
+            (unsigned long long)u64ToOk,
+            (unsigned long long)(u64ToFault + u64ToInval),
+            (unsigned long long)u64LoadOk,
+            (unsigned long long)(u64LoadFault + u64LoadInval),
+            (unsigned long long)u64StoreOk,
+            (unsigned long long)u64StoreFault,
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /*
+     * Grep: user_copy: soft retcode
+     * Wave 17 retcode catalog (ok/fault/inval return classes).
+     */
+    kprintf("user_copy: soft retcode "
+            "ok=1 fault=1 inval=1 from=1 to=1 load=1 store=1 "
+            "product_seh=OPEN full_smap=OPEN wave=%u "
+            "(retcode catalog; Soft≠product SEH; soft≠product)\n",
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /*
      * Grep: user_copy: soft deepen wave
      * areas tracks prior soft lines this emission (honesty..OPEN).
      */
     kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
             "catalog=%u smap=%llu surf=0x%x "
-            "(Wave 16 exclusive; not product SEH; not bar3; soft≠product)\n",
+            "(Wave 17 exclusive; not product SEH; not bar3; soft≠product)\n",
             (unsigned)USER_COPY_SOFT_WAVE,
             (unsigned)u32Areas,
             (unsigned long long)u64Logs,

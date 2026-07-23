@@ -6082,15 +6082,27 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
     /*
      * Soft stats smoke inventory — greppable product markers only.
+     * Wave 14 exclusive deepen: soft inventory + soft path stamps + deepen.
      * Call existing soft_log / soft_stats APIs when linked; never blocks M0.
      * Grep: soft: stats smoke
+     *        soft: inventory
+     *        soft: path
+     *        soft: deepen
      *        gj_linux_nr_class_soft_log / gj_native_dispatch_stats_soft
+     *        gj_syscall_entry_stats_soft
      *        timer_soft_log / serial_soft_log / cpu_soft_log
+     * greppable: soft: inventory / soft: path / soft: deepen
      */
     {
         u32 cHit = 0;
+        u32 cSerial;
+        u32 cWow64;
+        /* Wave 14 soft inventory stamp (file-local; never product gate). */
+        enum { MAIN_SOFT_SMOKE_WAVE = 14u, MAIN_SOFT_SMOKE_AREAS = 8u };
 
-        kprintf("soft: stats smoke begin\n");
+        kprintf("soft: stats smoke begin wave=%u areas=%u\n",
+                (unsigned)MAIN_SOFT_SMOKE_WAVE,
+                (unsigned)MAIN_SOFT_SMOKE_AREAS);
 
         /* Grep: soft: stats smoke cpu_soft_log */
         cpu_soft_log();
@@ -6101,8 +6113,10 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         cHit++;
 
         /* Grep: soft: stats smoke serial_soft_log */
+        cSerial = 0;
         if (serial_soft_log != NULL) {
             serial_soft_log();
+            cSerial = 1;
             cHit++;
         }
 
@@ -6114,7 +6128,42 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         gj_linux_nr_class_soft_log();
         cHit++;
 
-        kprintf("soft: stats smoke PASS hit=%u\n", cHit);
+        /* Grep: soft: stats smoke gj_syscall_entry_stats_soft */
+        (void)gj_syscall_entry_stats_soft();
+        cHit++;
+
+        /*
+         * WoW64 public counters already exercised earlier in bring-up;
+         * re-snapshot for greppable soft inventory (soft only).
+         */
+        cWow64 = wow64_calls();
+
+        /* Grep: soft: inventory (Wave 14 rollup of smoke surfaces) */
+        kprintf("soft: inventory wave=%u areas=%u hit=%u "
+                "cpu=1 timer=1 serial=%u native=1 linux_nr=1 entry=1 "
+                "wow64_calls=%u wow64_map=%u wow64_thunk=%u "
+                "(soft; not bar3)\n",
+                (unsigned)MAIN_SOFT_SMOKE_WAVE,
+                (unsigned)MAIN_SOFT_SMOKE_AREAS,
+                cHit, cSerial, cWow64,
+                wow64_map_hits(), wow64_thunk_hits());
+
+        /* Grep: soft: path (Wave 14 honesty claim) */
+        kprintf("soft: path claim=cpu|timer|serial|native|linux_nr|entry|"
+                "wow64_snap hybrid=M0_smoke enter_only=1 "
+                "areas=%u wave=%u (soft inventory; not bar3)\n",
+                (unsigned)MAIN_SOFT_SMOKE_AREAS,
+                (unsigned)MAIN_SOFT_SMOKE_WAVE);
+
+        /* Grep: soft: deepen wave */
+        kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "
+                "(Wave 14 exclusive; not bar3)\n",
+                (unsigned)MAIN_SOFT_SMOKE_WAVE,
+                (unsigned)MAIN_SOFT_SMOKE_AREAS,
+                cHit, cWow64);
+
+        kprintf("soft: stats smoke PASS hit=%u wave=%u\n",
+                cHit, (unsigned)MAIN_SOFT_SMOKE_WAVE);
     }
 
     kprintf("M0 OK\n");

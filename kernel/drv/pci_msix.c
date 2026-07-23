@@ -9,15 +9,20 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 11 exclusive; this unit only; never hard-gates):
+ * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
  * greppable: "pci: soft …" | "msix: soft …"
- *   pci: soft inventory … / msix: soft inventory …
- *   pci: soft table …     / msix: soft table …
- *   pci: soft pba …       / msix: soft pba …
- *   pci: soft fire …      / msix: soft fire …
- *   pci: soft mask …      / msix: soft mask …
- *   pci: soft hw …        / msix: soft hw …
- *   pci: soft path …      / msix: soft path …
+ *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
+ *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
+ *   pci: soft entry …     / msix: soft entry …      — entry0/1 detail lamps
+ *   pci: soft pba …       / msix: soft pba …        — sticky PBA width/API
+ *   pci: soft fire …      / msix: soft fire …       — fire + badge contract
+ *   pci: soft mask …      / msix: soft mask …       — mask hold / unmask
+ *   pci: soft hw …        / msix: soft hw …         — HW program tallies
+ *   pci: soft caps …      / msix: soft caps …       — MSI/MSI-X cap IDs
+ *   pci: soft consts …    / msix: soft consts …     — vec + addr base map
+ *   pci: soft path …      / msix: soft path …       — honesty non-claim
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=14 areas stamp
+ *   pci: soft stats …     / msix: soft stats …      — emission tallies
  *   pci: soft inventory PASS / pci: soft PASS
  *   msix: soft inventory PASS / msix: soft PASS
  * Honesty: soft shadow depth ≠ full device Table Size; soft ≠ bar3.
@@ -48,8 +53,12 @@ static u64 g_u64SoftPba;
 static u32 g_u32SoftProg;
 static u32 g_u32SoftFire;
 static int g_fSoftReady;
-/* Wave 11: times soft inventory printed (diagnostics only). */
+/* Wave 14: times soft inventory printed (diagnostics only). */
 static u32 g_u32SoftInvLogs;
+
+/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
+#define PCI_MSIX_SOFT_DEEPEN_AREAS 12u
+#define PCI_MSIX_SOFT_DEEPEN_WAVE  14u
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -292,7 +301,7 @@ pci_msix_soft_ready(void)
 }
 
 /*
- * Wave 11 soft inventory — greppable "pci: soft …" / "msix: soft …".
+ * Wave 14 soft inventory — greppable "pci: soft …" / "msix: soft …".
  * Pure observation; never allocates; never hard-gates HW/soft fire paths.
  * szVia: caller tag (probe / exercise / anon). Twin prefixes for greps.
  *
@@ -309,7 +318,18 @@ pci_msix_soft_inventory(const char *szVia)
     u32 u32Addr0 = 0;
     u32 u32Data0 = 0;
     u32 u32VecCtl0 = 0;
+    u32 u32Addr1 = 0;
+    u32 u32Data1 = 0;
+    u32 u32VecCtl1 = 0;
+    u32 fProg0 = 0;
+    u32 fProg1 = 0;
+    u32 fFire0 = 0;
+    u32 fFire1 = 0;
+    u32 fMask0 = 0;
+    u32 fMask1 = 0;
     u32 fIrqReady;
+    u32 u32Badge0;
+    u32 u32Badge1;
     const char *szViaSafe;
 
     szViaSafe = (szVia != NULL) ? szVia : "anon";
@@ -333,11 +353,24 @@ pci_msix_soft_inventory(const char *szVia)
         }
     }
     if (g_aSoftTab[0].u8Programmed) {
+        fProg0 = 1u;
         u32Addr0 = g_aSoftTab[0].u32MsgAddrLo;
         u32Data0 = g_aSoftTab[0].u32MsgData;
         u32VecCtl0 = g_aSoftTab[0].u32VecCtl;
+        fFire0 = g_aSoftTab[0].u8SoftFire ? 1u : 0u;
+        fMask0 = (u32VecCtl0 & GJ_MSIX_VECCTL_MASK) != 0 ? 1u : 0u;
+    }
+    if (GJ_MSIX_SOFT_TBL > 1u && g_aSoftTab[1].u8Programmed) {
+        fProg1 = 1u;
+        u32Addr1 = g_aSoftTab[1].u32MsgAddrLo;
+        u32Data1 = g_aSoftTab[1].u32MsgData;
+        u32VecCtl1 = g_aSoftTab[1].u32VecCtl;
+        fFire1 = g_aSoftTab[1].u8SoftFire ? 1u : 0u;
+        fMask1 = (u32VecCtl1 & GJ_MSIX_VECCTL_MASK) != 0 ? 1u : 0u;
     }
     fIrqReady = irq_msix_ready() ? 1u : 0u;
+    u32Badge0 = (u32)GJ_MSIX_BADGE_TBL(0);
+    u32Badge1 = (u32)GJ_MSIX_BADGE_TBL(1);
 
     /*
      * Grep: pci: soft inventory / msix: soft inventory
@@ -345,93 +378,179 @@ pci_msix_soft_inventory(const char *szVia)
      */
     kprintf("pci: soft inventory via=%s ready=%u depth=%u prog=%u "
             "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
-            "logs=%u\n",
+            "logs=%u wave=%u\n",
             szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
             (unsigned)cProgLive, (unsigned)g_u32SoftFire,
             (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
-            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs);
+            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("msix: soft inventory via=%s ready=%u depth=%u prog=%u "
             "prog_live=%u fire=%u pba=0x%lx hw_prog=%u irq_ready=%u "
-            "logs=%u\n",
+            "logs=%u wave=%u\n",
             szViaSafe, (unsigned)(g_fSoftReady ? 1 : 0),
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)g_u32SoftProg,
             (unsigned)cProgLive, (unsigned)g_u32SoftFire,
             (unsigned long)g_u64SoftPba, (unsigned)g_u32Programmed,
-            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs);
+            (unsigned)fIrqReady, (unsigned)g_u32SoftInvLogs,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: pci: soft table / msix: soft table */
     kprintf("pci: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
-            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x\n",
+            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x "
+            "wave=%u\n",
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
-            (unsigned)u32Data0, (unsigned)u32VecCtl0,
-            (unsigned)(g_aSoftTab[0].u8Programmed ? 1 : 0),
-            (unsigned)(g_aSoftTab[0].u8SoftFire ? 1 : 0),
-            (unsigned)PCI_MSIX_PROBE_VEC);
+            (unsigned)u32Data0, (unsigned)u32VecCtl0, (unsigned)fProg0,
+            (unsigned)fFire0, (unsigned)PCI_MSIX_PROBE_VEC,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("msix: soft table depth=%u entry0_addr=0x%x entry0_data=0x%x "
-            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x\n",
+            "entry0_vecctl=0x%x programmed=%u soft_fire=%u probe_vec=0x%x "
+            "wave=%u\n",
             (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)u32Addr0,
-            (unsigned)u32Data0, (unsigned)u32VecCtl0,
-            (unsigned)(g_aSoftTab[0].u8Programmed ? 1 : 0),
-            (unsigned)(g_aSoftTab[0].u8SoftFire ? 1 : 0),
-            (unsigned)PCI_MSIX_PROBE_VEC);
+            (unsigned)u32Data0, (unsigned)u32VecCtl0, (unsigned)fProg0,
+            (unsigned)fFire0, (unsigned)PCI_MSIX_PROBE_VEC,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: pci: soft entry / msix: soft entry (Wave 14 multi-entry lamps) */
+    kprintf("pci: soft entry e0_prog=%u e0_addr=0x%x e0_data=0x%x "
+            "e0_mask=%u e0_fire=%u e1_prog=%u e1_addr=0x%x e1_data=0x%x "
+            "e1_mask=%u e1_fire=%u soft PASS\n",
+            (unsigned)fProg0, (unsigned)u32Addr0, (unsigned)u32Data0,
+            (unsigned)fMask0, (unsigned)fFire0, (unsigned)fProg1,
+            (unsigned)u32Addr1, (unsigned)u32Data1, (unsigned)fMask1,
+            (unsigned)fFire1);
+    kprintf("msix: soft entry e0_prog=%u e0_addr=0x%x e0_data=0x%x "
+            "e0_mask=%u e0_fire=%u e1_prog=%u e1_addr=0x%x e1_data=0x%x "
+            "e1_mask=%u e1_fire=%u soft PASS\n",
+            (unsigned)fProg0, (unsigned)u32Addr0, (unsigned)u32Data0,
+            (unsigned)fMask0, (unsigned)fFire0, (unsigned)fProg1,
+            (unsigned)u32Addr1, (unsigned)u32Data1, (unsigned)fMask1,
+            (unsigned)fFire1);
 
     /* Grep: pci: soft pba / msix: soft pba */
     kprintf("pci: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
-            "width=64\n",
-            (unsigned long)g_u64SoftPba);
+            "width=64 wave=%u\n",
+            (unsigned long)g_u64SoftPba,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("msix: soft pba bits=0x%lx sticky=1 clear_api=1 mask_sets=1 "
-            "width=64\n",
-            (unsigned long)g_u64SoftPba);
+            "width=64 wave=%u\n",
+            (unsigned long)g_u64SoftPba,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: pci: soft fire / msix: soft fire */
-    kprintf("pci: soft fire count=%u live_fired=%u badge_tbl=GJ_MSIX_BADGE_TBL "
-            "inject_if_ready=%u masked_hold=1\n",
-            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)fIrqReady);
-    kprintf("msix: soft fire count=%u live_fired=%u badge_tbl=GJ_MSIX_BADGE_TBL "
-            "inject_if_ready=%u masked_hold=1\n",
-            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)fIrqReady);
+    kprintf("pci: soft fire count=%u live_fired=%u badge_tbl0=0x%x "
+            "badge_tbl1=0x%x inject_if_ready=%u masked_hold=1 wave=%u\n",
+            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)u32Badge0,
+            (unsigned)u32Badge1, (unsigned)fIrqReady,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+    kprintf("msix: soft fire count=%u live_fired=%u badge_tbl0=0x%x "
+            "badge_tbl1=0x%x inject_if_ready=%u masked_hold=1 wave=%u\n",
+            (unsigned)g_u32SoftFire, (unsigned)cFired, (unsigned)u32Badge0,
+            (unsigned)u32Badge1, (unsigned)fIrqReady,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: pci: soft mask / msix: soft mask */
     kprintf("pci: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
-            "prog_live=%u\n",
-            (unsigned)cMasked, (unsigned)cProgLive);
+            "prog_live=%u e0_mask=%u e1_mask=%u\n",
+            (unsigned)cMasked, (unsigned)cProgLive, (unsigned)fMask0,
+            (unsigned)fMask1);
     kprintf("msix: soft mask live=%u vecctl_bit0=1 unmask_delivers=1 "
-            "prog_live=%u\n",
-            (unsigned)cMasked, (unsigned)cProgLive);
+            "prog_live=%u e0_mask=%u e1_mask=%u\n",
+            (unsigned)cMasked, (unsigned)cProgLive, (unsigned)fMask0,
+            (unsigned)fMask1);
 
     /* Grep: pci: soft hw / msix: soft hw — HW program tallies (may be 0) */
     kprintf("pci: soft hw programmed=%u scan_api=1 enable_api=1 "
-            "program_first=1 map_device=1\n",
-            (unsigned)g_u32Programmed);
+            "program_first=1 map_device=1 wave=%u\n",
+            (unsigned)g_u32Programmed, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("msix: soft hw programmed=%u scan_api=1 enable_api=1 "
-            "program_first=1 map_device=1\n",
-            (unsigned)g_u32Programmed);
+            "program_first=1 map_device=1 wave=%u\n",
+            (unsigned)g_u32Programmed, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: pci: soft caps / msix: soft caps — public PCI cap IDs */
+    kprintf("pci: soft caps msi_id=0x%02x msix_id=0x%02x status_cap=0x%02x "
+            "soft PASS\n",
+            (unsigned)PCI_CAP_ID_MSI, (unsigned)PCI_CAP_ID_MSIX,
+            (unsigned)PCI_STATUS_CAP);
+    kprintf("msix: soft caps msi_id=0x%02x msix_id=0x%02x status_cap=0x%02x "
+            "soft PASS\n",
+            (unsigned)PCI_CAP_ID_MSI, (unsigned)PCI_CAP_ID_MSIX,
+            (unsigned)PCI_STATUS_CAP);
+
+    /* Grep: pci: soft consts / msix: soft consts */
+    kprintf("pci: soft consts probe_vec=0x%x addr_base=0x%x depth=%u "
+            "vecctl_mask=0x%x soft PASS\n",
+            (unsigned)PCI_MSIX_PROBE_VEC, (unsigned)MSI_ADDR_BASE,
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)GJ_MSIX_VECCTL_MASK);
+    kprintf("msix: soft consts probe_vec=0x%x addr_base=0x%x depth=%u "
+            "vecctl_mask=0x%x soft PASS\n",
+            (unsigned)PCI_MSIX_PROBE_VEC, (unsigned)MSI_ADDR_BASE,
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)GJ_MSIX_VECCTL_MASK);
 
     /*
      * Grep: pci: soft path / msix: soft path
      * Honesty: bounded soft shadow ≠ full device Table Size; soft ≠ bar3.
      */
     kprintf("pci: soft path claim=kernel_soft depth_bound=%u "
-            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 via=%s\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe);
+            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 "
+            "via=%s wave=%u\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("msix: soft path claim=kernel_soft depth_bound=%u "
-            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 via=%s\n",
-            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe);
+            "full_table_size=0 bar3=open soft_only_when_no_mmio=1 "
+            "via=%s wave=%u\n",
+            (unsigned)GJ_MSIX_SOFT_TBL, szViaSafe,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: pci: soft deepen / msix: soft deepen (Wave 14 stamp) */
+    kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
+            "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
+            (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed);
+    kprintf("msix: soft deepen wave=%u areas=%u via=%s ready=%u "
+            "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
+            (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed);
+
+    /* Grep: pci: soft stats / msix: soft stats */
+    kprintf("pci: soft stats inv_logs=%u soft_prog=%u soft_fire=%u "
+            "hw_prog=%u depth=%u wave=%u\n",
+            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProg,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed,
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+    kprintf("msix: soft stats inv_logs=%u soft_prog=%u soft_fire=%u "
+            "hw_prog=%u depth=%u wave=%u\n",
+            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProg,
+            (unsigned)g_u32SoftFire, (unsigned)g_u32Programmed,
+            (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Soft path is always available after init — inventory PASS. */
     if (g_fSoftReady) {
         /* Grep: pci: soft inventory PASS / pci: soft PASS */
-        kprintf("pci: soft inventory PASS via=%s logs=%u\n", szViaSafe,
-                (unsigned)g_u32SoftInvLogs);
-        kprintf("pci: soft PASS via=%s\n", szViaSafe);
+        kprintf("pci: soft inventory PASS via=%s logs=%u wave=%u "
+                "areas=%u\n",
+                szViaSafe, (unsigned)g_u32SoftInvLogs,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS);
+        kprintf("pci: soft PASS via=%s wave=%u\n", szViaSafe,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
         /* Grep: msix: soft inventory PASS / msix: soft PASS */
-        kprintf("msix: soft inventory PASS via=%s logs=%u\n", szViaSafe,
-                (unsigned)g_u32SoftInvLogs);
-        kprintf("msix: soft PASS via=%s\n", szViaSafe);
+        kprintf("msix: soft inventory PASS via=%s logs=%u wave=%u "
+                "areas=%u\n",
+                szViaSafe, (unsigned)g_u32SoftInvLogs,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS);
+        kprintf("msix: soft PASS via=%s wave=%u\n", szViaSafe,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     } else {
-        kprintf("pci: soft inventory SKIP via=%s\n", szViaSafe);
-        kprintf("msix: soft inventory SKIP via=%s\n", szViaSafe);
+        kprintf("pci: soft inventory SKIP via=%s wave=%u\n", szViaSafe,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("msix: soft inventory SKIP via=%s wave=%u\n", szViaSafe,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     }
 }
 
@@ -509,7 +628,7 @@ pci_msix_soft_table_exercise(void)
                 g_u32SoftProg, g_u32SoftFire,
                 (unsigned long)pci_msix_soft_pba());
     }
-    /* Wave 11: greppable soft inventory rollup (after exercise state). */
+    /* Wave 14: greppable soft inventory rollup (after exercise state). */
     pci_msix_soft_inventory("exercise");
     return fOk;
 }
@@ -733,7 +852,7 @@ pci_msix_probe_log(void)
     /* Soft table always exercised (works with zero devices). */
     fSoft = pci_msix_soft_table_exercise();
     /*
-     * Wave 11 soft inventory at probe (exercise already dumps once;
+     * Wave 14 soft inventory at probe (exercise already dumps once;
      * probe via= tag deepens greppable "pci: soft …" / "msix: soft …").
      */
     pci_msix_soft_inventory("probe");

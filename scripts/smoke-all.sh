@@ -15,6 +15,8 @@
 #   product-summary      scripts/gj-product-summary.sh when present
 #   live-iso artifact    presence only (build via make live-iso separately)
 #   nvme CAP             already soft (RHEL QEMU splits)
+#   continuum high-water via product-summary (Wave 14: target M=15600 when
+#     greppable; scan is source of truth — not a hard gate; ≠ bar3/Top50)
 #
 # Contrast:
 #   scripts/gj-quick-keys.sh      hard presence keys (subset)
@@ -357,9 +359,11 @@ case "$ud_n" in
 esac
 echo "  soft info: TRAP #UD count=$ud_n (Multiboot)"
 # Soft product-summary panel when helper is present
-if [ -x scripts/gj-product-summary.sh ]; then
-    echo "  --- gj-product-summary (soft) ---"
-    ./scripts/gj-product-summary.sh "$log_mb" 2>/dev/null || true
+# (Wave 14: continuum high-water side panel notes M=15600 only when greppable;
+#  hard gates above stay hard — continuum soft graph ≠ smoke-all product bar)
+if [ -x scripts/gj-product-summary.sh ] || [ -f scripts/gj-product-summary.sh ]; then
+    echo "  --- gj-product-summary (soft; wave 14 continuum side panel) ---"
+    bash scripts/gj-product-summary.sh "$log_mb" 2>/dev/null || true
 fi
 
 echo "== OVMF EFI =="

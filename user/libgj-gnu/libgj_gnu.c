@@ -26,6 +26,18 @@
  *   greppable: GJ_GNU_SOFT_ID
  *   greppable: GJ_GNU_SOFT_PROBE
  *   greppable: GJ_GNU_SOFT_TOUCH
+ *   greppable: GJ_GNU_SOFT_INVENTORY
+ *   greppable: GJ_GNU_SOFT_DEEPEN
+ *   greppable: GJ_GNU_SOFT_WAVE
+ *   greppable: GJ_GNU_SOFT_SURFACE
+ *   greppable: GJ_GNU_SOFT_NOTE
+ *
+ * Soft inventory (Wave 14 exclusive deepen):
+ *   libgj-gnu: soft inventory wave=14 surfaces=10 caps=0xf stamp=GNU1
+ *   libgj-gnu: soft deepen wave=14 areas=export,stamp,caps,get,id,probe,
+ *              touch,inventory,wave,surface
+ *   libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 bar3=0
+ * Diagnostics only — never a product bar3 claim; product 0x43 unchanged.
  */
 #include <stdint.h>
 
@@ -42,6 +54,13 @@
 #define GJ_GNU_SOFT_CAP_TOUCH   ((uint32_t)0x8u)
 #define GJ_GNU_SOFT_CAP_MASK    ((uint32_t)0xfu)
 
+/* Wave 14 exclusive soft inventory stamp. */
+#define GJ_GNU_SOFT_WAVE        14u
+/* Soft dynsym surface count (export+init+stamp+caps+get+id+probe+touch
+ * +inventory+wave+surface+note+deepen — product + soft catalog). */
+#define GJ_GNU_SOFT_SURFACES    10u
+#define GJ_GNU_SOFT_AREAS       10u
+
 /* greppable: GJ_GNU_SOFT_EXPORT_CANON */
 volatile uint64_t gj_gnu_export = GJ_GNU_EXPORT_CANON;
 
@@ -50,6 +69,43 @@ volatile uint64_t gj_gnu_soft_stamp = GJ_GNU_SOFT_STAMP_CANON;
 
 /* Soft presence / capability word (data export; GLOB_DAT soft target). */
 volatile uint32_t gj_gnu_soft_caps = GJ_GNU_SOFT_CAP_MASK;
+
+/* Soft note counters (cold; wrap OK; never hard-fail). */
+static volatile uint32_t g_u32SoftProbeN;
+static volatile uint32_t g_u32SoftTouchN;
+static volatile uint32_t g_u32SoftGetN;
+static volatile uint32_t g_u32SoftIdN;
+static volatile uint32_t g_u32SoftInvN;
+
+/*
+ * Product soft inventory blob (rodata; greppable).
+ * greppable: GJ_GNU_SOFT_INVENTORY
+ * Grep: libgj-gnu: soft inventory
+ */
+static const char g_szGnuSoftInventory[] =
+    "libgj-gnu: soft inventory wave=14 surfaces=10 areas=10 "
+    "export=0x43 stamp=GNU1 caps=0xf "
+    "get=1 id=1 probe=1 touch=1 inventory=1 deepen=1 "
+    "hash=gnu soname=libgj-gnu.so.1 freestanding=1 bar3=0";
+
+/*
+ * Wave 14 soft deepen stamp.
+ * greppable: GJ_GNU_SOFT_DEEPEN
+ * Grep: libgj-gnu: soft deepen
+ */
+static const char g_szGnuSoftDeepen[] =
+    "libgj-gnu: soft deepen wave=14 areas=10 "
+    "export,stamp,caps,get,id,probe,touch,inventory,wave,surface "
+    "product_export=0x43 soft_stamp=GNU1 hot_path=clean bar3=0";
+
+/*
+ * Soft path honesty line.
+ * Grep: libgj-gnu: soft path
+ */
+static const char g_szGnuSoftPath[] =
+    "libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 "
+    "export=0x43 freestanding=1 pure_c=1 no_heap=1 "
+    "bar3=0 (soft inventory; not bar3)";
 
 void
 gj_gnu_init(void)
@@ -68,6 +124,7 @@ uint64_t
 gj_gnu_soft_get(void)
 {
     /* greppable: GJ_GNU_SOFT_GET */
+    g_u32SoftGetN++;
     return gj_gnu_export;
 }
 
@@ -78,6 +135,7 @@ uint64_t
 gj_gnu_soft_id(void)
 {
     /* greppable: GJ_GNU_SOFT_ID */
+    g_u32SoftIdN++;
     return gj_gnu_soft_stamp;
 }
 
@@ -90,6 +148,7 @@ int
 gj_gnu_soft_probe(void)
 {
     /* greppable: GJ_GNU_SOFT_PROBE */
+    g_u32SoftProbeN++;
     if (gj_gnu_export != GJ_GNU_EXPORT_CANON) {
         gj_gnu_export = GJ_GNU_EXPORT_CANON;
         return 0;
@@ -106,8 +165,116 @@ uint64_t
 gj_gnu_soft_touch(void)
 {
     /* greppable: GJ_GNU_SOFT_TOUCH */
+    g_u32SoftTouchN++;
     gj_gnu_export = GJ_GNU_EXPORT_CANON;
     gj_gnu_soft_stamp = GJ_GNU_SOFT_STAMP_CANON;
     gj_gnu_soft_caps = GJ_GNU_SOFT_CAP_MASK;
     return gj_gnu_export;
+}
+
+/*
+ * Cold soft inventory accessor (Wave 14).
+ * greppable: GJ_GNU_SOFT_INVENTORY
+ * Grep: libgj-gnu: soft inventory
+ */
+const char *
+gj_gnu_soft_inventory(void)
+{
+    g_u32SoftInvN++;
+    return g_szGnuSoftInventory;
+}
+
+/*
+ * Cold soft deepen stamp (Wave 14).
+ * greppable: GJ_GNU_SOFT_DEEPEN
+ * Grep: libgj-gnu: soft deepen
+ */
+const char *
+gj_gnu_soft_deepen(void)
+{
+    return g_szGnuSoftDeepen;
+}
+
+/*
+ * Cold soft path honesty line.
+ * Grep: libgj-gnu: soft path
+ */
+const char *
+gj_gnu_soft_path(void)
+{
+    return g_szGnuSoftPath;
+}
+
+/*
+ * Soft wave stamp (14). greppable: GJ_GNU_SOFT_WAVE
+ * Grep: libgj-gnu: soft wave=
+ */
+uint32_t
+gj_gnu_soft_wave(void)
+{
+    return (uint32_t)GJ_GNU_SOFT_WAVE;
+}
+
+/*
+ * Soft dynsym surface count for .gnu.hash soft catalog.
+ * greppable: GJ_GNU_SOFT_SURFACE
+ * Grep: libgj-gnu: soft surfaces=
+ */
+uint32_t
+gj_gnu_soft_surface_count(void)
+{
+    return (uint32_t)GJ_GNU_SOFT_SURFACES;
+}
+
+/*
+ * Soft area catalog size (Wave 14 deepen areas).
+ * Grep: libgj-gnu: soft areas=
+ */
+uint32_t
+gj_gnu_soft_area_count(void)
+{
+    return (uint32_t)GJ_GNU_SOFT_AREAS;
+}
+
+/*
+ * Soft note rollup: packed get|id|probe|touch|inv call counters (low bytes).
+ * Never hard-fails; wrap OK. greppable: GJ_GNU_SOFT_NOTE
+ * Grep: libgj-gnu: soft note
+ */
+uint64_t
+gj_gnu_soft_note(void)
+{
+    uint64_t u64N;
+
+    u64N = ((uint64_t)g_u32SoftGetN & 0xffu)
+         | (((uint64_t)g_u32SoftIdN & 0xffu) << 8)
+         | (((uint64_t)g_u32SoftProbeN & 0xffu) << 16)
+         | (((uint64_t)g_u32SoftTouchN & 0xffu) << 24)
+         | (((uint64_t)g_u32SoftInvN & 0xffu) << 32);
+    return u64N;
+}
+
+/*
+ * Soft note raw counters (get, id, probe, touch, inv) — optional out args.
+ * NULL out pointers are soft-skipped. Grep: libgj-gnu: soft note
+ */
+void
+gj_gnu_soft_note_counts(uint32_t *pGet, uint32_t *pId, uint32_t *pProbe,
+                        uint32_t *pTouch, uint32_t *pInv)
+{
+    if (pGet != 0) {
+        *pGet = g_u32SoftGetN;
+    }
+    if (pId != 0) {
+        *pId = g_u32SoftIdN;
+    }
+    if (pProbe != 0) {
+        *pProbe = g_u32SoftProbeN;
+    }
+    if (pTouch != 0) {
+        *pTouch = g_u32SoftTouchN;
+    }
+    if (pInv != 0) {
+        *pInv = g_u32SoftInvN;
+    }
 }

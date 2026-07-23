@@ -15,12 +15,30 @@
  * supported vs NOT_SUPPORTED; never invokes power-state-changing calls.
  * Soft conduit detail + recover-fault counters are greppable.
  *
+ * -------------------------------------------------------------------------
+ * Soft inventory deepen (Wave 14 exclusive; this unit only)
+ * -------------------------------------------------------------------------
+ * Multi-line greppable "aarch64: psci soft …" under fixed areas:
+ *   inventory | version | conduit | features | recover | gates | path | deepen
+ * Version soft: maj/min/raw decode lamps after VERSION success.
+ * Recover soft: probe-active + fault/call tallies (exception-path pairing).
+ * Path honesty: FEATURES-only — no CPU_ON / SYSTEM_OFF / SUSPEND side effects.
+ * Soft PASS/FAIL gates keep prior features shape; deepen never hard-gates.
+ * Soft ≠ product SMP bring-up; soft ≠ bar3.
+ *
  * Greppable:
  *   aarch64: psci PASS conduit=hvc|smc version=… el3=…
  *   aarch64: psci soft SKIP (no firmware)
  *   aarch64: psci features soft ok=… miss=… cpu_on=… …
  *   aarch64: psci features soft PASS | FAIL
  *   aarch64: psci conduit soft hvc|smc|none faults=…
+ *   aarch64: psci soft inventory …
+ *   aarch64: psci soft version …
+ *   aarch64: psci soft recover …
+ *   aarch64: psci soft gates …
+ *   aarch64: psci soft path …
+ *   aarch64: psci soft deepen …
+ *   aarch64: psci soft PASS | FAIL
  *
  * Freestanding pure C; no GPL Linux PSCI paste.
  */
@@ -54,6 +72,10 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE    14u
+#define PSCI_SOFT_AREAS   8u
+
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
 volatile unsigned long g_psci_probe_result;
@@ -64,6 +86,13 @@ static unsigned long g_cPsciCalls;
 static unsigned long g_cPsciFaults;
 static unsigned long g_cPsciFeatOk;
 static unsigned long g_cPsciFeatMiss;
+static unsigned long g_cPsciSoftInvLogs;
+static unsigned long g_u64SoftVerRaw;
+static unsigned g_uSoftVerMaj;
+static unsigned g_uSoftVerMin;
+static unsigned g_uSoftEl3;
+static unsigned g_uSoftFeatCpuOnOk;
+static unsigned g_uSoftLive; /* 1 if VERSION path live (not SKIP) */
 
 enum psci_conduit {
     PSCI_CONDUIT_NONE = 0,
@@ -265,6 +294,130 @@ psci_conduit_soft_log(int fEl3)
     aarch64_uart_puts("\n");
 }
 
+/*
+ * Wave 14 combined soft inventory under "aarch64: psci soft …".
+ * Emits multi-area lamps + final soft PASS|FAIL. Never hard-gates.
+ * Grep areas: inventory | version | conduit | features | recover | gates |
+ *             path | deepen
+ * Returns 1 on soft PASS (live firmware + features soft OK).
+ */
+static int
+psci_soft_inventory(int fFeatSoft)
+{
+    const char *szConduit;
+    unsigned uGateLive;
+    unsigned uGateFeat;
+    unsigned uGateCpuOn;
+    unsigned uGateConduit;
+    unsigned uGateCalls;
+    int fOk;
+
+    if (g_cPsciSoftInvLogs < 0xfffffffful) {
+        g_cPsciSoftInvLogs++;
+    }
+
+    if (g_nConduit == PSCI_CONDUIT_HVC) {
+        szConduit = "hvc";
+    } else if (g_nConduit == PSCI_CONDUIT_SMC) {
+        szConduit = "smc";
+    } else {
+        szConduit = "none";
+    }
+
+    uGateLive = g_uSoftLive;
+    uGateFeat = (fFeatSoft != 0) ? 1u : 0u;
+    uGateCpuOn = g_uSoftFeatCpuOnOk;
+    uGateConduit = (g_nConduit != PSCI_CONDUIT_NONE) ? 1u : 0u;
+    uGateCalls = (g_cPsciCalls > 0ul) ? 1u : 0u;
+
+    /* Grep: aarch64: psci soft inventory */
+    aarch64_uart_puts("aarch64: psci soft inventory live=");
+    aarch64_uart_put_hex((unsigned long)uGateLive);
+    aarch64_uart_puts(" conduit=");
+    aarch64_uart_puts(szConduit);
+    aarch64_uart_puts(" el3=");
+    aarch64_uart_put_hex_n((unsigned long)g_uSoftEl3, 1u);
+    aarch64_uart_puts(" feat_ok=");
+    aarch64_uart_put_hex(g_cPsciFeatOk);
+    aarch64_uart_puts(" feat_miss=");
+    aarch64_uart_put_hex(g_cPsciFeatMiss);
+    aarch64_uart_puts(" calls=");
+    aarch64_uart_put_hex(g_cPsciCalls);
+    aarch64_uart_puts(" faults=");
+    aarch64_uart_put_hex(g_cPsciFaults);
+    aarch64_uart_puts(" logs=");
+    aarch64_uart_put_hex(g_cPsciSoftInvLogs);
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_AREAS);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: psci soft version */
+    aarch64_uart_puts("aarch64: psci soft version maj=");
+    aarch64_uart_put_hex_n((unsigned long)g_uSoftVerMaj, 4u);
+    aarch64_uart_puts(" min=");
+    aarch64_uart_put_hex_n((unsigned long)g_uSoftVerMin, 4u);
+    aarch64_uart_puts(" raw=");
+    aarch64_uart_put_hex(g_u64SoftVerRaw);
+    aarch64_uart_puts(" live=");
+    aarch64_uart_put_hex((unsigned long)uGateLive);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: psci soft recover (exception-path pairing lamps) */
+    aarch64_uart_puts("aarch64: psci soft recover active=");
+    aarch64_uart_put_hex((unsigned long)(g_psci_probe_active != 0 ? 1 : 0));
+    aarch64_uart_puts(" fault_latched=");
+    aarch64_uart_put_hex(g_psci_probe_fault);
+    aarch64_uart_puts(" result=");
+    aarch64_uart_put_hex(g_psci_probe_result);
+    aarch64_uart_puts(" faults=");
+    aarch64_uart_put_hex(g_cPsciFaults);
+    aarch64_uart_puts(" calls=");
+    aarch64_uart_put_hex(g_cPsciCalls);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: psci soft gates */
+    aarch64_uart_puts("aarch64: psci soft gates live=");
+    aarch64_uart_put_hex((unsigned long)uGateLive);
+    aarch64_uart_puts(" conduit=");
+    aarch64_uart_put_hex((unsigned long)uGateConduit);
+    aarch64_uart_puts(" feat=");
+    aarch64_uart_put_hex((unsigned long)uGateFeat);
+    aarch64_uart_puts(" cpu_on=");
+    aarch64_uart_put_hex((unsigned long)uGateCpuOn);
+    aarch64_uart_puts(" calls=");
+    aarch64_uart_put_hex((unsigned long)uGateCalls);
+    aarch64_uart_puts(" table=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_FEAT_COUNT);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: psci soft path */
+    aarch64_uart_puts("aarch64: psci soft path features=1 cpu_on=0 "
+                      "sys_off=0 suspend=0 neon=0 wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts(" (soft inventory; not bar3)\n");
+
+    /* Grep: aarch64: psci soft deepen */
+    aarch64_uart_puts("aarch64: psci soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts(" areas=inventory,version,conduit,features,recover,"
+                      "gates,path,deepen unit=psci.c only rate_limited=0\n");
+
+    fOk = 0;
+    if (uGateLive != 0u && uGateFeat != 0u && uGateCpuOn != 0u &&
+        uGateConduit != 0u) {
+        fOk = 1;
+    }
+
+    if (fOk != 0) {
+        aarch64_uart_puts("aarch64: psci soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: psci soft FAIL\n");
+    }
+    return fOk;
+}
+
 void
 aarch64_psci_probe(void)
 {
@@ -275,11 +428,19 @@ aarch64_psci_probe(void)
     unsigned cFeatOk;
     int fEl3;
     int fFeatSoft;
+    int fInvSoft;
 
     fEl3 = el3_implemented();
     u64FeatCpuOn = (unsigned long)(long)PSCI_RET_NOT_SUPPORTED;
     cFeatOk = 0u;
     fFeatSoft = 0;
+    fInvSoft = 0;
+    g_uSoftEl3 = (unsigned)fEl3;
+    g_uSoftLive = 0u;
+    g_uSoftFeatCpuOnOk = 0u;
+    g_uSoftVerMaj = 0u;
+    g_uSoftVerMin = 0u;
+    g_u64SoftVerRaw = 0ul;
 
     /* Prefer HVC (QEMU virt / KVM common conduit). */
     g_nConduit = PSCI_CONDUIT_HVC;
@@ -295,11 +456,19 @@ aarch64_psci_probe(void)
         aarch64_uart_puts("aarch64: psci soft SKIP (no firmware)\n");
         psci_conduit_soft_log(fEl3);
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
+        /* Wave 14: still emit multi-area inventory on SKIP path. */
+        fInvSoft = psci_soft_inventory(0);
+        (void)fInvSoft;
         return;
     }
 
     maj = (unsigned)((u64Ver >> 16) & 0xfffful);
     min = (unsigned)(u64Ver & 0xfffful);
+    g_uSoftLive = 1u;
+    g_uSoftVerMaj = maj;
+    g_uSoftVerMin = min;
+    g_u64SoftVerRaw = u64Ver;
+
     aarch64_uart_puts("aarch64: psci PASS conduit=");
     aarch64_uart_puts(g_nConduit == PSCI_CONDUIT_HVC ? "hvc" : "smc");
     aarch64_uart_puts(" version=");
@@ -323,6 +492,7 @@ aarch64_psci_probe(void)
     if (cFeatOk >= 1u &&
         (long)u64FeatCpuOn != PSCI_RET_NOT_SUPPORTED) {
         fFeatSoft = 1;
+        g_uSoftFeatCpuOnOk = 1u;
     }
 
     /* Keep legacy one-line cpu_on marker for existing greps. */
@@ -337,4 +507,8 @@ aarch64_psci_probe(void)
     } else {
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
     }
+
+    /* Wave 14 combined soft inventory under "aarch64: psci soft …". */
+    fInvSoft = psci_soft_inventory(fFeatSoft);
+    (void)fInvSoft;
 }

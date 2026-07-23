@@ -22,7 +22,7 @@
  *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
  *   soft reclaim of the map (re-install PTEs, re-export).
  *
- * Soft store inventory (Wave 12 exclusive deepen):
+ * Soft store inventory (Wave 12 base; Wave 14 exclusive soft deepen):
  *   - Ownership: claim / reclaim / release / busy / claim_inval
  *   - Meta: stats/cap/queue/flush ok|inval|fault|nodev splits
  *   - Sector R/W: read/write ok + io/inval/nodev/fault + blk|scsi
@@ -30,6 +30,7 @@
  *   - Ring: export/map/kick/state ok|nodev|inval|fault + remap soft
  *   - Aggregate err + ok + not_init + last op/ret/lba snapshot
  *   - Path catalog + xfer ceiling + backend live snapshot
+ *   - Wave 14: per-op enter, peak lba/cb, copy path, catalog, PASS
  *   greppable: "store_door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *
@@ -119,6 +120,18 @@ static i64 g_i64SoftLastRet;      /* last terminal return */
 static u64 g_u64SoftLastLba;      /* last R/W LBA (0 if none) */
 static u8  g_fSoftOnce;           /* one-shot after first call activity */
 
+/* Wave 14 exclusive soft deepen — complementary path tallies. */
+static u32 g_u32SoftOpEnter[32];  /* per-opcode enter; index = op */
+static u32 g_u32SoftUnknownOp;    /* NOSUPPORT terminals */
+static u32 g_u32SoftPeakCb;       /* peak R/W transfer size */
+static u64 g_u64SoftPeakLba;      /* peak LBA observed on R/W */
+static u32 g_u32SoftZeroCb;       /* R/W with cb == 0 */
+static u32 g_u32SoftAligned;      /* R/W sector-aligned cb */
+static u32 g_u32SoftUnaligned;    /* R/W unaligned cb */
+static u32 g_u32SoftCopyUser;     /* copy path used user_range_ok */
+static u32 g_u32SoftCopyKern;     /* copy path used kernel smoke */
+static u32 g_u32SoftInitCalls;    /* store_door_init entries */
+
 static void store_soft_inc(u32 *pCtr);
 static void store_soft_add64(u64 *pCtr, u64 u64N);
 static void store_soft_note_err(i64 i64R);
@@ -168,13 +181,14 @@ store_soft_note_err(i64 i64R)
         store_soft_inc(&g_u32SoftIo);
     } else if (i64R == GJ_ERR_NOSUPPORT) {
         store_soft_inc(&g_u32SoftNosupport);
+        store_soft_inc(&g_u32SoftUnknownOp);
     }
 }
 
 /**
- * Greppable soft store inventory (product / smoke). Wave 12 deepen.
+ * Greppable soft store inventory (product / smoke). Wave 12 base; Wave 14 deepen.
  *   store_door: soft inventory calls=… rw=… claims=… reclaims=…
- *        ring_calls=… owned=… map_va=0x… token=… wave=12
+ *        ring_calls=… owned=… map_va=0x… token=… wave=14
  *   store_door: soft own claim=… reclaim=… release=… release_free=…
  *        claim_inval=… claim_busy=… release_inval=…
  *   store_door: soft meta stats=… stats_inval=… stats_fault=… cap=…
@@ -211,7 +225,7 @@ store_soft_inventory_log(void)
     /* Grep: store_door: soft inventory */
     kprintf("store_door: soft inventory calls=%u rw=%u claims=%u "
             "reclaims=%u ring_calls=%u owned=%u map_va=0x%lx token=0x%x "
-            "logs=%u wave=12\n",
+            "logs=%u wave=14\n",
             g_u32Calls, g_u32DoorRw, g_u32Claims, g_u32Reclaims,
             g_u32RingCalls, u32Owned, (unsigned long)g_u64RingMapVa,
             g_u32OwnerToken, g_u32SoftLogs);
@@ -274,11 +288,61 @@ store_soft_inventory_log(void)
             u32Blk, u32Scsi, (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR,
             u32QFree);
 
+    /*
+     * Wave 14 exclusive deepen (complementary; never reshapes primary lines).
+     */
+    /* Grep: store_door: soft total */
+    kprintf("store_door: soft total ok=%u fail_like=%u calls=%u logs=%u "
+            "unknown=%u not_init=%u wave=14\n",
+            g_u32SoftOk,
+            g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy + g_u32SoftFault +
+                g_u32SoftIo + g_u32SoftNosupport,
+            g_u32Calls, g_u32SoftLogs, g_u32SoftUnknownOp, g_u32SoftNotInit);
+
+    /* Grep: store_door: soft ops */
+    /* Indices match GJ_STORE_OP_* (1=STATS .. 12=MAP_RING). */
+    kprintf("store_door: soft ops "
+            "stats=%u cap=%u read=%u write=%u claim=%u release=%u "
+            "queue=%u flush=%u export=%u kick=%u ring_state=%u map=%u "
+            "unknown=%u\n",
+            g_u32SoftOpEnter[1], g_u32SoftOpEnter[2], g_u32SoftOpEnter[3],
+            g_u32SoftOpEnter[4], g_u32SoftOpEnter[5], g_u32SoftOpEnter[6],
+            g_u32SoftOpEnter[7], g_u32SoftOpEnter[8], g_u32SoftOpEnter[9],
+            g_u32SoftOpEnter[10], g_u32SoftOpEnter[11], g_u32SoftOpEnter[12],
+            g_u32SoftUnknownOp);
+
+    /* Grep: store_door: soft peak */
+    kprintf("store_door: soft peak cb=%u lba=0x%lx read_b=%lu write_b=%lu "
+            "zero_cb=%u aligned=%u unaligned=%u\n",
+            g_u32SoftPeakCb, (unsigned long)g_u64SoftPeakLba,
+            (unsigned long)g_u64SoftReadBytes,
+            (unsigned long)g_u64SoftWriteBytes, g_u32SoftZeroCb,
+            g_u32SoftAligned, g_u32SoftUnaligned);
+
+    /* Grep: store_door: soft copy */
+    kprintf("store_door: soft copy user=%u kern=%u inits=%u\n",
+            g_u32SoftCopyUser, g_u32SoftCopyKern, g_u32SoftInitCalls);
+
+    /* Grep: store_door: soft catalog */
+    kprintf("store_door: soft catalog xfer_max=%u sector=%u "
+            "ops=claim,release,stats,cap,read,write,queue,flush,"
+            "export,map,kick,ring_state wave=14\n",
+            (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR);
+
     /* Grep: store_door: soft path */
     kprintf("store_door: soft path claim=storaged rw=blk|scsi "
             "ring=export|map|kick|state reclaim=idempotent "
             "map_remap=soft_reclaim flush=soft_ok "
-            "(soft inventory; not bar3)\n");
+            "wave=14 (soft inventory; not bar3)\n");
+
+    /*
+     * Soft lamp: init surface always soft-pass after store_door_init.
+     * Grep: store_door: soft inventory PASS | store_door: soft PASS
+     */
+    kprintf("store_door: soft inventory PASS calls=%u logs=%u blk=%u "
+            "scsi=%u wave=14\n",
+            g_u32Calls, g_u32SoftLogs, u32Blk, u32Scsi);
+    kprintf("store_door: soft PASS calls=%u wave=14\n", g_u32Calls);
 }
 
 /**
@@ -309,11 +373,13 @@ store_copy_out(u64 u64Dst, const void *pSrc, u32 cb)
         return GJ_ERR_INVAL;
     }
     if (user_range_ok(u64Dst, cb)) {
+        store_soft_inc(&g_u32SoftCopyUser);
         if (copy_to_user(u64Dst, pSrc, cb) != GJ_OK) {
             return GJ_ERR_FAULT;
         }
     } else {
         /* Kernel-smoke path: destination is a trusted HHDM/static buffer. */
+        store_soft_inc(&g_u32SoftCopyKern);
         memcpy((void *)(gj_vaddr_t)u64Dst, pSrc, cb);
     }
     return 0;
@@ -329,10 +395,12 @@ store_copy_in(void *pDst, u64 u64Src, u32 cb)
         return GJ_ERR_INVAL;
     }
     if (user_range_ok(u64Src, cb)) {
+        store_soft_inc(&g_u32SoftCopyUser);
         if (copy_from_user(pDst, u64Src, cb) != GJ_OK) {
             return GJ_ERR_FAULT;
         }
     } else {
+        store_soft_inc(&g_u32SoftCopyKern);
         memcpy(pDst, (const void *)(gj_vaddr_t)u64Src, cb);
     }
     return 0;
@@ -406,10 +474,27 @@ store_door_init(void)
     g_i64SoftLastRet = 0;
     g_u64SoftLastLba = 0;
     g_fSoftOnce = 0;
+    {
+        u32 iOp;
+
+        for (iOp = 0; iOp < 32u; iOp++) {
+            g_u32SoftOpEnter[iOp] = 0;
+        }
+    }
+    g_u32SoftUnknownOp = 0;
+    g_u32SoftPeakCb = 0;
+    g_u64SoftPeakLba = 0;
+    g_u32SoftZeroCb = 0;
+    g_u32SoftAligned = 0;
+    g_u32SoftUnaligned = 0;
+    g_u32SoftCopyUser = 0;
+    g_u32SoftCopyKern = 0;
+    /* g_u32SoftInitCalls is cumulative across re-init for diagnostics. */
+    store_soft_inc(&g_u32SoftInitCalls);
     /* Backends may probe later; report readiness snapshot for bring-up. */
     kprintf("store_door: init xfer_max=%u blk=%d scsi=%d\n", STORE_XFER_MAX,
             virtio_blk_ready() ? 1 : 0, scsi_mid_ready() ? 1 : 0);
-    /* Grep: store_door: soft (baseline inventory after init; wave=12) */
+    /* Grep: store_door: soft (baseline inventory after init; wave=14) */
     store_soft_inventory_log();
 }
 
@@ -466,6 +551,11 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
     g_u32Calls++;
     g_u32SoftLastOp = u32Op;
+    if (u32Op < 32u) {
+        store_soft_inc(&g_u32SoftOpEnter[u32Op]);
+    } else {
+        store_soft_inc(&g_u32SoftUnknownOp);
+    }
 
     switch (u32Op) {
     case GJ_STORE_OP_CLAIM:
@@ -709,6 +799,20 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         if (cb > GJ_VIRTIO_BLK_SECTOR) {
             store_soft_inc(&g_u32SoftRwMulti);
+        }
+        /* Wave 14: peak / alignment soft samples on successful R/W. */
+        if (cb == 0) {
+            store_soft_inc(&g_u32SoftZeroCb);
+        } else if ((cb % GJ_VIRTIO_BLK_SECTOR) == 0) {
+            store_soft_inc(&g_u32SoftAligned);
+        } else {
+            store_soft_inc(&g_u32SoftUnaligned);
+        }
+        if (cb > g_u32SoftPeakCb) {
+            g_u32SoftPeakCb = cb;
+        }
+        if (u64Lba > g_u64SoftPeakLba) {
+            g_u64SoftPeakLba = u64Lba;
         }
         i64Ret = (i64)cb;
         break;

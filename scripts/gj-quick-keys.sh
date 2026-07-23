@@ -16,8 +16,9 @@
 #   serial: soft verify PASS|FAIL|idle   (x86 COM1; serial.c)
 #   aarch64: kmain soft PASS             (kmain phase summary)
 #   linux: nr class soft PASS|PARTIAL|NONE  (linux_dispatch NR table)
-# Soft companions (Wave 13 exclusive — info only, never hard-fail):
-#   continuum high-water makefile_max=15500 when greppable (soft graph ≠ bar3)
+# Soft companions (Wave 14 exclusive — info only, never hard-fail):
+#   continuum high-water makefile_max=15600 when greppable (soft graph ≠ bar3)
+#   (scan is source of truth; do not claim greppable until Makefile wired)
 #   bar3 OPEN stamp (client launch + Deck Top 50 still NOT-TRIED)
 #
 # Exit 0 if all presence keys hit; 1 if any missing (soft info reported only).
@@ -113,13 +114,14 @@ info_check "serial soft verify" 'serial: soft verify'
 info_check "kmain soft"         'aarch64: kmain soft PASS|kmain soft PASS'
 info_check "nr class soft"      'linux: nr class soft'
 
-# --- Wave 13 soft companions (never increments miss; hard keys stay hard) ---
-# Continuum high-water makefile_max=15500 when greppable (soft graph only).
+# --- Wave 14 soft companions (never increments miss; hard keys stay hard) ---
+# Continuum high-water makefile_max=15600 when greppable (soft graph only).
+# Scan is source of truth — stamp greppable only when N>=15600 (Makefile wire).
 # Bar3 open stamp: media READY ≠ client run ≠ Top-50; always OPEN honesty.
-echo "  --- continuum / bar3 soft (wave 13) ---"
-info_check "makefile_max=15500 (log)" 'makefile_max=15500'
+echo "  --- continuum / bar3 soft (wave 14) ---"
+info_check "makefile_max=15600 (log)" 'makefile_max=15600'
 info_check "ubar3open / bar3=0 (log)" 'ubar3open|bar3=0|bar3:[[:space:]]*OPEN|bar3 OPEN'
-# Host continuum scan: stamp makefile_max=15500 greppable only when N>=15500.
+# Host continuum scan: stamp makefile_max=15600 greppable only when N>=15600.
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
   mx_line=${mx_line//$'\r'/}
@@ -131,15 +133,16 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   fi
   if [[ -n "${_mx_n:-}" ]]; then
     echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
-    if [[ "$_mx_n" -ge 15500 ]]; then
-      echo "  info: continuum high-water  makefile_max=15500 greppable  (soft graph ≠ bar3)"
+    if [[ "$_mx_n" -ge 15600 ]]; then
+      echo "  info: continuum high-water  makefile_max=15600 greppable  (soft graph ≠ bar3)"
     else
-      echo "  info: continuum high-water  makefile_max=15500  (absent; tree max=$_mx_n)"
+      echo "  info: continuum high-water  makefile_max=15600  (absent; tree max=$_mx_n; scan=truth)"
     fi
   else
     echo "  info: continuum high-water  makefile_max=(unparsed)"
   fi
   echo "  info: continuum honesty  soft graph wire ≠ bar3 client / Top50 titles"
+  echo "  info: continuum wave 14  target decade M=15600 (CREATE-ONLY soft; parent paste wires)"
 else
   echo "  info: continuum makefile_max=(helper missing)"
 fi

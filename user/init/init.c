@@ -29,9 +29,10 @@
  *   init: soft rlimit ok=… miss=…
  *   init: soft stats areas=… path=… mmap=… ipc=… spawn=… door=… memobj=…
  *                 link=… id=… clock=… fd=… rlim=…
- *   init: soft deepen wave=11 areas=…
+ *   init: soft path soft=1 bar3=0 multi_server=0 confine=0 wave=14
+ *   init: soft deepen wave=14 areas=…
  *
- * Soft deepen Wave 11 (never hard-fails boot):
+ * Soft deepen Wave 14 (never hard-fails boot; exclusive soft inventory):
  *   - libgj string/memory helpers (strcmp/memcpy/itoa/memmove/strstr/…)
  *   - CLOCK_REALTIME + clock_getres + clock_nanosleep(0)
  *   - fstat / arch_prctl GET_FS/GS / futex WAKE / brk grow query
@@ -43,7 +44,8 @@
  *   - native doors: platform/notify/console/qos + store/net/vfs/session
  *     STATS (no CLAIM — live daemons own claim tokens)
  *   - scsi READY/STATS/INQUIRY/READ_CAP + HDA STATS (no stream open)
- *   - named memobj create+map + soft second name probe
+ *   - named memobj create+map + soft second/third name probe
+ * Honesty: soft inventory ≠ product multi-server confine (multi_server=0).
  *
  * Parent owns Makefile target + kernel/proc/init_embed.S (.incbin).
  */
@@ -144,7 +146,8 @@ soft_note(long i64R, unsigned *pOk, unsigned *pMiss)
 /*
  * Emit greppable soft inventory lines (prefix "init: soft ").
  * Pure observation — always soft; does not gate abi PASS.
- * Wave 11: ids/clocks/fds/rlimit lines + deepen wave stamp + wider stats.
+ * Wave 14: ids/clocks/fds/rlimit + path honesty + deepen wave stamp.
+ * Honesty: soft ≠ product multi-server confine.
  */
 static void
 soft_inventory_log(void)
@@ -207,28 +210,28 @@ soft_inventory_log(void)
                       (unsigned long)g_cSoftLinkMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft ids (Wave 11) */
+    /* Grep: init: soft ids (Wave 14) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft ids ok=%u miss=%u\n",
                       (unsigned long)g_cSoftIdOk,
                       (unsigned long)g_cSoftIdMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft clocks (Wave 11) */
+    /* Grep: init: soft clocks (Wave 14) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft clocks ok=%u miss=%u\n",
                       (unsigned long)g_cSoftClockOk,
                       (unsigned long)g_cSoftClockMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft fds (Wave 11) */
+    /* Grep: init: soft fds (Wave 14) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft fds ok=%u miss=%u\n",
                       (unsigned long)g_cSoftFdOk,
                       (unsigned long)g_cSoftFdMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft rlimit (Wave 11) */
+    /* Grep: init: soft rlimit (Wave 14) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft rlimit ok=%u miss=%u\n",
                       (unsigned long)g_cSoftRlimOk,
@@ -254,9 +257,16 @@ soft_inventory_log(void)
                       (unsigned long)g_cSoftRlimOk);
     gj_puts(aLine);
 
-    /* Grep: init: soft deepen wave (Wave 11 stamp) */
+    /*
+     * Grep: init: soft path (Wave 14 honesty).
+     * Soft inventory only — not multi-server confine product.
+     */
+    gj_puts("init: soft path soft=1 bar3=0 multi_server=0 confine=0 "
+            "wave=14\n");
+
+    /* Grep: init: soft deepen wave (Wave 14 stamp) */
     (void)gj_snprintf(aLine, sizeof(aLine),
-                      "init: soft deepen wave=11 areas=%u\n",
+                      "init: soft deepen wave=14 areas=%u\n",
                       (unsigned long)g_cSoftAreas);
     gj_puts(aLine);
 }

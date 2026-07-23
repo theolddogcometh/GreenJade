@@ -11,7 +11,7 @@
  *   virtio-net: features
  *   virtio-net: multi-buf
  *
- * Soft inventory (Wave 12 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
  * greppable: "virtio-net: soft …"
  *   virtio-net: soft inventory …
  *   virtio-net: soft multi-buf …
@@ -23,6 +23,15 @@
  *   virtio-net: soft mac …
  *   virtio-net: soft path …
  *   virtio-net: soft ring …
+ *   virtio-net: soft last …
+ *   virtio-net: soft errors …
+ *   virtio-net: soft api …
+ *   virtio-net: soft refill …
+ *   virtio-net: soft hdr …
+ *   virtio-net: soft bytes …
+ *   virtio-net: soft empty …
+ *   virtio-net: soft link …
+ *   virtio-net: soft deepen …
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *   virtio-net: soft inventory PASS|NODEV|PARTIAL
  */
@@ -83,13 +92,16 @@ static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
 /* Bounce pool for userspace AVAIL_PUSH (ring programming path) */
 #define GJ_NET_BOUNCE_N 8u
 #define GJ_NET_BOUNCE_SZ 2048u
+/* Wave 14 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_NET_SOFT_DEEPEN_WAVE  14u
+#define VIRTIO_NET_SOFT_DEEPEN_AREAS 18u
 static u8                    g_aBounce[GJ_NET_BOUNCE_N][GJ_NET_BOUNCE_SZ]
     __attribute__((aligned(16)));
 static u8                    g_aBounceUsed[GJ_NET_BOUNCE_N];
 static u8                    g_aMac[6];
 static int                   g_fHaveMac;
 
-/* Wave 12 soft inventory telemetry (never hard-gates product TX/RX). */
+/* Wave 14 soft inventory telemetry (never hard-gates product TX/RX). */
 static u32 g_u32SoftLogN;     /* inventory emissions */
 static int g_fSoftOnce;       /* first post-activity inventory emitted */
 static u32 g_u32MapQ;         /* map_q_user successes */
@@ -98,6 +110,24 @@ static u32 g_u32KickApi;      /* kick_q API calls (distinct from desc kicks) */
 static u32 g_u32MapDma;       /* map_dma_user successes */
 static u16 g_u16RxFreeMin;    /* RX free-desc watermark (0xffff = never) */
 static u16 g_u16TxFreeMin;    /* TX free-desc watermark (0xffff = never) */
+/* Wave 14 deepen: API enter, miss, sticky last, refill. */
+static u32 g_u32TxApi;        /* virtio_net_tx entries */
+static u32 g_u32RxApi;        /* virtio_net_rx entries */
+static u32 g_u32StatsApi;     /* virtio_net_stats entries */
+static u32 g_u32ExportFail;   /* export_q soft miss */
+static u32 g_u32MapFail;      /* map_q_user soft miss */
+static u32 g_u32MapDmaFail;   /* map_dma_user soft miss */
+static u32 g_u32BounceFail;   /* bounce_alloc miss */
+static u32 g_u32RefillOps;    /* rx_post_all invocations with posts */
+static u32 g_u32RefillSlots;  /* slots newly posted across refills */
+static u32 g_u32LastTxLen;    /* sticky last TX frame length */
+static u32 g_u32LastRxLen;    /* sticky last RX payload length */
+static u32 g_u32LastNumBuf;   /* sticky last RX num_buffers */
+static u32 g_u32ProbeOk;      /* probe DRIVER_OK */
+static u32 g_u32ProbeNodev;   /* probe no device */
+static u32 g_u32ProbeFail;    /* probe pci/nego/q fail */
+static u32 g_u32ReadyQuery;   /* virtio_net_ready samples */
+static const char *g_szLastVia; /* sticky last inventory via */
 
 static void virtio_net_soft_inventory(const char *szVia);
 static void net_soft_maybe_once(void);
@@ -218,7 +248,7 @@ net_q_note_free(void)
 }
 
 /**
- * Greppable Wave 12 soft inventory dump (product / smoke).
+ * Greppable Wave 14 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-net: soft …" — never hard-gates; kprintf only.
  *
  *   virtio-net: soft inventory  — ready + PCI + geometry + free watermarks
@@ -231,6 +261,15 @@ net_q_note_free(void)
  *   virtio-net: soft mac        — soft MAC presence + octets
  *   virtio-net: soft path       — product surface catalog (claim honesty)
  *   virtio-net: soft ring       — export/map/kick/dma soft tallies
+ *   virtio-net: soft last       — sticky last TX/RX lengths (Wave 14)
+ *   virtio-net: soft errors     — fail/drop/miss breakdown (Wave 14)
+ *   virtio-net: soft api        — public API enter tallies (Wave 14)
+ *   virtio-net: soft refill     — RX pool refill tallies (Wave 14)
+ *   virtio-net: soft hdr        — virtio-net hdr geometry (Wave 14)
+ *   virtio-net: soft bytes      — TX/RX byte totals (Wave 14)
+ *   virtio-net: soft empty      — RX empty / soft miss (Wave 14)
+ *   virtio-net: soft link       — MAC+STATUS feature lamps (Wave 14)
+ *   virtio-net: soft deepen     — wave=14 areas stamp
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *
  * greppable: virtio-net: soft
@@ -251,12 +290,17 @@ virtio_net_soft_inventory(const char *szVia)
     u16 u16TxFreeMin;
     u8 u8Bus = 0;
     u8 u8Slot = 0;
+    u8 u8Func = 0;
+    u8 u8Modern = 0;
     unsigned fMac;
     unsigned fStatus;
     unsigned fMrg;
     unsigned fV1;
+    u32 u32Ready;
+    u32 u32BytesTot;
 
     szViaSafe = (szVia != NULL) ? szVia : "path";
+    g_szLastVia = szViaSafe;
 
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
@@ -284,12 +328,16 @@ virtio_net_soft_inventory(const char *szVia)
     if (g_pNet != NULL) {
         u8Bus = g_pNet->u8Bus;
         u8Slot = g_pNet->u8Slot;
+        u8Func = g_pNet->u8Func;
+        u8Modern = g_pNet->fModern;
     }
 
     fMac = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_MAC) != 0);
     fStatus = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_STATUS) != 0);
     fMrg = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_MRG_RXBUF) != 0);
     fV1 = (unsigned)((g_Stats.u64Features & GJ_VIRTIO_F_VERSION_1) != 0);
+    u32Ready = g_fReady ? 1u : 0u;
+    u32BytesTot = (u32)(g_Stats.u64TxBytes + g_Stats.u64RxBytes);
 
     /*
      * Soft verdict (inventory only; TX/RX path unchanged):
@@ -312,37 +360,42 @@ virtio_net_soft_inventory(const char *szVia)
     kprintf("virtio-net: soft inventory via=%s ready=%u bus=%x slot=%x "
             "rx_slots=%u rx_sz=%u bounce_n=%u bounce_sz=%u "
             "tx_chain=2desc mac_have=%u rx_free=%u rx_free_min=%u "
-            "tx_free=%u tx_free_min=%u log_n=%u\n",
-            szViaSafe, g_fReady ? 1u : 0u, (unsigned)u8Bus, (unsigned)u8Slot,
+            "tx_free=%u tx_free_min=%u log_n=%u wave=%u areas=%u\n",
+            szViaSafe, u32Ready, (unsigned)u8Bus, (unsigned)u8Slot,
             (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)GJ_VIRTIO_NET_RX_SZ,
             (unsigned)GJ_NET_BOUNCE_N, (unsigned)GJ_NET_BOUNCE_SZ,
             (unsigned)g_fHaveMac, (unsigned)u16RxFree, (unsigned)u16RxFreeMin,
-            (unsigned)u16TxFree, (unsigned)u16TxFreeMin, g_u32SoftLogN);
+            (unsigned)u16TxFree, (unsigned)u16TxFreeMin, g_u32SoftLogN,
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE,
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_AREAS);
 
     /* Grep: virtio-net: soft multi-buf */
     kprintf("virtio-net: soft multi-buf rx_n=%u posted=%u live=%u "
-            "post_fail=%u merge=%u mrg_feat=%u refill=1 pool_sz=%u\n",
+            "post_fail=%u merge=%u mrg_feat=%u refill=1 pool_sz=%u "
+            "refill_ops=%u refill_slots=%u\n",
             (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)g_Stats.u32RxPosted,
             (unsigned)cLive, (unsigned)g_Stats.u32RxPostFail,
             (unsigned)g_Stats.u32RxMerge, fMrg,
-            (unsigned)(GJ_VIRTIO_NET_RX_N * GJ_VIRTIO_NET_RX_SZ));
+            (unsigned)(GJ_VIRTIO_NET_RX_N * GJ_VIRTIO_NET_RX_SZ),
+            g_u32RefillOps, g_u32RefillSlots);
 
     /* Grep: virtio-net: soft tx-chain */
     kprintf("virtio-net: soft tx-chain prefer=2desc fallback=1desc "
             "multi=%u single=%u fail=%u timeout=%u hdr_sz=%u "
-            "max_payload=1514\n",
+            "max_payload=1514 last_tx=%u\n",
             (unsigned)g_Stats.u32TxMulti, (unsigned)g_Stats.u32TxSingle,
             (unsigned)g_Stats.u32TxFail, (unsigned)g_Stats.u32TxTimeout,
-            (unsigned)sizeof(struct virtio_net_hdr));
+            (unsigned)sizeof(struct virtio_net_hdr), g_u32LastTxLen);
 
     /* Grep: virtio-net: soft bounce */
     kprintf("virtio-net: soft bounce slots=%u sz=%u used=%u free=%u "
-            "avail_push=%u user_ring=%u map_dma=%u\n",
+            "avail_push=%u user_ring=%u map_dma=%u bounce_fail=%u\n",
             (unsigned)GJ_NET_BOUNCE_N, (unsigned)GJ_NET_BOUNCE_SZ,
             (unsigned)cBounceUsed,
             (unsigned)(GJ_NET_BOUNCE_N - cBounceUsed),
             (unsigned)g_Stats.u32AvailPushes,
-            (unsigned)g_Stats.u32UserRingPushes, g_u32MapDma);
+            (unsigned)g_Stats.u32UserRingPushes, g_u32MapDma,
+            g_u32BounceFail);
 
     /* Grep: virtio-net: soft queue */
     kprintf("virtio-net: soft queue rx_size=%u rx_free=%u rx_free_min=%u "
@@ -358,10 +411,12 @@ virtio_net_soft_inventory(const char *szVia)
 
     /* Grep: virtio-net: soft features */
     kprintf("virtio-net: soft features guest=0x%lx dev=0x%lx "
-            "mac=%u status=%u mrg=%u v1=%u ladder=mac+status+mrg|mac+status|v1\n",
+            "mac=%u status=%u mrg=%u v1=%u ladder=mac+status+mrg|mac+status|v1 "
+            "wave=%u\n",
             (unsigned long)g_Stats.u64Features,
             (unsigned long)g_Stats.u64FeaturesDev,
-            fMac, fStatus, fMrg, fV1);
+            fMac, fStatus, fMrg, fV1,
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
 
     /* Grep: virtio-net: soft stats */
     kprintf("virtio-net: soft stats tx=%u rx=%u tx_bytes=%lu rx_bytes=%lu "
@@ -390,32 +445,97 @@ virtio_net_soft_inventory(const char *szVia)
     kprintf("virtio-net: soft path claim=%u tx=1 rx=1 multi_buf=1 "
             "tx_chain=1 bounce=1 export_q=1 map_q=1 map_dma=1 kick_q=1 "
             "avail_push=1 user_ring=1 used_reap=1 q_free=1 stats=1 "
-            "gso=0 csum_offload=0 mq=0 ctrl_vq=0\n",
-            g_fReady ? 1u : 0u);
+            "gso=0 csum_offload=0 mq=0 ctrl_vq=0 wave=%u\n",
+            u32Ready, (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
 
     /* Grep: virtio-net: soft ring */
     kprintf("virtio-net: soft ring export=%u map=%u map_dma=%u kick_api=%u "
             "desc_kicks=%u avail_push=%u user_ring=%u "
-            "rx_pa_desc=0x%lx tx_pa_desc=0x%lx\n",
+            "rx_pa_desc=0x%lx tx_pa_desc=0x%lx "
+            "export_fail=%u map_fail=%u map_dma_fail=%u\n",
             g_u32ExportQ, g_u32MapQ, g_u32MapDma, g_u32KickApi,
             (unsigned)g_Stats.u32Kicks,
             (unsigned)g_Stats.u32AvailPushes,
             (unsigned)g_Stats.u32UserRingPushes,
             (unsigned long)(g_fReady ? (u64)g_qRx.paDesc : 0ull),
-            (unsigned long)(g_fReady ? (u64)g_qTx.paDesc : 0ull));
+            (unsigned long)(g_fReady ? (u64)g_qTx.paDesc : 0ull),
+            g_u32ExportFail, g_u32MapFail, g_u32MapDmaFail);
+
+    /* Grep: virtio-net: soft last (Wave 14) */
+    kprintf("virtio-net: soft last tx_len=%u rx_len=%u num_buf=%u "
+            "via=%s once=%u\n",
+            g_u32LastTxLen, g_u32LastRxLen, g_u32LastNumBuf, szViaSafe,
+            g_fSoftOnce ? 1u : 0u);
+
+    /* Grep: virtio-net: soft errors (Wave 14) */
+    kprintf("virtio-net: soft errors tx_fail=%u tx_timeout=%u drop=%u "
+            "empty=%u post_fail=%u bounce_fail=%u export_fail=%u "
+            "map_fail=%u map_dma_fail=%u probe_fail=%u\n",
+            (unsigned)g_Stats.u32TxFail, (unsigned)g_Stats.u32TxTimeout,
+            (unsigned)g_Stats.u32RxDrop, (unsigned)g_Stats.u32RxEmpty,
+            (unsigned)g_Stats.u32RxPostFail, g_u32BounceFail, g_u32ExportFail,
+            g_u32MapFail, g_u32MapDmaFail, g_u32ProbeFail);
+
+    /* Grep: virtio-net: soft api (Wave 14) */
+    kprintf("virtio-net: soft api tx=%u rx=%u stats=%u export=%u map=%u "
+            "map_dma=%u kick=%u ready_q=%u\n",
+            g_u32TxApi, g_u32RxApi, g_u32StatsApi, g_u32ExportQ, g_u32MapQ,
+            g_u32MapDma, g_u32KickApi, g_u32ReadyQuery);
+
+    /* Grep: virtio-net: soft refill (Wave 14) */
+    kprintf("virtio-net: soft refill ops=%u slots=%u posted=%u live=%u "
+            "post_fail=%u pool_n=%u\n",
+            g_u32RefillOps, g_u32RefillSlots, (unsigned)g_Stats.u32RxPosted,
+            (unsigned)cLive, (unsigned)g_Stats.u32RxPostFail,
+            (unsigned)GJ_VIRTIO_NET_RX_N);
+
+    /* Grep: virtio-net: soft hdr (Wave 14) */
+    kprintf("virtio-net: soft hdr sz=%u flags_off=0 gso_off=1 "
+            "num_buffers_off=10 v1=%u mrg=%u last_num_buf=%u\n",
+            (unsigned)sizeof(struct virtio_net_hdr), fV1, fMrg,
+            g_u32LastNumBuf);
+
+    /* Grep: virtio-net: soft bytes (Wave 14) */
+    kprintf("virtio-net: soft bytes tx=%lu rx=%lu total=%u "
+            "tx_count=%u rx_count=%u\n",
+            (unsigned long)g_Stats.u64TxBytes,
+            (unsigned long)g_Stats.u64RxBytes, u32BytesTot,
+            (unsigned)g_Stats.u32TxCount, (unsigned)g_Stats.u32RxCount);
+
+    /* Grep: virtio-net: soft empty (Wave 14) */
+    kprintf("virtio-net: soft empty rx_empty=%u tx_timeout=%u "
+            "soft_miss=empty+timeout\n",
+            (unsigned)g_Stats.u32RxEmpty, (unsigned)g_Stats.u32TxTimeout);
+
+    /* Grep: virtio-net: soft link (Wave 14) */
+    kprintf("virtio-net: soft link ready=%u modern=%u mac_have=%u "
+            "mac_feat=%u status_feat=%u bus=%x slot=%x func=%x "
+            "probe_ok=%u probe_nodev=%u\n",
+            u32Ready, (unsigned)u8Modern, (unsigned)g_fHaveMac, fMac, fStatus,
+            (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
+            g_u32ProbeOk, g_u32ProbeNodev);
+
+    /* Grep: virtio-net: soft deepen (Wave 14 stamp) */
+    kprintf("virtio-net: soft deepen wave=%u areas=%u ready=%u tx=%u "
+            "rx=%u log_n=%u\n",
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE,
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_AREAS, u32Ready,
+            (unsigned)g_Stats.u32TxCount, (unsigned)g_Stats.u32RxCount,
+            g_u32SoftLogN);
 
     /* Grep: virtio-net: soft PASS | NODEV | PARTIAL */
     kprintf("virtio-net: soft %s via=%s ready=%u tx=%u rx=%u "
-            "tx_fail=%u drop=%u log_n=%u\n",
-            szVerdict, szViaSafe, g_fReady ? 1u : 0u,
+            "tx_fail=%u drop=%u log_n=%u wave=%u\n",
+            szVerdict, szViaSafe, u32Ready,
             (unsigned)g_Stats.u32TxCount, (unsigned)g_Stats.u32RxCount,
             (unsigned)g_Stats.u32TxFail, (unsigned)g_Stats.u32RxDrop,
-            g_u32SoftLogN);
+            g_u32SoftLogN, (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
 
     /* Grep: virtio-net: soft inventory PASS|NODEV|PARTIAL */
-    kprintf("virtio-net: soft inventory %s via=%s logs=%u "
+    kprintf("virtio-net: soft inventory %s via=%s logs=%u wave=%u "
             "(soft inventory only; not bar3)\n",
-            szVerdict, szViaSafe, g_u32SoftLogN);
+            szVerdict, szViaSafe, g_u32SoftLogN,
+            (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
 }
 
 /**
@@ -484,6 +604,14 @@ rx_post_all(void)
             c++;
         }
     }
+    if (c > 0u) {
+        g_u32RefillOps++;
+        if (g_u32RefillSlots <= 0xffffffffu - c) {
+            g_u32RefillSlots += c;
+        } else {
+            g_u32RefillSlots = 0xffffffffu;
+        }
+    }
     return c;
 }
 
@@ -543,6 +671,23 @@ virtio_net_probe(void)
     g_u32MapDma = 0;
     g_u16RxFreeMin = 0xffffu;
     g_u16TxFreeMin = 0xffffu;
+    g_u32TxApi = 0;
+    g_u32RxApi = 0;
+    g_u32StatsApi = 0;
+    g_u32ExportFail = 0;
+    g_u32MapFail = 0;
+    g_u32MapDmaFail = 0;
+    g_u32BounceFail = 0;
+    g_u32RefillOps = 0;
+    g_u32RefillSlots = 0;
+    g_u32LastTxLen = 0;
+    g_u32LastRxLen = 0;
+    g_u32LastNumBuf = 0;
+    g_u32ProbeOk = 0;
+    g_u32ProbeNodev = 0;
+    g_u32ProbeFail = 0;
+    g_u32ReadyQuery = 0;
+    g_szLastVia = NULL;
 
     c = virtio_dev_count();
     /* kind==1, transitional 0x1000, or modern net device ID */
@@ -560,7 +705,8 @@ virtio_net_probe(void)
     }
     if (g_pNet == NULL) {
         kprintf("virtio-net: no device\n");
-        /* Grep: virtio-net: soft … NODEV (Wave 12 soft inventory). */
+        g_u32ProbeNodev++;
+        /* Grep: virtio-net: soft … NODEV (Wave 14 soft inventory). */
         virtio_net_soft_inventory("nodev");
         return -1;
     }
@@ -568,6 +714,7 @@ virtio_net_probe(void)
     if (st != GJ_OK || g_pNet->pCommon == NULL) {
         kprintf("virtio-net: setup failed %d\n", (int)st);
         g_pNet = NULL;
+        g_u32ProbeFail++;
         virtio_net_soft_inventory("pci_fail");
         return -1;
     }
@@ -587,6 +734,7 @@ virtio_net_probe(void)
             if (st != GJ_OK) {
                 kprintf("virtio-net: negotiate failed %d\n", (int)st);
                 g_pNet = NULL;
+                g_u32ProbeFail++;
                 virtio_net_soft_inventory("negotiate_fail");
                 return -1;
             }
@@ -604,6 +752,7 @@ virtio_net_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-net: rx queue failed %d\n", (int)st);
         g_pNet = NULL;
+        g_u32ProbeFail++;
         virtio_net_soft_inventory("rx_q_fail");
         return -1;
     }
@@ -611,6 +760,7 @@ virtio_net_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-net: tx queue failed %d\n", (int)st);
         g_pNet = NULL;
+        g_u32ProbeFail++;
         virtio_net_soft_inventory("tx_q_fail");
         return -1;
     }
@@ -628,6 +778,7 @@ virtio_net_probe(void)
     virtio_set_status(g_pNet, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                    GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK));
     g_fReady = 1;
+    g_u32ProbeOk++;
     g_u16RxFreeMin = virtio_q_num_free(&g_qRx);
     g_u16TxFreeMin = virtio_q_num_free(&g_qTx);
     if (g_fHaveMac) {
@@ -641,7 +792,7 @@ virtio_net_probe(void)
                 (unsigned)g_pNet->u8Bus, (unsigned)g_pNet->u8Slot);
     }
     /*
-     * Wave 12 soft inventory rollup (prefix-stable "virtio-net: soft …").
+     * Wave 14 soft inventory rollup (prefix-stable "virtio-net: soft …").
      * Post-probe PARTIAL until first product TX/RX frames complete.
      */
     virtio_net_soft_inventory("probe");
@@ -651,6 +802,7 @@ virtio_net_probe(void)
 int
 virtio_net_ready(void)
 {
+    g_u32ReadyQuery++;
     return g_fReady;
 }
 
@@ -667,6 +819,7 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
     i32 i32Done;
     int fMulti = 0;
 
+    g_u32TxApi++;
     if (!g_fReady || pFrame == NULL || cbLen == 0 || cbLen > 1514) {
         if (g_fReady) {
             g_Stats.u32TxFail++;
@@ -674,6 +827,7 @@ virtio_net_tx(const void *pFrame, u32 cbLen)
         }
         return -1;
     }
+    g_u32LastTxLen = cbLen;
 
     /* Reap completed TX to free multi-desc chains */
     {
@@ -757,6 +911,7 @@ virtio_net_rx(void *pOut, u32 cbMax)
     u8 *pSlot;
     u32 iMerge;
 
+    g_u32RxApi++;
     if (!g_fReady || pOut == NULL) {
         return -1;
     }
@@ -859,9 +1014,11 @@ virtio_net_rx(void *pOut, u32 cbMax)
         g_Stats.u32RxMerge++;
     }
 
+    g_u32LastNumBuf = (u32)u16NumBuf;
     if (cbCopied > 0) {
         g_Stats.u32RxCount++;
         g_Stats.u64RxBytes += (u64)cbCopied;
+        g_u32LastRxLen = cbCopied;
     }
 
     /* Refill multi-buffer RX pool */
@@ -936,6 +1093,7 @@ virtio_net_features_dev(void)
 int
 virtio_net_stats(struct gj_virtio_net_stats *pOut)
 {
+    g_u32StatsApi++;
     if (pOut == NULL) {
         return -1;
     }
@@ -955,10 +1113,12 @@ virtio_net_export_q(u16 u16Which, struct gj_virtq_export *pOut)
     struct gj_virtq *pQ;
 
     if (!g_fReady || pOut == NULL) {
+        g_u32ExportFail++;
         return -1;
     }
     pQ = (u16Which == 0) ? &g_qRx : &g_qTx;
     if (u16Which > 1 || pQ->pDesc == NULL) {
+        g_u32ExportFail++;
         return -1;
     }
     memset(pOut, 0, sizeof(*pOut));
@@ -1005,27 +1165,33 @@ virtio_net_map_q_user(u16 u16Which, u64 u64VaBase, struct gj_virtq_export *pOut)
     struct gj_virtq_export ex;
 
     if (virtio_net_export_q(u16Which, &ex) != 0) {
+        /* export_q already tallied export_fail; map miss is distinct. */
+        g_u32MapFail++;
         return -1;
     }
     if (u64VaBase == 0 || (u64VaBase & 0xfffull) != 0) {
+        g_u32MapFail++;
         return -1;
     }
     /* One page each: rings live on dedicated PMM pages (virtio_q_setup). */
     if (vmm_map_page((gj_vaddr_t)u64VaBase, (gj_paddr_t)ex.u64PaDesc,
                      GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) !=
         GJ_OK) {
+        g_u32MapFail++;
         return -1;
     }
     if (vmm_map_page((gj_vaddr_t)(u64VaBase + GJ_PAGE_SIZE),
                      (gj_paddr_t)ex.u64PaAvail,
                      GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) !=
         GJ_OK) {
+        g_u32MapFail++;
         return -1;
     }
     if (vmm_map_page((gj_vaddr_t)(u64VaBase + 2u * GJ_PAGE_SIZE),
                      (gj_paddr_t)ex.u64PaUsed,
                      GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE | GJ_VMM_PROT_USER) !=
         GJ_OK) {
+        g_u32MapFail++;
         return -1;
     }
     ex.u32OffDesc = 0;
@@ -1058,6 +1224,7 @@ virtio_net_map_dma_user(u64 u64VaBase, struct gj_virtq_dma_export *pOut)
     gj_paddr_t pa;
 
     if (!g_fReady || u64VaBase == 0 || (u64VaBase & 0xfffull) != 0) {
+        g_u32MapDmaFail++;
         return -1;
     }
     nPages = (GJ_NET_BOUNCE_SZ + GJ_PAGE_SIZE - 1) / GJ_PAGE_SIZE;
@@ -1070,6 +1237,7 @@ virtio_net_map_dma_user(u64 u64VaBase, struct gj_virtq_dma_export *pOut)
                              pa + (gj_paddr_t)i * GJ_PAGE_SIZE,
                              GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE |
                                  GJ_VMM_PROT_USER) != GJ_OK) {
+                g_u32MapDmaFail++;
                 return -1;
             }
         }
@@ -1189,6 +1357,7 @@ bounce_alloc(void)
             return (int)i;
         }
     }
+    g_u32BounceFail++;
     return -1;
 }
 

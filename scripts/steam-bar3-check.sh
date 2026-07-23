@@ -29,6 +29,11 @@
 #   - Soft MANIFEST / READY / STAGE_META stamps
 #   - Always: bar3 client run OPEN; Top50 NOT-TRIED
 #
+# Wave 14 soft note (exclusive scripts high-water era):
+#   Continuum target decade M=15600 is CREATE-ONLY soft graph only.
+#   media READY ≠ continuum makefile_max wire ≠ smoke-all PASS ≠ title PASS.
+#   makefile_max remains an honest Makefile scan (product-summary side panel).
+#
 # Env:
 #   GJ_STEAM_TREE   host cache (default build/steam-tree)
 #   GJ_STEAM_STAGE  staged tree root (default build/steam-stage)
@@ -311,6 +316,7 @@ esac
 
 echo "  note:   soft check — exit 0 always; does not download or run Steam"
 echo "  note:   media READY ≠ smoke-all PASS ≠ bar3 client / Top50"
+echo "  note:   Wave 14 soft  continuum M=15600 era ≠ bar3; makefile_max=scan truth"
 echo "  bar3:   OPEN (client launch + matrix fill still required)"
 echo "  see:    docs/STEAM_BAR3_STATUS.md  docs/STEAM_HWTEST.md"
 echo "  see:    scripts/gj-product-summary.sh  scripts/gj-quick-keys.sh"

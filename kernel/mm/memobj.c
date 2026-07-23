@@ -11,21 +11,25 @@
  *   USER map flags    — memobj_sanitize_user_prot always forces U
  *   named lifecycle   — publish/unlink independent of last map
  *
- * Soft memobj inventory (Wave 11 exclusive deepen):
+ * Soft memobj inventory (Wave 14 exclusive deepen):
+ *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live pool / named / pages / mapped snaps; pool+named+pages+mapped peaks
  *   - Kind / flags / multi-map / idle live snaps (pool walk)
  *   - Cumulative create / map / unmap / destroy / reclaim / USER sanitize
  *   - Region soft full/reuse/overlap + share + named create/unlink
  *   - AS ensure + wine-shm soft path tallies + honesty path catalog
+ *   - Stats rollup + deepen wave=14 stamp + PASS/PARTIAL/INIT/NONE
  *   greppable: "memobj: soft …"
  *
  * Grep markers (prefix-stable memobj: soft …):
- *   memobj: soft inventory | pool | named | kinds | flags | peaks
+ *   memobj: soft honesty | inventory | pool | named | kinds | flags | peaks
  *   memobj: soft region | create | map | unmap | USER | as | wine
- *   memobj: soft path | PASS | PARTIAL | INIT
+ *   memobj: soft path | stats | deepen wave=14
+ *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
- * Honesty: soft inventory only — not bar3 / full FILE-object production.
+ * Honesty: soft inventory only — not bar3 / not product / not 1TiB product /
+ *          full FILE-object production remains OPEN.
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -54,7 +58,7 @@ struct memobj_named_slot {
 static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
 
 /*
- * Soft product inventory (Wave 11 exclusive). Cumulative unless noted live/peak.
+ * Soft product inventory (Wave 14 exclusive). Cumulative unless noted live/peak.
  * Diagnostics only — never hard-gate create/map/unmap policy.
  * greppable: memobj: soft …
  */
@@ -1056,7 +1060,7 @@ memobj_map_named(struct gj_process *pProc, const char *szName, u64 u64Hint,
     return vaBase;
 }
 
-/* ---- Soft observability / Wave 11 inventory ----------------------------- */
+/* ---- Soft observability / Wave 14 inventory ----------------------------- */
 
 /**
  * Soft: non-zero if name is wine* (wine-shm / winesrv-shm product path).
@@ -1216,8 +1220,9 @@ soft_inventory_scan(void)
 }
 
 /**
- * Greppable Wave 11 soft memobj inventory dump (product / smoke).
+ * Greppable Wave 14 soft memobj inventory dump (product / smoke deepen).
  * Prefix-stable markers (memobj: soft …):
+ *   memobj: soft honesty    — explicit non-claims (not product/bar3/1TiB)
  *   memobj: soft inventory  — rollup live + peaks + logs
  *   memobj: soft pool       — pool used/free/peak + pages/mapped live
  *   memobj: soft named      — named table + create/unlink/lookup
@@ -1232,9 +1237,12 @@ soft_inventory_scan(void)
  *   memobj: soft as         — process_as_ensure ok/fail/idem
  *   memobj: soft wine       — wine-shm create/map + live named
  *   memobj: soft path       — honesty catalog (FILE cold OPEN)
- *   memobj: soft PASS|PARTIAL|INIT
+ *   memobj: soft stats      — rollup tallies for agent greps
+ *   memobj: soft deepen     — wave=14 stamp + area count
+ *   memobj: soft PASS|PARTIAL|INIT|NONE | inventory PASS
  * greppable: memobj: soft
- * Honesty: soft inventory only — not bar3 / full FILE production.
+ * Honesty: soft inventory only — not product / not bar3 / not 1TiB product /
+ *          full FILE production remains OPEN.
  */
 static void
 soft_inventory_log(void)
@@ -1242,36 +1250,52 @@ soft_inventory_log(void)
     const char *szVerdict;
     u32 cMapOk;
     u32 cMapFail;
+    u32 cCreateOk;
+    u32 cAreas = 0;
 
     soft_inventory_scan();
 
     cMapOk = g_cSoftMapAnonOk + g_cSoftMapShareOk + g_cSoftMapNamedOk;
     cMapFail = g_cSoftMapAnonFail + g_cSoftMapShareFail + g_cSoftMapNamedFail +
                g_cSoftMapCoreFail;
+    cCreateOk = g_cSoftCreateAnonOk + g_cSoftNamedCreate;
 
     /*
      * Soft verdict (inventory only; never hard-gates maps):
-     *   INIT     — no create/map activity yet (post-init baseline)
      *   PASS     — any successful create or map observed
      *   PARTIAL  — only failures so far (pool/name/table soft miss)
+     *   INIT     — inventory dumped, no create/map activity yet
+     *   NONE     — reserved (kept for greppable PASS/NONE symmetry)
      */
     if (g_cSoftCreateAnonOk != 0u || g_cSoftNamedCreate != 0u || cMapOk != 0u) {
         szVerdict = "PASS";
     } else if (g_cSoftCreateAnonFail != 0u || g_cSoftCreateNamedFail != 0u ||
                cMapFail != 0u || g_cSoftNamedTableFull != 0u) {
         szVerdict = "PARTIAL";
-    } else {
+    } else if (g_u32SoftInvSamples > 0u) {
         szVerdict = "INIT";
+    } else {
+        szVerdict = "NONE";
     }
+
+    /*
+     * Honesty first: freestanding soft inventory is NOT product / bar3 /
+     * 1TiB product. greppable: memobj: soft honesty
+     */
+    kprintf("memobj: soft honesty not-product not-bar3 not-1TiB-product "
+            "product_tib=0 bar3=OPEN file_kind=OPEN wine_shm=soft "
+            "diagnostics=1 (soft inventory only; never closes bar3)\n");
+    cAreas++;
 
     /* Grep: memobj: soft inventory */
     kprintf("memobj: soft inventory pool=%u/%u named=%u/%u pages=%u mapped=%u "
-            "peak_pool=%u peak_named=%u multi=%u idle=%u logs=%u "
-            "(soft; not bar3)\n",
+            "peak_pool=%u peak_named=%u multi=%u idle=%u logs=%u wave=14 "
+            "(soft; not product; not bar3; not 1TiB product)\n",
             g_u32SoftPoolUsed, (unsigned)GJ_MEMOBJ_POOL, g_u32SoftNamedUsed,
             (unsigned)GJ_NAMED_MAX, g_u32SoftPagesOwned, g_u32SoftMappedTotal,
             g_u32SoftPoolPeak, g_u32SoftNamedPeak, g_u32SoftMultiMap,
             g_u32SoftIdleObjs, g_u32SoftInvSamples);
+    cAreas++;
 
     /* Grep: memobj: soft pool */
     kprintf("memobj: soft pool used=%u free=%u peak=%u pages=%u mapped=%u "
@@ -1280,6 +1304,7 @@ soft_inventory_log(void)
             g_u32SoftPagesOwned, g_u32SoftMappedTotal,
             (unsigned)GJ_MEMOBJ_POOL, g_u32SoftInvSamples,
             (unsigned)GJ_MEMOBJ_MAX_PAGES);
+    cAreas++;
 
     /* Grep: memobj: soft named */
     kprintf("memobj: soft named used=%u free=%u peak=%u create=%u unlink=%u "
@@ -1289,18 +1314,21 @@ soft_inventory_log(void)
             g_cSoftNamedCreate, g_cSoftNamedUnlink, g_cSoftNamedTableFull,
             g_cSoftLookupNamedHit, g_cSoftLookupNamedMiss,
             (unsigned)GJ_NAMED_MAX, (unsigned)GJ_MEMOBJ_NAME_MAX);
+    cAreas++;
 
     /* Grep: memobj: soft kinds */
     kprintf("memobj: soft kinds anon=%u named=%u file=%u other=%u "
             "live=%u (FILE cold OPEN soft)\n",
             g_u32SoftKindAnon, g_u32SoftKindNamed, g_u32SoftKindFile,
             g_u32SoftKindOther, g_u32SoftPoolUsed);
+    cAreas++;
 
     /* Grep: memobj: soft flags */
     kprintf("memobj: soft flags shareable=%u named=%u zeroed=%u multi_map=%u "
             "idle=%u (G-MO-3 share soft)\n",
             g_u32SoftFlagShare, g_u32SoftFlagNamed, g_u32SoftFlagZeroed,
             g_u32SoftMultiMap, g_u32SoftIdleObjs);
+    cAreas++;
 
     /* Grep: memobj: soft peaks */
     kprintf("memobj: soft peaks pool=%u named=%u pages=%u mapped=%u "
@@ -1308,18 +1336,21 @@ soft_inventory_log(void)
             g_u32SoftPoolPeak, g_u32SoftNamedPeak, g_u32SoftPagesPeak,
             g_u32SoftMappedPeak, (unsigned)GJ_PROC_REGION_MAX,
             (unsigned)GJ_MEMOBJ_POOL, (unsigned)GJ_NAMED_MAX);
+    cAreas++;
 
     /* Grep: memobj: soft region */
     kprintf("memobj: soft region full=%u reuse=%u overlap=%u "
             "region_max=%u share_maps=%u\n",
             g_cSoftRegionFull, g_cSoftRegionReuse, g_cSoftRegionOverlap,
             (unsigned)GJ_PROC_REGION_MAX, g_cSoftShareMaps);
+    cAreas++;
 
     /* Grep: memobj: soft create */
     kprintf("memobj: soft create anon_ok=%u anon_fail=%u named_fail=%u "
             "named_ok=%u destroy=%u reclaim=%u\n",
             g_cSoftCreateAnonOk, g_cSoftCreateAnonFail, g_cSoftCreateNamedFail,
             g_cSoftNamedCreate, g_cSoftDestroy, g_cSoftReclaim);
+    cAreas++;
 
     /* Grep: memobj: soft map */
     kprintf("memobj: soft map anon_ok=%u anon_fail=%u share_ok=%u "
@@ -1328,29 +1359,34 @@ soft_inventory_log(void)
             g_cSoftMapAnonOk, g_cSoftMapAnonFail, g_cSoftMapShareOk,
             g_cSoftMapShareFail, g_cSoftMapNamedOk, g_cSoftMapNamedFail,
             g_cSoftMapCoreFail, g_cSoftUserMap, cMapOk);
+    cAreas++;
 
     /* Grep: memobj: soft unmap */
     kprintf("memobj: soft unmap region=%u orphan=%u destroy=%u reclaim=%u "
-            "page_pa_ok=%u page_pa_fail=%u (soft; not bar3)\n",
+            "page_pa_ok=%u page_pa_fail=%u (soft; not bar3; not 1TiB product)\n",
             g_cSoftUnmapRegion, g_cSoftUnmapOrphan, g_cSoftDestroy,
             g_cSoftReclaim, g_cSoftPagePaOk, g_cSoftPagePaFail);
+    cAreas++;
 
     /* Grep: memobj: soft USER — G-MAP-2 force-U product maps */
     kprintf("memobj: soft USER sanitize=%u default_r=%u force_u=1 "
             "va_base=0x%lx va_end=0x%lx (G-MAP-2 soft)\n",
             g_cSoftUserMap, g_cSoftUserMapDefR,
             (unsigned long)GJ_USER_VA_BASE, (unsigned long)GJ_USER_VA_END);
+    cAreas++;
 
     /* Grep: memobj: soft as */
     kprintf("memobj: soft as ensure_ok=%u ensure_fail=%u ensure_idem=%u "
             "(G-AS-1 soft)\n",
             g_cSoftAsEnsureOk, g_cSoftAsEnsureFail, g_cSoftAsEnsureIdem);
+    cAreas++;
 
     /* Grep: memobj: soft wine */
     kprintf("memobj: soft wine create=%u map=%u named_live=%u "
             "share_maps=%u (wine-shm soft; Proton A0)\n",
             g_cSoftWineNamedCreate, g_cSoftWineNamedMap,
             g_u32SoftWineNamedLive, g_cSoftShareMaps);
+    cAreas++;
 
     /*
      * Grep: memobj: soft path
@@ -1360,15 +1396,49 @@ soft_inventory_log(void)
     kprintf("memobj: soft path claim=1 anon=1 named=1 share=1 unlink=1 "
             "user_map=1 region_table=1 as_ensure=1 wine_shm=1 "
             "file_kind=0 max_pages=%u pool=%u named_max=%u region_max=%u "
-            "(soft inventory; FILE cold OPEN; not bar3)\n",
+            "product_tib=0 bar3=OPEN "
+            "(soft inventory; FILE cold OPEN; not product; not bar3; "
+            "not 1TiB product)\n",
             (unsigned)GJ_MEMOBJ_MAX_PAGES, (unsigned)GJ_MEMOBJ_POOL,
             (unsigned)GJ_NAMED_MAX, (unsigned)GJ_PROC_REGION_MAX);
+    cAreas++;
 
-    /* Grep: memobj: soft PASS | PARTIAL | INIT */
+    /* Grep: memobj: soft stats — rollup tallies for agent greps. */
+    kprintf("memobj: soft stats pool=%u named=%u pages=%u mapped=%u "
+            "create_ok=%u map_ok=%u map_fail=%u destroy=%u reclaim=%u "
+            "share_maps=%u user_map=%u wine_create=%u wine_map=%u "
+            "region_full=%u logs=%u\n",
+            g_u32SoftPoolUsed, g_u32SoftNamedUsed, g_u32SoftPagesOwned,
+            g_u32SoftMappedTotal, cCreateOk, cMapOk, cMapFail, g_cSoftDestroy,
+            g_cSoftReclaim, g_cSoftShareMaps, g_cSoftUserMap,
+            g_cSoftWineNamedCreate, g_cSoftWineNamedMap, g_cSoftRegionFull,
+            g_u32SoftInvSamples);
+    cAreas++;
+
+    /* Grep: memobj: soft deepen wave (Wave 14 stamp; areas = prior soft lines). */
+    kprintf("memobj: soft deepen wave=14 areas=%u logs=%u pool=%u named=%u "
+            "map_ok=%u create_ok=%u product_tib=0 bar3=OPEN file_kind=OPEN "
+            "(soft; not product; not bar3; not 1TiB product)\n",
+            cAreas, g_u32SoftInvSamples, g_u32SoftPoolUsed, g_u32SoftNamedUsed,
+            cMapOk, cCreateOk);
+
+    /*
+     * Close markers: soft activity lamp only.
+     * Grep: memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
+     * Never "product PASS" / "bar3 PASS" / "1TiB product PASS".
+     */
     kprintf("memobj: soft %s pool=%u named=%u map_ok=%u map_fail=%u "
-            "create_ok=%u logs=%u (soft inventory; not bar3)\n",
+            "create_ok=%u logs=%u "
+            "(soft inventory; not product; not bar3; not 1TiB product)\n",
             szVerdict, g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk, cMapFail,
-            g_cSoftCreateAnonOk + g_cSoftNamedCreate, g_u32SoftInvSamples);
+            cCreateOk, g_u32SoftInvSamples);
+    if (cCreateOk != 0u || cMapOk != 0u) {
+        /* Grep: memobj: soft inventory PASS (activity PASS only). */
+        kprintf("memobj: soft inventory PASS pool=%u named=%u map_ok=%u "
+                "logs=%u (soft; not product; not bar3; not 1TiB product)\n",
+                g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk,
+                g_u32SoftInvSamples);
+    }
 }
 
 /**

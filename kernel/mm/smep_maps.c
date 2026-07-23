@@ -11,9 +11,23 @@
  *   - Post-harden residual-U audit → greppable soft PASS/FAIL
  *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
  *
- * Soft deepen (Wave 9 exclusive): soft SMEP/map inventory + greppable
- * "smep: soft …" logs (map U axes, leaf sizes, CR4/CPUID, harden stats).
+ * Soft deepen (Wave 9 base; Wave 14 exclusive deepen): soft SMEP/map
+ * inventory + greppable "smep: soft …" logs (map U axes, leaf sizes,
+ * CR4/CPUID, harden stats, honesty/path/deepen stamps).
  * Diagnostics only — never hard-gate boot; wrap OK.
+ *
+ * Wave 14 soft inventory deepen (prefix-stable; greppable: smep: soft):
+ *   "smep: soft honesty …"    explicit non-claims (not full G-MAP product)
+ *   "smep: soft inventory …"  stage + harden/audit soft pass surface
+ *   "smep: soft map …"        leaf U axes + clear/walk residual snapshot
+ *   "smep: soft cr4 …"        CR4.SMEP/SMAP + CPUID.7 feature bits
+ *   "smep: soft residual …"   audit residual + straddle/UX soft axes
+ *   "smep: soft enable …"     SMEP/SMAP enable/skip soft path catalog
+ *   "smep: soft path …"       surface catalog + honesty open lamps
+ *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
+ *   "smep: soft deepen …"     wave=14 stamp + area count
+ *   "smep: soft lamps …"      CR4/CPUID readiness lamps
+ * Honesty: soft inventory only — not product G-MAP complete; not bar3.
  *
  * greppable: smep: harden
  * greppable: smep: SMEP
@@ -21,6 +35,16 @@
  * greppable: smep: audit
  * greppable: smep: stats
  * greppable: smep: soft
+ * greppable: smep: soft honesty
+ * greppable: smep: soft inventory
+ * greppable: smep: soft map
+ * greppable: smep: soft cr4
+ * greppable: smep: soft residual
+ * greppable: smep: soft enable
+ * greppable: smep: soft path
+ * greppable: smep: soft stats
+ * greppable: smep: soft deepen
+ * greppable: smep: soft lamps
  * greppable: SMEP_HARDEN_STATS
  */
 #include <gj/config.h>
@@ -46,12 +70,18 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 14u
+
+/* Soft inventory greppable area count (honesty..lamps; deepen excluded). */
+#define SMEP_SOFT_AREAS 9u
+
 static struct gj_smep_stats g_stats;
 static int                  g_fSmepOn;
 static int                  g_fSmapOn;
 
 /*
- * Soft map inventory axes (file-local; Wave 9 exclusive).
+ * Soft map inventory axes (file-local; Wave 9 + Wave 14 exclusive).
  * Snapshotted over the last mutate harden walk; wrap OK; never hard-gate.
  * greppable: smep: soft
  */
@@ -65,6 +95,19 @@ static u64 g_u64SoftMapUUserBand;    /* present U wholly inside user band */
 static u64 g_u64SoftMapUStraddle;    /* present U on user-band straddle */
 static u64 g_u64SoftMapAlreadySuper; /* present !U (already supervisor) */
 static u64 g_u64SoftInvLogs;         /* smep_soft_inventory emissions */
+
+/*
+ * Wave 14: enable-path soft tallies (file-local; diagnostics only).
+ * Separate from g_stats skip/on so inventory can show path attempts.
+ */
+static u64 g_u64SoftEnableSmepOk;
+static u64 g_u64SoftEnableSmepFail;
+static u64 g_u64SoftEnableSmepSkip;
+static u64 g_u64SoftEnableSmapOk;
+static u64 g_u64SoftEnableSmapFail;
+static u64 g_u64SoftEnableSmapSkip;
+static u64 g_u64SoftHardenNull;      /* null pml4 soft fail path */
+static u64 g_u64SoftLastRemain;      /* last audit residual U */
 
 /* Soft helpers defined after leaf_must_clear_u / CR4/CPUID statics. */
 static void smep_soft_map_reset(void);
@@ -286,14 +329,21 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
 }
 
 /**
- * Greppable soft SMEP/map inventory dump (product / smoke).
+ * Greppable soft SMEP/map inventory dump (product / smoke; Wave 14 deepen).
  * Prefix-stable markers (smep: soft …):
+ *   smep: soft honesty    — explicit non-claims
  *   smep: soft inventory  — stage + harden/audit soft pass surface
  *   smep: soft map        — leaf U axes + clear/walk residual snapshot
  *   smep: soft cr4        — CR4.SMEP/SMAP + CPUID.7 feature bits
+ *   smep: soft residual   — audit residual + straddle/UX soft axes
+ *   smep: soft enable     — SMEP/SMAP enable/skip soft path
+ *   smep: soft path       — surface catalog + honesty open lamps
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
+ *   smep: soft deepen     — wave=14 stamp + area count
+ *   smep: soft lamps      — CR4/CPUID readiness lamps
  *
  * Never allocates; safe from boot harden / enable paths.
+ * Honesty: soft inventory ≠ product G-MAP complete; not bar3.
  * greppable: smep: soft
  */
 static void
@@ -306,6 +356,8 @@ smep_soft_inventory(const char *szWhere)
     int fSmapBit;
     int fCpuidSmep;
     int fCpuidSmap;
+    u32 u32Areas;
+    int fSoftPass;
 
     g_u64SoftInvLogs++;
     if (szWhere == NULL) {
@@ -320,11 +372,24 @@ smep_soft_inventory(const char *szWhere)
     fCpuidSmap = ((u32Ebx & CPUID7_EBX_SMAP) != 0) ? 1 : 0;
     u64Cleared = g_stats.u64Cleared4k + g_stats.u64Cleared2m +
                  g_stats.u64Cleared1g;
+    u32Areas = 0;
+
+    /*
+     * Honesty first: freestanding soft inventory is NOT product G-MAP close.
+     * Grep: smep: soft honesty
+     */
+    kprintf("smep: soft honesty not-product-GMAP not-full-P-MEM-6 "
+            "g_map=soft p_mem6=soft product_gmap=OPEN product_pmem6=OPEN "
+            "straddle_split=OPEN bar3=OPEN wave=%u "
+            "(soft inventory only; never hard-gates boot)\n",
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
 
     /* Grep: smep: soft inventory */
     kprintf("smep: soft inventory via=%s harden=%lu audit=%lu "
-            "pass=%lu fail=%lu residual_u=%lu logs=%lu "
-            "g_map=1..4 p_mem6=smep+smap user_band=[0x%llx,0x%llx)\n",
+            "pass=%lu fail=%lu residual_u=%lu logs=%lu wave=%u "
+            "g_map=1..4 p_mem6=smep+smap user_band=[0x%llx,0x%llx) "
+            "(soft; not product G-MAP; not bar3)\n",
             szWhere,
             (unsigned long)g_stats.u64HardenCalls,
             (unsigned long)g_stats.u64AuditCalls,
@@ -332,8 +397,10 @@ smep_soft_inventory(const char *szWhere)
             (unsigned long)g_stats.u64SoftFail,
             (unsigned long)g_stats.u64AuditRemainU,
             (unsigned long)g_u64SoftInvLogs,
+            (unsigned)SMEP_SOFT_WAVE,
             (unsigned long long)GJ_USER_VA_BASE,
             (unsigned long long)GJ_USER_VA_END);
+    u32Areas++;
 
     /* Grep: smep: soft map */
     kprintf("smep: soft map present=%lu leaf4k=%lu leaf2m=%lu leaf1g=%lu "
@@ -359,6 +426,7 @@ smep_soft_inventory(const char *szWhere)
             (unsigned long)g_stats.u64WalkedLeaves,
             (unsigned long)g_stats.u64SkippedUserBand,
             (unsigned long)g_stats.u64StraddleLarge);
+    u32Areas++;
 
     /* Grep: smep: soft cr4 */
     kprintf("smep: soft cr4 cr4=0x%lx smep_bit=%d smap_bit=%d "
@@ -368,11 +436,53 @@ smep_soft_inventory(const char *szWhere)
             g_fSmepOn, g_fSmapOn, fCpuidSmep, fCpuidSmap,
             (unsigned long)g_stats.u64SmepSkip,
             (unsigned long)g_stats.u64SmapSkip);
+    u32Areas++;
+
+    /* Grep: smep: soft residual */
+    kprintf("smep: soft residual last_remain=%lu audit_remain=%lu "
+            "straddle_large=%lu ux_cleared=%lu skip_user=%lu "
+            "harden_null=%lu soft_pass=%lu soft_fail=%lu "
+            "(audit residual; soft only; not product gate)\n",
+            (unsigned long)g_u64SoftLastRemain,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned long)g_stats.u64StraddleLarge,
+            (unsigned long)g_stats.u64UxCleared,
+            (unsigned long)g_stats.u64SkippedUserBand,
+            (unsigned long)g_u64SoftHardenNull,
+            (unsigned long)g_stats.u64SoftPass,
+            (unsigned long)g_stats.u64SoftFail);
+    u32Areas++;
+
+    /* Grep: smep: soft enable */
+    kprintf("smep: soft enable smep_ok=%lu smep_fail=%lu smep_skip=%lu "
+            "smap_ok=%lu smap_fail=%lu smap_skip=%lu "
+            "cpuid7_smep=%d cpuid7_smap=%d "
+            "(CPUID-gated CR4; soft path only)\n",
+            (unsigned long)g_u64SoftEnableSmepOk,
+            (unsigned long)g_u64SoftEnableSmepFail,
+            (unsigned long)g_u64SoftEnableSmepSkip,
+            (unsigned long)g_u64SoftEnableSmapOk,
+            (unsigned long)g_u64SoftEnableSmapFail,
+            (unsigned long)g_u64SoftEnableSmapSkip,
+            fCpuidSmep, fCpuidSmap);
+    u32Areas++;
+
+    /*
+     * Soft path honesty: surface catalog + explicit non-claims.
+     * Grep: smep: soft path
+     */
+    kprintf("smep: soft path via=%s "
+            "harden_walk→clear_U→reload_cr3→audit→enable_smep→enable_smap "
+            "leaf=4k|2m|1g g_map=1..4 p_mem6=soft "
+            "straddle_split=OPEN product_gmap=OPEN bar3=OPEN wave=%u "
+            "(soft inventory; not bar3)\n",
+            szWhere, (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
 
     /* Grep: smep: soft stats */
     kprintf("smep: soft stats harden=%lu audit=%lu cleared=%lu "
             "walked=%lu ux=%lu residual_u=%lu soft_pass=%lu soft_fail=%lu "
-            "smep_on=%lu smap_on=%lu inv_logs=%lu\n",
+            "smep_on=%lu smap_on=%lu inv_logs=%lu wave=%u\n",
             (unsigned long)g_stats.u64HardenCalls,
             (unsigned long)g_stats.u64AuditCalls,
             (unsigned long)u64Cleared,
@@ -383,7 +493,57 @@ smep_soft_inventory(const char *szWhere)
             (unsigned long)g_stats.u64SoftFail,
             (unsigned long)(cpu_smep_is_enabled() ? 1ull : 0ull),
             (unsigned long)(cpu_smap_is_enabled() ? 1ull : 0ull),
-            (unsigned long)g_u64SoftInvLogs);
+            (unsigned long)g_u64SoftInvLogs,
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
+
+    /* Grep: smep: soft lamps */
+    kprintf("smep: soft lamps smep_bit=%d smap_bit=%d "
+            "cpuid7_smep=%d cpuid7_smap=%d smep_on=%d smap_on=%d "
+            "harden_calls=%lu residual_u=%lu wave=%u "
+            "(soft readiness; not product gate)\n",
+            fSmepBit, fSmapBit, fCpuidSmep, fCpuidSmap,
+            g_fSmepOn, g_fSmapOn,
+            (unsigned long)g_stats.u64HardenCalls,
+            (unsigned long)g_stats.u64AuditRemainU,
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
+
+    /*
+     * Grep: smep: soft deepen wave
+     * areas tracks prior soft lines this emission (honesty..lamps).
+     */
+    kprintf("smep: soft deepen wave=%u areas=%u via=%s logs=%lu "
+            "catalog=%u residual_u=%lu "
+            "(Wave 14 exclusive; not product G-MAP; not bar3)\n",
+            (unsigned)SMEP_SOFT_WAVE,
+            (unsigned)u32Areas,
+            szWhere,
+            (unsigned long)g_u64SoftInvLogs,
+            (unsigned)SMEP_SOFT_AREAS,
+            (unsigned long)g_stats.u64AuditRemainU);
+
+    /*
+     * Soft close lamp: residual U == 0 after any audit is soft-pass shape.
+     * Never hard-gates. Grep: smep: soft PASS | smep: soft FAIL
+     */
+    fSoftPass = (g_stats.u64AuditCalls != 0 &&
+                 g_stats.u64AuditRemainU == 0) ? 1 : 0;
+    if (fSoftPass != 0) {
+        kprintf("smep: soft PASS via=%s residual_u=0 harden=%lu "
+                "wave=%u (soft inventory only; not product gate)\n",
+                szWhere,
+                (unsigned long)g_stats.u64HardenCalls,
+                (unsigned)SMEP_SOFT_WAVE);
+    } else if (g_stats.u64AuditCalls != 0) {
+        kprintf("smep: soft FAIL via=%s residual_u=%lu "
+                "wave=%u (soft inventory only; not product gate)\n",
+                szWhere,
+                (unsigned long)g_stats.u64AuditRemainU,
+                (unsigned)SMEP_SOFT_WAVE);
+    }
+
+    (void)SMEP_SOFT_AREAS;
 }
 
 /**
@@ -575,6 +735,7 @@ cpu_enable_smep(void)
 
     if ((u32Ebx & CPUID7_EBX_SMEP) == 0) {
         g_stats.u64SmepSkip++;
+        g_u64SoftEnableSmepSkip++;
         g_fSmepOn = 0;
         g_stats.u64SmepOn = 0;
         kprintf("smep: SMEP soft skip (CPUID.7 no SMEP)\n");
@@ -589,6 +750,7 @@ cpu_enable_smep(void)
     if ((u64Cr4 & CR4_SMEP) != 0) {
         g_fSmepOn = 1;
         g_stats.u64SmepOn = 1;
+        g_u64SoftEnableSmepOk++;
         kprintf("smep: SMEP enabled CR4=0x%lx soft PASS\n",
                 (unsigned long)u64Cr4);
         /* greppable: smep: soft */
@@ -597,6 +759,7 @@ cpu_enable_smep(void)
         g_fSmepOn = 0;
         g_stats.u64SmepOn = 0;
         g_stats.u64SoftFail++;
+        g_u64SoftEnableSmepFail++;
         kprintf("smep: SMEP soft FAIL CR4=0x%lx (bit not sticky)\n",
                 (unsigned long)u64Cr4);
         /* greppable: smep: soft */
@@ -612,6 +775,7 @@ cpu_enable_smap(void)
 
     if ((u32Ebx & CPUID7_EBX_SMAP) == 0) {
         g_stats.u64SmapSkip++;
+        g_u64SoftEnableSmapSkip++;
         g_fSmapOn = 0;
         g_stats.u64SmapOn = 0;
         kprintf("smep: SMAP soft skip (CPUID.7 no SMAP)\n");
@@ -628,6 +792,7 @@ cpu_enable_smap(void)
     if ((u64Cr4 & CR4_SMAP) != 0) {
         g_fSmapOn = 1;
         g_stats.u64SmapOn = 1;
+        g_u64SoftEnableSmapOk++;
         user_access_smap_enabled();
         kprintf("smep: SMAP enabled CR4=0x%lx; copy_* STAC/CLAC soft PASS\n",
                 (unsigned long)u64Cr4);
@@ -637,6 +802,7 @@ cpu_enable_smap(void)
         g_fSmapOn = 0;
         g_stats.u64SmapOn = 0;
         g_stats.u64SoftFail++;
+        g_u64SoftEnableSmapFail++;
         kprintf("smep: SMAP soft FAIL CR4=0x%lx (bit not sticky)\n",
                 (unsigned long)u64Cr4);
         /* greppable: smep: soft */
@@ -682,6 +848,7 @@ vmm_harden_audit_user_bits(void)
         g_stats.u64StraddleLarge = u64T;
     }
     g_stats.u64AuditRemainU = u64Remain;
+    g_u64SoftLastRemain = u64Remain;
     if (u64Remain == 0) {
         g_stats.u64SoftPass++;
         kprintf("smep: audit residual_u=0 soft PASS\n");
@@ -707,11 +874,12 @@ vmm_harden_kernel_maps(void)
     u64 u64Remain;
 
     g_stats.u64HardenCalls++;
-    /* Wave 9: soft map inventory snapshot for this mutate walk. */
+    /* Wave 9/14: soft map inventory snapshot for this mutate walk. */
     smep_soft_map_reset();
 
     if (pPml4 == NULL) {
         g_stats.u64SoftFail++;
+        g_u64SoftHardenNull++;
         kprintf("smep: harden soft FAIL (null pml4)\n");
         /* greppable: smep: soft */
         smep_soft_inventory("harden_null");
@@ -745,7 +913,7 @@ vmm_harden_kernel_maps(void)
             (unsigned long)g_stats.u64AuditCalls,
             (unsigned long)g_stats.u64SmepOn,
             (unsigned long)g_stats.u64SmapOn);
-    /* greppable: smep: soft inventory / map / cr4 / stats */
+    /* greppable: smep: soft inventory / map / cr4 / stats / deepen */
     smep_soft_inventory("harden");
 }
 
@@ -759,6 +927,12 @@ smep_stats_get(struct gj_smep_stats *pOut)
     g_stats.u64SmepOn = cpu_smep_is_enabled() ? 1ull : 0ull;
     g_stats.u64SmapOn = cpu_smap_is_enabled() ? 1ull : 0ull;
     *pOut = g_stats;
+    /*
+     * Emit soft inventory on stats read so bring-up smoke that
+     * snapshots SMEP_HARDEN_STATS also greps smep: soft lines.
+     * greppable: smep: soft
+     */
+    smep_soft_inventory("stats_get");
 }
 
 void
@@ -772,5 +946,18 @@ smep_stats_reset(void)
     g_stats.u64SmapOn = u64Smap;
     /* Map inventory axes are independent of g_stats; clear with reset. */
     smep_soft_map_reset();
-    g_u64SoftInvLogs = 0;
+    g_u64SoftEnableSmepOk = 0;
+    g_u64SoftEnableSmepFail = 0;
+    g_u64SoftEnableSmepSkip = 0;
+    g_u64SoftEnableSmapOk = 0;
+    g_u64SoftEnableSmapFail = 0;
+    g_u64SoftEnableSmapSkip = 0;
+    g_u64SoftHardenNull = 0;
+    g_u64SoftLastRemain = 0;
+    /* Preserve inv log count across reset (emission lifetime) — Wave 14:
+     * match user_copy; do not zero g_u64SoftInvLogs so logs stay monotonic.
+     * Prior Wave 9 zeroed it; deepen prefers lifetime logs like user_copy.
+     */
+    /* greppable: smep: soft (zeroed inventory after reset) */
+    smep_soft_inventory("stats_reset");
 }

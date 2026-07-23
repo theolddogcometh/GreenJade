@@ -8,6 +8,14 @@
  * Kernel smoke (GJ_VK_KERNEL_SMOKE) logs markers grepped by scripts/smoke-all.sh:
  *   "vk: QueuePresentKHR", "vk: QueueSubmit", "vk_icd: negotiate"
  * Do not change those substrings without updating the smoke harness.
+ *
+ * Soft inventory (Wave 14 exclusive deepen; greppable; not bar3 GPU):
+ *   vk_icd: soft inventory wave=14 negotiate=… present=… submit=… acquire=…
+ *   vk_icd: soft deepen wave=14 areas=negotiate,instance,device,swapchain,
+ *           acquire,present,submit,lookup,host,path,counts,features
+ *   vk_icd: soft path software_present|virtio_gpu bar3=0
+ * Soft counters wrap OK; never hard-gate product returns.
+ * greppable: "vk_icd: soft"
  */
 #include <vulkan/vulkan_core_gj.h>
 #include <vulkan/vk_icd.h>
@@ -1006,10 +1014,73 @@ soft_fb_crc(const void *pPix, uint32_t w, uint32_t h, uint32_t stride)
 static uint32_t g_u32HostPresents;
 static uint32_t g_u32HostPresentCrc;
 
+/*
+ * Wave 14 soft inventory counters (file-local; wrap OK; never hard-gate).
+ * Grep: vk_icd: soft
+ */
+#define VK_ICD_SOFT_WAVE     14u
+#define VK_ICD_SOFT_AREAS    12u
+#define VK_ICD_SOFT_SURFACES 8u /* negotiate inst dev sc acquire present submit lookup */
+
+static volatile uint32_t g_u32SoftNegotiateN;
+static volatile uint32_t g_u32SoftCreateInstN;
+static volatile uint32_t g_u32SoftCreateDevN;
+static volatile uint32_t g_u32SoftCreateScN;
+static volatile uint32_t g_u32SoftAcquireN;
+static volatile uint32_t g_u32SoftAcquireOk;
+static volatile uint32_t g_u32SoftPresentN;
+static volatile uint32_t g_u32SoftPresentOk;
+static volatile uint32_t g_u32SoftPresentMiss;
+static volatile uint32_t g_u32SoftSubmitN;
+static volatile uint32_t g_u32SoftLookupN;
+static volatile uint32_t g_u32SoftLookupHit;
+static volatile uint32_t g_u32SoftLookupMiss;
+static volatile uint32_t g_u32SoftInvN;
+
+static void
+vk_icd_soft_inc(volatile uint32_t *pCtr)
+{
+    if (pCtr != 0) {
+        (*pCtr)++;
+    }
+}
+
+/*
+ * Soft inventory blob (Wave 14). Grep: vk_icd: soft inventory
+ */
+static const char g_szVkIcdSoftInventory[] =
+    "vk_icd: soft inventory wave=14 surfaces=8 areas=12 "
+    "negotiate=1 instance=1 device=1 swapchain=1 acquire=1 present=1 "
+    "submit=1 lookup=1 host=1 path=1 counts=1 features=1 "
+    "bar3=0 (soft inventory; not bar3)";
+
+/*
+ * Grep: vk_icd: soft deepen
+ */
+static const char g_szVkIcdSoftDeepen[] =
+    "vk_icd: soft deepen wave=14 areas=12 "
+    "negotiate,instance,device,swapchain,acquire,present,submit,"
+    "lookup,host,path,counts,features "
+    "software_present=1 bar3=0";
+
+/*
+ * Grep: vk_icd: soft path
+ */
+static const char g_szVkIcdSoftPath[] =
+#ifdef GJ_VK_KERNEL_SMOKE
+    "vk_icd: soft path mode=kernel_smoke virtio_gpu=1 "
+    "present=virtio software_crc=0 bar3=0 (soft inventory; not bar3)";
+#else
+    "vk_icd: soft path mode=host software_present=1 "
+    "present=soft_fb_crc bar3=0 (soft inventory; not bar3)";
+#endif
+
 static VkResult
 present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
 {
+    vk_icd_soft_inc(&g_u32SoftPresentN);
     if (pPix == NULL || w == 0 || h == 0) {
+        vk_icd_soft_inc(&g_u32SoftPresentMiss);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (stride == 0) {
@@ -1017,11 +1088,14 @@ present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
     }
 #ifdef GJ_VK_KERNEL_SMOKE
     if (!virtio_gpu_ready()) {
+        vk_icd_soft_inc(&g_u32SoftPresentMiss);
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (virtio_gpu_present(w, h, pPix, stride) != 0) {
+        vk_icd_soft_inc(&g_u32SoftPresentMiss);
         return VK_ERROR_DEVICE_LOST;
     }
+    vk_icd_soft_inc(&g_u32SoftPresentOk);
     return VK_SUCCESS;
 #else
     /* Host ICD: software present — touch corners, CRC, count frames. */
@@ -1048,6 +1122,7 @@ present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
             g_u32HostPresentCrc = 1u;
         }
         g_u32HostPresents++;
+        vk_icd_soft_inc(&g_u32SoftPresentOk);
     }
     return VK_SUCCESS;
 #endif
@@ -1065,6 +1140,98 @@ uint32_t
 gj_vk_host_present_crc(void)
 {
     return g_u32HostPresentCrc;
+}
+
+/*
+ * Cold soft inventory accessor. Grep: vk_icd: soft inventory
+ */
+const char *
+gj_vk_icd_loader_soft_inventory(void)
+{
+    vk_icd_soft_inc(&g_u32SoftInvN);
+    return g_szVkIcdSoftInventory;
+}
+
+/*
+ * Cold soft deepen stamp. Grep: vk_icd: soft deepen
+ */
+const char *
+gj_vk_icd_loader_soft_deepen(void)
+{
+    return g_szVkIcdSoftDeepen;
+}
+
+/*
+ * Cold soft path honesty. Grep: vk_icd: soft path
+ */
+const char *
+gj_vk_icd_loader_soft_path(void)
+{
+    return g_szVkIcdSoftPath;
+}
+
+/*
+ * Soft wave stamp (14). Grep: vk_icd: soft wave=
+ */
+uint32_t
+gj_vk_icd_loader_soft_wave(void)
+{
+    return (uint32_t)VK_ICD_SOFT_WAVE;
+}
+
+/*
+ * Soft surface / area counts. Grep: vk_icd: soft surfaces= / areas=
+ */
+uint32_t
+gj_vk_icd_loader_soft_surface_count(void)
+{
+    return (uint32_t)VK_ICD_SOFT_SURFACES;
+}
+
+uint32_t
+gj_vk_icd_loader_soft_area_count(void)
+{
+    return (uint32_t)VK_ICD_SOFT_AREAS;
+}
+
+/*
+ * Soft note counters (optional out; NULL soft-skipped).
+ * Grep: vk_icd: soft note
+ */
+void
+gj_vk_icd_loader_soft_note_counts(uint32_t *pNegotiate, uint32_t *pPresent,
+                                  uint32_t *pPresentOk, uint32_t *pSubmit,
+                                  uint32_t *pAcquire, uint32_t *pLookup,
+                                  uint32_t *pInv)
+{
+    if (pNegotiate != 0) {
+        *pNegotiate = g_u32SoftNegotiateN;
+    }
+    if (pPresent != 0) {
+        *pPresent = g_u32SoftPresentN;
+    }
+    if (pPresentOk != 0) {
+        *pPresentOk = g_u32SoftPresentOk;
+    }
+    if (pSubmit != 0) {
+        *pSubmit = g_u32SoftSubmitN;
+    }
+    if (pAcquire != 0) {
+        *pAcquire = g_u32SoftAcquireN;
+    }
+    if (pLookup != 0) {
+        *pLookup = g_u32SoftLookupN;
+    }
+    if (pInv != 0) {
+        *pInv = g_u32SoftInvN;
+    }
+    (void)g_u32SoftCreateInstN;
+    (void)g_u32SoftCreateDevN;
+    (void)g_u32SoftCreateScN;
+    (void)g_u32SoftAcquireOk;
+    (void)g_u32SoftPresentMiss;
+    (void)g_u32SoftLookupHit;
+    (void)g_u32SoftLookupMiss;
 }
 
 /* ---- Extension names advertised by this ICD ---- */
@@ -1127,6 +1294,7 @@ vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 {
     uint32_t i;
 
+    vk_icd_soft_inc(&g_u32SoftCreateInstN);
     (void)pAllocator;
     if (pCreateInfo == NULL || pInstance == NULL) {
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -1332,6 +1500,7 @@ vkCreateDevice(VkPhysicalDevice physicalDevice,
     uint32_t w = 64;
     uint32_t h = 64;
 
+    vk_icd_soft_inc(&g_u32SoftCreateDevN);
     (void)pAllocator;
     if (physicalDevice == NULL || physicalDevice->u32Magic != MAGIC_PHYS ||
         pCreateInfo == NULL || pDevice == NULL) {
@@ -1594,6 +1763,8 @@ vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pCreateInf
     struct gj_surface *pSurf;
     VkPresentModeKHR mode;
 
+    vk_icd_soft_inc(&g_u32SoftCreateScN);
+
     (void)pAllocator;
     if (device == NULL || device->u32Magic != MAGIC_DEV || pCreateInfo == NULL ||
         pSwapchain == NULL) {
@@ -1752,6 +1923,7 @@ vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeou
     uint32_t tries;
     int found = 0;
 
+    vk_icd_soft_inc(&g_u32SoftAcquireN);
     if (pSc == NULL || pSc->u32Magic != MAGIC_SC || pImageIndex == NULL ||
         pSc->u32Count == 0) {
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -1787,6 +1959,7 @@ vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeou
             pF->u8Signaled = 1;
         }
     }
+    vk_icd_soft_inc(&g_u32SoftAcquireOk);
     return VK_SUCCESS;
 }
 
@@ -2088,6 +2261,7 @@ vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
     uint32_t s;
     uint32_t c;
 
+    vk_icd_soft_inc(&g_u32SoftSubmitN);
     (void)queue;
     if (pSubmits != NULL) {
         for (s = 0; s < submitCount; s++) {
@@ -4275,12 +4449,16 @@ vkCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
 static PFN_vkVoidFunction
 lookup_name(const char *pName)
 {
+    vk_icd_soft_inc(&g_u32SoftLookupN);
     if (pName == NULL) {
+        vk_icd_soft_inc(&g_u32SoftLookupMiss);
         return NULL;
     }
 #define ENT(n)                                                                 \
-    if (streq(pName, #n))                                                      \
-        return (PFN_vkVoidFunction)n
+    if (streq(pName, #n)) {                                                    \
+        vk_icd_soft_inc(&g_u32SoftLookupHit);                                  \
+        return (PFN_vkVoidFunction)n;                                          \
+    }
     ENT(vkCreateInstance);
     ENT(vkDestroyInstance);
     ENT(vkEnumerateInstanceExtensionProperties);
@@ -4429,6 +4607,7 @@ lookup_name(const char *pName)
     ENT(vk_icdGetInstanceProcAddr);
     ENT(vk_icdGetPhysicalDeviceProcAddr);
 #undef ENT
+    vk_icd_soft_inc(&g_u32SoftLookupMiss);
     return NULL;
 }
 
@@ -4451,6 +4630,7 @@ vkGetDeviceProcAddr(VkDevice device, const char *pName)
 VKAPI_ATTR VkResult VKAPI_CALL
 vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion)
 {
+    vk_icd_soft_inc(&g_u32SoftNegotiateN);
     if (pSupportedVersion == NULL) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }

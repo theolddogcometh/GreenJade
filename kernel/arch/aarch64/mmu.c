@@ -55,14 +55,26 @@
  * soft-touch DRAM through Attr1 and soft-read a known MMIO FR word through
  * Attr0 (PL011 UART FR @ 0x09000018 — RO status; never writes DR).
  *
- * Soft MMU inventory (deepen; pure read of live TCR/TTBR after enable):
+ * Soft MMU inventory (Wave 14 deepen; pure read of live TCR/TTBR after enable):
  *   page size soft  — TCR_EL1.TG0 → 4 KiB expected (TG0=0b00)
  *   TTBR soft presence — TTBR0_EL1 BADDR non-zero / matches L1; TTBR1=0
+ *   MAIR soft — Attr0 device / Attr1 normal pack match
+ *   SCTLR soft lamps — M/C/I after enable
+ *   L1 soft — valid block / attr / OA for [0] device + [1] normal
+ * Soft deepen: area catalog + wave=14 stamp
+ * Soft path honesty: identity scaffold only — product_kernel=OPEN
  * Greppable:
  *   aarch64: mmu PASS
  *   aarch64: mmu map soft PASS   (L1[0] device + L1[1] normal + M/C/I)
  *   aarch64: mmu soft page_size=… tg0=… t0sz=…
  *   aarch64: mmu soft ttbr0=… ttbr1=… present=… ttbr1_clear=…
+ *   aarch64: mmu soft mair=… attr0=… attr1=… match=…
+ *   aarch64: mmu soft sctlr=… m=… c=… i=…
+ *   aarch64: mmu soft l1 d0_ok=… d1_ok=… map_ok=…
+ *   aarch64: mmu soft inventory wave=14 …
+ *   aarch64: mmu soft deepen wave=14 areas=…
+ *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=14
+ *   aarch64: mmu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: mmu soft PASS | FAIL
  *   aarch64: mmu soft SKIP (no page)
  *
@@ -106,8 +118,17 @@ extern void *aarch64_pmm_alloc(void);
 #define MMU_SOFT_PAGE_16K  16384ul
 #define MMU_SOFT_PAGE_64K  65536ul
 
+/* Wave 14 soft inventory stamp (greppable wave=14). */
+#define MMU_SOFT_WAVE 14u
+
+/* Soft deepen area count: page,ttbr,mair,sctlr,l1,path,honesty. */
+#define MMU_SOFT_AREAS 7u
+
 /* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
 #define TTBR_BADDR_MASK (~0xffful)
+
+/* Soft inventory emit counter (Wave 14 stats). */
+static unsigned g_cMmuSoftLogs;
 
 /* Block / table descriptors (stage-1) */
 #define DESC_VALID    (1ull << 0)
@@ -130,8 +151,13 @@ extern void *aarch64_pmm_alloc(void);
 /* Level-1 block size: 1 GiB with 4K granule / 39-bit VA (T0SZ=25) */
 #define L1_BLOCK_SIZE (1ull << 30)
 
-/* Soft map self-touch targets (identity on virt). */
-#define MMU_SOFT_DRAM_PA   0x40080000ul
+/*
+ * Soft map self-touch pattern (identity Attr1 on virt).
+ * Do NOT write fixed PA 0x40080000: the order-0 pool often covers that
+ * address after __bss_end, and a freelist-node paint corrupts PMM walk
+ * (Wave 14: soft touch uses the live L1 page instead — already allocated,
+ * identity-mapped normal WB, never freelist-linked while in use).
+ */
 #define MMU_SOFT_DRAM_PAT  0x5a5a5a5a5a5a5a5aul
 /* PL011 UART FR (flag register) — RO; confirms device block still maps MMIO. */
 #define MMU_SOFT_UART_FR   0x09000018ul
@@ -239,13 +265,18 @@ mmu_map_soft_observe(unsigned long *pL1)
         fOk = 0;
     }
 
-    /* Soft walk DRAM through identity map (Attr1). */
-    pDram = (volatile unsigned long *)MMU_SOFT_DRAM_PA;
+    /*
+     * Soft walk DRAM through identity map (Attr1) via unused L1 slot
+     * (entries [2..511] are zero/unused). Avoids painting freelist nodes
+     * in the order-0 pool (fixed mid-pool PA was unsafe once pool grows).
+     */
+    pDram = (volatile unsigned long *)&pL1[511];
     *pDram = MMU_SOFT_DRAM_PAT;
     v = *pDram;
     if (v != MMU_SOFT_DRAM_PAT) {
         fOk = 0;
     }
+    *pDram = 0ul; /* restore unused L1 entry */
 
     /*
      * Soft walk device block: read PL011 FR only (status). Confirms L1[0]
@@ -269,15 +300,20 @@ mmu_map_soft_observe(unsigned long *pL1)
     aarch64_uart_put_hex(sctlr);
     aarch64_uart_puts(" uart_fr=");
     aarch64_uart_put_hex((unsigned long)uFr);
+    aarch64_uart_puts(" dram_soft_pa=");
+    aarch64_uart_put_hex((unsigned long)(void *)pDram);
     aarch64_uart_puts("\n");
 
     return fOk;
 }
 
 /*
- * Soft MMU inventory deepen (non-fatal):
+ * Soft MMU inventory deepen (Wave 14; non-fatal):
  *   - page size soft: live TCR.TG0 → expected 4 KiB granule
  *   - TTBR soft presence: TTBR0 BADDR matches L1; TTBR1 cleared (TTBR0-only)
+ *   - MAIR soft: Attr0 device / Attr1 normal pack
+ *   - SCTLR soft lamps: M/C/I
+ *   - L1 soft: descriptor shape for identity blocks
  * Emits greppable "aarch64: mmu soft …" lines. Returns 1 on PASS.
  */
 static int
@@ -286,23 +322,44 @@ mmu_soft_inventory(unsigned long *pL1)
     unsigned long uTcr;
     unsigned long uTtbr0;
     unsigned long uTtbr1;
+    unsigned long uMair;
+    unsigned long uSctlr;
     unsigned long uTg0;
     unsigned long uT0sz;
     unsigned long cbPage;
     unsigned long paL1;
     unsigned long paTtbr0;
+    unsigned long d0;
+    unsigned long d1;
+    unsigned long uAttr0;
+    unsigned long uAttr1;
     int fPageOk;
     int fTtbrPresent;
     int fTtbr1Clear;
     int fTtbrMatch;
+    int fMairOk;
+    int fSctlrOk;
+    int fD0Ok;
+    int fD1Ok;
     int fOk;
+
+    if (g_cMmuSoftLogs < 0xffffffffu) {
+        g_cMmuSoftLogs++;
+    }
 
     __asm__ volatile("mrs %0, tcr_el1" : "=r"(uTcr));
     __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(uTtbr0));
     __asm__ volatile("mrs %0, ttbr1_el1" : "=r"(uTtbr1));
+    __asm__ volatile("mrs %0, mair_el1" : "=r"(uMair));
+    __asm__ volatile("mrs %0, sctlr_el1" : "=r"(uSctlr));
+
+    d0 = pL1[0];
+    d1 = pL1[1];
 
     uT0sz = uTcr & TCR_T0SZ_MASK;
     uTg0 = (uTcr & TCR_TG0_MASK) >> TCR_TG0_SHIFT;
+    uAttr0 = uMair & 0xfful;
+    uAttr1 = (uMair >> 8) & 0xfful;
 
     /*
      * AArch64 TCR_ELx.TG0 encodings (translation granule for TTBR0):
@@ -345,9 +402,41 @@ mmu_soft_inventory(unsigned long *pL1)
         fTtbrMatch = 1;
     }
 
+    /* Soft MAIR pack: Attr0 device-nGnRnE, Attr1 normal WB. */
+    fMairOk = 0;
+    if (uMair == MAIR_EL1_VAL && uAttr0 == MAIR_DEVICE_nGnRnE &&
+        uAttr1 == MAIR_NORMAL_WB) {
+        fMairOk = 1;
+    }
+
+    /* Soft SCTLR lamps: M|C|I set after enable. */
+    fSctlrOk = 0;
+    if ((uSctlr & (SCTLR_M | SCTLR_C | SCTLR_I)) ==
+        (SCTLR_M | SCTLR_C | SCTLR_I)) {
+        fSctlrOk = 1;
+    }
+
+    /* Soft L1[0] device block shape. */
+    fD0Ok = 0;
+    if ((d0 & DESC_VALID) != 0ul && (d0 & DESC_TABLE) == 0ul &&
+        (d0 & DESC_ATTR_MASK) == DESC_ATTR_DEV &&
+        (d0 & (DESC_PXN | DESC_UXN)) == (DESC_PXN | DESC_UXN) &&
+        (d0 & L1_OA_MASK) == 0ul) {
+        fD0Ok = 1;
+    }
+
+    /* Soft L1[1] normal block shape (DRAM @ 0x4000_0000). */
+    fD1Ok = 0;
+    if ((d1 & DESC_VALID) != 0ul && (d1 & DESC_TABLE) == 0ul &&
+        (d1 & DESC_ATTR_MASK) == DESC_ATTR_MEM &&
+        (d1 & L1_OA_MASK) == 0x40000000ul) {
+        fD1Ok = 1;
+    }
+
     fOk = 0;
     if (fPageOk != 0 && fTtbrPresent != 0 && fTtbr1Clear != 0 &&
-        fTtbrMatch != 0) {
+        fTtbrMatch != 0 && fMairOk != 0 && fSctlrOk != 0 &&
+        fD0Ok != 0 && fD1Ok != 0) {
         fOk = 1;
     }
 
@@ -375,6 +464,89 @@ mmu_soft_inventory(unsigned long *pL1)
     aarch64_uart_put_hex(fTtbrMatch != 0 ? 1ul : 0ul);
     aarch64_uart_puts(" l1=");
     aarch64_uart_put_hex(paL1);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft mair — Wave 14 Attr pack. */
+    aarch64_uart_puts("aarch64: mmu soft mair=");
+    aarch64_uart_put_hex(uMair);
+    aarch64_uart_puts(" attr0=");
+    aarch64_uart_put_hex(uAttr0);
+    aarch64_uart_puts(" attr1=");
+    aarch64_uart_put_hex(uAttr1);
+    aarch64_uart_puts(" match=");
+    aarch64_uart_put_hex(fMairOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft sctlr — Wave 14 M/C/I lamps. */
+    aarch64_uart_puts("aarch64: mmu soft sctlr=");
+    aarch64_uart_put_hex(uSctlr);
+    aarch64_uart_puts(" m=");
+    aarch64_uart_put_hex((uSctlr & SCTLR_M) != 0ul ? 1ul : 0ul);
+    aarch64_uart_puts(" c=");
+    aarch64_uart_put_hex((uSctlr & SCTLR_C) != 0ul ? 1ul : 0ul);
+    aarch64_uart_puts(" i=");
+    aarch64_uart_put_hex((uSctlr & SCTLR_I) != 0ul ? 1ul : 0ul);
+    aarch64_uart_puts(" ok=");
+    aarch64_uart_put_hex(fSctlrOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft l1 — Wave 14 descriptor lamps. */
+    aarch64_uart_puts("aarch64: mmu soft l1 d0_ok=");
+    aarch64_uart_put_hex(fD0Ok != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" d1_ok=");
+    aarch64_uart_put_hex(fD1Ok != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" map_ok=");
+    aarch64_uart_put_hex((fD0Ok != 0 && fD1Ok != 0) ? 1ul : 0ul);
+    aarch64_uart_puts(" d0=");
+    aarch64_uart_put_hex(d0);
+    aarch64_uart_puts(" d1=");
+    aarch64_uart_put_hex(d1);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft inventory — Wave 14 rollup. */
+    aarch64_uart_puts("aarch64: mmu soft inventory wave=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
+    aarch64_uart_puts(" page_ok=");
+    aarch64_uart_put_hex(fPageOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" ttbr_ok=");
+    aarch64_uart_put_hex((fTtbrPresent != 0 && fTtbrMatch != 0 &&
+                           fTtbr1Clear != 0) ? 1ul : 0ul);
+    aarch64_uart_puts(" mair_ok=");
+    aarch64_uart_put_hex(fMairOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" sctlr_ok=");
+    aarch64_uart_put_hex(fSctlrOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" l1_ok=");
+    aarch64_uart_put_hex((fD0Ok != 0 && fD1Ok != 0) ? 1ul : 0ul);
+    aarch64_uart_puts(" logs=");
+    aarch64_uart_put_hex((unsigned long)g_cMmuSoftLogs);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Grep: aarch64: mmu soft deepen
+     * Wave 14 area catalog — identity soft scaffold only.
+     */
+    aarch64_uart_puts("aarch64: mmu soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_AREAS);
+    aarch64_uart_puts(" catalog=page,ttbr,mair,sctlr,l1,path,honesty logs=");
+    aarch64_uart_put_hex((unsigned long)g_cMmuSoftLogs);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Grep: aarch64: mmu soft path
+     * Honesty: 2-block identity only — not hierarchical VMM / user maps.
+     */
+    aarch64_uart_puts("aarch64: mmu soft path identity=1 l1_blocks=2 ttbr1=0 "
+                      "user_maps=0 hier_vmm=0 product_kernel=OPEN "
+                      "hard_gate=0 wave=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft honesty */
+    aarch64_uart_puts("aarch64: mmu soft honesty product_kernel=OPEN "
+                      "soft_only=1 no_bar3=1 no_user_maps=1 wave=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
     if (fOk != 0) {

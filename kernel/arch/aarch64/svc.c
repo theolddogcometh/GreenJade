@@ -24,6 +24,15 @@
  *   3. aarch64_linux_nr_soft(nr) — soft getpid/gettid return path
  *   4. Selftest exercises stub table + soft getpid without full reg frame
  *   5. Soft SVC inventory — greppable "aarch64: svc soft …" (Wave 9)
+ *   6. Soft inventory deepen — Wave 14 multi-area inventory (this unit only)
+ *
+ * Soft inventory deepen (Wave 14 exclusive; this unit only):
+ *   Multi-line greppable "aarch64: svc soft …" under fixed areas:
+ *     inventory | count | nrs | have | groups | gates | path | deepen
+ *   Groups soft: io / mm / net / proc / sync NR presence rollups
+ *   Path honesty: in-arch stub only — no shared linux_dispatch, no x8 frame
+ *   Soft PASS/FAIL gates keep Wave 9 shape; deepen never hard-gates.
+ *   Soft ≠ product Linux ABI; soft ≠ bar3.
  *
  * Next product step (still in-arch): widen the exception frame to save
  * x0–x18, pass a soft reg struct into try_handle, read NR from x8, call
@@ -36,12 +45,21 @@
  *            aarch64: svc soft count=… stub_hit=… soft_hit=… nrs=…
  *            aarch64: svc soft nrs=… soft_nrs=… ordered=… ec=… enosys=…
  *            aarch64: svc soft have getpid=… gettid=… write=… futex=…
+ *            aarch64: svc soft inventory …
+ *            aarch64: svc soft groups …
+ *            aarch64: svc soft gates …
+ *            aarch64: svc soft path …
+ *            aarch64: svc soft deepen …
  *            aarch64: svc soft PASS | FAIL
  */
 #include "types_arch.h"
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define SVC_SOFT_WAVE   14u
+#define SVC_SOFT_AREAS  8u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -318,18 +336,21 @@ aarch64_svc_try_handle(unsigned long u64Vec, unsigned long esr,
 }
 
 /*
- * Soft SVC inventory (Wave 9 exclusive deepen).
+ * Soft SVC inventory (Wave 9 base + Wave 14 exclusive deepen).
  * Walks the in-arch NR stub table, tallies soft-covered NRs, checks
  * non-decreasing NR order and key deepen presence, then emits greppable
- * "aarch64: svc soft …" lines. Pure C; no shared dispatch, no new objects.
+ * "aarch64: svc soft …" multi-area lines. Pure C; no shared dispatch,
+ * no new objects. Never hard-gates product.
  *
- * Soft PASS gates (all required):
+ * Soft PASS gates (all required; unchanged from Wave 9):
  *   - SVC64 count non-zero after selftest probe (fSvcCountOk)
  *   - stub ENOSYS exercise OK (fStubOk)
  *   - deep stub ENOSYS exercise OK (fDeepOk)
  *   - soft getpid/gettid return shape OK (fGetpidOk)
  *   - table non-empty, ordered, soft NRs present, deepen NRs present
  *   - g_cSoftHit >= 2 (both soft NRs exercised)
+ *
+ * Grep areas: inventory | count | nrs | have | groups | gates | path | deepen
  *
  * Returns 1 on soft PASS, 0 on soft FAIL.
  */
@@ -344,12 +365,31 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     unsigned fHaveGetpid;
     unsigned fHaveGettid;
     unsigned fHaveWrite;
+    unsigned fHaveRead;
     unsigned fHaveFutex;
     unsigned fHaveIouring;
     unsigned fHaveClone3;
+    unsigned fHaveClone;
     unsigned fHaveGetrandom;
     unsigned fHaveEpoll;
     unsigned fHavePipe2;
+    unsigned fHaveMmap;
+    unsigned fHaveOpenat;
+    unsigned fHaveSocket;
+    unsigned fHaveBrk;
+    unsigned fHaveExit;
+    unsigned fHaveClock;
+    unsigned cGroupIo;
+    unsigned cGroupMm;
+    unsigned cGroupNet;
+    unsigned cGroupProc;
+    unsigned cGroupSync;
+    unsigned uGateSvc;
+    unsigned uGateStub;
+    unsigned uGateDeep;
+    unsigned uGateGetpid;
+    unsigned uGateTable;
+    unsigned uGateSoftHit;
     int fTableOk;
     int fOk;
 
@@ -359,12 +399,25 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     fHaveGetpid = 0u;
     fHaveGettid = 0u;
     fHaveWrite = 0u;
+    fHaveRead = 0u;
     fHaveFutex = 0u;
     fHaveIouring = 0u;
     fHaveClone3 = 0u;
+    fHaveClone = 0u;
     fHaveGetrandom = 0u;
     fHaveEpoll = 0u;
     fHavePipe2 = 0u;
+    fHaveMmap = 0u;
+    fHaveOpenat = 0u;
+    fHaveSocket = 0u;
+    fHaveBrk = 0u;
+    fHaveExit = 0u;
+    fHaveClock = 0u;
+    cGroupIo = 0u;
+    cGroupMm = 0u;
+    cGroupNet = 0u;
+    cGroupProc = 0u;
+    cGroupSync = 0u;
     uPrev = 0u;
 
     for (i = 0u; i < cNrs; i++) {
@@ -378,25 +431,91 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
         if (uNr == A64_NR_getpid) {
             fHaveGetpid = 1u;
             cSoftNrs++;
+            cGroupProc++;
         } else if (uNr == A64_NR_gettid) {
             fHaveGettid = 1u;
             cSoftNrs++;
+            cGroupProc++;
         } else if (uNr == A64_NR_write) {
             fHaveWrite = 1u;
+            cGroupIo++;
+        } else if (uNr == A64_NR_read) {
+            fHaveRead = 1u;
+            cGroupIo++;
         } else if (uNr == A64_NR_futex) {
             fHaveFutex = 1u;
+            cGroupSync++;
         } else if (uNr == A64_NR_io_uring_setup) {
             fHaveIouring = 1u;
+            cGroupIo++;
         } else if (uNr == A64_NR_clone3) {
             fHaveClone3 = 1u;
+            cGroupProc++;
+        } else if (uNr == A64_NR_clone) {
+            fHaveClone = 1u;
+            cGroupProc++;
         } else if (uNr == A64_NR_getrandom) {
             fHaveGetrandom = 1u;
         } else if (uNr == A64_NR_epoll_pwait) {
             fHaveEpoll = 1u;
+            cGroupIo++;
         } else if (uNr == A64_NR_pipe2) {
             fHavePipe2 = 1u;
+            cGroupIo++;
+        } else if (uNr == A64_NR_mmap) {
+            fHaveMmap = 1u;
+            cGroupMm++;
+        } else if (uNr == A64_NR_munmap || uNr == A64_NR_mprotect ||
+                   uNr == A64_NR_brk) {
+            if (uNr == A64_NR_brk) {
+                fHaveBrk = 1u;
+            }
+            cGroupMm++;
+        } else if (uNr == A64_NR_openat || uNr == A64_NR_close) {
+            if (uNr == A64_NR_openat) {
+                fHaveOpenat = 1u;
+            }
+            cGroupIo++;
+        } else if (uNr == A64_NR_socket || uNr == A64_NR_bind ||
+                   uNr == A64_NR_connect || uNr == A64_NR_listen ||
+                   uNr == A64_NR_accept) {
+            if (uNr == A64_NR_socket) {
+                fHaveSocket = 1u;
+            }
+            cGroupNet++;
+        } else if (uNr == A64_NR_exit || uNr == A64_NR_exit_group ||
+                   uNr == A64_NR_execve || uNr == A64_NR_wait4) {
+            if (uNr == A64_NR_exit) {
+                fHaveExit = 1u;
+            }
+            cGroupProc++;
+        } else if (uNr == A64_NR_clock_gettime ||
+                   uNr == A64_NR_clock_nanosleep ||
+                   uNr == A64_NR_nanosleep) {
+            fHaveClock = 1u;
+            cGroupSync++;
+        } else if (uNr == A64_NR_io_uring_enter ||
+                   uNr == A64_NR_io_uring_register ||
+                   uNr == A64_NR_io_setup || uNr == A64_NR_readv ||
+                   uNr == A64_NR_writev) {
+            cGroupIo++;
         }
     }
+
+    /* Grep: aarch64: svc soft inventory */
+    aarch64_uart_puts("aarch64: svc soft inventory nrs=");
+    aarch64_uart_put_hex((unsigned long)cNrs);
+    aarch64_uart_puts(" soft_nrs=");
+    aarch64_uart_put_hex((unsigned long)cSoftNrs);
+    aarch64_uart_puts(" soft_hit=");
+    aarch64_uart_put_hex(g_cSoftHit);
+    aarch64_uart_puts(" stub_hit=");
+    aarch64_uart_put_hex(g_cStubHit);
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_AREAS);
+    aarch64_uart_puts("\n");
 
     /*
      * Greppable counter inventory (post selftest exercise).
@@ -442,18 +561,34 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     aarch64_uart_put_hex((unsigned long)fHaveGettid);
     aarch64_uart_puts(" write=");
     aarch64_uart_put_hex((unsigned long)fHaveWrite);
+    aarch64_uart_puts(" read=");
+    aarch64_uart_put_hex((unsigned long)fHaveRead);
     aarch64_uart_puts(" futex=");
     aarch64_uart_put_hex((unsigned long)fHaveFutex);
     aarch64_uart_puts(" iouring=");
     aarch64_uart_put_hex((unsigned long)fHaveIouring);
     aarch64_uart_puts(" clone3=");
     aarch64_uart_put_hex((unsigned long)fHaveClone3);
+    aarch64_uart_puts(" clone=");
+    aarch64_uart_put_hex((unsigned long)fHaveClone);
     aarch64_uart_puts(" getrandom=");
     aarch64_uart_put_hex((unsigned long)fHaveGetrandom);
     aarch64_uart_puts(" epoll=");
     aarch64_uart_put_hex((unsigned long)fHaveEpoll);
     aarch64_uart_puts(" pipe2=");
     aarch64_uart_put_hex((unsigned long)fHavePipe2);
+    aarch64_uart_puts(" mmap=");
+    aarch64_uart_put_hex((unsigned long)fHaveMmap);
+    aarch64_uart_puts(" openat=");
+    aarch64_uart_put_hex((unsigned long)fHaveOpenat);
+    aarch64_uart_puts(" socket=");
+    aarch64_uart_put_hex((unsigned long)fHaveSocket);
+    aarch64_uart_puts(" brk=");
+    aarch64_uart_put_hex((unsigned long)fHaveBrk);
+    aarch64_uart_puts(" exit=");
+    aarch64_uart_put_hex((unsigned long)fHaveExit);
+    aarch64_uart_puts(" clock=");
+    aarch64_uart_put_hex((unsigned long)fHaveClock);
     aarch64_uart_puts(" count_ok=");
     aarch64_uart_put_hex(fSvcCountOk != 0 ? 1ul : 0ul);
     aarch64_uart_puts(" stub_ok=");
@@ -464,6 +599,19 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     aarch64_uart_put_hex(fGetpidOk != 0 ? 1ul : 0ul);
     aarch64_uart_puts("\n");
 
+    /* Grep: aarch64: svc soft groups (NR family rollups) */
+    aarch64_uart_puts("aarch64: svc soft groups io=");
+    aarch64_uart_put_hex((unsigned long)cGroupIo);
+    aarch64_uart_puts(" mm=");
+    aarch64_uart_put_hex((unsigned long)cGroupMm);
+    aarch64_uart_puts(" net=");
+    aarch64_uart_put_hex((unsigned long)cGroupNet);
+    aarch64_uart_puts(" proc=");
+    aarch64_uart_put_hex((unsigned long)cGroupProc);
+    aarch64_uart_puts(" sync=");
+    aarch64_uart_put_hex((unsigned long)cGroupSync);
+    aarch64_uart_puts("\n");
+
     fTableOk = 0;
     if (cNrs > 0u && fOrdered != 0u && cSoftNrs == 2u &&
         fHaveGetpid != 0u && fHaveGettid != 0u && fHaveWrite != 0u &&
@@ -472,11 +620,47 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
         fTableOk = 1;
     }
 
+    uGateSvc = (fSvcCountOk != 0) ? 1u : 0u;
+    uGateStub = (fStubOk != 0) ? 1u : 0u;
+    uGateDeep = (fDeepOk != 0) ? 1u : 0u;
+    uGateGetpid = (fGetpidOk != 0) ? 1u : 0u;
+    uGateTable = (fTableOk != 0) ? 1u : 0u;
+    uGateSoftHit = (g_cSoftHit >= 2ul) ? 1u : 0u;
+
+    /* Grep: aarch64: svc soft gates */
+    aarch64_uart_puts("aarch64: svc soft gates svc=");
+    aarch64_uart_put_hex((unsigned long)uGateSvc);
+    aarch64_uart_puts(" stub=");
+    aarch64_uart_put_hex((unsigned long)uGateStub);
+    aarch64_uart_puts(" deep=");
+    aarch64_uart_put_hex((unsigned long)uGateDeep);
+    aarch64_uart_puts(" getpid=");
+    aarch64_uart_put_hex((unsigned long)uGateGetpid);
+    aarch64_uart_puts(" table=");
+    aarch64_uart_put_hex((unsigned long)uGateTable);
+    aarch64_uart_puts(" soft_hit=");
+    aarch64_uart_put_hex((unsigned long)uGateSoftHit);
+    aarch64_uart_puts(" ordered=");
+    aarch64_uart_put_hex((unsigned long)fOrdered);
+    aarch64_uart_puts("\n");
+
     fOk = 0;
     if (fSvcCountOk != 0 && fStubOk != 0 && fDeepOk != 0 &&
         fGetpidOk != 0 && fTableOk != 0 && g_cSoftHit >= 2ul) {
         fOk = 1;
     }
+
+    /* Grep: aarch64: svc soft path */
+    aarch64_uart_puts("aarch64: svc soft path stub=1 soft_pid=1 x8_frame=0 "
+                      "shared_dispatch=0 neon=0 wave=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+    aarch64_uart_puts(" (soft inventory; not bar3)\n");
+
+    /* Grep: aarch64: svc soft deepen */
+    aarch64_uart_puts("aarch64: svc soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=inventory,count,nrs,have,groups,gates,path,"
+                      "deepen unit=svc.c only rate_limited=0\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: svc soft PASS\n");

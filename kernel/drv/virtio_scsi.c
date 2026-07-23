@@ -14,15 +14,22 @@
  *   g_fSoft after failed/absent probe — TMF/stats/event_poll soft;
  *   CDB I/O stays with scsi_mid soft LUN (submit returns -1).
  *
- * Soft inventory (Wave 11 exclusive; this unit only; never hard-gates):
- * greppable: "virtio-scsi: soft …"
+ * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates;
+ * not bar3 — greppable "virtio-scsi: soft …"):
  *   virtio-scsi: soft inventory …
+ *   virtio-scsi: soft pci …
+ *   virtio-scsi: soft geometry …
  *   virtio-scsi: soft queue …
+ *   virtio-scsi: soft ring …
  *   virtio-scsi: soft ctrl …
  *   virtio-scsi: soft event …
  *   virtio-scsi: soft req …
  *   virtio-scsi: soft last …
+ *   virtio-scsi: soft counters …
+ *   virtio-scsi: soft api …
+ *   virtio-scsi: soft errors …
  *   virtio-scsi: soft path …
+ *   virtio-scsi: soft deepen wave=14 …
  *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
  *   virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV
  *
@@ -70,6 +77,10 @@
 
 /* Product kind marker from virtio_pci kind_from_device (scsi modern/transitional). */
 #define VIRTIO_SCSI_KIND 6u
+
+/* Wave 14 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define SCSI_SOFT_WAVE  14u
+#define SCSI_SOFT_AREAS 16u
 
 /* ---- OASIS request / response shapes (clean-room public layout) ---------- */
 
@@ -126,7 +137,7 @@ static u32                   g_u32LastResponse;
 static u32                   g_u32LastResidual;
 static u32                   g_u32LastScsiStatus;
 
-/* Wave 11 soft inventory telemetry (never hard-gates product I/O). */
+/* Wave 14 soft inventory telemetry (never hard-gates product I/O). */
 static u32 g_u32SoftLogN;     /* inventory emissions */
 static int g_fSoftOnce;       /* first post-activity inventory emitted */
 static u32 g_u32SoftTmfOk;    /* soft-only TMF accepts (no HBA) */
@@ -139,6 +150,23 @@ static u32 g_u32EventRepostFail;
 static u16 g_u16FreeMinCtrl;  /* free-desc watermarks (live only) */
 static u16 g_u16FreeMinEvent;
 static u16 g_u16FreeMinReq;
+static u32 g_u32LastTmfSubtype; /* sticky last TMF subtype */
+static u32 g_u32LastEventType;  /* sticky last event type */
+static u32 g_u32LastEventReason;/* sticky last event reason */
+static u32 g_u32LastCdbLen;     /* sticky last CDB length */
+static u32 g_u32LastDataLen;    /* sticky last data payload length */
+static u32 g_u32ReqTimeout;     /* request q poll timeouts */
+static u32 g_u32ReqQAddFail;    /* request q add failures */
+static u32 g_u32CtrlTimeout;    /* control q poll timeouts */
+static u32 g_u32CtrlQAddFail;   /* control q add failures */
+static u32 g_u32ApiSubmit;      /* virtio_scsi_submit enters */
+static u32 g_u32ApiTmf;         /* virtio_scsi_ctrl_tmf enters */
+static u32 g_u32ApiEventPoll;   /* virtio_scsi_event_poll enters */
+static u32 g_u32ApiQstats;      /* virtio_scsi_qstats enters */
+static u32 g_u32ApiQFree;       /* virtio_scsi_q_free enters */
+static u32 g_u32DataInOps;      /* data-in submit completions */
+static u32 g_u32DataOutOps;     /* data-out submit completions */
+static u32 g_u32NoDataOps;      /* no-data submit completions */
 
 /* Single outstanding command buffers (identity-mapped BSS). */
 static struct virtio_scsi_req_cmd      g_Req __attribute__((aligned(16)));
@@ -148,7 +176,7 @@ static struct virtio_scsi_ctrl_tmf_resp g_TmfResp __attribute__((aligned(16)));
 static u8 g_aData[GJ_VIRTIO_SCSI_DATA_MAX] __attribute__((aligned(16)));
 static u8 g_aEvent[VIRTIO_SCSI_EVENT_SZ] __attribute__((aligned(16)));
 
-/* ---- Soft inventory (Wave 11) -------------------------------------------- */
+/* ---- Soft inventory (Wave 14 exclusive deepen) --------------------------- */
 
 /* Forward: emit after soft-arm / probe / activity / qstats. */
 static void scsi_soft_inventory(const char *szVia);
@@ -178,17 +206,9 @@ q_note_free(void)
 }
 
 /**
- * Greppable Wave 11 soft inventory dump (product / smoke).
+ * Greppable Wave 14 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-scsi: soft …" — never hard-gates; kprintf only.
- *
- *   virtio-scsi: soft inventory — ready/soft + PCI + queue geometry
- *   virtio-scsi: soft queue     — free watermarks for ctrl/event/req
- *   virtio-scsi: soft ctrl      — TMF live + soft-accept tallies
- *   virtio-scsi: soft event     — poll/repost soft path tallies
- *   virtio-scsi: soft req       — CDB I/O + soft-miss counters
- *   virtio-scsi: soft last      — sticky last response/residual/status
- *   virtio-scsi: soft path      — product surface catalog (claim honesty)
- *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
+ * Soft only — not bar3 / not product multi-HBA close.
  *
  * greppable: virtio-scsi: soft
  */
@@ -196,19 +216,32 @@ static void
 scsi_soft_inventory(const char *szVia)
 {
     const char *szVerdict;
+    const char *szViaSafe;
     u16 u16FreeCtrl;
     u16 u16FreeEvent;
     u16 u16FreeReq;
     u16 u16QSize;
+    u16 u16FreeMinC;
+    u16 u16FreeMinE;
+    u16 u16FreeMinR;
     u8 u8Bus;
     u8 u8Slot;
+    u8 u8Func;
+    u8 u8Modern;
+    u16 u16Device;
+    u32 u32Kind;
     u32 u32Soft;
     u32 u32Ready;
     u32 u32Claim;
+    u32 u32NotifyMult;
+    u32 u32NumQueues;
+    u64 u64FeatDev;
+    u64 u64FeatDrv;
+    u64 u64PaCtrl;
+    u64 u64PaEvent;
+    u64 u64PaReq;
 
-    if (szVia == NULL) {
-        szVia = "path";
-    }
+    szViaSafe = (szVia != NULL) ? szVia : "path";
 
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
@@ -228,8 +261,22 @@ scsi_soft_inventory(const char *szVia)
         u16FreeEvent = virtio_q_num_free(&g_qEvent);
         u16FreeReq = virtio_q_num_free(&g_qReq);
     }
+    u16FreeMinC = (g_u16FreeMinCtrl == 0xffffu) ? 0u : g_u16FreeMinCtrl;
+    u16FreeMinE = (g_u16FreeMinEvent == 0xffffu) ? 0u : g_u16FreeMinEvent;
+    u16FreeMinR = (g_u16FreeMinReq == 0xffffu) ? 0u : g_u16FreeMinReq;
     u8Bus = (g_pScsi != NULL) ? g_pScsi->u8Bus : 0;
     u8Slot = (g_pScsi != NULL) ? g_pScsi->u8Slot : 0;
+    u8Func = (g_pScsi != NULL) ? g_pScsi->u8Func : 0;
+    u8Modern = (g_pScsi != NULL) ? g_pScsi->fModern : 0;
+    u16Device = (g_pScsi != NULL) ? g_pScsi->u16Device : 0;
+    u32Kind = (g_pScsi != NULL) ? g_pScsi->u32Kind : 0;
+    u64FeatDev = (g_pScsi != NULL) ? g_pScsi->u64FeaturesDev : 0ull;
+    u64FeatDrv = (g_pScsi != NULL) ? g_pScsi->u64FeaturesDrv : 0ull;
+    u32NotifyMult = (g_pScsi != NULL) ? g_pScsi->u32NotifyMult : 0;
+    u32NumQueues = (g_pScsi != NULL) ? g_pScsi->u32NumQueues : 0;
+    u64PaCtrl = g_fReady ? (u64)g_qCtrl.paDesc : 0ull;
+    u64PaEvent = g_fReady ? (u64)g_qEvent.paDesc : 0ull;
+    u64PaReq = g_fReady ? (u64)g_qReq.paDesc : 0ull;
 
     /*
      * Soft verdict (inventory only; I/O path unchanged):
@@ -251,28 +298,55 @@ scsi_soft_inventory(const char *szVia)
     /* Grep: virtio-scsi: soft inventory */
     kprintf("virtio-scsi: soft inventory via=%s ready=%u soft=%u bus=%x "
             "slot=%x q_size=%u data_max=%u event_sz=%u event_posted=%u "
-            "log_n=%u\n",
-            szVia, u32Ready, u32Soft, (unsigned)u8Bus, (unsigned)u8Slot,
+            "log_n=%u wave=%u areas=%u\n",
+            szViaSafe, u32Ready, u32Soft, (unsigned)u8Bus, (unsigned)u8Slot,
             (unsigned)u16QSize, (unsigned)GJ_VIRTIO_SCSI_DATA_MAX,
             (unsigned)VIRTIO_SCSI_EVENT_SZ, g_fEventPosted ? 1u : 0u,
-            g_u32SoftLogN);
+            g_u32SoftLogN, (unsigned)SCSI_SOFT_WAVE,
+            (unsigned)SCSI_SOFT_AREAS);
+
+    /* Grep: virtio-scsi: soft pci */
+    kprintf("virtio-scsi: soft pci bus=%x slot=%x func=%x dev=0x%x kind=%u "
+            "modern=%u feat_dev=0x%lx feat_drv=0x%lx num_queues=%u "
+            "notify_mult=%u\n",
+            (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
+            (unsigned)u16Device, u32Kind, (unsigned)u8Modern,
+            (unsigned long)u64FeatDev, (unsigned long)u64FeatDrv,
+            u32NumQueues, u32NotifyMult);
+
+    /* Grep: virtio-scsi: soft geometry */
+    kprintf("virtio-scsi: soft geometry q_size=%u data_max=%u event_sz=%u "
+            "poll_spins=%u ctrl_spins=%u event_spins=%u kind=%u "
+            "q0_ctrl=1 q1_event=1 q2_req=1\n",
+            (unsigned)VIRTIO_SCSI_Q_SIZE, (unsigned)GJ_VIRTIO_SCSI_DATA_MAX,
+            (unsigned)VIRTIO_SCSI_EVENT_SZ, (unsigned)VIRTIO_SCSI_POLL_SPINS,
+            (unsigned)VIRTIO_SCSI_CTRL_SPINS, (unsigned)VIRTIO_SCSI_EVENT_SPINS,
+            (unsigned)VIRTIO_SCSI_KIND);
 
     /* Grep: virtio-scsi: soft queue (0xffff free_min → 0 = never noted) */
     kprintf("virtio-scsi: soft queue ctrl_idx=%u event_idx=%u req_idx=%u "
             "free_ctrl=%u free_event=%u free_req=%u free_min_c=%u "
-            "free_min_e=%u free_min_r=%u\n",
+            "free_min_e=%u free_min_r=%u size=%u\n",
             (unsigned)VIRTIO_SCSI_Q_CONTROL, (unsigned)VIRTIO_SCSI_Q_EVENT,
             (unsigned)VIRTIO_SCSI_Q_REQUEST, (unsigned)u16FreeCtrl,
             (unsigned)u16FreeEvent, (unsigned)u16FreeReq,
-            (unsigned)((g_u16FreeMinCtrl == 0xffffu) ? 0u : g_u16FreeMinCtrl),
-            (unsigned)((g_u16FreeMinEvent == 0xffffu) ? 0u : g_u16FreeMinEvent),
-            (unsigned)((g_u16FreeMinReq == 0xffffu) ? 0u : g_u16FreeMinReq));
+            (unsigned)u16FreeMinC, (unsigned)u16FreeMinE,
+            (unsigned)u16FreeMinR, (unsigned)u16QSize);
+
+    /* Grep: virtio-scsi: soft ring */
+    kprintf("virtio-scsi: soft ring ctrl_pa=0x%lx event_pa=0x%lx "
+            "req_pa=0x%lx free_c=%u free_e=%u free_r=%u pages=9\n",
+            (unsigned long)u64PaCtrl, (unsigned long)u64PaEvent,
+            (unsigned long)u64PaReq, (unsigned)u16FreeCtrl,
+            (unsigned)u16FreeEvent, (unsigned)u16FreeReq);
 
     /* Grep: virtio-scsi: soft ctrl */
     kprintf("virtio-scsi: soft ctrl ok=%u fail=%u soft_ok=%u soft_fail=%u "
-            "tmf_type=%u soft_accept=abort+reset spins=%u\n",
+            "tmf_type=%u soft_accept=abort+reset spins=%u "
+            "timeout=%u q_add_fail=%u\n",
             g_u32CtrlOk, g_u32CtrlFail, g_u32SoftTmfOk, g_u32SoftTmfFail,
-            (unsigned)VIRTIO_SCSI_T_TMF, (unsigned)VIRTIO_SCSI_CTRL_SPINS);
+            (unsigned)VIRTIO_SCSI_T_TMF, (unsigned)VIRTIO_SCSI_CTRL_SPINS,
+            g_u32CtrlTimeout, g_u32CtrlQAddFail);
 
     /* Grep: virtio-scsi: soft event */
     kprintf("virtio-scsi: soft event count=%u polls=%u empty=%u posted=%u "
@@ -283,32 +357,72 @@ scsi_soft_inventory(const char *szVia)
 
     /* Grep: virtio-scsi: soft req */
     kprintf("virtio-scsi: soft req ok=%u fail=%u soft_miss=%u bounce=%u "
-            "poll_spins=%u simple_attr=%u\n",
+            "poll_spins=%u simple_attr=%u data_in=%u data_out=%u "
+            "nodata=%u timeout=%u q_add_fail=%u\n",
             g_u32IoCount, g_u32IoFail, g_u32SoftSubmitMiss,
             (unsigned)GJ_VIRTIO_SCSI_DATA_MAX, (unsigned)VIRTIO_SCSI_POLL_SPINS,
-            (unsigned)VIRTIO_SCSI_S_SIMPLE);
+            (unsigned)VIRTIO_SCSI_S_SIMPLE, g_u32DataInOps, g_u32DataOutOps,
+            g_u32NoDataOps, g_u32ReqTimeout, g_u32ReqQAddFail);
 
     /* Grep: virtio-scsi: soft last */
-    kprintf("virtio-scsi: soft last resp=%u residual=%u scsi_status=%u\n",
-            g_u32LastResponse, g_u32LastResidual, g_u32LastScsiStatus);
+    kprintf("virtio-scsi: soft last resp=%u residual=%u scsi_status=%u "
+            "tmf_sub=%u event=%u event_reason=%u cdb_len=%u data_len=%u\n",
+            g_u32LastResponse, g_u32LastResidual, g_u32LastScsiStatus,
+            g_u32LastTmfSubtype, g_u32LastEventType, g_u32LastEventReason,
+            g_u32LastCdbLen, g_u32LastDataLen);
+
+    /* Grep: virtio-scsi: soft counters */
+    kprintf("virtio-scsi: soft counters io=%u io_fail=%u ctrl=%u ctrl_fail=%u "
+            "ev=%u soft_tmf=%u soft_miss=%u log_n=%u\n",
+            g_u32IoCount, g_u32IoFail, g_u32CtrlOk, g_u32CtrlFail,
+            g_u32EventCount, g_u32SoftTmfOk, g_u32SoftSubmitMiss,
+            g_u32SoftLogN);
+
+    /* Grep: virtio-scsi: soft api */
+    kprintf("virtio-scsi: soft api submit=%u tmf=%u event_poll=%u "
+            "qstats=%u q_free=%u\n",
+            g_u32ApiSubmit, g_u32ApiTmf, g_u32ApiEventPoll, g_u32ApiQstats,
+            g_u32ApiQFree);
+
+    /* Grep: virtio-scsi: soft errors */
+    kprintf("virtio-scsi: soft errors io_fail=%u req_timeout=%u req_q_add=%u "
+            "ctrl_fail=%u ctrl_timeout=%u ctrl_q_add=%u soft_tmf_fail=%u "
+            "soft_miss=%u event_repost_fail=%u\n",
+            g_u32IoFail, g_u32ReqTimeout, g_u32ReqQAddFail, g_u32CtrlFail,
+            g_u32CtrlTimeout, g_u32CtrlQAddFail, g_u32SoftTmfFail,
+            g_u32SoftSubmitMiss, g_u32EventRepostFail);
 
     /*
      * Grep: virtio-scsi: soft path
      * Honesty catalog: claim=1 only with live HBA; soft CDB stays mid.
+     * Soft inventory ≠ bar3 / multi-HBA product close.
      */
     kprintf("virtio-scsi: soft path claim=%u soft_path=%u cdb=%u tmf=1 "
             "event_poll=1 qstats=1 soft_cdb=0 (mid owns soft LUN) "
-            "q0_ctrl=1 q1_event=1 q2_req=1\n",
-            u32Claim, u32Soft, u32Claim);
+            "q0_ctrl=1 q1_event=1 q2_req=1 bar3=0 steam=0 "
+            "feat_dev=0x%lx feat_drv=0x%lx\n",
+            u32Claim, u32Soft, u32Claim, (unsigned long)u64FeatDev,
+            (unsigned long)u64FeatDrv);
+
+    /* Grep: virtio-scsi: soft deepen wave (Wave 14 stamp) */
+    kprintf("virtio-scsi: soft deepen wave=%u areas=%u via=%s ready=%u "
+            "soft=%u io=%u ctrl=%u ev=%u log_n=%u "
+            "(soft inventory only; not bar3)\n",
+            (unsigned)SCSI_SOFT_WAVE, (unsigned)SCSI_SOFT_AREAS, szViaSafe,
+            u32Ready, u32Soft, g_u32IoCount, g_u32CtrlOk, g_u32EventCount,
+            g_u32SoftLogN);
 
     /* Grep: virtio-scsi: soft PASS | SOFT | PARTIAL | NODEV */
     kprintf("virtio-scsi: soft %s via=%s ready=%u soft=%u io=%u ctrl=%u "
-            "ev=%u log_n=%u\n",
-            szVerdict, szVia, u32Ready, u32Soft, g_u32IoCount, g_u32CtrlOk,
-            g_u32EventCount, g_u32SoftLogN);
+            "ev=%u log_n=%u wave=%u\n",
+            szVerdict, szViaSafe, u32Ready, u32Soft, g_u32IoCount, g_u32CtrlOk,
+            g_u32EventCount, g_u32SoftLogN, (unsigned)SCSI_SOFT_WAVE);
 
     /* Grep: virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV */
-    kprintf("virtio-scsi: soft inventory %s\n", szVerdict);
+    kprintf("virtio-scsi: soft inventory %s via=%s logs=%u wave=%u "
+            "areas=%u (soft inventory only; not bar3)\n",
+            szVerdict, szViaSafe, g_u32SoftLogN, (unsigned)SCSI_SOFT_WAVE,
+            (unsigned)SCSI_SOFT_AREAS);
 }
 
 /**
@@ -340,7 +454,7 @@ soft_arm(void)
     g_pScsi = NULL;
     g_fEventPosted = 0;
     kprintf("virtio-scsi: soft-armed (ctrl+event+req soft path, no HBA)\n");
-    /* Wave 11 soft inventory — greppable virtio-scsi: soft (SOFT). */
+    /* Wave 14 soft inventory — greppable virtio-scsi: soft (SOFT). */
     scsi_soft_inventory("soft_arm");
 }
 
@@ -366,6 +480,23 @@ stats_clear(void)
     g_u16FreeMinEvent = 0xffffu;
     g_u16FreeMinReq = 0xffffu;
     g_fSoftOnce = 0;
+    g_u32LastTmfSubtype = 0;
+    g_u32LastEventType = 0;
+    g_u32LastEventReason = 0;
+    g_u32LastCdbLen = 0;
+    g_u32LastDataLen = 0;
+    g_u32ReqTimeout = 0;
+    g_u32ReqQAddFail = 0;
+    g_u32CtrlTimeout = 0;
+    g_u32CtrlQAddFail = 0;
+    g_u32ApiSubmit = 0;
+    g_u32ApiTmf = 0;
+    g_u32ApiEventPoll = 0;
+    g_u32ApiQstats = 0;
+    g_u32ApiQFree = 0;
+    g_u32DataInOps = 0;
+    g_u32DataOutOps = 0;
+    g_u32NoDataOps = 0;
     /* Preserve g_u32SoftLogN across re-probe so log_n stays monotonic. */
 }
 
@@ -509,7 +640,7 @@ virtio_scsi_probe(void)
             (unsigned)g_pScsi->u8Bus, (unsigned)g_pScsi->u8Slot,
             g_fEventPosted);
     /*
-     * Wave 11 soft inventory rollup (prefix-stable "virtio-scsi: soft …").
+     * Wave 14 soft inventory rollup (prefix-stable "virtio-scsi: soft …").
      * PARTIAL typical here (ready, no product I/O yet).
      */
     scsi_soft_inventory("probe");
@@ -536,6 +667,7 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
     i32 i32Len;
     u32 cbData;
 
+    g_u32ApiSubmit++;
     /* Soft-only: CDB path is scsi_mid soft LUN; do not claim transport. */
     if (!g_fReady) {
         if (g_fSoft) {
@@ -564,11 +696,13 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
     g_Req.u64Id = (u64)g_u32IoCount + (u64)g_u32IoFail + 1ull;
     g_Req.u8TaskAttr = VIRTIO_SCSI_S_SIMPLE;
     memcpy(g_Req.aCdb, pReq->cdb.aCdb, pReq->cdb.u8CdbLen);
+    g_u32LastCdbLen = (u32)pReq->cdb.u8CdbLen;
 
     cbData = pReq->cbData;
     if (cbData > sizeof(g_aData)) {
         cbData = sizeof(g_aData);
     }
+    g_u32LastDataLen = cbData;
     memset(g_aData, 0, sizeof(g_aData));
     if (cbData > 0 && pReq->pData != NULL && !pReq->fDataIn) {
         memcpy(g_aData, pReq->pData, cbData);
@@ -587,6 +721,7 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
                           (gj_paddr_t)(gj_vaddr_t)&g_Req, (u32)sizeof(g_Req), 0,
                           (gj_paddr_t)(gj_vaddr_t)&g_Resp, (u32)sizeof(g_Resp),
                           1) < 0) {
+            g_u32ReqQAddFail++;
             g_u32IoFail++;
             scsi_soft_maybe_once();
             return -1;
@@ -597,6 +732,7 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
                           (gj_paddr_t)(gj_vaddr_t)&g_Resp, (u32)sizeof(g_Resp),
                           1,
                           (gj_paddr_t)(gj_vaddr_t)g_aData, cbData, 1) < 0) {
+            g_u32ReqQAddFail++;
             g_u32IoFail++;
             scsi_soft_maybe_once();
             return -1;
@@ -607,6 +743,7 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
                           (gj_paddr_t)(gj_vaddr_t)g_aData, cbData, 0,
                           (gj_paddr_t)(gj_vaddr_t)&g_Resp, (u32)sizeof(g_Resp),
                           1) < 0) {
+            g_u32ReqQAddFail++;
             g_u32IoFail++;
             scsi_soft_maybe_once();
             return -1;
@@ -617,6 +754,7 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
     i32Len = virtio_q_poll(&g_qReq, VIRTIO_SCSI_POLL_SPINS);
     if (i32Len < 0) {
         kprintf("virtio-scsi: timeout\n");
+        g_u32ReqTimeout++;
         g_u32IoFail++;
         scsi_soft_maybe_once();
         return -1;
@@ -662,6 +800,13 @@ virtio_scsi_submit(struct gj_scsi_request *pReq)
         return -1;
     }
     g_u32IoCount++;
+    if (cbData == 0) {
+        g_u32NoDataOps++;
+    } else if (pReq->fDataIn) {
+        g_u32DataInOps++;
+    } else {
+        g_u32DataOutOps++;
+    }
     q_note_free();
     scsi_soft_maybe_once();
     return 0;
@@ -686,6 +831,8 @@ virtio_scsi_ctrl_tmf(u32 u32Subtype, u32 u32Lun, u64 u64Tag)
 {
     i32 i32Len;
 
+    g_u32ApiTmf++;
+    g_u32LastTmfSubtype = u32Subtype;
     /* Soft-only path: accept abort/reset family as nop success. */
     if (!g_fReady) {
         if (g_fSoft && soft_tmf_ok(u32Subtype)) {
@@ -727,6 +874,7 @@ virtio_scsi_ctrl_tmf(u32 u32Subtype, u32 u32Lun, u64 u64Tag)
                       0,
                       (gj_paddr_t)(gj_vaddr_t)&g_TmfResp,
                       (u32)sizeof(g_TmfResp), 1) < 0) {
+        g_u32CtrlQAddFail++;
         g_u32CtrlFail++;
         scsi_soft_maybe_once();
         return -1;
@@ -736,6 +884,7 @@ virtio_scsi_ctrl_tmf(u32 u32Subtype, u32 u32Lun, u64 u64Tag)
     i32Len = virtio_q_poll(&g_qCtrl, VIRTIO_SCSI_CTRL_SPINS);
     if (i32Len < 0) {
         kprintf("virtio-scsi: ctrl TMF timeout subtype=%u\n", u32Subtype);
+        g_u32CtrlTimeout++;
         g_u32CtrlFail++;
         scsi_soft_maybe_once();
         return -1;
@@ -770,6 +919,7 @@ virtio_scsi_event_poll(struct gj_virtio_scsi_event *pOut)
     i32 i32Len;
     struct virtio_scsi_event *pEv;
 
+    g_u32ApiEventPoll++;
     /* Soft-only / not ready: no async events. */
     if (!g_fReady) {
         return 0;
@@ -805,6 +955,8 @@ virtio_scsi_event_poll(struct gj_virtio_scsi_event *pOut)
     pOut->u32Missed = (pEv->u32Event & GJ_VIRTIO_SCSI_EVT_MISSED) ? 1u : 0u;
     pOut->u32Reason = pEv->u32Reason;
     pOut->u32Lun = (u32)pEv->aLun[1];
+    g_u32LastEventType = pOut->u32Event;
+    g_u32LastEventReason = pOut->u32Reason;
     g_u32EventCount++;
 
     /* Soft repost so the device can deliver the next event. */
@@ -834,6 +986,7 @@ virtio_scsi_event_count(void)
 int
 virtio_scsi_qstats(struct gj_virtio_scsi_qstats *pOut)
 {
+    g_u32ApiQstats++;
     if (pOut == NULL) {
         return -1;
     }
@@ -867,6 +1020,7 @@ virtio_scsi_qstats(struct gj_virtio_scsi_qstats *pOut)
 u16
 virtio_scsi_q_free(u32 u32QIdx)
 {
+    g_u32ApiQFree++;
     if (!g_fReady) {
         return 0;
     }

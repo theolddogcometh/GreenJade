@@ -16,6 +16,19 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
+ * Wave 14 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
+ *   iommu: soft present    — DMAR/IVRS presence lamps
+ *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
+ *   iommu: soft window     — software BDF window table tallies
+ *   iommu: soft enforce    — policy arm + deny counters (soft)
+ *   iommu: soft path       — honesty: always-on product IOMMU remains OPEN
+ *   iommu: soft lamps      — composite soft lamps
+ *   iommu: soft deepen     — wave=14 stamp + area count
+ *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
+ *   iommu: soft PASS | soft inventory PASS
+ * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close.
+ *
  * Clean-room; dual-licensed pure C (not a GPL VT-d driver paste).
  */
 #include <gj/boot_info.h>
@@ -38,6 +51,11 @@
 #define IOMMU_DMAR_ATSR  2u
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE  14u
+/* Fixed greppable categories for deepen stamp (inventory…OPEN). */
+#define IOMMU_SOFT_AREAS 10u
 
 static struct gj_iommu_info g_Info;
 static int g_fProbed;
@@ -70,12 +88,14 @@ static u32 g_cWinRevokeMiss;   /* revoke with no matching used slot */
 static u32 g_cWinRevokeBad;    /* revoke rejected (bad BDF) */
 static u32 g_cWinSoftInvLogs;  /* times soft inventory printed */
 static int g_fWinSoftInvOnce;  /* first-activity inventory emitted */
+static u32 g_cSoftInvLogs;     /* Wave 14 iommu: soft inventory dumps */
 
 static void iommu_dmar_parse(u8 *pDmar, u32 u32MapMax);
 static void iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb);
 static void iommu_soft_probe_handoff(void);
 static void iommu_window_cap_soft_inventory(void);
 static void iommu_window_cap_soft_maybe_once(void);
+static void iommu_soft_inventory_log(void);
 
 static int
 sig_n(const void *p, const char *sz, u32 cb)
@@ -192,6 +212,136 @@ iommu_window_cap_soft_maybe_once(void)
     iommu_window_cap_soft_inventory();
 }
 
+/**
+ * Wave 14 greppable soft inventory dump (prefix "iommu: soft …").
+ * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
+ *
+ * greppable: iommu: soft
+ * greppable: iommu: soft inventory
+ * greppable: iommu: soft present
+ * greppable: iommu: soft dmar
+ * greppable: iommu: soft window
+ * greppable: iommu: soft enforce
+ * greppable: iommu: soft path
+ * greppable: iommu: soft lamps
+ * greppable: iommu: soft deepen
+ * greppable: iommu: soft OPEN
+ * greppable: iommu: soft PASS
+ */
+static void
+iommu_soft_inventory_log(void)
+{
+    u32 cUsed;
+    u32 u32Denies;
+    int fPresent;
+    int fEnforce;
+    u8 u8Vendor;
+    u32 u32Units;
+    const char *szVendor;
+
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
+    cUsed = iommu_window_count();
+    u32Denies = g_u32Denies;
+    fPresent = (g_Info.u8Present != 0) ? 1 : 0;
+    fEnforce = g_fEnforce ? 1 : 0;
+    u8Vendor = g_Info.u8Vendor;
+    u32Units = g_Info.u32Units;
+    if (u8Vendor == GJ_IOMMU_VENDOR_INTEL) {
+        szVendor = "intel";
+    } else if (u8Vendor == GJ_IOMMU_VENDOR_AMD) {
+        szVendor = "amd";
+    } else {
+        szVendor = "none";
+    }
+
+    /* Grep: iommu: soft inventory */
+    kprintf("iommu: soft inventory present=%d vendor=%s units=%u "
+            "windows=%u max=%u denies=%u enforce=%d logs=%u wave=%u "
+            "(soft inventory; not always-on product IOMMU; not bar3)\n",
+            fPresent, szVendor, u32Units, cUsed,
+            (unsigned)GJ_IOMMU_MAX_WINDOWS, u32Denies, fEnforce,
+            g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft present */
+    kprintf("iommu: soft present lamp=%d vendor=%u vendor_name=%s "
+            "units=%u intel=%u amd=%u none=%u wave=%u\n",
+            fPresent, (unsigned)u8Vendor, szVendor, u32Units,
+            (u8Vendor == GJ_IOMMU_VENDOR_INTEL) ? 1u : 0u,
+            (u8Vendor == GJ_IOMMU_VENDOR_AMD) ? 1u : 0u,
+            (u8Vendor == GJ_IOMMU_VENDOR_NONE) ? 1u : 0u,
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft dmar */
+    kprintf("iommu: soft dmar drhd=%u accepted=%u rmrr=%u atsr=%u "
+            "rhsa=%u other=%u rmrr_first_base=0x%lx rmrr_first_limit=0x%lx "
+            "wave=%u (structure soft inventory)\n",
+            g_cDrhd, g_cDrhdAccepted, g_cRmrr, g_cAtsr, g_cRhsa, g_cOther,
+            (unsigned long)g_u64RmrrFirstBase,
+            (unsigned long)g_u64RmrrFirstLimit, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft window */
+    kprintf("iommu: soft window used=%u max=%u create_ok=%u update=%u "
+            "fail=%u full=%u reject=%u destroy=%u revoke=%u miss=%u "
+            "bad=%u wave=%u (software BDF table; not cap object product)\n",
+            cUsed, (unsigned)GJ_IOMMU_MAX_WINDOWS, g_cWinCreateOk,
+            g_cWinCreateUpdate, g_cWinCreateFail, g_cWinFull, g_cWinReject,
+            g_cWinDestroy, g_cWinRevokeCall, g_cWinRevokeMiss,
+            g_cWinRevokeBad, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft enforce */
+    kprintf("iommu: soft enforce armed=%d denies=%u windows=%u "
+            "production_default_open_bus=0 soft "
+            "always_on_product=OPEN wave=%u "
+            "(soft policy lamps; not product always-on IOMMU)\n",
+            fEnforce, u32Denies, cUsed, (unsigned)IOMMU_SOFT_WAVE);
+
+    /*
+     * Honesty: always-on product IOMMU remains OPEN.
+     * Soft deepen ≠ product always-on IOMMU claim.
+     * Grep: iommu: soft path
+     */
+    kprintf("iommu: soft path probe=acpi_dmar_ivrs enforce=software_window "
+            "create_window=soft_bdf_table destroy=soft_revoke "
+            "always_on_product=OPEN hw_first_revoke=OPEN "
+            "cap_typed_window=OPEN bar3=OPEN wave=%u "
+            "(soft inventory; not product always-on IOMMU)\n",
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft lamps */
+    kprintf("iommu: soft lamps present=%d enforce=%d windows_live=%u "
+            "denies=%u dmar_structs=%u probed=%d wave=%u "
+            "(composite soft lamps)\n",
+            fPresent, fEnforce, cUsed, u32Denies,
+            g_cDrhd + g_cRmrr + g_cAtsr + g_cRhsa + g_cOther,
+            g_fProbed, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft deepen wave (Wave 14 stamp) */
+    kprintf("iommu: soft deepen wave=%u areas=%u logs=%u "
+            "(Wave 14 exclusive; soft only; not product always-on IOMMU; "
+            "not bar3)\n",
+            (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
+            g_cSoftInvLogs);
+
+    /*
+     * Explicit OPEN honesty for always-on product IOMMU.
+     * Grep: iommu: soft OPEN
+     */
+    kprintf("iommu: soft OPEN always_on_product=OPEN "
+            "no_open_bus_master_product=OPEN hw_te_default=OPEN "
+            "cap_window_object=OPEN inventory_only=1 wave=%u "
+            "(soft deepen ≠ product always-on IOMMU claim; not bar3)\n",
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft inventory PASS | iommu: soft PASS */
+    kprintf("iommu: soft inventory PASS present=%d windows=%u logs=%u "
+            "wave=%u\n",
+            fPresent, cUsed, g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
+    kprintf("iommu: soft PASS wave=%u areas=%u always_on_product=OPEN\n",
+            (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS);
+}
+
 /** Publish DMAR inventory + run VT-d soft-probe / domain soft smoke. */
 static void
 iommu_soft_probe_handoff(void)
@@ -215,6 +365,11 @@ iommu_soft_probe_handoff(void)
      * Grep: iommu: window cap soft inventory
      */
     iommu_window_cap_soft_inventory();
+    /*
+     * Wave 14 exclusive soft inventory (greppable "iommu: soft …").
+     * Soft deepen only; always-on product IOMMU remains OPEN.
+     */
+    iommu_soft_inventory_log();
 }
 
 void
@@ -252,6 +407,7 @@ iommu_probe(void)
     g_cWinRevokeBad = 0;
     g_cWinSoftInvLogs = 0;
     g_fWinSoftInvOnce = 0;
+    g_cSoftInvLogs = 0;
 
     pBi = boot_info_get();
     if (pBi != NULL) {

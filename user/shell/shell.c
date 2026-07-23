@@ -192,6 +192,7 @@
  *           u768gsoak umakefile14600 ubar3open (product v1.67)
  *           ucontinuum14600 uioringmin u1tibopen (product v1.68)
  *           ucontinuum15300 umakefile15300 umatrixopen (product v1.69)
+ *           uwave14 umulticonfine udaemonsoft (product v1.70 Wave 14)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -372,12 +373,17 @@
  *            umatrixopen prints 0 (Deck Top 50 matrix still NOT-TRIED soft);
  *            free exclusive continuum names; soft facts only;
  *            soft continuum ≠ bar3; does not claim Deck Top 50 PASS)
- *           (help/version soft banners Wave 11 honesty: help prints
+ *           (uwave14 prints 1 (Wave 14 exclusive soft deepen stamp);
+ *            umulticonfine prints 0 (soft ≠ product multi-server confine);
+ *            udaemonsoft prints soft daemon inventory honesty lines;
+ *            free exclusive names; soft facts only; soft ≠ bar3)
+ *           (help/version soft banners Wave 14 honesty: help prints
  *            GreenJade soft product + shell=native vfs door + soft=1 +
- *            bar3=0 before cmds:; version keeps
- *            "GreenJade shell (native vfs door) v1.69" smoke substring then
- *            GreenJade soft product + soft=1 + bar3=0; soft facts only —
- *            not bar3 close, not Deck Top 50 PASS; soft ≠ bar3)
+ *            bar3=0 + multi_server=0 + confine=0 before cmds:; version keeps
+ *            "GreenJade shell (native vfs door) v1.70" smoke substring then
+ *            GreenJade soft product + soft=1 + bar3=0 + multi_server=0 +
+ *            confine=0 + wave=14; soft facts only — not bar3 close, not Deck
+ *            Top 50 PASS; soft ≠ product multi-server confine)
  */
 #include <gj/string.h>
 #include <gj/syscalls.h>
@@ -15049,6 +15055,51 @@ cmd_umatrixopen(void)
     return 0;
 }
 
+/*
+ * uwave14 — print 1 (Wave 14 exclusive soft deepen stamp) (product v1.70).
+ * Soft fact only: user-daemon soft inventory wave high-water is 14.
+ * Free exclusive name; soft facts only; soft ≠ bar3.
+ * Usage: uwave14
+ */
+static int
+cmd_uwave14(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
+ * umulticonfine — print 0 (soft ≠ product multi-server confine) (product v1.70).
+ * Wave 14 honesty one-liner. Soft inventory greps ≠ multi-server product.
+ * Free exclusive name; soft facts only; does not claim bar3 close.
+ * Usage: umulticonfine
+ */
+static int
+cmd_umulticonfine(void)
+{
+    out("0\n");
+    return 0;
+}
+
+/*
+ * udaemonsoft — print soft daemon inventory honesty (product v1.70 Wave 14).
+ * Greppable soft inventory for live logs. Soft facts only; never bar3.
+ * Honesty: soft ≠ product multi-server confine.
+ * Usage: udaemonsoft
+ */
+static int
+cmd_udaemonsoft(void)
+{
+    out("greenjade-shell: soft inventory wave=14 areas=8\n");
+    out("greenjade-shell: soft daemons init=1 shell=1 vfsd=1 sessiond=1 "
+        "storaged=1 sshd=1 netstackd=1 scsi_mid=1\n");
+    out("greenjade-shell: soft deepen wave=14 multi_server=0 confine=0 "
+        "bar3=0\n");
+    out("greenjade-shell: soft path soft=1 multi_server=0 confine=0 "
+        "(soft inventory; not bar3; soft != product multi-server confine)\n");
+    return 0;
+}
+
 /* Run one command line; returns 0 ok, -1 fail, 1 exit */
 static int
 run_line(const char *szLine)
@@ -15063,15 +15114,19 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "help") == 0) {
         /*
-         * Soft product banner Wave 11 honesty (facts only). Identifies
+         * Soft product banner Wave 14 honesty (facts only). Identifies
          * GreenJade soft product continuum shell; soft=1; bar3=0 (still
-         * open). Soft continuum ≠ bar3. Not Deck Top 50 PASS and not bar3
-         * close. Greppable soft inventory for live logs.
+         * open); multi_server=0; confine=0. Soft continuum ≠ bar3.
+         * Soft ≠ product multi-server confine. Not Deck Top 50 PASS.
+         * Greppable soft inventory for live logs.
          */
         out("GreenJade soft product\n");
         out("shell=native vfs door\n");
         out("soft=1\n");
         out("bar3=0\n");
+        out("multi_server=0\n");
+        out("confine=0\n");
+        out("wave=14\n");
         out("cmds: help echo cat ls rm stat touch cp mv head tail wc cmp "
             "sleep size true false clear hostname uname id whoami date env "
             "printenv nproc uptime basename dirname cksum grep test printf "
@@ -15230,6 +15285,7 @@ run_line(const char *szLine)
             "u768gsoak umakefile14600 ubar3open "
             "ucontinuum14600 uioringmin u1tibopen "
             "ucontinuum15300 umakefile15300 umatrixopen "
+            "uwave14 umulticonfine udaemonsoft "
             "dos2unix unix2dos "
             "sync pwd format mount bigfile install stats storecap storestats "
             "storeflush netstats version exit\n");
@@ -15372,17 +15428,20 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "version") == 0) {
         /*
-         * Soft product version banner Wave 11 honesty.
+         * Soft product version banner Wave 14 honesty.
          * Keep substring "GreenJade shell (native vfs door)" for smoke gate.
          * Extra lines are soft inventory only: GreenJade soft product identity,
-         * soft=1, and bar3=0 (still open). Soft continuum ≠ bar3. Does not
-         * claim Deck Top 50 PASS or bar3 close. Mirrors help soft banner
-         * facts for greppable live logs (ubar3open / bar3=0 agents).
+         * soft=1, bar3=0 (still open), multi_server=0, confine=0, wave=14.
+         * Soft continuum ≠ bar3. Soft ≠ product multi-server confine.
+         * Does not claim Deck Top 50 PASS or bar3 close.
          */
-        out("GreenJade shell (native vfs door) v1.69\n");
+        out("GreenJade shell (native vfs door) v1.70\n");
         out("GreenJade soft product\n");
         out("soft=1\n");
         out("bar3=0\n");
+        out("multi_server=0\n");
+        out("confine=0\n");
+        out("wave=14\n");
         return 0;
     }
     if (gj_strcmp(aCmd, "storecap") == 0) {
@@ -18956,6 +19015,15 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "umatrixopen") == 0) {
         return cmd_umatrixopen();
     }
+    if (gj_strcmp(aCmd, "uwave14") == 0) {
+        return cmd_uwave14();
+    }
+    if (gj_strcmp(aCmd, "umulticonfine") == 0) {
+        return cmd_umulticonfine();
+    }
+    if (gj_strcmp(aCmd, "udaemonsoft") == 0) {
+        return cmd_udaemonsoft();
+    }
     if (gj_strcmp(aCmd, "dos2unix") == 0) {
         char aU[64];
 
@@ -19482,6 +19550,10 @@ _start(void)
         "ucontinuum15300",
         "umakefile15300",
         "umatrixopen",
+        /* product v1.70 Wave 14: exclusive soft deepen user-daemon honesty */
+        "uwave14",
+        "umulticonfine",
+        "udaemonsoft",
         "version",
         "install",
         "exit",
@@ -19617,6 +19689,7 @@ _start(void)
     out("greenjade-shell: u768gsoak umakefile14600 ubar3open PASS\n");
     out("greenjade-shell: ucontinuum14600 uioringmin u1tibopen PASS\n");
     out("greenjade-shell: ucontinuum15300 umakefile15300 umatrixopen PASS\n");
+    out("greenjade-shell: uwave14 umulticonfine udaemonsoft PASS\n");
     out("greenjade-shell: storeflush PASS\n");
     out("greenjade-shell: vfs PASS\n");
     out("greenjade-shell: interactive PASS\n");

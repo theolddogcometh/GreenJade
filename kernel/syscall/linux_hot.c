@@ -5,18 +5,24 @@
  * Linux hybrid Option C — kernel hot paths (clean-room pure C11).
  * Dual MIT OR Apache-2.0. No GPL source.
  *
- * Soft product inventory (Wave 11 exclusive; this unit only):
+ * Soft product inventory (Wave 11 base; Wave 14 exclusive deepen):
  *   - Group enter tallies (io/id/mem/time/futex/sched/sig/sock/info/proc)
  *   - Live task view snapshot (pid/tid/cred/brk/fs_base)
  *   - Handler catalog capacity (static product surface count)
+ *   - Wave 14: groups catalog + deepen stamp + path/stats wave lamps
  *   Never hard-gates; wrap OK; diagnostics only — does not alter i64Ret.
  * Greppable prefix-stable serial markers:
  *   linux: hot soft inventory …
+ *   linux: hot soft groups …
  *   linux: hot soft io|id|mem|time|futex|sched|sig|sock|info|proc …
  *   linux: hot soft live …
  *   linux: hot soft path …
  *   linux: hot soft stats …
+ *   linux: hot soft deepen …
  * greppable: "linux: hot soft"
+ * greppable: linux: hot soft inventory
+ * greppable: linux: hot soft path
+ * greppable: linux: hot soft deepen
  */
 #include <gj/cpu.h>
 #include <gj/error.h>
@@ -57,8 +63,8 @@ static u64 g_u64ClearChildTid;
 static u64 g_u64MonoNsec; /* crude mono clock until TSC calibrate */
 
 /*
- * Soft inventory groups (Wave 11). Enter-only tallies — never rewrite ret.
- * greppable: linux: hot soft …
+ * Soft inventory groups (Wave 11 base; Wave 14 deepen). Enter-only tallies —
+ * never rewrite ret. greppable: linux: hot soft …
  */
 enum {
     HOT_SOFT_GRP_IO = 0,   /* write/readv/pread/pwrite family */
@@ -74,9 +80,15 @@ enum {
     HOT_SOFT_GRP_N
 };
 
-/* Static product surface: public gj_linux_hot_* entry count (catalog). */
+/*
+ * Static product surface: public gj_linux_hot_* entry count (catalog).
+ * Wave 14 soft inventory stamp (file-local; never product gate).
+ * Areas: inventory|groups|io|id|mem|time|futex|sched|sig|sock|info|proc|
+ *        live|path|stats|deepen
+ */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE     11u
+#define GJ_LINUX_HOT_SOFT_WAVE     14u
+#define GJ_LINUX_HOT_SOFT_AREAS    16u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -122,13 +134,16 @@ hot_soft_enter(u32 u32Grp, const struct gj_linux_regs *pRegs)
 }
 
 /**
- * Greppable soft Linux hot-path inventory (product / smoke).
+ * Greppable soft Linux hot-path inventory (product / smoke; Wave 14 deepen).
  *   linux: hot soft inventory …
+ *   linux: hot soft groups …
  *   linux: hot soft io|id|mem|time|futex|sched|sig|sock|info|proc …
  *   linux: hot soft live …
  *   linux: hot soft path …
  *   linux: hot soft stats …
+ *   linux: hot soft deepen …
  * greppable: linux: hot soft
+ * Honesty: soft inventory only — not product gate; not bar3.
  */
 static void
 hot_soft_inventory_log(void)
@@ -136,99 +151,138 @@ hot_soft_inventory_log(void)
     struct linux_hot_soft s;
     u32 u32HasProc;
     u32 u32BrkLive;
+    u32 u32LiveCred;
+    u32 u32GroupsActive;
+    u32 iGrp;
 
     hot_soft_inc(&g_hotSoft.u64LogN);
     s = g_hotSoft;
     u32HasProc = (g_pLinuxProc != NULL) ? 1u : 0u;
     u32BrkLive = (g_u64BrkBase != 0 || g_u64BrkCur != 0) ? 1u : 0u;
+    u32LiveCred = (g_u32LinuxUid != 0 || g_u32LinuxEuid != 0) ? 1u : 0u;
+    u32GroupsActive = 0;
+    for (iGrp = 0; iGrp < (u32)HOT_SOFT_GRP_N; iGrp++) {
+        if (s.aEnter[iGrp] != 0) {
+            u32GroupsActive++;
+        }
+    }
 
     /* Grep: linux: hot soft inventory */
     kprintf("linux: hot soft inventory wave=%u handlers=%u groups=%u "
-            "enter=%lu null_regs=%lu ctx_set=%lu log_n=%lu "
-            "proc=%u brk_live=%u\n",
+            "areas=%u enter=%lu null_regs=%lu ctx_set=%lu log_n=%lu "
+            "proc=%u brk_live=%u cred_live=%u grp_active=%u "
+            "(soft; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned)HOT_SOFT_GRP_N,
+            (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned long)s.u64EnterTotal,
             (unsigned long)s.u64NullRegs,
             (unsigned long)s.u64CtxSet,
             (unsigned long)s.u64LogN,
-            u32HasProc, u32BrkLive);
+            u32HasProc, u32BrkLive, u32LiveCred, u32GroupsActive);
+
+    /* Grep: linux: hot soft groups (Wave 14 catalog) */
+    kprintf("linux: hot soft groups n=%u active=%u "
+            "names=io,id,mem,time,futex,sched,sig,sock,info,proc "
+            "wave=%u\n",
+            (unsigned)HOT_SOFT_GRP_N, u32GroupsActive,
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft io */
     kprintf("linux: hot soft io enter=%lu "
-            "surface=write,writev,readv,preadv,pwritev,pread64,pwrite64\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_IO]);
+            "surface=write,writev,readv,preadv,pwritev,pread64,pwrite64 "
+            "wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_IO],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft id */
     kprintf("linux: hot soft id enter=%lu "
-            "surface=get/set uid/gid/pid/sid/groups/personality\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_ID]);
+            "surface=get/set uid/gid/pid/sid/groups/personality "
+            "wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_ID],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft mem */
     kprintf("linux: hot soft mem enter=%lu "
             "surface=brk,mmap,munmap,mremap,mprotect,msync,mincore,"
-            "mlock,pkey,mbind\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_MEM]);
+            "mlock,pkey,mbind wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_MEM],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft time */
     kprintf("linux: hot soft time enter=%lu "
-            "surface=clock_*,nanosleep,itimer,alarm,timeofday,time\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_TIME]);
+            "surface=clock_*,nanosleep,itimer,alarm,timeofday,time "
+            "wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_TIME],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft futex */
     kprintf("linux: hot soft futex enter=%lu "
             "surface=futex,futex_wake2,futex_wait2,robust_list,"
-            "set_tid_address\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_FUTEX]);
+            "set_tid_address wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_FUTEX],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft sched */
     kprintf("linux: hot soft sched enter=%lu "
-            "surface=yield,sched_get/set*,affinity,attr,priority\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_SCHED]);
+            "surface=yield,sched_get/set*,affinity,attr,priority "
+            "wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SCHED],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft sig */
     kprintf("linux: hot soft sig enter=%lu "
-            "surface=tkill,tgkill,sigaltstack,rt_sig*,pause\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_SIG]);
+            "surface=tkill,tgkill,sigaltstack,rt_sig*,pause wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SIG],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft sock */
     kprintf("linux: hot soft sock enter=%lu "
             "surface=getsockopt,setsockopt,getsockname,getpeername,"
-            "shutdown\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_SOCK]);
+            "shutdown wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_SOCK],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft info */
     kprintf("linux: hot soft info enter=%lu "
             "surface=uname,sysinfo,times,rusage,prctl,cap,random,getcpu,"
-            "priority,arch_prctl\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_INFO]);
+            "priority,arch_prctl wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_INFO],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft proc */
     kprintf("linux: hot soft proc enter=%lu "
-            "surface=exit,exit_group,waitid,process_vm_*,membarrier,rseq\n",
-            (unsigned long)s.aEnter[HOT_SOFT_GRP_PROC]);
+            "surface=exit,exit_group,waitid,process_vm_*,membarrier,rseq "
+            "wave=%u\n",
+            (unsigned long)s.aEnter[HOT_SOFT_GRP_PROC],
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft live */
     kprintf("linux: hot soft live pid=%u tid=%u ppid=%u pgid=%u sid=%u "
             "uid=%u euid=%u gid=%u egid=%u brk_base=0x%lx brk_cur=0x%lx "
-            "fs_base=0x%lx gs_base=0x%lx clear_ctid=0x%lx\n",
+            "fs_base=0x%lx gs_base=0x%lx clear_ctid=0x%lx wave=%u\n",
             g_u32LinuxPid, g_u32LinuxTid, g_u32LinuxPpid, g_u32LinuxPgid,
             g_u32LinuxSid, g_u32LinuxUid, g_u32LinuxEuid, g_u32LinuxGid,
             g_u32LinuxEgid,
             (unsigned long)g_u64BrkBase, (unsigned long)g_u64BrkCur,
             (unsigned long)g_u64FsBase, (unsigned long)g_u64GsBase,
-            (unsigned long)g_u64ClearChildTid);
+            (unsigned long)g_u64ClearChildTid,
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft path */
     kprintf("linux: hot soft path hybrid=OptionC hot=kernel "
             "cold=personality enter_only=1 ret_rewrite=0 "
-            "(soft inventory; not bar3)\n");
+            "handlers=%u groups=%u wave=%u "
+            "(soft inventory; not bar3)\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
+            (unsigned)HOT_SOFT_GRP_N,
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft stats */
     kprintf("linux: hot soft stats enter=%lu io=%lu id=%lu mem=%lu "
             "time=%lu futex=%lu sched=%lu sig=%lu sock=%lu info=%lu "
-            "proc=%lu null=%lu ctx=%lu log_n=%lu\n",
+            "proc=%lu null=%lu ctx=%lu log_n=%lu wave=%u\n",
             (unsigned long)s.u64EnterTotal,
             (unsigned long)s.aEnter[HOT_SOFT_GRP_IO],
             (unsigned long)s.aEnter[HOT_SOFT_GRP_ID],
@@ -242,6 +296,18 @@ hot_soft_inventory_log(void)
             (unsigned long)s.aEnter[HOT_SOFT_GRP_PROC],
             (unsigned long)s.u64NullRegs,
             (unsigned long)s.u64CtxSet,
+            (unsigned long)s.u64LogN,
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+
+    /* Grep: linux: hot soft deepen wave */
+    kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
+            "groups=%u enter=%lu logs=%lu "
+            "(Wave 14 exclusive; not bar3)\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
+            (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
+            (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
+            (unsigned)HOT_SOFT_GRP_N,
+            (unsigned long)s.u64EnterTotal,
             (unsigned long)s.u64LogN);
 }
 
@@ -270,7 +336,7 @@ gj_linux_set_current(struct gj_process *pProc, u32 u32Pid, u32 u32Tid)
     g_pLinuxProc = pProc;
     g_u32LinuxPid = u32Pid ? u32Pid : 1;
     g_u32LinuxTid = u32Tid ? u32Tid : g_u32LinuxPid;
-    /* Wave 11 soft: arm inventory on bind (bring-up smoke greps). */
+    /* Wave 14 soft: arm inventory on bind (bring-up smoke greps). */
     hot_soft_inc(&g_hotSoft.u64CtxSet);
     hot_soft_inventory_maybe_once();
 }

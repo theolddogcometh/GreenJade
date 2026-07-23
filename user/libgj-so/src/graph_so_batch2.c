@@ -17,12 +17,22 @@
  * Soft only; decls also in include/gj_so.h. Marker values match
  * GJ_SO_BATCH2_EXPORT_A_VALUE (0x422) / _B_VALUE (0x423) there.
  *
- * Soft surface (unwired):
+ * Soft surface (unwired; Wave 14 exclusive deepen):
  *   gj_so_batch2_export_a / _b — distinct data markers (0x422 / 0x423)
- *   gj_so_batch2_init          — restores both markers
+ *   gj_so_batch2_soft_stamp    — soft companion stamp ('B2s2')
+ *   gj_so_batch2_init          — restores both markers + stamp
  *   gj_so_batch2_id            — XOR of markers (-Werror clean)
  *   gj_so_batch2_chain_next    — one step of SysV hash chain walk
  *   gj_so_batch2_chain_find    — soft linear chain probe by name hash slot
+ *   gj_so_batch2_soft_get      — soft XOR id (read-only)
+ *   gj_so_batch2_soft_probe    — soft check + careful restore
+ *
+ * greppable: GJ_SO_BATCH2_SOFT_MARKER
+ * greppable: GJ_SO_BATCH2_SOFT_INIT
+ * greppable: GJ_SO_BATCH2_SOFT_GET
+ * greppable: GJ_SO_BATCH2_SOFT_PROBE
+ * greppable: GJ_SO_BATCH2_SOFT_STAMP
+ * greppable: libgj-so: soft batch2 wave=14
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -30,15 +40,22 @@
 /* Matches GJ_SO_BATCH2_EXPORT_*_VALUE in include/gj_so.h (soft section). */
 #define GJ_SO_BATCH2_EXPORT_A_VALUE  ((uint64_t)0x422)
 #define GJ_SO_BATCH2_EXPORT_B_VALUE  ((uint64_t)0x423)
+#define GJ_SO_BATCH2_STAMP_CANON     ((uint64_t)0x42327332ull) /* 'B2s2' */
 
+/* greppable: GJ_SO_BATCH2_SOFT_MARKER */
 volatile uint64_t gj_so_batch2_export_a = GJ_SO_BATCH2_EXPORT_A_VALUE;
 volatile uint64_t gj_so_batch2_export_b = GJ_SO_BATCH2_EXPORT_B_VALUE;
+
+/* greppable: GJ_SO_BATCH2_SOFT_STAMP */
+volatile uint64_t gj_so_batch2_soft_stamp = GJ_SO_BATCH2_STAMP_CANON;
 
 void
 gj_so_batch2_init(void)
 {
+	/* greppable: GJ_SO_BATCH2_SOFT_INIT */
 	gj_so_batch2_export_a = GJ_SO_BATCH2_EXPORT_A_VALUE;
 	gj_so_batch2_export_b = GJ_SO_BATCH2_EXPORT_B_VALUE;
+	gj_so_batch2_soft_stamp = GJ_SO_BATCH2_STAMP_CANON;
 }
 
 uint64_t
@@ -92,4 +109,36 @@ gj_so_batch2_chain_find(const uint32_t *pChain, uint32_t u32Nchain,
 		u32Idx = pChain[u32Idx];
 	}
 	return 0;
+}
+
+/*
+ * Soft get of the batch XOR id. Read-only; does not mutate.
+ */
+uint64_t
+gj_so_batch2_soft_get(void)
+{
+	/* greppable: GJ_SO_BATCH2_SOFT_GET */
+	return gj_so_batch2_export_a ^ gj_so_batch2_export_b;
+}
+
+/*
+ * Soft probe: 1 if both markers + stamp are canonical; on soft miss
+ * carefully restores and returns 0. Never hard-fails.
+ */
+int
+gj_so_batch2_soft_probe(void)
+{
+	/* greppable: GJ_SO_BATCH2_SOFT_PROBE */
+	if (gj_so_batch2_export_a != GJ_SO_BATCH2_EXPORT_A_VALUE ||
+	    gj_so_batch2_export_b != GJ_SO_BATCH2_EXPORT_B_VALUE) {
+		gj_so_batch2_export_a = GJ_SO_BATCH2_EXPORT_A_VALUE;
+		gj_so_batch2_export_b = GJ_SO_BATCH2_EXPORT_B_VALUE;
+		gj_so_batch2_soft_stamp = GJ_SO_BATCH2_STAMP_CANON;
+		return 0;
+	}
+	if (gj_so_batch2_soft_stamp != GJ_SO_BATCH2_STAMP_CANON) {
+		gj_so_batch2_soft_stamp = GJ_SO_BATCH2_STAMP_CANON;
+		return 0;
+	}
+	return 1;
 }

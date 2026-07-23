@@ -30,16 +30,28 @@
  * After CR3 load (serial already up on UEFI path), emit greppable soft markers
  * for identity install and the published gj_boot_info (GOP / memmap / handoff).
  *
- * Grep markers:
- *   boot: identity soft PASS cr3=… leaves=… gib=4
+ * Wave 14 exclusive soft deepen (this unit only — greppable "identity: soft …"):
+ *   identity: soft honesty    — bridge only; higher-half product OPEN
+ *   identity: soft inventory  — pt/pd/leaf cover snapshot + wave stamp
+ *   identity: soft layout     — PML4/PDPT/PD phys addresses
+ *   identity: soft pd         — per-GiB PD leaf tallies
+ *   identity: soft geometry   — 4 GiB / 2 MiB leaf design constants
+ *   identity: soft flags      — leaf/link PTE flag inventory
+ *   identity: soft cover      — cover/match/align/pml4/pdpt lamps
+ *   identity: soft cr3        — expect/read/match soft classify
+ *   identity: soft link       — PML4[0] + PDPT[0..3] link soft
+ *   identity: soft pml4       — slot0 link + upper-slot empty soft
+ *   identity: soft stats      — install/log counters + leaf rollup
+ *   identity: soft path       — UEFI install path honesty catalog
+ *   identity: soft deepen     — wave=14 stamp + area count
  *   identity: soft PASS|PARTIAL|FAIL …
- *   identity: soft inventory …
- *   identity: soft layout …
- *   identity: soft pd …
+ *   boot: identity soft PASS …
  *   boot: handoff soft … / boot: memmap soft … / boot: GOP soft …
  *     (via boot_info_soft_log when source is UEFI)
  *
  * greppable: identity: soft
+ * greppable: identity: soft honesty
+ * greppable: identity: soft deepen
  * greppable: boot: identity soft
  *
  * Limits (not product end-state)
@@ -47,6 +59,7 @@
  *   - Covers only [0, 4 GiB). Machines with >4 GiB RAM still boot; PMM uses
  *     the firmware memory map for usable frames, then HHDM grows coverage
  *     (P-MEM-3 / P-MEM-5). This map is a bridge, not the 1 TiB bar.
+ *   - Higher-half product move remains OPEN (soft honesty; never claims HH).
  *   - g_aPt lives in kernel BSS and must remain identity-reachable while
  *     CR3 points here (linked in the low identity window of the product ELF).
  *   - Call once, early, after ExitBootServices and before VMM mutates tables.
@@ -64,14 +77,19 @@
 #define PTE_ADDR_MASK 0x000ffffffffff000ull
 
 /* Soft inventory constants (must match build loop). */
-#define IDMAP_PT_PAGES     6u
-#define IDMAP_PD_COUNT     4u
+#define IDMAP_PT_PAGES      6u
+#define IDMAP_PD_COUNT      4u
 #define IDMAP_LEAVES_PER_PD 512u
-#define IDMAP_LEAF_SHIFT   21u /* 2 MiB */
-#define IDMAP_GIB_SHIFT    30u /* 1 GiB */
-#define IDMAP_GIB          4u
-#define IDMAP_LEAF_FLAGS   (PTE_P | PTE_W | PTE_PS)
-#define IDMAP_LINK_FLAGS   (PTE_P | PTE_W)
+#define IDMAP_LEAF_SHIFT    21u /* 2 MiB */
+#define IDMAP_GIB_SHIFT     30u /* 1 GiB */
+#define IDMAP_GIB           4u
+#define IDMAP_LEAF_FLAGS    (PTE_P | PTE_W | PTE_PS)
+#define IDMAP_LINK_FLAGS    (PTE_P | PTE_W)
+#define IDMAP_SOFT_WAVE     14u /* Wave 14 exclusive soft deepen stamp */
+#define IDMAP_LEAVES_EXPECT (IDMAP_PD_COUNT * IDMAP_LEAVES_PER_PD)
+#define IDMAP_LEAF_BYTES    (1ull << IDMAP_LEAF_SHIFT)
+#define IDMAP_GIB_BYTES     (1ull << IDMAP_GIB_SHIFT)
+#define IDMAP_COVER_BYTES   ((u64)IDMAP_GIB << IDMAP_GIB_SHIFT)
 
 /* Six pages: PML4 + PDPT + 4×PD (covers 4 GiB with 2 MiB leaves). */
 static u8 g_aPt[IDMAP_PT_PAGES * 4096u] __attribute__((aligned(4096)));
@@ -85,13 +103,13 @@ static u32 g_cSoftIdentityLog;
 /**
  * Soft identity map inventory — walk g_aPt after CR3 load; never hard-fails.
  *
- * Prefix-stable greppable product markers:
- *   identity: soft PASS|PARTIAL|FAIL cr3=… match=… leaves=… …
- *   identity: soft inventory pt_pages=… pd=… leaves_ok=… …
- *   identity: soft layout pml4=… pdpt=… pd0=… …
- *   identity: soft pd i=… leaves_ok=… bad_flag=… bad_pa=… base_pa=…
+ * Wave 14 exclusive soft deepen — prefix-stable greppable markers:
+ *   identity: soft honesty / inventory / layout / pd / geometry / flags
+ *   identity: soft cover / cr3 / link / pml4 / stats / path / deepen
+ *   identity: soft PASS|PARTIAL|FAIL …
  *
  * Soft only: does not change maps or abort boot.
+ * Honesty: bridge map only; higher-half product move remains OPEN.
  */
 static void
 identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
@@ -107,18 +125,29 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
     u32 cPdptOk;
     u32 cPml4Ok;
     u32 cEmptyUpper;
+    u32 cPml4EmptyUpper;
     u32 fCr3Match;
     u32 fAligned;
     u32 fCover;
+    u32 fPml4Present;
+    u32 fPml4Rw;
+    u32 fNxClaim;
+    u32 fUserClaim;
+    u32 fGlobalClaim;
+    u32 fHhProduct;
+    u32 cAreas;
+    u32 cLeavesExpect;
     u64 paExpect;
     u64 paGot;
     u64 u64Ent;
     u64 u64Pml4Pa;
     u64 u64PdptPa;
+    u64 u64Pml4Ent;
     u64 aPdPa[IDMAP_PD_COUNT];
     u32 aPdLeavesOk[IDMAP_PD_COUNT];
     u32 aPdBadFlag[IDMAP_PD_COUNT];
     u32 aPdBadPa[IDMAP_PD_COUNT];
+    u32 aPdLinkOk[IDMAP_PD_COUNT];
     const char *szVerdict;
 
     pPml4 = (u64 *)(void *)&g_aPt[0];
@@ -132,13 +161,22 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
     cPdptOk = 0;
     cPml4Ok = 0;
     cEmptyUpper = 0;
+    cPml4EmptyUpper = 0;
+    cAreas = 0;
+    cLeavesExpect = IDMAP_LEAVES_EXPECT;
     fCr3Match = (u64Cr3Read == u64Cr3Expect) ? 1u : 0u;
     fAligned = (((u64)(gj_vaddr_t)g_aPt & 0xfffu) == 0u) ? 1u : 0u;
+    fNxClaim = 0u;     /* soft honesty: early bridge never sets NX */
+    fUserClaim = 0u;   /* soft honesty: no user bits */
+    fGlobalClaim = 0u; /* soft honesty: no global bits */
+    fHhProduct = 0u;   /* higher-half product move remains OPEN */
 
     /* PML4[0] → PDPT | P | W */
-    u64Ent = pPml4[0];
-    if ((u64Ent & IDMAP_LINK_FLAGS) == IDMAP_LINK_FLAGS &&
-        (u64Ent & PTE_ADDR_MASK) == (u64PdptPa & PTE_ADDR_MASK)) {
+    u64Pml4Ent = pPml4[0];
+    fPml4Present = ((u64Pml4Ent & PTE_P) != 0ull) ? 1u : 0u;
+    fPml4Rw = ((u64Pml4Ent & PTE_W) != 0ull) ? 1u : 0u;
+    if ((u64Pml4Ent & IDMAP_LINK_FLAGS) == IDMAP_LINK_FLAGS &&
+        (u64Pml4Ent & PTE_ADDR_MASK) == (u64PdptPa & PTE_ADDR_MASK)) {
         cPml4Ok = 1u;
     }
 
@@ -148,11 +186,13 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
         aPdLeavesOk[iPd] = 0;
         aPdBadFlag[iPd] = 0;
         aPdBadPa[iPd] = 0;
+        aPdLinkOk[iPd] = 0;
 
         u64Ent = pPdpt[iPd];
         if ((u64Ent & IDMAP_LINK_FLAGS) == IDMAP_LINK_FLAGS &&
             (u64Ent & PTE_ADDR_MASK) == (aPdPa[iPd] & PTE_ADDR_MASK)) {
             cPdptOk++;
+            aPdLinkOk[iPd] = 1u;
         }
 
         for (iPage = 0; iPage < IDMAP_LEAVES_PER_PD; iPage++) {
@@ -182,10 +222,15 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
             cEmptyUpper++;
         }
     }
+    /* Soft: PML4 slots 1..511 empty (low-half bridge only). */
+    for (iPage = 1u; iPage < 512u; iPage++) {
+        if (pPml4[iPage] == 0ull) {
+            cPml4EmptyUpper++;
+        }
+    }
 
-    fCover = (cLeavesOk == (IDMAP_PD_COUNT * IDMAP_LEAVES_PER_PD) &&
-              cPml4Ok == 1u && cPdptOk == IDMAP_PD_COUNT && fCr3Match != 0u &&
-              fAligned != 0u)
+    fCover = (cLeavesOk == cLeavesExpect && cPml4Ok == 1u &&
+              cPdptOk == IDMAP_PD_COUNT && fCr3Match != 0u && fAligned != 0u)
                  ? 1u
                  : 0u;
 
@@ -207,28 +252,44 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
         g_cSoftIdentityLog++;
     }
 
+    /*
+     * Honesty first: 4 GiB identity bridge is NOT higher-half product.
+     * greppable: identity: soft honesty
+     */
+    kprintf("identity: soft honesty bridge_only=1 higher_half_product=OPEN "
+            "hh_claim=%u cover_gib=%u leaf_mib=%u nx=%u user=%u global=%u "
+            "p_mem_3=OPEN p_mem_5=OPEN product_tib=0 "
+            "(soft; never closes higher-half)\n",
+            (unsigned)fHhProduct, (unsigned)IDMAP_GIB,
+            (unsigned)(IDMAP_LEAF_BYTES / (1024ull * 1024ull)),
+            (unsigned)fNxClaim, (unsigned)fUserClaim,
+            (unsigned)fGlobalClaim);
+    cAreas++;
+
     /* Grep: identity: soft PASS | PARTIAL | FAIL */
     kprintf("identity: soft %s cr3=0x%lx cr3_read=0x%lx match=%u "
             "leaves=%u leaves_ok=%u bad_flag=%u bad_pa=%u gib=%u "
-            "pt_pages=%u installs=%u log_n=%u\n",
+            "pt_pages=%u installs=%u log_n=%u wave=%u\n",
             szVerdict, (unsigned long)u64Cr3Expect,
             (unsigned long)u64Cr3Read, fCr3Match, (unsigned)cLeavesBuilt,
             (unsigned)cLeavesOk, (unsigned)cLeavesBadFlag,
             (unsigned)cLeavesBadPa, (unsigned)IDMAP_GIB,
             (unsigned)IDMAP_PT_PAGES, (unsigned)g_cSoftIdentityInstall,
-            (unsigned)g_cSoftIdentityLog);
+            (unsigned)g_cSoftIdentityLog, (unsigned)IDMAP_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: identity: soft inventory */
-    kprintf("identity: soft inventory pt_pages=%u pd=%u pdpt_ok=%u "
+    kprintf("identity: soft inventory wave=%u pt_pages=%u pd=%u pdpt_ok=%u "
             "pml4_ok=%u leaves_ok=%u leaves_expect=%u empty_upper=%u "
             "aligned=%u cover=%u leaf_shift=%u link_flags=0x%x "
             "leaf_flags=0x%x\n",
-            (unsigned)IDMAP_PT_PAGES, (unsigned)IDMAP_PD_COUNT,
-            (unsigned)cPdptOk, (unsigned)cPml4Ok, (unsigned)cLeavesOk,
-            (unsigned)(IDMAP_PD_COUNT * IDMAP_LEAVES_PER_PD),
+            (unsigned)IDMAP_SOFT_WAVE, (unsigned)IDMAP_PT_PAGES,
+            (unsigned)IDMAP_PD_COUNT, (unsigned)cPdptOk, (unsigned)cPml4Ok,
+            (unsigned)cLeavesOk, (unsigned)cLeavesExpect,
             (unsigned)cEmptyUpper, fAligned, fCover,
             (unsigned)IDMAP_LEAF_SHIFT, (unsigned)IDMAP_LINK_FLAGS,
             (unsigned)IDMAP_LEAF_FLAGS);
+    cAreas++;
 
     /* Grep: identity: soft layout */
     kprintf("identity: soft layout pml4=0x%lx pdpt=0x%lx "
@@ -239,16 +300,107 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
             (unsigned long)aPdPa[2], (unsigned long)aPdPa[3],
             (unsigned long)(u64)(gj_vaddr_t)g_aPt,
             (unsigned)sizeof(g_aPt));
+    cAreas++;
 
     /* Grep: identity: soft pd */
     for (iPd = 0; iPd < IDMAP_PD_COUNT; iPd++) {
         paExpect = (u64)iPd << IDMAP_GIB_SHIFT;
         kprintf("identity: soft pd i=%u leaves_ok=%u bad_flag=%u bad_pa=%u "
-                "base_pa=0x%lx pd_pa=0x%lx gib_span=1\n",
+                "link_ok=%u base_pa=0x%lx pd_pa=0x%lx gib_span=1\n",
                 (unsigned)iPd, (unsigned)aPdLeavesOk[iPd],
                 (unsigned)aPdBadFlag[iPd], (unsigned)aPdBadPa[iPd],
-                (unsigned long)paExpect, (unsigned long)aPdPa[iPd]);
+                (unsigned)aPdLinkOk[iPd], (unsigned long)paExpect,
+                (unsigned long)aPdPa[iPd]);
     }
+    cAreas++;
+
+    /* Grep: identity: soft geometry — design constants (compile-time). */
+    kprintf("identity: soft geometry gib=%u cover_bytes=0x%lx "
+            "leaf_bytes=0x%lx leaf_shift=%u gib_shift=%u "
+            "pd=%u leaves_per_pd=%u leaves_expect=%u pt_pages=%u "
+            "pt_bytes=%u page=4096 soft PASS\n",
+            (unsigned)IDMAP_GIB, (unsigned long)IDMAP_COVER_BYTES,
+            (unsigned long)IDMAP_LEAF_BYTES, (unsigned)IDMAP_LEAF_SHIFT,
+            (unsigned)IDMAP_GIB_SHIFT, (unsigned)IDMAP_PD_COUNT,
+            (unsigned)IDMAP_LEAVES_PER_PD, (unsigned)cLeavesExpect,
+            (unsigned)IDMAP_PT_PAGES, (unsigned)sizeof(g_aPt));
+    cAreas++;
+
+    /* Grep: identity: soft flags — leaf/link PTE flag inventory. */
+    kprintf("identity: soft flags leaf=0x%x link=0x%x P=0x%x W=0x%x "
+            "PS=0x%x addr_mask=0x%lx nx_claim=%u user_claim=%u "
+            "global_claim=%u soft PASS\n",
+            (unsigned)IDMAP_LEAF_FLAGS, (unsigned)IDMAP_LINK_FLAGS,
+            (unsigned)PTE_P, (unsigned)PTE_W, (unsigned)PTE_PS,
+            (unsigned long)PTE_ADDR_MASK, (unsigned)fNxClaim,
+            (unsigned)fUserClaim, (unsigned)fGlobalClaim);
+    cAreas++;
+
+    /* Grep: identity: soft cover — aggregate readiness lamps. */
+    kprintf("identity: soft cover %s cover=%u match=%u aligned=%u "
+            "pml4_ok=%u pdpt_ok=%u/%u leaves_ok=%u/%u bad_flag=%u "
+            "bad_pa=%u empty_pdpt_upper=%u/%u\n",
+            szVerdict, fCover, fCr3Match, fAligned, (unsigned)cPml4Ok,
+            (unsigned)cPdptOk, (unsigned)IDMAP_PD_COUNT, (unsigned)cLeavesOk,
+            (unsigned)cLeavesExpect, (unsigned)cLeavesBadFlag,
+            (unsigned)cLeavesBadPa, (unsigned)cEmptyUpper,
+            (unsigned)(512u - IDMAP_PD_COUNT));
+    cAreas++;
+
+    /* Grep: identity: soft cr3 */
+    kprintf("identity: soft cr3 expect=0x%lx read=0x%lx match=%u "
+            "aligned_pt=%u pml4_pa=0x%lx soft %s\n",
+            (unsigned long)u64Cr3Expect, (unsigned long)u64Cr3Read,
+            fCr3Match, fAligned, (unsigned long)u64Pml4Pa, szVerdict);
+    cAreas++;
+
+    /* Grep: identity: soft link — PML4 + PDPT link rollup. */
+    kprintf("identity: soft link pml4_ok=%u pdpt_ok=%u/%u "
+            "pd0=%u pd1=%u pd2=%u pd3=%u link_flags=0x%x soft %s\n",
+            (unsigned)cPml4Ok, (unsigned)cPdptOk, (unsigned)IDMAP_PD_COUNT,
+            (unsigned)aPdLinkOk[0], (unsigned)aPdLinkOk[1],
+            (unsigned)aPdLinkOk[2], (unsigned)aPdLinkOk[3],
+            (unsigned)IDMAP_LINK_FLAGS, szVerdict);
+    cAreas++;
+
+    /* Grep: identity: soft pml4 — slot0 + upper empty (low-half only). */
+    kprintf("identity: soft pml4 slot0=0x%lx present=%u rw=%u ok=%u "
+            "empty_upper=%u/511 pdpt_pa=0x%lx low_half_only=1 "
+            "hh_slots=0 soft PASS\n",
+            (unsigned long)u64Pml4Ent, (unsigned)fPml4Present,
+            (unsigned)fPml4Rw, (unsigned)cPml4Ok,
+            (unsigned)cPml4EmptyUpper, (unsigned long)u64PdptPa);
+    cAreas++;
+
+    /* Grep: identity: soft stats */
+    kprintf("identity: soft stats installs=%u log_n=%u leaves_built=%u "
+            "leaves_ok=%u bad_flag=%u bad_pa=%u pdpt_ok=%u pml4_ok=%u "
+            "cover=%u wave=%u\n",
+            (unsigned)g_cSoftIdentityInstall, (unsigned)g_cSoftIdentityLog,
+            (unsigned)cLeavesBuilt, (unsigned)cLeavesOk,
+            (unsigned)cLeavesBadFlag, (unsigned)cLeavesBadPa,
+            (unsigned)cPdptOk, (unsigned)cPml4Ok, fCover,
+            (unsigned)IDMAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Soft path honesty: UEFI install site + explicit non-claims.
+     * greppable: identity: soft path
+     */
+    kprintf("identity: soft path claim=uefi_bridge site=boot_install_"
+            "identity_4gib multiboot=boot.S twin=1 product_hh=OPEN "
+            "hhdm=OPEN w_xor_x=OPEN smep=OPEN cover_gib=%u "
+            "soft_never_gates=1 wave=%u\n",
+            (unsigned)IDMAP_GIB, (unsigned)IDMAP_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: identity: soft deepen — Wave 14 stamp + area count. */
+    kprintf("identity: soft deepen wave=%u areas=%u verdict=%s "
+            "cover=%u leaves_ok=%u installs=%u log_n=%u "
+            "higher_half_product=OPEN (soft; bridge only)\n",
+            (unsigned)IDMAP_SOFT_WAVE, (unsigned)cAreas, szVerdict, fCover,
+            (unsigned)cLeavesOk, (unsigned)g_cSoftIdentityInstall,
+            (unsigned)g_cSoftIdentityLog);
 }
 
 /**
@@ -306,12 +458,12 @@ boot_install_identity_4gib(void)
             (unsigned long)u64Cr3Expect);
     /* Grep: boot: identity soft PASS */
     kprintf("boot: identity soft PASS cr3=0x%lx cr3_read=0x%lx match=%d "
-            "leaves=%u gib=4 pt_pages=6 installs=%u\n",
+            "leaves=%u gib=4 pt_pages=6 installs=%u wave=%u\n",
             (unsigned long)u64Cr3Expect, (unsigned long)u64Cr3Read,
             u64Cr3Read == u64Cr3Expect, (unsigned)cLeaves,
-            (unsigned)g_cSoftIdentityInstall);
+            (unsigned)g_cSoftIdentityInstall, (unsigned)IDMAP_SOFT_WAVE);
 
-    /* Grep: identity: soft … (Wave 9 soft inventory deepen) */
+    /* Grep: identity: soft … (Wave 14 exclusive soft inventory deepen) */
     identity_soft_inventory(u64Cr3Expect, u64Cr3Read, cLeaves);
 
     /*

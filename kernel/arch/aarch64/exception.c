@@ -22,7 +22,21 @@
  *   aarch64: exception soft daif=… i_held=… el=…
  *   aarch64: exception soft PASS | FAIL
  *
+ * Soft inventory deepen (Wave 14 exclusive; this unit only):
+ *   Multi-line greppable areas under "aarch64: exception soft …":
+ *     inventory | vbar | class | counts | daif | banks | gates | path | deepen
+ *   Banks soft: CurrentEL SP_ELx / SP_EL0 / Lower AArch64 / Lower AArch32
+ *               slot base indices (ARM DDI fixed geometry).
+ *   Path honesty: soft observe only — DAIF.I held; no product IRQ delivery.
+ *   Soft PASS/FAIL gates keep prior shape; deepen never hard-gates.
+ *   Soft ≠ product exception complete; soft ≠ bar3.
+ *
  * Greppable: aarch64: exceptions PASS
+ *            aarch64: exception soft inventory …
+ *            aarch64: exception soft banks …
+ *            aarch64: exception soft gates …
+ *            aarch64: exception soft path …
+ *            aarch64: exception soft deepen …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -40,6 +54,7 @@
 /* Fixed AArch64 vector table geometry (ARM DDI). */
 #define EXC_SOFT_SLOTS          16u
 #define EXC_SOFT_SLOT_BYTES     0x80u
+#define EXC_SOFT_TABLE_BYTES    (EXC_SOFT_SLOTS * EXC_SOFT_SLOT_BYTES)
 
 /* vec & 3 class encoding (must match exceptions.S + dispatch). */
 #define EXC_SOFT_CLASS_SYNC     0u
@@ -47,11 +62,21 @@
 #define EXC_SOFT_CLASS_FIQ      2u
 #define EXC_SOFT_CLASS_SERROR   3u
 
+/* Soft bank base indices (vec / 4): ARM DDI fixed layout. */
+#define EXC_SOFT_BANK_CUR_SPX   1u /* Current EL, SP_ELx: vec 4–7 */
+#define EXC_SOFT_BANK_CUR_SP0   0u /* Current EL, SP_EL0: vec 0–3 */
+#define EXC_SOFT_BANK_LOWER_A64 2u /* Lower EL AArch64: vec 8–11 */
+#define EXC_SOFT_BANK_LOWER_A32 3u /* Lower EL AArch32: vec 12–15 */
+
 /* DAIF system-register bit positions (PSTATE view via MRS DAIF). */
 #define EXC_SOFT_DAIF_F_BIT     (1ul << 6)
 #define EXC_SOFT_DAIF_I_BIT     (1ul << 7)
 #define EXC_SOFT_DAIF_A_BIT     (1ul << 8)
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define EXC_SOFT_WAVE   14u
+#define EXC_SOFT_AREAS  9u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -72,15 +97,18 @@ static unsigned long g_cSyncSoft;
 static unsigned long g_cSerrorSoft;
 
 /*
- * Soft exception inventory deepen (install-time).
+ * Soft exception inventory deepen (install-time; Wave 14 multi-area).
  * Greppable family: "aarch64: exception soft …"
- * Pure integer / system-register MRS; no FP/NEON.
+ * Pure integer / system-register MRS; no FP/NEON. Never hard-gates.
  *
  * Gates (soft / non-fatal for product bring-up):
  *   - VBAR_EL1 matches aarch64_vectors and is 2 KiB aligned
  *   - take counters all zero at install baseline
  *   - DAIF.I held (product soft path does not unmask IRQs yet)
  *   - CurrentEL is EL1
+ *
+ * Grep areas: inventory | vbar | class | counts | daif | banks | gates |
+ *             path | deepen
  * Returns 1 on soft PASS.
  */
 static int
@@ -93,6 +121,12 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     unsigned long u64Match;
     unsigned long u64Baseline0;
     unsigned long u64IHeld;
+    unsigned long u64DHeld;
+    unsigned long u64AHeld;
+    unsigned long u64FHeld;
+    unsigned long u64GateVbar;
+    unsigned long u64GateEl;
+    unsigned long u64TableBytes;
     int fOk;
 
     __asm__ volatile("mrs %0, daif" : "=r"(u64Daif));
@@ -119,6 +153,27 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     if ((u64Daif & EXC_SOFT_DAIF_I_BIT) != 0ul) {
         u64IHeld = 1ul;
     }
+    u64DHeld = ((u64Daif & EXC_SOFT_DAIF_D_BIT) != 0ul) ? 1ul : 0ul;
+    u64AHeld = ((u64Daif & EXC_SOFT_DAIF_A_BIT) != 0ul) ? 1ul : 0ul;
+    u64FHeld = ((u64Daif & EXC_SOFT_DAIF_F_BIT) != 0ul) ? 1ul : 0ul;
+    u64TableBytes = (unsigned long)EXC_SOFT_TABLE_BYTES;
+
+    /* Grep: aarch64: exception soft inventory */
+    aarch64_uart_puts("aarch64: exception soft inventory el=");
+    aarch64_uart_put_hex(u64El);
+    aarch64_uart_puts(" match=");
+    aarch64_uart_put_hex(u64Match);
+    aarch64_uart_puts(" align=");
+    aarch64_uart_put_hex(u64AlignOk);
+    aarch64_uart_puts(" baseline0=");
+    aarch64_uart_put_hex(u64Baseline0);
+    aarch64_uart_puts(" i_held=");
+    aarch64_uart_put_hex(u64IHeld);
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_AREAS);
+    aarch64_uart_puts("\n");
 
     /* VBAR geometry soft inventory. */
     aarch64_uart_puts("aarch64: exception soft vbar=");
@@ -133,6 +188,10 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_SLOTS);
     aarch64_uart_puts(" slotb=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_SLOT_BYTES);
+    aarch64_uart_puts(" tableb=");
+    aarch64_uart_put_hex(u64TableBytes);
+    aarch64_uart_puts(" align_mask=");
+    aarch64_uart_put_hex(EXC_SOFT_VBAR_ALIGN_MASK);
     aarch64_uart_puts("\n");
 
     /* Class encoding soft inventory (vec & 3). */
@@ -157,6 +216,9 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     aarch64_uart_put_hex(g_cSerrorSoft);
     aarch64_uart_puts(" baseline0=");
     aarch64_uart_put_hex(u64Baseline0);
+    aarch64_uart_puts(" total=");
+    aarch64_uart_put_hex(g_cSyncSoft + g_cIrqSoft + g_cFiqSoft +
+                         g_cSerrorSoft);
     aarch64_uart_puts("\n");
 
     /* DAIF / EL soft inventory (I held while soft IRQ path documents only). */
@@ -165,13 +227,48 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     aarch64_uart_puts(" i_held=");
     aarch64_uart_put_hex(u64IHeld);
     aarch64_uart_puts(" d=");
-    aarch64_uart_put_hex((u64Daif & EXC_SOFT_DAIF_D_BIT) != 0ul ? 1ul : 0ul);
+    aarch64_uart_put_hex(u64DHeld);
     aarch64_uart_puts(" a=");
-    aarch64_uart_put_hex((u64Daif & EXC_SOFT_DAIF_A_BIT) != 0ul ? 1ul : 0ul);
+    aarch64_uart_put_hex(u64AHeld);
     aarch64_uart_puts(" f=");
-    aarch64_uart_put_hex((u64Daif & EXC_SOFT_DAIF_F_BIT) != 0ul ? 1ul : 0ul);
+    aarch64_uart_put_hex(u64FHeld);
     aarch64_uart_puts(" el=");
     aarch64_uart_put_hex(u64El);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: exception soft banks (ARM DDI fixed slot banks) */
+    aarch64_uart_puts("aarch64: exception soft banks cur_sp0=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_BANK_CUR_SP0);
+    aarch64_uart_puts(" cur_spx=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_BANK_CUR_SPX);
+    aarch64_uart_puts(" lower_a64=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_BANK_LOWER_A64);
+    aarch64_uart_puts(" lower_a32=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_BANK_LOWER_A32);
+    aarch64_uart_puts(" irq_cur_spx=");
+    aarch64_uart_put_hex((unsigned long)(EXC_SOFT_BANK_CUR_SPX * 4u +
+                                         EXC_SOFT_CLASS_IRQ));
+    aarch64_uart_puts(" sync_cur_spx=");
+    aarch64_uart_put_hex((unsigned long)(EXC_SOFT_BANK_CUR_SPX * 4u +
+                                         EXC_SOFT_CLASS_SYNC));
+    aarch64_uart_puts("\n");
+
+    u64GateVbar = (u64Match != 0ul && u64AlignOk != 0ul) ? 1ul : 0ul;
+    u64GateEl = (u64El == 1ul) ? 1ul : 0ul;
+
+    /* Grep: aarch64: exception soft gates */
+    aarch64_uart_puts("aarch64: exception soft gates vbar=");
+    aarch64_uart_put_hex(u64GateVbar);
+    aarch64_uart_puts(" baseline0=");
+    aarch64_uart_put_hex(u64Baseline0);
+    aarch64_uart_puts(" i_held=");
+    aarch64_uart_put_hex(u64IHeld);
+    aarch64_uart_puts(" el1=");
+    aarch64_uart_put_hex(u64GateEl);
+    aarch64_uart_puts(" match=");
+    aarch64_uart_put_hex(u64Match);
+    aarch64_uart_puts(" align=");
+    aarch64_uart_put_hex(u64AlignOk);
     aarch64_uart_puts("\n");
 
     fOk = 1;
@@ -187,6 +284,18 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     if (u64El != 1ul) {
         fOk = 0;
     }
+
+    /* Grep: aarch64: exception soft path */
+    aarch64_uart_puts("aarch64: exception soft path install=1 deliver=0 "
+                      "daif_i=1 gic_soft=1 neon=0 wave=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+    aarch64_uart_puts(" (soft inventory; not bar3)\n");
+
+    /* Grep: aarch64: exception soft deepen */
+    aarch64_uart_puts("aarch64: exception soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=inventory,vbar,class,counts,daif,banks,gates,"
+                      "path,deepen unit=exception.c only rate_limited=0\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: exception soft PASS\n");

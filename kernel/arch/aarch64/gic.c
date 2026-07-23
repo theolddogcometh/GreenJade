@@ -57,6 +57,18 @@
  * Soft PASS when dist+cpuif enables stick, PMR allows all, soft ISENABLER0
  * bits remain, and SPI capacity covers UART/virtio0 INTIDs.
  *
+ * -------------------------------------------------------------------------
+ * Soft inventory deepen (Wave 14 exclusive; this unit only)
+ * -------------------------------------------------------------------------
+ * Multi-line greppable "aarch64: gic soft …" under fixed areas:
+ *   inventory | dist | cpuif | spi | ppi | iar | gates | path | deepen
+ * PPI soft: SGI mask + vtimer PPI 27 + masked phys timer lamps.
+ * IAR soft: last soft-observe INTID + spurious lamp.
+ * Gates soft: enable/PMR/ISEN0/SPI-cap rollup lamps.
+ * Path honesty: soft prime only — no product IRQ delivery / EOI loop.
+ * Soft PASS/FAIL gates unchanged from prior waves; deepen never hard-gates.
+ * Soft ≠ product SMP GIC; soft ≠ bar3.
+ *
  * Future IRQ take (not fully wired; offsets used by soft path now):
  *   GICC_IAR  @ 0x00C — read INTID (bits [9:0]); spurious = 1023
  *   GICC_EOIR @ 0x010 — write same INTID after handle (priority drop)
@@ -70,6 +82,12 @@
  *            aarch64: gic soft dist …
  *            aarch64: gic soft cpuif …
  *            aarch64: gic soft spi count=…
+ *            aarch64: gic soft inventory …
+ *            aarch64: gic soft ppi …
+ *            aarch64: gic soft iar …
+ *            aarch64: gic soft gates …
+ *            aarch64: gic soft path …
+ *            aarch64: gic soft deepen …
  *            aarch64: gic soft PASS | FAIL
  *
  * Freestanding pure C; no GPL Linux arch paste.
@@ -135,8 +153,33 @@
 #define GIC_SOFT_SPI_PRIO    0xa0u /* mid priority; lower value = higher prio */
 #define GIC_SOFT_SPI_TARGET  0x01u /* CPU interface 0 */
 
+/* Soft PPI INTIDs (local; Wave 14 inventory lamps). */
+#define GIC_PPI_VTIMER_INTID  27u /* virtual timer */
+#define GIC_PPI_PTIMER_INTID  30u /* non-secure physical timer (masked) */
+#define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
+#define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE   14u
+#define GIC_SOFT_AREAS  9u
+
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
+
+/*
+ * Soft SPI/IAR peeks captured by gic_spi_soft_observe for Wave 14 inventory.
+ * Zero until observe runs; never hard-gate product.
+ */
+static unsigned g_uSoftSpiPrioUart;
+static unsigned g_uSoftSpiTgtUart;
+static unsigned g_uSoftSpiPrioVio;
+static unsigned g_uSoftSpiTgtVio;
+static unsigned g_uSoftSpiIsen1;
+static unsigned g_uSoftIarRaw;
+static unsigned g_uSoftIarId;
+static unsigned g_uSoftIarSpur;
+static unsigned g_uSoftSpiOk;
+static unsigned g_cSoftInvLogs;
 
 /*
  * gicd / gicc — MMIO word at fixed phys base + offset.
@@ -319,6 +362,17 @@ gic_spi_soft_observe(unsigned uTyper, unsigned cIrqLines)
         fOk = 0;
     }
 
+    /* Wave 14: capture SPI/IAR soft peeks for inventory emission. */
+    g_uSoftSpiPrioUart = uPrioUart;
+    g_uSoftSpiTgtUart = uTgtUart;
+    g_uSoftSpiPrioVio = uPrioVio;
+    g_uSoftSpiTgtVio = uTgtVio;
+    g_uSoftSpiIsen1 = uIsen1b;
+    g_uSoftIarRaw = uIar;
+    g_uSoftIarId = uId;
+    g_uSoftIarSpur = (uId == GICC_INTID_SPURIOUS) ? 1u : 0u;
+    g_uSoftSpiOk = (fOk != 0) ? 1u : 0u;
+
     aarch64_uart_puts("aarch64: GIC SPI soft lines=");
     aarch64_uart_put_hex((unsigned long)cIrqLines);
     aarch64_uart_puts(" uart=");
@@ -365,9 +419,10 @@ aarch64_gic_soft_eoi(unsigned uIntId)
 }
 
 /*
- * Soft GIC inventory deepen: re-read distributor + CPU interface identity
- * and config, decode SPI count from TYPER, emit greppable "aarch64: gic soft"
- * lines. Pure word/byte MMIO; no FP/NEON. Returns 1 on soft PASS.
+ * Soft GIC inventory deepen (Wave 14): re-read distributor + CPU interface
+ * identity and config, decode SPI count from TYPER, emit greppable
+ * "aarch64: gic soft …" multi-area inventory. Pure word/byte MMIO; no
+ * FP/NEON. Returns 1 on soft PASS. Never hard-gates product bring-up.
  *
  * Gates (all soft / non-fatal for product bring-up):
  *   - GICD_CTLR EnableGrp0 stuck
@@ -375,6 +430,8 @@ aarch64_gic_soft_eoi(unsigned uIntId)
  *   - GICC_PMR allow-all stuck
  *   - soft ISENABLER0 (SGI + vtimer PPI) still set
  *   - SPI capacity covers virtio0 INTID 48 (cSpi >= 32 → lines >= 64)
+ *
+ * Grep areas: inventory | dist | cpuif | spi | ppi | iar | gates | path | deepen
  */
 static int
 gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
@@ -392,7 +449,20 @@ gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
     unsigned uHppir;
     unsigned uCpuIidr;
     unsigned uIsen0rb;
+    unsigned uGateDist;
+    unsigned uGateCpu;
+    unsigned uGatePmr;
+    unsigned uGateIsen0;
+    unsigned uGateSpiCap;
+    unsigned uGateMmio;
+    unsigned uPpiVtimer;
+    unsigned uPpiPtimer;
+    unsigned uSgiMask;
     int fOk;
+
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
 
     /* Distributor soft inventory. */
     uDistCtlr = *gicd(GICD_CTLR);
@@ -410,6 +480,25 @@ gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
     } else {
         cSpi = 0u;
     }
+
+    uSgiMask = uIsen0rb & GICD_SGI_ENABLE_MASK;
+    uPpiVtimer = (uIsen0rb & GICD_PPI_VTIMER_BIT) != 0u ? 1u : 0u;
+    uPpiPtimer = (uIsen0rb & (1u << GIC_PPI_PTIMER_INTID)) != 0u ? 1u : 0u;
+
+    /* Grep: aarch64: gic soft inventory */
+    aarch64_uart_puts("aarch64: gic soft inventory lines=");
+    aarch64_uart_put_hex((unsigned long)cIrqLines);
+    aarch64_uart_puts(" spi=");
+    aarch64_uart_put_hex((unsigned long)cSpi);
+    aarch64_uart_puts(" spi_ok=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiOk);
+    aarch64_uart_puts(" logs=");
+    aarch64_uart_put_hex((unsigned long)g_cSoftInvLogs);
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_AREAS);
+    aarch64_uart_puts("\n");
 
     aarch64_uart_puts("aarch64: gic soft dist ctlr=");
     aarch64_uart_put_hex((unsigned long)uDistCtlr);
@@ -466,33 +555,98 @@ gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
     aarch64_uart_put_hex((unsigned long)GIC_SPI_VIRTIO0_INTID);
     aarch64_uart_puts(" need=");
     aarch64_uart_put_hex((unsigned long)(GIC_SPI_VIRTIO0_INTID + 1u));
+    aarch64_uart_puts(" prio_u=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiPrioUart);
+    aarch64_uart_puts(" tgt_u=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiTgtUart);
+    aarch64_uart_puts(" prio_v=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiPrioVio);
+    aarch64_uart_puts(" tgt_v=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiTgtVio);
+    aarch64_uart_puts(" isen1=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiIsen1);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: gic soft ppi (SGI bank + vtimer soft arm lamps) */
+    aarch64_uart_puts("aarch64: gic soft ppi vtimer=");
+    aarch64_uart_put_hex((unsigned long)GIC_PPI_VTIMER_INTID);
+    aarch64_uart_puts(" armed=");
+    aarch64_uart_put_hex((unsigned long)uPpiVtimer);
+    aarch64_uart_puts(" ptimer=");
+    aarch64_uart_put_hex((unsigned long)GIC_PPI_PTIMER_INTID);
+    aarch64_uart_puts(" p_armed=");
+    aarch64_uart_put_hex((unsigned long)uPpiPtimer);
+    aarch64_uart_puts(" stimer=");
+    aarch64_uart_put_hex((unsigned long)GIC_PPI_STIMER_INTID);
+    aarch64_uart_puts(" vmaint=");
+    aarch64_uart_put_hex((unsigned long)GIC_PPI_VMAINT_INTID);
+    aarch64_uart_puts(" sgi_mask=");
+    aarch64_uart_put_hex((unsigned long)uSgiMask);
+    aarch64_uart_puts(" soft_isen0=");
+    aarch64_uart_put_hex((unsigned long)GICD_SOFT_ISENABLER0);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: gic soft iar */
+    aarch64_uart_puts("aarch64: gic soft iar raw=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftIarRaw);
+    aarch64_uart_puts(" id=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftIarId);
+    aarch64_uart_puts(" spur=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftIarSpur);
+    aarch64_uart_puts(" spur_id=");
+    aarch64_uart_put_hex((unsigned long)GICC_INTID_SPURIOUS);
+    aarch64_uart_puts(" uart_id=");
+    aarch64_uart_put_hex((unsigned long)GIC_SPI_UART_INTID);
+    aarch64_uart_puts(" vio0_id=");
+    aarch64_uart_put_hex((unsigned long)GIC_SPI_VIRTIO0_INTID);
+    aarch64_uart_puts("\n");
+
+    uGateDist = ((uDistCtlr & GICD_CTLR_ENABLE) != 0u) ? 1u : 0u;
+    uGateCpu = ((uCpuCtlr & GICC_CTLR_ENABLE) != 0u) ? 1u : 0u;
+    uGatePmr = ((uCpuPmr & 0xffu) == GICC_PMR_ALLOW_ALL) ? 1u : 0u;
+    uGateIsen0 =
+        ((uIsen0rb & GICD_SOFT_ISENABLER0) == GICD_SOFT_ISENABLER0) ? 1u : 0u;
+    uGateSpiCap = (cSpi >= 32u && cIrqLines >= 64u) ? 1u : 0u;
+    uGateMmio = (uTyper != 0xffffffffu && uDistIidr != 0xffffffffu) ? 1u : 0u;
+
+    /* Grep: aarch64: gic soft gates */
+    aarch64_uart_puts("aarch64: gic soft gates dist=");
+    aarch64_uart_put_hex((unsigned long)uGateDist);
+    aarch64_uart_puts(" cpu=");
+    aarch64_uart_put_hex((unsigned long)uGateCpu);
+    aarch64_uart_puts(" pmr=");
+    aarch64_uart_put_hex((unsigned long)uGatePmr);
+    aarch64_uart_puts(" isen0=");
+    aarch64_uart_put_hex((unsigned long)uGateIsen0);
+    aarch64_uart_puts(" spi_cap=");
+    aarch64_uart_put_hex((unsigned long)uGateSpiCap);
+    aarch64_uart_puts(" mmio=");
+    aarch64_uart_put_hex((unsigned long)uGateMmio);
+    aarch64_uart_puts(" spi_ok=");
+    aarch64_uart_put_hex((unsigned long)g_uSoftSpiOk);
     aarch64_uart_puts("\n");
 
     fOk = 1;
-    if ((uDistCtlr & GICD_CTLR_ENABLE) == 0u) {
-        fOk = 0;
-    }
-    if ((uCpuCtlr & GICC_CTLR_ENABLE) == 0u) {
-        fOk = 0;
-    }
-    if ((uCpuPmr & 0xffu) != GICC_PMR_ALLOW_ALL) {
-        fOk = 0;
-    }
-    if ((uIsen0rb & GICD_SOFT_ISENABLER0) != GICD_SOFT_ISENABLER0) {
-        fOk = 0;
-    }
-    /* Need INTID bank covering virtio0 (48) → lines >= 64 → cSpi >= 32. */
-    if (cSpi < 32u || cIrqLines < 64u) {
+    if (uGateDist == 0u || uGateCpu == 0u || uGatePmr == 0u ||
+        uGateIsen0 == 0u || uGateSpiCap == 0u || uGateMmio == 0u) {
         fOk = 0;
     }
     /* Sanity: caller snapshot of ISENABLER0 should match re-read soft bits. */
     if ((uIsen0 & GICD_SOFT_ISENABLER0) != GICD_SOFT_ISENABLER0) {
         fOk = 0;
     }
-    /* Unmapped MMIO often returns all-ones; treat as soft fail. */
-    if (uTyper == 0xffffffffu || uDistIidr == 0xffffffffu) {
-        fOk = 0;
-    }
+
+    /* Grep: aarch64: gic soft path */
+    aarch64_uart_puts("aarch64: gic soft path prime=1 deliver=0 eoi_loop=0 "
+                      "daif_i=1 neon=0 smp=0 wave=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+    aarch64_uart_puts(" (soft inventory; not bar3)\n");
+
+    /* Grep: aarch64: gic soft deepen */
+    aarch64_uart_puts("aarch64: gic soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+    aarch64_uart_puts(" areas=inventory,dist,cpuif,spi,ppi,iar,gates,path,"
+                      "deepen unit=gic.c only rate_limited=0\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: gic soft PASS\n");

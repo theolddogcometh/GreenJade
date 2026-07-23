@@ -6,13 +6,29 @@
  * G-PTR-*: range must sit in product user window, be present, and U=1.
  * Soft deepen: write-intent (W|COW), page-chunk SMAP window, soft stats.
  *
- * Soft copy_from/to_user inventory (Wave 9 exclusive):
+ * Soft copy_from/to_user inventory (Wave 9 base; Wave 14 exclusive deepen):
  *   - Cumulative from/to/load/store ok|fault|inval + byte totals
  *   - Soft peaks / last transfer sizes (diagnostics only; wrap OK)
  *   - SMAP STAC/CLAC + page-chunk counters
+ *   - Range-ok / map fail reason axes (soft only)
+ *   - Zero-len early returns + pages/chunk peak soft
  *   greppable: "user_copy: soft …"
  *
- * Honesty: soft inventory only — not product SEH / full SMAP claim.
+ * Wave 14 soft inventory deepen (prefix-stable; greppable: user_copy: soft):
+ *   "user_copy: soft honesty …"   explicit non-claims (not SEH / full SMAP)
+ *   "user_copy: soft inventory …" rollup + wave stamp
+ *   "user_copy: soft from_ok=…"   bulk from/to terminal status (legacy)
+ *   "user_copy: soft load_ok=…"   scalar load/store status (legacy)
+ *   "user_copy: soft bytes_from=…" bytes + peak/last (legacy)
+ *   "user_copy: soft range …"     range-ok fail reason axes
+ *   "user_copy: soft map …"       map fail reason axes + write intent
+ *   "user_copy: soft chunk …"     STAC/CLAC + chunk/page soft peaks
+ *   "user_copy: soft zero …"      zero-length early-return soft tallies
+ *   "user_copy: soft path …"      surface catalog + honesty open lamps
+ *   "user_copy: soft stats …"     aggregate rollup
+ *   "user_copy: soft deepen …"    wave=14 stamp + area count
+ *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
+ * Honesty: soft inventory only — not product SEH / full SMAP claim; not bar3.
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -27,11 +43,17 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 14u
+
+/* Soft inventory greppable area count (honesty..lamps; deepen excluded). */
+#define USER_COPY_SOFT_AREAS 11u
+
 static int                      g_fSmapOn;
 static struct gj_user_copy_stats g_stats;
 
 /*
- * Soft inventory extras (Wave 9; file-local — not hard product gates).
+ * Soft inventory extras (Wave 9 + Wave 14; file-local — not hard product gates).
  * greppable: user_copy: soft
  */
 static u64 g_u64SoftPeakFrom;      /* max successful copy_from_user cb */
@@ -40,17 +62,55 @@ static u64 g_u64SoftLastFrom;      /* last successful copy_from_user cb */
 static u64 g_u64SoftLastTo;        /* last successful copy_to_user cb */
 static u64 g_u64SoftInventoryLogs; /* soft_inventory_log emissions */
 
+/* Wave 14: range-ok fail reason axes (soft; wrap OK). */
+static u64 g_u64SoftRangeOversize;
+static u64 g_u64SoftRangeBelowBase;
+static u64 g_u64SoftRangeAboveEnd;
+static u64 g_u64SoftRangeOverflow;
+static u64 g_u64SoftRangeEndBeyond;
+
+/* Wave 14: map fail reason axes (soft; wrap OK). */
+static u64 g_u64SoftMapNotPresent;
+static u64 g_u64SoftMapNotUser;
+static u64 g_u64SoftMapWriteRo;    /* write intent, !W and !COW */
+static u64 g_u64SoftMapReadOk;     /* mapped_access read intent soft ok */
+static u64 g_u64SoftMapWriteOk;    /* mapped_access write intent soft ok */
+static u64 g_u64SoftMapReadCall;   /* mapped_access read-intent calls */
+static u64 g_u64SoftMapWriteCall;  /* mapped_access write-intent calls */
+
+/* Wave 14: zero-length early returns + chunk/page soft peaks. */
+static u64 g_u64SoftZeroFrom;
+static u64 g_u64SoftZeroTo;
+static u64 g_u64SoftZeroLoad;      /* load/store never zero-cb; reserved */
+static u64 g_u64SoftPeakChunks;    /* max chunks in one copy_raw_chunked */
+static u64 g_u64SoftLastChunks;    /* last transfer chunk count */
+static u64 g_u64SoftPeakPages;     /* max pages spanned (soft estimate) */
+static u64 g_u64SoftLastPages;     /* last transfer pages spanned */
+
 static void user_copy_soft_inventory_log(void);
 static void user_copy_soft_note_from(size_t cb);
 static void user_copy_soft_note_to(size_t cb);
+static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
 
 /**
- * Greppable soft copy_from/to_user inventory (product / smoke).
- *   user_copy: soft from_ok=… from_fault=… from_inval=… to_ok=… to_fault=… to_inval=…
- *   user_copy: soft load_ok=… load_fault=… load_inval=… store_ok=… store_fault=…
- *   user_copy: soft bytes_from=… bytes_to=… peak_from=… peak_to=… last_from=… last_to=…
- *   user_copy: soft range_ok_fail=… range_map_fail=… smap=… stac=… clac=… chunks=…
- *   user_copy: soft base=0x… end=0x… max=… logs=…
+ * Greppable soft copy_from/to_user inventory (product / smoke; Wave 14 deepen).
+ * Prefix-stable markers (user_copy: soft …):
+ *   user_copy: soft honesty    — explicit non-claims
+ *   user_copy: soft inventory  — rollup + wave
+ *   user_copy: soft from_ok=…  — bulk from/to (legacy line shape)
+ *   user_copy: soft load_ok=…  — load/store (legacy)
+ *   user_copy: soft bytes_from=… — bytes/peak/last (legacy)
+ *   user_copy: soft range      — range-ok fail axes
+ *   user_copy: soft map        — map fail / intent axes
+ *   user_copy: soft chunk      — STAC/CLAC + chunk/page peaks
+ *   user_copy: soft zero       — zero-len early returns
+ *   user_copy: soft path       — surface catalog + open lamps
+ *   user_copy: soft stats      — aggregate rollup
+ *   user_copy: soft deepen     — wave=14 stamp + areas
+ *   user_copy: soft lamps      — SMAP readiness lamps
+ *
+ * Never allocates; safe from SMAP notify / stats get/reset.
+ * Honesty: soft inventory only — not product SEH / full SMAP; not bar3.
  * greppable: user_copy: soft
  */
 static void
@@ -80,6 +140,7 @@ user_copy_soft_inventory_log(void)
     u64 u64LastFrom;
     u64 u64LastTo;
     u64 u64Logs;
+    u32 u32Areas;
 
     /* Snapshot soft counters (diagnostics only; no hard lock needed). */
     u64FromOk = g_stats.u64FromOk;
@@ -110,10 +171,43 @@ user_copy_soft_inventory_log(void)
         g_u64SoftInventoryLogs++;
     }
     u64Logs = g_u64SoftInventoryLogs;
+    u32Areas = 0;
+
+    /*
+     * Honesty first: freestanding soft inventory is NOT product SEH / full SMAP.
+     * Grep: user_copy: soft honesty
+     */
+    kprintf("user_copy: soft honesty not-product-SEH not-full-SMAP "
+            "g_ptr=soft smap_window=page_chunk product_seh=OPEN "
+            "full_smap=OPEN bar3=OPEN wave=%u "
+            "(soft inventory only; never hard-gates)\n",
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /* Grep: user_copy: soft inventory */
+    kprintf("user_copy: soft inventory from_ok=%llu to_ok=%llu "
+            "load_ok=%llu store_ok=%llu bytes_from=%llu bytes_to=%llu "
+            "range_ok_fail=%llu range_map_fail=%llu smap=%llu chunks=%llu "
+            "logs=%llu wave=%u "
+            "(soft; not product SEH; not bar3)\n",
+            (unsigned long long)u64FromOk,
+            (unsigned long long)u64ToOk,
+            (unsigned long long)u64LoadOk,
+            (unsigned long long)u64StoreOk,
+            (unsigned long long)u64BytesFrom,
+            (unsigned long long)u64BytesTo,
+            (unsigned long long)u64RangeOkFail,
+            (unsigned long long)u64RangeMapFail,
+            (unsigned long long)u64SmapOn,
+            (unsigned long long)u64Chunks,
+            (unsigned long long)u64Logs,
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
 
     /*
      * Grep: user_copy: soft
      * Soft inventory lamp only — not product SEH / full SMAP complete.
+     * Legacy multi-field lines kept prefix-stable for smoke greps.
      */
     kprintf("user_copy: soft from_ok=%llu from_fault=%llu from_inval=%llu "
             "to_ok=%llu to_fault=%llu to_inval=%llu\n",
@@ -123,6 +217,7 @@ user_copy_soft_inventory_log(void)
             (unsigned long long)u64ToOk,
             (unsigned long long)u64ToFault,
             (unsigned long long)u64ToInval);
+    u32Areas++;
     kprintf("user_copy: soft load_ok=%llu load_fault=%llu load_inval=%llu "
             "store_ok=%llu store_fault=%llu\n",
             (unsigned long long)u64LoadOk,
@@ -130,6 +225,7 @@ user_copy_soft_inventory_log(void)
             (unsigned long long)u64LoadInval,
             (unsigned long long)u64StoreOk,
             (unsigned long long)u64StoreFault);
+    u32Areas++;
     kprintf("user_copy: soft bytes_from=%llu bytes_to=%llu peak_from=%llu "
             "peak_to=%llu last_from=%llu last_to=%llu\n",
             (unsigned long long)u64BytesFrom,
@@ -138,20 +234,143 @@ user_copy_soft_inventory_log(void)
             (unsigned long long)u64PeakTo,
             (unsigned long long)u64LastFrom,
             (unsigned long long)u64LastTo);
-    kprintf("user_copy: soft range_ok_fail=%llu range_map_fail=%llu "
-            "smap=%llu stac=%llu clac=%llu chunks=%llu\n",
+    u32Areas++;
+
+    /* Grep: user_copy: soft range */
+    kprintf("user_copy: soft range ok_fail=%llu oversize=%llu "
+            "below_base=%llu above_end=%llu overflow=%llu end_beyond=%llu "
+            "base=0x%llx end=0x%llx max=%llu "
+            "(range-ok axes; soft only)\n",
             (unsigned long long)u64RangeOkFail,
+            (unsigned long long)g_u64SoftRangeOversize,
+            (unsigned long long)g_u64SoftRangeBelowBase,
+            (unsigned long long)g_u64SoftRangeAboveEnd,
+            (unsigned long long)g_u64SoftRangeOverflow,
+            (unsigned long long)g_u64SoftRangeEndBeyond,
+            (unsigned long long)GJ_USER_VA_BASE,
+            (unsigned long long)GJ_USER_VA_END,
+            (unsigned long long)GJ_USER_COPY_MAX);
+    u32Areas++;
+
+    /* Grep: user_copy: soft map */
+    kprintf("user_copy: soft map map_fail=%llu not_present=%llu "
+            "not_user=%llu write_ro=%llu read_ok=%llu write_ok=%llu "
+            "read_call=%llu write_call=%llu "
+            "(P|U|W|COW soft; not product SEH)\n",
             (unsigned long long)u64RangeMapFail,
+            (unsigned long long)g_u64SoftMapNotPresent,
+            (unsigned long long)g_u64SoftMapNotUser,
+            (unsigned long long)g_u64SoftMapWriteRo,
+            (unsigned long long)g_u64SoftMapReadOk,
+            (unsigned long long)g_u64SoftMapWriteOk,
+            (unsigned long long)g_u64SoftMapReadCall,
+            (unsigned long long)g_u64SoftMapWriteCall);
+    u32Areas++;
+
+    /* Grep: user_copy: soft chunk */
+    kprintf("user_copy: soft chunk smap=%llu stac=%llu clac=%llu "
+            "chunks=%llu peak_chunks=%llu last_chunks=%llu "
+            "peak_pages=%llu last_pages=%llu "
+            "(page-chunk SMAP window; soft only)\n",
             (unsigned long long)u64SmapOn,
             (unsigned long long)u64Stac,
             (unsigned long long)u64Clac,
-            (unsigned long long)u64Chunks);
+            (unsigned long long)u64Chunks,
+            (unsigned long long)g_u64SoftPeakChunks,
+            (unsigned long long)g_u64SoftLastChunks,
+            (unsigned long long)g_u64SoftPeakPages,
+            (unsigned long long)g_u64SoftLastPages);
+    u32Areas++;
+
+    /* Grep: user_copy: soft zero */
+    kprintf("user_copy: soft zero from=%llu to=%llu load=%llu "
+            "(zero-len early return; soft only)\n",
+            (unsigned long long)g_u64SoftZeroFrom,
+            (unsigned long long)g_u64SoftZeroTo,
+            (unsigned long long)g_u64SoftZeroLoad);
+    u32Areas++;
+
+    /*
+     * Soft path honesty: surface catalog + explicit non-claims.
+     * Grep: user_copy: soft path
+     */
+    kprintf("user_copy: soft path "
+            "range_ok→mapped_access→stac_chunk→clac "
+            "from|to|load_u32|store_u32 write_intent=W|COW "
+            "smap_notify=1 product_seh=OPEN full_smap=OPEN "
+            "exception_port=OPEN bar3=OPEN wave=%u "
+            "(soft inventory; not bar3)\n",
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /* Grep: user_copy: soft stats */
+    kprintf("user_copy: soft stats from_ok=%llu from_fault=%llu "
+            "from_inval=%llu to_ok=%llu to_fault=%llu to_inval=%llu "
+            "load_ok=%llu store_ok=%llu bytes_from=%llu bytes_to=%llu "
+            "range_ok_fail=%llu range_map_fail=%llu stac=%llu clac=%llu "
+            "chunks=%llu smap=%llu logs=%llu wave=%u\n",
+            (unsigned long long)u64FromOk,
+            (unsigned long long)u64FromFault,
+            (unsigned long long)u64FromInval,
+            (unsigned long long)u64ToOk,
+            (unsigned long long)u64ToFault,
+            (unsigned long long)u64ToInval,
+            (unsigned long long)u64LoadOk,
+            (unsigned long long)u64StoreOk,
+            (unsigned long long)u64BytesFrom,
+            (unsigned long long)u64BytesTo,
+            (unsigned long long)u64RangeOkFail,
+            (unsigned long long)u64RangeMapFail,
+            (unsigned long long)u64Stac,
+            (unsigned long long)u64Clac,
+            (unsigned long long)u64Chunks,
+            (unsigned long long)u64SmapOn,
+            (unsigned long long)u64Logs,
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /* Grep: user_copy: soft lamps */
+    kprintf("user_copy: soft lamps smap_on=%llu stac_clac_armed=%llu "
+            "peak_from=%llu peak_to=%llu peak_chunks=%llu peak_pages=%llu "
+            "base=0x%llx end=0x%llx max=%llu wave=%u "
+            "(soft readiness; not product gate)\n",
+            (unsigned long long)u64SmapOn,
+            (unsigned long long)u64SmapOn,
+            (unsigned long long)u64PeakFrom,
+            (unsigned long long)u64PeakTo,
+            (unsigned long long)g_u64SoftPeakChunks,
+            (unsigned long long)g_u64SoftPeakPages,
+            (unsigned long long)GJ_USER_VA_BASE,
+            (unsigned long long)GJ_USER_VA_END,
+            (unsigned long long)GJ_USER_COPY_MAX,
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
+    /*
+     * Legacy geometry line (Wave 9 shape) kept greppable.
+     * Grep: user_copy: soft base=
+     */
     kprintf("user_copy: soft base=0x%llx end=0x%llx max=%llu logs=%llu "
             "(soft inventory; not product SEH)\n",
             (unsigned long long)GJ_USER_VA_BASE,
             (unsigned long long)GJ_USER_VA_END,
             (unsigned long long)GJ_USER_COPY_MAX,
             (unsigned long long)u64Logs);
+
+    /*
+     * Grep: user_copy: soft deepen wave
+     * areas tracks prior soft lines this emission (honesty..lamps).
+     */
+    kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
+            "catalog=%u smap=%llu "
+            "(Wave 14 exclusive; not product SEH; not bar3)\n",
+            (unsigned)USER_COPY_SOFT_WAVE,
+            (unsigned)u32Areas,
+            (unsigned long long)u64Logs,
+            (unsigned)USER_COPY_SOFT_AREAS,
+            (unsigned long long)u64SmapOn);
+
+    (void)USER_COPY_SOFT_AREAS;
 }
 
 /**
@@ -179,6 +398,30 @@ user_copy_soft_note_to(size_t cb)
     g_u64SoftLastTo = u64Cb;
     if (u64Cb > g_u64SoftPeakTo) {
         g_u64SoftPeakTo = u64Cb;
+    }
+}
+
+/**
+ * Note page-chunk transfer soft peaks (Wave 14).
+ * Pages estimate: ceil span of [src, src+cb) at page grain via chunk count.
+ */
+static void
+user_copy_soft_note_chunked(size_t cb, u64 u64Chunks)
+{
+    u64 u64Pages;
+
+    g_u64SoftLastChunks = u64Chunks;
+    if (u64Chunks > g_u64SoftPeakChunks) {
+        g_u64SoftPeakChunks = u64Chunks;
+    }
+    /* Soft page span: each chunk ≤ one page; chunk count ≈ pages touched. */
+    u64Pages = u64Chunks;
+    if (cb == 0) {
+        u64Pages = 0;
+    }
+    g_u64SoftLastPages = u64Pages;
+    if (u64Pages > g_u64SoftPeakPages) {
+        g_u64SoftPeakPages = u64Pages;
     }
 }
 
@@ -224,6 +467,25 @@ user_copy_stats_reset(void)
     g_u64SoftPeakTo = 0;
     g_u64SoftLastFrom = 0;
     g_u64SoftLastTo = 0;
+    g_u64SoftRangeOversize = 0;
+    g_u64SoftRangeBelowBase = 0;
+    g_u64SoftRangeAboveEnd = 0;
+    g_u64SoftRangeOverflow = 0;
+    g_u64SoftRangeEndBeyond = 0;
+    g_u64SoftMapNotPresent = 0;
+    g_u64SoftMapNotUser = 0;
+    g_u64SoftMapWriteRo = 0;
+    g_u64SoftMapReadOk = 0;
+    g_u64SoftMapWriteOk = 0;
+    g_u64SoftMapReadCall = 0;
+    g_u64SoftMapWriteCall = 0;
+    g_u64SoftZeroFrom = 0;
+    g_u64SoftZeroTo = 0;
+    g_u64SoftZeroLoad = 0;
+    g_u64SoftPeakChunks = 0;
+    g_u64SoftLastChunks = 0;
+    g_u64SoftPeakPages = 0;
+    g_u64SoftLastPages = 0;
     /* Preserve inventory log count across reset (emission lifetime). */
     /* Grep: user_copy: soft (zeroed inventory after reset) */
     user_copy_soft_inventory_log();
@@ -261,6 +523,7 @@ copy_raw_chunked(void *pDst, const void *pSrc, size_t cb)
     u8 *pD = (u8 *)pDst;
     const u8 *pS = (const u8 *)pSrc;
     size_t cbLeft = cb;
+    u64 u64Chunks = 0;
 
     while (cbLeft > 0) {
         size_t cbOff = (size_t)((u64)(gj_vaddr_t)pS & (u64)(GJ_PAGE_SIZE - 1));
@@ -273,10 +536,12 @@ copy_raw_chunked(void *pDst, const void *pSrc, size_t cb)
         memcpy(pD, pS, cbChunk);
         user_access_end();
         g_stats.u64Chunks++;
+        u64Chunks++;
         pD += cbChunk;
         pS += cbChunk;
         cbLeft -= cbChunk;
     }
+    user_copy_soft_note_chunked(cb, u64Chunks);
 }
 
 int
@@ -290,23 +555,28 @@ user_range_ok(u64 u64Va, u64 u64Cb)
     /* Soft cap: never accept a single span larger than the user window. */
     if (u64Cb > GJ_USER_COPY_MAX) {
         g_stats.u64RangeOkFail++;
+        g_u64SoftRangeOversize++;
         return 0;
     }
     if (u64Va < GJ_USER_VA_BASE) {
         g_stats.u64RangeOkFail++;
+        g_u64SoftRangeBelowBase++;
         return 0;
     }
     if (u64Va >= GJ_USER_VA_END) {
         g_stats.u64RangeOkFail++;
+        g_u64SoftRangeAboveEnd++;
         return 0;
     }
     u64End = u64Va + u64Cb;
     if (u64End < u64Va) {
         g_stats.u64RangeOkFail++;
+        g_u64SoftRangeOverflow++;
         return 0; /* overflow */
     }
     if (u64End > GJ_USER_VA_END) {
         g_stats.u64RangeOkFail++;
+        g_u64SoftRangeEndBeyond++;
         return 0;
     }
     return 1;
@@ -334,6 +604,11 @@ user_range_mapped_access(u64 u64Va, u64 u64Cb, u32 u32Access)
         u32Access = GJ_USER_ACCESS_READ;
     }
     fWrite = (u32Access & GJ_USER_ACCESS_WRITE) != 0 ? 1 : 0;
+    if (fWrite != 0) {
+        g_u64SoftMapWriteCall++;
+    } else {
+        g_u64SoftMapReadCall++;
+    }
 
     u64End = u64Va + u64Cb;
     u64Page = u64Va & ~(u64)(GJ_PAGE_SIZE - 1);
@@ -341,10 +616,12 @@ user_range_mapped_access(u64 u64Va, u64 u64Cb, u32 u32Access)
         u64Pte = vmm_read_pte((gj_vaddr_t)u64Page);
         if ((u64Pte & GJ_USER_PTE_P) == 0) {
             g_stats.u64RangeMapFail++;
+            g_u64SoftMapNotPresent++;
             return 0;
         }
         if ((u64Pte & GJ_USER_PTE_U) == 0) {
             g_stats.u64RangeMapFail++;
+            g_u64SoftMapNotUser++;
             return 0;
         }
         /*
@@ -355,6 +632,7 @@ user_range_mapped_access(u64 u64Va, u64 u64Cb, u32 u32Access)
             if ((u64Pte & GJ_USER_PTE_W) == 0 &&
                 (u64Pte & GJ_USER_PTE_COW) == 0) {
                 g_stats.u64RangeMapFail++;
+                g_u64SoftMapWriteRo++;
                 return 0;
             }
         }
@@ -362,6 +640,11 @@ user_range_mapped_access(u64 u64Va, u64 u64Cb, u32 u32Access)
             break;
         }
         u64Page += (u64)GJ_PAGE_SIZE;
+    }
+    if (fWrite != 0) {
+        g_u64SoftMapWriteOk++;
+    } else {
+        g_u64SoftMapReadOk++;
     }
     return 1;
 }
@@ -380,6 +663,7 @@ copy_from_user(void *pKdst, u64 u64Usrc, size_t cb)
         return GJ_ERR_INVAL;
     }
     if (cb == 0) {
+        g_u64SoftZeroFrom++;
         return GJ_OK;
     }
     if (!user_range_mapped_access(u64Usrc, (u64)cb, GJ_USER_ACCESS_READ)) {
@@ -401,6 +685,7 @@ copy_to_user(u64 u64Udst, const void *pKsrc, size_t cb)
         return GJ_ERR_INVAL;
     }
     if (cb == 0) {
+        g_u64SoftZeroTo++;
         return GJ_OK;
     }
     if (!user_range_mapped_access(u64Udst, (u64)cb, GJ_USER_ACCESS_WRITE)) {

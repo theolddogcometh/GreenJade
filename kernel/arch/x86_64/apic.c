@@ -7,7 +7,8 @@
  * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
  * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  *
- * Soft APIC inventory (Wave 12 exclusive deepen; this unit only — greppable):
+ * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 14 exclusive deepen;
+ * this unit only — greppable "apic: soft …"):
  *   apic: soft PASS|PARTIAL|UP|FAIL|NONE …  — primary verdict (Wave 10+)
  *   apic: soft inventory …                  — rollup catalog + wave tag
  *   apic: soft timer …                      — LVT/period/bus_hz surface
@@ -23,6 +24,13 @@
  *   apic: soft irq …                        — timer/resched/tlb IRQ tallies
  *   apic: soft bringup …                    — PASS|idle|active INIT/SIPI
  *   apic: soft path …                       — honesty non-claim (≠ bar3)
+ * Wave 14 exclusive complementary surfaces (never reshape primary fields):
+ *   apic: soft query …                      — ready/cal/bus/ticks/npt samples
+ *   apic: soft lapic …                      — MMIO vs x2 r/w path split
+ *   apic: soft sample …                     — cal window enter/ok/fail
+ *   apic: soft lamps …                      — ready/cal/periodic/svr lamps
+ *   apic: soft reject …                     — !ready / clamp / icr-cap skips
+ *   apic: soft deepen …                     — wave=14 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -76,6 +84,10 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_SAMPLES_MAX  2u
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
+/* Soft inventory wave stamp (this unit exclusive deepen). */
+#define APIC_SOFT_WAVE        14u
+#define APIC_SOFT_ICR_SPIN_MAX 1000000u
+
 static volatile u32 *g_pLapic;
 static int            g_fReady;
 static int            g_fCalibrated;
@@ -101,7 +113,7 @@ static u32            g_u32HzProgrammed;
 
 /*
  * Soft inventory counters (file-local; wrap OK; diagnostics only).
- * Wave 10 base + Wave 12 exclusive path deepen.
+ * Wave 10 base + Wave 12 path + Wave 14 exclusive deepen.
  * Hot IRQ path only bumps counters already present — no kprintf.
  * greppable: apic: soft
  * greppable: apic: soft stats
@@ -163,6 +175,34 @@ static u64            g_u64SoftTimerHzSkip; /* timer_hz early return */
 static u64            g_u64SoftLocalDefault;/* local start fallback INIT */
 static u64            g_u64SoftLocalProg;   /* local start programmed INIT */
 static u64            g_u64SoftIpiInit;     /* apic_ipi_init entries */
+
+/* Wave 14 exclusive path tallies (complementary; never hard-gate). */
+static u64            g_u64SoftLapicRdX2;   /* lapic_r via x2APIC MSR */
+static u64            g_u64SoftLapicRdMmio; /* lapic_r via MMIO */
+static u64            g_u64SoftLapicRdNull; /* lapic_r null MMIO */
+static u64            g_u64SoftLapicWrX2;   /* lapic_w via x2APIC MSR */
+static u64            g_u64SoftLapicWrMmio; /* lapic_w via MMIO */
+static u64            g_u64SoftLapicWrNull; /* lapic_w null MMIO skip */
+static u64            g_u64SoftCalSample;   /* apic_cal_sample entries */
+static u64            g_u64SoftCalSampleOk; /* cal sample returned bus_hz */
+static u64            g_u64SoftCalSampleFail;/* cal sample returned 0 */
+static u64            g_u64SoftQReady;      /* apic_ready samples */
+static u64            g_u64SoftQCal;        /* apic_calibrated samples */
+static u64            g_u64SoftQBusHz;      /* apic_bus_hz samples */
+static u64            g_u64SoftQTicks;      /* apic_timer_ticks samples */
+static u64            g_u64SoftQTicksCpu;   /* apic_timer_ticks_cpu samples */
+static u64            g_u64SoftQTicksCpuBad;/* ticks_cpu slot OOB */
+static u64            g_u64SoftQNpt;        /* apic_nsec_per_tick samples */
+static u64            g_u64SoftQInitCnt;    /* apic_timer_init_count samples */
+static u64            g_u64SoftQCurCnt;     /* apic_timer_cur_count samples */
+static u64            g_u64SoftQCurSkip;    /* cur_count !ready */
+static u64            g_u64SoftQSnap;       /* cal_soft_snapshot samples */
+static u64            g_u64SoftQSnapNull;   /* snapshot null out */
+static u64            g_u64SoftQLog;        /* cal_soft_log samples */
+static u64            g_u64SoftTimerHzClamp;/* timer_hz min INIT clamp */
+static u64            g_u64SoftLocalSkip;   /* local start !ready */
+static u64            g_u64SoftIcrCap;      /* ICR wait hit spin budget */
+static u64            g_u64SoftReschedSlot0;/* resched skip cpu0 */
 
 extern void irq_stub_apic_timer(void);
 extern void irq_stub_ipi_resched(void);
@@ -226,10 +266,14 @@ lapic_w(u32 u32Off, u32 u32Val)
 
         /* ICR is 64-bit; other regs are 32-bit in low half */
         __asm__ volatile ("wrmsr" : : "c"(u32Msr), "a"(u32Lo), "d"(u32Hi));
+        apic_soft_inc64(&g_u64SoftLapicWrX2);
         return;
     }
     if (g_pLapic) {
         g_pLapic[u32Off / 4] = u32Val;
+        apic_soft_inc64(&g_u64SoftLapicWrMmio);
+    } else {
+        apic_soft_inc64(&g_u64SoftLapicWrNull);
     }
 }
 
@@ -243,9 +287,15 @@ lapic_r(u32 u32Off)
 
         __asm__ volatile ("rdmsr" : "=a"(u32Lo), "=d"(u32Hi) : "c"(u32Msr));
         (void)u32Hi;
+        apic_soft_inc64(&g_u64SoftLapicRdX2);
         return u32Lo;
     }
-    return g_pLapic ? g_pLapic[u32Off / 4] : 0;
+    if (g_pLapic) {
+        apic_soft_inc64(&g_u64SoftLapicRdMmio);
+        return g_pLapic[u32Off / 4];
+    }
+    apic_soft_inc64(&g_u64SoftLapicRdNull);
+    return 0;
 }
 
 static void
@@ -276,9 +326,11 @@ cal_fail(u32 u32Status)
 }
 
 /**
- * Wave 12 greppable soft APIC inventory (product / smoke).
+ * Wave 14 greppable soft APIC inventory (product / smoke).
  * Prefix-stable markers under "apic: soft …". Never hard-gates; no alloc.
  * via= names the call site (init / calibrate / timer_hz / cal_log / …).
+ * Primary Wave 10/12 field names stay stable; Wave 14 adds complementary
+ * sub-lines only.
  * greppable: apic: soft
  */
 static void
@@ -402,7 +454,7 @@ apic_soft_inventory(const char *szVia)
     kprintf("apic: soft inventory via=%s ready=%u cal=%u status=%s "
             "attempts=%u ok=%u fail=%u samples=%u period=%u hz=%u "
             "bsp_ticks=%lu cpu_ticks_sum=%u inits=%u cal_calls=%u "
-            "timer_hz_n=%u local_n=%u eoi_n=%u log_n=%u wave=12\n",
+            "timer_hz_n=%u local_n=%u eoi_n=%u log_n=%u wave=%u\n",
             szVia, g_fReady ? 1u : 0u, g_fCalibrated ? 1u : 0u, szCal,
             (unsigned)g_u32CalAttempts, (unsigned)g_u32CalOk,
             (unsigned)g_u32CalFail, (unsigned)g_u32CalSamples,
@@ -410,7 +462,8 @@ apic_soft_inventory(const char *szVia)
             (unsigned long)g_u64Ticks, (unsigned)u32CpuTicksSum,
             (unsigned)g_u32SoftInit, (unsigned)g_u32SoftCalCalls,
             (unsigned)g_u32SoftTimerHz, (unsigned)g_u32SoftLocalStart,
-            (unsigned)g_u32SoftEoi, (unsigned)g_u32SoftLogN);
+            (unsigned)g_u32SoftEoi, (unsigned)g_u32SoftLogN,
+            (unsigned)APIC_SOFT_WAVE);
 
     /* Grep: apic: soft timer */
     kprintf("apic: soft timer vec=%u div=%u div_cfg=0x%x lvt=0x%x "
@@ -502,17 +555,17 @@ apic_soft_inventory(const char *szVia)
     /* Grep: apic: soft mode */
     kprintf("apic: soft mode xapic_mmio=%p base_en=%u bsp=%u x2_msr=%u "
             "x2_enabled=%u base=0x%lx div_factor=%u cal_samples_max=%u "
-            "wave=12\n",
+            "wave=%u\n",
             (void *)g_pLapic, (unsigned)u32BaseEn, (unsigned)u32Bsp,
             (unsigned)u32X2En, (unsigned)u32X2,
             (unsigned long)u64Base, (unsigned)LAPIC_DIV_FACTOR,
-            (unsigned)APIC_CAL_SAMPLES_MAX);
+            (unsigned)APIC_CAL_SAMPLES_MAX, (unsigned)APIC_SOFT_WAVE);
 
     /* Grep: apic: soft stats */
     kprintf("apic: soft stats init=%u cal_calls=%u timer_hz_n=%u "
             "local_n=%u eoi_n=%u ipi_send=%lu ipi_self=%lu "
             "init_sipi=%lu resched=%lu tlb_shoot=%lu timer_irq=%lu "
-            "ipi_init=%lu log_n=%u wave=12\n",
+            "ipi_init=%lu log_n=%u wave=%u\n",
             (unsigned)g_u32SoftInit, (unsigned)g_u32SoftCalCalls,
             (unsigned)g_u32SoftTimerHz, (unsigned)g_u32SoftLocalStart,
             (unsigned)g_u32SoftEoi,
@@ -523,7 +576,7 @@ apic_soft_inventory(const char *szVia)
             (unsigned long)g_u64SoftTlbShoot,
             (unsigned long)g_u64SoftTimerIrq,
             (unsigned long)g_u64SoftIpiInit,
-            (unsigned)g_u32SoftLogN);
+            (unsigned)g_u32SoftLogN, (unsigned)APIC_SOFT_WAVE);
 
     /* Grep: apic: soft last */
     kprintf("apic: soft last dest=%u vec=%u tlb_expect=%u tlb_ack=%u "
@@ -592,8 +645,89 @@ apic_soft_inventory(const char *szVia)
      */
     kprintf("apic: soft path claim=xapic_timer+ipi+tlb p_irq1=1 "
             "p_time4=1 p_smp5=1 mono=bsp_only x2_optional=1 "
-            "bar3=open via=%s (soft inventory; not bar3)\n",
-            szVia);
+            "bar3=open via=%s wave=%u (soft inventory; not bar3)\n",
+            szVia, (unsigned)APIC_SOFT_WAVE);
+
+    /*
+     * Wave 14 exclusive complementary sub-lines (never reshape primary).
+     */
+    /* Grep: apic: soft query */
+    kprintf("apic: soft query ready=%lu cal=%lu bus_hz=%lu ticks=%lu "
+            "ticks_cpu=%lu ticks_cpu_bad=%lu npt=%lu init_cnt=%lu "
+            "cur_cnt=%lu cur_skip=%lu snap=%lu snap_null=%lu log=%lu\n",
+            (unsigned long)g_u64SoftQReady,
+            (unsigned long)g_u64SoftQCal,
+            (unsigned long)g_u64SoftQBusHz,
+            (unsigned long)g_u64SoftQTicks,
+            (unsigned long)g_u64SoftQTicksCpu,
+            (unsigned long)g_u64SoftQTicksCpuBad,
+            (unsigned long)g_u64SoftQNpt,
+            (unsigned long)g_u64SoftQInitCnt,
+            (unsigned long)g_u64SoftQCurCnt,
+            (unsigned long)g_u64SoftQCurSkip,
+            (unsigned long)g_u64SoftQSnap,
+            (unsigned long)g_u64SoftQSnapNull,
+            (unsigned long)g_u64SoftQLog);
+
+    /* Grep: apic: soft lapic */
+    kprintf("apic: soft lapic rd_x2=%lu rd_mmio=%lu rd_null=%lu "
+            "wr_x2=%lu wr_mmio=%lu wr_null=%lu "
+            "path=x2_msr|mmio|null\n",
+            (unsigned long)g_u64SoftLapicRdX2,
+            (unsigned long)g_u64SoftLapicRdMmio,
+            (unsigned long)g_u64SoftLapicRdNull,
+            (unsigned long)g_u64SoftLapicWrX2,
+            (unsigned long)g_u64SoftLapicWrMmio,
+            (unsigned long)g_u64SoftLapicWrNull);
+
+    /* Grep: apic: soft sample */
+    kprintf("apic: soft sample enter=%lu ok=%lu fail=%lu "
+            "wait_ticks=%u max_samples=%u s1_skip=%lu "
+            "align_last=%u wait_last=%u\n",
+            (unsigned long)g_u64SoftCalSample,
+            (unsigned long)g_u64SoftCalSampleOk,
+            (unsigned long)g_u64SoftCalSampleFail,
+            (unsigned)APIC_CAL_WAIT_TICKS,
+            (unsigned)APIC_CAL_SAMPLES_MAX,
+            (unsigned long)g_u64SoftCalSample1Skip,
+            (unsigned)g_u32CalAlignSpins,
+            (unsigned)g_u32CalWaitSpins);
+
+    /* Grep: apic: soft lamps */
+    kprintf("apic: soft lamps ready=%u cal=%u period=%u hz=%u "
+            "svr_en=%u lvt_masked=%u lvt_periodic=%u x2=%u "
+            "base_en=%u bsp=%u mono_hint=%u verdict=%s\n",
+            g_fReady ? 1u : 0u, g_fCalibrated ? 1u : 0u,
+            (g_u32PeriodInit != 0) ? 1u : 0u,
+            (g_u32HzProgrammed != 0) ? 1u : 0u,
+            (unsigned)u32SvrEn, (unsigned)u32LvtMasked,
+            (unsigned)u32LvtPeriodic, (unsigned)u32X2,
+            (unsigned)u32BaseEn, (unsigned)u32Bsp,
+            (g_fCalibrated && g_u32PeriodInit != 0) ? 1u : 0u,
+            szVerdict);
+
+    /* Grep: apic: soft reject */
+    kprintf("apic: soft reject ipi_nrdy=%lu self_nrdy=%lu "
+            "init_nrdy=%lu resched_skip=%lu resched_slot0=%lu "
+            "timer_hz_skip=%lu timer_hz_clamp=%lu local_skip=%lu "
+            "icr_cap=%lu tlb_nrdy=%lu\n",
+            (unsigned long)g_u64SoftIpiNotReady,
+            (unsigned long)g_u64SoftSelfNotReady,
+            (unsigned long)g_u64SoftInitSipiNotReady,
+            (unsigned long)g_u64SoftReschedSkip,
+            (unsigned long)g_u64SoftReschedSlot0,
+            (unsigned long)g_u64SoftTimerHzSkip,
+            (unsigned long)g_u64SoftTimerHzClamp,
+            (unsigned long)g_u64SoftLocalSkip,
+            (unsigned long)g_u64SoftIcrCap,
+            (unsigned long)g_u64SoftTlbNotReady);
+
+    /* Grep: apic: soft deepen */
+    kprintf("apic: soft deepen wave=%u areas="
+            "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"
+            "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject "
+            "unit=apic.c only hot_irq_kprintf=0 via=%s\n",
+            (unsigned)APIC_SOFT_WAVE, szVia);
 }
 
 void
@@ -715,6 +849,33 @@ apic_init(void)
     g_u64SoftLocalDefault = 0;
     g_u64SoftLocalProg = 0;
     g_u64SoftIpiInit = 0;
+    /* Wave 14 exclusive path deepen reset. */
+    g_u64SoftLapicRdX2 = 0;
+    g_u64SoftLapicRdMmio = 0;
+    g_u64SoftLapicRdNull = 0;
+    g_u64SoftLapicWrX2 = 0;
+    g_u64SoftLapicWrMmio = 0;
+    g_u64SoftLapicWrNull = 0;
+    g_u64SoftCalSample = 0;
+    g_u64SoftCalSampleOk = 0;
+    g_u64SoftCalSampleFail = 0;
+    g_u64SoftQReady = 0;
+    g_u64SoftQCal = 0;
+    g_u64SoftQBusHz = 0;
+    g_u64SoftQTicks = 0;
+    g_u64SoftQTicksCpu = 0;
+    g_u64SoftQTicksCpuBad = 0;
+    g_u64SoftQNpt = 0;
+    g_u64SoftQInitCnt = 0;
+    g_u64SoftQCurCnt = 0;
+    g_u64SoftQCurSkip = 0;
+    g_u64SoftQSnap = 0;
+    g_u64SoftQSnapNull = 0;
+    g_u64SoftQLog = 0;
+    g_u64SoftTimerHzClamp = 0;
+    g_u64SoftLocalSkip = 0;
+    g_u64SoftIcrCap = 0;
+    g_u64SoftReschedSlot0 = 0;
     u64Base = rdmsr(IA32_APIC_BASE_MSR);
     if ((u64Base & APIC_BASE_ENABLE) == 0) {
         u64Base |= APIC_BASE_ENABLE;
@@ -801,6 +962,9 @@ apic_send_resched(u32 u32CpuSlot)
 
     if (!g_fReady || u32CpuSlot == 0) {
         apic_soft_inc64(&g_u64SoftReschedSkip);
+        if (u32CpuSlot == 0) {
+            apic_soft_inc64(&g_u64SoftReschedSlot0);
+        }
         return;
     }
     apic_soft_inc64(&g_u64SoftResched);
@@ -889,6 +1053,7 @@ tlb_shootdown(gj_vaddr_t va)
 int
 apic_ready(void)
 {
+    apic_soft_inc64(&g_u64SoftQReady);
     return g_fReady;
 }
 
@@ -901,10 +1066,13 @@ apic_cal_sample(u32 u32WaitTicks, u32 *pPitDelta, u32 *pElapsed)
 {
     u64 u64J0;
     u64 u64J1;
+    u64 u64Hz;
     u32 u32Cur;
     u32 u32Elapsed;
     u32 u32Spins;
     const u32 u32InitMax = 0xffffffffu;
+
+    apic_soft_inc64(&g_u64SoftCalSample);
 
     /* Align to a PIT tick boundary */
     u64J0 = timer_jiffies();
@@ -915,6 +1083,7 @@ apic_cal_sample(u32 u32WaitTicks, u32 *pPitDelta, u32 *pElapsed)
     }
     g_u32CalAlignSpins = u32Spins;
     if (timer_jiffies() == u64J0) {
+        apic_soft_inc64(&g_u64SoftCalSampleFail);
         return 0;
     }
 
@@ -933,6 +1102,7 @@ apic_cal_sample(u32 u32WaitTicks, u32 *pPitDelta, u32 *pElapsed)
     g_u32CalWaitSpins = u32Spins;
 
     if (u64J1 <= u64J0 || u32Cur >= u32InitMax) {
+        apic_soft_inc64(&g_u64SoftCalSampleFail);
         return 0;
     }
 
@@ -947,7 +1117,9 @@ apic_cal_sample(u32 u32WaitTicks, u32 *pPitDelta, u32 *pElapsed)
      * u32Elapsed counts over (j1-j0) PIT ticks at GJ_TIMER_HZ.
      * bus_hz = elapsed * GJ_TIMER_HZ / (j1-j0)
      */
-    return ((u64)u32Elapsed * (u64)GJ_TIMER_HZ) / (u64J1 - u64J0);
+    u64Hz = ((u64)u32Elapsed * (u64)GJ_TIMER_HZ) / (u64J1 - u64J0);
+    apic_soft_inc64(&g_u64SoftCalSampleOk);
+    return u64Hz;
 }
 
 int
@@ -1059,12 +1231,14 @@ apic_calibrate(void)
 int
 apic_calibrated(void)
 {
+    apic_soft_inc64(&g_u64SoftQCal);
     return g_fCalibrated;
 }
 
 u64
 apic_bus_hz(void)
 {
+    apic_soft_inc64(&g_u64SoftQBusHz);
     return g_u64BusHz;
 }
 
@@ -1092,6 +1266,7 @@ apic_timer_hz(u32 u32Hz)
     }
     if (u32Init < 1000u) {
         u32Init = 1000u;
+        apic_soft_inc64(&g_u64SoftTimerHzClamp);
     }
     g_u32PeriodInit = u32Init;
     g_u64NsecPerTick = 1000000000ull / (u64)u32Hz;
@@ -1116,13 +1291,16 @@ apic_timer_hz(u32 u32Hz)
 u64
 apic_timer_ticks(void)
 {
+    apic_soft_inc64(&g_u64SoftQTicks);
     return g_u64Ticks;
 }
 
 u64
 apic_timer_ticks_cpu(u32 u32Cpu)
 {
+    apic_soft_inc64(&g_u64SoftQTicksCpu);
     if (u32Cpu >= GJ_CPU_STATIC_MAX) {
+        apic_soft_inc64(&g_u64SoftQTicksCpuBad);
         return 0;
     }
     return g_aCpuTicks[u32Cpu];
@@ -1131,19 +1309,23 @@ apic_timer_ticks_cpu(u32 u32Cpu)
 u64
 apic_nsec_per_tick(void)
 {
+    apic_soft_inc64(&g_u64SoftQNpt);
     return g_u64NsecPerTick;
 }
 
 u32
 apic_timer_init_count(void)
 {
+    apic_soft_inc64(&g_u64SoftQInitCnt);
     return g_u32PeriodInit;
 }
 
 u32
 apic_timer_cur_count(void)
 {
+    apic_soft_inc64(&g_u64SoftQCurCnt);
     if (!g_fReady) {
+        apic_soft_inc64(&g_u64SoftQCurSkip);
         return 0;
     }
     return lapic_r(LAPIC_TIMER_CUR);
@@ -1153,8 +1335,10 @@ void
 apic_cal_soft_snapshot(struct gj_apic_cal_soft *pOut)
 {
     if (pOut == NULL) {
+        apic_soft_inc64(&g_u64SoftQSnapNull);
         return;
     }
+    apic_soft_inc64(&g_u64SoftQSnap);
     pOut->u32Status = g_u32CalStatus;
     pOut->u32Attempts = g_u32CalAttempts;
     pOut->u32Ok = g_u32CalOk;
@@ -1182,6 +1366,7 @@ apic_cal_soft_log(void)
     const char *szSt;
     const char *szVerdict;
 
+    apic_soft_inc64(&g_u64SoftQLog);
     apic_cal_soft_snapshot(&stCal);
 
     switch (stCal.u32Status) {
@@ -1241,6 +1426,7 @@ apic_timer_start_local(void)
     u32 u32Init = g_u32PeriodInit;
 
     if (!g_fReady) {
+        apic_soft_inc64(&g_u64SoftLocalSkip);
         return;
     }
     apic_soft_inc32(&g_u32SoftLocalStart);
@@ -1276,11 +1462,14 @@ apic_icr_wait(void)
 
     apic_soft_inc64(&g_u64SoftIcrWait);
     while ((lapic_r(LAPIC_ICR_LOW) & LAPIC_ICR_PENDING) != 0 &&
-           u32Spins < 1000000u) {
+           u32Spins < APIC_SOFT_ICR_SPIN_MAX) {
         u32Spins++;
         __asm__ volatile ("pause");
     }
     g_u32SoftIcrLastSpins = u32Spins;
+    if (u32Spins >= APIC_SOFT_ICR_SPIN_MAX) {
+        apic_soft_inc64(&g_u64SoftIcrCap);
+    }
 }
 
 void

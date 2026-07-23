@@ -11,13 +11,24 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product (grep: user: ring3 map soft | user: personality map soft):
+ * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ * greppable: "user: soft …" | "user_task: soft …"
+ *   user: soft inventory …
+ *   user: soft stats …
+ *   user: soft map …
+ *   user: soft layout …
+ *   user: soft enter …
+ *   user: soft recheck …
+ *   user: soft catalog …
+ *   user: soft deepen wave=14 …
+ *   user: soft path …
+ *   user: soft PASS|PARTIAL
+ *   user: ring3 map soft | user: personality map soft (post-map observe)
  *   Post-map PTE soft (P|U, code RX / stack RW|NX) + payload soft match
  *   Layout soft (user band, page align, code/stack non-overlap, dual windows)
  *   Fail closed on soft bad; greppable soft PASS|FAIL; soft stats counters
  *   Idempotent re-map: already-live soft recheck without double-install
- *
- * Pure C freestanding; dual MIT OR Apache-2.0.
+ * Soft ≠ bar3. Pure C freestanding; dual MIT OR Apache-2.0.
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -49,7 +60,9 @@ extern char gj_protonrt_user_blob_end[];
 static int g_fUserMapped;
 static int g_fPersMapped;
 
-/* ---- Soft map / enter counters (grep: user: soft stats) ---------------- */
+/* ---- Soft map / enter counters (grep: user: soft …) Wave 14 ----------- */
+#define GJ_USER_SOFT_WAVE 14u
+
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
 static u32 g_cRing3Soft;
@@ -67,6 +80,208 @@ static size_t g_cbRing3Blob;
 static size_t g_cbPersBlob;
 static u32    g_cRing3CodePages;
 static u32    g_cPersCodePages;
+
+/* Wave 14 deepen path tallies (diagnostics only; wrap OK). */
+static u32 g_u32SoftLayoutFailRing3;
+static u32 g_u32SoftLayoutFailPers;
+static u32 g_u32SoftAsEnsureFailRing3;
+static u32 g_u32SoftAsEnsureFailPers;
+static u32 g_u32SoftBlobBadRing3;
+static u32 g_u32SoftBlobBadPers;
+static u32 g_u32SoftInstallFailRing3;
+static u32 g_u32SoftInstallFailPers;
+static u32 g_u32SoftStackFailRing3;
+static u32 g_u32SoftStackFailPers;
+static u32 g_u32SoftTeardown;
+static u32 g_u32SoftIdemRing3;
+static u32 g_u32SoftIdemPers;
+static u32 g_u32SoftRecheckPassRing3;
+static u32 g_u32SoftRecheckFailRing3;
+static u32 g_u32SoftRecheckPassPers;
+static u32 g_u32SoftRecheckFailPers;
+static u32 g_u32SoftEnterSkipNotMap;
+static u32 g_u32SoftEnterSkipSyscall;
+static u32 g_u32SoftEnterSkipRecheck;
+static u32 g_u32SoftObserveOk;
+static u32 g_u32SoftObserveBad;
+static u32 g_u32SoftLogN;
+static u8  g_fSoftInvOnce;
+
+static void user_soft_inc(u32 *pCtr);
+static void user_soft_inventory(const char *szVia);
+static void user_soft_maybe_once(void);
+
+/** Soft: saturating bump (wrap avoided; wrap OK if ever hit). */
+static void
+user_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/**
+ * Greppable Wave 14 soft user_task inventory (product / smoke).
+ * Twin prefixes: user: soft … | user_task: soft …
+ * Never hard-gates map/enter path. Soft ≠ bar3.
+ *
+ * greppable: user: soft
+ * greppable: user_task: soft
+ */
+static void
+user_soft_inventory(const char *szVia)
+{
+    const char *szViaSafe;
+    const char *szVerdict;
+    u32         u32Ring3Live;
+    u32         u32PersLive;
+
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    user_soft_inc(&g_u32SoftLogN);
+    u32Ring3Live = g_fUserMapped != 0 ? 1u : 0u;
+    u32PersLive = g_fPersMapped != 0 ? 1u : 0u;
+
+    if (g_cRing3MapOk != 0u || g_cPersMapOk != 0u) {
+        szVerdict = "PASS";
+    } else if (g_cRing3MapFail != 0u || g_cPersMapFail != 0u ||
+               g_cEnterSkip != 0u) {
+        szVerdict = "PARTIAL";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /* Grep: user: soft inventory */
+    kprintf("user: soft inventory via=%s ring3_ok=%u ring3_fail=%u "
+            "pers_ok=%u pers_fail=%u enter_ok=%u enter_skip=%u "
+            "ring3_live=%u pers_live=%u log_n=%u wave=%u\n",
+            szViaSafe, g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk,
+            g_cPersMapFail, g_cEnterOk, g_cEnterSkip, u32Ring3Live,
+            u32PersLive, g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+
+    /* Grep: user: soft stats */
+    kprintf("user: soft stats ring3_ok=%u ring3_fail=%u ring3_soft=%u "
+            "ring3_soft_bad=%u pers_ok=%u pers_fail=%u pers_soft=%u "
+            "pers_soft_bad=%u enter_ok=%u enter_skip=%u code_pages=%u "
+            "stack_pages=%u ring3_live=%u pers_live=%u\n",
+            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, g_cRing3SoftBad,
+            g_cPersMapOk, g_cPersMapFail, g_cPersSoft, g_cPersSoftBad,
+            g_cEnterOk, g_cEnterSkip, g_cCodePages, g_cStackPages,
+            u32Ring3Live, u32PersLive);
+
+    /* Grep: user: soft map */
+    kprintf("user: soft map ring3_blob_bad=%u pers_blob_bad=%u "
+            "ring3_install_fail=%u pers_install_fail=%u "
+            "ring3_stack_fail=%u pers_stack_fail=%u "
+            "ring3_as_fail=%u pers_as_fail=%u teardown=%u "
+            "observe_ok=%u observe_bad=%u\n",
+            g_u32SoftBlobBadRing3, g_u32SoftBlobBadPers,
+            g_u32SoftInstallFailRing3, g_u32SoftInstallFailPers,
+            g_u32SoftStackFailRing3, g_u32SoftStackFailPers,
+            g_u32SoftAsEnsureFailRing3, g_u32SoftAsEnsureFailPers,
+            g_u32SoftTeardown, g_u32SoftObserveOk, g_u32SoftObserveBad);
+
+    /* Grep: user: soft layout */
+    kprintf("user: soft layout ring3_fail=%u pers_fail=%u "
+            "idem_ring3=%u idem_pers=%u dual_window=1\n",
+            g_u32SoftLayoutFailRing3, g_u32SoftLayoutFailPers,
+            g_u32SoftIdemRing3, g_u32SoftIdemPers);
+
+    /* Grep: user: soft enter */
+    kprintf("user: soft enter ok=%u skip=%u not_mapped=%u syscall=%u "
+            "recheck=%u\n",
+            g_cEnterOk, g_cEnterSkip, g_u32SoftEnterSkipNotMap,
+            g_u32SoftEnterSkipSyscall, g_u32SoftEnterSkipRecheck);
+
+    /* Grep: user: soft recheck */
+    kprintf("user: soft recheck ring3_pass=%u ring3_fail=%u "
+            "pers_pass=%u pers_fail=%u\n",
+            g_u32SoftRecheckPassRing3, g_u32SoftRecheckFailRing3,
+            g_u32SoftRecheckPassPers, g_u32SoftRecheckFailPers);
+
+    /* Grep: user: soft catalog */
+    kprintf("user: soft catalog code_va=0x%lx stack_top=0x%lx "
+            "code_pages=%u stack_pages=%u pers_code=0x%lx "
+            "pers_stack=0x%lx pers_code_pages=%u ring3_blob=%lu "
+            "pers_blob=%lu wave=%u\n",
+            (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP,
+            GJ_USER_CODE_PAGES, GJ_USER_STACK_PAGES,
+            (unsigned long)GJ_PERS_CODE_VA, (unsigned long)GJ_PERS_STACK_TOP,
+            GJ_PERS_CODE_PAGES, (unsigned long)g_cbRing3Blob,
+            (unsigned long)g_cbPersBlob, GJ_USER_SOFT_WAVE);
+
+    /* Grep: user: soft path */
+    kprintf("user: soft path claim=ring3,personality,enter "
+            "pte=RX_code+RW_NX_stack payload_match=1 layout=dual "
+            "sysret_enter=1 G-PERS=1 wave=%u "
+            "(soft inventory; not bar3)\n",
+            GJ_USER_SOFT_WAVE);
+
+    /* Grep: user: soft deepen */
+    kprintf("user: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
+            "enter_ok=%u soft=%u soft_bad=%u logs=%u "
+            "(soft inventory only; not product gate)\n",
+            GJ_USER_SOFT_WAVE, szViaSafe, g_cRing3MapOk, g_cPersMapOk,
+            g_cEnterOk, g_cRing3Soft + g_cPersSoft,
+            g_cRing3SoftBad + g_cPersSoftBad, g_u32SoftLogN);
+
+    /* Grep: user: soft PASS | PARTIAL */
+    kprintf("user: soft %s via=%s ring3_live=%u pers_live=%u "
+            "enter_ok=%u log_n=%u wave=%u\n",
+            szVerdict, szViaSafe, u32Ring3Live, u32PersLive, g_cEnterOk,
+            g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+
+    /* Twin prefix: user_task: soft … */
+    /* Grep: user_task: soft inventory */
+    kprintf("user_task: soft inventory via=%s ring3_ok=%u ring3_fail=%u "
+            "pers_ok=%u pers_fail=%u enter_ok=%u enter_skip=%u "
+            "ring3_live=%u pers_live=%u log_n=%u wave=%u\n",
+            szViaSafe, g_cRing3MapOk, g_cRing3MapFail, g_cPersMapOk,
+            g_cPersMapFail, g_cEnterOk, g_cEnterSkip, u32Ring3Live,
+            u32PersLive, g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+
+    /* Grep: user_task: soft deepen */
+    kprintf("user_task: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
+            "enter_ok=%u soft=%u soft_bad=%u logs=%u "
+            "(soft inventory only; not product gate)\n",
+            GJ_USER_SOFT_WAVE, szViaSafe, g_cRing3MapOk, g_cPersMapOk,
+            g_cEnterOk, g_cRing3Soft + g_cPersSoft,
+            g_cRing3SoftBad + g_cPersSoftBad, g_u32SoftLogN);
+
+    /* Grep: user_task: soft path */
+    kprintf("user_task: soft path claim=ring3,personality,enter "
+            "pte=RX_code+RW_NX_stack payload_match=1 layout=dual "
+            "sysret_enter=1 G-PERS=1 wave=%u "
+            "(soft inventory; not bar3)\n",
+            GJ_USER_SOFT_WAVE);
+
+    /* Grep: user_task: soft PASS | PARTIAL */
+    kprintf("user_task: soft %s via=%s ring3_live=%u pers_live=%u "
+            "enter_ok=%u log_n=%u wave=%u\n",
+            szVerdict, szViaSafe, u32Ring3Live, u32PersLive, g_cEnterOk,
+            g_u32SoftLogN, GJ_USER_SOFT_WAVE);
+}
+
+/**
+ * After first product map/enter activity, print soft inventory once.
+ * Diagnostics only.
+ */
+static void
+user_soft_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_cRing3MapOk == 0u && g_cPersMapOk == 0u &&
+        g_cRing3MapFail == 0u && g_cPersMapFail == 0u &&
+        g_cEnterOk == 0u && g_cEnterSkip == 0u) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    user_soft_inventory("activity");
+}
 
 /**
  * Install user RX (or RW) page: zero frame under kernel CR3, copy payload,
@@ -411,6 +626,7 @@ user_map_soft_observe(u64 u64CodeVa, size_t cbCode, const void *pBlob,
         if (pSoftBad != NULL) {
             (*pSoftBad)++;
         }
+        user_soft_inc(&g_u32SoftObserveBad);
         kprintf("user: %s map soft FAIL inval cb=%lu pages=%u\n", szTag,
                 (unsigned long)cbCode, cStackPages);
         return GJ_ERR_INVAL;
@@ -500,6 +716,7 @@ user_map_soft_observe(u64 u64CodeVa, size_t cbCode, const void *pBlob,
     if (pSoftOk != NULL) {
         (*pSoftOk)++;
     }
+    user_soft_inc(&g_u32SoftObserveOk);
     /* Grep: user: ring3 map soft PASS / user: personality map soft PASS */
     kprintf("user: %s map soft PASS code@0x%lx stacktop@0x%lx code_pages=%u "
             "stack_pages=%u blob=%lu pte_rx=1 pte_rw=1 payload=1\n",
@@ -517,6 +734,7 @@ user_map_soft_fail_teardown(gj_vaddr_t vaCode, u32 cCodePages, u64 u64StackTop,
 {
     u32 iPage;
 
+    user_soft_inc(&g_u32SoftTeardown);
     user_unmap_window(vaCode, cCodePages);
     for (iPage = 0; iPage < cStackPages; iPage++) {
         u64 u64PageVa = u64StackTop - ((u64)iPage + 1ull) * GJ_PAGE_SIZE;
@@ -540,14 +758,18 @@ user_task_map_ring3(struct gj_process *pProc)
     if (cbBlob == 0 ||
         cbBlob > (size_t)GJ_USER_CODE_PAGES * (size_t)GJ_PAGE_SIZE) {
         g_cRing3MapFail++;
+        user_soft_inc(&g_u32SoftBlobBadRing3);
         kprintf("user: bad ring3 blob size %lu\n", (unsigned long)cbBlob);
+        user_soft_maybe_once();
         return -1;
     }
 
     /* Soft idempotent: already live + soft recheck still green → success. */
     if (g_fUserMapped != 0) {
         if (user_task_ring3_map_soft() == 0) {
+            user_soft_inc(&g_u32SoftIdemRing3);
             kprintf("user: ring3 map soft already live recheck PASS\n");
+            user_soft_maybe_once();
             return 0;
         }
         /* Soft bad on live map: tear down before reinstall (avoid PA leak). */
@@ -566,14 +788,18 @@ user_task_map_ring3(struct gj_process *pProc)
                              g_fPersMapped)) {
         g_cRing3MapFail++;
         g_cRing3SoftBad++;
+        user_soft_inc(&g_u32SoftLayoutFailRing3);
         kprintf("user: ring3 map soft FAIL layout\n");
+        user_soft_maybe_once();
         return -1;
     }
 
     if (pProc != NULL) {
         if (process_as_ensure(pProc) != GJ_OK) {
             g_cRing3MapFail++;
+            user_soft_inc(&g_u32SoftAsEnsureFailRing3);
             kprintf("user: as_ensure failed\n");
+            user_soft_maybe_once();
             return -1;
         }
         process_as_activate(pProc);
@@ -583,13 +809,17 @@ user_task_map_ring3(struct gj_process *pProc)
                               cbBlob, GJ_USER_CODE_PAGES, &cCodePages);
     if (st != GJ_OK) {
         g_cRing3MapFail++;
+        user_soft_inc(&g_u32SoftInstallFailRing3);
         kprintf("user: map code RX failed %d\n", (int)st);
+        user_soft_maybe_once();
         return -1;
     }
 
     if (user_map_stack(GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES) != 0) {
         user_unmap_window((gj_vaddr_t)GJ_USER_CODE_VA, cCodePages);
         g_cRing3MapFail++;
+        user_soft_inc(&g_u32SoftStackFailRing3);
+        user_soft_maybe_once();
         return -1;
     }
 
@@ -607,7 +837,9 @@ user_task_map_ring3(struct gj_process *pProc)
         user_map_soft_fail_teardown((gj_vaddr_t)GJ_USER_CODE_VA, cCodePages,
                                     GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES);
         g_cRing3MapFail++;
+        user_soft_inc(&g_u32SoftObserveBad);
         kprintf("user: ring3 map soft FAIL st=%d\n", (int)st);
+        user_soft_maybe_once();
         return -1;
     }
 
@@ -618,6 +850,7 @@ user_task_map_ring3(struct gj_process *pProc)
     kprintf("user: ring3 code@0x%lx stacktop@0x%lx blob=%lu pages=%u PASS\n",
             (unsigned long)GJ_USER_CODE_VA,
             (unsigned long)GJ_USER_STACK_TOP, (unsigned long)cbBlob, cCodePages);
+    user_soft_maybe_once();
     return 0;
 }
 
@@ -626,26 +859,33 @@ user_task_enter_ring3(void)
 {
     if (!g_fUserMapped && !g_fPersMapped) {
         g_cEnterSkip++;
+        user_soft_inc(&g_u32SoftEnterSkipNotMap);
         kprintf("user: not mapped\n");
         kprintf("user: ring3 enter soft SKIP not_mapped\n");
+        user_soft_maybe_once();
         return;
     }
     if (!cpu_syscall_ready()) {
         g_cEnterSkip++;
+        user_soft_inc(&g_u32SoftEnterSkipSyscall);
         kprintf("user: SYSCALL not ready\n");
         kprintf("user: ring3 enter soft SKIP syscall\n");
+        user_soft_maybe_once();
         return;
     }
     /* Soft recheck of the trampoline window before irrevocable enter. */
     if (g_fUserMapped != 0 && user_task_ring3_map_soft() != 0) {
         g_cEnterSkip++;
+        user_soft_inc(&g_u32SoftEnterSkipRecheck);
         kprintf("user: ring3 enter soft SKIP recheck\n");
+        user_soft_maybe_once();
         return;
     }
     g_cEnterOk++;
     kprintf("user: entering ring3…\n");
     kprintf("user: ring3 enter soft PASS code@0x%lx stack@0x%lx\n",
             (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP);
+    user_soft_maybe_once();
     cpu_enter_user(GJ_USER_CODE_VA, GJ_USER_STACK_TOP);
 }
 
@@ -660,14 +900,18 @@ user_personality_map(struct gj_process *pProc)
     if (cbBlob == 0 ||
         cbBlob > (size_t)GJ_PERS_CODE_PAGES * (size_t)GJ_PAGE_SIZE) {
         g_cPersMapFail++;
+        user_soft_inc(&g_u32SoftBlobBadPers);
         kprintf("user: bad protonrt blob size %lu\n", (unsigned long)cbBlob);
+        user_soft_maybe_once();
         return -1;
     }
 
     /* Soft idempotent: live personality soft recheck. */
     if (g_fPersMapped != 0) {
         if (user_personality_map_soft() == 0) {
+            user_soft_inc(&g_u32SoftIdemPers);
             kprintf("user: personality map soft already live recheck PASS\n");
+            user_soft_maybe_once();
             return 0;
         }
         /* Soft bad on live map: tear down before reinstall (avoid PA leak). */
@@ -688,14 +932,18 @@ user_personality_map(struct gj_process *pProc)
                              g_fUserMapped)) {
         g_cPersMapFail++;
         g_cPersSoftBad++;
+        user_soft_inc(&g_u32SoftLayoutFailPers);
         kprintf("user: personality map soft FAIL layout\n");
+        user_soft_maybe_once();
         return -1;
     }
 
     if (pProc != NULL) {
         if (process_as_ensure(pProc) != GJ_OK) {
             g_cPersMapFail++;
+            user_soft_inc(&g_u32SoftAsEnsureFailPers);
             kprintf("user: personality as_ensure failed\n");
+            user_soft_maybe_once();
             return -1;
         }
         process_as_activate(pProc);
@@ -707,13 +955,17 @@ user_personality_map(struct gj_process *pProc)
                               cbBlob, GJ_PERS_CODE_PAGES, &cCodePages);
     if (st != GJ_OK) {
         g_cPersMapFail++;
+        user_soft_inc(&g_u32SoftInstallFailPers);
         kprintf("user: personality map code failed %d\n", (int)st);
+        user_soft_maybe_once();
         return -1;
     }
 
     if (user_map_stack(GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES) != 0) {
         user_unmap_window((gj_vaddr_t)GJ_PERS_CODE_VA, cCodePages);
         g_cPersMapFail++;
+        user_soft_inc(&g_u32SoftStackFailPers);
+        user_soft_maybe_once();
         return -1;
     }
 
@@ -725,7 +977,9 @@ user_personality_map(struct gj_process *pProc)
         user_map_soft_fail_teardown((gj_vaddr_t)GJ_PERS_CODE_VA, cCodePages,
                                     GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES);
         g_cPersMapFail++;
+        user_soft_inc(&g_u32SoftObserveBad);
         kprintf("user: personality map soft FAIL st=%d\n", (int)st);
+        user_soft_maybe_once();
         return -1;
     }
 
@@ -738,6 +992,7 @@ user_personality_map(struct gj_process *pProc)
     kprintf("user: personality server mapped @0x%lx (%lu bytes) pages=%u "
             "native PASS\n",
             (unsigned long)GJ_PERS_CODE_VA, (unsigned long)cbBlob, cCodePages);
+    user_soft_maybe_once();
     return 0;
 }
 
@@ -791,15 +1046,11 @@ user_task_stats(struct gj_user_task_stats *pOut)
 u32
 user_task_stats_soft(void)
 {
-    /* Grep: user: soft stats */
-    kprintf("user: soft stats ring3_ok=%u ring3_fail=%u ring3_soft=%u "
-            "ring3_soft_bad=%u pers_ok=%u pers_fail=%u pers_soft=%u "
-            "pers_soft_bad=%u enter_ok=%u enter_skip=%u code_pages=%u "
-            "stack_pages=%u ring3_live=%u pers_live=%u\n",
-            g_cRing3MapOk, g_cRing3MapFail, g_cRing3Soft, g_cRing3SoftBad,
-            g_cPersMapOk, g_cPersMapFail, g_cPersSoft, g_cPersSoftBad,
-            g_cEnterOk, g_cEnterSkip, g_cCodePages, g_cStackPages,
-            g_fUserMapped != 0 ? 1u : 0u, g_fPersMapped != 0 ? 1u : 0u);
+    /*
+     * Wave 14: full greppable soft inventory dump (includes soft stats).
+     * Grep: user: soft | user_task: soft
+     */
+    user_soft_inventory("stats");
     return g_cRing3Soft;
 }
 
@@ -809,6 +1060,7 @@ user_task_ring3_map_soft(void)
     gj_status_t st;
 
     if (g_fUserMapped == 0 || g_cbRing3Blob == 0) {
+        user_soft_inc(&g_u32SoftRecheckFailRing3);
         kprintf("user: ring3 map soft recheck FAIL not_mapped\n");
         return -1;
     }
@@ -816,9 +1068,11 @@ user_task_ring3_map_soft(void)
                                GJ_USER_STACK_TOP, GJ_USER_STACK_PAGES, NULL,
                                -1, "ring3", &g_cRing3Soft, &g_cRing3SoftBad);
     if (st != GJ_OK) {
+        user_soft_inc(&g_u32SoftRecheckFailRing3);
         kprintf("user: ring3 map soft recheck FAIL st=%d\n", (int)st);
         return -1;
     }
+    user_soft_inc(&g_u32SoftRecheckPassRing3);
     kprintf("user: ring3 map soft recheck PASS\n");
     return 0;
 }
@@ -829,12 +1083,14 @@ user_personality_map_soft(void)
     gj_status_t st;
 
     if (g_fPersMapped == 0 || g_cbPersBlob == 0) {
+        user_soft_inc(&g_u32SoftRecheckFailPers);
         kprintf("user: personality map soft recheck FAIL not_mapped\n");
         return -1;
     }
     if (g_u64PersEntry != GJ_PERS_CODE_VA ||
         g_u64PersStack != GJ_PERS_STACK_TOP) {
         g_cPersSoftBad++;
+        user_soft_inc(&g_u32SoftRecheckFailPers);
         kprintf("user: personality map soft recheck FAIL entry=0x%lx "
                 "stack=0x%lx\n",
                 (unsigned long)g_u64PersEntry, (unsigned long)g_u64PersStack);
@@ -844,9 +1100,11 @@ user_personality_map_soft(void)
                                GJ_PERS_STACK_TOP, GJ_PERS_STACK_PAGES, NULL, -1,
                                "personality", &g_cPersSoft, &g_cPersSoftBad);
     if (st != GJ_OK) {
+        user_soft_inc(&g_u32SoftRecheckFailPers);
         kprintf("user: personality map soft recheck FAIL st=%d\n", (int)st);
         return -1;
     }
+    user_soft_inc(&g_u32SoftRecheckPassPers);
     kprintf("user: personality map soft recheck PASS\n");
     return 0;
 }

@@ -8,14 +8,19 @@
  * Hybrid SYSCALL uses this table; soft thunk zero-extends and fixes mmap2
  * pgoff / socketcall demux for pure-C paths without hardware compat CS.
  *
- * Soft inventory (Wave 11 exclusive; this unit only) — greppable "wow64: soft …":
+ * Soft inventory (Wave 11 base; Wave 14 exclusive deepen) —
+ * greppable "wow64: soft …":
  *   wow64: soft inventory …
  *   wow64: soft map …
  *   wow64: soft thunk …
  *   wow64: soft adjust …
  *   wow64: soft personality …
  *   wow64: soft path …
+ *   wow64: soft deepen …
  * Pure observation; never hard-gates path PASS; wrap OK; not bar3.
+ * greppable: wow64: soft inventory
+ * greppable: wow64: soft path
+ * greppable: wow64: soft deepen
  */
 #include <gj/klog.h>
 #include <gj/wow64.h>
@@ -29,9 +34,13 @@ static u32 g_u32Mmap2Hits;
 static u32 g_u32SocketcallHits;
 
 /*
- * Soft product inventory (Wave 11 exclusive). Cumulative path tallies.
- * greppable: wow64: soft …
+ * Soft product inventory (Wave 11 base; Wave 14 deepen). Cumulative path
+ * tallies. greppable: wow64: soft …
+ * Areas: inventory|map|thunk|adjust|personality|path|deepen
  */
+#define GJ_WOW64_SOFT_WAVE  14u
+#define GJ_WOW64_SOFT_AREAS 7u
+
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
 static u32 g_u32SoftIsMappedProbe;  /* wow64_nr_is_mapped probes */
@@ -72,7 +81,7 @@ soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable soft WoW64 inventory (product / smoke).
+ * Greppable soft WoW64 inventory (product / smoke; Wave 14 deepen).
  * Prefix-stable markers (wow64: soft …):
  *   wow64: soft inventory     — personality + public counter rollup
  *   wow64: soft map           — translate / is_mapped path tallies
@@ -80,54 +89,95 @@ soft_inc(u32 *pCtr)
  *   wow64: soft adjust        — mmap2 / socketcall / llseek fixups
  *   wow64: soft personality   — enable/disable surface
  *   wow64: soft path          — honesty claim (soft ≠ bar3)
+ *   wow64: soft deepen        — Wave 14 stamp
  * greppable: wow64: soft
+ * Honesty: soft inventory only — not product gate; not bar3.
  */
 static void
 soft_inventory_log(void)
 {
     u32 u32Enabled;
+    u32 u32AdjActive;
+    u32 u32MapRatio;
 
     soft_inc(&g_u32SoftLogN);
     u32Enabled = (g_fWow64 != 0) ? 1u : 0u;
+    u32AdjActive = 0;
+    if (g_u32SoftAdjustMmap2 != 0) {
+        u32AdjActive++;
+    }
+    if (g_u32SoftAdjustSocket != 0) {
+        u32AdjActive++;
+    }
+    if (g_u32SoftAdjustOldMmap != 0) {
+        u32AdjActive++;
+    }
+    if (g_u32SoftAdjustLlseek != 0) {
+        u32AdjActive++;
+    }
+    /* Soft map hit fraction in basis points (0 if no calls yet). */
+    if (g_u32Calls != 0) {
+        u32MapRatio = (u32)(((u64)g_u32MapHits * 10000ull) /
+                            (u64)g_u32Calls);
+    } else {
+        u32MapRatio = 0;
+    }
 
     /* Grep: wow64: soft inventory */
     kprintf("wow64: soft inventory enabled=%u calls=%u map=%u identity=%u "
-            "thunk=%u mmap2=%u socketcall=%u log_n=%u\n",
+            "thunk=%u mmap2=%u socketcall=%u log_n=%u "
+            "areas=%u wave=%u (soft; not bar3)\n",
             u32Enabled, g_u32Calls, g_u32MapHits, g_u32IdentityHits,
             g_u32ThunkHits, g_u32Mmap2Hits, g_u32SocketcallHits,
-            g_u32SoftLogN);
+            g_u32SoftLogN,
+            (unsigned)GJ_WOW64_SOFT_AREAS,
+            (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft map */
     kprintf("wow64: soft map enter=%u null_out=%u is_mapped=%u "
-            "hits=%u identity=%u\n",
+            "hits=%u identity=%u map_bp=%u wave=%u\n",
             g_u32SoftTranslateEnter, g_u32SoftTranslateNull,
-            g_u32SoftIsMappedProbe, g_u32MapHits, g_u32IdentityHits);
+            g_u32SoftIsMappedProbe, g_u32MapHits, g_u32IdentityHits,
+            u32MapRatio, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft thunk */
-    kprintf("wow64: soft thunk enter=%u ok=%u null=%u hits=%u\n",
+    kprintf("wow64: soft thunk enter=%u ok=%u null=%u hits=%u wave=%u\n",
             g_u32SoftThunkEnter, g_u32SoftThunkOk, g_u32SoftThunkNull,
-            g_u32ThunkHits);
+            g_u32ThunkHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft adjust */
     kprintf("wow64: soft adjust enter=%u nop=%u zx=%u mmap2=%u socket=%u "
             "sock_fail=%u old_mmap=%u llseek=%u args_zx=%u "
-            "sock_nr_ok=%u sock_nr_fail=%u ptr32=%u\n",
+            "sock_nr_ok=%u sock_nr_fail=%u ptr32=%u adj_active=%u "
+            "wave=%u\n",
             g_u32SoftAdjustEnter, g_u32SoftAdjustNop, g_u32SoftAdjustZx,
             g_u32SoftAdjustMmap2, g_u32SoftAdjustSocket,
             g_u32SoftAdjustSockFail, g_u32SoftAdjustOldMmap,
             g_u32SoftAdjustLlseek, g_u32SoftArgsZxCalls,
-            g_u32SoftSocketNrOk, g_u32SoftSocketNrFail, g_u32SoftPtr32);
+            g_u32SoftSocketNrOk, g_u32SoftSocketNrFail, g_u32SoftPtr32,
+            u32AdjActive, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft personality */
     kprintf("wow64: soft personality enabled=%u on=%u off=%u "
-            "page_shift=%u\n",
+            "page_shift=%u wave=%u\n",
             u32Enabled, g_u32SoftPersonOn, g_u32SoftPersonOff,
-            GJ_WOW64_PAGE_SHIFT);
+            GJ_WOW64_PAGE_SHIFT, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft path */
     kprintf("wow64: soft path claim=nr_map+arg_zx+mmap2_pgoff+"
             "socketcall_demux+llseek_compose hybrid=SYSCALL+int80 "
-            "(soft inventory; not bar3)\n");
+            "areas=%u wave=%u (soft inventory; not bar3)\n",
+            (unsigned)GJ_WOW64_SOFT_AREAS,
+            (unsigned)GJ_WOW64_SOFT_WAVE);
+
+    /* Grep: wow64: soft deepen wave */
+    kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
+            "thunk=%u adjust=%u logs=%u "
+            "(Wave 14 exclusive; not bar3)\n",
+            (unsigned)GJ_WOW64_SOFT_WAVE,
+            (unsigned)GJ_WOW64_SOFT_AREAS,
+            g_u32Calls, g_u32MapHits, g_u32ThunkHits,
+            g_u32SoftAdjustEnter, g_u32SoftLogN);
 }
 
 /**
@@ -166,7 +216,7 @@ wow64_set(int fOn)
         soft_inc(&g_u32SoftPersonOff);
     }
     kprintf("wow64: personality %s\n", g_fWow64 ? "on" : "off");
-    /* Wave 11: greppable soft inventory on personality flip. */
+    /* Wave 14: greppable soft inventory on personality flip. */
     soft_inventory_maybe_once();
 }
 

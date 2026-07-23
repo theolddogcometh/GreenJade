@@ -43,10 +43,12 @@ Source of truth for the shipped SO: **`libgj_so.c` only**. Soft batches under
 
 ## Exports (product SO)
 
+### Stable product contracts
+
 | Symbol | Type | Notes |
 |--------|------|-------|
 | `gj_so_export` | `volatile uint64_t` | Defined value `0x42`; primary resolve target |
-| `gj_so_init` | `void(void)` | Resets `gj_so_export` to `0x42` |
+| `gj_so_init` | `void(void)` | Restores export + soft stamp + soft caps |
 | `gj_so_get_export` | `uint64_t(void)` | JUMP_SLOT-friendly read of the export |
 | `gj_so_sysv_hash` | `uint32_t(const char *)` | Classic ELF SysV name hash (`DT_HASH`) |
 
@@ -54,30 +56,52 @@ Source of truth for the shipped SO: **`libgj_so.c` only**. Soft batches under
 `gj_so_export`. Kernel / ld-gj multi-SO paths also look for
 `hash/sym gj_so_export PASS` in the boot log.
 
+### Soft deepen surface (Wave 14 exclusive)
+
+Extra dynsyms enrich SysV `DT_HASH` buckets/chains. Soft-only: never hard-fail;
+smoke contracts above stay stable. Greppable: `GJ_SO_SOFT_*`,
+`libgj-so: soft deepen wave=14`.
+
+| Symbol | Kind | Notes |
+|--------|------|-------|
+| `gj_so_soft_stamp` | data (`0x53595356` / `'SYSV'`) | Soft identity stamp |
+| `gj_so_soft_caps` | data (`0x1f`) | Soft capability bitmask |
+| `gj_so_soft_get` | function | Returns current `gj_so_export` |
+| `gj_so_soft_id` | function | Returns soft stamp |
+| `gj_so_soft_probe` | function | 1 if export canonical; careful restore on miss |
+| `gj_so_soft_touch` | function | Re-assert export/stamp/caps; returns `0x42` |
+| `gj_so_soft_inventory` | function | Cold greppable inventory line (rodata) |
+| `gj_so_soft_wave` / `gj_so_soft_areas` | function | Wave 14 stamp / area count |
+
 ## Soft batches (unwired)
 
 Ownership: only **missing** SysV/product-SO symbols land here; do not
 redefine `user/libcgj` or the product TU. Parent Makefile must list a TU
 when symbols ship; until then these are freestanding soft scaffolds.
+Wave 14 soft deepen adds stamp / soft_get / soft_probe on both batches.
 
 ### `src/graph_so_batch1.c`
 
 | Symbol | Role |
 |--------|------|
 | `gj_so_batch1_export` | Presence marker `0x421` |
+| `gj_so_batch1_soft_stamp` | Soft companion stamp `'B1s1'` |
 | `gj_so_batch1_init` / `gj_so_batch1_id` | Marker restore / read |
 | `gj_so_batch1_sysv_hash` | Soft copy of classic ELF SysV hash |
 | `gj_so_batch1_streq` | Freestanding string equality (chain match) |
 | `gj_so_batch1_bucket` | `hash % nbucket` helper |
+| `gj_so_batch1_soft_get` / `_probe` | Soft read / check + restore |
 
 ### `src/graph_so_batch2.c`
 
 | Symbol | Role |
 |--------|------|
 | `gj_so_batch2_export_a` / `_b` | Distinct markers `0x422` / `0x423` |
+| `gj_so_batch2_soft_stamp` | Soft companion stamp `'B2s2'` |
 | `gj_so_batch2_init` / `gj_so_batch2_id` | Restore / XOR id |
 | `gj_so_batch2_chain_next` | One SysV chain step (bounds-checked) |
 | `gj_so_batch2_chain_find` | Soft bucket→chain probe with match callback |
+| `gj_so_batch2_soft_get` / `_probe` | Soft XOR id / check + restore |
 
 Soft only — **not** a product resolve path and **not** bar3 / Top-50 evidence.
 

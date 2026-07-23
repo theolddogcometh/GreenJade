@@ -11,6 +11,11 @@
  *   Wave 9 complementary (file-local): publish static/dyn, GS init,
  *   HHDM vs identity dyn path, reject class split, walk/kgs probes,
  *   extra "cpu: soft counters|probe" lines — primary PASS line stable.
+ *
+ * Wave 14 exclusive deepen (this unit only — greppable "cpu: soft …"):
+ *   cpu: soft inventory|pool|publish|reject_class|dyn|gs|layout|path|deepen
+ *   Additive; never reshapes primary PASS|counters|probe|slot lines.
+ * Never hard-gates product; wrap-OK counters and kprintf only.
  */
 #include <gj/cpu.h>
 #include <gj/gdt.h>
@@ -635,6 +640,113 @@ cpu_soft_log(void)
                 i, u32Kind, (unsigned long)pCpu->u64KernelRsp,
                 (unsigned long)pCpu->u64Cr3, (void *)pCpu->pCurrent,
                 pCpu->u32Online);
+    }
+
+    /*
+     * Wave 14 exclusive deepen (complementary; never reshapes primary lines):
+     *   cpu: soft inventory …
+     *   cpu: soft pool …
+     *   cpu: soft publish …
+     *   cpu: soft reject_class …
+     *   cpu: soft dyn …
+     *   cpu: soft gs …
+     *   cpu: soft layout …
+     *   cpu: soft path …
+     *   cpu: soft deepen …
+     * greppable: cpu: soft
+     */
+    {
+        u32 u32StaticHead;
+        u32 u32DynCeil;
+        u32 u32DynHead;
+        u32 u32PoolOccBp;
+        u32 u32GsBaseMatch;
+        u64 u64GsNow;
+
+        /* Soft headroom vs design ceilings (diagnostics only). */
+        if (stSoft.u32StaticOnline < stSoft.u32StaticMax) {
+            u32StaticHead = stSoft.u32StaticMax - stSoft.u32StaticOnline;
+        } else {
+            u32StaticHead = 0;
+        }
+        if (stSoft.u32MaxCpus > stSoft.u32StaticMax) {
+            u32DynCeil = stSoft.u32MaxCpus - stSoft.u32StaticMax;
+        } else {
+            u32DynCeil = 0;
+        }
+        if (stSoft.u32DynOnline < u32DynCeil) {
+            u32DynHead = u32DynCeil - stSoft.u32DynOnline;
+        } else {
+            u32DynHead = 0;
+        }
+        /* Occupancy basis points vs GJ_MAX_CPUS (0 if ceiling is 0). */
+        if (stSoft.u32MaxCpus != 0) {
+            u32PoolOccBp =
+                (stSoft.u32Online * 10000u) / stSoft.u32MaxCpus;
+        } else {
+            u32PoolOccBp = 0;
+        }
+        u64GsNow = rdmsr(MSR_GS_BASE);
+        u32GsBaseMatch = cpu_soft_va_is_published(u64GsNow) ? 1u : 0u;
+
+        /* Grep: cpu: soft inventory */
+        kprintf("cpu: soft inventory verdict=%s online=%u static=%u dyn=%u "
+                "dyn_alloc=%u oom=%u reject=%u idem=%u max_id=%u "
+                "gs_sane=%u walk_match=%u logs=%u wave=14\n",
+                szVerdict, stSoft.u32Online, stSoft.u32StaticOnline,
+                stSoft.u32DynOnline, stSoft.u32DynAlloc, stSoft.u32Oom,
+                stSoft.u32Reject, stSoft.u32Idempotent,
+                stSoft.u32MaxOnlineId, stSoft.u32GsSane, u32WalkMatch,
+                g_u32SoftLogN);
+        /* Grep: cpu: soft pool */
+        kprintf("cpu: soft pool static_max=%u max_cpus=%u static_on=%u "
+                "dyn_on=%u static_head=%u dyn_ceil=%u dyn_head=%u "
+                "occ_bp=%u dyn_ptrs=%u\n",
+                stSoft.u32StaticMax, stSoft.u32MaxCpus,
+                stSoft.u32StaticOnline, stSoft.u32DynOnline, u32StaticHead,
+                u32DynCeil, u32DynHead, u32PoolOccBp, u32DynPtrs);
+        /* Grep: cpu: soft publish */
+        kprintf("cpu: soft publish static=%u dyn=%u last_id=%u last_pa=0x%lx "
+                "last_pages=%u bsp_init=%u\n",
+                g_u32SoftPublishStatic, g_u32SoftPublishDyn,
+                stSoft.u32LastInitId, (unsigned long)stSoft.u64LastDynPa,
+                stSoft.u32LastPages, g_u32SoftBspInit);
+        /* Grep: cpu: soft reject_class */
+        kprintf("cpu: soft reject_class total=%u bsp=%u oob=%u zero_pages=%u "
+                "null_va=%u oom=%u idem=%u\n",
+                stSoft.u32Reject, g_u32SoftRejectBsp, g_u32SoftRejectOob,
+                g_u32SoftZeroPages, g_u32SoftNullVa, stSoft.u32Oom,
+                stSoft.u32Idempotent);
+        /* Grep: cpu: soft dyn */
+        kprintf("cpu: soft dyn alloc=%u online=%u hhdm=%u ident=%u "
+                "reuse=%u pages_sum=%u null_va=%u oom=%u\n",
+                stSoft.u32DynAlloc, stSoft.u32DynOnline, g_u32SoftDynHhdm,
+                g_u32SoftDynIdent, g_u32SoftDynReuse, g_u32SoftDynPagesSum,
+                g_u32SoftNullVa, stSoft.u32Oom);
+        /* Grep: cpu: soft gs */
+        kprintf("cpu: soft gs sane=%u base_match=%u kgs_zero=%u gs_init=%u "
+                "id_mis=%u id_mis_hwm=%u gs=0x%lx\n",
+                stSoft.u32GsSane, u32GsBaseMatch, u32KgsZero,
+                g_u32SoftGsInit, u32IdMis, g_u32SoftIdMatchFail,
+                (unsigned long)u64GsNow);
+        /* Grep: cpu: soft layout */
+        kprintf("cpu: soft layout percpu_cb=%u pages_per=%u "
+                "syscall_stack=%u static_max=%u max_cpus=%u "
+                "page_size=%u hhdm_base=0x%lx\n",
+                stSoft.u32PercpuBytes, u32PagesPer,
+                (u32)GJ_SYSCALL_STACK_SIZE, stSoft.u32StaticMax,
+                stSoft.u32MaxCpus, (u32)GJ_PAGE_SIZE,
+                (unsigned long)GJ_HHDM_BASE);
+        /* Grep: cpu: soft path */
+        kprintf("cpu: soft path claim=static_bss+pmm_dyn gs=MSR_GS_BASE "
+                "kgs=0 kind=STATIC|DYN soft=Wave14 "
+                "(soft inventory; not bar3)\n");
+        /* Grep: cpu: soft deepen */
+        kprintf("cpu: soft deepen wave=14 areas=9 online=%u static=%u "
+                "dyn=%u oom=%u reject=%u logs=%u\n",
+                stSoft.u32Online, stSoft.u32StaticOnline,
+                stSoft.u32DynOnline, stSoft.u32Oom, stSoft.u32Reject,
+                g_u32SoftLogN);
     }
 }
 

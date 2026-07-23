@@ -10,16 +10,22 @@
  *   length: l / ll  (e.g. %ld %lu %lx %lld %llu %llx)
  *   optional 0-flag + decimal width (e.g. %04x %08lx %016llx)
  *
- * Soft kprintf inventory (Wave 9 exclusive; this unit only):
+ * Soft kprintf inventory (Wave 9 exclusive; Wave 14 deepen; this unit only):
  *   Lifetime conversion / flag / null-arg counters; never hard-gate format.
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
  *     kprintf: soft inventory …
  *     kprintf: soft conv …
  *     kprintf: soft flags …
- *     stdio_k: soft …
+ *     kprintf: soft null …
+ *     kprintf: soft path …
+ *     kprintf: soft stats …
+ *     kprintf: soft deepen wave=14 …
+ *     stdio_k: soft inventory|path|stats|deepen|fmt …
  *   Emissions only at power-of-two call milestones, hard-capped at
  *   KPF_SOFT_LOG_MAX. Soft dump uses console_* + print_u64 only (no nested
  *   kprintf) so inventory never re-enters the formatter.
+ * greppable: kprintf: soft
+ * greppable: stdio_k: soft
  */
 #include <gj/console.h>
 #include <gj/klog.h>
@@ -37,21 +43,35 @@ enum {
 enum { KPF_NUM_BUF = 80, KPF_WIDTH_MAX = 64 };
 
 /*
- * Soft inventory serial budget (Wave 9). Absolute cap of greppable dumps;
- * milestones are power-of-two kprintf call counts (1,2,4,…).
+ * Soft inventory serial budget (Wave 9 / Wave 14). Absolute cap of greppable
+ * dumps; milestones are power-of-two kprintf call counts (1,2,4,…).
  * greppable: kprintf: soft / stdio_k: soft
  */
 #define KPF_SOFT_LOG_MAX 8u
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define KPF_SOFT_WAVE 14u
+
+/*
+ * Soft inventory area count (fixed greppable categories for deepen stamp):
+ *   inventory | conv | flags | null | path | stats | deepen | stdio
+ */
+#define KPF_SOFT_AREAS 8u
 
 /*
  * Soft product counters (wrap OK; diagnostics only).
  * greppable: kprintf: soft inventory
  * greppable: kprintf: soft conv
  * greppable: kprintf: soft flags
+ * greppable: kprintf: soft null
+ * greppable: kprintf: soft path
+ * greppable: kprintf: soft stats
+ * greppable: kprintf: soft deepen
  * greppable: stdio_k: soft
  */
 static u64 g_u64SoftCalls;     /* kprintf entries */
 static u64 g_u64SoftPanic;     /* panic entries */
+static u64 g_u64SoftPanicNull; /* panic(NULL) */
 static u64 g_u64SoftLit;       /* literal (non-%) bytes emitted */
 static u64 g_u64SoftPct;       /* '%' conversion sites entered */
 static u64 g_u64SoftConvEsc;   /* %% */
@@ -67,9 +87,13 @@ static u64 g_u64SoftZeroPad;   /* conversions with '0' pad flag */
 static u64 g_u64SoftLenL;      /* length 'l' */
 static u64 g_u64SoftLenLl;     /* length 'll' */
 static u64 g_u64SoftNullFmt;   /* kprintf(NULL, …) */
+static u64 g_u64SoftEmptyFmt;  /* kprintf("") empty format */
 static u64 g_u64SoftNullS;     /* %s with NULL arg → "(null)" */
 static u64 g_u64SoftTrunc;     /* format ended mid-conversion */
-static u64 g_u64SoftSkip;      /* soft log suppressed (cap / not milestone) */
+static u64 g_u64SoftSkip;      /* soft log suppressed (cap / busy / reenter) */
+static u64 g_u64SoftCapSkip;   /* soft log suppressed: hit KPF_SOFT_LOG_MAX */
+static u64 g_u64SoftBusySkip;  /* soft log suppressed: reentrancy guard */
+static u64 g_u64SoftLastMile;  /* last power-of-two milestone that logged */
 static u32 g_u32SoftLogged;    /* greppable dump emissions */
 static int g_fSoftBusy;        /* reentrancy guard for soft dump */
 
@@ -172,25 +196,31 @@ kpf_soft_kv(const char *szKey, u64 u64Val)
 }
 
 /**
- * Greppable soft kprintf inventory (product / smoke).
+ * Greppable soft kprintf inventory (product / smoke; Wave 14 deepen).
  * Must not call kprintf — console_write + print_u64 only.
  *
- *   kprintf: soft inventory …
- *   kprintf: soft conv …
- *   kprintf: soft flags …
- *   stdio_k: soft …
+ *   kprintf: soft inventory|conv|flags|null|path|stats|deepen …
+ *   stdio_k: soft inventory|path|stats|deepen|fmt …
  */
 static void
 kprintf_soft_log(void)
 {
+    u64 u64ConvAll;
+
     if (g_fSoftBusy != 0) {
         kpf_soft_inc(&g_u64SoftSkip);
+        kpf_soft_inc(&g_u64SoftBusySkip);
         return;
     }
     g_fSoftBusy = 1;
     if (g_u32SoftLogged < 0xffffffffu) {
         g_u32SoftLogged++;
     }
+    g_u64SoftLastMile = g_u64SoftCalls;
+
+    u64ConvAll = g_u64SoftConvEsc + g_u64SoftConvC + g_u64SoftConvS +
+                 g_u64SoftConvD + g_u64SoftConvU + g_u64SoftConvX +
+                 g_u64SoftConvP + g_u64SoftConvUnk;
 
     /* Grep: kprintf: soft inventory */
     console_write("kprintf: soft inventory");
@@ -199,6 +229,10 @@ kprintf_soft_log(void)
     kpf_soft_kv(" pct=", g_u64SoftPct);
     kpf_soft_kv(" panic=", g_u64SoftPanic);
     kpf_soft_kv(" trunc=", g_u64SoftTrunc);
+    kpf_soft_kv(" empty=", g_u64SoftEmptyFmt);
+    kpf_soft_kv(" conv_all=", u64ConvAll);
+    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
     console_write("\n");
 
     /* Grep: kprintf: soft conv */
@@ -211,6 +245,7 @@ kprintf_soft_log(void)
     kpf_soft_kv(" x=", g_u64SoftConvX);
     kpf_soft_kv(" p=", g_u64SoftConvP);
     kpf_soft_kv(" unk=", g_u64SoftConvUnk);
+    kpf_soft_kv(" all=", u64ConvAll);
     console_write("\n");
 
     /* Grep: kprintf: soft flags */
@@ -219,16 +254,101 @@ kprintf_soft_log(void)
     kpf_soft_kv(" zero=", g_u64SoftZeroPad);
     kpf_soft_kv(" len_l=", g_u64SoftLenL);
     kpf_soft_kv(" len_ll=", g_u64SoftLenLl);
-    kpf_soft_kv(" null_fmt=", g_u64SoftNullFmt);
-    kpf_soft_kv(" null_s=", g_u64SoftNullS);
+    kpf_soft_kv(" width_max=", (u64)KPF_WIDTH_MAX);
     console_write("\n");
 
-    /* Grep: stdio_k: soft */
+    /* Grep: kprintf: soft null */
+    console_write("kprintf: soft null");
+    kpf_soft_kv(" null_fmt=", g_u64SoftNullFmt);
+    kpf_soft_kv(" null_s=", g_u64SoftNullS);
+    kpf_soft_kv(" empty_fmt=", g_u64SoftEmptyFmt);
+    kpf_soft_kv(" panic_null=", g_u64SoftPanicNull);
+    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
+    console_write("\n");
+
+    /* Grep: kprintf: soft path */
+    console_write("kprintf: soft path claim=console_putchar,console_write "
+                  "fmt=%%,%c,%s,%d,%i,%u,%x,%p len=l,ll flag=0-width "
+                  "reenter_safe=1 nested_kprintf=0 string_c=0 "
+                  "milestone=pow2 cap=");
+    print_u64((u64)KPF_SOFT_LOG_MAX, 10u, 0, ' ');
+    console_write(" wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (soft inventory; not libc printf)\n");
+
+    /* Grep: kprintf: soft stats */
+    console_write("kprintf: soft stats");
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" lit=", g_u64SoftLit);
+    kpf_soft_kv(" pct=", g_u64SoftPct);
+    kpf_soft_kv(" conv_all=", u64ConvAll);
+    kpf_soft_kv(" panic=", g_u64SoftPanic);
+    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" skip=", g_u64SoftSkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write("\n");
+
+    /* Grep: kprintf: soft deepen wave */
+    console_write("kprintf: soft deepen wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" skip=", g_u64SoftSkip);
+    console_write(" (Wave 14 exclusive; soft only; not libc)\n");
+
+    /* Grep: stdio_k: soft inventory */
+    console_write("stdio_k: soft inventory");
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" lit=", g_u64SoftLit);
+    kpf_soft_kv(" pct=", g_u64SoftPct);
+    kpf_soft_kv(" panic=", g_u64SoftPanic);
+    kpf_soft_kv(" trunc=", g_u64SoftTrunc);
+    kpf_soft_kv(" empty=", g_u64SoftEmptyFmt);
+    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write("\n");
+
+    /* Grep: stdio_k: soft path */
+    console_write("stdio_k: soft path claim=console_putchar,console_write "
+                  "fmt=%%,%c,%s,%d,%i,%u,%x,%p len=l,ll flag=0-width "
+                  "reenter_safe=1 nested_kprintf=0 string_c=0 "
+                  "wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (soft inventory; not bar3)\n");
+
+    /* Grep: stdio_k: soft stats */
+    console_write("stdio_k: soft stats");
+    kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" skip=", g_u64SoftSkip);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write("\n");
+
+    /* Grep: stdio_k: soft deepen */
+    console_write("stdio_k: soft deepen wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" calls=", g_u64SoftCalls);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    console_write(" (Wave 14 exclusive; soft only)\n");
+
+    /* Grep: stdio_k: soft (fmt surface) */
     console_write("stdio_k: soft");
     kpf_soft_kv(" log_n=", (u64)g_u32SoftLogged);
     kpf_soft_kv(" skip=", g_u64SoftSkip);
     kpf_soft_kv(" max=", (u64)KPF_SOFT_LOG_MAX);
-    console_write(" fmt=%s,%c,%d,%i,%u,%x,%p,l,ll,0-width PASS\n");
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write(" fmt=%%,%c,%s,%d,%i,%u,%x,%p,l,ll,0-width PASS\n");
 
     g_fSoftBusy = 0;
 }
@@ -252,10 +372,12 @@ kprintf_soft_maybe_log(void)
 
     if (g_fSoftBusy != 0) {
         kpf_soft_inc(&g_u64SoftSkip);
+        kpf_soft_inc(&g_u64SoftBusySkip);
         return;
     }
     if (g_u32SoftLogged >= KPF_SOFT_LOG_MAX) {
         kpf_soft_inc(&g_u64SoftSkip);
+        kpf_soft_inc(&g_u64SoftCapSkip);
         return;
     }
 
@@ -272,6 +394,12 @@ kprintf(const char *szFmt, ...)
 
     if (szFmt == NULL) {
         kpf_soft_inc(&g_u64SoftNullFmt);
+        kprintf_soft_maybe_log();
+        return;
+    }
+
+    if (*szFmt == '\0') {
+        kpf_soft_inc(&g_u64SoftEmptyFmt);
         kprintf_soft_maybe_log();
         return;
     }
@@ -406,6 +534,9 @@ void
 panic(const char *szMsg)
 {
     kpf_soft_inc(&g_u64SoftPanic);
+    if (szMsg == NULL) {
+        kpf_soft_inc(&g_u64SoftPanicNull);
+    }
     kprintf("PANIC: %s\n", szMsg ? szMsg : "(null)");
     for (;;) {
 #if defined(GJ_ARCH_AARCH64)

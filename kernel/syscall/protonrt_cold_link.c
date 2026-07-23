@@ -6,6 +6,14 @@
  * Soft multi-server confine deepen: expose path policy, promise-denial
  * ledger, death-cleanup soft note (product multi-server confine OPEN).
  * Grep: confine: expose soft | confine: ledger soft | confine: death soft
+ *
+ * Soft inventory (Wave 14 exclusive deepen; this unit only):
+ *   protonrt: soft inventory|enter|fs|net|proc|time|mem|other|confine|
+ *             attach|path|deepen …
+ *   cold_link: soft … (twin prefix)
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
+ * greppable: protonrt: soft
+ * greppable: cold_link: soft
  */
 #include <gj/cold_ipc.h>
 #include <gj/cpu.h>
@@ -71,6 +79,426 @@ static u32 g_u32ExposeSoftCount;
 static u8  g_u8ConfineSoftOnce;
 static u8  g_u8DeathSoftOnce;
 static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
+
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define GJ_PROTONRT_SOFT_WAVE  14u
+/* Soft inventory area count (fixed greppable categories for deepen stamp). */
+#define GJ_PROTONRT_SOFT_AREAS 12u
+
+/*
+ * Soft NR group buckets for cold personality enter tallies (Wave 14).
+ * Diagnostics only — never hard-gates protonrt_service returns.
+ */
+enum {
+    PRT_SOFT_GRP_FS = 0,   /* open/read/write/stat/path/dir/fd */
+    PRT_SOFT_GRP_NET,      /* socket/connect/send/recv/… */
+    PRT_SOFT_GRP_PROC,     /* kill/wait/pidfd/exec-shaped */
+    PRT_SOFT_GRP_TIME,     /* clock/timer/nanosleep-shaped */
+    PRT_SOFT_GRP_MEM,      /* mmap/mprotect/brk-shaped cold */
+    PRT_SOFT_GRP_OTHER,    /* fallback / protonrt_cold_linux */
+    PRT_SOFT_GRP_N
+};
+
+/*
+ * Soft product inventory (Wave 14 exclusive deepen).
+ * greppable: protonrt: soft … / cold_link: soft …
+ */
+static u64 g_u64PrtSoftEnter;                 /* protonrt_service entries */
+static u64 g_u64PrtSoftNull;                  /* pRegs == NULL */
+static u64 g_u64PrtSoftGrp[PRT_SOFT_GRP_N];   /* per-group enters */
+static u64 g_u64PrtSoftAttach;                /* gj_protonrt_attach_cold */
+static u64 g_u64PrtSoftLogN;                  /* soft inventory dumps */
+static u64 g_u64PrtSoftExposeAllow;           /* expose allow path */
+static u64 g_u64PrtSoftExposeUpdate;          /* expose update path */
+static u64 g_u64PrtSoftExposeFull;            /* expose table full deny */
+static u64 g_u64PrtSoftPathDeny;              /* path policy deny */
+static u64 g_u64PrtSoftDeathNote;             /* death cleanup notes */
+static u8  g_fPrtSoftOnce;                    /* one-shot deep dump */
+
+static void protonrt_soft_inc(u64 *pCtr);
+static void protonrt_soft_note_enter(u64 u64Nr);
+static void protonrt_soft_inventory_log(void);
+static void protonrt_soft_inventory_maybe_once(void);
+
+/** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
+static void
+protonrt_soft_inc(u64 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Soft: classify cold NR into inventory group (diagnostic only).
+ * Shape mirrors linux hot soft groups without hard-gating the service.
+ */
+static u32
+protonrt_soft_grp_of(u64 u64Nr)
+{
+    switch (u64Nr) {
+    case LINUX_NR_read:
+    case LINUX_NR_write:
+    case LINUX_NR_open:
+    case LINUX_NR_close:
+    case LINUX_NR_stat:
+    case LINUX_NR_fstat:
+    case LINUX_NR_lstat:
+    case LINUX_NR_poll:
+    case LINUX_NR_lseek:
+    case LINUX_NR_access:
+    case LINUX_NR_pipe:
+    case LINUX_NR_select:
+    case LINUX_NR_dup:
+    case LINUX_NR_dup2:
+    case LINUX_NR_fcntl:
+    case LINUX_NR_flock:
+    case LINUX_NR_fsync:
+    case LINUX_NR_fdatasync:
+    case LINUX_NR_truncate:
+    case LINUX_NR_ftruncate:
+    case LINUX_NR_getdents:
+    case LINUX_NR_getcwd:
+    case LINUX_NR_chdir:
+    case LINUX_NR_fchdir:
+    case LINUX_NR_rename:
+    case LINUX_NR_mkdir:
+    case LINUX_NR_rmdir:
+    case LINUX_NR_creat:
+    case LINUX_NR_link:
+    case LINUX_NR_unlink:
+    case LINUX_NR_symlink:
+    case LINUX_NR_readlink:
+    case LINUX_NR_chmod:
+    case LINUX_NR_fchmod:
+    case LINUX_NR_chown:
+    case LINUX_NR_fchown:
+    case LINUX_NR_lchown:
+    case LINUX_NR_umask:
+    case LINUX_NR_mknod:
+    case LINUX_NR_statfs:
+    case LINUX_NR_fstatfs:
+    case LINUX_NR_getdents64:
+    case LINUX_NR_openat:
+    case LINUX_NR_mkdirat:
+    case LINUX_NR_mknodat:
+    case LINUX_NR_fchownat:
+    case LINUX_NR_futimesat:
+    case LINUX_NR_newfstatat:
+    case LINUX_NR_unlinkat:
+    case LINUX_NR_renameat:
+    case LINUX_NR_linkat:
+    case LINUX_NR_symlinkat:
+    case LINUX_NR_readlinkat:
+    case LINUX_NR_fchmodat:
+    case LINUX_NR_faccessat:
+    case LINUX_NR_utimensat:
+    case LINUX_NR_name_to_handle_at:
+    case LINUX_NR_open_by_handle_at:
+    case LINUX_NR_syncfs:
+    case LINUX_NR_renameat2:
+    case LINUX_NR_execveat:
+    case LINUX_NR_statx:
+    case LINUX_NR_io_uring_setup:
+    case LINUX_NR_io_uring_enter:
+    case LINUX_NR_io_uring_register:
+    case LINUX_NR_openat2:
+    case LINUX_NR_faccessat2:
+    case LINUX_NR_close_range:
+        return (u32)PRT_SOFT_GRP_FS;
+    case LINUX_NR_socket:
+    case LINUX_NR_connect:
+    case LINUX_NR_accept:
+    case LINUX_NR_sendto:
+    case LINUX_NR_recvfrom:
+    case LINUX_NR_sendmsg:
+    case LINUX_NR_recvmsg:
+    case LINUX_NR_shutdown:
+    case LINUX_NR_bind:
+    case LINUX_NR_listen:
+    case LINUX_NR_getsockname:
+    case LINUX_NR_getpeername:
+    case LINUX_NR_socketpair:
+    case LINUX_NR_setsockopt:
+    case LINUX_NR_getsockopt:
+    case LINUX_NR_accept4:
+    case LINUX_NR_recvmmsg:
+    case LINUX_NR_sendmmsg:
+        return (u32)PRT_SOFT_GRP_NET;
+    case LINUX_NR_exit:
+    case LINUX_NR_fork:
+    case LINUX_NR_vfork:
+    case LINUX_NR_execve:
+    case LINUX_NR_exit_group:
+    case LINUX_NR_wait4:
+    case LINUX_NR_kill:
+    case LINUX_NR_tkill:
+    case LINUX_NR_tgkill:
+    case LINUX_NR_waitid:
+    case LINUX_NR_clone:
+    case LINUX_NR_clone3:
+    case LINUX_NR_pidfd_send_signal:
+    case LINUX_NR_pidfd_open:
+    case LINUX_NR_pidfd_getfd:
+        return (u32)PRT_SOFT_GRP_PROC;
+    case LINUX_NR_nanosleep:
+    case LINUX_NR_getitimer:
+    case LINUX_NR_alarm:
+    case LINUX_NR_setitimer:
+    case LINUX_NR_gettimeofday:
+    case LINUX_NR_times:
+    case LINUX_NR_clock_gettime:
+    case LINUX_NR_clock_getres:
+    case LINUX_NR_clock_nanosleep:
+    case LINUX_NR_timer_create:
+    case LINUX_NR_timer_settime:
+    case LINUX_NR_timer_gettime:
+    case LINUX_NR_timer_getoverrun:
+    case LINUX_NR_timer_delete:
+    case LINUX_NR_clock_adjtime:
+    case LINUX_NR_timerfd_create:
+    case LINUX_NR_timerfd_settime:
+    case LINUX_NR_timerfd_gettime:
+        return (u32)PRT_SOFT_GRP_TIME;
+    case LINUX_NR_mmap:
+    case LINUX_NR_mprotect:
+    case LINUX_NR_munmap:
+    case LINUX_NR_brk:
+    case LINUX_NR_mremap:
+    case LINUX_NR_msync:
+    case LINUX_NR_mincore:
+    case LINUX_NR_madvise:
+    case LINUX_NR_mlock:
+    case LINUX_NR_munlock:
+    case LINUX_NR_mlockall:
+    case LINUX_NR_munlockall:
+    case LINUX_NR_mbind:
+    case LINUX_NR_set_mempolicy:
+    case LINUX_NR_get_mempolicy:
+    case LINUX_NR_migrate_pages:
+    case LINUX_NR_move_pages:
+    case LINUX_NR_mlock2:
+    case LINUX_NR_process_madvise:
+        return (u32)PRT_SOFT_GRP_MEM;
+    default:
+        return (u32)PRT_SOFT_GRP_OTHER;
+    }
+}
+
+/**
+ * Soft enter note — never alters service return. Diagnostics only.
+ * greppable: protonrt: soft enter
+ */
+static void
+protonrt_soft_note_enter(u64 u64Nr)
+{
+    u32 u32Grp;
+
+    protonrt_soft_inc(&g_u64PrtSoftEnter);
+    u32Grp = protonrt_soft_grp_of(u64Nr);
+    if (u32Grp < (u32)PRT_SOFT_GRP_N) {
+        protonrt_soft_inc(&g_u64PrtSoftGrp[u32Grp]);
+    }
+    protonrt_soft_inventory_maybe_once();
+}
+
+/**
+ * Greppable soft cold personality inventory (Wave 14 exclusive deepen).
+ * Twin prefixes: protonrt: soft … / cold_link: soft …
+ * greppable: protonrt: soft
+ * greppable: cold_link: soft
+ */
+static void
+protonrt_soft_inventory_log(void)
+{
+    u32 u32HasProc;
+    u32 u32Confined;
+    u32 u32Promises;
+    u32 u32Alive;
+
+    protonrt_soft_inc(&g_u64PrtSoftLogN);
+    u32HasProc = (g_pLinuxProc != NULL) ? 1u : 0u;
+    u32Confined = 0u;
+    u32Promises = 0u;
+    u32Alive = 0u;
+    if (g_pLinuxProc != NULL) {
+        u32Confined = g_pLinuxProc->u32Confined;
+        u32Promises = g_pLinuxProc->u32Promises;
+        u32Alive = g_pLinuxProc->u32Alive;
+    }
+
+    /* Grep: protonrt: soft inventory */
+    kprintf("protonrt: soft inventory wave=%u areas=%u enter=%llu null=%llu "
+            "attach=%llu logs=%llu proc=%u confined=%u alive=%u "
+            "expose_ents=%u "
+            "(cold personality soft; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE,
+            (unsigned)GJ_PROTONRT_SOFT_AREAS,
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftNull,
+            (unsigned long long)g_u64PrtSoftAttach,
+            (unsigned long long)g_u64PrtSoftLogN,
+            u32HasProc, u32Confined, u32Alive, g_u32ExposeSoftCount);
+
+    /* Grep: protonrt: soft enter */
+    kprintf("protonrt: soft enter total=%llu fs=%llu net=%llu proc=%llu "
+            "time=%llu mem=%llu other=%llu wave=%u\n",
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_PROC],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_TIME],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_MEM],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_OTHER],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft fs */
+    kprintf("protonrt: soft fs enter=%llu surface=openat,read,write,stat,"
+            "path,dir,fd,io_uring_min wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft net */
+    kprintf("protonrt: soft net enter=%llu surface=socket,connect,send,recv,"
+            "bind,listen wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft proc */
+    kprintf("protonrt: soft proc enter=%llu surface=kill,wait,pidfd,exec,"
+            "clone wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_PROC],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft time */
+    kprintf("protonrt: soft time enter=%llu surface=clock,timer,nanosleep "
+            "wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_TIME],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft mem */
+    kprintf("protonrt: soft mem enter=%llu surface=mmap,mprotect,brk,madvise "
+            "wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_MEM],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft other */
+    kprintf("protonrt: soft other enter=%llu fallback=protonrt_cold_linux "
+            "wave=%u\n",
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_OTHER],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft confine */
+    kprintf("protonrt: soft confine promise_deny=%u expose_deny=%u "
+            "death_cleanup=%u expose_ents=%u expose_allow=%llu "
+            "expose_update=%llu expose_full=%llu path_deny=%llu "
+            "death_note=%llu promises=0x%x confined=%u wave=%u\n",
+            g_u32ConfinePromiseDeny, g_u32ConfineExposeDeny,
+            g_u32ConfineDeathCleanup, g_u32ExposeSoftCount,
+            (unsigned long long)g_u64PrtSoftExposeAllow,
+            (unsigned long long)g_u64PrtSoftExposeUpdate,
+            (unsigned long long)g_u64PrtSoftExposeFull,
+            (unsigned long long)g_u64PrtSoftPathDeny,
+            (unsigned long long)g_u64PrtSoftDeathNote,
+            u32Promises, u32Confined, (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft attach */
+    kprintf("protonrt: soft attach calls=%llu once_probe=%u death_once=%u "
+            "wave=%u\n",
+            (unsigned long long)g_u64PrtSoftAttach,
+            g_u8ConfineSoftOnce ? 1u : 0u,
+            g_u8DeathSoftOnce ? 1u : 0u,
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft path */
+    kprintf("protonrt: soft path service=protonrt_service "
+            "backend=vfs_ram+protonrt_cold_linux "
+            "confine=soft_expose+promise multi_server=OPEN "
+            "io_uring=min_rings_soft bar3=open wave=%u "
+            "(cold personality soft inventory; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: protonrt: soft deepen wave (Wave 14 stamp) */
+    kprintf("protonrt: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
+            "fs=%llu net=%llu proc=%llu confine_deny=%u "
+            "(Wave 14 exclusive; cold link soft; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE,
+            (unsigned)GJ_PROTONRT_SOFT_AREAS,
+            (unsigned long long)g_u64PrtSoftLogN,
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_PROC],
+            g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny);
+
+    /*
+     * Twin prefix: cold_link: soft … (agent-friendly alias).
+     */
+    /* Grep: cold_link: soft inventory */
+    kprintf("cold_link: soft inventory wave=%u areas=%u enter=%llu null=%llu "
+            "attach=%llu logs=%llu proc=%u confined=%u alive=%u "
+            "expose_ents=%u "
+            "(cold personality soft; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE,
+            (unsigned)GJ_PROTONRT_SOFT_AREAS,
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftNull,
+            (unsigned long long)g_u64PrtSoftAttach,
+            (unsigned long long)g_u64PrtSoftLogN,
+            u32HasProc, u32Confined, u32Alive, g_u32ExposeSoftCount);
+
+    /* Grep: cold_link: soft enter */
+    kprintf("cold_link: soft enter total=%llu fs=%llu net=%llu proc=%llu "
+            "time=%llu mem=%llu other=%llu wave=%u\n",
+            (unsigned long long)g_u64PrtSoftEnter,
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_FS],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_NET],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_PROC],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_TIME],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_MEM],
+            (unsigned long long)g_u64PrtSoftGrp[PRT_SOFT_GRP_OTHER],
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: cold_link: soft confine */
+    kprintf("cold_link: soft confine promise_deny=%u expose_deny=%u "
+            "death_cleanup=%u expose_ents=%u path_deny=%llu wave=%u\n",
+            g_u32ConfinePromiseDeny, g_u32ConfineExposeDeny,
+            g_u32ConfineDeathCleanup, g_u32ExposeSoftCount,
+            (unsigned long long)g_u64PrtSoftPathDeny,
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: cold_link: soft path */
+    kprintf("cold_link: soft path service=protonrt_service "
+            "backend=vfs_ram+protonrt_cold_linux multi_server=OPEN "
+            "bar3=open wave=%u (soft inventory; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
+    /* Grep: cold_link: soft deepen wave (Wave 14 stamp) */
+    kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
+            "(Wave 14 exclusive; cold link soft; not bar3)\n",
+            (unsigned)GJ_PROTONRT_SOFT_WAVE,
+            (unsigned)GJ_PROTONRT_SOFT_AREAS,
+            (unsigned long long)g_u64PrtSoftLogN,
+            (unsigned long long)g_u64PrtSoftEnter);
+}
+
+/**
+ * After first product service activity, print soft inventory once.
+ * Diagnostics only — never gates cold attach or confine soft PASS.
+ */
+static void
+protonrt_soft_inventory_maybe_once(void)
+{
+    if (g_fPrtSoftOnce != 0) {
+        return;
+    }
+    if (g_u64PrtSoftEnter == 0 && g_u64PrtSoftAttach == 0) {
+        return;
+    }
+    g_fPrtSoftOnce = 1;
+    protonrt_soft_inventory_log();
+}
 
 /**
  * Soft promise require with ledger count on denial.
@@ -163,6 +591,7 @@ confine_soft_expose(const char *szPath, u32 u32Rights)
                 confine_soft_path_prefix(g_aExposeSoft[i].szPath, szPath)) {
                 g_aExposeSoft[i].u8Rights =
                     (u8)(g_aExposeSoft[i].u8Rights | (u8)u32Rights);
+                protonrt_soft_inc(&g_u64PrtSoftExposeUpdate);
                 kprintf("confine: expose soft update path=%s rights=0x%x\n",
                         szPath, (u32)g_aExposeSoft[i].u8Rights);
                 return 0;
@@ -173,6 +602,7 @@ confine_soft_expose(const char *szPath, u32 u32Rights)
     }
     if (iFree >= GJ_EXPOSE_SOFT_MAX) {
         g_u32ConfineExposeDeny++;
+        protonrt_soft_inc(&g_u64PrtSoftExposeFull);
         kprintf("confine: expose soft full deny path=%s\n", szPath);
         return -LINUX_ENOSPC;
     }
@@ -183,6 +613,7 @@ confine_soft_expose(const char *szPath, u32 u32Rights)
     }
     g_aExposeSoft[iFree].szPath[n] = '\0';
     g_u32ExposeSoftCount++;
+    protonrt_soft_inc(&g_u64PrtSoftExposeAllow);
     kprintf("confine: expose soft allow path=%s rights=0x%x slot=%u\n",
             g_aExposeSoft[iFree].szPath, u32Rights, iFree);
     return 0;
@@ -207,6 +638,7 @@ confine_soft_path_policy(const char *szPath, u32 u32Need)
         return 0;
     }
     g_u32ConfineExposeDeny++;
+    protonrt_soft_inc(&g_u64PrtSoftPathDeny);
     kprintf("confine: expose soft path deny path=%s need=0x%x\n",
             szPath != NULL ? szPath : "", u32Need);
     return -LINUX_EACCES;
@@ -232,6 +664,7 @@ confine_soft_death_cleanup(struct gj_process *pProc)
     }
     g_u32ExposeSoftCount = 0u;
     g_u32ConfineDeathCleanup++;
+    protonrt_soft_inc(&g_u64PrtSoftDeathNote);
     kprintf("confine: death soft cleanup note calls=%u "
             "promise_deny=%u expose_deny=%u (product multi-server OPEN)\n",
             g_u32ConfineDeathCleanup, g_u32ConfinePromiseDeny,
@@ -406,8 +839,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     (void)pCtx;
     if (pRegs == NULL) {
+        protonrt_soft_inc(&g_u64PrtSoftNull);
+        protonrt_soft_inventory_maybe_once();
         return -LINUX_EINVAL;
     }
+
+    /* Wave 14 soft enter inventory (never mutates service return). */
+    protonrt_soft_note_enter(pRegs->u64Nr);
 
     /*
      * Soft death cleanup: if a dead PCB still hits cold personality, scrub
@@ -2947,9 +3385,12 @@ gj_protonrt_attach_cold(void)
     cold_ipc_set_service(protonrt_service, NULL);
     cold_ipc_set_doors_mode(1);
     cold_ipc_set_personality_attached(1);
+    protonrt_soft_inc(&g_u64PrtSoftAttach);
     /*
      * Soft multi-server confine deepen probe (expose / ledger / death).
      * Product multi-server confine stays OPEN. Preserves confine soft PASS.
      */
     confine_soft_selfprobe();
+    /* Wave 14 soft inventory baseline after cold attach. */
+    protonrt_soft_inventory_log();
 }

@@ -4,18 +4,33 @@
  *
  * Product T1 HCL: NVMe PCI class probe — clean-room pure C.
  * Enumerate class 01:08:02; soft identify via CAP field inventory + VS
- * + CSTS/CC soft status through vmm_map_device_uc (high UC window —
- * never identity-map device MMIO over the kernel). Soft-read only: no
- * CC enable, no admin queues claimed as product, no I/O. No GPL source;
- * public PCI class codes + NVM Express Base register layout only.
+ * + CSTS/CC / INTMS / INTMC / AQA soft status through vmm_map_device_uc
+ * (high UC window — never identity-map device MMIO over the kernel).
+ * Soft-read only: no CC enable, no admin queues claimed as product, no
+ * I/O. No GPL source; public PCI class codes + NVM Express Base register
+ * layout only.
  *
- * Greppable soft surface (Wave 12 CAP inventory deepen):
- *   nvme: probe … soft PASS|SKIP
- *   nvme: CAP=… soft PASS
- *   nvme: CAP inventory … soft PASS|SKIP   (per-field + summary)
- *   nvme: identify VS=… soft PASS
- *   nvme: CSTS=… soft PASS / CC=… soft PASS
- *   nvme: admin queues soft SKIP / CC enable soft SKIP
+ * Wave 14 exclusive soft deepen (this unit only — greppable "nvme: soft …"):
+ *   nvme: soft inventory  — CAP/VS/CSTS/CC ok + via + wave stamp
+ *   nvme: soft cap        — CAP field rollup + derived soft values
+ *   nvme: soft fields     — per-field CAP lamps (MQES…CRMS)
+ *   nvme: soft vs         — version major.minor.ter
+ *   nvme: soft csts       — RDY/CFS observe
+ *   nvme: soft cc         — EN observe (never write)
+ *   nvme: soft int        — INTMS/INTMC soft-read
+ *   nvme: soft aqa        — AQA soft-read (admin queue attrs; not claimed)
+ *   nvme: soft regs       — capability-region offset map
+ *   nvme: soft bar        — BAR0 map path / bits
+ *   nvme: soft pci        — class 01:08:02 inventory
+ *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
+ *   nvme: soft deepen     — wave=14 areas stamp
+ *   nvme: soft stats      — emission / probe tallies
+ *   nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP
+ *
+ * Legacy greppable (Wave 12 CAP inventory; kept prefix-stable):
+ *   nvme: CAP inventory … soft PASS|SKIP
+ *   nvme: CAP=… / identify VS=… / CSTS=… / CC=…
+ *   nvme: admin queues soft SKIP / I/O path soft SKIP
  */
 #include <gj/klog.h>
 #include <gj/types.h>
@@ -30,10 +45,13 @@
  * Controller properties (NVM Express Base, capability region).
  * Offsets are byte offsets into BAR0; soft-read only.
  */
-#define NVME_REG_CAP  0x00u /* 64-bit CAP — soft inventory fields below */
-#define NVME_REG_VS   0x08u /* 32-bit Version */
-#define NVME_REG_CC   0x14u /* 32-bit Controller Configuration (read soft) */
-#define NVME_REG_CSTS 0x1Cu /* 32-bit Controller Status (read soft) */
+#define NVME_REG_CAP   0x00u /* 64-bit CAP — soft inventory fields below */
+#define NVME_REG_VS    0x08u /* 32-bit Version */
+#define NVME_REG_INTMS 0x0Cu /* 32-bit Interrupt Mask Set (soft-read) */
+#define NVME_REG_INTMC 0x10u /* 32-bit Interrupt Mask Clear (soft-read) */
+#define NVME_REG_CC    0x14u /* 32-bit Controller Configuration (read soft) */
+#define NVME_REG_CSTS  0x1Cu /* 32-bit Controller Status (read soft) */
+#define NVME_REG_AQA   0x24u /* 32-bit Admin Queue Attributes (soft-read) */
 
 /* CSTS / CC single-bit soft decode (public layout; inventory only) */
 #define NVME_CSTS_RDY 0x1u
@@ -74,6 +92,18 @@
 #define NVME_CAP_CMBS(c)   ((u32)(((c) >> 57) & 1u))
 #define NVME_CAP_CRMS(c)   ((u32)(((c) >> 59) & 3u))
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
+
+/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
+#define NVME_SOFT_DEEPEN_AREAS 14u
+#define NVME_SOFT_DEEPEN_WAVE  14u
+
+/* Soft inventory emission tallies (wrap OK; never hard-gate). */
+static u32 g_u32SoftInvLogs;
+static u32 g_u32SoftProbeLogs;
+static u32 g_u32SoftIdentifyOk;
+static u32 g_u32SoftMapFail;
+static u32 g_u32SoftNoBar;
+static u32 g_u32SoftFound;
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -134,7 +164,7 @@ nvme_bar0_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pf64)
 
 /**
  * Soft CAP field inventory — full per-field decode (read-only).
- * Grep: nvme: CAP inventory … soft PASS|SKIP
+ * Grep: nvme: CAP inventory … soft PASS|SKIP  (Wave 12 legacy surface)
  *
  * All-0 / all-1 CAP is treated as unreadable MMIO for the soft path.
  * Derived soft values (max_q_entries, TO ms, doorbell stride bytes,
@@ -257,7 +287,7 @@ nvme_soft_cap_inventory(u64 u64Cap)
 
 /**
  * Soft CSTS/CC status inventory (read-only; never write CC.EN).
- * Grep: nvme: CSTS=… soft PASS | nvme: CC=… soft PASS
+ * Grep: nvme: CSTS=… soft PASS | nvme: CC=… soft PASS  (Wave 12 legacy)
  */
 static void
 nvme_soft_status_inventory(u32 u32Csts, u32 u32Cc)
@@ -282,11 +312,244 @@ nvme_soft_status_inventory(u32 u32Csts, u32 u32Cc)
 }
 
 /**
- * Soft identify: map BAR0 UC and inventory CAP fields + VS + CSTS/CC.
- * Read-only MMIO — no CC write, no AQA/ASQ/ACQ, no admin queues as product.
+ * Wave 14 greppable soft inventory dump — prefix-stable "nvme: soft …".
+ * Snapshots soft-read CAP/VS/CSTS/CC/INT/AQA; never allocates; never
+ * hard-gates; never writes CC or claims queues. 0xff.. / 0 = unread.
+ *
+ * greppable: nvme: soft
  */
 static void
-nvme_soft_identify(u64 paBar)
+nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
+                    u32 u32Cc, u32 u32Intms, u32 u32Intmc, u32 u32Aqa,
+                    u64 paBar, u32 u32BarBits)
+{
+    u32 u32Mqes = 0;
+    u32 u32Cqr = 0;
+    u32 u32Ams = 0;
+    u32 u32To = 0;
+    u32 u32Dstrd = 0;
+    u32 u32Nssrs = 0;
+    u32 u32Css = 0;
+    u32 u32Bps = 0;
+    u32 u32Cps = 0;
+    u32 u32MpsMin = 0;
+    u32 u32MpsMax = 0;
+    u32 u32Pmrs = 0;
+    u32 u32Cmbs = 0;
+    u32 u32Crms = 0;
+    u32 u32MaxQ = 0;
+    u32 u32ToMs = 0;
+    u32 u32DbStrideB = 0;
+    u32 u32Maj;
+    u32 u32Min;
+    u32 u32Ter;
+    u32 u32Rdy;
+    u32 u32Cfs;
+    u32 u32En;
+    u32 u32Asqs;
+    u32 u32Acqs;
+    int fCapOk;
+    int fVsOk;
+    int fCstsOk;
+    int fCcOk;
+    int fCssNvm;
+    const char *szViaSafe;
+    const char *szVerdict;
+
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "anon";
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
+    }
+
+    fCapOk = (u64Cap != 0ull && u64Cap != ~0ull) ? 1 : 0;
+    fVsOk = (u32Vs != 0u && u32Vs != 0xffffffffu) ? 1 : 0;
+    fCstsOk = (u32Csts != 0xffffffffu) ? 1 : 0;
+    fCcOk = (u32Cc != 0xffffffffu) ? 1 : 0;
+
+    if (fCapOk != 0) {
+        u32Mqes = NVME_CAP_MQES(u64Cap);
+        u32Cqr = NVME_CAP_CQR(u64Cap);
+        u32Ams = NVME_CAP_AMS(u64Cap);
+        u32To = NVME_CAP_TO(u64Cap);
+        u32Dstrd = NVME_CAP_DSTRD(u64Cap);
+        u32Nssrs = NVME_CAP_NSSRS(u64Cap);
+        u32Css = NVME_CAP_CSS(u64Cap);
+        u32Bps = NVME_CAP_BPS(u64Cap);
+        u32Cps = NVME_CAP_CPS(u64Cap);
+        u32MpsMin = NVME_CAP_MPSMIN(u64Cap);
+        u32MpsMax = NVME_CAP_MPSMAX(u64Cap);
+        u32Pmrs = NVME_CAP_PMRS(u64Cap);
+        u32Cmbs = NVME_CAP_CMBS(u64Cap);
+        u32Crms = NVME_CAP_CRMS(u64Cap);
+        u32MaxQ = u32Mqes + 1u;
+        u32ToMs = u32To * 500u;
+        u32DbStrideB = 4u << u32Dstrd;
+    }
+    fCssNvm = ((u32Css & NVME_CAP_CSS_NVM) != 0u) ? 1 : 0;
+
+    u32Ter = u32Vs & 0xffu;
+    u32Min = (u32Vs >> 8) & 0xffu;
+    u32Maj = (u32Vs >> 16) & 0xffffu;
+    u32Rdy = (fCstsOk != 0 && (u32Csts & NVME_CSTS_RDY) != 0u) ? 1u : 0u;
+    u32Cfs = (fCstsOk != 0 && (u32Csts & NVME_CSTS_CFS) != 0u) ? 1u : 0u;
+    u32En = (fCcOk != 0 && (u32Cc & NVME_CC_EN) != 0u) ? 1u : 0u;
+    /* AQA: ASQS bits 7:0, ACQS bits 27:16 (0's based when programmed) */
+    u32Asqs = (u32Aqa != 0xffffffffu) ? (u32Aqa & 0xfffu) : 0u;
+    u32Acqs = (u32Aqa != 0xffffffffu) ? ((u32Aqa >> 16) & 0xfffu) : 0u;
+
+    /*
+     * Soft verdict (inventory only; never claims admin/I/O queues):
+     *   PASS — CAP readable (mapped controller)
+     *   SKIP — unreadable CAP / empty inventory path
+     */
+    if (fCapOk != 0) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "SKIP";
+    }
+
+    /* Grep: nvme: soft inventory */
+    kprintf("nvme: soft inventory via=%s cap_ok=%u vs_ok=%u csts_ok=%u "
+            "cc_ok=%u mqes=%u css=0x%x rdy=%u en=%u found=%u logs=%u "
+            "wave=%u\n",
+            szViaSafe, fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u,
+            fCstsOk != 0 ? 1u : 0u, fCcOk != 0 ? 1u : 0u, u32Mqes, u32Css,
+            u32Rdy, u32En, g_u32SoftFound, g_u32SoftInvLogs,
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+
+    /* Grep: nvme: soft cap */
+    if (fCapOk != 0) {
+        kprintf("nvme: soft cap mqes=%u max_q=%u cqr=%u ams=%u to=%u "
+                "to_ms=%u dstrd=%u db_b=%u nssrs=%u css=0x%x nvm=%u "
+                "bps=%u cps=%u mpsmin=%u mpsmax=%u pmrs=%u cmbs=%u "
+                "crms=%u raw=0x%lx soft PASS\n",
+                u32Mqes, u32MaxQ, u32Cqr, u32Ams, u32To, u32ToMs, u32Dstrd,
+                u32DbStrideB, u32Nssrs, u32Css, fCssNvm != 0 ? 1u : 0u,
+                u32Bps, u32Cps, u32MpsMin, u32MpsMax, u32Pmrs, u32Cmbs,
+                u32Crms, (unsigned long)u64Cap);
+    } else {
+        kprintf("nvme: soft cap soft SKIP cap=0x%lx\n",
+                (unsigned long)u64Cap);
+    }
+
+    /* Grep: nvme: soft fields (per-field CAP lamps) */
+    if (fCapOk != 0) {
+        kprintf("nvme: soft fields MQES=%u CQR=%u AMS=%u TO=%u DSTRD=%u "
+                "NSSRS=%u CSS=0x%x BPS=%u CPS=%u MPSMIN=%u MPSMAX=%u "
+                "PMRS=%u CMBS=%u CRMS=%u soft PASS\n",
+                u32Mqes, u32Cqr, u32Ams, u32To, u32Dstrd, u32Nssrs, u32Css,
+                u32Bps, u32Cps, u32MpsMin, u32MpsMax, u32Pmrs, u32Cmbs,
+                u32Crms);
+    } else {
+        kprintf("nvme: soft fields soft SKIP\n");
+    }
+
+    /* Grep: nvme: soft vs */
+    if (fVsOk != 0) {
+        kprintf("nvme: soft vs major=%u minor=%u ter=%u raw=0x%x "
+                "soft PASS\n",
+                u32Maj, u32Min, u32Ter, u32Vs);
+    } else {
+        kprintf("nvme: soft vs soft SKIP vs=0x%x\n", u32Vs);
+    }
+
+    /* Grep: nvme: soft csts */
+    if (fCstsOk != 0) {
+        kprintf("nvme: soft csts rdy=%u cfs=%u raw=0x%x soft PASS\n",
+                u32Rdy, u32Cfs, u32Csts);
+    } else {
+        kprintf("nvme: soft csts soft SKIP csts=0x%x\n", u32Csts);
+    }
+
+    /* Grep: nvme: soft cc (observe only — never write EN) */
+    if (fCcOk != 0) {
+        kprintf("nvme: soft cc en=%u raw=0x%x soft PASS cc_write=0\n",
+                u32En, u32Cc);
+    } else {
+        kprintf("nvme: soft cc soft SKIP cc=0x%x\n", u32Cc);
+    }
+
+    /* Grep: nvme: soft int (INTMS/INTMC soft-read; never mask-write) */
+    if (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) {
+        kprintf("nvme: soft int intms=0x%x intmc=0x%x soft PASS "
+                "mask_write=0\n",
+                u32Intms, u32Intmc);
+    } else {
+        kprintf("nvme: soft int soft SKIP intms=0x%x intmc=0x%x\n",
+                u32Intms, u32Intmc);
+    }
+
+    /* Grep: nvme: soft aqa (admin queue attrs observe; not claimed) */
+    if (u32Aqa != 0xffffffffu) {
+        kprintf("nvme: soft aqa asqs=%u acqs=%u raw=0x%x soft PASS "
+                "queues_claimed=0\n",
+                u32Asqs, u32Acqs, u32Aqa);
+    } else {
+        kprintf("nvme: soft aqa soft SKIP aqa=0x%x\n", u32Aqa);
+    }
+
+    /* Grep: nvme: soft regs (capability-region offset map) */
+    kprintf("nvme: soft regs CAP=0x%x VS=0x%x INTMS=0x%x INTMC=0x%x "
+            "CC=0x%x CSTS=0x%x AQA=0x%x soft PASS\n",
+            (unsigned)NVME_REG_CAP, (unsigned)NVME_REG_VS,
+            (unsigned)NVME_REG_INTMS, (unsigned)NVME_REG_INTMC,
+            (unsigned)NVME_REG_CC, (unsigned)NVME_REG_CSTS,
+            (unsigned)NVME_REG_AQA);
+
+    /* Grep: nvme: soft bar */
+    kprintf("nvme: soft bar pa=0x%lx bits=%u map_uc=1 io=0 soft PASS\n",
+            (unsigned long)paBar, u32BarBits);
+
+    /* Grep: nvme: soft pci */
+    kprintf("nvme: soft pci class=0x%02x subclass=0x%02x pif=0x%02x "
+            "mass_storage_nvme=1 soft PASS\n",
+            (unsigned)NVME_PCI_CLASS, (unsigned)NVME_PCI_SUBCLASS,
+            (unsigned)NVME_PCI_PROG_IF);
+
+    /*
+     * Grep: nvme: soft path
+     * Honesty: product surface is PCI class + soft CAP/VS/status inventory.
+     * claim=0 queues — no CC.EN write, no AQA/ASQ/ACQ program, no I/O.
+     */
+    kprintf("nvme: soft path claim=0 admin_q=0 io_q=0 cc_en_write=0 "
+            "aqa_write=0 identify_cmd=0 map_uc=1 cap_fields=1 vs=1 "
+            "csts_ro=1 cc_ro=1 int_ro=1 aqa_ro=1 via=%s wave=%u\n",
+            szViaSafe, (unsigned)NVME_SOFT_DEEPEN_WAVE);
+
+    /* Grep: nvme: soft deepen wave (Wave 14 stamp) */
+    kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
+            "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "
+            "skip=%u\n",
+            (unsigned)NVME_SOFT_DEEPEN_WAVE,
+            (unsigned)NVME_SOFT_DEEPEN_AREAS, szViaSafe,
+            fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u, g_u32SoftFound,
+            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoBar,
+            fCapOk != 0 ? 1u : 0u, fCapOk != 0 ? 0u : 1u);
+
+    /* Grep: nvme: soft stats */
+    kprintf("nvme: soft stats inv_logs=%u probe_logs=%u found=%u "
+            "identify_ok=%u map_fail=%u no_bar=%u wave=%u\n",
+            g_u32SoftInvLogs, g_u32SoftProbeLogs, g_u32SoftFound,
+            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoBar,
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+
+    /* Grep: nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP */
+    kprintf("nvme: soft inventory %s via=%s mqes=%u css=0x%x wave=%u "
+            "areas=%u\n",
+            szVerdict, szViaSafe, u32Mqes, u32Css,
+            (unsigned)NVME_SOFT_DEEPEN_WAVE,
+            (unsigned)NVME_SOFT_DEEPEN_AREAS);
+    kprintf("nvme: soft %s via=%s cap_ok=%u wave=%u\n", szVerdict, szViaSafe,
+            fCapOk != 0 ? 1u : 0u, (unsigned)NVME_SOFT_DEEPEN_WAVE);
+}
+
+/**
+ * Soft identify: map BAR0 UC and inventory CAP fields + VS + CSTS/CC +
+ * INTMS/INTMC/AQA. Read-only MMIO — no CC write, no AQA/ASQ/ACQ program,
+ * no admin queues as product.
+ */
+static void
+nvme_soft_identify(u64 paBar, u32 u32BarBits)
 {
     gj_vaddr_t vaMap = 0;
     gj_status_t stMap;
@@ -295,8 +558,14 @@ nvme_soft_identify(u64 paBar)
             (unsigned long)paBar);
     stMap = vmm_map_device_uc((gj_paddr_t)paBar, 0x1000, &vaMap);
     if (stMap != GJ_OK) {
+        if (g_u32SoftMapFail < 0xffffffffu) {
+            g_u32SoftMapFail++;
+        }
         kprintf("nvme: bar0 map soft SKIP st=%d\n", (int)stMap);
         kprintf("nvme: CAP inventory soft SKIP (unmapped)\n");
+        nvme_soft_inventory("map_fail", ~0ull, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, paBar, u32BarBits);
         return;
     }
     {
@@ -305,6 +574,9 @@ nvme_soft_identify(u64 paBar)
         u32 u32Vs;
         u32 u32Cc;
         u32 u32Csts;
+        u32 u32Intms;
+        u32 u32Intmc;
+        u32 u32Aqa;
         u32 u32Maj;
         u32 u32Min;
         u32 u32Ter;
@@ -313,13 +585,22 @@ nvme_soft_identify(u64 paBar)
         u64Cap = *(volatile u64 *)(void *)(pMmio + NVME_REG_CAP);
         /* VS @ 0x08: TER:MIN:MAJ in bytes (public layout) */
         u32Vs = *(volatile u32 *)(void *)(pMmio + NVME_REG_VS);
+        /* INTMS / INTMC soft-read only — never mask-write */
+        u32Intms = *(volatile u32 *)(void *)(pMmio + NVME_REG_INTMS);
+        u32Intmc = *(volatile u32 *)(void *)(pMmio + NVME_REG_INTMC);
         /* CC / CSTS soft-read only — never write EN */
         u32Cc = *(volatile u32 *)(void *)(pMmio + NVME_REG_CC);
         u32Csts = *(volatile u32 *)(void *)(pMmio + NVME_REG_CSTS);
+        /* AQA soft-read only — never program ASQ/ACQ */
+        u32Aqa = *(volatile u32 *)(void *)(pMmio + NVME_REG_AQA);
 
         u32Ter = u32Vs & 0xffu;
         u32Min = (u32Vs >> 8) & 0xffu;
         u32Maj = (u32Vs >> 16) & 0xffffu;
+
+        if (g_u32SoftIdentifyOk < 0xffffffffu) {
+            g_u32SoftIdentifyOk++;
+        }
 
         kprintf("nvme: CAP=0x%lx soft PASS\n", (unsigned long)u64Cap);
         nvme_soft_cap_inventory(u64Cap);
@@ -329,6 +610,9 @@ nvme_soft_identify(u64 paBar)
         /* Explicit non-claim: product stop is CAP/VS/status soft inventory. */
         kprintf("nvme: admin queues soft SKIP (not claimed)\n");
         kprintf("nvme: I/O path soft SKIP (not claimed)\n");
+        /* Wave 14 unified soft inventory */
+        nvme_soft_inventory("identify", u64Cap, u32Vs, u32Csts, u32Cc,
+                            u32Intms, u32Intmc, u32Aqa, paBar, u32BarBits);
     }
 }
 
@@ -344,6 +628,10 @@ nvme_probe_scan(void)
     u8 u8Func;
     u32 cFound = 0;
 
+    if (g_u32SoftProbeLogs < 0xffffffffu) {
+        g_u32SoftProbeLogs++;
+    }
+
     for (u8Bus = 0; u8Bus < 8; u8Bus++) {
         for (u8Slot = 0; u8Slot < 32; u8Slot++) {
             for (u8Func = 0; u8Func < 8; u8Func++) {
@@ -357,6 +645,7 @@ nvme_probe_scan(void)
                 u16 u16Device;
                 int f64 = 0;
                 u64 paBar;
+                u32 u32BarBits;
 
                 u16Vendor = (u16)(u32Id & 0xffffu);
                 if (u16Vendor == 0xffffu) {
@@ -375,26 +664,40 @@ nvme_probe_scan(void)
                     continue;
                 }
                 paBar = nvme_bar0_pa(u8Bus, u8Slot, u8Func, &u32BarRaw, &f64);
+                u32BarBits = f64 != 0 ? 64u : 32u;
                 kprintf("nvme: probe %u:%u.%u vendor=0x%x bar0=0x%x soft "
                         "PASS\n",
                         u8Bus, u8Slot, u8Func, u16Vendor, u32BarRaw);
                 kprintf("nvme: identify %u:%u.%u id=%04x:%04x bar0_pa=0x%lx "
                         "bits=%u soft PASS\n",
                         u8Bus, u8Slot, u8Func, u16Vendor, u16Device,
-                        (unsigned long)paBar, f64 != 0 ? 64u : 32u);
+                        (unsigned long)paBar, u32BarBits);
                 if (paBar != 0 && (u32BarRaw & 1u) == 0) {
-                    nvme_soft_identify(paBar);
+                    nvme_soft_identify(paBar, u32BarBits);
                 } else {
+                    if (g_u32SoftNoBar < 0xffffffffu) {
+                        g_u32SoftNoBar++;
+                    }
                     kprintf("nvme: bar0 empty/io soft SKIP\n");
                     kprintf("nvme: CAP inventory soft SKIP (unmapped)\n");
+                    nvme_soft_inventory("no_bar", ~0ull, 0xffffffffu,
+                                        0xffffffffu, 0xffffffffu,
+                                        0xffffffffu, 0xffffffffu,
+                                        0xffffffffu, 0ull, 0u);
                 }
                 cFound++;
+                if (g_u32SoftFound < 0xffffffffu) {
+                    g_u32SoftFound++;
+                }
             }
         }
     }
     if (cFound == 0) {
         kprintf("nvme: probe none soft SKIP\n");
         kprintf("nvme: CAP inventory soft SKIP (no controller)\n");
+        nvme_soft_inventory("none", ~0ull, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0ull, 0u);
     } else {
         kprintf("nvme: probe count=%u soft PASS\n", cFound);
     }

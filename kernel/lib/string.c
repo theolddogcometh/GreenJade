@@ -8,30 +8,82 @@
  * Callers must pass valid pointers (and non-NULL where a buffer is required).
  * No heap, no locale, no I/O - safe for early boot and freestanding builds.
  *
- * Soft string helper inventory (Wave 9 exclusive; greppable; hot path clean):
- *   string: soft inventory helpers=14 groups=2
+ * Soft string helper inventory (Wave 9 exclusive; Wave 14 deepen; greppable;
+ * hot path clean):
+ *   string: soft inventory helpers=14 groups=2 wave=14
  *   string: soft mem memset memcpy memmove memcmp memchr
- *   string: soft str strlen strnlen strcmp strncmp strlcpy strlcat strchr strrchr strstr
+ *   string: soft str strlen strnlen strcmp strncmp strlcpy strlcat
+ *            strchr strrchr strstr
+ *   string: soft groups mem=5 str=9 total=14
  *   string: soft policy freestanding pure_c no_heap no_locale no_io
  *   string: soft counts none
  *   string: soft hot_path clean
+ *   string: soft path claim=freestanding …
+ *   string: soft deepen wave=14 areas=8 …
  *
  * Call counts intentionally omitted: memset/memcpy/etc. stay freestanding
  * early-boot hot path with no counter traffic. Inventory is source + rodata
- * only (see string_soft_inventory / string_soft_helper_count).
+ * + cold accessors only (never consulted by helpers).
+ * greppable: string: soft
  */
 #include <gj/string.h>
 
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define STRING_SOFT_WAVE 14u
+
 /*
- * Product soft inventory blob (rodata). Never consulted by the helpers.
+ * Soft inventory area count (fixed greppable categories for deepen stamp):
+ *   inventory | mem | str | groups | policy | counts | path | deepen
+ */
+#define STRING_SOFT_AREAS 8u
+
+enum {
+    STRING_SOFT_HELPERS = 14,
+    STRING_SOFT_MEM = 5,
+    STRING_SOFT_STR = 9
+};
+
+/*
+ * Product soft inventory blobs (rodata). Never consulted by the helpers.
  * Grep: string: soft
  */
 static const char g_szStringSoftInventory[] =
-    "string: soft inventory helpers=14 groups=2 "
+    "string: soft inventory helpers=14 groups=2 wave=14 "
     "mem=memset,memcpy,memmove,memcmp,memchr "
     "str=strlen,strnlen,strcmp,strncmp,strlcpy,strlcat,strchr,strrchr,strstr "
     "policy=freestanding,pure_c,no_heap,no_locale,no_io "
-    "counts=none hot_path=clean";
+    "counts=none hot_path=clean areas=8";
+
+static const char g_szStringSoftMem[] =
+    "string: soft mem memset,memcpy,memmove,memcmp,memchr count=5 "
+    "group=mem wave=14";
+
+static const char g_szStringSoftStr[] =
+    "string: soft str strlen,strnlen,strcmp,strncmp,strlcpy,strlcat,"
+    "strchr,strrchr,strstr count=9 group=str wave=14";
+
+static const char g_szStringSoftGroups[] =
+    "string: soft groups mem=5 str=9 total=14 wave=14";
+
+static const char g_szStringSoftPolicy[] =
+    "string: soft policy freestanding pure_c no_heap no_locale no_io "
+    "early_boot=1 counters=0 wave=14";
+
+static const char g_szStringSoftCounts[] =
+    "string: soft counts none hot_path=clean reason=early_boot "
+    "wave=14 (intentional; helpers stay cold of tallies)";
+
+static const char g_szStringSoftPath[] =
+    "string: soft path claim=freestanding mem=5 str=9 helpers=14 "
+    "counts=none hot_path=clean no_heap=1 no_locale=1 no_io=1 "
+    "early_boot=1 wave=14 (soft inventory; not libc)";
+
+static const char g_szStringSoftDeepen[] =
+    "string: soft deepen wave=14 areas=8 helpers=14 mem=5 str=9 "
+    "counts=none hot_path=clean (Wave 14 exclusive; soft only)";
+
+static const char g_szStringSoftHotPath[] =
+    "string: soft hot_path clean counters=0 early_boot=1 wave=14";
 
 /* Soft helper name table (order matches public soft set; cold only). */
 static const char *const g_apszStringSoftHelpers[] = {
@@ -51,15 +103,31 @@ static const char *const g_apszStringSoftHelpers[] = {
     "strstr",
 };
 
-enum {
-    STRING_SOFT_HELPERS = 14,
-    STRING_SOFT_MEM = 5,
-    STRING_SOFT_STR = 9
+/* Soft mem-* name table (order matches mem group; cold only). */
+static const char *const g_apszStringSoftMem[] = {
+    "memset",
+    "memcpy",
+    "memmove",
+    "memcmp",
+    "memchr",
+};
+
+/* Soft str-* name table (order matches str group; cold only). */
+static const char *const g_apszStringSoftStr[] = {
+    "strlen",
+    "strnlen",
+    "strcmp",
+    "strncmp",
+    "strlcpy",
+    "strlcat",
+    "strchr",
+    "strrchr",
+    "strstr",
 };
 
 /*
  * Cold soft inventory accessor — not used by any hot helper.
- * Returns the greppable "string: soft …" product line (NUL-terminated).
+ * Returns the greppable "string: soft inventory …" product line.
  */
 const char *
 string_soft_inventory(void)
@@ -108,6 +176,108 @@ string_soft_helper_name(unsigned uIndex)
         return NULL;
     }
     return g_apszStringSoftHelpers[uIndex];
+}
+
+/*
+ * Cold soft inventory: Wave 14 stamp (never product gate).
+ * Grep: string: soft deepen wave=
+ */
+unsigned
+string_soft_wave(void)
+{
+    return (unsigned)STRING_SOFT_WAVE;
+}
+
+/*
+ * Cold soft inventory: fixed greppable area count for deepen stamp.
+ * Grep: string: soft deepen areas=
+ */
+unsigned
+string_soft_areas(void)
+{
+    return (unsigned)STRING_SOFT_AREAS;
+}
+
+/* Cold: greppable "string: soft mem …" line. */
+const char *
+string_soft_mem_line(void)
+{
+    return g_szStringSoftMem;
+}
+
+/* Cold: greppable "string: soft str …" line. */
+const char *
+string_soft_str_line(void)
+{
+    return g_szStringSoftStr;
+}
+
+/* Cold: greppable "string: soft groups …" line. */
+const char *
+string_soft_groups_line(void)
+{
+    return g_szStringSoftGroups;
+}
+
+/* Cold: greppable "string: soft policy …" line. */
+const char *
+string_soft_policy(void)
+{
+    return g_szStringSoftPolicy;
+}
+
+/* Cold: greppable "string: soft counts …" line. */
+const char *
+string_soft_counts_line(void)
+{
+    return g_szStringSoftCounts;
+}
+
+/* Cold: greppable "string: soft path …" line. */
+const char *
+string_soft_path(void)
+{
+    return g_szStringSoftPath;
+}
+
+/* Cold: greppable "string: soft deepen wave=14 …" line. */
+const char *
+string_soft_deepen(void)
+{
+    return g_szStringSoftDeepen;
+}
+
+/* Cold: greppable "string: soft hot_path …" line. */
+const char *
+string_soft_hot_path(void)
+{
+    return g_szStringSoftHotPath;
+}
+
+/*
+ * Cold soft inventory: mem-* helper name by group index, or NULL.
+ * Grep: string: soft mem
+ */
+const char *
+string_soft_mem_name(unsigned uIndex)
+{
+    if (uIndex >= (unsigned)STRING_SOFT_MEM) {
+        return NULL;
+    }
+    return g_apszStringSoftMem[uIndex];
+}
+
+/*
+ * Cold soft inventory: str-* helper name by group index, or NULL.
+ * Grep: string: soft str
+ */
+const char *
+string_soft_str_name(unsigned uIndex)
+{
+    if (uIndex >= (unsigned)STRING_SOFT_STR) {
+        return NULL;
+    }
+    return g_apszStringSoftStr[uIndex];
 }
 
 void *
@@ -356,4 +526,4 @@ strstr(const char *szHay, const char *szNeedle)
     return NULL;
 }
 
-/* string: soft inventory end helpers=14 counts=none hot_path=clean */
+/* string: soft inventory end helpers=14 counts=none hot_path=clean wave=14 areas=8 */

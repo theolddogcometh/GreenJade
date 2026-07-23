@@ -7,7 +7,8 @@
  * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
  * greppable "pe32: … PASS" markers stay stable.
  *
- * Soft inventory (Wave 11 exclusive; this unit only — greppable "pe32: soft …"):
+ * Soft inventory (Wave 11 base + Wave 14 exclusive deepen; this unit only —
+ * greppable "pe32: soft …"):
  *   pe32: soft inventory   — capacity + pipeline catalog + log tallies
  *   pe32: soft parse       — parse/sections enter+ok snapshot
  *   pe32: soft stage       — image_stage + map_user snapshot
@@ -16,6 +17,15 @@
  *   pe32: soft int80       — CS32 int80 smoke surface catalog (not bar3)
  *   pe32: soft path        — honesty: kernel PE soft ≠ Steam/Proton titles
  *   pe32: soft inventory PASS / pe32: soft PASS
+ * Wave 14 exclusive complementary surfaces (never reshape primary fields):
+ *   pe32: soft reject      — parse/sec/stage/map/validate/reloc/load fails
+ *   pe32: soft format      — PE32/PE32+ + i386/amd64 accept tallies
+ *   pe32: soft reloc       — ABSOLUTE/HIGHLOW/DIR64/HIGH/LOW/skip/delta0
+ *   pe32: soft soft_va     — preferred-base honor vs fallback band
+ *   pe32: soft stats       — aggregate enter/ok/fail rollup + wave
+ *   pe32: soft lamps       — pipeline readiness lamps (software only)
+ *   pe32: soft smoke       — smoke/spawn/wow64/int80/vfs ok snapshot
+ *   pe32: soft deepen      — wave=14 areas stamp
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -43,6 +53,9 @@
 #define OPT_PE32   0x10bu
 #define OPT_PE32P  0x20bu
 
+/* Soft inventory wave stamp (this unit exclusive deepen). */
+#define PE32_SOFT_WAVE 14u
+
 static u32
 rd32(const u8 *p)
 {
@@ -58,6 +71,7 @@ rd16(const u8 *p)
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped off product return paths; never hard-gate behavior.
+ * Wave 11 base + Wave 14 exclusive path deepen.
  * greppable: pe32: soft …
  */
 struct pe32_soft_stats {
@@ -87,6 +101,30 @@ struct pe32_soft_stats {
     u64 u64Int80SmokeOk;
     u64 u64VfsLoadOk;
     u64 u64SoftLog;
+    /* Wave 14 exclusive reject / format / reloc / soft_va tallies. */
+    u64 u64ParseFail;
+    u64 u64SecFail;
+    u64 u64StageFail;
+    u64 u64MapFail;
+    u64 u64ValidateFail;
+    u64 u64RelocFail;
+    u64 u64LoadFail;
+    u64 u64SoftExecFail;
+    u64 u64FmtPe32;
+    u64 u64FmtPe32p;
+    u64 u64FmtI386;
+    u64 u64FmtAmd64;
+    u64 u64RelocAbs;
+    u64 u64RelocHighlow;
+    u64 u64RelocDir64;
+    u64 u64RelocHigh;
+    u64 u64RelocLow;
+    u64 u64RelocSkip;
+    u64 u64RelocDelta0;
+    u64 u64RelocEmptyDir;
+    u64 u64SoftVaPref;
+    u64 u64SoftVaFallback;
+    u64 u64SoftVaNull;
 };
 
 static struct pe32_soft_stats g_soft;
@@ -102,31 +140,47 @@ pe32_soft_inc(u64 *pCtr)
 }
 
 /**
- * Wave 11 soft inventory dump — greppable "pe32: soft …".
+ * Wave 14 soft inventory dump — greppable "pe32: soft …".
  * Snapshots live soft path state; never allocates; never hard-gates.
+ * Primary Wave 11 field names stay stable; Wave 14 adds complementary lines.
  * szVia: caller tag (smoke / spawn / wow64 / int80 / vfs / anon).
  */
 static void
 pe32_soft_inventory_log(const char *szVia)
 {
     const char *szViaSafe;
+    u32 u32LampParse;
+    u32 u32LampStage;
+    u32 u32LampLoad;
+    u32 u32LampExec;
+    u32 u32LampReloc;
 
     szViaSafe = (szVia != NULL) ? szVia : "anon";
     pe32_soft_inc(&g_soft.u64SoftLog);
 
+    u32LampParse = (g_soft.u64ParseOk != 0) ? 1u : 0u;
+    u32LampStage = (g_soft.u64StageOk != 0) ? 1u : 0u;
+    u32LampLoad = (g_soft.u64LoadOk != 0) ? 1u : 0u;
+    u32LampExec = (g_soft.u64SoftExecOk != 0 || g_soft.u64SoftIretqOk != 0)
+                      ? 1u
+                      : 0u;
+    u32LampReloc = (g_soft.u64RelocOk != 0) ? 1u : 0u;
+
     /*
      * Grep: pe32: soft inventory
      * Capacity + dual-format catalog (PE32 i386 + PE32+ amd64) + log count.
+     * Wave 14 appends wave= only — prior keys remain prefix-stable.
      */
     kprintf("pe32: soft inventory via=%s max_sec=%u stage_cap=0x8000 "
             "pe32=1 pe32p=1 i386=1 amd64=1 soft_exec=1 soft_reloc=1 "
             "soft_va=0x50000000 int80=1 vfs=1 wow64=1 logs=%lu "
-            "parse_ok=%lu stage_ok=%lu load_ok=%lu\n",
+            "parse_ok=%lu stage_ok=%lu load_ok=%lu wave=%u\n",
             szViaSafe, (unsigned)GJ_PE32_MAX_SECTIONS,
             (unsigned long)g_soft.u64SoftLog,
             (unsigned long)g_soft.u64ParseOk,
             (unsigned long)g_soft.u64StageOk,
-            (unsigned long)g_soft.u64LoadOk);
+            (unsigned long)g_soft.u64LoadOk,
+            (unsigned)PE32_SOFT_WAVE);
 
     /* Grep: pe32: soft parse */
     kprintf("pe32: soft parse enter=%lu ok=%lu sec_enter=%lu sec_ok=%lu\n",
@@ -188,13 +242,148 @@ pe32_soft_inventory_log(const char *szVia)
      */
     kprintf("pe32: soft path claim=kernel_soft pe_load=1 wow64_tramp=1 "
             "cs32_int80=1 soft_exec=1 steam_pe=0 proton_title=0 bar3=open "
+            "via=%s wave=%u\n",
+            szViaSafe, (unsigned)PE32_SOFT_WAVE);
+
+    /*
+     * Wave 14 exclusive complementary sub-lines (never reshape primary).
+     * Reject = sticky path fails + derived (enter-ok) when sticky is 0.
+     */
+    /* Grep: pe32: soft reject */
+    kprintf("pe32: soft reject parse=%lu sec=%lu stage=%lu map=%lu "
+            "validate=%lu reloc=%lu load=%lu soft_exec=%lu\n",
+            (unsigned long)((g_soft.u64ParseFail != 0)
+                                ? g_soft.u64ParseFail
+                                : ((g_soft.u64ParseEnter > g_soft.u64ParseOk)
+                                       ? (g_soft.u64ParseEnter - g_soft.u64ParseOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64SecFail != 0)
+                                ? g_soft.u64SecFail
+                                : ((g_soft.u64SecEnter > g_soft.u64SecOk)
+                                       ? (g_soft.u64SecEnter - g_soft.u64SecOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64StageFail != 0)
+                                ? g_soft.u64StageFail
+                                : ((g_soft.u64StageEnter > g_soft.u64StageOk)
+                                       ? (g_soft.u64StageEnter - g_soft.u64StageOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64MapFail != 0)
+                                ? g_soft.u64MapFail
+                                : ((g_soft.u64MapEnter > g_soft.u64MapOk)
+                                       ? (g_soft.u64MapEnter - g_soft.u64MapOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64ValidateFail != 0)
+                                ? g_soft.u64ValidateFail
+                                : ((g_soft.u64ValidateEnter > g_soft.u64ValidateOk)
+                                       ? (g_soft.u64ValidateEnter -
+                                          g_soft.u64ValidateOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64RelocFail != 0)
+                                ? g_soft.u64RelocFail
+                                : ((g_soft.u64RelocEnter > g_soft.u64RelocOk)
+                                       ? (g_soft.u64RelocEnter - g_soft.u64RelocOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64LoadFail != 0)
+                                ? g_soft.u64LoadFail
+                                : ((g_soft.u64LoadEnter > g_soft.u64LoadOk)
+                                       ? (g_soft.u64LoadEnter - g_soft.u64LoadOk)
+                                       : 0ull)),
+            (unsigned long)((g_soft.u64SoftExecFail != 0)
+                                ? g_soft.u64SoftExecFail
+                                : ((g_soft.u64SoftExecEnter > g_soft.u64SoftExecOk)
+                                       ? (g_soft.u64SoftExecEnter -
+                                          g_soft.u64SoftExecOk)
+                                       : 0ull)));
+
+    /* Grep: pe32: soft format */
+    kprintf("pe32: soft format pe32=%lu pe32p=%lu i386=%lu amd64=%lu "
+            "pair=pe32_i386|pe32p_amd64 catalog=1\n",
+            (unsigned long)g_soft.u64FmtPe32,
+            (unsigned long)g_soft.u64FmtPe32p,
+            (unsigned long)g_soft.u64FmtI386,
+            (unsigned long)g_soft.u64FmtAmd64);
+
+    /* Grep: pe32: soft reloc */
+    kprintf("pe32: soft reloc enter=%lu ok=%lu fail=%lu abs=%lu "
+            "highlow=%lu dir64=%lu high=%lu low=%lu skip=%lu "
+            "delta0=%lu empty_dir=%lu\n",
+            (unsigned long)g_soft.u64RelocEnter,
+            (unsigned long)g_soft.u64RelocOk,
+            (unsigned long)g_soft.u64RelocFail,
+            (unsigned long)g_soft.u64RelocAbs,
+            (unsigned long)g_soft.u64RelocHighlow,
+            (unsigned long)g_soft.u64RelocDir64,
+            (unsigned long)g_soft.u64RelocHigh,
+            (unsigned long)g_soft.u64RelocLow,
+            (unsigned long)g_soft.u64RelocSkip,
+            (unsigned long)g_soft.u64RelocDelta0,
+            (unsigned long)g_soft.u64RelocEmptyDir);
+
+    /* Grep: pe32: soft soft_va */
+    kprintf("pe32: soft soft_va pref=%lu fallback=%lu null_info=%lu "
+            "band=0x50000000 honor=high_user_page_aligned\n",
+            (unsigned long)g_soft.u64SoftVaPref,
+            (unsigned long)g_soft.u64SoftVaFallback,
+            (unsigned long)g_soft.u64SoftVaNull);
+
+    /* Grep: pe32: soft stats */
+    kprintf("pe32: soft stats parse_e=%lu parse_ok=%lu stage_e=%lu "
+            "stage_ok=%lu map_e=%lu map_ok=%lu load_e=%lu load_ok=%lu "
+            "reloc_e=%lu reloc_ok=%lu soft_exec_e=%lu soft_exec_ok=%lu "
+            "logs=%lu wave=%u\n",
+            (unsigned long)g_soft.u64ParseEnter,
+            (unsigned long)g_soft.u64ParseOk,
+            (unsigned long)g_soft.u64StageEnter,
+            (unsigned long)g_soft.u64StageOk,
+            (unsigned long)g_soft.u64MapEnter,
+            (unsigned long)g_soft.u64MapOk,
+            (unsigned long)g_soft.u64LoadEnter,
+            (unsigned long)g_soft.u64LoadOk,
+            (unsigned long)g_soft.u64RelocEnter,
+            (unsigned long)g_soft.u64RelocOk,
+            (unsigned long)g_soft.u64SoftExecEnter,
+            (unsigned long)g_soft.u64SoftExecOk,
+            (unsigned long)g_soft.u64SoftLog,
+            (unsigned)PE32_SOFT_WAVE);
+
+    /* Grep: pe32: soft lamps */
+    kprintf("pe32: soft lamps parse=%u stage=%u load=%u reloc=%u "
+            "exec=%u smoke=%u spawn=%u wow64=%u int80=%u vfs=%u "
             "via=%s\n",
+            u32LampParse, u32LampStage, u32LampLoad, u32LampReloc,
+            u32LampExec,
+            (g_soft.u64SmokeOk != 0) ? 1u : 0u,
+            (g_soft.u64SpawnOk != 0) ? 1u : 0u,
+            (g_soft.u64Wow64Ok != 0) ? 1u : 0u,
+            (g_soft.u64Int80SmokeOk != 0) ? 1u : 0u,
+            (g_soft.u64VfsLoadOk != 0) ? 1u : 0u,
             szViaSafe);
 
+    /* Grep: pe32: soft smoke */
+    kprintf("pe32: soft smoke ok=%lu spawn=%lu wow64=%lu int80=%lu "
+            "vfs=%lu hw_enter=%lu compat=%lu soft_iretq=%lu\n",
+            (unsigned long)g_soft.u64SmokeOk,
+            (unsigned long)g_soft.u64SpawnOk,
+            (unsigned long)g_soft.u64Wow64Ok,
+            (unsigned long)g_soft.u64Int80SmokeOk,
+            (unsigned long)g_soft.u64VfsLoadOk,
+            (unsigned long)g_soft.u64HwEnterOk,
+            (unsigned long)g_soft.u64CompatOk,
+            (unsigned long)g_soft.u64SoftIretqOk);
+
+    /* Grep: pe32: soft deepen */
+    kprintf("pe32: soft deepen wave=%u areas="
+            "inventory,parse,stage,load,exec,int80,path,"
+            "reject,format,reloc,soft_va,stats,lamps,smoke "
+            "unit=pe32.c only hard_gate=0 via=%s\n",
+            (unsigned)PE32_SOFT_WAVE, szViaSafe);
+
     /* Grep: pe32: soft inventory PASS / pe32: soft PASS */
-    kprintf("pe32: soft inventory PASS via=%s logs=%lu\n", szViaSafe,
-            (unsigned long)g_soft.u64SoftLog);
-    kprintf("pe32: soft PASS via=%s\n", szViaSafe);
+    kprintf("pe32: soft inventory PASS via=%s logs=%lu wave=%u\n",
+            szViaSafe, (unsigned long)g_soft.u64SoftLog,
+            (unsigned)PE32_SOFT_WAVE);
+    kprintf("pe32: soft PASS via=%s wave=%u\n", szViaSafe,
+            (unsigned)PE32_SOFT_WAVE);
 }
 
 int
@@ -316,6 +505,17 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
         return -1;
     }
     pOut->u32Ready = 1;
+    /* Wave 14: format accept tallies (pair-checked above). */
+    if (pOut->u8IsPe32) {
+        pe32_soft_inc(&g_soft.u64FmtPe32);
+    } else {
+        pe32_soft_inc(&g_soft.u64FmtPe32p);
+    }
+    if (machine == MACH_I386) {
+        pe32_soft_inc(&g_soft.u64FmtI386);
+    } else if (machine == MACH_AMD64) {
+        pe32_soft_inc(&g_soft.u64FmtAmd64);
+    }
     pe32_soft_inc(&g_soft.u64ParseOk);
     return 0;
 }
@@ -608,6 +808,8 @@ pe32_load_soft_va(const struct gj_pe32_info *pInfo)
 
     /* High free band used by all PE smokes; stable greppable map path. */
     if (pInfo == NULL || !pInfo->u32Ready) {
+        pe32_soft_inc(&g_soft.u64SoftVaNull);
+        pe32_soft_inc(&g_soft.u64SoftVaFallback);
         return 0x50000000ull;
     }
     u64Pref = pInfo->u64ImageBase;
@@ -619,9 +821,11 @@ pe32_load_soft_va(const struct gj_pe32_info *pInfo)
         (u64Pref & 0xfffull) == 0ull) {
         /* Soft wrap check for SizeOfImage */
         if (u64Pref + (u64)pInfo->u32SizeOfImage > u64Pref) {
+            pe32_soft_inc(&g_soft.u64SoftVaPref);
             return u64Pref;
         }
     }
+    pe32_soft_inc(&g_soft.u64SoftVaFallback);
     return 0x50000000ull;
 }
 
@@ -637,25 +841,30 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
 
     pe32_soft_inc(&g_soft.u64RelocEnter);
     if (pImage == NULL || pInfo == NULL || !pInfo->u32Ready || cbImage == 0) {
+        pe32_soft_inc(&g_soft.u64RelocFail);
         return -1;
     }
     if (cbImage < pInfo->u32SizeOfImage) {
+        pe32_soft_inc(&g_soft.u64RelocFail);
         return -1;
     }
     u64Pref = pInfo->u64ImageBase;
     u64Delta = u64VaBase - u64Pref;
     /* Soft: already at preferred — nothing to fix up */
     if (u64Delta == 0) {
+        pe32_soft_inc(&g_soft.u64RelocDelta0);
         pe32_soft_inc(&g_soft.u64RelocOk);
         return 0;
     }
     /* Soft: no reloc directory → fixed-base image; allow high-VA smoke map */
     if (pInfo->u32RelocRva == 0 || pInfo->u32RelocSize < 8u) {
+        pe32_soft_inc(&g_soft.u64RelocEmptyDir);
         pe32_soft_inc(&g_soft.u64RelocOk);
         return 0;
     }
     if (pInfo->u32RelocRva >= cbImage ||
         pInfo->u32RelocSize > cbImage - pInfo->u32RelocRva) {
+        pe32_soft_inc(&g_soft.u64RelocFail);
         return -1;
     }
     pImg = (u8 *)pImage;
@@ -668,9 +877,11 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
         u32 i;
 
         if (u32BlockSize < 8u) {
+            pe32_soft_inc(&g_soft.u64RelocFail);
             return -1; /* corrupt */
         }
         if (u32BlockSize > u32End - u32Off) {
+            pe32_soft_inc(&g_soft.u64RelocFail);
             return -1;
         }
         u32Entries = (u32BlockSize - 8u) / 2u;
@@ -681,13 +892,16 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
             u32 u32Fix = u32PageRva + (u32)u16Ofs;
 
             if (u16Type == 0) {
-                continue; /* IMAGE_REL_BASED_ABSOLUTE */
+                /* IMAGE_REL_BASED_ABSOLUTE */
+                pe32_soft_inc(&g_soft.u64RelocAbs);
+                continue;
             }
             if (u16Type == 3) {
                 /* IMAGE_REL_BASED_HIGHLOW — 32-bit */
                 u32 u32Val;
 
                 if (u32Fix > cbImage - 4u) {
+                    pe32_soft_inc(&g_soft.u64RelocFail);
                     return -1;
                 }
                 u32Val = rd32(pImg + u32Fix);
@@ -696,12 +910,14 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 pImg[u32Fix + 1] = (u8)(u32Val >> 8);
                 pImg[u32Fix + 2] = (u8)(u32Val >> 16);
                 pImg[u32Fix + 3] = (u8)(u32Val >> 24);
+                pe32_soft_inc(&g_soft.u64RelocHighlow);
             } else if (u16Type == 10) {
                 /* IMAGE_REL_BASED_DIR64 — PE32+ */
                 u64 u64Val;
                 u32 lo, hi;
 
                 if (u32Fix > cbImage - 8u) {
+                    pe32_soft_inc(&g_soft.u64RelocFail);
                     return -1;
                 }
                 lo = rd32(pImg + u32Fix);
@@ -716,23 +932,28 @@ pe32_soft_relocate(void *pImage, u32 cbImage,
                 pImg[u32Fix + 5] = (u8)(u64Val >> 40);
                 pImg[u32Fix + 6] = (u8)(u64Val >> 48);
                 pImg[u32Fix + 7] = (u8)(u64Val >> 56);
+                pe32_soft_inc(&g_soft.u64RelocDir64);
             } else if (u16Type == 1 || u16Type == 2) {
                 /* HIGH / LOW — soft 16-bit halves */
                 u16 u16Val;
 
                 if (u32Fix > cbImage - 2u) {
+                    pe32_soft_inc(&g_soft.u64RelocFail);
                     return -1;
                 }
                 u16Val = rd16(pImg + u32Fix);
                 if (u16Type == 1) {
                     u16Val = (u16)(u16Val + (u16)(u64Delta >> 16));
+                    pe32_soft_inc(&g_soft.u64RelocHigh);
                 } else {
                     u16Val = (u16)(u16Val + (u16)u64Delta);
+                    pe32_soft_inc(&g_soft.u64RelocLow);
                 }
                 pImg[u32Fix + 0] = (u8)(u16Val);
                 pImg[u32Fix + 1] = (u8)(u16Val >> 8);
             } else {
                 /* Soft: unknown reloc type — skip (do not fail smoke PE) */
+                pe32_soft_inc(&g_soft.u64RelocSkip);
                 continue;
             }
         }
@@ -802,6 +1023,7 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
     pe32_soft_inc(&g_soft.u64LoadEnter);
     if (pProc == NULL || pFile == NULL || pOut == NULL) {
         kprintf("pe32: load_process arg FAIL\n");
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     memset(pOut, 0, sizeof(*pOut));
@@ -811,29 +1033,34 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
     if (pe32_parse(pFile, cbFile, &info) != 0) {
         kprintf("pe32: load_process parse FAIL\n");
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     nSec = pe32_parse_sections(pFile, cbFile, &info, aSec, GJ_PE32_MAX_SECTIONS);
     if (nSec < 0) {
         kprintf("pe32: load_process sections FAIL\n");
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     if (info.u32SizeOfImage == 0 || info.u32SizeOfImage > sizeof(aImage)) {
         kprintf("pe32: load_process size FAIL sz=0x%x\n", info.u32SizeOfImage);
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     /* Soft load validate before staging (entry/sec/dir bounds). */
     if (pe32_load_soft_validate(&info, aSec, (u32)nSec) != 0) {
         kprintf("pe32: load_process soft_validate FAIL\n");
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     if (pe32_image_stage(pFile, cbFile, &info, aSec, (u32)nSec, aImage,
                          info.u32SizeOfImage) != 0) {
         kprintf("pe32: load_process stage FAIL\n");
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     /* Soft VA: preferred when high, else 0x50000000 (smoke-stable). */
@@ -841,11 +1068,13 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
     if (pe32_soft_relocate(aImage, info.u32SizeOfImage, &info, vaBase) != 0) {
         kprintf("pe32: load_process soft_reloc FAIL\n");
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     cpu_load_cr3(u64Saved);
     if (process_as_ensure(pProc) != GJ_OK) {
         kprintf("pe32: load_process as_ensure FAIL\n");
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     u64Saved = cpu_read_cr3();
@@ -855,6 +1084,7 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
         kprintf("pe32: load_process map_user FAIL va=0x%lx\n",
                 (unsigned long)vaBase);
         cpu_load_cr3(u64Saved);
+        pe32_soft_inc(&g_soft.u64LoadFail);
         return -1;
     }
     /* Stack above image end (+ guard page gap) */
@@ -869,6 +1099,7 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
             if (pa == 0) {
                 kprintf("pe32: load_process stack pmm FAIL\n");
                 cpu_load_cr3(u64Saved);
+                pe32_soft_inc(&g_soft.u64LoadFail);
                 return -1;
             }
             pK = (void *)(gj_vaddr_t)(hhdm_ready() ? (GJ_HHDM_BASE + (u64)pa)
@@ -880,6 +1111,7 @@ pe32_load_process(struct gj_process *pProc, const void *pFile, u32 cbFile,
                 kprintf("pe32: load_process stack map FAIL p=%u\n", p);
                 pmm_free(pa);
                 cpu_load_cr3(u64Saved);
+                pe32_soft_inc(&g_soft.u64LoadFail);
                 return -1;
             }
         }
@@ -1425,6 +1657,7 @@ pe32_i386_soft_exec(const void *pImage, u32 cbImage, u32 u32EntryRva,
 
     pe32_soft_inc(&g_soft.u64SoftExecEnter);
     if (pImage == NULL || cbImage == 0 || u32EntryRva >= cbImage) {
+        pe32_soft_inc(&g_soft.u64SoftExecFail);
         return -1;
     }
     p = (const u8 *)pImage;

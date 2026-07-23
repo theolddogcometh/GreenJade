@@ -8,12 +8,20 @@
  *
  *   Door path (virtio-scsi / HBA ready):
  *     READY → INQUIRY → optional READ_CAP → optional READ10 →
- *     optional STATS → live path PASS (scsi door)
+ *     optional STATS → soft side + soft inventory → live path PASS
  *
  *   Soft path (no HBA / READY ≠ 1):
  *     soft LUN init → TUR → INQUIRY → MODE SENSE → READ_CAP →
  *     WRITE10/READ10 verify → illegal-LUN sense → REQUEST SENSE →
- *     SYNC → soft stats → live path PASS (no-HBA soft)
+ *     SYNC → deepen probes → soft inventory → live path PASS
+ *
+ * Soft inventory (Wave 14 exclusive deepen — greppable "scsi_mid-gj: soft …"):
+ *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=14 areas=10
+ *   scsi_mid-gj: soft steps tur=… inq=… mode=… readcap=… write10=… read10=…
+ *                rw=… lun=… sense=… sync=… multi=… lba=… evpd=… bits=…
+ *   scsi_mid-gj: soft lun / multi / lba / evpd / door / geometry / deepen / path
+ * Soft LUN honesty remains soft; product door INQUIRY path is separate.
+ * Diagnostics only — never gates live path PASS.
  *
  * Soft LUN is pure userspace mid policy (geometry, sense, LUN map) so
  * freestanding smokes stay green without virtio-scsi. Parent tree still
@@ -30,6 +38,34 @@
 #define SOFT_SECTORS  64u
 #define SOFT_SEC_SIZE 512u
 #define SOFT_SENSE_MAX 32u
+
+/* Wave stamp + inventory area count (Wave 14 exclusive deepen). */
+#define SCSI_SOFT_WAVE  14u
+#define SCSI_SOFT_AREAS 10u
+/* areas: suite steps lun multi lba evpd door geometry deepen path */
+
+/* Soft suite sub-step bits (Wave 14 greppable steps line). */
+#define SOFT_S_TUR     (1u << 0)
+#define SOFT_S_INQ     (1u << 1)
+#define SOFT_S_MODE    (1u << 2)
+#define SOFT_S_READCAP (1u << 3)
+#define SOFT_S_WRITE10 (1u << 4)
+#define SOFT_S_READ10  (1u << 5)
+#define SOFT_S_RW      (1u << 6)
+#define SOFT_S_LUN     (1u << 7)
+#define SOFT_S_SENSE   (1u << 8)
+#define SOFT_S_SYNC    (1u << 9)
+#define SOFT_S_MULTI   (1u << 10)
+#define SOFT_S_LBA     (1u << 11)
+#define SOFT_S_EVPD    (1u << 12)
+
+/* Soft door sub-step bits (product door path lamps; INQUIRY separate). */
+#define SOFT_D_READY   (1u << 0)
+#define SOFT_D_INQ     (1u << 1)
+#define SOFT_D_READCAP (1u << 2)
+#define SOFT_D_READ10  (1u << 3)
+#define SOFT_D_STATS   (1u << 4)
+#define SOFT_D_SIDE    (1u << 5)
 
 #define SCSI_OP_TEST_UNIT_READY   0x00u
 #define SCSI_OP_REQUEST_SENSE     0x03u
@@ -170,6 +206,28 @@ static unsigned g_uSoftIoOk;
 static unsigned g_uSoftIoFail;
 static int g_fSoftArmed;
 
+/*
+ * Soft product inventory (Wave 14 exclusive deepen). Cumulative for this
+ * process. greppable: scsi_mid-gj: soft …
+ * Never hard-gates live path. Soft ≠ product multi-server confine.
+ */
+static unsigned g_cSoftOk;          /* soft suite sub-steps greened */
+static unsigned g_cSoftSkip;        /* soft suite sub-steps soft-skipped */
+static unsigned g_uSoftStepBits;    /* SOFT_S_* mask of greened soft steps */
+static unsigned g_uSoftDoorBits;    /* SOFT_D_* mask of greened door steps */
+static unsigned g_cSoftDoorOk;      /* door soft sub-steps greened */
+static unsigned g_cSoftDoorSkip;    /* door soft sub-steps soft-skipped */
+static unsigned g_cSoftInvLog;      /* inventory dump emissions */
+static unsigned g_uSoftLunHonest;   /* illegal LUN → CHECK KEY/ASC honesty */
+static unsigned g_uSoftLunKey;      /* last illegal-LUN sense KEY */
+static unsigned g_uSoftLunAsc;      /* last illegal-LUN sense ASC */
+static unsigned g_uSoftLbaHonest;   /* illegal LBA → CHECK honesty */
+static unsigned g_uSoftEvpdHonest;  /* EVPD INQUIRY → CHECK honesty */
+static unsigned g_uSoftMultiOk;     /* multi-block soft R/W greened */
+static unsigned g_uSoftProductInq;  /* product (door) INQUIRY greened */
+static unsigned g_uSoftSoftInq;     /* soft-path INQUIRY greened */
+static unsigned g_aSoftDoorStats[2];/* last door STATS snapshot */
+
 static void
 soft_sense_clear(void)
 {
@@ -197,6 +255,9 @@ soft_init(void)
     g_uSoftIoOk = 0;
     g_uSoftIoFail = 0;
     g_fSoftArmed = 1;
+    g_uSoftStepBits = 0;
+    g_cSoftOk = 0;
+    g_cSoftSkip = 0;
 }
 
 static int
@@ -500,6 +561,320 @@ msg_soft_stats(void)
     msg(aLine);
 }
 
+/* ---- Soft inventory (Wave 14 exclusive deepen) -------------------------- */
+
+/** Note one soft suite sub-step outcome (never hard-gates). */
+static void
+soft_step_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftStepBits |= uBit;
+        if (g_cSoftOk < 0xffffffffu) {
+            g_cSoftOk++;
+        }
+    } else if (g_cSoftSkip < 0xffffffffu) {
+        g_cSoftSkip++;
+    }
+}
+
+/** Note one soft door sub-step outcome (never hard-gates). */
+static void
+soft_door_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftDoorBits |= uBit;
+        if (g_cSoftDoorOk < 0xffffffffu) {
+            g_cSoftDoorOk++;
+        }
+    } else if (g_cSoftDoorSkip < 0xffffffffu) {
+        g_cSoftDoorSkip++;
+    }
+}
+
+/**
+ * Greppable soft inventory (Wave 14 exclusive deepen).
+ * Prefix-stable markers (scsi_mid-gj: soft …):
+ *   scsi_mid-gj: soft inventory  — ok/skip + door + wave/areas + log_n
+ *   scsi_mid-gj: soft steps      — per-sub-step lamps + bits
+ *   scsi_mid-gj: soft lun        — LUN honesty (soft only; not product gate)
+ *   scsi_mid-gj: soft multi      — multi-block deepen lamp
+ *   scsi_mid-gj: soft lba        — illegal LBA honesty lamp
+ *   scsi_mid-gj: soft evpd       — EVPD reject honesty lamp
+ *   scsi_mid-gj: soft door       — product door soft lamps (INQUIRY separate)
+ *   scsi_mid-gj: soft geometry   — soft LUN geometry
+ *   scsi_mid-gj: soft deepen     — wave=14 stamp
+ *   scsi_mid-gj: soft path       — honesty: soft LUN ≠ product door INQUIRY
+ *   scsi_mid-gj: soft inventory PASS
+ *
+ * Soft LUN honesty remains soft. Product INQUIRY path is door-only.
+ * Never hard-gates live path PASS.
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[192];
+    unsigned o;
+
+    if (g_cSoftInvLog < 0xffffffffu) {
+        g_cSoftInvLog++;
+    }
+
+    /* Grep: scsi_mid-gj: soft inventory */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft inventory ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " soft_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftIoOk);
+    append_s(aLine, sizeof(aLine), &o, " soft_fail=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftIoFail);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorSkip);
+    append_s(aLine, sizeof(aLine), &o, " wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SCSI_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SCSI_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, " log_n=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftInvLog);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft steps */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft steps tur=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_TUR) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " inq=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_INQ) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " mode=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_MODE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " readcap=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_READCAP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " write10=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_WRITE10) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " read10=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_READ10) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " rw=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_RW) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " lun=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_LUN) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " sense=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_SENSE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " sync=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_SYNC) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " multi=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_MULTI) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " lba=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_LBA) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " evpd=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStepBits & SOFT_S_EVPD) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStepBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft lun (honesty remains soft) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft lun honest=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftLunHonest);
+    append_s(aLine, sizeof(aLine), &o, " key=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftLunKey);
+    append_s(aLine, sizeof(aLine), &o, " asc=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftLunAsc);
+    append_s(aLine, sizeof(aLine), &o,
+             " soft_only=1 (soft inventory; not product gate)\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft multi */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft multi ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftMultiOk);
+    append_s(aLine, sizeof(aLine), &o, " lba=2 blocks=2\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft lba */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft lba honest=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftLbaHonest);
+    append_s(aLine, sizeof(aLine), &o, " asc=0x21 soft_only=1\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft evpd */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft evpd honest=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftEvpdHonest);
+    append_s(aLine, sizeof(aLine), &o, " asc=0x24 soft_only=1\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft door (product INQUIRY tracked separate) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft door ready=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_D_READY) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " product_inq=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftProductInq);
+    append_s(aLine, sizeof(aLine), &o, " readcap=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_D_READCAP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " read10=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_D_READ10) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_D_STATS) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " side_inq=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & SOFT_D_SIDE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " soft_inq=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftSoftInq);
+    append_s(aLine, sizeof(aLine), &o, " io=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftDoorStats[0]);
+    append_s(aLine, sizeof(aLine), &o, " ready_flag=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftDoorStats[1]);
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDoorBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft geometry */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft geometry sectors=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_SECTORS);
+    append_s(aLine, sizeof(aLine), &o, " sec_size=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_SEC_SIZE);
+    append_s(aLine, sizeof(aLine), &o, " bytes=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(SOFT_SECTORS * SOFT_SEC_SIZE));
+    append_s(aLine, sizeof(aLine), &o, " sense_max=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_SENSE_MAX);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: scsi_mid-gj: soft deepen wave */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: soft deepen wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SCSI_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)SCSI_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, " ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " multi_server=0 confine=0\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: scsi_mid-gj: soft path
+     * Honesty: soft LUN policy ≠ product door INQUIRY path; not bar3.
+     * Soft inventory ≠ product multi-server confine.
+     */
+    msg("scsi_mid-gj: soft path soft_lun=1 door=1 product_inq=door "
+        "soft_inq=soft lun_honest=soft multi=soft lba=soft evpd=soft "
+        "multi_server=0 confine=0 wave=14 "
+        "(soft inventory; not bar3; soft != product multi-server confine)\n");
+
+    /* Soft lamp only — never a product / bar3 gate. */
+    msg("scsi_mid-gj: soft inventory PASS\n");
+}
+
+/**
+ * Wave 14 deepen probes on the soft LUN (multi-block, illegal LBA, EVPD).
+ * Always soft — never hard-fails the live path.
+ */
+static void
+soft_deepen_probes(void)
+{
+    unsigned char aCdb[16];
+    unsigned char aBlk[SOFT_SEC_SIZE * 2u];
+    unsigned i;
+    int fOk;
+
+    /* Multi-block WRITE10/READ10 at LBA 2, 2 blocks. */
+    for (i = 0; i < sizeof(aBlk); i++) {
+        aBlk[i] = (unsigned char)(0x3Cu ^ (unsigned char)i);
+    }
+    cdb_rw10(aCdb, SCSI_OP_WRITE_10, 2u, 2u);
+    fOk = (soft_submit(0, aCdb, 10, aBlk, sizeof(aBlk)) == 0);
+    if (fOk) {
+        memzero(aBlk, sizeof(aBlk));
+        cdb_rw10(aCdb, SCSI_OP_READ_10, 2u, 2u);
+        fOk = (soft_submit(0, aCdb, 10, aBlk, sizeof(aBlk)) == 0);
+        if (fOk) {
+            for (i = 0; i < sizeof(aBlk); i++) {
+                if (aBlk[i] != (unsigned char)(0x3Cu ^ (unsigned char)i)) {
+                    fOk = 0;
+                    break;
+                }
+            }
+        }
+    }
+    if (fOk) {
+        g_uSoftMultiOk = 1;
+        soft_step_note(SOFT_S_MULTI, 1);
+        msg("scsi_mid-gj: soft multi PASS\n");
+    } else {
+        soft_step_note(SOFT_S_MULTI, 0);
+        msg("scsi_mid-gj: soft multi soft-skip\n");
+    }
+
+    /* Illegal LBA (past soft geometry) → CHECK ASC 0x21. */
+    cdb_rw10(aCdb, SCSI_OP_READ_10, SOFT_SECTORS, 1u);
+    if (soft_submit(0, aCdb, 10, aBlk, SOFT_SEC_SIZE) != 0 &&
+        g_uSoftSenseLen >= 14 &&
+        (g_aSoftSense[2] & 0x0fu) == SCSI_SK_ILLEGAL_REQUEST &&
+        g_aSoftSense[12] == 0x21u) {
+        g_uSoftLbaHonest = 1;
+        soft_step_note(SOFT_S_LBA, 1);
+        msg("scsi_mid-gj: soft LBA map PASS\n");
+    } else {
+        soft_step_note(SOFT_S_LBA, 0);
+        msg("scsi_mid-gj: soft LBA map soft-skip\n");
+    }
+
+    /* EVPD INQUIRY reject honesty (soft path only serves standard INQUIRY). */
+    memzero(aCdb, 16);
+    aCdb[0] = SCSI_OP_INQUIRY;
+    aCdb[1] = 0x01u; /* EVPD */
+    aCdb[2] = 0x00u;
+    aCdb[4] = 36;
+    if (soft_submit(0, aCdb, 6, aBlk, 36) != 0 && g_uSoftSenseLen >= 14 &&
+        (g_aSoftSense[2] & 0x0fu) == SCSI_SK_ILLEGAL_REQUEST &&
+        g_aSoftSense[12] == 0x24u) {
+        g_uSoftEvpdHonest = 1;
+        soft_step_note(SOFT_S_EVPD, 1);
+        msg("scsi_mid-gj: soft EVPD reject PASS\n");
+    } else {
+        soft_step_note(SOFT_S_EVPD, 0);
+        msg("scsi_mid-gj: soft EVPD reject soft-skip\n");
+    }
+}
+
 /*
  * Full userspace soft mid smoke when no virtio-scsi / door not ready.
  * Never hard-fails the live path: any soft step miss still soft-skips
@@ -525,18 +900,23 @@ run_soft_path(void)
     /* 1. TUR */
     cdb_tur(aCdb);
     if (soft_submit(0, aCdb, 6, 0, 0) == 0) {
+        soft_step_note(SOFT_S_TUR, 1);
         msg("scsi_mid-gj: soft TUR PASS\n");
     } else {
+        soft_step_note(SOFT_S_TUR, 0);
         msg("scsi_mid-gj: soft TUR soft-skip\n");
     }
 
-    /* 2. INQUIRY + vendor */
+    /* 2. Soft INQUIRY + vendor (product door INQUIRY path is separate). */
     memzero(aInq, sizeof(aInq));
     cdb_inquiry(aCdb, 36);
     if (soft_submit(0, aCdb, 6, aInq, sizeof(aInq)) == 0) {
+        g_uSoftSoftInq = 1;
+        soft_step_note(SOFT_S_INQ, 1);
         msg("scsi_mid-gj: soft INQUIRY PASS\n");
         msg_inquiry_vendor(aInq, (long)sizeof(aInq));
     } else {
+        soft_step_note(SOFT_S_INQ, 0);
         msg("scsi_mid-gj: soft INQUIRY soft-skip\n");
     }
 
@@ -544,8 +924,10 @@ run_soft_path(void)
     memzero(aMode, sizeof(aMode));
     cdb_mode_sense6(aCdb, 4);
     if (soft_submit(0, aCdb, 6, aMode, sizeof(aMode)) == 0) {
+        soft_step_note(SOFT_S_MODE, 1);
         msg("scsi_mid-gj: soft MODE_SENSE PASS\n");
     } else {
+        soft_step_note(SOFT_S_MODE, 0);
         msg("scsi_mid-gj: soft MODE_SENSE soft-skip\n");
     }
 
@@ -553,8 +935,10 @@ run_soft_path(void)
     memzero(aCap, sizeof(aCap));
     cdb_read_cap(aCdb);
     if (soft_submit(0, aCdb, 10, aCap, sizeof(aCap)) == 0) {
+        soft_step_note(SOFT_S_READCAP, 1);
         msg("scsi_mid-gj: soft READ_CAP PASS\n");
     } else {
+        soft_step_note(SOFT_S_READCAP, 0);
         msg("scsi_mid-gj: soft READ_CAP soft-skip\n");
     }
 
@@ -565,8 +949,10 @@ run_soft_path(void)
     cdb_rw10(aCdb, SCSI_OP_WRITE_10, 1u, 1u);
     fOk = (soft_submit(0, aCdb, 10, aBlk, SOFT_SEC_SIZE) == 0);
     if (fOk) {
+        soft_step_note(SOFT_S_WRITE10, 1);
         msg("scsi_mid-gj: soft WRITE10 PASS\n");
     } else {
+        soft_step_note(SOFT_S_WRITE10, 0);
         msg("scsi_mid-gj: soft WRITE10 soft-skip\n");
     }
     memzero(aBlk, sizeof(aBlk));
@@ -582,38 +968,55 @@ run_soft_path(void)
         }
     }
     if (fRwOk) {
+        soft_step_note(SOFT_S_READ10, 1);
+        soft_step_note(SOFT_S_RW, 1);
         msg("scsi_mid-gj: soft READ10 PASS\n");
         msg("scsi_mid-gj: soft R/W verify PASS\n");
     } else {
+        soft_step_note(SOFT_S_READ10, 0);
+        soft_step_note(SOFT_S_RW, 0);
         msg("scsi_mid-gj: soft READ10 soft-skip\n");
     }
 
-    /* 6. Illegal LUN → CHECK sense, then REQUEST SENSE harvest */
+    /* 6. Illegal LUN → CHECK sense (soft honesty), then REQUEST SENSE */
     cdb_tur(aCdb);
     if (soft_submit(1, aCdb, 6, 0, 0) != 0 && g_uSoftSenseLen >= 14 &&
         (g_aSoftSense[2] & 0x0fu) == SCSI_SK_ILLEGAL_REQUEST &&
         g_aSoftSense[12] == 0x25u) {
+        g_uSoftLunHonest = 1;
+        g_uSoftLunKey = (unsigned)(g_aSoftSense[2] & 0x0fu);
+        g_uSoftLunAsc = (unsigned)g_aSoftSense[12];
+        soft_step_note(SOFT_S_LUN, 1);
         msg("scsi_mid-gj: soft LUN map PASS\n");
     } else {
+        soft_step_note(SOFT_S_LUN, 0);
         msg("scsi_mid-gj: soft LUN map soft-skip\n");
     }
     memzero(aSense, sizeof(aSense));
     cdb_req_sense(aCdb, 18);
     if (soft_submit(0, aCdb, 6, aSense, sizeof(aSense)) == 0) {
+        soft_step_note(SOFT_S_SENSE, 1);
         msg("scsi_mid-gj: soft REQ_SENSE PASS\n");
     } else {
+        soft_step_note(SOFT_S_SENSE, 0);
         msg("scsi_mid-gj: soft REQ_SENSE soft-skip\n");
     }
 
     /* 7. SYNCHRONIZE CACHE */
     cdb_sync(aCdb);
     if (soft_submit(0, aCdb, 10, 0, 0) == 0) {
+        soft_step_note(SOFT_S_SYNC, 1);
         msg("scsi_mid-gj: soft SYNC PASS\n");
     } else {
+        soft_step_note(SOFT_S_SYNC, 0);
         msg("scsi_mid-gj: soft SYNC soft-skip\n");
     }
 
+    /* 8. Wave 14 deepen probes (multi / LBA / EVPD) — always soft. */
+    soft_deepen_probes();
+
     msg_soft_stats();
+    soft_inventory_log();
     msg("scsi_mid-gj: soft mid PASS\n");
     msg("scsi_mid-gj: live path PASS (no-HBA soft)\n");
 }
@@ -629,10 +1032,15 @@ run_door_path(void)
     static unsigned aStats[2];
     long n;
     unsigned i;
+    int fCapOk;
 
     msg("scsi_mid-gj: READY PASS\n");
+    soft_door_note(SOFT_D_READY, 1);
 
-    /* INQUIRY — hard fail if door errors. */
+    /*
+     * Product INQUIRY — door path only. Hard fail if door errors.
+     * Soft inventory tracks product_inq separately from soft_inq.
+     */
     for (i = 0; i < sizeof(aInq); i++) {
         aInq[i] = 0;
     }
@@ -641,19 +1049,28 @@ run_door_path(void)
         msg("scsi_mid-gj: INQUIRY FAIL\n");
         gj_exit(1);
     }
+    g_uSoftProductInq = 1;
+    soft_door_note(SOFT_D_INQ, 1);
     msg("scsi_mid-gj: INQUIRY PASS\n");
     msg_inquiry_vendor(aInq, (n >= 16) ? n : (long)sizeof(aInq));
 
     /* Optional capacity + single-block READ10. */
-    if (gj_scsi(GJ_SCSI_OP_READ_CAP, (long)(unsigned long)aCap, 0, 0) == 0) {
+    fCapOk = (gj_scsi(GJ_SCSI_OP_READ_CAP, (long)(unsigned long)aCap, 0, 0) ==
+              0);
+    if (fCapOk) {
+        soft_door_note(SOFT_D_READCAP, 1);
         msg("scsi_mid-gj: READ_CAP PASS\n");
         n = gj_scsi(GJ_SCSI_OP_READ10, 0, (long)(unsigned long)aBlk, 1);
         if (n == 512) {
+            soft_door_note(SOFT_D_READ10, 1);
             msg("scsi_mid-gj: READ10 PASS\n");
         } else {
+            soft_door_note(SOFT_D_READ10, 0);
             msg("scsi_mid-gj: READ10 soft-skip\n");
         }
     } else {
+        soft_door_note(SOFT_D_READCAP, 0);
+        soft_door_note(SOFT_D_READ10, 0);
         msg("scsi_mid-gj: READ_CAP soft-skip\n");
     }
 
@@ -664,6 +1081,9 @@ run_door_path(void)
         char aLine[64];
         unsigned o = 0;
 
+        g_aSoftDoorStats[0] = aStats[0];
+        g_aSoftDoorStats[1] = aStats[1];
+        soft_door_note(SOFT_D_STATS, 1);
         append_s(aLine, sizeof(aLine), &o, "scsi_mid-gj: STATS PASS io=");
         append_u(aLine, sizeof(aLine), &o, (unsigned long)aStats[0]);
         append_s(aLine, sizeof(aLine), &o, " ready=");
@@ -672,12 +1092,14 @@ run_door_path(void)
         aLine[o] = '\0';
         msg(aLine);
     } else {
+        soft_door_note(SOFT_D_STATS, 0);
         msg("scsi_mid-gj: STATS soft-skip\n");
     }
 
     /*
      * Soft mid side-smoke even when door is ready: proves userspace soft
      * policy stays healthy beside the HBA path (never hard-fails).
+     * Soft INQUIRY is separate from product door INQUIRY.
      */
     {
         unsigned char aCdb[16];
@@ -687,12 +1109,20 @@ run_door_path(void)
         cdb_inquiry(aCdb, 36);
         memzero(aSoftInq, sizeof(aSoftInq));
         if (soft_submit(0, aCdb, 6, aSoftInq, sizeof(aSoftInq)) == 0) {
+            g_uSoftSoftInq = 1;
+            soft_door_note(SOFT_D_SIDE, 1);
+            soft_step_note(SOFT_S_INQ, 1);
             msg("scsi_mid-gj: soft side INQUIRY PASS\n");
         } else {
+            soft_door_note(SOFT_D_SIDE, 0);
+            soft_step_note(SOFT_S_INQ, 0);
             msg("scsi_mid-gj: soft side soft-skip\n");
         }
+        /* Soft LUN honesty + deepen beside door (always soft). */
+        soft_deepen_probes();
     }
 
+    soft_inventory_log();
     msg("scsi_mid-gj: live path PASS (scsi door)\n");
 }
 

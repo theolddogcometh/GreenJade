@@ -11,12 +11,14 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Soft product inventory (Wave 11 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
  *   - Lifetime: charged / released / net / peak components / max-one
  *   - Waste events: waste_allocs/frees, align/unsplit hits, take_whole
  *   - Fail taxonomy: zero / uninit / oversize / oom / double_free
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
+ *   - Path catalog + stats rollup + deepen wave=14 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK).
  *
@@ -25,6 +27,7 @@
  *   kheap: stats …
  *   kheap: counters …
  *   kheap: soft …            (baseline allocs/frees/bytes + waste)
+ *   kheap: soft honesty …
  *   kheap: soft inventory …
  *   kheap: soft live …
  *   kheap: soft lifetime …
@@ -32,6 +35,9 @@
  *   kheap: soft fail …
  *   kheap: soft ops …
  *   kheap: soft path …
+ *   kheap: soft stats …
+ *   kheap: soft deepen wave=14 …
+ *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -477,6 +483,8 @@ kheap_dump_stats(void)
 {
     size_t cbSoftLive;
     u64 u64SoftNet;
+    u32 cAreas = 0;
+    int fPass;
 
     cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
     /* Lifetime net: charged - released (0 if released ahead; wrap-safe). */
@@ -486,6 +494,14 @@ kheap_dump_stats(void)
         u64SoftNet = 0;
     }
     g_cSoftLogN++;
+
+    /*
+     * Soft PASS lamp: heap inited and has seen grow or live free pool.
+     * Diagnostics only — never product / bar3 / 1TiB claim.
+     */
+    fPass = (g_fInit != 0 && (g_cGrow > 0 || g_cbFree > 0 || g_cAlloc > 0))
+                ? 1
+                : 0;
 
     kprintf("kheap: stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_align=%lu soft_unsplit=%lu\n",
@@ -505,10 +521,20 @@ kheap_dump_stats(void)
             (unsigned long)g_cDoubleFree);
 
     /*
-     * Soft heap inventory deepen (Wave 11) — greppable: kheap: soft
+     * Soft heap inventory deepen (Wave 14) — greppable: kheap: soft
      * Baseline line preserves prior greps (allocs/frees/bytes + waste).
-     * Catalog sub-lines: inventory | live | lifetime | waste | fail | ops | path
+     * Catalog: honesty | inventory | live | lifetime | waste | fail |
+     *          ops | path | stats | deepen | PASS|NONE
      */
+    /*
+     * Honesty first: freestanding soft inventory is NOT product / bar3 /
+     * 1TiB product. greppable: kheap: soft honesty
+     */
+    kprintf("kheap: soft honesty not-product not-bar3 not-1TiB-product "
+            "product_tib=0 bar3=OPEN freelist=soft_only diagnostics=1 "
+            "multi_page=OPEN (soft inventory only; never closes bar3)\n");
+    cAreas++;
+
     /* Grep: kheap: soft (baseline) */
     kprintf("kheap: soft allocs=%lu frees=%lu bytes=%lu "
             "align=%lu unsplit=%lu peak=%lu "
@@ -527,14 +553,17 @@ kheap_dump_stats(void)
             (unsigned long)g_cSoftWasteFree,
             (unsigned long)g_cSoftAlignHit,
             (unsigned long)g_cSoftUnsplitHit);
+    cAreas++;
 
     /* Grep: kheap: soft inventory */
     kprintf("kheap: soft inventory page_payload=%lu split_min=%lu "
             "align=16 policy=best_fit grow=pmm_page magic=live+free "
-            "logs=%lu\n",
+            "logs=%lu init=%d wave=14 (soft; not bar3; not 1TiB product)\n",
             (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
             (unsigned long)GJ_KHEAP_SPLIT_MIN,
-            (unsigned long)g_cSoftLogN);
+            (unsigned long)g_cSoftLogN,
+            g_fInit);
+    cAreas++;
 
     /* Grep: kheap: soft live */
     kprintf("kheap: soft live frag=%lu align=%lu unsplit=%lu peak=%lu "
@@ -549,6 +578,7 @@ kheap_dump_stats(void)
             (unsigned long)g_cbFree,
             (unsigned long)g_cFreeBlocks,
             (unsigned long)g_cFreeBlocksPeak);
+    cAreas++;
 
     /* Grep: kheap: soft lifetime */
     kprintf("kheap: soft lifetime charged=%lu released=%lu net=%lu "
@@ -561,6 +591,7 @@ kheap_dump_stats(void)
             (unsigned long)g_cbSoftPeakUnsplit,
             (unsigned long)g_cbSoftMaxAlignOne,
             (unsigned long)g_cbSoftMaxUnsplitOne);
+    cAreas++;
 
     /* Grep: kheap: soft waste */
     kprintf("kheap: soft waste allocs=%lu frees=%lu align_hit=%lu "
@@ -571,6 +602,7 @@ kheap_dump_stats(void)
             (unsigned long)g_cSoftUnsplitHit,
             (unsigned long)g_cSoftTakeWhole,
             (unsigned long)g_cSplit);
+    cAreas++;
 
     /* Grep: kheap: soft fail */
     kprintf("kheap: soft fail total=%lu zero=%lu uninit=%lu oversize=%lu "
@@ -583,6 +615,7 @@ kheap_dump_stats(void)
             (unsigned long)g_cDoubleFree,
             (unsigned long)g_cSoftFreeUninit,
             (unsigned long)g_cSoftNullFree);
+    cAreas++;
 
     /* Grep: kheap: soft ops */
     kprintf("kheap: soft ops allocs=%lu frees=%lu grow=%lu split=%lu "
@@ -593,8 +626,75 @@ kheap_dump_stats(void)
             (unsigned long)g_cSplit,
             (unsigned long)g_cSoftBestFit,
             (unsigned long)g_cSoftTakeWhole);
+    cAreas++;
 
-    /* Grep: kheap: soft path */
+    /*
+     * Soft path honesty: surface catalog + explicit non-claims.
+     * greppable: kheap: soft path
+     */
     kprintf("kheap: soft path claim=freelist+pmm_grow scrub=free "
-            "zero=alloc policy=best_fit (soft inventory; not bar3)\n");
+            "zero=alloc policy=best_fit align=16 single_page=1 "
+            "multi_page=OPEN product_tib=0 bar3=OPEN "
+            "(soft inventory; not product; not bar3; not 1TiB product)\n");
+    cAreas++;
+
+    /* Grep: kheap: soft stats — rollup tallies for agent greps. */
+    kprintf("kheap: soft stats used=%lu free=%lu free_blocks=%lu "
+            "soft_frag=%lu soft_peak=%lu charged=%lu released=%lu net=%lu "
+            "allocs=%lu frees=%lu grow=%lu split=%lu fail=%lu "
+            "waste_allocs=%lu logs=%lu init=%d\n",
+            (unsigned long)g_cbUsed,
+            (unsigned long)g_cbFree,
+            (unsigned long)g_cFreeBlocks,
+            (unsigned long)cbSoftLive,
+            (unsigned long)g_cbSoftPeak,
+            (unsigned long)g_cbSoftCharged,
+            (unsigned long)g_cbSoftReleased,
+            (unsigned long)u64SoftNet,
+            (unsigned long)g_cAlloc,
+            (unsigned long)g_cFree,
+            (unsigned long)g_cGrow,
+            (unsigned long)g_cSplit,
+            (unsigned long)g_cFail,
+            (unsigned long)g_cSoftWasteAlloc,
+            (unsigned long)g_cSoftLogN,
+            g_fInit);
+    cAreas++;
+
+    /* Grep: kheap: soft deepen wave (Wave 14 stamp; areas = prior soft lines). */
+    kprintf("kheap: soft deepen wave=14 areas=%u logs=%lu init=%d "
+            "used=%lu free=%lu soft_frag=%lu product_tib=0 bar3=OPEN "
+            "(soft; not product; not bar3; not 1TiB product)\n",
+            cAreas,
+            (unsigned long)g_cSoftLogN,
+            g_fInit,
+            (unsigned long)g_cbUsed,
+            (unsigned long)g_cbFree,
+            (unsigned long)cbSoftLive);
+
+    /*
+     * Close markers: freelist soft readiness only.
+     * Grep: kheap: soft PASS | kheap: soft NONE | kheap: soft inventory PASS
+     * Never "product PASS" / "bar3 PASS" / "1TiB product PASS".
+     */
+    if (fPass) {
+        /* Grep: kheap: soft PASS | kheap: soft inventory PASS */
+        kprintf("kheap: soft PASS grow=%lu free=%lu allocs=%lu "
+                "(soft inventory; not product; not bar3; not 1TiB product)\n",
+                (unsigned long)g_cGrow,
+                (unsigned long)g_cbFree,
+                (unsigned long)g_cAlloc);
+        kprintf("kheap: soft inventory PASS logs=%lu soft_frag=%lu "
+                "(soft; not product; not bar3; not 1TiB product)\n",
+                (unsigned long)g_cSoftLogN,
+                (unsigned long)cbSoftLive);
+    } else {
+        /* Grep: kheap: soft NONE */
+        kprintf("kheap: soft NONE init=%d grow=%lu free=%lu allocs=%lu "
+                "(soft inventory; not product; not bar3; not 1TiB product)\n",
+                g_fInit,
+                (unsigned long)g_cGrow,
+                (unsigned long)g_cbFree,
+                (unsigned long)g_cAlloc);
+    }
 }

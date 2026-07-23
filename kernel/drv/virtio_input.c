@@ -16,9 +16,11 @@
  *   virtio-input: event ring soft PASS
  *   virtio-input: abs/rel axes soft PASS
  *
- * Wave 12 soft inventory (prefix-stable; never hard-gates; this unit only):
- * greppable: "virtio-input: soft …"
+ * Soft inventory (Wave 14 exclusive deepen; this unit only —
+ * greppable "virtio-input: soft …"; never hard-gates; not bar3):
  *   virtio-input: soft inventory …
+ *   virtio-input: soft pci …
+ *   virtio-input: soft geometry …
  *   virtio-input: soft ring …
  *   virtio-input: soft slots …
  *   virtio-input: soft queue …
@@ -29,7 +31,10 @@
  *   virtio-input: soft last …
  *   virtio-input: soft stats …
  *   virtio-input: soft counters …
+ *   virtio-input: soft api …
+ *   virtio-input: soft features …
  *   virtio-input: soft path …
+ *   virtio-input: soft deepen wave=14 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -75,6 +80,10 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MIN 0
 #define VI_ABS_SOFT_MAX 32767
 
+/* Wave 14 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define VI_SOFT_WAVE  14u
+#define VI_SOFT_AREAS 19u
+
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
 static int                   g_fReady;
@@ -107,7 +116,7 @@ static struct gj_input_absinfo g_AbsY;
 static int g_fAbsInfoX;
 static int g_fAbsInfoY;
 
-/* Wave 12 soft inventory telemetry (never hard-gates product poll). */
+/* Wave 14 soft inventory telemetry (never hard-gates product poll). */
 static u32 g_u32SoftLogN;      /* inventory emissions */
 static int g_fSoftOnce;        /* first-activity inventory emitted */
 static u16 g_u16FreeMin;       /* event q free-desc watermark */
@@ -127,6 +136,14 @@ static u32 g_u32SynSeen;       /* SYN events observed */
 static u32 g_u32KeySeen;       /* KEY events observed */
 static u32 g_u32RelEvSeen;     /* REL events observed */
 static u32 g_u32AbsEvSeen;     /* ABS events observed */
+static u32 g_u32ApiPoll;       /* virtio_input_poll enters */
+static u32 g_u32ApiRelSoft;    /* virtio_input_rel_soft enters */
+static u32 g_u32ApiAbsSoft;    /* virtio_input_abs_soft enters */
+static u32 g_u32ApiAbsinfo;    /* virtio_input_absinfo enters */
+static u32 g_u32ApiEventCount; /* virtio_input_event_count enters */
+static u32 g_u32ApiPending;    /* virtio_input_pending enters */
+static u32 g_u32ApiRelReset;   /* virtio_input_rel_reset enters */
+static u32 g_u32ApiMiss;       /* public API not-ready / bad-arg rejects */
 
 /* Forward: emit after probe / fail / activity / stats reads. */
 static void soft_inventory(const char *szVia);
@@ -194,6 +211,14 @@ telemetry_reset(void)
     g_u32KeySeen = 0;
     g_u32RelEvSeen = 0;
     g_u32AbsEvSeen = 0;
+    g_u32ApiPoll = 0;
+    g_u32ApiRelSoft = 0;
+    g_u32ApiAbsSoft = 0;
+    g_u32ApiAbsinfo = 0;
+    g_u32ApiEventCount = 0;
+    g_u32ApiPending = 0;
+    g_u32ApiRelReset = 0;
+    g_u32ApiMiss = 0;
 }
 
 static void
@@ -437,25 +462,12 @@ cfg_r32(volatile u8 *pBase, u32 u32Off)
     return (i32)(*p);
 }
 
-/* ---- Soft inventory (Wave 12 exclusive) ---------------------------------- */
+/* ---- Soft inventory (Wave 14 exclusive deepen) --------------------------- */
 
 /**
- * Greppable Wave 12 soft inventory dump (product / smoke).
+ * Greppable Wave 14 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-input: soft …" — never hard-gates; kprintf only.
- *
- *   virtio-input: soft inventory  — ready + PCI + slot/ring geometry
- *   virtio-input: soft ring       — soft delivery head/len/drop-oldest
- *   virtio-input: soft slots      — multi-slot post / drain budget
- *   virtio-input: soft queue      — event q0 free watermark
- *   virtio-input: soft axes       — last ABS + accumulated REL
- *   virtio-input: soft caps       — KEY/REL/ABS mask
- *   virtio-input: soft absinfo    — ABS_INFO X/Y + soft defaults
- *   virtio-input: soft drain      — HW drain burst tallies
- *   virtio-input: soft last       — sticky last event snapshot
- *   virtio-input: soft stats      — events/pending/dropped snapshot
- *   virtio-input: soft counters   — poll/drain/kick/type tallies
- *   virtio-input: soft path       — honesty catalog (claim when ready)
- *   virtio-input: soft PASS|NODEV|PARTIAL
+ * Soft only — not bar3 / not product multi-device input close.
  *
  * greppable: virtio-input: soft
  */
@@ -468,11 +480,26 @@ soft_inventory(const char *szVia)
     u32 u32Key;
     u32 u32Rel;
     u32 u32Abs;
+    u32 u32Ready;
+    u32 u32Claim;
     u16 u16FreeNow;
     u16 u16QSize;
     u16 u16FreeMin;
+    u16 u16NumFree;
+    u16 u16LastUsed;
     u8 u8Bus;
     u8 u8Slot;
+    u8 u8Func;
+    u8 u8Modern;
+    u16 u16Device;
+    u32 u32Kind;
+    u32 u32NotifyMult;
+    u32 u32NumQueues;
+    u64 u64FeatDev;
+    u64 u64FeatDrv;
+    u64 u64PaDesc;
+    u64 u64PaAvail;
+    u64 u64PaUsed;
 
     szViaSafe = (szVia != NULL) ? szVia : "path";
 
@@ -485,16 +512,33 @@ soft_inventory(const char *szVia)
     u32Key = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_KEY) ? 1u : 0u;
     u32Rel = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_REL) ? 1u : 0u;
     u32Abs = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_ABS) ? 1u : 0u;
+    u32Ready = g_fReady ? 1u : 0u;
+    u32Claim = u32Ready;
 
     u16QSize = g_fReady ? g_qEvent.u16Size : 0;
     u16FreeNow = 0;
+    u16NumFree = 0;
+    u16LastUsed = 0;
     if (g_fReady) {
         q_note_free();
         u16FreeNow = virtio_q_num_free(&g_qEvent);
+        u16NumFree = g_qEvent.u16NumFree;
+        u16LastUsed = g_qEvent.u16LastUsed;
     }
     u16FreeMin = (g_u16FreeMin == 0xffffu) ? 0u : g_u16FreeMin;
     u8Bus = (g_pIn != NULL) ? g_pIn->u8Bus : 0;
     u8Slot = (g_pIn != NULL) ? g_pIn->u8Slot : 0;
+    u8Func = (g_pIn != NULL) ? g_pIn->u8Func : 0;
+    u8Modern = (g_pIn != NULL) ? g_pIn->fModern : 0;
+    u16Device = (g_pIn != NULL) ? g_pIn->u16Device : 0;
+    u32Kind = (g_pIn != NULL) ? g_pIn->u32Kind : 0;
+    u64FeatDev = (g_pIn != NULL) ? g_pIn->u64FeaturesDev : 0ull;
+    u64FeatDrv = (g_pIn != NULL) ? g_pIn->u64FeaturesDrv : 0ull;
+    u32NotifyMult = (g_pIn != NULL) ? g_pIn->u32NotifyMult : 0;
+    u32NumQueues = (g_pIn != NULL) ? g_pIn->u32NumQueues : 0;
+    u64PaDesc = g_fReady ? (u64)g_qEvent.paDesc : 0ull;
+    u64PaAvail = g_fReady ? (u64)g_qEvent.paAvail : 0ull;
+    u64PaUsed = g_fReady ? (u64)g_qEvent.paUsed : 0ull;
 
     /*
      * Soft verdict (inventory only; poll path unchanged):
@@ -513,18 +557,38 @@ soft_inventory(const char *szVia)
     /* Grep: virtio-input: soft inventory */
     kprintf("virtio-input: soft inventory via=%s ready=%u bus=%x slot=%x "
             "slots=%u ring=%u q=%u posted=%u caps=0x%x free=%u free_min=%u "
-            "log_n=%u\n",
-            szViaSafe, (unsigned)(g_fReady ? 1 : 0), (unsigned)u8Bus,
-            (unsigned)u8Slot, (unsigned)VI_SLOTS, (unsigned)VI_RING,
-            (unsigned)VI_Q_SIZE, (unsigned)g_cPosted, (unsigned)g_u32Caps,
-            (unsigned)u16FreeNow, (unsigned)u16FreeMin, g_u32SoftLogN);
+            "log_n=%u wave=%u areas=%u\n",
+            szViaSafe, u32Ready, (unsigned)u8Bus, (unsigned)u8Slot,
+            (unsigned)VI_SLOTS, (unsigned)VI_RING, (unsigned)VI_Q_SIZE,
+            (unsigned)g_cPosted, (unsigned)g_u32Caps, (unsigned)u16FreeNow,
+            (unsigned)u16FreeMin, g_u32SoftLogN, (unsigned)VI_SOFT_WAVE,
+            (unsigned)VI_SOFT_AREAS);
+
+    /* Grep: virtio-input: soft pci */
+    kprintf("virtio-input: soft pci bus=%x slot=%x func=%x dev=0x%x kind=%u "
+            "modern=%u feat_dev=0x%lx feat_drv=0x%lx num_queues=%u "
+            "notify_mult=%u\n",
+            (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
+            (unsigned)u16Device, u32Kind, (unsigned)u8Modern,
+            (unsigned long)u64FeatDev, (unsigned long)u64FeatDrv,
+            u32NumQueues, u32NotifyMult);
+
+    /* Grep: virtio-input: soft geometry */
+    kprintf("virtio-input: soft geometry q_size=%u slots=%u ring=%u "
+            "drain_max=%u poll_spins=%u abs_soft=%d..%d status_q=0 "
+            "event_q=0\n",
+            (unsigned)VI_Q_SIZE, (unsigned)VI_SLOTS, (unsigned)VI_RING,
+            (unsigned)VI_DRAIN_MAX, (unsigned)VI_POLL_SPINS,
+            (int)VI_ABS_SOFT_MIN, (int)VI_ABS_SOFT_MAX);
 
     /* Grep: virtio-input: soft ring */
     kprintf("virtio-input: soft ring head=%u len=%u depth=%u events=%u "
-            "dropped=%u drop_oldest=1 pending=%u\n",
+            "dropped=%u drop_oldest=1 pending=%u "
+            "pa_desc=0x%lx pa_avail=0x%lx pa_used=0x%lx\n",
             (unsigned)g_u32Head, (unsigned)g_u32Len, (unsigned)VI_RING,
             (unsigned)g_u32EventCount, (unsigned)g_u32Dropped,
-            (unsigned)u32Pending);
+            (unsigned)u32Pending, (unsigned long)u64PaDesc,
+            (unsigned long)u64PaAvail, (unsigned long)u64PaUsed);
 
     /* Grep: virtio-input: soft slots */
     kprintf("virtio-input: soft slots posted=%u max=%u drain_max=%u "
@@ -534,11 +598,15 @@ soft_inventory(const char *szVia)
 
     /* Grep: virtio-input: soft queue */
     kprintf("virtio-input: soft queue event_q=0 size=%u free=%u free_min=%u "
-            "free_head=%u notify_off=%u pa_desc=0x%lx\n",
+            "num_free=%u free_head=%u last_used=%u notify_off=%u "
+            "notify_mult=%u q_idx=%u\n",
             (unsigned)u16QSize, (unsigned)u16FreeNow, (unsigned)u16FreeMin,
+            (unsigned)u16NumFree,
             (unsigned)(g_fReady ? g_qEvent.u16FreeHead : 0u),
+            (unsigned)u16LastUsed,
             (unsigned)(g_fReady ? g_qEvent.u16NotifyOff : 0u),
-            (unsigned long)(g_fReady ? (u64)g_qEvent.paDesc : 0ull));
+            u32NotifyMult,
+            (unsigned)(g_fReady ? g_qEvent.u16QueueIdx : 0u));
 
     /* Grep: virtio-input: soft axes */
     kprintf("virtio-input: soft axes abs_x=%d abs_y=%d abs_seen=%u "
@@ -580,38 +648,64 @@ soft_inventory(const char *szVia)
     kprintf("virtio-input: soft stats events=%u pending=%u dropped=%u "
             "posted=%u ready=%u kicks=%u\n",
             (unsigned)g_u32EventCount, (unsigned)u32Pending,
-            (unsigned)g_u32Dropped, (unsigned)g_cPosted,
-            (unsigned)(g_fReady ? 1 : 0), g_u32Kicks);
+            (unsigned)g_u32Dropped, (unsigned)g_cPosted, u32Ready,
+            g_u32Kicks);
 
     /* Grep: virtio-input: soft counters */
     kprintf("virtio-input: soft counters polls=%u hits=%u empty=%u "
             "drain=%u pushed=%u kicks=%u post_fail=%u unknown=%u "
-            "log_n=%u\n",
+            "api_miss=%u log_n=%u\n",
             g_u32Polls, g_u32PollHits, g_u32PollEmpty, g_u32DrainCalls,
             g_u32DrainPushed, g_u32Kicks, g_u32PostFail, g_u32UnknownSlot,
-            g_u32SoftLogN);
+            g_u32ApiMiss, g_u32SoftLogN);
+
+    /* Grep: virtio-input: soft api */
+    kprintf("virtio-input: soft api poll=%u rel_soft=%u abs_soft=%u "
+            "absinfo=%u event_count=%u pending=%u rel_reset=%u miss=%u\n",
+            g_u32ApiPoll, g_u32ApiRelSoft, g_u32ApiAbsSoft, g_u32ApiAbsinfo,
+            g_u32ApiEventCount, g_u32ApiPending, g_u32ApiRelReset,
+            g_u32ApiMiss);
+
+    /* Grep: virtio-input: soft features */
+    kprintf("virtio-input: soft features guest=0x%lx dev=0x%lx "
+            "cap_key=%u cap_rel=%u cap_abs=%u absinfo_x=%u absinfo_y=%u "
+            "v1_only=1\n",
+            (unsigned long)u64FeatDrv, (unsigned long)u64FeatDev,
+            (unsigned)u32Key, (unsigned)u32Rel, (unsigned)u32Abs,
+            (unsigned)(g_fAbsInfoX ? 1 : 0), (unsigned)(g_fAbsInfoY ? 1 : 0));
 
     /*
      * Grep: virtio-input: soft path
      * Honesty: product input path is this driver (claim=1 when ready).
      * Multi-slot q0 + soft ring + soft axes + cfg EV_BITS/ABS_INFO soft probe.
+     * Soft inventory ≠ bar3 / multi-device product close.
      */
     kprintf("virtio-input: soft path claim=%u q0_event=1 multi_slot=1 "
             "soft_ring=1 soft_axes=1 drop_oldest=1 cfg_ev_bits=1 "
-            "cfg_abs_info=1 poll=1 absinfo=1 rel_reset=1 status_q=0\n",
-            (unsigned)(g_fReady ? 1 : 0));
+            "cfg_abs_info=1 poll=1 absinfo=1 rel_reset=1 status_q=0 "
+            "bar3=0 steam=0\n",
+            u32Claim);
+
+    /* Grep: virtio-input: soft deepen wave (Wave 14 stamp) */
+    kprintf("virtio-input: soft deepen wave=%u areas=%u via=%s ready=%u "
+            "events=%u polls=%u posted=%u log_n=%u "
+            "(soft inventory only; not bar3)\n",
+            (unsigned)VI_SOFT_WAVE, (unsigned)VI_SOFT_AREAS, szViaSafe,
+            u32Ready, (unsigned)g_u32EventCount, g_u32Polls,
+            (unsigned)g_cPosted, g_u32SoftLogN);
 
     /* Grep: virtio-input: soft PASS | NODEV | PARTIAL */
     kprintf("virtio-input: soft %s via=%s ready=%u events=%u polls=%u "
-            "hits=%u dropped=%u log_n=%u\n",
-            szVerdict, szViaSafe, (unsigned)(g_fReady ? 1 : 0),
-            (unsigned)g_u32EventCount, g_u32Polls, g_u32PollHits,
-            (unsigned)g_u32Dropped, g_u32SoftLogN);
+            "hits=%u dropped=%u log_n=%u wave=%u\n",
+            szVerdict, szViaSafe, u32Ready, (unsigned)g_u32EventCount,
+            g_u32Polls, g_u32PollHits, (unsigned)g_u32Dropped, g_u32SoftLogN,
+            (unsigned)VI_SOFT_WAVE);
 
     /* Grep: virtio-input: soft inventory PASS|NODEV|PARTIAL */
-    kprintf("virtio-input: soft inventory %s via=%s logs=%u "
-            "(soft inventory only; never hard-gates)\n",
-            szVerdict, szViaSafe, g_u32SoftLogN);
+    kprintf("virtio-input: soft inventory %s via=%s logs=%u wave=%u "
+            "areas=%u (soft inventory only; never hard-gates)\n",
+            szVerdict, szViaSafe, g_u32SoftLogN, (unsigned)VI_SOFT_WAVE,
+            (unsigned)VI_SOFT_AREAS);
 }
 
 /**
@@ -745,7 +839,7 @@ virtio_input_probe(void)
     }
     if (g_pIn == NULL) {
         kprintf("virtio-input: no device\n");
-        /* Grep: virtio-input: soft … NODEV (Wave 12 soft inventory) */
+        /* Grep: virtio-input: soft … NODEV (Wave 14 soft inventory) */
         soft_inventory("nodev");
         return -1;
     }
@@ -786,7 +880,7 @@ virtio_input_probe(void)
     kprintf("virtio-input: abs/rel axes soft PASS caps=0x%x absinfo=%d/%d\n",
             (unsigned)g_u32Caps, g_fAbsInfoX, g_fAbsInfoY);
     /*
-     * Wave 12 soft inventory rollup (prefix-stable "virtio-input: soft …").
+     * Wave 14 soft inventory rollup (prefix-stable "virtio-input: soft …").
      * Never hard-gates ready PASS.
      */
     soft_inventory("probe");
@@ -802,7 +896,9 @@ virtio_input_ready(void)
 int
 virtio_input_poll(struct gj_input_event *pOut)
 {
+    g_u32ApiPoll++;
     if (!g_fReady || pOut == NULL) {
+        g_u32ApiMiss++;
         return -1;
     }
     g_u32Polls++;
@@ -826,6 +922,7 @@ virtio_input_event_count(void)
      * virtio-input: soft … without requiring a second poll (mirrors
      * virtio-gpu present_count / virtio-blk q_stats). Never hard-gates.
      */
+    g_u32ApiEventCount++;
     soft_inventory("event_count");
     return g_u32EventCount;
 }
@@ -833,6 +930,7 @@ virtio_input_event_count(void)
 u32
 virtio_input_pending(void)
 {
+    g_u32ApiPending++;
     if (!g_fReady || !ring_sane()) {
         return 0;
     }
@@ -860,7 +958,9 @@ virtio_input_caps(void)
 int
 virtio_input_rel_soft(i32 *pX, i32 *pY, i32 *pWheel)
 {
+    g_u32ApiRelSoft++;
     if (!g_fReady) {
+        g_u32ApiMiss++;
         return -1;
     }
     /* Opportunistic drain so axes reflect recent device traffic. */
@@ -881,6 +981,7 @@ virtio_input_rel_soft(i32 *pX, i32 *pY, i32 *pWheel)
 void
 virtio_input_rel_reset(void)
 {
+    g_u32ApiRelReset++;
     g_i32RelX = 0;
     g_i32RelY = 0;
     g_i32RelWheel = 0;
@@ -889,7 +990,9 @@ virtio_input_rel_reset(void)
 int
 virtio_input_abs_soft(i32 *pX, i32 *pY, int *pFSeen)
 {
+    g_u32ApiAbsSoft++;
     if (!g_fReady) {
+        g_u32ApiMiss++;
         return -1;
     }
     (void)drain_hw();
@@ -909,7 +1012,9 @@ virtio_input_abs_soft(i32 *pX, i32 *pY, int *pFSeen)
 int
 virtio_input_absinfo(u16 u16Code, struct gj_input_absinfo *pOut)
 {
+    g_u32ApiAbsinfo++;
     if (!g_fReady || pOut == NULL) {
+        g_u32ApiMiss++;
         return -1;
     }
     if (u16Code == (u16)GJ_ABS_X) {
@@ -920,5 +1025,6 @@ virtio_input_absinfo(u16 u16Code, struct gj_input_absinfo *pOut)
         *pOut = g_AbsY;
         return 0;
     }
+    g_u32ApiMiss++;
     return -1;
 }

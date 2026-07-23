@@ -8,7 +8,7 @@
  * Soft deepen: multi-frame RX drain per poll, VLAN skip, IHL-aware ICMP,
  * frame/drop/tcp demux counters, greppable soft eth inventory log.
  *
- * Wave 12 exclusive soft inventory deepen (this unit only; never hard-gates):
+ * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
  *   net: eth soft …              — prefix-stable product / smoke markers
  *   net: eth soft inventory      — verdict + lifetime rollup + caps
  *   net: eth soft frames         — rx / drop / ok / vlan / short buckets
@@ -21,11 +21,14 @@
  *   net: eth soft link           — ready shadow + transitions + identity
  *   net: eth soft tx             — reply TX ok/fail soft
  *   net: eth soft path           — honesty: L2 demux soft ≠ netstackd / bar3
- * greppable: net: eth soft
+ *   net: eth soft PASS           — soft lamp (never product gate)
+ *   Twin prefix also emitted: "net_eth: soft …".
+ * greppable: net: eth soft / net_eth: soft
  *
  * Greppable soft inventory (prefix-stable):
  *   net: eth soft …
- *   net_eth: ARP/UDP/ICMP-echo helpers
+ *   net_eth: soft …
+ *   net_eth: ARP/UDP/ICMP-echo helpers (legacy boot line)
  */
 #include <gj/klog.h>
 #include <gj/net_eth.h>
@@ -67,8 +70,8 @@ static u32 g_u32LinkChanges;   /* soft link ready 0↔1 transitions */
 static u32 g_u32SoftLogN;      /* inventory log emissions (cap spam) */
 
 /*
- * Wave 12 exclusive deepen — file-local path tallies (wrap OK; never hard-gate).
- * greppable: net: eth soft …
+ * Wave 14 exclusive deepen — file-local path tallies (wrap OK; never hard-gate).
+ * greppable: net: eth soft … / net_eth: soft …
  */
 static u32 g_u32DropShort;     /* cb < 14 or null frame */
 static u32 g_u32DropEtype;     /* unknown ethertype */
@@ -148,7 +151,8 @@ ip_checksum(const void *p, u32 cb)
 /**
  * Soft eth inventory log — greppable product markers only (never hard-gates).
  *
- * Wave 12 multi-line deepen (prefix-stable "net: eth soft …"):
+ * Wave 14 multi-line deepen (prefix-stable "net: eth soft …" + twin
+ * "net_eth: soft …"):
  *   net: eth soft PASS|UP|NODEV|PARTIAL frames_rx=… drop=… ok=… vlan=…
  *        tcp=… arp=… udp=… icmp=… poll_max=…
  *   net: eth soft inventory …
@@ -163,7 +167,10 @@ ip_checksum(const void *p, u32 cb)
  *        last_batch=… batch_max=… link_ch=… log_n=… ip=… mac=…
  *   net: eth soft tx …
  *   net: eth soft path …
- * greppable: net: eth soft
+ *   net: eth soft PASS …
+ *   Twin lines: net_eth: soft inventory|frames|demux|arp|icmp|udp|tcp|
+ *               poll|link|tx|path|PASS|stats
+ * greppable: net: eth soft / net_eth: soft
  */
 static void
 net_eth_soft_log(void)
@@ -172,6 +179,7 @@ net_eth_soft_log(void)
     u32 u32Ready;
     u32 u32Proto;
     u32 u32AvgBatch;
+    u32 u32DropIpv4;
 
     u32Ready = virtio_net_ready() ? 1u : 0u;
     u32Proto = g_u32ArpReplies + g_u32UdpEchoes + g_u32IcmpEchoes +
@@ -180,6 +188,7 @@ net_eth_soft_log(void)
     if (g_u32PollsDrain != 0u) {
         u32AvgBatch = g_u32BatchSum / g_u32PollsDrain;
     }
+    u32DropIpv4 = g_u32DropIpv4Short + g_u32DropIpv4Ver;
 
     /*
      * Verdict (soft product inventory; door paths unchanged):
@@ -207,16 +216,35 @@ net_eth_soft_log(void)
             g_u32VlanSkip, g_u32TcpDemux, g_u32ArpReplies, g_u32UdpEchoes,
             g_u32IcmpEchoes, (u32)NET_ETH_POLL_MAX);
 
+    /* Grep: net_eth: soft (twin verdict rollup) */
+    kprintf("net_eth: soft %s frames_rx=%u drop=%u ok=%u vlan=%u tcp=%u "
+            "arp=%u udp=%u icmp=%u poll_max=%u wave=14\n",
+            szVerdict, g_u32FramesRx, g_u32FramesDrop, g_u32FramesOk,
+            g_u32VlanSkip, g_u32TcpDemux, g_u32ArpReplies, g_u32UdpEchoes,
+            g_u32IcmpEchoes, (u32)NET_ETH_POLL_MAX);
+
     /* Grep: net: eth soft inventory */
     kprintf("net: eth soft inventory verdict=%s ready=%u frames_rx=%u "
             "drop=%u ok=%u vlan=%u proto=%u tcp=%u arp=%u udp=%u icmp=%u "
             "tx_ok=%u tx_fail=%u bytes_rx=%u bytes_tx=%u poll_max=%u "
-            "log_n=%u wave=12\n",
+            "log_n=%u wave=14\n",
             szVerdict, u32Ready, g_u32FramesRx, g_u32FramesDrop,
             g_u32FramesOk, g_u32VlanSkip, u32Proto, g_u32TcpDemux,
             g_u32ArpReplies, g_u32UdpEchoes, g_u32IcmpEchoes, g_u32TxOk,
             g_u32TxFail, g_u32BytesRx, g_u32BytesTx, (u32)NET_ETH_POLL_MAX,
             g_u32SoftLogN);
+
+    /* Grep: net_eth: soft inventory (twin prefix) */
+    kprintf("net_eth: soft inventory verdict=%s ready=%u frames_rx=%u "
+            "drop=%u ok=%u vlan=%u proto=%u tcp=%u arp=%u udp=%u icmp=%u "
+            "tx_ok=%u tx_fail=%u bytes_rx=%u bytes_tx=%u poll_max=%u "
+            "log_n=%u cap=%u cadence=%u wave=14\n",
+            szVerdict, u32Ready, g_u32FramesRx, g_u32FramesDrop,
+            g_u32FramesOk, g_u32VlanSkip, u32Proto, g_u32TcpDemux,
+            g_u32ArpReplies, g_u32UdpEchoes, g_u32IcmpEchoes, g_u32TxOk,
+            g_u32TxFail, g_u32BytesRx, g_u32BytesTx, (u32)NET_ETH_POLL_MAX,
+            g_u32SoftLogN, (u32)NET_ETH_SOFT_LOG_CAP,
+            (u32)NET_ETH_SOFT_LOG_EVERY);
 
     /* Grep: net: eth soft frames */
     kprintf("net: eth soft frames rx=%u drop=%u ok=%u vlan=%u short=%u "
@@ -225,18 +253,38 @@ net_eth_soft_log(void)
             g_u32DropShort, g_u32DropEtype, g_u32DropIpv4Short,
             g_u32DropIpv4Ver, g_u32DropProto, g_u32BytesRx);
 
+    /* Grep: net_eth: soft frames (twin) */
+    kprintf("net_eth: soft frames rx=%u drop=%u ok=%u vlan=%u short=%u "
+            "etype=%u ipv4=%u proto=%u bytes_rx=%u wave=14\n",
+            g_u32FramesRx, g_u32FramesDrop, g_u32FramesOk, g_u32VlanSkip,
+            g_u32DropShort, g_u32DropEtype, u32DropIpv4, g_u32DropProto,
+            g_u32BytesRx);
+
     /* Grep: net: eth soft demux */
     kprintf("net: eth soft demux arp_ok=%u icmp_ok=%u udp_ok=%u tcp_ok=%u "
             "vlan_skip=%u drop_short=%u drop_etype=%u drop_ipv4=%u "
             "drop_proto=%u frames_ok=%u\n",
             g_u32ArpReplies, g_u32IcmpEchoes, g_u32UdpEchoes, g_u32TcpDemux,
-            g_u32VlanSkip, g_u32DropShort, g_u32DropEtype,
-            g_u32DropIpv4Short + g_u32DropIpv4Ver, g_u32DropProto,
-            g_u32FramesOk);
+            g_u32VlanSkip, g_u32DropShort, g_u32DropEtype, u32DropIpv4,
+            g_u32DropProto, g_u32FramesOk);
+
+    /* Grep: net_eth: soft demux (twin) */
+    kprintf("net_eth: soft demux arp_ok=%u icmp_ok=%u udp_ok=%u tcp_ok=%u "
+            "vlan_skip=%u drop_short=%u drop_etype=%u drop_ipv4=%u "
+            "drop_proto=%u frames_ok=%u wave=14\n",
+            g_u32ArpReplies, g_u32IcmpEchoes, g_u32UdpEchoes, g_u32TcpDemux,
+            g_u32VlanSkip, g_u32DropShort, g_u32DropEtype, u32DropIpv4,
+            g_u32DropProto, g_u32FramesOk);
 
     /* Grep: net: eth soft arp */
     kprintf("net: eth soft arp seen=%u reply=%u bad_op=%u not_us=%u "
             "tx_fail=%u\n",
+            g_u32ArpSeen, g_u32ArpReplies, g_u32ArpBadOp, g_u32ArpNotUs,
+            g_u32ArpTxFail);
+
+    /* Grep: net_eth: soft arp (twin) */
+    kprintf("net_eth: soft arp seen=%u reply=%u bad_op=%u not_us=%u "
+            "tx_fail=%u wave=14\n",
             g_u32ArpSeen, g_u32ArpReplies, g_u32ArpBadOp, g_u32ArpNotUs,
             g_u32ArpTxFail);
 
@@ -246,9 +294,21 @@ net_eth_soft_log(void)
             g_u32IcmpSeen, g_u32IcmpEchoes, g_u32IcmpShort, g_u32IcmpNotUs,
             g_u32IcmpNotEcho, g_u32IcmpTxFail);
 
+    /* Grep: net_eth: soft icmp (twin) */
+    kprintf("net_eth: soft icmp seen=%u echo=%u short=%u not_us=%u "
+            "not_echo=%u tx_fail=%u wave=14\n",
+            g_u32IcmpSeen, g_u32IcmpEchoes, g_u32IcmpShort, g_u32IcmpNotUs,
+            g_u32IcmpNotEcho, g_u32IcmpTxFail);
+
     /* Grep: net: eth soft udp */
     kprintf("net: eth soft udp seen=%u echo=%u short=%u not_echo=%u "
             "tx_fail=%u dport=7\n",
+            g_u32UdpSeen, g_u32UdpEchoes, g_u32UdpShort, g_u32UdpNotEcho,
+            g_u32UdpTxFail);
+
+    /* Grep: net_eth: soft udp (twin) */
+    kprintf("net_eth: soft udp seen=%u echo=%u short=%u not_echo=%u "
+            "tx_fail=%u dport=7 wave=14\n",
             g_u32UdpSeen, g_u32UdpEchoes, g_u32UdpShort, g_u32UdpNotEcho,
             g_u32UdpTxFail);
 
@@ -257,10 +317,23 @@ net_eth_soft_log(void)
             "(net_tcp_input soft; multi-seg via net_tcp_poll)\n",
             g_u32TcpSeen, g_u32TcpDemux, g_u32TcpMiss);
 
+    /* Grep: net_eth: soft tcp (twin) */
+    kprintf("net_eth: soft tcp seen=%u demux=%u miss=%u "
+            "(net_tcp_input soft; multi-seg via net_tcp_poll) wave=14\n",
+            g_u32TcpSeen, g_u32TcpDemux, g_u32TcpMiss);
+
     /* Grep: net: eth soft poll */
     kprintf("net: eth soft poll entries=%u nodev=%u drain=%u empty=%u "
             "last_batch=%u batch_max=%u batch_sum=%u batch_avg=%u "
             "poll_max=%u cadence=%u\n",
+            g_u32Polls, g_u32PollsNoDev, g_u32PollsDrain, g_u32PollsEmpty,
+            g_u32LastBatch, g_u32BatchMax, g_u32BatchSum, u32AvgBatch,
+            (u32)NET_ETH_POLL_MAX, (u32)NET_ETH_SOFT_LOG_EVERY);
+
+    /* Grep: net_eth: soft poll (twin) */
+    kprintf("net_eth: soft poll entries=%u nodev=%u drain=%u empty=%u "
+            "last_batch=%u batch_max=%u batch_sum=%u batch_avg=%u "
+            "poll_max=%u cadence=%u wave=14\n",
             g_u32Polls, g_u32PollsNoDev, g_u32PollsDrain, g_u32PollsEmpty,
             g_u32LastBatch, g_u32BatchMax, g_u32BatchSum, u32AvgBatch,
             (u32)NET_ETH_POLL_MAX, (u32)NET_ETH_SOFT_LOG_EVERY);
@@ -275,9 +348,25 @@ net_eth_soft_log(void)
             g_aOurMac[0], g_aOurMac[1], g_aOurMac[2], g_aOurMac[3],
             g_aOurMac[4], g_aOurMac[5]);
 
+    /* Grep: net_eth: soft link (twin) */
+    kprintf("net_eth: soft link ready=%u polls=%u nodev=%u drain=%u "
+            "last_batch=%u batch_max=%u link_ch=%u log_n=%u "
+            "ip=%u.%u.%u.%u mac=%02x:%02x:%02x:%02x:%02x:%02x wave=14\n",
+            u32Ready, g_u32Polls, g_u32PollsNoDev, g_u32PollsDrain,
+            g_u32LastBatch, g_u32BatchMax, g_u32LinkChanges, g_u32SoftLogN,
+            g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
+            g_aOurMac[0], g_aOurMac[1], g_aOurMac[2], g_aOurMac[3],
+            g_aOurMac[4], g_aOurMac[5]);
+
     /* Grep: net: eth soft tx */
     kprintf("net: eth soft tx ok=%u fail=%u bytes=%u arp=%u icmp=%u udp=%u "
             "(reply path only; not full stack TX)\n",
+            g_u32TxOk, g_u32TxFail, g_u32BytesTx, g_u32ArpReplies,
+            g_u32IcmpEchoes, g_u32UdpEchoes);
+
+    /* Grep: net_eth: soft tx (twin) */
+    kprintf("net_eth: soft tx ok=%u fail=%u bytes=%u arp=%u icmp=%u udp=%u "
+            "(reply path only; not full stack TX) wave=14\n",
             g_u32TxOk, g_u32TxFail, g_u32BytesTx, g_u32ArpReplies,
             g_u32IcmpEchoes, g_u32UdpEchoes);
 
@@ -286,6 +375,40 @@ net_eth_soft_log(void)
             "vlan=skip_count ihl=icmp_soft rtx=net_tcp_poll "
             "guest=10.0.2.15/52:54:00:12:34:56 "
             "(soft inventory; not netstackd; not bar3)\n");
+
+    /* Grep: net_eth: soft path (twin) */
+    kprintf("net_eth: soft path virtio_rx=batch demux=arp|icmp|udp7|tcp "
+            "vlan=skip_count ihl=icmp_soft rtx=net_tcp_poll "
+            "guest=10.0.2.15/52:54:00:12:34:56 "
+            "wave=14 (soft inventory; not netstackd; not bar3)\n");
+
+    /* Grep: net: eth soft stats (Wave 14 compact rollup) */
+    kprintf("net: eth soft stats verdict=%s ready=%u rx=%u drop=%u ok=%u "
+            "vlan=%u proto=%u tx_ok=%u tx_fail=%u polls=%u drain=%u "
+            "link_ch=%u log_n=%u wave=14\n",
+            szVerdict, u32Ready, g_u32FramesRx, g_u32FramesDrop,
+            g_u32FramesOk, g_u32VlanSkip, u32Proto, g_u32TxOk, g_u32TxFail,
+            g_u32Polls, g_u32PollsDrain, g_u32LinkChanges, g_u32SoftLogN);
+
+    /* Grep: net_eth: soft stats (twin) */
+    kprintf("net_eth: soft stats verdict=%s ready=%u rx=%u drop=%u ok=%u "
+            "vlan=%u tcp=%u arp=%u udp=%u icmp=%u tx_ok=%u bytes_rx=%u "
+            "bytes_tx=%u polls=%u log_n=%u wave=14\n",
+            szVerdict, u32Ready, g_u32FramesRx, g_u32FramesDrop,
+            g_u32FramesOk, g_u32VlanSkip, g_u32TcpDemux, g_u32ArpReplies,
+            g_u32UdpEchoes, g_u32IcmpEchoes, g_u32TxOk, g_u32BytesRx,
+            g_u32BytesTx, g_u32Polls, g_u32SoftLogN);
+
+    /* Grep: net: eth soft PASS / net_eth: soft PASS */
+    kprintf("net: eth soft PASS wave=14 logs=%u verdict=%s ready=%u "
+            "frames_ok=%u proto=%u cap=%u "
+            "(soft inventory only; not product gate)\n",
+            g_u32SoftLogN, szVerdict, u32Ready, g_u32FramesOk, u32Proto,
+            (u32)NET_ETH_SOFT_LOG_CAP);
+    kprintf("net_eth: soft PASS wave=14 logs=%u verdict=%s ready=%u "
+            "frames_ok=%u proto=%u "
+            "(soft inventory only; not product gate)\n",
+            g_u32SoftLogN, szVerdict, u32Ready, g_u32FramesOk, u32Proto);
 }
 
 /**
@@ -362,6 +485,17 @@ net_eth_init(void)
     kprintf("net_eth: ARP/UDP/ICMP-echo helpers (IP %u.%u.%u.%u) poll_max=%u\n",
             g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
             NET_ETH_POLL_MAX);
+    /* Grep: net: eth soft init / net_eth: soft init */
+    kprintf("net: eth soft init poll_max=%u log_every=%u log_cap=%u "
+            "ip=%u.%u.%u.%u mac=%02x:%02x:%02x:%02x:%02x:%02x wave=14\n",
+            (u32)NET_ETH_POLL_MAX, (u32)NET_ETH_SOFT_LOG_EVERY,
+            (u32)NET_ETH_SOFT_LOG_CAP, g_aOurIp[0], g_aOurIp[1], g_aOurIp[2],
+            g_aOurIp[3], g_aOurMac[0], g_aOurMac[1], g_aOurMac[2],
+            g_aOurMac[3], g_aOurMac[4], g_aOurMac[5]);
+    kprintf("net_eth: soft init poll_max=%u log_every=%u log_cap=%u "
+            "guest=10.0.2.15 wave=14\n",
+            (u32)NET_ETH_POLL_MAX, (u32)NET_ETH_SOFT_LOG_EVERY,
+            (u32)NET_ETH_SOFT_LOG_CAP);
     /* Greppable soft inventory at init (NODEV typical before virtio probe). */
     net_eth_soft_log();
 }

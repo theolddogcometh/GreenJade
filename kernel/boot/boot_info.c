@@ -12,18 +12,27 @@
  *   boot_info_soft_log     — greppable serial markers (post serial_init)
  *     includes soft Multiboot2 / tag inventory (P-BOOT-2 dev path)
  *
- * Wave 12 exclusive deepen — greppable prefix-stable "boot: soft …"
+ * Wave 14 exclusive soft deepen — greppable prefix-stable "boot: soft …"
  * (diagnostics only; never hard-gate product / ExitBootServices):
+ *   boot: soft honesty       — explicit non-claims (soft never gates EBS)
  *   boot: soft inventory     — master surface + wave stamp
  *   boot: soft path          — P-BOOT-1/2 claim + source class
  *   boot: soft handoff       — magic/version/source/flags snapshot
  *   boot: soft memmap        — EFI MD usable + type-class tallies
  *   boot: soft gop           — FB geometry soft classify
  *   boot: soft flags         — GJ_BOOT_F_* bit inventory
+ *   boot: soft caps          — per-flag soft PASS lamps
  *   boot: soft source        — GJ_BOOT_SRC_* class + publish tallies
  *   boot: soft stats         — set_global / log / mb2 inv counters
  *   boot: soft kernel        — kernel image span soft classify
  *   boot: soft rsdp          — ACPI RSDP soft present/skip
+ *   boot: soft contract      — magic/version/struct size contract
+ *   boot: soft fields        — handoff field presence lamps
+ *   boot: soft efi_mt        — reclaimable EFI type map constants
+ *   boot: soft geometry      — FB pitch/bpp soft math
+ *   boot: soft publish       — set_global source-class tallies
+ *   boot: soft derive        — flag-derive path counters
+ *   boot: soft deepen        — wave=14 stamp + area count
  *   boot: soft mb2           — PASS|SKIP|REJECT|PARTIAL tag walk
  *   boot: soft mb2 tag       — per-class tag counts
  *   boot: soft mb2 mmap      — first mmap tag entry inventory
@@ -40,12 +49,21 @@
  *   boot: GOP soft PASS|SKIP|REJECT …
  *
  * greppable: boot: soft
+ * greppable: boot: soft honesty
  * greppable: boot: soft inventory
+ * greppable: boot: soft deepen
  * greppable: boot: soft path
  * greppable: boot: soft handoff
  * greppable: boot: soft memmap
  * greppable: boot: soft gop
  * greppable: boot: soft flags
+ * greppable: boot: soft caps
+ * greppable: boot: soft contract
+ * greppable: boot: soft fields
+ * greppable: boot: soft efi_mt
+ * greppable: boot: soft geometry
+ * greppable: boot: soft publish
+ * greppable: boot: soft derive
  * greppable: boot: soft source
  * greppable: boot: soft stats
  * greppable: boot: soft mb2
@@ -845,13 +863,19 @@ boot_info_soft_mb2_log(const struct gj_boot_info *pInfo)
             (unsigned)g_cSoftMb2InvCalls);
 }
 
+/* Wave 14 exclusive soft deepen stamp (this unit only). */
+#define BI_SOFT_WAVE 14u
+
 /*
- * Wave 12: greppable boot: soft … deepen surface (handoff/memmap/gop/flags).
+ * Wave 14: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
+ * plus honesty/contract/caps/fields/efi_mt/geometry/publish/derive/deepen).
  * Complements legacy "boot: handoff soft" / "boot: memmap soft" / "boot: GOP soft".
  * greppable: boot: soft
+ * Soft only: never hard-gates product / ExitBootServices.
+ * Higher-half product move remains OPEN (identity bridge is separate unit).
  */
 static void
-boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
+boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
                           const struct bi_soft_memmap_deep *pDeep,
                           int fValid, int fGop,
                           const char *szHandoff)
@@ -865,6 +889,18 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
     u32 fMb2Bit;
     u32 fKernelSpan;
     u32 fRsdp;
+    u32 fMapPtr;
+    u32 fMapBytes;
+    u32 fDescSize;
+    u32 fFbBase;
+    u32 fMb2Phys;
+    u32 fMagicOk;
+    u32 fVersionOk;
+    u32 u32BppBytes;
+    u32 u32MinPitch;
+    u32 fPitchOk;
+    u32 cAreas;
+    u32 cCapBits;
     const char *szSrcName;
     const char *szPathClaim;
     const char *szMemmap;
@@ -882,6 +918,35 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                       ? 1u
                       : 0u;
     fRsdp = (pInfo != NULL && pInfo->u64Rsdp != 0) ? 1u : 0u;
+    fMapPtr = (pInfo != NULL && pInfo->u64MemMap != 0) ? 1u : 0u;
+    fMapBytes = (pInfo != NULL && pInfo->u64MemMapBytes != 0) ? 1u : 0u;
+    fDescSize = (pInfo != NULL && pInfo->u64MemDescSize != 0) ? 1u : 0u;
+    fFbBase = (pInfo != NULL && pInfo->u64FbBase != 0) ? 1u : 0u;
+    fMb2Phys = (pInfo != NULL && pInfo->u32Mb2InfoPhys != 0) ? 1u : 0u;
+    fMagicOk = (pInfo != NULL && pInfo->u32Magic == GJ_BOOT_INFO_MAGIC) ? 1u
+                                                                       : 0u;
+    fVersionOk =
+        (pInfo != NULL && pInfo->u32Version == GJ_BOOT_INFO_VERSION) ? 1u
+                                                                    : 0u;
+    cAreas = 0;
+    cCapBits = (u32)fMemmapBit + (u32)fRsdpBit + (u32)fFbBit +
+               (u32)fKernelBit + (u32)fMb2Bit;
+
+    /* Soft FB pitch math (observability; mirrors boot_info_soft_gop_ok). */
+    u32BppBytes = 0;
+    u32MinPitch = 0;
+    fPitchOk = 0;
+    if (pInfo != NULL && pInfo->u64FbBase != 0) {
+        if (pInfo->u32FbBpp <= 16u) {
+            u32BppBytes = 2u;
+        } else if (pInfo->u32FbBpp <= 24u) {
+            u32BppBytes = 3u;
+        } else {
+            u32BppBytes = 4u;
+        }
+        u32MinPitch = pInfo->u32FbWidth * u32BppBytes;
+        fPitchOk = (pInfo->u32FbPitch >= u32MinPitch) ? 1u : 0u;
+    }
 
     if (u32Source == GJ_BOOT_SRC_UEFI) {
         szSrcName = "uefi";
@@ -914,20 +979,35 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
         szHandoff = "STUB";
     }
 
+    /*
+     * Honesty first: soft inventory never gates ExitBootServices / product.
+     * greppable: boot: soft honesty
+     */
+    kprintf("boot: soft honesty never_gates_ebs=1 never_gates_product=1 "
+            "higher_half_product=OPEN identity_bridge=separate "
+            "p_boot_1=uefi p_boot_2=mb2_dev soft_only=1 wave=%u\n",
+            (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
     /* Grep: boot: soft inventory */
-    kprintf("boot: soft inventory wave=12 handoff=%s source=%u src=%s "
+    kprintf("boot: soft inventory wave=%u handoff=%s source=%u src=%s "
             "path=%s magic_ok=%d memmap=%s gop=%s set=%u log=%u "
-            "mb2_inv=%u memmap_calls=%u gop_calls=%u\n",
-            szHandoff, (unsigned)u32Source, szSrcName, szPathClaim, fValid,
-            szMemmap, szGop, (unsigned)g_cSoftSetGlobal,
-            (unsigned)g_cSoftLogCalls, (unsigned)g_cSoftMb2InvCalls,
-            (unsigned)g_cSoftMemmapCalls, (unsigned)g_cSoftGopCalls);
+            "mb2_inv=%u memmap_calls=%u gop_calls=%u cap_bits=%u\n",
+            (unsigned)BI_SOFT_WAVE, szHandoff, (unsigned)u32Source,
+            szSrcName, szPathClaim, fValid, szMemmap, szGop,
+            (unsigned)g_cSoftSetGlobal, (unsigned)g_cSoftLogCalls,
+            (unsigned)g_cSoftMb2InvCalls, (unsigned)g_cSoftMemmapCalls,
+            (unsigned)g_cSoftGopCalls, (unsigned)cCapBits);
+    cAreas++;
 
     /* Grep: boot: soft path */
     kprintf("boot: soft path claim=%s p_boot_1=uefi_product "
             "p_boot_2=mb2_dev_only p_boot_3=efi_memmap_after_ebs "
-            "p_boot_4=acpi_rsdp source=%u flags=0x%x soft_never_gates=1\n",
-            szPathClaim, (unsigned)u32Source, (unsigned)u32Flags);
+            "p_boot_4=acpi_rsdp source=%u flags=0x%x soft_never_gates=1 "
+            "wave=%u\n",
+            szPathClaim, (unsigned)u32Source, (unsigned)u32Flags,
+            (unsigned)BI_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: boot: soft handoff */
     if (pInfo == NULL) {
@@ -950,6 +1030,7 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                 (unsigned long)pInfo->u64MemDescSize,
                 (unsigned long)pInfo->u64FbBase);
     }
+    cAreas++;
 
     /* Grep: boot: soft memmap */
     if (pDeep == NULL || !pDeep->base.fPresent) {
@@ -981,6 +1062,7 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                 (unsigned)pDeep->fStrideFallback,
                 (unsigned long)(pInfo != NULL ? pInfo->u64MemMap : 0));
     }
+    cAreas++;
 
     /* Grep: boot: soft gop */
     if (pInfo == NULL || pInfo->u64FbBase == 0) {
@@ -993,6 +1075,7 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                 pInfo->u32FbHeight, pInfo->u32FbPitch, pInfo->u32FbBpp,
                 (unsigned)fFbBit, fGop);
     }
+    cAreas++;
 
     /* Grep: boot: soft flags */
     kprintf("boot: soft flags raw=0x%x memmap=%u rsdp=%u fb=%u "
@@ -1003,6 +1086,29 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
             (unsigned)g_cSoftDeriveMemmap, (unsigned)g_cSoftDeriveRsdp,
             (unsigned)g_cSoftDeriveFb, (unsigned)g_cSoftDeriveKernel,
             (unsigned)g_cSoftDeriveMb2);
+    cAreas++;
+
+    /*
+     * Grep: boot: soft caps — per GJ_BOOT_F_* soft PASS lamps (Wave 14).
+     * Presence only; never claims product readiness beyond flag bits.
+     */
+    kprintf("boot: soft caps pop=%u memmap=%u soft %s\n",
+            (unsigned)cCapBits, (unsigned)fMemmapBit,
+            fMemmapBit ? "PASS" : "SKIP");
+    kprintf("boot: soft caps rsdp=%u soft %s\n", (unsigned)fRsdpBit,
+            fRsdpBit ? "PASS" : "SKIP");
+    kprintf("boot: soft caps fb=%u soft %s\n", (unsigned)fFbBit,
+            fFbBit ? "PASS" : "SKIP");
+    kprintf("boot: soft caps kernel_img=%u soft %s\n", (unsigned)fKernelBit,
+            fKernelBit ? "PASS" : "SKIP");
+    kprintf("boot: soft caps mb2_info=%u soft %s\n", (unsigned)fMb2Bit,
+            fMb2Bit ? "PASS" : "SKIP");
+    kprintf("boot: soft caps mask_memmap=0x%x mask_rsdp=0x%x mask_fb=0x%x "
+            "mask_kernel=0x%x mask_mb2=0x%x raw=0x%x soft PASS\n",
+            (unsigned)GJ_BOOT_F_MEMMAP, (unsigned)GJ_BOOT_F_RSDP,
+            (unsigned)GJ_BOOT_F_FB, (unsigned)GJ_BOOT_F_KERNEL_IMG,
+            (unsigned)GJ_BOOT_F_MB2_INFO, (unsigned)u32Flags);
+    cAreas++;
 
     /* Grep: boot: soft source */
     kprintf("boot: soft source id=%u name=%s uefi_publish=%u "
@@ -1010,6 +1116,7 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
             (unsigned)u32Source, szSrcName, (unsigned)g_cSoftUefiPublish,
             (unsigned)g_cSoftMb2Publish, (unsigned)g_cSoftUnknownPublish,
             (unsigned)g_cSoftSetGlobal, (unsigned)g_cSoftClearCalls);
+    cAreas++;
 
     /* Grep: boot: soft kernel */
     if (fKernelSpan == 0) {
@@ -1023,6 +1130,7 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                 (unsigned long)(pInfo->u64KernelBytes / (1024ull * 1024ull)),
                 (unsigned)fKernelBit);
     }
+    cAreas++;
 
     /* Grep: boot: soft rsdp */
     if (fRsdp == 0) {
@@ -1033,17 +1141,96 @@ boot_info_soft_wave12_log(const struct gj_boot_info *pInfo,
                 "p_boot_4=acpi_rsdp\n",
                 (unsigned long)pInfo->u64Rsdp, (unsigned)fRsdpBit);
     }
+    cAreas++;
+
+    /* Grep: boot: soft contract — magic/version/struct size (Wave 14). */
+    kprintf("boot: soft contract magic_ok=%u version_ok=%u "
+            "magic_expect=0x%x version_expect=%u struct_bytes=%u "
+            "src_unknown=%u src_mb2=%u src_uefi=%u soft %s\n",
+            (unsigned)fMagicOk, (unsigned)fVersionOk,
+            (unsigned)GJ_BOOT_INFO_MAGIC, (unsigned)GJ_BOOT_INFO_VERSION,
+            (unsigned)sizeof(struct gj_boot_info),
+            (unsigned)GJ_BOOT_SRC_UNKNOWN, (unsigned)GJ_BOOT_SRC_MULTIBOOT2,
+            (unsigned)GJ_BOOT_SRC_UEFI, fValid ? "PASS" : "STUB");
+    cAreas++;
+
+    /* Grep: boot: soft fields — field presence lamps (Wave 14). */
+    kprintf("boot: soft fields map_ptr=%u map_bytes=%u desc_size=%u "
+            "rsdp=%u fb=%u kernel_span=%u mb2_phys=%u flags=0x%x "
+            "source=%u soft PASS\n",
+            (unsigned)fMapPtr, (unsigned)fMapBytes, (unsigned)fDescSize,
+            (unsigned)fRsdp, (unsigned)fFbBase, (unsigned)fKernelSpan,
+            (unsigned)fMb2Phys, (unsigned)u32Flags, (unsigned)u32Source);
+    cAreas++;
+
+    /*
+     * Grep: boot: soft efi_mt — reclaimable EFI type map constants.
+     * Public UEFI types only; inventory of soft-usable reclaim set.
+     */
+    kprintf("boot: soft efi_mt loader_code=%u loader_data=%u "
+            "bs_code=%u bs_data=%u conventional=%u acpi_reclaim=%u "
+            "usable_set=6 soft PASS\n",
+            (unsigned)GJ_BOOT_EFI_MT_LOADER_CODE,
+            (unsigned)GJ_BOOT_EFI_MT_LOADER_DATA,
+            (unsigned)GJ_BOOT_EFI_MT_BS_CODE,
+            (unsigned)GJ_BOOT_EFI_MT_BS_DATA,
+            (unsigned)GJ_BOOT_EFI_MT_CONVENTIONAL,
+            (unsigned)GJ_BOOT_EFI_MT_ACPI_RECLAIM);
+    cAreas++;
+
+    /* Grep: boot: soft geometry — FB pitch/bpp soft math (Wave 14). */
+    if (pInfo == NULL || pInfo->u64FbBase == 0) {
+        kprintf("boot: soft geometry SKIP fb=0 bpp_bytes=0 min_pitch=0 "
+                "pitch_ok=0\n");
+    } else {
+        kprintf("boot: soft geometry %s w=%u h=%u pitch=%u bpp=%u "
+                "bpp_bytes=%u min_pitch=%u pitch_ok=%u px=%lu "
+                "row_bytes=%u soft %s\n",
+                szGop, pInfo->u32FbWidth, pInfo->u32FbHeight,
+                pInfo->u32FbPitch, pInfo->u32FbBpp, (unsigned)u32BppBytes,
+                (unsigned)u32MinPitch, (unsigned)fPitchOk,
+                (unsigned long)((u64)pInfo->u32FbWidth *
+                                (u64)pInfo->u32FbHeight),
+                (unsigned)pInfo->u32FbPitch, szGop);
+    }
+    cAreas++;
+
+    /* Grep: boot: soft publish — set_global source-class tallies. */
+    kprintf("boot: soft publish set=%u uefi=%u mb2=%u unknown=%u "
+            "clear=%u valid_ok=%u valid_fail=%u log=%u soft PASS\n",
+            (unsigned)g_cSoftSetGlobal, (unsigned)g_cSoftUefiPublish,
+            (unsigned)g_cSoftMb2Publish, (unsigned)g_cSoftUnknownPublish,
+            (unsigned)g_cSoftClearCalls, (unsigned)g_cSoftValidOk,
+            (unsigned)g_cSoftValidFail, (unsigned)g_cSoftLogCalls);
+    cAreas++;
+
+    /* Grep: boot: soft derive — flag-derive path counters. */
+    kprintf("boot: soft derive memmap=%u rsdp=%u fb=%u kernel=%u mb2=%u "
+            "soft PASS\n",
+            (unsigned)g_cSoftDeriveMemmap, (unsigned)g_cSoftDeriveRsdp,
+            (unsigned)g_cSoftDeriveFb, (unsigned)g_cSoftDeriveKernel,
+            (unsigned)g_cSoftDeriveMb2);
+    cAreas++;
 
     /* Grep: boot: soft stats */
     kprintf("boot: soft stats set=%u uefi=%u mb2_src=%u unknown=%u "
             "log=%u mb2_inv=%u memmap=%u gop=%u valid_ok=%u valid_fail=%u "
-            "clear=%u wave=12\n",
+            "clear=%u wave=%u\n",
             (unsigned)g_cSoftSetGlobal, (unsigned)g_cSoftUefiPublish,
             (unsigned)g_cSoftMb2Publish, (unsigned)g_cSoftUnknownPublish,
             (unsigned)g_cSoftLogCalls, (unsigned)g_cSoftMb2InvCalls,
             (unsigned)g_cSoftMemmapCalls, (unsigned)g_cSoftGopCalls,
             (unsigned)g_cSoftValidOk, (unsigned)g_cSoftValidFail,
-            (unsigned)g_cSoftClearCalls);
+            (unsigned)g_cSoftClearCalls, (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: boot: soft deepen — Wave 14 stamp + area count. */
+    kprintf("boot: soft deepen wave=%u areas=%u handoff=%s source=%u "
+            "src=%s memmap=%s gop=%s magic_ok=%d cap_bits=%u "
+            "higher_half_product=OPEN soft_never_gates=1\n",
+            (unsigned)BI_SOFT_WAVE, (unsigned)cAreas, szHandoff,
+            (unsigned)u32Source, szSrcName, szMemmap, szGop, fValid,
+            (unsigned)cCapBits);
 }
 
 /* Zero and stamp magic/version. No-op if pInfo is NULL (caller may probe). */
@@ -1182,8 +1369,8 @@ boot_info_soft_log(const struct gj_boot_info *pInfo)
         kprintf("boot: soft mb2 SKIP pa=0 reason=null_info log=%u\n",
                 (unsigned)g_cSoftLogCalls);
         kprintf("boot_info: soft mb2 inventory SKIP present=0\n");
-        /* Wave 12 deepen null path under boot: soft … */
-        boot_info_soft_wave12_log(NULL, NULL, 0, 0, "STUB");
+        /* Wave 14 deepen null path under boot: soft … */
+        boot_info_soft_wave14_log(NULL, NULL, 0, 0, "STUB");
         kprintf("boot: soft mb2 path SKIP reason=null_info\n");
         return;
     }
@@ -1258,8 +1445,8 @@ boot_info_soft_log(const struct gj_boot_info *pInfo)
                 pInfo->u32FbHeight, pInfo->u32FbPitch, pInfo->u32FbBpp);
     }
 
-    /* Wave 12 exclusive: deepen greppable boot: soft … surface. */
-    boot_info_soft_wave12_log(pInfo, &softDeep, fValid, fGop, szHandoff);
+    /* Wave 14 exclusive: deepen greppable boot: soft … surface. */
+    boot_info_soft_wave14_log(pInfo, &softDeep, fValid, fGop, szHandoff);
 
     /* Soft Multiboot2 / tag inventory (P-BOOT-2; SKIP on UEFI product). */
     boot_info_soft_mb2_log(pInfo);

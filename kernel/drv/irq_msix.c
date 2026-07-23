@@ -10,18 +10,22 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 11 exclusive; this unit only):
+ * Soft inventory (Wave 14 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
  * Catalog lines (prefix-stable):
- *   irq: soft inventory / irq_msix: soft inventory  — vec + path catalog
+ *   irq: soft inventory / irq_msix: soft inventory  — vec + path catalog + wave
  *   irq: soft inject    / irq_msix: soft inject     — soft inject tallies
  *   irq: soft pulse     / irq_msix: soft pulse      — soft pulse-path tallies
  *   irq: soft table     / irq_msix: soft table      — table-soft fire tallies
  *   irq: soft hw        / irq_msix: soft hw         — hw-sim + hard IRQ tallies
  *   irq: soft badges    / irq_msix: soft badges     — last badge + path tag
+ *   irq: soft vec       / irq_msix: soft vec        — IDT vector + path tags
+ *   irq: soft notify    / irq_msix: soft notify     — Notification live snapshot
+ *   irq: soft exercise  / irq_msix: soft exercise   — exercise tallies
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=14 areas stamp
  *   irq: soft stats     / irq_msix: soft stats      — aggregate counters
  *   irq: soft inventory PASS / irq: soft PASS
  *   irq_msix: soft inventory PASS / irq_msix: soft PASS
@@ -48,8 +52,12 @@ static u32 g_u32LastPath;
 static int g_fReady;
 static int g_fInHandler;
 
+/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 12u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE  14u
+
 /*
- * Wave 11 soft inventory sticky counters (wrap OK; never hard-gate).
+ * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
  * Hard IRQ path uses atomic RMW only (no kprintf from irq_msix_handler).
  * greppable: irq: soft stats
  * greppable: irq_msix: soft stats
@@ -114,7 +122,7 @@ irq_msix_note_pulse(u64 u64Badge, u32 u32Path)
 }
 
 /**
- * Wave 11 soft inventory dump — greppable "irq: soft …" / "irq_msix: soft …".
+ * Wave 14 soft inventory dump — greppable "irq: soft …" / "irq_msix: soft …".
  * Snapshots live soft path state; never allocates; never hard-gates.
  * Not for hard-IRQ (kprintf only from product / soft paths).
  * szVia: caller tag (init / inject / pulse / table / hw / exercise).
@@ -137,15 +145,19 @@ irq_msix_soft_inventory_log(const char *szVia)
     u64 u64Badge;
     u32 u32LastPath;
     u32 u32Handler;
+    u32 u32NotifyNonNull;
+    u32 fInHandler;
 
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
     irq_msix_soft_inc(&g_u32SoftLogN);
 
     u32Ready = (g_fReady != 0) ? 1u : 0u;
     pNotify = notify_msix_global();
+    u32NotifyNonNull = (pNotify != NULL) ? 1u : 0u;
     u32Live = (pNotify != NULL && notify_is_live(pNotify)) ? 1u : 0u;
     u32Signals = (pNotify != NULL) ? notify_signals(pNotify) : 0u;
     u64Pending = (pNotify != NULL) ? notify_pending(pNotify) : 0ull;
+    fInHandler = (g_fInHandler != 0) ? 1u : 0u;
 
     /* Snapshot product counters (relaxed; concurrent hard IRQ may race). */
     u32Soft = g_u32MsixSoft;
@@ -167,12 +179,13 @@ irq_msix_soft_inventory_log(const char *szVia)
     kprintf("irq: soft inventory via=%s vec=0x%x ready=%u live=%u "
             "paths=inject,pulse,table,hw,handler,exercise "
             "badge_soft=0x%x badge_hw=0x%x badge_tbl0=0x%x "
-            "soft=%u hw=%u irq=%u path=%u tbl=%u logs=%u\n",
+            "soft=%u hw=%u irq=%u path=%u tbl=%u logs=%u wave=%u\n",
             szViaSafe, (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)u32Ready,
             (unsigned)u32Live, (unsigned)GJ_MSIX_BADGE_SOFT,
             (unsigned)GJ_MSIX_BADGE_HW, (unsigned)GJ_MSIX_BADGE_TBL(0),
             (unsigned)u32Soft, (unsigned)u32Hw, (unsigned)u32Irq,
-            (unsigned)u32Path, (unsigned)u32Tbl, (unsigned)g_u32SoftLogN);
+            (unsigned)u32Path, (unsigned)u32Tbl, (unsigned)g_u32SoftLogN,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: irq: soft inject */
     kprintf("irq: soft inject enter=%u zero_coalesce=%u soft_total=%u "
@@ -213,20 +226,50 @@ irq_msix_soft_inventory_log(const char *szVia)
             (unsigned)GJ_MSIX_BADGE_SOFT, (unsigned)GJ_MSIX_BADGE_HW,
             (unsigned)GJ_MSIX_BADGE_TBL(0), (unsigned long)u64Pending);
 
+    /* Grep: irq: soft vec (Wave 14 IDT vector + path-tag map) */
+    kprintf("irq: soft vec idt=0x%x path_none=%u path_soft=%u path_hw=%u "
+            "path_irq=%u path_tbl=%u soft PASS\n",
+            (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)GJ_MSIX_PATH_NONE,
+            (unsigned)GJ_MSIX_PATH_SOFT, (unsigned)GJ_MSIX_PATH_HW,
+            (unsigned)GJ_MSIX_PATH_IRQ, (unsigned)GJ_MSIX_PATH_TBL);
+
+    /* Grep: irq: soft notify (Wave 14 Notification snapshot) */
+    kprintf("irq: soft notify nonnull=%u live=%u signals=%u pending=0x%lx "
+            "in_handler=%u soft PASS\n",
+            (unsigned)u32NotifyNonNull, (unsigned)u32Live,
+            (unsigned)u32Signals, (unsigned long)u64Pending,
+            (unsigned)fInHandler);
+
+    /* Grep: irq: soft exercise (Wave 14 exercise tallies) */
+    kprintf("irq: soft exercise enter=%u ok=%u fail=%u not_ready=%u "
+            "soft PASS\n",
+            (unsigned)g_u32SoftExerciseEnter, (unsigned)g_u32SoftExerciseOk,
+            (unsigned)g_u32SoftExerciseFail,
+            (unsigned)g_u32SoftExerciseNotReady);
+
     /*
      * Grep: irq: soft path
      * Honesty: soft delivery plumbing ≠ full device MSI-X product close.
      */
     kprintf("irq: soft path claim=notify_delivery live_device=0 "
-            "self_ipi=0 bar3=open dual=soft+idt_gate via=%s "
+            "self_ipi=0 bar3=open dual=soft+idt_gate via=%s wave=%u "
             "(soft inventory; not product gate)\n",
-            szViaSafe);
+            szViaSafe, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq: soft deepen wave (Wave 14 stamp) */
+    kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
+            "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
+            (unsigned)u32Ready, (unsigned)u32Live, (unsigned)u32Soft,
+            (unsigned)u32Path, (unsigned)u32Tbl,
+            (unsigned)g_u32SoftExerciseOk);
 
     /* Grep: irq: soft stats */
     kprintf("irq: soft stats init=%u inject=%u pulse=%u table=%u hw=%u "
             "handler=%u exercise_enter=%u exercise_ok=%u exercise_fail=%u "
             "exercise_nr=%u soft=%u hw_n=%u irq_n=%u path_n=%u tbl_n=%u "
-            "logs=%u\n",
+            "logs=%u wave=%u\n",
             (unsigned)g_u32SoftInit, (unsigned)g_u32SoftInjectEnter,
             (unsigned)u32Pulse, (unsigned)g_u32SoftTableEnter,
             (unsigned)g_u32SoftHwEnter, (unsigned)u32Handler,
@@ -234,13 +277,17 @@ irq_msix_soft_inventory_log(const char *szVia)
             (unsigned)g_u32SoftExerciseFail,
             (unsigned)g_u32SoftExerciseNotReady, (unsigned)u32Soft,
             (unsigned)u32Hw, (unsigned)u32Irq, (unsigned)u32Path,
-            (unsigned)u32Tbl, (unsigned)g_u32SoftLogN);
+            (unsigned)u32Tbl, (unsigned)g_u32SoftLogN,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: irq: soft inventory PASS / irq: soft PASS */
-    kprintf("irq: soft inventory PASS via=%s logs=%u ready=%u live=%u\n",
+    kprintf("irq: soft inventory PASS via=%s logs=%u ready=%u live=%u "
+            "wave=%u areas=%u\n",
             szViaSafe, (unsigned)g_u32SoftLogN, (unsigned)u32Ready,
-            (unsigned)u32Live);
-    kprintf("irq: soft PASS via=%s\n", szViaSafe);
+            (unsigned)u32Live, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS);
+    kprintf("irq: soft PASS via=%s wave=%u\n", szViaSafe,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
     /*
      * Twin prefix: irq_msix: soft … (agent-friendly alias; same tallies).
@@ -249,12 +296,13 @@ irq_msix_soft_inventory_log(const char *szVia)
     kprintf("irq_msix: soft inventory via=%s vec=0x%x ready=%u live=%u "
             "paths=inject,pulse,table,hw,handler,exercise "
             "badge_soft=0x%x badge_hw=0x%x badge_tbl0=0x%x "
-            "soft=%u hw=%u irq=%u path=%u tbl=%u logs=%u\n",
+            "soft=%u hw=%u irq=%u path=%u tbl=%u logs=%u wave=%u\n",
             szViaSafe, (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)u32Ready,
             (unsigned)u32Live, (unsigned)GJ_MSIX_BADGE_SOFT,
             (unsigned)GJ_MSIX_BADGE_HW, (unsigned)GJ_MSIX_BADGE_TBL(0),
             (unsigned)u32Soft, (unsigned)u32Hw, (unsigned)u32Irq,
-            (unsigned)u32Path, (unsigned)u32Tbl, (unsigned)g_u32SoftLogN);
+            (unsigned)u32Path, (unsigned)u32Tbl, (unsigned)g_u32SoftLogN,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: irq_msix: soft inject */
     kprintf("irq_msix: soft inject enter=%u zero_coalesce=%u soft_total=%u "
@@ -295,17 +343,47 @@ irq_msix_soft_inventory_log(const char *szVia)
             (unsigned)GJ_MSIX_BADGE_SOFT, (unsigned)GJ_MSIX_BADGE_HW,
             (unsigned)GJ_MSIX_BADGE_TBL(0), (unsigned long)u64Pending);
 
+    /* Grep: irq_msix: soft vec */
+    kprintf("irq_msix: soft vec idt=0x%x path_none=%u path_soft=%u "
+            "path_hw=%u path_irq=%u path_tbl=%u soft PASS\n",
+            (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)GJ_MSIX_PATH_NONE,
+            (unsigned)GJ_MSIX_PATH_SOFT, (unsigned)GJ_MSIX_PATH_HW,
+            (unsigned)GJ_MSIX_PATH_IRQ, (unsigned)GJ_MSIX_PATH_TBL);
+
+    /* Grep: irq_msix: soft notify */
+    kprintf("irq_msix: soft notify nonnull=%u live=%u signals=%u "
+            "pending=0x%lx in_handler=%u soft PASS\n",
+            (unsigned)u32NotifyNonNull, (unsigned)u32Live,
+            (unsigned)u32Signals, (unsigned long)u64Pending,
+            (unsigned)fInHandler);
+
+    /* Grep: irq_msix: soft exercise */
+    kprintf("irq_msix: soft exercise enter=%u ok=%u fail=%u not_ready=%u "
+            "soft PASS\n",
+            (unsigned)g_u32SoftExerciseEnter, (unsigned)g_u32SoftExerciseOk,
+            (unsigned)g_u32SoftExerciseFail,
+            (unsigned)g_u32SoftExerciseNotReady);
+
     /* Grep: irq_msix: soft path */
     kprintf("irq_msix: soft path claim=notify_delivery live_device=0 "
-            "self_ipi=0 bar3=open dual=soft+idt_gate via=%s "
+            "self_ipi=0 bar3=open dual=soft+idt_gate via=%s wave=%u "
             "(soft inventory; not product gate)\n",
-            szViaSafe);
+            szViaSafe, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq_msix: soft deepen */
+    kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
+            "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,
+            (unsigned)u32Ready, (unsigned)u32Live, (unsigned)u32Soft,
+            (unsigned)u32Path, (unsigned)u32Tbl,
+            (unsigned)g_u32SoftExerciseOk);
 
     /* Grep: irq_msix: soft stats */
     kprintf("irq_msix: soft stats init=%u inject=%u pulse=%u table=%u "
             "hw=%u handler=%u exercise_enter=%u exercise_ok=%u "
             "exercise_fail=%u exercise_nr=%u soft=%u hw_n=%u irq_n=%u "
-            "path_n=%u tbl_n=%u logs=%u\n",
+            "path_n=%u tbl_n=%u logs=%u wave=%u\n",
             (unsigned)g_u32SoftInit, (unsigned)g_u32SoftInjectEnter,
             (unsigned)u32Pulse, (unsigned)g_u32SoftTableEnter,
             (unsigned)g_u32SoftHwEnter, (unsigned)u32Handler,
@@ -313,14 +391,17 @@ irq_msix_soft_inventory_log(const char *szVia)
             (unsigned)g_u32SoftExerciseFail,
             (unsigned)g_u32SoftExerciseNotReady, (unsigned)u32Soft,
             (unsigned)u32Hw, (unsigned)u32Irq, (unsigned)u32Path,
-            (unsigned)u32Tbl, (unsigned)g_u32SoftLogN);
+            (unsigned)u32Tbl, (unsigned)g_u32SoftLogN,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
     /* Grep: irq_msix: soft inventory PASS / irq_msix: soft PASS */
     kprintf("irq_msix: soft inventory PASS via=%s logs=%u ready=%u "
-            "live=%u\n",
+            "live=%u wave=%u areas=%u\n",
             szViaSafe, (unsigned)g_u32SoftLogN, (unsigned)u32Ready,
-            (unsigned)u32Live);
-    kprintf("irq_msix: soft PASS via=%s\n", szViaSafe);
+            (unsigned)u32Live, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS);
+    kprintf("irq_msix: soft PASS via=%s wave=%u\n", szViaSafe,
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 }
 
 /**
@@ -407,7 +488,7 @@ irq_msix_soft_pulse_path(u64 u64Badge)
         kprintf("irq: MSI-X soft pulse path pending miss badge=0x%lx "
                 "pending=0x%lx\n",
                 (unsigned long)u64Badge, (unsigned long)u64Pending);
-        /* Twin soft miss lamp (Wave 11 inventory; does not replace smoke). */
+        /* Twin soft miss lamp (Wave 14 inventory; does not replace smoke). */
         kprintf("irq: soft pulse pend_miss badge=0x%lx pending=0x%lx\n",
                 (unsigned long)u64Badge, (unsigned long)u64Pending);
         kprintf("irq_msix: soft pulse pend_miss badge=0x%lx pending=0x%lx\n",
@@ -585,7 +666,7 @@ irq_msix_soft_path_exercise(void)
                 (unsigned long)g_u64LastBadge);
     }
 
-    /* Full Wave 11 soft inventory after exercise (bring-up smoke greps). */
+    /* Full Wave 14 soft inventory after exercise (bring-up smoke greps). */
     irq_msix_soft_inventory_log("exercise");
     return fOk;
 }

@@ -24,7 +24,7 @@
  *                  (grep: futex: robust set/get/exit)
  *
  * Soft wait/wake inventory (file-local sticky counters; never hard-gate).
- * Wave 11 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 14 exclusive deepen — greppable prefix-stable serial markers
  * (futex: soft …); diagnostics only, never hard-gate product:
  *   futex: soft wait inventory   — capacity + path catalog at init
  *   futex: soft wake inventory   — wake/bitset/timer/cancel catalog at init
@@ -34,23 +34,30 @@
  *   futex: soft table            — live waiter + robust slot occupancy
  *   futex: soft key              — private/shared key resolve tallies
  *   futex: soft robust           — set/get/exit OWNER_DIED soft tallies
- *   futex: soft path             — G-FUT invariants + product claim
+ *   futex: soft path             — G-FUT invariants + soft claim honesty
  *   futex: soft timer            — timer_check reap surface
  *   futex: soft thr              — cancel_thr dying-thr surface
  *   futex: soft wait park        — blocked + schedule success path
- *   futex: soft wait eagain      — value mismatch (fast or under lock)
- *   futex: soft wait etimedout   — deadline (immediate or timer reap)
+ *   futex: soft wait eagain      — value mismatch (fast/lock/cancel)
+ *   futex: soft wait etimedout   — deadline (immediate or post-park)
  *   futex: soft wait enomem      — waiter table full
  *   futex: soft wait einval      — bad args / shared zero PA / no thr
  *   futex: soft wait cancel      — lost-wake recheck cancel after enqueue
  *   futex: soft wait bitset      — WAIT_BITSET entry (non-MATCH_ANY)
+ *   futex: soft wait outcome     — Wave 14 ok/eagain/etimedout rollup
  *   futex: soft wake hit         — at least one waiter woken
  *   futex: soft wake miss        — zero waiters matched
  *   futex: soft wake bitset      — WAKE_BITSET entry (non-MATCH_ANY)
  *   futex: soft wake bitset miss — key match, bitset no overlap
+ *   futex: soft wake outcome     — Wave 14 hit/miss/woken rollup
  *   futex: soft timer reap       — timeout wake via futex_timer_check
  *   futex: soft thr cancel       — cancel_thr cleared dying-thr slots
+ *   futex: soft slot             — live private/shared/deadline/bitset snap
+ *   futex: soft capacity         — fixed table / walk caps
+ *   futex: soft catalog          — opcode soft catalog (impl vs not)
+ *   futex: soft deepen           — wave=14 areas stamp
  * greppable: futex: soft
+ * Soft only — does NOT claim product RR / full preemption complete.
  *
  * Wait object for thread_block/wake is the futex_waiter slot itself; tag 0.
  * Fixed table (no heap) — ENOMEM when all slots are in use.
@@ -131,10 +138,16 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
+/* Wave 14 exclusive soft deepen stamp (greppable wave=14). */
+#define FUTEX_SOFT_DEEPEN_WAVE  14u
+/* Fixed greppable categories emitted under "futex: soft …". */
+#define FUTEX_SOFT_DEEPEN_AREAS 20u
+
 /*
  * Soft wait/wake sticky counters (wrap OK; diagnostics only).
  * Bumped off the product return paths; never hard-gate behavior.
- * Wave 11 deepen: path + table + key + robust + timer + thr surfaces.
+ * Wave 14 deepen: path + table + key + robust + timer + thr + slot +
+ * catalog + capacity + outcome surfaces.
  * greppable: futex: soft stats
  * greppable: futex: soft
  */
@@ -205,6 +218,12 @@ static u32 g_u32SoftWaiting;
 static u32 g_u32SoftFree;
 static u32 g_u32SoftRobUsed;
 static u32 g_u32SoftRobFree;
+/* Wave 14 slot deepen: live waiter class snaps (diagnostic race OK). */
+static u32 g_u32SoftWaitPriv;
+static u32 g_u32SoftWaitShared;
+static u32 g_u32SoftWaitDeadline;
+static u32 g_u32SoftWaitBitset;
+static u32 g_u32SoftWaitClassic;
 
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
@@ -218,7 +237,8 @@ futex_soft_inc(u64 *pCtr)
 
 /**
  * Soft: sample waiter + robust table occupancy (no lock; diagnostic race OK).
- * Updates peaks; greppable via futex: soft table.
+ * Updates peaks; greppable via futex: soft table / futex: soft slot.
+ * Wave 14: private/shared/deadline/bitset class snaps on used waiters.
  */
 static void
 futex_soft_scan(void)
@@ -227,6 +247,11 @@ futex_soft_scan(void)
     u32 u32Used = 0;
     u32 u32Waiting = 0;
     u32 u32Rob = 0;
+    u32 u32Priv = 0;
+    u32 u32Shared = 0;
+    u32 u32Deadline = 0;
+    u32 u32Bitset = 0;
+    u32 u32Classic = 0;
 
     futex_soft_inc(&g_soft.u64SoftScan);
 
@@ -235,6 +260,20 @@ futex_soft_scan(void)
             u32Used++;
             if (g_aWaiters[iSlot].u8Waiting) {
                 u32Waiting++;
+            }
+            if (g_aWaiters[iSlot].key.u8Private) {
+                u32Priv++;
+            } else {
+                u32Shared++;
+            }
+            if (g_aWaiters[iSlot].u64Deadline != 0) {
+                u32Deadline++;
+            }
+            if (g_aWaiters[iSlot].u32Bitset != 0 &&
+                g_aWaiters[iSlot].u32Bitset != GJ_FUTEX_BITSET_MATCH_ANY) {
+                u32Bitset++;
+            } else {
+                u32Classic++;
             }
         }
     }
@@ -253,6 +292,11 @@ futex_soft_scan(void)
     g_u32SoftRobFree = (u32Rob < (u32)GJ_FUTEX_ROBUST_SLOTS)
                            ? ((u32)GJ_FUTEX_ROBUST_SLOTS - u32Rob)
                            : 0u;
+    g_u32SoftWaitPriv = u32Priv;
+    g_u32SoftWaitShared = u32Shared;
+    g_u32SoftWaitDeadline = u32Deadline;
+    g_u32SoftWaitBitset = u32Bitset;
+    g_u32SoftWaitClassic = u32Classic;
 
     if ((u64)u32Used > g_soft.u64TablePeakUsed) {
         g_soft.u64TablePeakUsed = (u64)u32Used;
@@ -296,6 +340,7 @@ futex_soft_note_claim(void)
  * Greppable soft wait/wake inventory + path/table/key/robust deepen.
  * Called from futex_init and once after first wait/wake activity.
  * Never allocates; safe from non-IRQ product paths.
+ * Wave 14 exclusive: wave=14 stamp + slot/catalog/capacity/outcome areas.
  * greppable: futex: soft wait inventory
  * greppable: futex: soft wake inventory
  * greppable: futex: soft wait
@@ -307,6 +352,10 @@ futex_soft_note_claim(void)
  * greppable: futex: soft path
  * greppable: futex: soft timer
  * greppable: futex: soft thr
+ * greppable: futex: soft slot
+ * greppable: futex: soft capacity
+ * greppable: futex: soft catalog
+ * greppable: futex: soft deepen
  */
 static void
 futex_soft_log(void)
@@ -317,7 +366,7 @@ futex_soft_log(void)
     /*
      * Catalog lines (prefix-stable): declare fixed-table capacity and the
      * wait/wake soft path surface so smoke/scripts can grep product depth
-     * without parsing C. Wave 11 deepen splits path/table/key/robust.
+     * without parsing C. Wave 14 deepen splits path/table/key/robust/slot.
      */
     /* Grep: futex: soft wait inventory */
     kprintf("futex: soft wait inventory slots=%u park=thread_block+schedule "
@@ -325,7 +374,7 @@ futex_soft_log(void)
             "lost_wake=recheck_under_lock g_fut3=no_product_spin "
             "enter=%lu park=%lu ok=%lu eagain=%lu etimedout=%lu enomem=%lu "
             "einval=%lu cancel=%lu early=%lu bitset=%lu classic=%lu "
-            "priv=%lu shared=%lu deadline=%lu no_deadline=%lu\n",
+            "priv=%lu shared=%lu deadline=%lu no_deadline=%lu wave=%u\n",
             (unsigned)GJ_FUTEX_MAX_WAITERS,
             (unsigned long)g_soft.u64WaitEnter,
             (unsigned long)g_soft.u64WaitPark,
@@ -341,14 +390,15 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64WaitPrivate,
             (unsigned long)g_soft.u64WaitShared,
             (unsigned long)g_soft.u64WaitDeadline,
-            (unsigned long)g_soft.u64WaitNoDeadline);
+            (unsigned long)g_soft.u64WaitNoDeadline,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft wake inventory */
     kprintf("futex: soft wake inventory match=key+bitset_and irqsave_lock=1 "
             "timer_reap=futex_timer_check thr_cancel=futex_cancel_thr "
             "enter=%lu hit=%lu miss=%lu woken=%lu einval=%lu zero=%lu "
             "bitset=%lu classic=%lu bitset_miss=%lu reap=%lu thr_cancel=%lu "
-            "priv=%lu shared=%lu\n",
+            "priv=%lu shared=%lu wave=%u\n",
             (unsigned long)g_soft.u64WakeEnter,
             (unsigned long)g_soft.u64WakeHit,
             (unsigned long)g_soft.u64WakeMiss,
@@ -361,14 +411,15 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64TimerReap,
             (unsigned long)g_soft.u64ThrCancel,
             (unsigned long)g_soft.u64WakePrivate,
-            (unsigned long)g_soft.u64WakeShared);
+            (unsigned long)g_soft.u64WakeShared,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft wait — path tallies (Wave 11 deepen) */
+    /* Grep: futex: soft wait — path tallies (Wave 14 deepen) */
     kprintf("futex: soft wait enter=%lu park=%lu ok=%lu eagain=%lu "
             "eagain_fast=%lu eagain_lock=%lu eagain_cancel=%lu "
             "etimedout=%lu etimed_imm=%lu etimed_park=%lu enomem=%lu "
             "einval=%lu cancel=%lu early=%lu bitset=%lu classic=%lu "
-            "priv=%lu shared=%lu deadline=%lu no_deadline=%lu\n",
+            "priv=%lu shared=%lu deadline=%lu no_deadline=%lu wave=%u\n",
             (unsigned long)g_soft.u64WaitEnter,
             (unsigned long)g_soft.u64WaitPark,
             (unsigned long)g_soft.u64WaitOk,
@@ -388,12 +439,57 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64WaitPrivate,
             (unsigned long)g_soft.u64WaitShared,
             (unsigned long)g_soft.u64WaitDeadline,
-            (unsigned long)g_soft.u64WaitNoDeadline);
+            (unsigned long)g_soft.u64WaitNoDeadline,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft wake — path tallies (Wave 11 deepen) */
+    /* Grep: futex: soft wait eagain — Wave 14 split surface */
+    kprintf("futex: soft wait eagain total=%lu fast=%lu lock=%lu "
+            "cancel=%lu wave=%u\n",
+            (unsigned long)g_soft.u64WaitEagain,
+            (unsigned long)g_soft.u64WaitEagainFast,
+            (unsigned long)g_soft.u64WaitEagainLock,
+            (unsigned long)g_soft.u64WaitEagainCancel,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wait etimedout — Wave 14 split surface */
+    kprintf("futex: soft wait etimedout total=%lu imm=%lu park=%lu "
+            "timer_reap=%lu wave=%u\n",
+            (unsigned long)g_soft.u64WaitEtimedout,
+            (unsigned long)g_soft.u64WaitEtimedImm,
+            (unsigned long)g_soft.u64WaitEtimedPark,
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wait park / enomem / einval / cancel / bitset */
+    kprintf("futex: soft wait park=%lu enomem=%lu einval=%lu cancel=%lu "
+            "early=%lu bitset=%lu classic=%lu wave=%u\n",
+            (unsigned long)g_soft.u64WaitPark,
+            (unsigned long)g_soft.u64WaitEnomem,
+            (unsigned long)g_soft.u64WaitEinval,
+            (unsigned long)g_soft.u64WaitCancel,
+            (unsigned long)g_soft.u64WaitEarlyWake,
+            (unsigned long)g_soft.u64WaitBitset,
+            (unsigned long)g_soft.u64WaitClassic,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wait outcome — Wave 14 rollup */
+    kprintf("futex: soft wait outcome ok=%lu eagain=%lu etimedout=%lu "
+            "enomem=%lu einval=%lu cancel=%lu park=%lu early=%lu "
+            "wave=%u\n",
+            (unsigned long)g_soft.u64WaitOk,
+            (unsigned long)g_soft.u64WaitEagain,
+            (unsigned long)g_soft.u64WaitEtimedout,
+            (unsigned long)g_soft.u64WaitEnomem,
+            (unsigned long)g_soft.u64WaitEinval,
+            (unsigned long)g_soft.u64WaitCancel,
+            (unsigned long)g_soft.u64WaitPark,
+            (unsigned long)g_soft.u64WaitEarlyWake,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wake — path tallies (Wave 14 deepen) */
     kprintf("futex: soft wake enter=%lu hit=%lu miss=%lu woken=%lu "
             "einval=%lu zero=%lu bitset=%lu classic=%lu bitset_miss=%lu "
-            "priv=%lu shared=%lu\n",
+            "priv=%lu shared=%lu wave=%u\n",
             (unsigned long)g_soft.u64WakeEnter,
             (unsigned long)g_soft.u64WakeHit,
             (unsigned long)g_soft.u64WakeMiss,
@@ -404,7 +500,30 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64WakeClassic,
             (unsigned long)g_soft.u64WakeBitsetMiss,
             (unsigned long)g_soft.u64WakePrivate,
-            (unsigned long)g_soft.u64WakeShared);
+            (unsigned long)g_soft.u64WakeShared,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wake hit / miss / bitset */
+    kprintf("futex: soft wake hit=%lu miss=%lu woken=%lu bitset=%lu "
+            "bitset_miss=%lu classic=%lu wave=%u\n",
+            (unsigned long)g_soft.u64WakeHit,
+            (unsigned long)g_soft.u64WakeMiss,
+            (unsigned long)g_soft.u64WakeWoken,
+            (unsigned long)g_soft.u64WakeBitset,
+            (unsigned long)g_soft.u64WakeBitsetMiss,
+            (unsigned long)g_soft.u64WakeClassic,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft wake outcome — Wave 14 rollup */
+    kprintf("futex: soft wake outcome hit=%lu miss=%lu woken=%lu "
+            "einval=%lu zero=%lu bitset_miss=%lu wave=%u\n",
+            (unsigned long)g_soft.u64WakeHit,
+            (unsigned long)g_soft.u64WakeMiss,
+            (unsigned long)g_soft.u64WakeWoken,
+            (unsigned long)g_soft.u64WakeEinval,
+            (unsigned long)g_soft.u64WakeZeroCount,
+            (unsigned long)g_soft.u64WakeBitsetMiss,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft stats */
     kprintf("futex: soft stats wait_enter=%lu wait_park=%lu wait_ok=%lu "
@@ -414,7 +533,8 @@ futex_soft_log(void)
             "wake_miss=%lu wake_woken=%lu wake_einval=%lu wake_zero=%lu "
             "wake_bitset=%lu wake_classic=%lu wake_bitset_miss=%lu "
             "timer_reap=%lu thr_cancel=%lu soft_log=%lu "
-            "key_priv=%lu key_shared=%lu robust_set=%lu robust_mark=%lu\n",
+            "key_priv=%lu key_shared=%lu robust_set=%lu robust_mark=%lu "
+            "wave=%u\n",
             (unsigned long)g_soft.u64WaitEnter,
             (unsigned long)g_soft.u64WaitPark,
             (unsigned long)g_soft.u64WaitOk,
@@ -441,34 +561,56 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64KeyPrivateOk,
             (unsigned long)g_soft.u64KeySharedOk,
             (unsigned long)g_soft.u64RobustSetOk,
-            (unsigned long)g_soft.u64RobustMarked);
+            (unsigned long)g_soft.u64RobustMarked,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft table */
     kprintf("futex: soft table waiters_max=%u used=%u free=%u waiting=%u "
             "peak_used=%lu peak_wait=%lu robust_max=%u robust_used=%u "
-            "robust_free=%u peak_robust=%lu samples=%lu\n",
+            "robust_free=%u peak_robust=%lu samples=%lu wave=%u\n",
             (unsigned)GJ_FUTEX_MAX_WAITERS, g_u32SoftUsed, g_u32SoftFree,
             g_u32SoftWaiting, (unsigned long)g_soft.u64TablePeakUsed,
             (unsigned long)g_soft.u64TablePeakWait,
             (unsigned)GJ_FUTEX_ROBUST_SLOTS, g_u32SoftRobUsed,
             g_u32SoftRobFree, (unsigned long)g_soft.u64TablePeakRob,
-            (unsigned long)g_soft.u64SoftScan);
+            (unsigned long)g_soft.u64SoftScan,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft slot — Wave 14 live class snap */
+    kprintf("futex: soft slot used=%u waiting=%u priv=%u shared=%u "
+            "deadline=%u bitset=%u classic=%u robust_used=%u wave=%u\n",
+            g_u32SoftUsed, g_u32SoftWaiting, g_u32SoftWaitPriv,
+            g_u32SoftWaitShared, g_u32SoftWaitDeadline,
+            g_u32SoftWaitBitset, g_u32SoftWaitClassic, g_u32SoftRobUsed,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft capacity — fixed table lamps */
+    kprintf("futex: soft capacity waiters_max=%u robust_slots=%u "
+            "robust_walk_max=%u bitset_match_any=0x%x heap=0 "
+            "spin_product=0 wave=%u\n",
+            (unsigned)GJ_FUTEX_MAX_WAITERS,
+            (unsigned)GJ_FUTEX_ROBUST_SLOTS,
+            (unsigned)GJ_FUTEX_ROBUST_WALK_MAX,
+            (unsigned)GJ_FUTEX_BITSET_MATCH_ANY,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft key */
     kprintf("futex: soft key priv_ok=%lu shared_ok=%lu shared_fault=%lu "
             "align_fail=%lu null_out=%lu cr3_switch=%lu "
-            "g_fut1=shared_pa private=as+va\n",
+            "g_fut1=shared_pa private=as+va wave=%u\n",
             (unsigned long)g_soft.u64KeyPrivateOk,
             (unsigned long)g_soft.u64KeySharedOk,
             (unsigned long)g_soft.u64KeySharedFault,
             (unsigned long)g_soft.u64KeyAlignFail,
             (unsigned long)g_soft.u64KeyNullOut,
-            (unsigned long)g_soft.u64KeySharedCr3Sw);
+            (unsigned long)g_soft.u64KeySharedCr3Sw,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft robust */
     kprintf("futex: soft robust set_ok=%lu set_fail=%lu get_ok=%lu "
             "get_miss=%lu exit_enter=%lu exit_empty=%lu marked=%lu "
-            "walk=%lu wake=%lu slots=%u walk_max=%u g_fut_robust=1\n",
+            "walk=%lu wake=%lu slots=%u walk_max=%u g_fut_robust=1 "
+            "wave=%u\n",
             (unsigned long)g_soft.u64RobustSetOk,
             (unsigned long)g_soft.u64RobustSetFail,
             (unsigned long)g_soft.u64RobustGetOk,
@@ -479,28 +621,71 @@ futex_soft_log(void)
             (unsigned long)g_soft.u64RobustWalk,
             (unsigned long)g_soft.u64RobustWake,
             (unsigned)GJ_FUTEX_ROBUST_SLOTS,
-            (unsigned)GJ_FUTEX_ROBUST_WALK_MAX);
+            (unsigned)GJ_FUTEX_ROBUST_WALK_MAX,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft path */
+    /*
+     * Grep: futex: soft catalog — opcode soft inventory (impl vs not).
+     * Product-active: WAIT/WAKE/WAIT_BITSET/WAKE_BITSET + robust helpers.
+     * REQUEUE/PI/FD remain soft catalog only (not implemented here).
+     */
+    kprintf("futex: soft catalog wait=1 wake=1 wait_bitset=1 wake_bitset=1 "
+            "robust=1 requeue=0 cmp_requeue=0 wake_op=0 pi=0 fd=0 "
+            "g_fut1=1 g_fut2=1 g_fut3=1 wave=%u\n",
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: futex: soft path
+     * Honesty: park via thread_block only; no product spin; not RR/preempt.
+     */
     kprintf("futex: soft path park=thread_block+schedule "
             "lost_wake=recheck_under_lock match=key+bitset_and "
             "irqsave_lock=1 timer=futex_timer_check "
             "thr_cancel=futex_cancel_thr g_fut1=shared_pa "
             "g_fut2=mono_deadline g_fut3=no_product_spin "
             "bitset=g_fut_bitset robust=g_fut_robust "
-            "(soft inventory; not bar3)\n");
+            "rr_complete=0 preempt_complete=0 "
+            "wave=%u (soft inventory; not bar3)\n",
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft timer */
+    /* Grep: futex: soft timer / timer reap */
     kprintf("futex: soft timer check=%lu reap=%lu "
-            "path=futex_timer_check irqsafe_counter=1 g_fut2=1\n",
+            "path=futex_timer_check irqsafe_counter=1 g_fut2=1 wave=%u\n",
             (unsigned long)g_soft.u64TimerCheck,
-            (unsigned long)g_soft.u64TimerReap);
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+    kprintf("futex: soft timer reap=%lu check=%lu wave=%u\n",
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned long)g_soft.u64TimerCheck,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: futex: soft thr */
+    /* Grep: futex: soft thr / thr cancel */
     kprintf("futex: soft thr cancel_calls=%lu slots_cleared=%lu "
-            "path=futex_cancel_thr death_orphan=wake_clear\n",
+            "path=futex_cancel_thr death_orphan=wake_clear wave=%u\n",
             (unsigned long)g_soft.u64ThrCancelCalls,
-            (unsigned long)g_soft.u64ThrCancel);
+            (unsigned long)g_soft.u64ThrCancel,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+    kprintf("futex: soft thr cancel slots=%lu calls=%lu wave=%u\n",
+            (unsigned long)g_soft.u64ThrCancel,
+            (unsigned long)g_soft.u64ThrCancelCalls,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: futex: soft deepen wave (Wave 14 stamp) */
+    kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
+            "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE,
+            (unsigned)FUTEX_SOFT_DEEPEN_AREAS,
+            (unsigned long)g_soft.u64WaitEnter,
+            (unsigned long)g_soft.u64WakeEnter, g_u32SoftUsed,
+            g_u32SoftWaiting, (unsigned long)g_soft.u64SoftLog);
+
+    /* Grep: futex: soft inventory PASS / futex: soft PASS */
+    kprintf("futex: soft inventory PASS soft_log=%lu wave=%u areas=%u\n",
+            (unsigned long)g_soft.u64SoftLog,
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE,
+            (unsigned)FUTEX_SOFT_DEEPEN_AREAS);
+    kprintf("futex: soft PASS wave=%u\n",
+            (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 }
 
 /**

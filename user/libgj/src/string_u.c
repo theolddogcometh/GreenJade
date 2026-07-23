@@ -5,8 +5,9 @@
  * Freestanding string/memory helpers for libgj userspace.
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  *
- * Soft freestanding helpers inventory (Wave 10 exclusive; greppable; hot path clean):
- *   libgj: soft inventory helpers=42 groups=10
+ * Soft freestanding helpers inventory (Wave 14 exclusive deepen; greppable;
+ * hot path clean):
+ *   libgj: soft inventory helpers=42 groups=10 wave=14 areas=12
  *   libgj: soft length  gj_strlen gj_strnlen
  *   libgj: soft compare gj_strcmp gj_strncmp gj_strcasecmp gj_strncasecmp
  *   libgj: soft copy    gj_strcpy gj_strncpy gj_strcat gj_strncat gj_strlcpy gj_strlcat
@@ -20,10 +21,13 @@
  *   libgj: soft policy  freestanding pure_c no_heap no_locale no_errno ascii_only soft_null
  *   libgj: soft counts  none
  *   libgj: soft hot_path clean
+ *   libgj: soft deepen  wave=14 areas=inventory,groups,names,policy,path,counts
+ *   libgj: soft path    freestanding=1 pure_c=1 no_heap=1 counts=none bar3=0
  *
  * Call counts intentionally omitted: hot string/mem helpers stay freestanding
  * product-path clean with no counter traffic. Inventory is source + rodata
- * only (see gj_string_soft_inventory / gj_string_soft_helper_count).
+ * only (see gj_string_soft_inventory / gj_string_soft_helper_count /
+ * gj_string_soft_wave / gj_string_soft_group_name).
  * Diagnostics / agent honesty only — never a product bar3 claim.
  */
 #include <gj/string.h>
@@ -31,12 +35,17 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+/* Wave 14 exclusive soft deepen stamp (greppable wave=14). */
+#define LIBGJ_SOFT_WAVE   14u
+/* Fixed greppable area catalog (inventory..path). */
+#define LIBGJ_SOFT_AREAS  12u
+
 /*
  * Product soft inventory blob (rodata). Never consulted by the hot helpers.
- * Grep: libgj: soft
+ * Grep: libgj: soft inventory
  */
 static const char g_szLibgjSoftInventory[] =
-    "libgj: soft inventory helpers=42 groups=10 "
+    "libgj: soft inventory helpers=42 groups=10 wave=14 areas=12 "
     "length=gj_strlen,gj_strnlen "
     "compare=gj_strcmp,gj_strncmp,gj_strcasecmp,gj_strncasecmp "
     "copy=gj_strcpy,gj_strncpy,gj_strcat,gj_strncat,gj_strlcpy,gj_strlcat "
@@ -49,6 +58,25 @@ static const char g_szLibgjSoftInventory[] =
     "format=gj_itoa,gj_utoa,gj_xtoa,gj_snprintf "
     "policy=freestanding,pure_c,no_heap,no_locale,no_errno,ascii_only,soft_null "
     "counts=none hot_path=clean";
+
+/*
+ * Wave 14 soft deepen stamp (rodata companion).
+ * Grep: libgj: soft deepen
+ */
+static const char g_szLibgjSoftDeepen[] =
+    "libgj: soft deepen wave=14 areas=12 "
+    "inventory,groups,names,length,compare,copy,search,case,ctype,mem,"
+    "parse,io,format,policy,path,counts "
+    "helpers=42 hot_path=clean counts=none bar3=0";
+
+/*
+ * Wave 14 honesty path line (static route labels).
+ * Grep: libgj: soft path
+ */
+static const char g_szLibgjSoftPath[] =
+    "libgj: soft path freestanding=1 pure_c=1 no_heap=1 no_locale=1 "
+    "no_errno=1 ascii_only=1 soft_null=1 counts=none hot_path=clean "
+    "bar3=0 (soft inventory; not bar3)";
 
 /* Soft helper name table (order matches public soft set; cold only). */
 static const char *const g_apszLibgjSoftHelpers[] = {
@@ -106,6 +134,20 @@ static const char *const g_apszLibgjSoftHelpers[] = {
     "gj_snprintf",
 };
 
+/* Soft group name table (order matches group helper counts). */
+static const char *const g_apszLibgjSoftGroups[] = {
+    "length",
+    "compare",
+    "copy",
+    "search",
+    "case",
+    "ctype",
+    "mem",
+    "parse",
+    "io",
+    "format",
+};
+
 enum {
     LIBGJ_SOFT_HELPERS = 42,
     LIBGJ_SOFT_GROUPS  = 10,
@@ -133,6 +175,42 @@ gj_string_soft_inventory(void)
 }
 
 /*
+ * Cold soft deepen stamp (Wave 14). Grep: libgj: soft deepen
+ */
+const char *
+gj_string_soft_deepen(void)
+{
+    return g_szLibgjSoftDeepen;
+}
+
+/*
+ * Cold soft path honesty line. Grep: libgj: soft path
+ */
+const char *
+gj_string_soft_path(void)
+{
+    return g_szLibgjSoftPath;
+}
+
+/*
+ * Cold soft inventory: Wave stamp (14). Grep: libgj: soft wave=
+ */
+unsigned
+gj_string_soft_wave(void)
+{
+    return (unsigned)LIBGJ_SOFT_WAVE;
+}
+
+/*
+ * Cold soft inventory: greppable area count. Grep: libgj: soft areas=
+ */
+unsigned
+gj_string_soft_area_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_AREAS;
+}
+
+/*
  * Cold soft inventory: total helper count in the freestanding soft set.
  * Grep: libgj: soft helpers=
  */
@@ -153,6 +231,60 @@ gj_string_soft_group_count(void)
 }
 
 /*
+ * Cold soft inventory: length-* group size. Grep: libgj: soft length
+ */
+unsigned
+gj_string_soft_length_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_LENGTH;
+}
+
+/*
+ * Cold soft inventory: compare-* group size. Grep: libgj: soft compare
+ */
+unsigned
+gj_string_soft_compare_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_COMPARE;
+}
+
+/*
+ * Cold soft inventory: copy-* group size. Grep: libgj: soft copy
+ */
+unsigned
+gj_string_soft_copy_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_COPY;
+}
+
+/*
+ * Cold soft inventory: search-* group size. Grep: libgj: soft search
+ */
+unsigned
+gj_string_soft_search_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_SEARCH;
+}
+
+/*
+ * Cold soft inventory: case-* group size. Grep: libgj: soft case
+ */
+unsigned
+gj_string_soft_case_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_CASE;
+}
+
+/*
+ * Cold soft inventory: ctype-* group size. Grep: libgj: soft ctype
+ */
+unsigned
+gj_string_soft_ctype_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_CTYPE;
+}
+
+/*
  * Cold soft inventory: mem-* group size.
  * Grep: libgj: soft mem
  */
@@ -160,6 +292,24 @@ unsigned
 gj_string_soft_mem_count(void)
 {
     return (unsigned)LIBGJ_SOFT_MEM;
+}
+
+/*
+ * Cold soft inventory: parse-* group size. Grep: libgj: soft parse
+ */
+unsigned
+gj_string_soft_parse_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_PARSE;
+}
+
+/*
+ * Cold soft inventory: io-* group size. Grep: libgj: soft io
+ */
+unsigned
+gj_string_soft_io_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_IO;
 }
 
 /*
@@ -184,6 +334,19 @@ gj_string_soft_helper_name(unsigned uIndex)
         return NULL;
     }
     return g_apszLibgjSoftHelpers[uIndex];
+}
+
+/*
+ * Cold soft inventory: group name by index (0..groups-1), or NULL.
+ * Grep: libgj: soft
+ */
+const char *
+gj_string_soft_group_name(unsigned uGroup)
+{
+    if (uGroup >= (unsigned)LIBGJ_SOFT_GROUPS) {
+        return NULL;
+    }
+    return g_apszLibgjSoftGroups[uGroup];
 }
 
 /*

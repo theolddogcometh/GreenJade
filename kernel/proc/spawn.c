@@ -10,12 +10,13 @@
  *   wait  → reap exit code, invalidate parent PROCESS cap, recycle spawn slot
  * Failure paths reverse tear down (no orphan AS / stale cap).
  *
- * Soft product inventory (Wave 11 exclusive; this unit only):
+ * Soft product inventory (Wave 14 exclusive deepen; this unit only):
  *   - Spawn path: enter / ok / fail + deny reasons (null/cnode/full/meta/as/mint/thr)
  *   - Mint path: install + soft post-mint verify reason catalog
  *   - Kill / wait / from_cap path tallies + live peak
+ *   - Wave 14: teardown / AS reverse / wait-register / JIT mint / lifecycle
  *   greppable: "spawn: soft …"
- *   Never hard-gates; diagnostics / smoke grep only (wrap OK).
+ *   Never hard-gates; diagnostics / smoke grep only (wrap OK). Soft ≠ bar3.
  *
  * Soft mint verify (grep: spawn: mint soft | spawn: soft mint):
  *   Post-mint verify of PROCESS type/rights/obj/gen (fail closed on soft bad)
@@ -53,9 +54,11 @@ static u32 g_cMintSoft;      /* soft post-mint verify PASS */
 static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
 
 /*
- * Soft product inventory (Wave 11 exclusive). Cumulative unless noted live/peak.
+ * Soft product inventory (Wave 14 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
+#define GJ_SPAWN_SOFT_WAVE 14u
+
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
 static u32 g_u32SoftDenyNoCnode;     /* parent CNode missing */
@@ -76,6 +79,8 @@ static u32 g_u32SoftMintCoreRights;  /* soft-verify core rights missing */
 static u32 g_u32SoftMintRights;      /* soft-verify full wanted rights miss */
 static u32 g_u32SoftMintFromCap;     /* soft-verify process_from_cap mismatch */
 static u32 g_u32SoftMintInstallFail; /* gj_cap_alloc_install fail */
+static u32 g_u32SoftMintJit;         /* mint with CapJit rights OR'd (W14) */
+static u32 g_u32SoftMintNoJit;       /* mint without JIT (W14) */
 
 static u32 g_u32SoftKillEnter;       /* process_kill entries */
 static u32 g_u32SoftKillIdem;        /* kill already-dead (idempotent ok) */
@@ -92,9 +97,20 @@ static u32 g_u32SoftWaitDenyResolve; /* wait resolve fail */
 static u32 g_u32SoftWaitDenyType;    /* wait type != PROCESS */
 static u32 g_u32SoftWaitDenyRights;  /* wait missing WAIT */
 static u32 g_u32SoftWaitDenyNoent;   /* wait null child object */
+static u32 g_u32SoftWaitSlotFree;    /* wait recycled fixed spawn slot (W14) */
+static u32 g_u32SoftWaitCapInv;      /* wait invalidated parent PROCESS cap */
 
 static u32 g_u32SoftFromCapHit;      /* process_from_cap success */
 static u32 g_u32SoftFromCapMiss;     /* process_from_cap fail-closed */
+
+/* Wave 14 lifecycle / reverse-path tallies. */
+static u32 g_u32SoftFailCleanup;     /* spawn_fail_cleanup calls */
+static u32 g_u32SoftAsTeardown;      /* spawn_as_teardown ran destroy */
+static u32 g_u32SoftAsTeardownSkip;  /* AS teardown no-op (null/0/kernel) */
+static u32 g_u32SoftWaitReg;         /* process_wait_register after thr live */
+static u32 g_u32SoftPersonaNative;   /* spawn personality=0 */
+static u32 g_u32SoftPersonaLinux;    /* spawn personality=1 */
+static u32 g_u32SoftLastThrId;       /* last successful first-thr id (sample) */
 
 static u32 g_u32SoftLogN;            /* soft inventory log emissions */
 static u8  g_fSoftOnce;              /* one-shot after first product activity */
@@ -145,7 +161,7 @@ soft_note_live_peak(void)
 }
 
 /**
- * Greppable soft spawn inventory (Wave 11 exclusive; product / smoke).
+ * Greppable soft spawn inventory (Wave 14 deepen; product / smoke).
  * Prefix-stable markers (spawn: soft …):
  *   spawn: soft inventory  — table caps + live/peak + rights + logs
  *   spawn: soft stats      — cumulative ok/fail/live/kill/wait/mint*
@@ -154,6 +170,9 @@ soft_note_live_peak(void)
  *   spawn: soft kill       — enter/ok/idem + deny catalog
  *   spawn: soft wait       — enter/ok/again + deny catalog
  *   spawn: soft from_cap   — process_from_cap hit/miss
+ *   spawn: soft teardown   — Wave 14 reverse-path + AS teardown
+ *   spawn: soft lifecycle  — Wave 14 persona/JIT/wait-reg/last thr
+ *   spawn: soft deepen     — Wave 14 stamp
  *   spawn: soft path       — honesty: fixed table ≠ full posix_spawn
  *   spawn: soft inventory PASS / spawn: soft PASS
  *
@@ -178,10 +197,11 @@ soft_inventory_log(const char *szVia)
 
     /* Grep: spawn: soft inventory */
     kprintf("spawn: soft inventory via=%s max=%u slots=%u live=%u free=%u "
-            "peak=%u rights_base=0x%x rights_core=0x%x logs=%u\n",
+            "peak=%u rights_base=0x%x rights_core=0x%x logs=%u wave=%u\n",
             szViaSafe, GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS,
             cLive, u32Free, g_u32SoftLivePeak,
-            (unsigned)u16Base, (unsigned)u16Core, g_u32SoftLogN);
+            (unsigned)u16Base, (unsigned)u16Core, g_u32SoftLogN,
+            GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft stats */
     kprintf("spawn: soft stats ok=%u fail=%u live=%u kill=%u wait=%u "
@@ -201,12 +221,13 @@ soft_inventory_log(const char *szVia)
     /* Grep: spawn: soft mint */
     kprintf("spawn: soft mint install_ok=%u install_fail=%u soft_pass=%u "
             "soft_bad=%u null_arg=%u null_ref=%u resolve=%u type=%u "
-            "obj=%u gen=%u core_rights=%u rights=%u from_cap=%u\n",
+            "obj=%u gen=%u core_rights=%u rights=%u from_cap=%u "
+            "jit=%u nojit=%u\n",
             g_cMintOk, g_cMintFail, g_cMintSoft, g_cMintSoftBad,
             g_u32SoftMintNullArg, g_u32SoftMintNullRef, g_u32SoftMintResolve,
             g_u32SoftMintType, g_u32SoftMintObj, g_u32SoftMintGen,
             g_u32SoftMintCoreRights, g_u32SoftMintRights,
-            g_u32SoftMintFromCap);
+            g_u32SoftMintFromCap, g_u32SoftMintJit, g_u32SoftMintNoJit);
 
     /* Grep: spawn: soft kill */
     kprintf("spawn: soft kill enter=%u ok=%u idem=%u deny_null=%u "
@@ -218,15 +239,29 @@ soft_inventory_log(const char *szVia)
 
     /* Grep: spawn: soft wait */
     kprintf("spawn: soft wait enter=%u ok=%u again=%u deny_null=%u "
-            "deny_resolve=%u deny_type=%u deny_rights=%u deny_noent=%u\n",
+            "deny_resolve=%u deny_type=%u deny_rights=%u deny_noent=%u "
+            "slot_free=%u cap_inv=%u\n",
             g_u32SoftWaitEnter, g_cWait, g_u32SoftWaitAgain,
             g_u32SoftWaitDenyNull, g_u32SoftWaitDenyResolve,
             g_u32SoftWaitDenyType, g_u32SoftWaitDenyRights,
-            g_u32SoftWaitDenyNoent);
+            g_u32SoftWaitDenyNoent, g_u32SoftWaitSlotFree,
+            g_u32SoftWaitCapInv);
 
     /* Grep: spawn: soft from_cap */
     kprintf("spawn: soft from_cap hit=%u miss=%u\n",
             g_u32SoftFromCapHit, g_u32SoftFromCapMiss);
+
+    /* Grep: spawn: soft teardown (Wave 14 reverse path) */
+    kprintf("spawn: soft teardown fail_cleanup=%u as_teardown=%u "
+            "as_skip=%u\n",
+            g_u32SoftFailCleanup, g_u32SoftAsTeardown,
+            g_u32SoftAsTeardownSkip);
+
+    /* Grep: spawn: soft lifecycle (Wave 14) */
+    kprintf("spawn: soft lifecycle wait_reg=%u persona_native=%u "
+            "persona_linux=%u last_thr=%u peak=%u\n",
+            g_u32SoftWaitReg, g_u32SoftPersonaNative, g_u32SoftPersonaLinux,
+            g_u32SoftLastThrId, g_u32SoftLivePeak);
 
     /*
      * Honesty line: fixed spawn table + PROCESS mint is product bring-up,
@@ -235,9 +270,18 @@ soft_inventory_log(const char *szVia)
      */
     kprintf("spawn: soft path claim=process_spawn G-PROC-2=mint "
             "G-PROC-5=death fixed_table=1 table_max=%u cnode_slots=%u "
-            "posix_spawn=0 multi_server_confine=0 via=%s "
+            "posix_spawn=0 multi_server_confine=0 via=%s wave=%u "
             "(soft inventory; not bar3)\n",
-            GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS, szViaSafe);
+            GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS, szViaSafe,
+            GJ_SPAWN_SOFT_WAVE);
+
+    /* Grep: spawn: soft deepen */
+    kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
+            "live=%u peak=%u mint_soft=%u mint_soft_bad=%u teardown=%u "
+            "logs=%u (soft inventory only; not product gate)\n",
+            GJ_SPAWN_SOFT_WAVE, szViaSafe, g_u32SoftSpawnEnter, g_cSpawned,
+            g_cSpawnFail, cLive, g_u32SoftLivePeak, g_cMintSoft,
+            g_cMintSoftBad, g_u32SoftFailCleanup, g_u32SoftLogN);
 
     /*
      * Soft lamp only — table + core rights configured. Never hard-gates.
@@ -245,10 +289,11 @@ soft_inventory_log(const char *szVia)
      */
     if (GJ_SPAWN_MAX > 0u && u16Core != 0) {
         kprintf("spawn: soft inventory PASS via=%s logs=%u live=%u "
-                "peak=%u mint_soft=%u mint_soft_bad=%u\n",
+                "peak=%u mint_soft=%u mint_soft_bad=%u wave=%u\n",
                 szViaSafe, g_u32SoftLogN, cLive, g_u32SoftLivePeak,
-                g_cMintSoft, g_cMintSoftBad);
-        kprintf("spawn: soft PASS via=%s\n", szViaSafe);
+                g_cMintSoft, g_cMintSoftBad, GJ_SPAWN_SOFT_WAVE);
+        kprintf("spawn: soft PASS via=%s wave=%u\n", szViaSafe,
+                GJ_SPAWN_SOFT_WAVE);
     } else {
         kprintf("spawn: soft FAIL via=%s max=%u core=0x%x "
                 "(soft inventory only; not product gate)\n",
@@ -391,6 +436,7 @@ spawn_as_teardown(struct gj_process *pProc)
     u64 u64Saved;
 
     if (pProc == NULL || pProc->u64Cr3 == 0) {
+        spawn_soft_inc(&g_u32SoftAsTeardownSkip);
         return;
     }
     u64Cr3 = pProc->u64Cr3;
@@ -402,11 +448,14 @@ spawn_as_teardown(struct gj_process *pProc)
         vmm_set_anon_cursor(NULL);
         (void)vmm_as_destroy(u64Cr3);
         pProc->u64Cr3 = 0;
+        spawn_soft_inc(&g_u32SoftAsTeardown);
         if (u64Saved != 0) {
             cpu_load_cr3(u64Saved);
         } else if (u64Ker != 0) {
             cpu_load_cr3(u64Ker);
         }
+    } else {
+        spawn_soft_inc(&g_u32SoftAsTeardownSkip);
     }
 }
 
@@ -420,6 +469,7 @@ spawn_fail_cleanup(struct spawn_slot *pSlot, struct gj_process *pParent,
     if (pSlot == NULL) {
         return;
     }
+    spawn_soft_inc(&g_u32SoftFailCleanup);
     if (pParent != NULL && pRef != NULL && pParent->pCnode != NULL) {
         struct gj_cap_resolved res;
 
@@ -444,6 +494,9 @@ spawn_process_rights(u32 u32Jit)
     u16Rights = GJ_SPAWN_PROCESS_RIGHTS_BASE;
     if (u32Jit) {
         u16Rights |= (u16)GJ_RIGHT_JIT;
+        spawn_soft_inc(&g_u32SoftMintJit);
+    } else {
+        spawn_soft_inc(&g_u32SoftMintNoJit);
     }
     return u16Rights;
 }
@@ -697,10 +750,12 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
     process_wait_forget(pChild);
     if (res.pSlot != NULL) {
         gj_cap_slot_invalidate(res.pSlot);
+        spawn_soft_inc(&g_u32SoftWaitCapInv);
     }
     pSlot = spawn_slot_of(pChild);
     if (pSlot != NULL) {
         pSlot->u8Used = 0;
+        spawn_soft_inc(&g_u32SoftWaitSlotFree);
     }
     g_cWait++;
     kprintf("spawn: wait reaped exit=%u PASS\n", u32Exit);
@@ -776,6 +831,11 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
     pChild->pParent = pParent;
     pChild->u32Alive = 1;
     pChild->u32Personality = pArgs->u32Personality;
+    if (pArgs->u32Personality == 0u) {
+        spawn_soft_inc(&g_u32SoftPersonaNative);
+    } else {
+        spawn_soft_inc(&g_u32SoftPersonaLinux);
+    }
     gj_process_set_jit(pChild, pArgs->u32Jit ? 1 : 0);
 
     st = gj_process_bootstrap_root_meta(pChild, &pSlot->meta, NULL);
@@ -821,6 +881,8 @@ process_spawn(struct gj_process *pParent, const struct gj_spawn_args *pArgs,
      */
     u32Ppid = process_wait_pid_of(pParent);
     (void)process_wait_register(pChild, u32Ppid != 0 ? u32Ppid : 1u);
+    spawn_soft_inc(&g_u32SoftWaitReg);
+    g_u32SoftLastThrId = u32Thr;
 
     g_cSpawned++;
     soft_note_live_peak();

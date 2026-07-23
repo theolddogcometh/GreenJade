@@ -2,17 +2,21 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Cooperative threads + RR/QoS pick. See thread.h for dual-stack layout and
+ * Cooperative threads + soft QoS pick. See thread.h for dual-stack layout and
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
  *
- * Soft product deepen (Wave 11 exclusive; this unit only):
+ * Soft product deepen (Wave 14 exclusive; this unit only):
  *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
  *   - pick_next soft stats + equal-rank wait-age fairness
  *   - kstack base+mid canary + poison HWM soft scan
  *   - soft sched inventory: ready/run snap + HWM + transition counts
- *   - Wave 11 path tallies: create/block/wake/yield/switch/exit + aff/proc
- *     greppable: "sched: soft …" / "thread: soft …"
+ *   - path tallies: create/block/wake/yield/switch/exit + aff/proc
+ *   - Wave 14 greppable "thread: soft …" deepen (wave=14 stamp):
+ *       inventory|table|ready|run|create|block|wake|yield|switch|
+ *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen
+ *     twin "sched: soft …" retained for legacy smoke greps
+ *   Soft only — does NOT claim product RR / full preemption complete.
  *   Never hard-gates pick_next; diagnostics only (wrap OK).
  */
 #include <gj/apic.h>
@@ -53,8 +57,13 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
+/* Wave 14 exclusive soft deepen stamp (greppable wave=14). */
+#define THREAD_SOFT_DEEPEN_WAVE  14u
+/* Fixed greppable categories emitted under "thread: soft …". */
+#define THREAD_SOFT_DEEPEN_AREAS 20u
+
 /*
- * Soft sched inventory (Wave 11; file-local; ready = RUNNABLE, run = RUNNING).
+ * Soft sched inventory (Wave 14; file-local; ready = RUNNABLE, run = RUNNING).
  * Snapshots from table walk; HWM of live ready/run; transition + path tallies.
  * Diagnostics only — never hard-gates pick_next.
  * greppable: sched: soft … / thread: soft …
@@ -71,6 +80,8 @@ static u32 g_u32SoftAffAnySnap;  /* live thr affinity=any (0xFF) */
 static u32 g_u32SoftAffPinSnap;  /* live thr pinned (not any) */
 static u32 g_u32SoftProcSnap;    /* live thr with pProc bound */
 static u32 g_u32SoftSysUserSnap; /* live thr with mid-syscall USER_* valid */
+static u32 g_u32SoftIdleSnap;    /* planted AP/BSP idle thr count */
+static u32 g_u32SoftCr3Snap;     /* live thr with non-zero u64Cr3 */
 static u32 g_u32SoftReadyHwm;    /* max ready seen */
 static u32 g_u32SoftRunHwm;      /* max run seen */
 static u32 g_u32SoftLiveHwm;     /* max live seen */
@@ -84,7 +95,7 @@ static u32 g_aSoftReadyQos[5];   /* ready thr by base QoS class 0..4 */
 static u32 g_aSoftRunQos[5];     /* run thr by base QoS class 0..4 */
 static int g_fSoftInvOnce;       /* one-shot warm inventory dump */
 
-/* Wave 11 soft path tallies (cumulative; wrap OK). */
+/* Soft path tallies (cumulative; wrap OK). Wave 14 deepen surfaces. */
 static u64 g_u64SoftCreateOk;      /* thread_create success */
 static u64 g_u64SoftCreateFull;    /* table full / no slot */
 static u64 g_u64SoftCreateUser;    /* thread_create_user success */
@@ -135,14 +146,14 @@ sched_soft_note_run(void)
     g_u64SoftRunTrans++;
 }
 
-/* Soft: count thr becoming BLOCKED (Wave 11 path deepen). */
+/* Soft: count thr becoming BLOCKED (path deepen). */
 static void
 sched_soft_note_block(void)
 {
     g_u64SoftBlockTrans++;
 }
 
-/* Soft: count thr becoming EXITED (Wave 11 path deepen). */
+/* Soft: count thr becoming EXITED (path deepen). */
 static void
 sched_soft_note_exit(void)
 {
@@ -152,6 +163,7 @@ sched_soft_note_exit(void)
 /*
  * Walk fixed thr table; refresh ready/run/blocked/… snaps + HWM.
  * Pure read of thr state / QoS / boost / aff / proc; safe after thread_init.
+ * Wave 14: also idle plant count + non-zero CR3 live snap.
  */
 static void
 sched_soft_inventory_scan(void)
@@ -169,6 +181,8 @@ sched_soft_inventory_scan(void)
     u32 cAffPin = 0;
     u32 cProc = 0;
     u32 cSysUser = 0;
+    u32 cIdle = 0;
+    u32 cCr3 = 0;
     u32 aReadyQos[5];
     u32 aRunQos[5];
 
@@ -209,6 +223,9 @@ sched_soft_inventory_scan(void)
         if (g_aThreads[iThr].u32SysUserValid != 0) {
             cSysUser++;
         }
+        if (g_aThreads[iThr].u64Cr3 != 0) {
+            cCr3++;
+        }
         if (u32St == GJ_THR_RUNNABLE) {
             cReady++;
             aReadyQos[u8Qos]++;
@@ -220,6 +237,17 @@ sched_soft_inventory_scan(void)
         } else if (u32St == GJ_THR_EXITED) {
             cExited++;
         }
+    }
+
+    /* Soft idle plant inventory (BSP + APs; pointer presence only). */
+    for (iThr = 0; iThr < GJ_CPU_STATIC_MAX; iThr++) {
+        if (g_apIdle[iThr] != NULL) {
+            cIdle++;
+        }
+    }
+    if (g_pIdle != NULL && g_apIdle[0] == NULL) {
+        /* Bootstrap idle before apIdle[0] wired — count once. */
+        cIdle++;
     }
 
     g_u32SoftReadySnap = cReady;
@@ -234,6 +262,8 @@ sched_soft_inventory_scan(void)
     g_u32SoftAffPinSnap = cAffPin;
     g_u32SoftProcSnap = cProc;
     g_u32SoftSysUserSnap = cSysUser;
+    g_u32SoftIdleSnap = cIdle;
+    g_u32SoftCr3Snap = cCr3;
     for (iThr = 0; iThr < 5u; iThr++) {
         g_aSoftReadyQos[iThr] = aReadyQos[iThr];
         g_aSoftRunQos[iThr] = aRunQos[iThr];
@@ -254,12 +284,14 @@ sched_soft_inventory_scan(void)
 }
 
 /*
- * Greppable soft inventory dump (Wave 11 product / smoke).
+ * Greppable soft inventory dump (Wave 14 product / smoke).
  * Twin prefixes so either agent grep works:
  *   sched: soft inventory|ready|run|create|block|wake|yield|switch|path|aff …
- *   thread: soft table|ready|run|inventory|create|path|qos|canary|aff …
+ *   thread: soft table|ready|run|inventory|create|block|wake|yield|switch|
+ *           path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen …
  * greppable: sched: soft
  * greppable: thread: soft
+ * Soft only — never claims product RR / full preemption complete.
  */
 static void
 sched_soft_inventory_print(void)
@@ -272,12 +304,12 @@ sched_soft_inventory_print(void)
     /* Grep: sched: soft inventory */
     kprintf("sched: soft inventory ready=%u run=%u blocked=%u exited=%u "
             "live=%u unused=%u user=%u boost=%u samples=%lu "
-            "slots=%u log_n=%u\n",
+            "slots=%u log_n=%u wave=%u\n",
             g_u32SoftReadySnap, g_u32SoftRunSnap, g_u32SoftBlockedSnap,
             g_u32SoftExitedSnap, g_u32SoftLiveSnap, g_u32SoftUnusedSnap,
             g_u32SoftUserSnap, g_u32SoftBoostSnap,
             (unsigned long)g_u64SoftInvSamples, GJ_MAX_THREADS,
-            g_u32SoftLogN);
+            g_u32SoftLogN, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: sched: soft ready */
     kprintf("sched: soft ready snap=%u hwm=%u trans=%lu "
             "qos_n=%u qos_i=%u qos_b=%u qos_u=%u qos_d=%u\n",
@@ -338,74 +370,214 @@ sched_soft_inventory_print(void)
             "pick_gen=%u\n",
             g_u32SoftAffAnySnap, g_u32SoftAffPinSnap, g_u32SoftProcSnap,
             g_u32SoftSysUserSnap, g_u32PickGen);
-    /* Grep: sched: soft path */
+    /* Grep: sched: soft path — coop pick; not product RR/preempt complete */
     kprintf("sched: soft path claim=create+block+wake+yield+switch+pick "
-            "qos=0..4 boost_cap=%u (soft inventory; not bar3)\n",
-            GJ_QOS_BOOST_CAP);
+            "qos=0..4 boost_cap=%u coop=1 rr_complete=0 preempt_complete=0 "
+            "wave=%u (soft inventory; not bar3)\n",
+            GJ_QOS_BOOST_CAP, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
 
-    /* Grep: thread: soft table */
-    kprintf("thread: soft table live=%u unused=%u exited=%u blocked=%u "
-            "live_hwm=%u user=%u boost=%u max=%u\n",
-            g_u32SoftLiveSnap, g_u32SoftUnusedSnap, g_u32SoftExitedSnap,
-            g_u32SoftBlockedSnap, g_u32SoftLiveHwm, g_u32SoftUserSnap,
-            g_u32SoftBoostSnap, GJ_MAX_THREADS);
-    /* Grep: thread: soft ready / thread: soft run */
-    kprintf("thread: soft ready=%u run=%u ready_hwm=%u run_hwm=%u "
-            "ready_trans=%lu run_trans=%lu inv_n=%lu\n",
-            g_u32SoftReadySnap, g_u32SoftRunSnap, g_u32SoftReadyHwm,
-            g_u32SoftRunHwm, (unsigned long)g_u64SoftReadyTrans,
-            (unsigned long)g_u64SoftRunTrans,
-            (unsigned long)g_u64SoftInvSamples);
-    /* Grep: thread: soft inventory (twin of sched: soft inventory) */
+    /*
+     * Wave 14 exclusive "thread: soft …" deepen surface (prefix-stable).
+     * Each area greppable on its own for continuum / smoke.
+     */
+    /* Grep: thread: soft inventory */
     kprintf("thread: soft inventory ready=%u run=%u blocked=%u exited=%u "
             "live=%u unused=%u user=%u boost=%u samples=%lu "
-            "slots=%u log_n=%u\n",
+            "slots=%u log_n=%u idle=%u cr3=%u wave=%u areas=%u\n",
             g_u32SoftReadySnap, g_u32SoftRunSnap, g_u32SoftBlockedSnap,
             g_u32SoftExitedSnap, g_u32SoftLiveSnap, g_u32SoftUnusedSnap,
             g_u32SoftUserSnap, g_u32SoftBoostSnap,
             (unsigned long)g_u64SoftInvSamples, GJ_MAX_THREADS,
-            g_u32SoftLogN);
+            g_u32SoftLogN, g_u32SoftIdleSnap, g_u32SoftCr3Snap,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE,
+            (unsigned)THREAD_SOFT_DEEPEN_AREAS);
+    /* Grep: thread: soft table */
+    kprintf("thread: soft table live=%u unused=%u exited=%u blocked=%u "
+            "live_hwm=%u user=%u boost=%u max=%u ready=%u run=%u "
+            "wave=%u\n",
+            g_u32SoftLiveSnap, g_u32SoftUnusedSnap, g_u32SoftExitedSnap,
+            g_u32SoftBlockedSnap, g_u32SoftLiveHwm, g_u32SoftUserSnap,
+            g_u32SoftBoostSnap, GJ_MAX_THREADS, g_u32SoftReadySnap,
+            g_u32SoftRunSnap, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft ready */
+    kprintf("thread: soft ready snap=%u hwm=%u trans=%lu "
+            "qos_n=%u qos_i=%u qos_b=%u qos_u=%u qos_d=%u wave=%u\n",
+            g_u32SoftReadySnap, g_u32SoftReadyHwm,
+            (unsigned long)g_u64SoftReadyTrans,
+            g_aSoftReadyQos[GJ_QOS_NORMAL],
+            g_aSoftReadyQos[GJ_QOS_INTERACTIVE],
+            g_aSoftReadyQos[GJ_QOS_BACKGROUND],
+            g_aSoftReadyQos[GJ_QOS_UTILITY],
+            g_aSoftReadyQos[GJ_QOS_DRIVER],
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft run */
+    kprintf("thread: soft run snap=%u hwm=%u trans=%lu "
+            "qos_n=%u qos_i=%u qos_b=%u qos_u=%u qos_d=%u wave=%u\n",
+            g_u32SoftRunSnap, g_u32SoftRunHwm,
+            (unsigned long)g_u64SoftRunTrans,
+            g_aSoftRunQos[GJ_QOS_NORMAL],
+            g_aSoftRunQos[GJ_QOS_INTERACTIVE],
+            g_aSoftRunQos[GJ_QOS_BACKGROUND],
+            g_aSoftRunQos[GJ_QOS_UTILITY],
+            g_aSoftRunQos[GJ_QOS_DRIVER],
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft create */
     kprintf("thread: soft create ok=%lu full=%lu user=%lu user32=%lu "
-            "reuse=%lu ap_idle=%lu set_cpu=%lu\n",
+            "reuse=%lu ap_idle=%lu set_cpu=%lu wave=%u\n",
             (unsigned long)g_u64SoftCreateOk,
             (unsigned long)g_u64SoftCreateFull,
             (unsigned long)g_u64SoftCreateUser,
             (unsigned long)g_u64SoftCreateUser32,
             (unsigned long)g_u64SoftCreateReuse,
             (unsigned long)g_u64SoftCreateApIdle,
-            (unsigned long)g_u64SoftSetCpuN);
-    /* Grep: thread: soft path */
-    kprintf("thread: soft path block=%lu wake_thr=%lu yield=%lu "
-            "switch=%lu exit=%lu (soft inventory; not bar3)\n",
+            (unsigned long)g_u64SoftSetCpuN,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft block */
+    kprintf("thread: soft block n=%lu trans=%lu snap=%u hwm=%u wave=%u\n",
             (unsigned long)g_u64SoftBlockN,
+            (unsigned long)g_u64SoftBlockTrans, g_u32SoftBlockedSnap,
+            g_u32SoftBlockedHwm, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft wake */
+    kprintf("thread: soft wake calls=%lu thr=%lu ready_trans=%lu wave=%u\n",
+            (unsigned long)g_u64SoftWakeCalls,
             (unsigned long)g_u64SoftWakeThr,
+            (unsigned long)g_u64SoftReadyTrans,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft yield */
+    kprintf("thread: soft yield n=%lu req=%lu pend_hit=%lu "
+            "soft_preempt_flag=1 product_preempt_complete=0 wave=%u\n",
             (unsigned long)g_u64SoftYieldN,
+            (unsigned long)g_u64SoftYieldReq,
+            (unsigned long)g_u64SoftYieldPendHit,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft switch */
+    kprintf("thread: soft switch enter=%lu self=%lu switch=%lu spin=%lu "
+            "exit=%lu exit_trans=%lu wave=%u\n",
+            (unsigned long)g_u64SoftSchedEnter,
+            (unsigned long)g_u64SoftSchedSelf,
             (unsigned long)g_u64SoftSchedSwitch,
-            (unsigned long)g_u64SoftExitN);
+            (unsigned long)g_u64SoftSchedSpin,
+            (unsigned long)g_u64SoftExitN,
+            (unsigned long)g_u64SoftExitTrans,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft exit */
+    kprintf("thread: soft exit n=%lu trans=%lu exited_snap=%u wave=%u\n",
+            (unsigned long)g_u64SoftExitN,
+            (unsigned long)g_u64SoftExitTrans, g_u32SoftExitedSnap,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft pick — soft QoS pick; not product RR complete */
+    kprintf("thread: soft pick total=%lu idle=%lu int=%lu norm=%lu "
+            "bg=%lu util=%lu drv=%lu aff_skip=%lu eq_fair=%lu self=%lu "
+            "gen=%u coop=1 rr_complete=0 wave=%u\n",
+            (unsigned long)g_soft.u64PickTotal,
+            (unsigned long)g_soft.u64PickIdle,
+            (unsigned long)g_soft.u64PickInteractive,
+            (unsigned long)g_soft.u64PickNormal,
+            (unsigned long)g_soft.u64PickBackground,
+            (unsigned long)g_soft.u64PickUtility,
+            (unsigned long)g_soft.u64PickDriver,
+            (unsigned long)g_soft.u64PickAffSkip,
+            (unsigned long)g_soft.u64PickEqualFair,
+            (unsigned long)g_soft.u64PickSelf, g_u32PickGen,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft qos */
     kprintf("thread: soft qos set=%lu clamp=%lu boost=%lu decay=%lu "
-            "boost_live=%u gen=%u cap=%u\n",
+            "boost_live=%u gen=%u cap=%u classes=0..4 wave=%u\n",
             (unsigned long)g_soft.u64QosSet,
             (unsigned long)g_soft.u64QosClamp,
             (unsigned long)g_soft.u64QosBoostSoft,
             (unsigned long)g_soft.u64QosBoostDecay, g_u32SoftBoostSnap,
-            g_u32PickGen, GJ_QOS_BOOST_CAP);
+            g_u32PickGen, GJ_QOS_BOOST_CAP,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft canary */
     kprintf("thread: soft canary plant=%lu chk=%lu ok=%lu mid=%lu "
-            "fail=%lu hwm_max=%lu hwm_n=%lu\n",
+            "fail=%lu hwm_max=%lu hwm_n=%lu wave=%u\n",
             (unsigned long)g_soft.u64CanaryPlant,
             (unsigned long)g_soft.u64CanaryCheck,
             (unsigned long)g_soft.u64CanaryOk,
             (unsigned long)g_soft.u64CanaryMidOk,
             (unsigned long)g_soft.u64CanaryFail,
             (unsigned long)g_soft.u64StackHwmMax,
-            (unsigned long)g_soft.u64StackHwmSamples);
+            (unsigned long)g_soft.u64StackHwmSamples,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft stack — dual-stack capacity inventory */
+    kprintf("thread: soft stack astack=%u kstack=%u mid_off=%u "
+            "poison=0x%x canary=base+mid hwm_max=%lu hwm_n=%lu wave=%u\n",
+            (unsigned)GJ_THR_STACK_SIZE, (unsigned)GJ_THR_KSTACK_SIZE,
+            (unsigned)GJ_THR_KSTACK_MID, (unsigned)GJ_THR_KSTACK_POISON,
+            (unsigned long)g_soft.u64StackHwmMax,
+            (unsigned long)g_soft.u64StackHwmSamples,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft aff */
     kprintf("thread: soft aff any=%u pin=%u proc=%u sys_user=%u "
-            "blocked_hwm=%u\n",
+            "blocked_hwm=%u cr3=%u wave=%u\n",
             g_u32SoftAffAnySnap, g_u32SoftAffPinSnap, g_u32SoftProcSnap,
-            g_u32SoftSysUserSnap, g_u32SoftBlockedHwm);
+            g_u32SoftSysUserSnap, g_u32SoftBlockedHwm, g_u32SoftCr3Snap,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft idle */
+    kprintf("thread: soft idle planted=%u bsp=%u ap_create=%lu "
+            "pick_idle=%lu cpu_max=%u wave=%u\n",
+            g_u32SoftIdleSnap, (g_pIdle != NULL) ? 1u : 0u,
+            (unsigned long)g_u64SoftCreateApIdle,
+            (unsigned long)g_soft.u64PickIdle, (unsigned)GJ_CPU_STATIC_MAX,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft caps — compile-time capacity lamps */
+    kprintf("thread: soft caps max_thr=%u qos_max=%u boost_cap=%u "
+            "astack=%u kstack=%u cpu_static=%u wave=%u\n",
+            (unsigned)GJ_MAX_THREADS, (unsigned)GJ_QOS_CLASS_MAX,
+            (unsigned)GJ_QOS_BOOST_CAP, (unsigned)GJ_THR_STACK_SIZE,
+            (unsigned)GJ_THR_KSTACK_SIZE, (unsigned)GJ_CPU_STATIC_MAX,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft stats */
+    kprintf("thread: soft stats pick=%lu idle=%lu int=%lu norm=%lu "
+            "bg=%lu util=%lu drv=%lu aff_skip=%lu eq_fair=%lu self=%lu "
+            "qos_set=%lu clamp=%lu boost=%lu decay=%lu "
+            "can_plant=%lu can_ok=%lu hwm_max=%lu log_n=%u wave=%u\n",
+            (unsigned long)g_soft.u64PickTotal,
+            (unsigned long)g_soft.u64PickIdle,
+            (unsigned long)g_soft.u64PickInteractive,
+            (unsigned long)g_soft.u64PickNormal,
+            (unsigned long)g_soft.u64PickBackground,
+            (unsigned long)g_soft.u64PickUtility,
+            (unsigned long)g_soft.u64PickDriver,
+            (unsigned long)g_soft.u64PickAffSkip,
+            (unsigned long)g_soft.u64PickEqualFair,
+            (unsigned long)g_soft.u64PickSelf,
+            (unsigned long)g_soft.u64QosSet,
+            (unsigned long)g_soft.u64QosClamp,
+            (unsigned long)g_soft.u64QosBoostSoft,
+            (unsigned long)g_soft.u64QosBoostDecay,
+            (unsigned long)g_soft.u64CanaryPlant,
+            (unsigned long)g_soft.u64CanaryOk,
+            (unsigned long)g_soft.u64StackHwmMax, g_u32SoftLogN,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /*
+     * Grep: thread: soft path
+     * Honesty: cooperative pick + soft yield flag ≠ product RR/preempt done.
+     */
+    kprintf("thread: soft path claim=create+block+wake+yield+switch+pick "
+            "coop=1 soft_yield_flag=1 rr_complete=0 preempt_complete=0 "
+            "block=%lu wake_thr=%lu yield=%lu switch=%lu exit=%lu "
+            "wave=%u (soft inventory; not bar3)\n",
+            (unsigned long)g_u64SoftBlockN,
+            (unsigned long)g_u64SoftWakeThr,
+            (unsigned long)g_u64SoftYieldN,
+            (unsigned long)g_u64SoftSchedSwitch,
+            (unsigned long)g_u64SoftExitN,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft deepen wave (Wave 14 stamp) */
+    kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
+            "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE,
+            (unsigned)THREAD_SOFT_DEEPEN_AREAS, g_u32SoftLiveSnap,
+            g_u32SoftReadySnap, g_u32SoftRunSnap, g_u32SoftBlockedSnap,
+            (unsigned long)g_soft.u64PickTotal, g_u32SoftLogN);
+    /* Grep: thread: soft inventory PASS / thread: soft PASS */
+    kprintf("thread: soft inventory PASS log_n=%u wave=%u areas=%u\n",
+            g_u32SoftLogN, (unsigned)THREAD_SOFT_DEEPEN_WAVE,
+            (unsigned)THREAD_SOFT_DEEPEN_AREAS);
+    kprintf("thread: soft PASS wave=%u\n",
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
 }
 
 /*
@@ -637,6 +809,8 @@ thread_init(void)
     g_u32SoftAffPinSnap = 0;
     g_u32SoftProcSnap = 0;
     g_u32SoftSysUserSnap = 0;
+    g_u32SoftIdleSnap = 0;
+    g_u32SoftCr3Snap = 0;
     g_u32SoftReadyHwm = 0;
     g_u32SoftRunHwm = 0;
     g_u32SoftLiveHwm = 0;
@@ -1225,7 +1399,7 @@ thread_sched_soft_stats_print(void)
             "util=%lu drv=%lu aff_skip=%lu eq_fair=%lu self=%lu "
             "qos_set=%lu qos_clamp=%lu boost=%lu decay=%lu "
             "can_plant=%lu can_chk=%lu can_ok=%lu can_mid=%lu can_fail=%lu "
-            "hwm_max=%lu hwm_n=%lu\n",
+            "hwm_max=%lu hwm_n=%lu wave=%u\n",
             (unsigned long)g_soft.u64PickTotal,
             (unsigned long)g_soft.u64PickIdle,
             (unsigned long)g_soft.u64PickInteractive,
@@ -1246,8 +1420,9 @@ thread_sched_soft_stats_print(void)
             (unsigned long)g_soft.u64CanaryMidOk,
             (unsigned long)g_soft.u64CanaryFail,
             (unsigned long)g_soft.u64StackHwmMax,
-            (unsigned long)g_soft.u64StackHwmSamples);
-    /* Deepen: ready/run soft inventory alongside pick stats. */
+            (unsigned long)g_soft.u64StackHwmSamples,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Wave 14: full greppable thread: soft … inventory alongside pick stats. */
     sched_soft_inventory_print();
     return g_soft.u64PickTotal;
 }

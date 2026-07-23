@@ -40,7 +40,7 @@
  * virtual counter).
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (freq soft + tick soft)
+ * Soft inventory deepen (Wave 14: freq soft + tick soft + path honesty)
  * -------------------------------------------------------------------------
  * Greppable family "aarch64: timer soft …" plus focused sub-markers:
  *   aarch64: timer soft frq=… t0=… t1=… adv=… delta=… hits=…
@@ -51,6 +51,11 @@
  *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
  *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
  *   aarch64: timer tick soft PASS | FAIL
+ *   aarch64: timer soft inventory wave=14 …
+ *   aarch64: timer soft stats …
+ *   aarch64: timer soft deepen wave=14 areas=…
+ *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
+ *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: timer soft PASS | FAIL
  *   aarch64: timer PASS
  *
@@ -92,6 +97,15 @@ extern void aarch64_uart_put_hex(unsigned long v);
 
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
+
+/* Wave 14 soft inventory stamp (greppable wave=14). */
+#define TIMER_SOFT_WAVE 14u
+
+/* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
+#define TIMER_SOFT_AREAS 6u
+
+/* Soft inventory emit counter (Wave 14 stats). */
+static unsigned g_cTimerSoftLogs;
 
 /* Soft inventory snapshot from tick path (stack-local via out params). */
 struct timer_tick_soft_inv {
@@ -453,7 +467,7 @@ timer_tick_soft_inventory(const struct timer_tick_soft_inv *pInv,
 }
 
 /*
- * Combined soft inventory line (greppable "aarch64: timer soft …").
+ * Combined soft inventory line (greppable "aarch64: timer soft …"; Wave 14).
  * Returns 1 if both freq soft and tick soft passed.
  */
 static int
@@ -462,7 +476,23 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
                      const struct timer_tick_soft_inv *pInv,
                      int fFreqSoft, int fTickSoft)
 {
+    unsigned cHits;
+    unsigned uSpins0;
+    unsigned uSpins1;
     int fSoft;
+
+    if (g_cTimerSoftLogs < 0xffffffffu) {
+        g_cTimerSoftLogs++;
+    }
+
+    cHits = 0u;
+    uSpins0 = 0u;
+    uSpins1 = 0u;
+    if (pInv != 0) {
+        cHits = pInv->cHits;
+        uSpins0 = pInv->uSpins0;
+        uSpins1 = pInv->uSpins1;
+    }
 
     aarch64_uart_puts("aarch64: timer soft frq=");
     aarch64_uart_put_hex((unsigned long)u32Frq);
@@ -494,6 +524,75 @@ timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
     aarch64_uart_put_hex((unsigned long)fFreqSoft);
     aarch64_uart_puts(" tick_ok=");
     aarch64_uart_put_hex((unsigned long)fTickSoft);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: timer soft inventory — Wave 14 rollup. */
+    aarch64_uart_puts("aarch64: timer soft inventory wave=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+    aarch64_uart_puts(" frq=");
+    aarch64_uart_put_hex((unsigned long)u32Frq);
+    aarch64_uart_puts(" adv=");
+    aarch64_uart_put_hex(u64Adv);
+    aarch64_uart_puts(" hits=");
+    aarch64_uart_put_hex((unsigned long)cHits);
+    aarch64_uart_puts(" freq_ok=");
+    aarch64_uart_put_hex((unsigned long)fFreqSoft);
+    aarch64_uart_puts(" tick_ok=");
+    aarch64_uart_put_hex((unsigned long)fTickSoft);
+    aarch64_uart_puts(" ppi=");
+    aarch64_uart_put_hex((unsigned long)TIMER_PPI_VIRT);
+    aarch64_uart_puts(" logs=");
+    aarch64_uart_put_hex((unsigned long)g_cTimerSoftLogs);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: timer soft stats */
+    aarch64_uart_puts("aarch64: timer soft stats frq=");
+    aarch64_uart_put_hex((unsigned long)u32Frq);
+    aarch64_uart_puts(" adv=");
+    aarch64_uart_put_hex(u64Adv);
+    aarch64_uart_puts(" hits=");
+    aarch64_uart_put_hex((unsigned long)cHits);
+    aarch64_uart_puts(" spins0=");
+    aarch64_uart_put_hex((unsigned long)uSpins0);
+    aarch64_uart_puts(" spins1=");
+    aarch64_uart_put_hex((unsigned long)uSpins1);
+    aarch64_uart_puts(" imask=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_ARM_IMASKED);
+    aarch64_uart_puts(" logs=");
+    aarch64_uart_put_hex((unsigned long)g_cTimerSoftLogs);
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Grep: aarch64: timer soft deepen
+     * Wave 14 area catalog — CNTV soft arm only; no IRQ delivery claim.
+     */
+    aarch64_uart_puts("aarch64: timer soft deepen wave=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_AREAS);
+    aarch64_uart_puts(" catalog=freq,tick,inventory,stats,path,honesty "
+                      "logs=");
+    aarch64_uart_put_hex((unsigned long)g_cTimerSoftLogs);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Grep: aarch64: timer soft path
+     * Honesty: IMASK stays set; PPI soft-enabled in GIC but no IRQ take.
+     * product_kernel=OPEN: aarch64 product kernel remains OPEN.
+     */
+    aarch64_uart_puts("aarch64: timer soft path imask=1 irq_delivery=0 "
+                      "cntv=1 cntp=0 ppi=");
+    aarch64_uart_put_hex((unsigned long)TIMER_PPI_VIRT);
+    aarch64_uart_puts(" product_kernel=OPEN hard_gate=0 wave=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: timer soft honesty */
+    aarch64_uart_puts("aarch64: timer soft honesty product_kernel=OPEN "
+                      "soft_only=1 no_irq_take=1 no_bar3=1 wave=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
     fSoft = 0;
@@ -582,13 +681,14 @@ aarch64_timer_probe(void)
     /* Soft tick inventory (arm bits + dual ISTATUS + quiet end). */
     fTickSoft = timer_tick_soft_inventory(&inv, u64Adv);
 
-    /* Combined soft inventory under "aarch64: timer soft …". */
+    /* Wave 14 combined soft inventory under "aarch64: timer soft …". */
     fSoft = timer_soft_inventory(u32Frq, u64T0, u64T1, u64Adv, &inv,
                                  fFreqSoft, fTickSoft);
 
     /*
      * Primary product marker: regs reachable. Always emit when probe runs
      * (M0+ smoke). Soft FAIL paths remain greppable separately.
+     * Honesty: timer PASS ≠ product IRQ timer / aarch64 kernel complete.
      */
     aarch64_uart_puts("aarch64: timer PASS\n");
 

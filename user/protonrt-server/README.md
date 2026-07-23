@@ -81,6 +81,25 @@ One-shot only; safe to ignore in `smoke-all.sh`:
 | `protonrt-user: soft reply-miss` | First soft `IPC_REPLY` failure (rare after live recv) |
 | `protonrt-user: soft serve-miss` | First `PERSONALITY_SERVE` copy/arg soft fault (frame still 0, `rax < 0`); reply still sent |
 
+### Soft inventory (Wave 14 exclusive deepen)
+
+Asm-safe soft deepen: greppable comments + one-shot markers above; no new
+hard exits. Source greppable stamps:
+
+```text
+protonrt-user: soft deepen wave=14
+protonrt-user: soft inventory areas=6 wave=14
+```
+
+| Area | Meaning |
+|------|---------|
+| 1 up-banner | Hard `door server up` once |
+| 2 fixed-frame | 128-byte regs frame allocated once (`r14`) |
+| 3 wire-zero | Zero 64-byte wire frame before each `IPC_RECV` |
+| 4 yield-miss | Soft miss → `pause` + `YIELD` (no busy-spin alone) |
+| 5 one-shot-soft | Ready / recv-miss / reply-miss / serve-miss (bits in `r15`) |
+| 6 never-exit-soft | Never `EXIT` / tear-down on soft error |
+
 Soft deepenings stay product-safe:
 
 - Fixed frame (no per-iter `sub`/`add` thrash)
@@ -88,6 +107,7 @@ Soft deepenings stay product-safe:
 - Reply uses serve `rax` (same value as kernel `cold_personality_server`)
 - Soft miss → `YIELD` (not busy-spin alone)
 - Never `EXIT` on soft error
+- Wave 14 inventory is comment + soft-flag documentation only (asm-safe)
 
 Kernel map/schedule companions (not from this directory):
 
@@ -170,6 +190,7 @@ part of this directory.
 |-------|--------|
 | G-PERS door loop in ring-3 | **Landed** (`server.S`) |
 | Door loop soft deepen | **Landed** (fixed frame, yield miss, one-shot soft markers) |
+| Wave 14 soft inventory | **Landed** (greppable comments + `SOFT_INV_WAVE=14` / areas=6) |
 | Cold policy in userspace | **Interim** — `PERSONALITY_SERVE` still kernel policy |
 | Wine-server A0 shape | **Kernel smoke** (`winesrv:` markers above) |
 | Deck Top 50 / libprotonrt growth | See `docs/PROTON_PERSONALITY.md` |

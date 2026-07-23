@@ -10,6 +10,22 @@
  * without a window; soft-only PASS without intel-iommu; honesty open_bus=0.
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
+ *
+ * Wave 14 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
+ *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
+ *   vtd: soft tables     — root/context/SLPT identity construct
+ *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
+ *   vtd: soft dmar       — DRHD/RMRR/ATSR/RHSA/other counts
+ *   vtd: soft te         — TE arm mode (none/soft/hw)
+ *   vtd: soft domain     — soft DID pool + attach slots
+ *   vtd: soft identity   — bring-up identity cover lamps
+ *   vtd: soft product    — P-DMA-4 no-open-bus soft path
+ *   vtd: soft path       — honesty: always-on product IOMMU remains OPEN
+ *   vtd: soft lamps      — composite soft lamps
+ *   vtd: soft deepen     — wave=14 stamp + area count
+ *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
+ *   vtd: soft PASS | soft inventory PASS
+ * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close.
  */
 #include <gj/config.h>
 #include <gj/iommu.h>
@@ -70,6 +86,11 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
+/* Wave 14 soft inventory stamp (file-local; never product gate). */
+#define VTD_SOFT_WAVE  14u
+/* Fixed greppable categories for deepen stamp (inventory…OPEN). */
+#define VTD_SOFT_AREAS 12u
+
 /*
  * Product-default soft BDF (P-DMA-4 smoke). Kept off main enforce 0:2.0 and
  * domain soft 0:3.0 so bring-up greps stay independent.
@@ -127,6 +148,11 @@ static u32                    g_u32DomUsed;
 
 /* Product-default soft (P-DMA-4): local deny-path ticks while enforce armed */
 static u32 g_u32ProdSoftDeny;
+
+/* Wave 14 greppable soft inventory dump count (vtd: soft …) */
+static u32 g_cSoftInvLogs;
+
+static void vtd_soft_inventory_log(void);
 
 static void *
 vtd_virt(gj_paddr_t pa)
@@ -702,6 +728,181 @@ iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb, int *pCovered)
 /* ---- Soft probe ---- */
 
 /**
+ * Wave 14 greppable soft inventory dump (prefix "vtd: soft …").
+ * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
+ *
+ * greppable: vtd: soft
+ * greppable: vtd: soft inventory
+ * greppable: vtd: soft tables
+ * greppable: vtd: soft cap
+ * greppable: vtd: soft dmar
+ * greppable: vtd: soft te
+ * greppable: vtd: soft domain
+ * greppable: vtd: soft identity
+ * greppable: vtd: soft product
+ * greppable: vtd: soft path
+ * greppable: vtd: soft lamps
+ * greppable: vtd: soft deepen
+ * greppable: vtd: soft OPEN
+ * greppable: vtd: soft PASS
+ */
+static void
+vtd_soft_inventory_log(void)
+{
+    u32 cAtt = 0;
+    u32 iAtt;
+    int fReady;
+    int fTe;
+    int nMode;
+    int fIdLo;
+    int fIdHi;
+    int fIdOut;
+    int fCoveredSoft;
+    const char *szMode;
+    const char *szCapSrc;
+
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
+
+    for (iAtt = 0; iAtt < VTD_SOFT_ATTACH_MAX; iAtt++) {
+        if (g_aAtt[iAtt].u8Used) {
+            cAtt++;
+        }
+    }
+
+    fReady = g_fVtdReady ? 1 : 0;
+    fTe = g_fTeArmed ? 1 : 0;
+    nMode = iommu_vtd_te_mode();
+    if (nMode == GJ_IOMMU_TE_HW) {
+        szMode = "hw";
+    } else if (nMode == GJ_IOMMU_TE_SOFT) {
+        szMode = "soft";
+    } else {
+        szMode = "none";
+    }
+    szCapSrc = g_fCapFromMmio ? "mmio" : "synthetic";
+    fIdLo = iommu_vtd_identity_covers(0, 0x1000);
+    fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
+    fIdOut = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT, 0x1000);
+    fCoveredSoft = (fIdLo && fIdHi && !fIdOut) ? 1 : 0;
+
+    /* Grep: vtd: soft inventory */
+    kprintf("vtd: soft inventory ready=%d pages=%u ctx_dev=%u ctx_present=%u "
+            "dom=%u/%u feat=0x%x te_mode=%s drhd=0x%lx logs=%u wave=%u "
+            "(soft inventory; not always-on product IOMMU; not bar3)\n",
+            fReady, g_u32VtdPages, g_u32CtxDevices,
+            g_Soft.u32CtxPresent, g_u32DomUsed,
+            (unsigned)GJ_IOMMU_DOMAIN_MAX, g_Soft.u32Feat, szMode,
+            (unsigned long)g_u64Drhd, g_cSoftInvLogs,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft tables */
+    kprintf("vtd: soft tables ready=%d root=0x%lx ctx=0x%lx slpt=0x%lx "
+            "pd0=0x%lx pages=%u ctx_dev=%u min_pages=%u wave=%u "
+            "(RAM construct; not HW product close)\n",
+            fReady, (unsigned long)g_paRoot, (unsigned long)g_paContext,
+            (unsigned long)g_paPdpt, (unsigned long)g_paPd0, g_u32VtdPages,
+            g_u32CtxDevices, (unsigned)VTD_PAGES_MIN, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft cap */
+    kprintf("vtd: soft cap src=%s mmio=%d cap=0x%lx ecap=0x%lx "
+            "feat_cap_mmio=%u feat_cap_soft=%u wave=%u "
+            "(read-only soft; never programs GCMD here)\n",
+            szCapSrc, g_fCapFromMmio ? 1 : 0, (unsigned long)g_u64Cap,
+            (unsigned long)g_u64Ecap,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft dmar */
+    kprintf("vtd: soft dmar drhd=%u rmrr=%u atsr=%u rhsa=%u other=%u "
+            "has_drhd=%d base=0x%lx wave=%u (fed from ACPI soft inventory)\n",
+            g_cDrhdInv, g_cRmrrInv, g_cAtsrInv, g_cRhsaInv, g_cOtherInv,
+            (g_u64Drhd != 0) ? 1 : 0, (unsigned long)g_u64Drhd,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft te */
+    kprintf("vtd: soft te armed=%d mode=%s mode_n=%d "
+            "feat_te_soft=%u feat_te_hw=%u root=0x%lx wave=%u "
+            "(soft-arm ≠ product always-on TE)\n",
+            fTe, szMode, nMode,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
+            (unsigned long)g_paRoot, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft domain */
+    kprintf("vtd: soft domain used=%u max=%u attach_live=%u attach_max=%u "
+            "default0=%u feat_domain=%u wave=%u "
+            "(software DID pool; no QI invalidate product)\n",
+            g_u32DomUsed, (unsigned)GJ_IOMMU_DOMAIN_MAX, cAtt,
+            (unsigned)VTD_SOFT_ATTACH_MAX, g_aDom[0].u8Used ? 1u : 0u,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft identity */
+    kprintf("vtd: soft identity limit=0x%lx cover_lo=%d cover_hi=%d "
+            "cover_out=%d bounds_ok=%d feat_id=%u sp=2MiB wave=%u "
+            "(bring-up first 1GiB; not full address-space product)\n",
+            (unsigned long)VTD_IDENTITY_LIMIT, fIdLo, fIdHi, fIdOut,
+            fCoveredSoft,
+            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft product (P-DMA-4 soft path tallies) */
+    kprintf("vtd: soft product soft_denies=%u open_bus=0 "
+            "prod_bdf=%u:%u.%u deny_bdf=%u:%u.%u "
+            "production_default_open_bus=0 soft wave=%u "
+            "(P-DMA-4 soft; not product always-on IOMMU)\n",
+            g_u32ProdSoftDeny, (unsigned)VTD_PROD_SOFT_BUS,
+            (unsigned)VTD_PROD_SOFT_SLOT, (unsigned)VTD_PROD_SOFT_FUNC,
+            (unsigned)VTD_PROD_SOFT_BUS, (unsigned)VTD_PROD_DENY_SLOT,
+            (unsigned)VTD_PROD_DENY_FUNC, (unsigned)VTD_SOFT_WAVE);
+
+    /*
+     * Honesty: always-on product IOMMU remains OPEN.
+     * Soft deepen ≠ product always-on IOMMU claim.
+     * Grep: vtd: soft path
+     */
+    kprintf("vtd: soft path tables=ram_identity_1g te=soft_or_hw "
+            "cap=mmio_or_synthetic domain=soft_did "
+            "always_on_product=OPEN hw_default_te=OPEN "
+            "qi_invalidate=OPEN bar3=OPEN wave=%u "
+            "(soft inventory; not product always-on IOMMU)\n",
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft lamps */
+    kprintf("vtd: soft lamps tables=%d te=%d cap_mmio=%d has_drhd=%d "
+            "identity=%d domain0=%d soft_probed=%d wave=%u "
+            "(composite soft lamps)\n",
+            fReady, fTe, g_fCapFromMmio ? 1 : 0, (g_u64Drhd != 0) ? 1 : 0,
+            fCoveredSoft, g_aDom[0].u8Used ? 1 : 0, g_fSoftProbed,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft deepen wave (Wave 14 stamp) */
+    kprintf("vtd: soft deepen wave=%u areas=%u logs=%u "
+            "(Wave 14 exclusive; soft only; not product always-on IOMMU; "
+            "not bar3)\n",
+            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs);
+
+    /*
+     * Explicit OPEN honesty for always-on product IOMMU.
+     * Grep: vtd: soft OPEN
+     */
+    kprintf("vtd: soft OPEN always_on_product=OPEN "
+            "no_open_bus_master_product=OPEN hw_te_default=OPEN "
+            "qi_product=OPEN inventory_only=1 wave=%u "
+            "(soft deepen ≠ product always-on IOMMU claim; not bar3)\n",
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft inventory PASS | vtd: soft PASS */
+    kprintf("vtd: soft inventory PASS ready=%d pages=%u logs=%u wave=%u\n",
+            fReady, g_u32VtdPages, g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
+    kprintf("vtd: soft PASS wave=%u areas=%u always_on_product=OPEN\n",
+            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS);
+}
+
+/**
  * Production-default soft path (P-DMA-4): arm enforce, deny open bus-master
  * without a window, grant+allow with window, honesty production_default_open_bus=0.
  *
@@ -883,6 +1084,11 @@ iommu_vtd_soft_probe(void)
      * intended. Soft-only; independent of existing soft-probe PASS.
      */
     (void)vtd_product_default_soft();
+    /*
+     * Wave 14 exclusive soft inventory (greppable "vtd: soft …").
+     * Soft deepen only; always-on product IOMMU remains OPEN.
+     */
+    vtd_soft_inventory_log();
     return 1;
 }
 

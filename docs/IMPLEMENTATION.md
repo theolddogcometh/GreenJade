@@ -708,3 +708,63 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 ---
 
 *Wave 12 honesty (2026-07-23): continuum **makefile_max=15400 soft only**; **bar3 remains OPEN**.*
+
+---
+
+## Progress note — GreenJade Wave 14 soft continuum (2026-07-23)
+
+**Additive only (Wave 14 exclusive for this file).** Prior progress rows and Wave 10/12 soft stamps above stay historical ledger. This section is Wave 14 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+
+### Soft stamp (Wave 14)
+
+| Field | Value |
+|-------|--------|
+| **Wave** | GreenJade Wave 14 (soft continuum / non-w13 deepen) |
+| **Continuum** | makefile target high-water **advancing toward 15600** — **soft only** (parent wires / CREATE-ONLY graph; tree may still show prior decade e.g. 15500) |
+| **bar3** | **OPEN** |
+| **Matrix** | **NOT-TRIED × 50** (no titles tried) |
+| **Product lamps** | **0** (soft stubs stay zero by design) |
+
+**Soft stamp (Wave 14):** continuum high-water **advancing toward 15600** soft only (parent wires). Soft deepen on non-w13 surfaces. **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+
+### Soft continuum ≠ bar3 (Wave 14 honesty)
+
+| Soft surface | What it is | What it is **not** |
+|--------------|------------|--------------------|
+| Continuum **toward 15600** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Soft deepen (non-w13 surfaces) | Honesty / bring-up surface deepen | Product complete; product lamps lit |
+| Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
+| Product lamps **0** | Soft score / bar3-ready stubs remain zero | Any product-score claim |
+
+**Hard rule:** never promote continuum advancing toward **15600**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.**
+
+### Explicit non-claims (Wave 14)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Continuum high-water advancing toward **15600** (parent wire soft)” | **Yes** — soft only |
+| “Soft continuum toward 15600 = Steam client / Top-50 / product score” | **No** |
+| “Product lamps lit / product complete from Wave 14 soft deepen” | **No** — lamps remain **0** |
+| “bar3 closed by continuum toward 15600 / media READY / kernel soft gates” | **No** |
+| “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
+| Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
+
+### Open (unchanged by Wave 14)
+
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
+- Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
+- Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
+- Soft continuum growth toward **15600** — **soft only**; does **not** close bar3; product lamps stay **0**
+
+**Bar3 remains OPEN.** Wave 14 honesty: continuum **advancing toward 15600 soft only**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+
+### Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [STEAM_HWTEST.md](STEAM_HWTEST.md) — media path / continuum soft scope  
+- [HCL.md](HCL.md) — soft probes ≠ full HCL product  
+- [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title matrix honesty  
+
+---
+
+*Wave 14 soft continuum (2026-07-23): high-water **advancing toward 15600 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*

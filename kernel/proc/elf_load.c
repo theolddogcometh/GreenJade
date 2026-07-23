@@ -6,12 +6,13 @@
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 11 exclusive; this unit only; never hard-gates):
+ * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
  * greppable: "elf: soft …" | "elf_load: soft …"
  *   elf: soft inventory …
  *   elf: soft probe …
  *   elf: soft load …
  *   elf: soft reloc …
+ *   elf: soft reloc_kind …   (Wave 14: relative/tls/irel/copy/glob/jump/abs64)
  *   elf: soft so …
  *   elf: soft needed …
  *   elf: soft resolve …
@@ -19,8 +20,11 @@
  *   elf: soft handoff …
  *   elf: soft interp …
  *   elf: soft path …
+ *   elf: soft deepen wave=14 …
+ *   elf: soft catalog …      (Wave 14 capacity honesty rollup)
  *   elf: soft PASS|PARTIAL
- *   elf_load: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
+ *   elf_load: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
+ *             handoff|interp|path|deepen|catalog …
  *   elf_load: soft PASS|PARTIAL
  * Diagnostics / smoke grep only — soft ≠ bar3; soft ≠ product DoD.
  */
@@ -83,6 +87,12 @@
 
 #define GJ_ELF_SO_MAX  4u
 #define GJ_ELF_SO_IMG  32768u
+/*
+ * Default ET_DYN load base when program vaddrs are low.
+ * High canonical user VA away from PE 0x400000 / small smoke bases.
+ * (Defined early so Wave 14 soft catalog can stamp the value.)
+ */
+#define GJ_ELF_DYN_BIAS 0x0000000070000000ull
 /* Per-SO load bias band (above main ET_DYN default at GJ_ELF_DYN_BIAS) */
 #define GJ_ELF_SO_BIAS_BASE 0x0000000071000000ull
 #define GJ_ELF_SO_BIAS_STEP 0x0000000001000000ull
@@ -121,9 +131,11 @@ static struct gj_elf_so g_aSo[GJ_ELF_SO_MAX];
 static u32              g_cSo;
 
 /*
- * Wave 11 soft inventory telemetry (never hard-gates product load path).
+ * Wave 14 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
+#define GJ_ELF_SOFT_WAVE 14u
+
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
 static u32 g_u32SoftProbeDyn;     /* probes with ET_DYN */
@@ -136,13 +148,23 @@ static u32 g_u32SoftLoadFail;     /* load fail (header/AS/map/empty) */
 static u32 g_u32SoftLoadDyn;      /* successful ET_DYN loads */
 static u32 g_u32SoftLoadExec;     /* successful ET_EXEC loads */
 static u32 g_u32SoftLoadBiasReq;  /* non-zero bias request loads */
+static u32 g_u32SoftLoadBiasDef;  /* default GJ_ELF_DYN_BIAS applied (W14) */
 static u32 g_u32SoftMapPages;     /* PT_LOAD segments mapped (lifetime) */
 static u32 g_u32SoftRelocOps;     /* reloc apply calls with cRel > 0 */
 static u32 g_u32SoftRelocHits;    /* sum of applied reloc counts */
-static u32 g_u32SoftSymHits;      /* sum of GLOB_DAT/JUMP_SLOT counts */
+static u32 g_u32SoftSymHits;      /* sum of GLOB_DAT/JUMP_SLOT/64/COPY counts */
+/* Wave 14 per-type reloc tallies (soft inventory only). */
+static u32 g_u32SoftRelocRelative;
+static u32 g_u32SoftRelocTls;     /* DTPMOD + DTPOFF + TPOFF */
+static u32 g_u32SoftRelocIrel;
+static u32 g_u32SoftRelocCopy;
+static u32 g_u32SoftRelocGlob;
+static u32 g_u32SoftRelocJump;
+static u32 g_u32SoftRelocAbs64;   /* R_X86_64_64 */
 static u32 g_u32SoftSoMapOk;      /* DT_NEEDED SO map success */
 static u32 g_u32SoftSoMapFail;    /* SO map fail */
 static u32 g_u32SoftSoSkip;       /* non-ELF SO skip */
+static u32 g_u32SoftSoFull;       /* registry full (W14) */
 static u32 g_u32SoftSoHash;       /* SOs with DT_HASH */
 static u32 g_u32SoftSoGnu;        /* SOs with DT_GNU_HASH */
 static u32 g_u32SoftNeededOk;     /* vfs resolve hit */
@@ -185,10 +207,11 @@ elf_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable Wave 11 soft inventory dump (product / smoke).
+ * Greppable Wave 14 soft inventory dump (product / smoke).
  * Twin prefixes so either agent grep works:
- *   elf: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
- *   elf_load: soft inventory|probe|load|reloc|so|needed|resolve|auxv|handoff|interp|path …
+ *   elf: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
+ *        handoff|interp|path|deepen|catalog …
+ *   elf_load: soft … (same catalog)
  * Never hard-gates load path. Soft ≠ bar3.
  *
  * greppable: elf: soft
@@ -242,11 +265,11 @@ elf_soft_inventory(const char *szVia)
     /* Grep: elf: soft inventory */
     kprintf("elf: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
             "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
-            "probe_ok=%u handoff_ok=%u log_n=%u\n",
+            "probe_ok=%u handoff_ok=%u log_n=%u wave=%u\n",
             szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
             (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
             g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
-            g_u32SoftHandoffOk, g_u32SoftLogN);
+            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft probe */
     kprintf("elf: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
@@ -257,21 +280,30 @@ elf_soft_inventory(const char *szVia)
 
     /* Grep: elf: soft load */
     kprintf("elf: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
-            "phdr_segs=%u so_max=%u\n",
+            "bias_def=%u phdr_segs=%u so_max=%u\n",
             g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
-            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftMapPages,
-            (unsigned)GJ_ELF_SO_MAX);
+            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef,
+            g_u32SoftMapPages, (unsigned)GJ_ELF_SO_MAX);
 
     /* Grep: elf: soft reloc */
     kprintf("elf: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
-            "tls=DTPMOD,DTPOFF,TPOFF irel=1\n",
-            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits);
+            "tls=DTPMOD,DTPOFF,TPOFF irel=1 wave=%u\n",
+            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
+            GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft reloc_kind (Wave 14 per-type rollup) */
+    kprintf("elf: soft reloc_kind relative=%u tls=%u irel=%u copy=%u "
+            "glob=%u jump=%u abs64=%u sym_hits=%u\n",
+            g_u32SoftRelocRelative, g_u32SoftRelocTls, g_u32SoftRelocIrel,
+            g_u32SoftRelocCopy, g_u32SoftRelocGlob, g_u32SoftRelocJump,
+            g_u32SoftRelocAbs64, g_u32SoftSymHits);
 
     /* Grep: elf: soft so */
-    kprintf("elf: soft so map_ok=%u map_fail=%u skip=%u live=%u "
+    kprintf("elf: soft so map_ok=%u map_fail=%u skip=%u full=%u live=%u "
             "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
-            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip, cReg,
-            cHashLive, cGnuLive, g_u32SoftSoHash, g_u32SoftSoGnu, g_cSo);
+            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip,
+            g_u32SoftSoFull, cReg, cHashLive, cGnuLive, g_u32SoftSoHash,
+            g_u32SoftSoGnu, g_cSo);
 
     /* Grep: elf: soft needed */
     kprintf("elf: soft needed calls=%u ok=%u miss=%u max=%u "
@@ -304,13 +336,33 @@ elf_soft_inventory(const char *szVia)
 
     /* Grep: elf: soft path */
     kprintf("elf: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
-            "ld-gj=1 so_reg=1 vfs_needed=1 (soft inventory; not bar3)\n");
+            "ld-gj=1 so_reg=1 vfs_needed=1 wave=%u "
+            "(soft inventory; not bar3)\n",
+            GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft deepen */
+    kprintf("elf: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
+            "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "
+            "(soft inventory only; not product gate)\n",
+            GJ_ELF_SOFT_WAVE, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk,
+            g_u32SoftRelocHits, cReg, g_u32SoftHandoffOk, g_u32SoftVerifyOk,
+            g_u32SoftLogN);
+
+    /* Grep: elf: soft catalog */
+    kprintf("elf: soft catalog so_max=%u so_img=%u needed_max=%u auxv_max=%u "
+            "dyn_bias=0x%lx handoff=0x%lx stack=0x%lx so_bias_base=0x%lx "
+            "wave=%u\n",
+            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
+            (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
+            GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft PASS | PARTIAL */
     kprintf("elf: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
-            "log_n=%u\n",
+            "log_n=%u wave=%u\n",
             szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
-            g_u32SoftHandoffOk, g_u32SoftLogN);
+            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
 
     /*
      * Twin prefix: elf_load: soft … (agent-friendly alias; same tallies).
@@ -318,11 +370,11 @@ elf_soft_inventory(const char *szVia)
     /* Grep: elf_load: soft inventory */
     kprintf("elf_load: soft inventory via=%s so_max=%u so_img=%u so_live=%u "
             "needed_max=%u auxv_max=%u load_ok=%u load_fail=%u "
-            "probe_ok=%u handoff_ok=%u log_n=%u\n",
+            "probe_ok=%u handoff_ok=%u log_n=%u wave=%u\n",
             szVia, (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
             (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
             g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftProbeOk,
-            g_u32SoftHandoffOk, g_u32SoftLogN);
+            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft probe */
     kprintf("elf_load: soft probe ok=%u fail=%u dyn=%u exec=%u interp=%u "
@@ -333,21 +385,30 @@ elf_soft_inventory(const char *szVia)
 
     /* Grep: elf_load: soft load */
     kprintf("elf_load: soft load ok=%u fail=%u dyn=%u exec=%u bias_req=%u "
-            "phdr_segs=%u so_max=%u\n",
+            "bias_def=%u phdr_segs=%u so_max=%u\n",
             g_u32SoftLoadOk, g_u32SoftLoadFail, g_u32SoftLoadDyn,
-            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftMapPages,
-            (unsigned)GJ_ELF_SO_MAX);
+            g_u32SoftLoadExec, g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef,
+            g_u32SoftMapPages, (unsigned)GJ_ELF_SO_MAX);
 
     /* Grep: elf_load: soft reloc */
     kprintf("elf_load: soft reloc ops=%u hits=%u sym=%u relative+sym=1 "
-            "tls=DTPMOD,DTPOFF,TPOFF irel=1\n",
-            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits);
+            "tls=DTPMOD,DTPOFF,TPOFF irel=1 wave=%u\n",
+            g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
+            GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft reloc_kind */
+    kprintf("elf_load: soft reloc_kind relative=%u tls=%u irel=%u copy=%u "
+            "glob=%u jump=%u abs64=%u sym_hits=%u\n",
+            g_u32SoftRelocRelative, g_u32SoftRelocTls, g_u32SoftRelocIrel,
+            g_u32SoftRelocCopy, g_u32SoftRelocGlob, g_u32SoftRelocJump,
+            g_u32SoftRelocAbs64, g_u32SoftSymHits);
 
     /* Grep: elf_load: soft so */
-    kprintf("elf_load: soft so map_ok=%u map_fail=%u skip=%u live=%u "
+    kprintf("elf_load: soft so map_ok=%u map_fail=%u skip=%u full=%u live=%u "
             "hash=%u gnu=%u hash_n=%u gnu_n=%u reg_n=%u\n",
-            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip, cReg,
-            cHashLive, cGnuLive, g_u32SoftSoHash, g_u32SoftSoGnu, g_cSo);
+            g_u32SoftSoMapOk, g_u32SoftSoMapFail, g_u32SoftSoSkip,
+            g_u32SoftSoFull, cReg, cHashLive, cGnuLive, g_u32SoftSoHash,
+            g_u32SoftSoGnu, g_cSo);
 
     /* Grep: elf_load: soft needed */
     kprintf("elf_load: soft needed calls=%u ok=%u miss=%u max=%u "
@@ -380,13 +441,33 @@ elf_soft_inventory(const char *szVia)
 
     /* Grep: elf_load: soft path */
     kprintf("elf_load: soft path claim=probe,load,so,reloc,auxv,handoff,interp "
-            "ld-gj=1 so_reg=1 vfs_needed=1 (soft inventory; not bar3)\n");
+            "ld-gj=1 so_reg=1 vfs_needed=1 wave=%u "
+            "(soft inventory; not bar3)\n",
+            GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft deepen */
+    kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
+            "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "
+            "(soft inventory only; not product gate)\n",
+            GJ_ELF_SOFT_WAVE, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk,
+            g_u32SoftRelocHits, cReg, g_u32SoftHandoffOk, g_u32SoftVerifyOk,
+            g_u32SoftLogN);
+
+    /* Grep: elf_load: soft catalog */
+    kprintf("elf_load: soft catalog so_max=%u so_img=%u needed_max=%u "
+            "auxv_max=%u dyn_bias=0x%lx handoff=0x%lx stack=0x%lx "
+            "so_bias_base=0x%lx wave=%u\n",
+            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
+            (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
+            GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft PASS | PARTIAL */
     kprintf("elf_load: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
-            "log_n=%u\n",
+            "log_n=%u wave=%u\n",
             szVerdict, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk, cReg,
-            g_u32SoftHandoffOk, g_u32SoftLogN);
+            g_u32SoftHandoffOk, g_u32SoftLogN, GJ_ELF_SOFT_WAVE);
 }
 
 /**
@@ -407,12 +488,6 @@ elf_soft_maybe_once(void)
     g_fSoftInvOnce = 1;
     elf_soft_inventory("activity");
 }
-
-/*
- * Default ET_DYN load base when program vaddrs are low.
- * High canonical user VA away from PE 0x400000 / small smoke bases.
- */
-#define GJ_ELF_DYN_BIAS 0x0000000070000000ull
 
 struct elf64_ehdr {
     u8  aIdent[16];
@@ -1511,18 +1586,22 @@ elf_apply_relocs(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
                     u64Word = (u64)pR->i64Addend + u64Bias;
                     elf_write_u64_user(u64Dst, u64Word);
                     cApplied++;
+                    elf_soft_inc(&g_u32SoftRelocRelative);
                 } else if (u32Type == R_X86_64_DTPMOD64) {
                     elf_write_u64_user(u64Dst, 1);
                     cApplied++;
+                    elf_soft_inc(&g_u32SoftRelocTls);
                 } else if (u32Type == R_X86_64_DTPOFF64 ||
                            u32Type == R_X86_64_TPOFF64) {
                     elf_write_u64_user(u64Dst, (u64)pR->i64Addend);
                     cApplied++;
+                    elf_soft_inc(&g_u32SoftRelocTls);
                 } else if (u32Type == R_X86_64_IRELATIVE) {
                     /* Defer true IFUNC call to ld-gj; store resolver VA */
                     u64Word = (u64)pR->i64Addend + u64Bias;
                     elf_write_u64_user(u64Dst, u64Word);
                     cApplied++;
+                    elf_soft_inc(&g_u32SoftRelocIrel);
                 } else if (u32Type == R_X86_64_GLOB_DAT ||
                            u32Type == R_X86_64_JUMP_SLOT ||
                            u32Type == R_X86_64_64) {
@@ -1538,6 +1617,13 @@ elf_apply_relocs(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
                     elf_write_u64_user(u64Dst, u64Word);
                     cApplied++;
                     cSym++;
+                    if (u32Type == R_X86_64_GLOB_DAT) {
+                        elf_soft_inc(&g_u32SoftRelocGlob);
+                    } else if (u32Type == R_X86_64_JUMP_SLOT) {
+                        elf_soft_inc(&g_u32SoftRelocJump);
+                    } else {
+                        elf_soft_inc(&g_u32SoftRelocAbs64);
+                    }
                 } else if (u32Type == R_X86_64_COPY) {
                     if (u64Symtab == 0) {
                         continue;
@@ -1551,6 +1637,7 @@ elf_apply_relocs(const void *pImage, u64 cb, const struct elf64_ehdr *pEh,
                     elf_write_u64_user(u64Dst, u64Word);
                     cApplied++;
                     cSym++;
+                    elf_soft_inc(&g_u32SoftRelocCopy);
                 }
             }
         }
@@ -1597,6 +1684,7 @@ elf_load_image_bias(struct gj_process *pProc, const void *pImage, u64 cb,
         elf_soft_inc(&g_u32SoftLoadBiasReq);
     } else if (info.u16Type == ET_DYN && info.u64LoadMin < 0x100000ull) {
         u64Bias = GJ_ELF_DYN_BIAS;
+        elf_soft_inc(&g_u32SoftLoadBiasDef);
     }
     info.u64Bias = u64Bias;
     info.u64Entry = pEh->u64Entry + u64Bias;
@@ -1864,6 +1952,7 @@ elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo)
             continue;
         }
         if (cLoaded >= GJ_ELF_SO_MAX) {
+            elf_soft_inc(&g_u32SoftSoFull);
             break;
         }
         iSlot = cLoaded;

@@ -4,6 +4,19 @@
  *
  * PCI driver surface: register, match, probe/remove/quiesce.
  * Host soft: 256-byte config image, BAR windows, inject/remove.
+ *
+ * Soft inventory (Wave 14 exclusive deepen; this unit only) —
+ * greppable "udx: pci soft …":
+ *   udx: pci soft inventory …
+ *   udx: pci soft driver …
+ *   udx: pci soft inject …
+ *   udx: pci soft bind …
+ *   udx: pci soft lifecycle …
+ *   udx: pci soft config …
+ *   udx: pci soft path …
+ *   udx: pci soft wave …
+ * Pure observation; never gates host skeleton PASS or freestanding path.
+ * Soft ≠ skeleton PASS. greppable: udx: pci soft
  */
 #include "udx_internal.h"
 
@@ -12,10 +25,16 @@
 #include <udx/pci.h>
 #include <udx/udx.h>
 
+#include <stdarg.h>
+
 #if defined(UDX_HOST_LIBC)
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #endif
+
+/* Soft wave stamp for greppable inventory lines. */
+#define UDX_PCI_SOFT_WAVE 14u
 
 struct udx_pci_bound {
     struct udx_pci_dev    *pPdev;
@@ -36,6 +55,226 @@ struct udx_pci_bound {
 
 static struct udx_pci_driver *g_pPciDrivers;
 static struct udx_pci_bound  *g_pPciDevices;
+
+/*
+ * Soft PCI product inventory (Wave 14 exclusive deepen).
+ * Cumulative for this process. greppable: udx: pci soft …
+ * Never hard-gates; wrap OK if ever hit.
+ */
+static u32 g_u32PciRegDrv;        /* register_driver enter */
+static u32 g_u32PciRegDrvOk;      /* register_driver ok */
+static u32 g_u32PciRegDrvInval;   /* register reject */
+static u32 g_u32PciUnregDrv;      /* unregister_driver */
+static u32 g_u32PciInject;        /* inject_ex enter */
+static u32 g_u32PciInjectOk;      /* inject success */
+static u32 g_u32PciInjectBusy;    /* duplicate BDF */
+static u32 g_u32PciInjectNomem;   /* alloc fail */
+static u32 g_u32PciInjectNosys;   /* freestanding NOSYS */
+static u32 g_u32PciRemove;        /* remove enter */
+static u32 g_u32PciRemoveOk;      /* remove success */
+static u32 g_u32PciRemoveNodev;   /* remove not found */
+static u32 g_u32PciRemoveNosys;   /* freestanding NOSYS */
+static u32 g_u32PciRescan;        /* host_rescan_pci */
+static u32 g_u32PciTryBind;       /* pci_try_bind enter */
+static u32 g_u32PciBindProbeOk;   /* probe returned 0 */
+static u32 g_u32PciBindNoProbe;   /* bound without probe */
+static u32 g_u32PciBindProbeFail; /* probe non-zero */
+static u32 g_u32PciUnbind;        /* pci_unbind performed */
+static u32 g_u32PciEnable;        /* enable ok */
+static u32 g_u32PciEnableInval;   /* enable no bound */
+static u32 g_u32PciDisable;       /* disable */
+static u32 g_u32PciSetMaster;     /* set_master ok */
+static u32 g_u32PciSetMasterInv;  /* set_master reject */
+static u32 g_u32PciClrMaster;     /* clear_master */
+static u32 g_u32PciReqReg;        /* request_regions ok */
+static u32 g_u32PciReqRegBusy;    /* request regions busy */
+static u32 g_u32PciReqRegInval;   /* request regions inval */
+static u32 g_u32PciRelReg;        /* release_regions */
+static u32 g_u32PciCfgRead;       /* config read* ok */
+static u32 g_u32PciCfgWrite;      /* config write* ok */
+static u32 g_u32PciCfgFail;       /* config access fail */
+static u32 g_u32PciGetDev;        /* get_device enter */
+static u32 g_u32PciGetDevHit;     /* get_device hit */
+static u32 g_u32PciGetDevMiss;    /* get_device miss */
+static u32 g_u32PciLiveDev;       /* soft live device count snap */
+static u32 g_u32PciLiveDrv;       /* soft live driver count snap */
+static u32 g_u32PciPeakDev;       /* peak devices observed */
+static u32 g_u32PciLogN;          /* soft inventory dumps */
+static u8  g_fPciSoftOnce;        /* one-shot after first ok path */
+
+static void pci_soft_inc(u32 *pu32);
+static void pci_soft_note_peak(u32 *pu32Peak, u32 u32Val);
+static void pci_soft_emit(const char *szFmt, ...);
+static void pci_soft_count_lists(void);
+static void pci_soft_inventory_log(void);
+static void pci_soft_maybe_once(void);
+
+static void
+pci_soft_inc(u32 *pu32)
+{
+    if (pu32 != NULL && *pu32 < 0xffffffffu) {
+        (*pu32)++;
+    }
+}
+
+/** Soft: raise peak if u32Val is higher (diagnostics only). */
+static void
+pci_soft_note_peak(u32 *pu32Peak, u32 u32Val)
+{
+    if (pu32Peak != NULL && u32Val > *pu32Peak) {
+        *pu32Peak = u32Val;
+    }
+}
+
+static void
+pci_soft_count_lists(void)
+{
+    struct udx_pci_bound *pBound;
+    struct udx_pci_driver *pDrv;
+    u32 u32Dev;
+    u32 u32Drv;
+
+    u32Dev = 0;
+    for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
+        if (u32Dev < 0xffffffffu) {
+            u32Dev++;
+        }
+    }
+    u32Drv = 0;
+    for (pDrv = g_pPciDrivers; pDrv != NULL; pDrv = pDrv->pNext) {
+        if (u32Drv < 0xffffffffu) {
+            u32Drv++;
+        }
+    }
+    g_u32PciLiveDev = u32Dev;
+    g_u32PciLiveDrv = u32Drv;
+    pci_soft_note_peak(&g_u32PciPeakDev, u32Dev);
+}
+
+/*
+ * Soft inventory emit path — host console; does not use udx_printk so
+ * core soft printk tallies stay product-path pure.
+ */
+static void
+pci_soft_emit(const char *szFmt, ...)
+{
+    if (szFmt == NULL) {
+        return;
+    }
+#if defined(UDX_HOST_LIBC)
+    {
+        va_list apArgs;
+
+        va_start(apArgs, szFmt);
+        (void)vprintf(szFmt, apArgs);
+        va_end(apArgs);
+    }
+#else
+    (void)szFmt;
+#endif
+}
+
+/**
+ * Greppable soft PCI inventory (Wave 14 exclusive deepen).
+ * Prefix-stable "udx: pci soft …" — never hard-gates; observation only.
+ *
+ * greppable: udx: pci soft
+ */
+static void
+pci_soft_inventory_log(void)
+{
+    u32 u32Host;
+
+    pci_soft_inc(&g_u32PciLogN);
+    pci_soft_count_lists();
+
+#if defined(UDX_HOST_LIBC)
+    u32Host = 1u;
+#else
+    u32Host = 0u;
+#endif
+
+    /* Grep: udx: pci soft inventory */
+    pci_soft_emit("udx: pci soft inventory reg_drv=%u inject_ok=%u "
+                  "remove_ok=%u bind_ok=%u bind_fail=%u enable=%u "
+                  "master=%u regions=%u cfg_r=%u cfg_w=%u "
+                  "live_dev=%u live_drv=%u log_n=%u wave=%u\n",
+                  g_u32PciRegDrvOk, g_u32PciInjectOk, g_u32PciRemoveOk,
+                  (u32)(g_u32PciBindProbeOk + g_u32PciBindNoProbe),
+                  g_u32PciBindProbeFail, g_u32PciEnable, g_u32PciSetMaster,
+                  g_u32PciReqReg, g_u32PciCfgRead, g_u32PciCfgWrite,
+                  g_u32PciLiveDev, g_u32PciLiveDrv, g_u32PciLogN,
+                  UDX_PCI_SOFT_WAVE);
+
+    /* Grep: udx: pci soft driver */
+    pci_soft_emit("udx: pci soft driver reg_enter=%u reg_ok=%u reg_inval=%u "
+                  "unreg=%u live_drv=%u rescan=%u\n",
+                  g_u32PciRegDrv, g_u32PciRegDrvOk, g_u32PciRegDrvInval,
+                  g_u32PciUnregDrv, g_u32PciLiveDrv, g_u32PciRescan);
+
+    /* Grep: udx: pci soft inject */
+    pci_soft_emit("udx: pci soft inject enter=%u ok=%u busy=%u nomem=%u "
+                  "nosys=%u remove=%u remove_ok=%u remove_nodev=%u "
+                  "remove_nosys=%u host_libc=%u\n",
+                  g_u32PciInject, g_u32PciInjectOk, g_u32PciInjectBusy,
+                  g_u32PciInjectNomem, g_u32PciInjectNosys, g_u32PciRemove,
+                  g_u32PciRemoveOk, g_u32PciRemoveNodev, g_u32PciRemoveNosys,
+                  u32Host);
+
+    /* Grep: udx: pci soft bind */
+    pci_soft_emit("udx: pci soft bind try=%u probe_ok=%u no_probe=%u "
+                  "probe_fail=%u unbind=%u live_dev=%u peak_dev=%u\n",
+                  g_u32PciTryBind, g_u32PciBindProbeOk, g_u32PciBindNoProbe,
+                  g_u32PciBindProbeFail, g_u32PciUnbind, g_u32PciLiveDev,
+                  g_u32PciPeakDev);
+
+    /* Grep: udx: pci soft lifecycle */
+    pci_soft_emit("udx: pci soft lifecycle enable=%u enable_inval=%u "
+                  "disable=%u set_master=%u set_master_inv=%u clr_master=%u "
+                  "req_reg=%u req_busy=%u req_inval=%u rel_reg=%u "
+                  "get_hit=%u get_miss=%u\n",
+                  g_u32PciEnable, g_u32PciEnableInval, g_u32PciDisable,
+                  g_u32PciSetMaster, g_u32PciSetMasterInv, g_u32PciClrMaster,
+                  g_u32PciReqReg, g_u32PciReqRegBusy, g_u32PciReqRegInval,
+                  g_u32PciRelReg, g_u32PciGetDevHit, g_u32PciGetDevMiss);
+
+    /* Grep: udx: pci soft config */
+    pci_soft_emit("udx: pci soft config read_ok=%u write_ok=%u fail=%u "
+                  "soft_image=256 type0=1\n",
+                  g_u32PciCfgRead, g_u32PciCfgWrite, g_u32PciCfgFail);
+
+    /*
+     * Path catalog — what this soft surface is / is not.
+     * greppable: udx: pci soft path
+     */
+    pci_soft_emit("udx: pci soft path register=udx_pci_register_driver "
+                  "inject=udx_host_inject_pci_ex "
+                  "enable=udx_pci_enable master=udx_pci_set_master "
+                  "regions=udx_pci_request_regions "
+                  "cfg=udx_pci_read_config_*/write_config_* "
+                  "skeleton_gate=0 hard_gate=0 soft=1\n");
+
+    /* Grep: udx: pci soft wave */
+    pci_soft_emit("udx: pci soft wave n=%u unit=pci exclusive=1 "
+                  "prefix=udx:_pci_soft deepen=1 "
+                  "(soft inventory; never gates skeleton PASS)\n",
+                  UDX_PCI_SOFT_WAVE);
+}
+
+/** Soft: one-shot inventory after first register/inject/bind success. */
+static void
+pci_soft_maybe_once(void)
+{
+    if (g_fPciSoftOnce != 0) {
+        return;
+    }
+    if (g_u32PciRegDrvOk == 0 && g_u32PciInjectOk == 0 &&
+        g_u32PciBindProbeOk == 0 && g_u32PciBindNoProbe == 0) {
+        return;
+    }
+    g_fPciSoftOnce = 1;
+    pci_soft_inventory_log();
+}
 
 static struct udx_pci_bound *
 pci_bound_of(const struct udx_pci_dev *pPdev)
@@ -214,6 +453,7 @@ pci_try_bind(struct udx_pci_bound *pBound)
     if (pBound == NULL || pBound->u8Bound) {
         return;
     }
+    pci_soft_inc(&g_u32PciTryBind);
     for (pDrv = g_pPciDrivers; pDrv != NULL; pDrv = pDrv->pNext) {
         pId = pci_find_id(pDrv, pBound->pPdev);
         if (pId == NULL) {
@@ -226,18 +466,23 @@ pci_try_bind(struct udx_pci_bound *pBound)
         pBound->dev.pBackend = pBound;
         if (pDrv->pfnProbe == NULL) {
             pBound->u8Bound = 1;
+            pci_soft_inc(&g_u32PciBindNoProbe);
+            pci_soft_maybe_once();
             udx_printk("udx: pci %s bound (no probe)\n", pDrv->szName);
             return;
         }
         nSt = pDrv->pfnProbe(pBound->pPdev, pId);
         if (nSt == 0) {
             pBound->u8Bound = 1;
+            pci_soft_inc(&g_u32PciBindProbeOk);
+            pci_soft_maybe_once();
             udx_printk("udx: pci %s probe ok %04x:%04x\n",
                        pDrv->szName,
                        pBound->pPdev->u16Vendor,
                        pBound->pPdev->u16Device);
             return;
         }
+        pci_soft_inc(&g_u32PciBindProbeFail);
         udx_printk("udx: pci %s probe fail %d\n", pDrv->szName, nSt);
         pBound->pDrv = NULL;
         pBound->pPdev->pDev = NULL;
@@ -261,6 +506,7 @@ pci_unbind(struct udx_pci_bound *pBound)
     }
     pBound->u8Bound = 0;
     pBound->pDrv = NULL;
+    pci_soft_inc(&g_u32PciUnbind);
 }
 
 #if defined(UDX_HOST_LIBC)
@@ -305,11 +551,15 @@ udx_pci_register_driver(struct udx_pci_driver *pDrv)
 {
     struct udx_pci_bound *pBound;
 
+    pci_soft_inc(&g_u32PciRegDrv);
     if (pDrv == NULL || pDrv->szName == NULL) {
+        pci_soft_inc(&g_u32PciRegDrvInval);
         return UDX_ERR_INVAL;
     }
     pDrv->pNext = g_pPciDrivers;
     g_pPciDrivers = pDrv;
+    pci_soft_inc(&g_u32PciRegDrvOk);
+    pci_soft_maybe_once();
     udx_printk("udx: pci register %s\n", pDrv->szName);
 
     for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
@@ -324,6 +574,7 @@ udx_pci_unregister_driver(struct udx_pci_driver *pDrv)
     struct udx_pci_driver **pp;
     struct udx_pci_bound *pBound;
 
+    pci_soft_inc(&g_u32PciUnregDrv);
     if (pDrv == NULL) {
         return;
     }
@@ -346,6 +597,7 @@ udx_host_rescan_pci(void)
 {
     struct udx_pci_bound *pBound;
 
+    pci_soft_inc(&g_u32PciRescan);
     for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
         pci_try_bind(pBound);
     }
@@ -371,6 +623,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
                        const u64 *aBarLen, const u8 *aBarIsMem,
                        struct udx_pci_dev **ppOut)
 {
+    pci_soft_inc(&g_u32PciInject);
 #if !defined(UDX_HOST_LIBC)
     (void)u16Vendor;
     (void)u16Device;
@@ -383,6 +636,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
     (void)aBarLen;
     (void)aBarIsMem;
     (void)ppOut;
+    pci_soft_inc(&g_u32PciInjectNosys);
     return UDX_ERR_NOSYS;
 #else
     struct udx_pci_bound *pBound;
@@ -396,6 +650,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
         if (pBound->pPdev &&
             pBound->pPdev->u8Bus == u8Bus &&
             pBound->pPdev->u8Devfn == u8Devfn) {
+            pci_soft_inc(&g_u32PciInjectBusy);
             return UDX_ERR_BUSY;
         }
     }
@@ -405,6 +660,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
     if (pBound == NULL || pPdev == NULL) {
         free(pBound);
         free(pPdev);
+        pci_soft_inc(&g_u32PciInjectNomem);
         return UDX_ERR_NOMEM;
     }
 
@@ -435,6 +691,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
         }
         if (g_u64NextPhys + u64Aligned < g_u64NextPhys) {
             pci_destroy_bound(pBound);
+            pci_soft_inc(&g_u32PciInjectNomem);
             return UDX_ERR_NOMEM;
         }
         pPdev->aBarPhys[iBar] = g_u64NextPhys;
@@ -442,6 +699,7 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
         pBound->apBarHost[iBar] = calloc(1, (size_t)u64Len);
         if (pBound->apBarHost[iBar] == NULL) {
             pci_destroy_bound(pBound);
+            pci_soft_inc(&g_u32PciInjectNomem);
             return UDX_ERR_NOMEM;
         }
         udx_host_window_register(pPdev->aBarPhys[iBar],
@@ -461,6 +719,9 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
     if (ppOut) {
         *ppOut = pPdev;
     }
+    pci_soft_inc(&g_u32PciInjectOk);
+    pci_soft_count_lists();
+    pci_soft_maybe_once();
     return UDX_OK;
 #endif
 }
@@ -468,13 +729,16 @@ udx_host_inject_pci_ex(u16 u16Vendor, u16 u16Device,
 udx_status_t
 udx_host_remove_pci(struct udx_pci_dev *pPdev)
 {
+    pci_soft_inc(&g_u32PciRemove);
 #if !defined(UDX_HOST_LIBC)
     (void)pPdev;
+    pci_soft_inc(&g_u32PciRemoveNosys);
     return UDX_ERR_NOSYS;
 #else
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL) {
+        pci_soft_inc(&g_u32PciRemoveNodev);
         return UDX_ERR_INVAL;
     }
     pBound = NULL;
@@ -490,10 +754,13 @@ udx_host_remove_pci(struct udx_pci_dev *pPdev)
         }
     }
     if (pBound == NULL || pBound->pPdev != pPdev) {
+        pci_soft_inc(&g_u32PciRemoveNodev);
         return UDX_ERR_NODEV;
     }
     pci_unlink_bound(pBound);
     pci_destroy_bound(pBound);
+    pci_soft_inc(&g_u32PciRemoveOk);
+    pci_soft_count_lists();
     return UDX_OK;
 #endif
 }
@@ -506,8 +773,10 @@ udx_pci_enable(struct udx_pci_dev *pPdev)
 
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL) {
+        pci_soft_inc(&g_u32PciEnableInval);
         return UDX_ERR_INVAL;
     }
+    pci_soft_inc(&g_u32PciEnable);
     pBound->u8Enabled = 1;
     u16Cmd = UDX_PCI_COMMAND_MEMORY;
     if (pPdev) {
@@ -531,6 +800,7 @@ udx_pci_disable(struct udx_pci_dev *pPdev)
 
     pBound = pci_bound_of(pPdev);
     if (pBound) {
+        pci_soft_inc(&g_u32PciDisable);
         pBound->u8Enabled = 0;
         pBound->u8Master = 0;
         pci_cfg_set_command_bits(pBound, 0,
@@ -556,10 +826,12 @@ udx_pci_set_master(struct udx_pci_dev *pPdev)
 
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL || !pBound->u8Enabled) {
+        pci_soft_inc(&g_u32PciSetMasterInv);
         return UDX_ERR_INVAL;
     }
     pBound->u8Master = 1;
     pci_cfg_set_command_bits(pBound, UDX_PCI_COMMAND_MASTER, 0);
+    pci_soft_inc(&g_u32PciSetMaster);
     return UDX_OK;
 }
 
@@ -572,6 +844,7 @@ udx_pci_clear_master(struct udx_pci_dev *pPdev)
     if (pBound) {
         pBound->u8Master = 0;
         pci_cfg_set_command_bits(pBound, 0, UDX_PCI_COMMAND_MASTER);
+        pci_soft_inc(&g_u32PciClrMaster);
     }
 }
 
@@ -591,13 +864,16 @@ udx_pci_request_regions(struct udx_pci_dev *pPdev, const char *szName)
 
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL) {
+        pci_soft_inc(&g_u32PciReqRegInval);
         return UDX_ERR_INVAL;
     }
     if (pBound->u8Regions) {
+        pci_soft_inc(&g_u32PciReqRegBusy);
         return UDX_ERR_BUSY;
     }
     pBound->u8Regions = 1;
     pBound->szRegionName = szName;
+    pci_soft_inc(&g_u32PciReqReg);
     return UDX_OK;
 }
 
@@ -610,6 +886,7 @@ udx_pci_release_regions(struct udx_pci_dev *pPdev)
     if (pBound) {
         pBound->u8Regions = 0;
         pBound->szRegionName = NULL;
+        pci_soft_inc(&g_u32PciRelReg);
     }
 }
 
@@ -668,13 +945,16 @@ udx_pci_get_device(u8 u8Bus, u8 u8Devfn)
 {
     struct udx_pci_bound *pBound;
 
+    pci_soft_inc(&g_u32PciGetDev);
     for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
         if (pBound->pPdev &&
             pBound->pPdev->u8Bus == u8Bus &&
             pBound->pPdev->u8Devfn == u8Devfn) {
+            pci_soft_inc(&g_u32PciGetDevHit);
             return pBound->pPdev;
         }
     }
+    pci_soft_inc(&g_u32PciGetDevMiss);
     return NULL;
 }
 
@@ -684,34 +964,42 @@ udx_pci_read_config_byte(struct udx_pci_dev *pPdev, int nWhere, u8 *pVal)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL || pVal == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || nWhere >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     pBound = pci_bound_of(pPdev);
     if (pBound != NULL && pBound->u8CfgLive) {
         *pVal = pBound->aCfg[nWhere];
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     /* Fallback without bound cfg image. */
     if (nWhere == UDX_PCI_CFG_VENDOR) {
         *pVal = (u8)(pPdev->u16Vendor & 0xffu);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == UDX_PCI_CFG_VENDOR + 1) {
         *pVal = (u8)((pPdev->u16Vendor >> 8) & 0xffu);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == UDX_PCI_CFG_DEVICE) {
         *pVal = (u8)(pPdev->u16Device & 0xffu);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == UDX_PCI_CFG_DEVICE + 1) {
         *pVal = (u8)((pPdev->u16Device >> 8) & 0xffu);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     *pVal = 0xffu;
+    pci_soft_inc(&g_u32PciCfgFail);
     return UDX_ERR_NOSYS;
 }
 
@@ -721,18 +1009,22 @@ udx_pci_write_config_byte(struct udx_pci_dev *pPdev, int nWhere, u8 u8Val)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || nWhere >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     /* Read-only identity fields. */
     if (nWhere == UDX_PCI_CFG_VENDOR || nWhere == UDX_PCI_CFG_VENDOR + 1 ||
         nWhere == UDX_PCI_CFG_DEVICE || nWhere == UDX_PCI_CFG_DEVICE + 1) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL || !pBound->u8CfgLive) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_NOSYS;
     }
     pBound->aCfg[nWhere] = u8Val;
@@ -745,6 +1037,7 @@ udx_pci_write_config_byte(struct udx_pci_dev *pPdev, int nWhere, u8 u8Val)
             pBound->u8Enabled = 0;
         }
     }
+    pci_soft_inc(&g_u32PciCfgWrite);
     return UDX_OK;
 }
 
@@ -754,26 +1047,32 @@ udx_pci_read_config_word(struct udx_pci_dev *pPdev, int nWhere, u16 *pVal)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL || pVal == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || (nWhere & 1) != 0 ||
         nWhere + 1 >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     pBound = pci_bound_of(pPdev);
     if (pBound != NULL && pBound->u8CfgLive) {
         *pVal = pci_cfg_get_word(pBound->aCfg, nWhere);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == UDX_PCI_CFG_VENDOR) {
         *pVal = pPdev->u16Vendor;
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == UDX_PCI_CFG_DEVICE) {
         *pVal = pPdev->u16Device;
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     *pVal = 0xffffu;
+    pci_soft_inc(&g_u32PciCfgFail);
     return UDX_ERR_NOSYS;
 }
 
@@ -783,17 +1082,21 @@ udx_pci_write_config_word(struct udx_pci_dev *pPdev, int nWhere, u16 u16Val)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || (nWhere & 1) != 0 ||
         nWhere + 1 >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere == UDX_PCI_CFG_VENDOR || nWhere == UDX_PCI_CFG_DEVICE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL || !pBound->u8CfgLive) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_NOSYS;
     }
     pci_cfg_put_word(pBound->aCfg, nWhere, u16Val);
@@ -805,6 +1108,7 @@ udx_pci_write_config_word(struct udx_pci_dev *pPdev, int nWhere, u16 u16Val)
             pBound->u8Enabled = 0;
         }
     }
+    pci_soft_inc(&g_u32PciCfgWrite);
     return UDX_OK;
 }
 
@@ -814,22 +1118,27 @@ udx_pci_read_config_dword(struct udx_pci_dev *pPdev, int nWhere, u32 *pVal)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL || pVal == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || (nWhere & 3) != 0 ||
         nWhere + 3 >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     pBound = pci_bound_of(pPdev);
     if (pBound != NULL && pBound->u8CfgLive) {
         *pVal = pci_cfg_get_dword(pBound->aCfg, nWhere);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     if (nWhere == 0) {
         *pVal = (u32)pPdev->u16Vendor | ((u32)pPdev->u16Device << 16);
+        pci_soft_inc(&g_u32PciCfgRead);
         return UDX_OK;
     }
     *pVal = 0xffffffffu;
+    pci_soft_inc(&g_u32PciCfgFail);
     return UDX_ERR_NOSYS;
 }
 
@@ -839,17 +1148,21 @@ udx_pci_write_config_dword(struct udx_pci_dev *pPdev, int nWhere, u32 u32Val)
     struct udx_pci_bound *pBound;
 
     if (pPdev == NULL) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere < 0 || (nWhere & 3) != 0 ||
         nWhere + 3 >= (int)UDX_PCI_CFG_SIZE) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL;
     }
     if (nWhere == 0) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_INVAL; /* vendor/device RO */
     }
     pBound = pci_bound_of(pPdev);
     if (pBound == NULL || !pBound->u8CfgLive) {
+        pci_soft_inc(&g_u32PciCfgFail);
         return UDX_ERR_NOSYS;
     }
     pci_cfg_put_dword(pBound->aCfg, nWhere, u32Val);
@@ -860,5 +1173,6 @@ udx_pci_write_config_dword(struct udx_pci_dev *pPdev, int nWhere, u32 u32Val)
         pBound->u8Enabled =
             (u16Cmd & (UDX_PCI_COMMAND_IO | UDX_PCI_COMMAND_MEMORY)) ? 1u : 0u;
     }
+    pci_soft_inc(&g_u32PciCfgWrite);
     return UDX_OK;
 }

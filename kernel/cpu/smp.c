@@ -26,6 +26,10 @@
  *   - ap_run: enter / inval / busy / ipi + poll drain
  *   - spins HWM + log_n + path honesty catalog
  *   Primary PASS|inventory|madt|phases|ap_run|slot lines stay field-stable.
+ *
+ * Wave 14 exclusive deepen (this unit only — greppable "smp: soft …"):
+ *   smp: soft deepen|verdict|handshake|online|sipi|x2|fail|ratio|path
+ *   Additive rollups + basis-point ratios; Wave 9/12 primary lines stable.
  * Never hard-gates product; wrap-OK counters and kprintf only.
  */
 #include <gj/apic.h>
@@ -1241,6 +1245,131 @@ smp_bringup_soft_log(void)
     /* Grep: smp: soft path */
     kprintf("smp: soft path claim=MADT+INIT-SIPI+ap_run "
             "phases=ENTRY..SCHED soft=Wave12 (soft inventory; not bar3)\n");
+
+    /*
+     * Wave 14 exclusive deepen (complementary; Wave 9/12 lines stay stable):
+     *   smp: soft deepen …
+     *   smp: soft verdict …
+     *   smp: soft handshake …
+     *   smp: soft online …
+     *   smp: soft sipi …
+     *   smp: soft x2 …
+     *   smp: soft fail …
+     *   smp: soft ratio …
+     *   smp: soft path … (Wave14 honesty stamp; Wave12 path line retained)
+     * greppable: smp: soft
+     */
+    {
+        u32 u32OkBp;
+        u32 u32ToBp;
+        u32 u32SkipBp;
+        u32 u32SchedBp;
+        u32 u32TriedDenom;
+        u32 u32ApFail;
+        u32 u32MadtHead;
+        u32 u32CapHead;
+        u32 u32CpuOn;
+
+        u32TriedDenom = stSoft.u32Tried;
+        if (u32TriedDenom == 0) {
+            u32OkBp = 0;
+            u32ToBp = 0;
+        } else {
+            u32OkBp = (stSoft.u32Ok * 10000u) / u32TriedDenom;
+            u32ToBp = (stSoft.u32Timeout * 10000u) / u32TriedDenom;
+        }
+        /* Skip share vs (tried+skipped) — soft only. */
+        if ((stSoft.u32Tried + stSoft.u32Skipped) != 0) {
+            u32SkipBp = (stSoft.u32Skipped * 10000u) /
+                        (stSoft.u32Tried + stSoft.u32Skipped);
+        } else {
+            u32SkipBp = 0;
+        }
+        /* Sched-ready basis points among online slots under cap. */
+        if (stSoft.u32Online != 0) {
+            u32SchedBp =
+                (stSoft.u32SchedReady * 10000u) / stSoft.u32Online;
+        } else {
+            u32SchedBp = 0;
+        }
+        u32ApFail = g_u32SoftApPercpuFail + g_u32SoftApIdleFail;
+        u32CpuOn = cpu_online_count();
+        if (g_Smp.u32NLocalApic > stSoft.u32Online) {
+            u32MadtHead = g_Smp.u32NLocalApic - stSoft.u32Online;
+        } else {
+            u32MadtHead = 0;
+        }
+        if (stSoft.u32Cap > stSoft.u32Online) {
+            u32CapHead = stSoft.u32Cap - stSoft.u32Online;
+        } else {
+            u32CapHead = 0;
+        }
+
+        /* Grep: smp: soft deepen */
+        kprintf("smp: soft deepen wave=14 areas=9 verdict=%s tried=%u "
+                "ok=%u timeout=%u skipped=%u online=%u cap=%u logs=%u\n",
+                szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
+                stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,
+                g_u32SoftLogN);
+        /* Grep: smp: soft verdict */
+        kprintf("smp: soft verdict %s ok_bp=%u to_bp=%u skip_bp=%u "
+                "sched_bp=%u ph_max=%u ph_sched=%u status_on=%u "
+                "status_to=%u status_fail=%u\n",
+                szVerdict, u32OkBp, u32ToBp, u32SkipBp, u32SchedBp,
+                u32PhMax, u32PhSched, u32StOnline, u32StTimeout,
+                u32StFail);
+        /* Grep: smp: soft handshake */
+        kprintf("smp: soft handshake tried=%u ok=%u timeout=%u "
+                "last_spins=%u spins_hwm=%u timer_spin_hwm=%u "
+                "last_slot=%u last_apic=%u sipi=%u\n",
+                stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
+                stSoft.u32LastSpins, g_u32SoftSpinsHwm,
+                g_u32SoftApTimerSpinHwm, stSoft.u32LastSlot,
+                stSoft.u32LastApicId, g_u32SoftStartSipi);
+        /* Grep: smp: soft online */
+        kprintf("smp: soft online smp=%u cpu=%u dyn_percpu=%u "
+                "sched_ready=%u cap=%u madt_en=%u madt_head=%u "
+                "cap_head=%u headroom=%u\n",
+                stSoft.u32Online, u32CpuOn, cpu_dyn_percpu_count(),
+                stSoft.u32SchedReady, stSoft.u32Cap, u32MadtEn,
+                u32MadtHead, u32CapHead, u32Headroom);
+        /* Grep: smp: soft sipi */
+        kprintf("smp: soft sipi enter=%u no_apic=%u up=%u bad_tramp=%u "
+                "x2_arm=%u sipi=%u skip_dis=%u skip_bsp=%u skip_cap=%u\n",
+                g_u32SoftStartEnter, g_u32SoftStartNoApic,
+                g_u32SoftStartUp, g_u32SoftStartBadTramp,
+                g_u32SoftStartX2Arm, g_u32SoftStartSipi, g_u32SoftSkipDis,
+                g_u32SoftSkipBsp, g_u32SoftSkipCap);
+        /* Grep: smp: soft x2 */
+        kprintf("smp: soft x2 enabled=%d supported_ids=%d icr_writes=%lu "
+                "icr_init=%lu icr_sipi=%lu icr_fixed=%lu last_mode=%u "
+                "arm=%u\n",
+                x2apic_enabled(), g_Smp.fX2ApicIds,
+                (unsigned long)x2apic_icr_soft_writes(),
+                (unsigned long)x2apic_icr_soft_init(),
+                (unsigned long)x2apic_icr_soft_sipi(),
+                (unsigned long)x2apic_icr_soft_fixed(),
+                (unsigned)x2apic_icr_soft_last_mode(),
+                g_u32SoftStartX2Arm);
+        /* Grep: smp: soft fail */
+        kprintf("smp: soft fail timeout=%u status_fail=%u percpu=%u "
+                "idle=%u ap_fail=%u ap_run_fail=%u ap_run_to=%u "
+                "ap_run_inval=%u ap_run_busy=%u\n",
+                stSoft.u32Timeout, u32StFail, g_u32SoftApPercpuFail,
+                g_u32SoftApIdleFail, u32ApFail, stSoft.u32ApRunFail,
+                stSoft.u32ApRunTimeout, g_u32SoftApRunInval,
+                g_u32SoftApRunBusy);
+        /* Grep: smp: soft ratio */
+        kprintf("smp: soft ratio ok_bp=%u to_bp=%u skip_bp=%u "
+                "sched_bp=%u tried=%u skipped=%u online=%u cap=%u "
+                "wave=14\n",
+                u32OkBp, u32ToBp, u32SkipBp, u32SchedBp, stSoft.u32Tried,
+                stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap);
+        /* Grep: smp: soft path (Wave 14 honesty; Wave12 path retained) */
+        kprintf("smp: soft path claim=MADT+INIT-SIPI+ap_run "
+                "phases=ENTRY..SCHED soft=Wave14 "
+                "(soft inventory; not bar3)\n");
+    }
 
     /*
      * Legacy greppable soft bring-up lines (kept for existing smoke greps):

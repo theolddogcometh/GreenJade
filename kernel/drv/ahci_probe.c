@@ -3,17 +3,25 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Product T1 HCL: AHCI (SATA HBA) PCI class probe — clean-room pure C.
- * Enumerate class 01:06:01; soft identify CAP/GHC/PI/VS via
+ * Enumerate class 01:06:01; soft identify CAP/GHC/IS/PI/VS/CAP2/BOHC via
  * vmm_map_device_uc (high UC window — never identity-map device MMIO
  * over the kernel).
  *
- * Wave 12 exclusive soft deepen (this unit only — greppable "ahci: soft …"):
- *   ahci: soft inventory  — ports / NP / NCS / CAP ok + PI mask
+ * Wave 14 exclusive soft deepen (this unit only — greppable "ahci: soft …"):
+ *   ahci: soft inventory  — ports / NP / NCS / CAP ok + PI mask + wave
  *   ahci: soft cap        — CAP field inventory (public AHCI 1.x layout)
+ *   ahci: soft cap2       — CAP2 field inventory (observe-only)
  *   ahci: soft pi         — ports-implemented popcount + mask
  *   ahci: soft ghc        — GHC soft snapshot (read-only; no AE write)
+ *   ahci: soft is         — Interrupt Status soft snapshot
  *   ahci: soft vs         — AHCI version major.minor
+ *   ahci: soft bohc       — BIOS/OS Handoff Control observe
+ *   ahci: soft iss        — Interface Speed Support decode
+ *   ahci: soft regs       — HBA memory offset map
+ *   ahci: soft pci        — class 01:06:01 inventory
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
+ *   ahci: soft deepen     — wave=14 areas stamp
+ *   ahci: soft stats      — emission / probe tallies
  *   ahci: soft inventory PASS|SKIP
  *   ahci: soft PASS|SKIP
  *
@@ -30,10 +38,13 @@
 #define AHCI_PCI_PROG_IF  0x01u
 
 /* HBA memory (ABAR) — AHCI 1.3.1 §3 (dword indices) */
-#define AHCI_REG_CAP 0u  /* 0x00 Host Capabilities */
-#define AHCI_REG_GHC 1u  /* 0x04 Global HBA Control */
-#define AHCI_REG_PI  3u  /* 0x0C Ports Implemented */
-#define AHCI_REG_VS  4u  /* 0x10 AHCI Version */
+#define AHCI_REG_CAP  0u  /* 0x00 Host Capabilities */
+#define AHCI_REG_GHC  1u  /* 0x04 Global HBA Control */
+#define AHCI_REG_IS   2u  /* 0x08 Interrupt Status */
+#define AHCI_REG_PI   3u  /* 0x0C Ports Implemented */
+#define AHCI_REG_VS   4u  /* 0x10 AHCI Version */
+#define AHCI_REG_CAP2 9u  /* 0x24 Host Capabilities Extended */
+#define AHCI_REG_BOHC 10u /* 0x28 BIOS/OS Handoff Control and Status */
 
 /* CAP field masks (AHCI 1.x; fields are 0's based where noted) */
 #define AHCI_CAP_NP_MASK   0x1fu /* bits 4:0  Number of Ports */
@@ -59,10 +70,38 @@
 #define AHCI_CAP_SNCQ      (1u << 30)
 #define AHCI_CAP_S64A      (1u << 31)
 
+/* CAP2 soft bits (AHCI 1.x extended; observe only) */
+#define AHCI_CAP2_BOH  (1u << 0) /* BIOS/OS Handoff */
+#define AHCI_CAP2_NVMP (1u << 1) /* NVMHCI Present */
+#define AHCI_CAP2_APST (1u << 2) /* Automatic Partial to Slumber */
+#define AHCI_CAP2_SDS  (1u << 3) /* Supports Device Sleep */
+#define AHCI_CAP2_SADM (1u << 4) /* Supports Aggressive Device Sleep Mgmt */
+#define AHCI_CAP2_DESO (1u << 5) /* DevSleep Entrance from Slumber Only */
+
 /* GHC soft bits (read-only inventory; never write AE) */
 #define AHCI_GHC_HR (1u << 0)  /* HBA Reset */
 #define AHCI_GHC_IE (1u << 1)  /* Interrupt Enable */
+#define AHCI_GHC_MRSM (1u << 2) /* MSI Revert to Single Message */
 #define AHCI_GHC_AE (1u << 31) /* AHCI Enable (observe only) */
+
+/* BOHC soft bits (observe only; never claim handoff) */
+#define AHCI_BOHC_BOS  (1u << 0) /* BIOS Owned Semaphore */
+#define AHCI_BOHC_OOS  (1u << 1) /* OS Owned Semaphore */
+#define AHCI_BOHC_SOOE (1u << 2) /* SMI on OS Ownership Change Enable */
+#define AHCI_BOHC_OOC  (1u << 3) /* OS Ownership Change */
+#define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
+
+/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
+#define AHCI_SOFT_DEEPEN_AREAS 14u
+#define AHCI_SOFT_DEEPEN_WAVE  14u
+
+/* Soft inventory emission tallies (wrap OK; never hard-gate). */
+static u32 g_u32SoftInvLogs;
+static u32 g_u32SoftProbeLogs;
+static u32 g_u32SoftIdentifyOk;
+static u32 g_u32SoftMapFail;
+static u32 g_u32SoftNoAbar;
+static u32 g_u32SoftFound;
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -137,22 +176,35 @@ ahci_abar_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pf64)
 }
 
 /**
- * Wave 12 greppable soft inventory dump (product / smoke).
+ * Map ISS field to greppable speed tag (soft inventory only).
+ */
+static const char *
+ahci_iss_tag(u32 u32Iss)
+{
+    if (u32Iss == 1u) {
+        return "gen1";
+    }
+    if (u32Iss == 2u) {
+        return "gen2";
+    }
+    if (u32Iss == 3u) {
+        return "gen3";
+    }
+    if (u32Iss == 0u) {
+        return "reserved0";
+    }
+    return "other";
+}
+
+/**
+ * Wave 14 greppable soft inventory dump (product / smoke).
  * Prefix-stable "ahci: soft …" — never hard-gates; kprintf only.
- *
- *   ahci: soft inventory — via + CAP ok + ports/NP/NCS + PI
- *   ahci: soft cap       — public CAP field inventory
- *   ahci: soft pi        — ports-implemented popcount + mask
- *   ahci: soft ghc       — GHC AE/IE/HR observe-only
- *   ahci: soft vs        — version major.minor
- *   ahci: soft path      — product surface honesty (no engines)
- *   ahci: soft PASS|SKIP / ahci: soft inventory PASS|SKIP
  *
  * greppable: ahci: soft
  */
 static void
-ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
-                    u32 u32Vs)
+ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
+                    u32 u32Pi, u32 u32Vs, u32 u32Cap2, u32 u32Bohc)
 {
     u32 u32Np;
     u32 u32Ncs;
@@ -164,10 +216,16 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
     int fPiOk;
     int fGhcOk;
     int fVsOk;
+    int fIsOk;
+    int fCap2Ok;
+    int fBohcOk;
     const char *szVerdict;
+    const char *szIss;
+    const char *szViaSafe;
 
-    if (szVia == NULL) {
-        szVia = "path";
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "path";
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
     }
 
     /*
@@ -178,6 +236,9 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
     fPiOk = (u32Pi != 0xffffffffu) ? 1 : 0;
     fGhcOk = (u32Ghc != 0xffffffffu) ? 1 : 0;
     fVsOk = (u32Vs != 0u && u32Vs != 0xffffffffu) ? 1 : 0;
+    fIsOk = (u32Is != 0xffffffffu) ? 1 : 0;
+    fCap2Ok = (u32Cap2 != 0xffffffffu) ? 1 : 0;
+    fBohcOk = (u32Bohc != 0xffffffffu) ? 1 : 0;
     cPortsImpl = (fPiOk != 0) ? ahci_popcount32(u32Pi) : 0u;
 
     u32Np = (fCapOk != 0) ? ((u32Cap & AHCI_CAP_NP_MASK) + 1u) : 0u;
@@ -189,6 +250,7 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
                  : 0u;
     u32Maj = (u32Vs >> 16) & 0xffffu;
     u32Min = u32Vs & 0xffffu;
+    szIss = ahci_iss_tag(u32Iss);
 
     /*
      * Soft verdict (inventory only; never claims port engines):
@@ -205,10 +267,12 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
 
     /* Grep: ahci: soft inventory */
     kprintf("ahci: soft inventory via=%s cap_ok=%u pi_ok=%u ghc_ok=%u "
-            "vs_ok=%u ports=%u np=%u ncs=%u pi=0x%x cap=0x%x\n",
-            szVia, fCapOk != 0 ? 1u : 0u, fPiOk != 0 ? 1u : 0u,
-            fGhcOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u, cPortsImpl, u32Np,
-            u32Ncs, u32Pi, u32Cap);
+            "vs_ok=%u cap2_ok=%u bohc_ok=%u ports=%u np=%u ncs=%u "
+            "pi=0x%x cap=0x%x wave=%u\n",
+            szViaSafe, fCapOk != 0 ? 1u : 0u, fPiOk != 0 ? 1u : 0u,
+            fGhcOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u,
+            fCap2Ok != 0 ? 1u : 0u, fBohcOk != 0 ? 1u : 0u, cPortsImpl,
+            u32Np, u32Ncs, u32Pi, u32Cap, (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
     /* Grep: ahci: soft cap (public AHCI 1.x CAP field inventory) */
     if (fCapOk != 0) {
@@ -237,6 +301,20 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
         kprintf("ahci: soft cap soft SKIP cap=0x%x\n", u32Cap);
     }
 
+    /* Grep: ahci: soft cap2 (Wave 14 extended CAP inventory) */
+    if (fCap2Ok != 0) {
+        kprintf("ahci: soft cap2 boh=%u nvmp=%u apst=%u sds=%u sadm=%u "
+                "deso=%u raw=0x%x soft PASS\n",
+                (u32Cap2 & AHCI_CAP2_BOH) != 0u ? 1u : 0u,
+                (u32Cap2 & AHCI_CAP2_NVMP) != 0u ? 1u : 0u,
+                (u32Cap2 & AHCI_CAP2_APST) != 0u ? 1u : 0u,
+                (u32Cap2 & AHCI_CAP2_SDS) != 0u ? 1u : 0u,
+                (u32Cap2 & AHCI_CAP2_SADM) != 0u ? 1u : 0u,
+                (u32Cap2 & AHCI_CAP2_DESO) != 0u ? 1u : 0u, u32Cap2);
+    } else {
+        kprintf("ahci: soft cap2 soft SKIP cap2=0x%x\n", u32Cap2);
+    }
+
     /* Grep: ahci: soft pi */
     if (fPiOk != 0 && cPortsImpl > 0u) {
         kprintf("ahci: soft pi ports=%u mask=0x%x soft PASS\n", cPortsImpl,
@@ -248,13 +326,22 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
 
     /* Grep: ahci: soft ghc (observe only — never write AE) */
     if (fGhcOk != 0) {
-        kprintf("ahci: soft ghc ae=%u ie=%u hr=%u raw=0x%x soft PASS "
-                "ae_write=0\n",
+        kprintf("ahci: soft ghc ae=%u ie=%u hr=%u mrsm=%u raw=0x%x "
+                "soft PASS ae_write=0\n",
                 (u32Ghc & AHCI_GHC_AE) != 0u ? 1u : 0u,
                 (u32Ghc & AHCI_GHC_IE) != 0u ? 1u : 0u,
-                (u32Ghc & AHCI_GHC_HR) != 0u ? 1u : 0u, u32Ghc);
+                (u32Ghc & AHCI_GHC_HR) != 0u ? 1u : 0u,
+                (u32Ghc & AHCI_GHC_MRSM) != 0u ? 1u : 0u, u32Ghc);
     } else {
         kprintf("ahci: soft ghc soft SKIP ghc=0x%x\n", u32Ghc);
+    }
+
+    /* Grep: ahci: soft is (Interrupt Status observe) */
+    if (fIsOk != 0) {
+        kprintf("ahci: soft is raw=0x%x pop=%u soft PASS clear_write=0\n",
+                u32Is, ahci_popcount32(u32Is));
+    } else {
+        kprintf("ahci: soft is soft SKIP is=0x%x\n", u32Is);
     }
 
     /* Grep: ahci: soft vs */
@@ -265,15 +352,62 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
         kprintf("ahci: soft vs soft SKIP vs=0x%x\n", u32Vs);
     }
 
+    /* Grep: ahci: soft bohc (observe only — never claim OS ownership) */
+    if (fBohcOk != 0) {
+        kprintf("ahci: soft bohc bos=%u oos=%u sooe=%u ooc=%u bb=%u "
+                "raw=0x%x soft PASS handoff_claim=0\n",
+                (u32Bohc & AHCI_BOHC_BOS) != 0u ? 1u : 0u,
+                (u32Bohc & AHCI_BOHC_OOS) != 0u ? 1u : 0u,
+                (u32Bohc & AHCI_BOHC_SOOE) != 0u ? 1u : 0u,
+                (u32Bohc & AHCI_BOHC_OOC) != 0u ? 1u : 0u,
+                (u32Bohc & AHCI_BOHC_BB) != 0u ? 1u : 0u, u32Bohc);
+    } else {
+        kprintf("ahci: soft bohc soft SKIP bohc=0x%x\n", u32Bohc);
+    }
+
+    /* Grep: ahci: soft iss */
+    if (fCapOk != 0) {
+        kprintf("ahci: soft iss code=%u tag=%s soft PASS\n", u32Iss, szIss);
+    } else {
+        kprintf("ahci: soft iss soft SKIP\n");
+    }
+
+    /* Grep: ahci: soft regs (HBA memory dword-index / byte-offset map) */
+    kprintf("ahci: soft regs CAP=0x00 GHC=0x04 IS=0x08 PI=0x0C VS=0x10 "
+            "CAP2=0x24 BOHC=0x28 soft PASS\n");
+
+    /* Grep: ahci: soft pci */
+    kprintf("ahci: soft pci class=0x%02x subclass=0x%02x pif=0x%02x "
+            "mass_storage_sata_ahci=1 soft PASS\n",
+            (unsigned)AHCI_PCI_CLASS, (unsigned)AHCI_PCI_SUBCLASS,
+            (unsigned)AHCI_PCI_PROG_IF);
+
     /*
      * Grep: ahci: soft path
      * Honesty catalog: product surface is PCI class + soft CAP/GHC/PI/VS.
      * claim=0 engines — no port start, no CLB/FB, no GHC.AE write.
      */
     kprintf("ahci: soft path claim=0 engines=0 cmdlist=0 fis=0 "
-            "ghc_ae_write=0 map_uc=1 cap_fields=1 pi=1 ghc_ro=1 vs=1 "
-            "via=%s\n",
-            szVia);
+            "ghc_ae_write=0 bohc_claim=0 map_uc=1 cap_fields=1 cap2=1 "
+            "pi=1 ghc_ro=1 is_ro=1 vs=1 bohc_ro=1 via=%s wave=%u\n",
+            szViaSafe, (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ahci: soft deepen wave (Wave 14 stamp) */
+    kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
+            "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
+            "skip=%u\n",
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE,
+            (unsigned)AHCI_SOFT_DEEPEN_AREAS, szViaSafe,
+            fCapOk != 0 ? 1u : 0u, cPortsImpl, g_u32SoftFound,
+            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoAbar,
+            fCapOk != 0 ? 1u : 0u, fCapOk != 0 ? 0u : 1u);
+
+    /* Grep: ahci: soft stats */
+    kprintf("ahci: soft stats inv_logs=%u probe_logs=%u found=%u "
+            "identify_ok=%u map_fail=%u no_abar=%u wave=%u\n",
+            g_u32SoftInvLogs, g_u32SoftProbeLogs, g_u32SoftFound,
+            g_u32SoftIdentifyOk, g_u32SoftMapFail, g_u32SoftNoAbar,
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
     /* Legacy greppable inventory lines (pre-Wave-12 product smokes) */
     if (cPortsImpl > 0u) {
@@ -295,15 +429,19 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Pi,
     }
 
     /* Grep: ahci: soft inventory PASS|SKIP / ahci: soft PASS|SKIP */
-    kprintf("ahci: soft inventory %s via=%s ports=%u ncs=%u\n", szVerdict,
-            szVia, cPortsImpl, u32Ncs);
-    kprintf("ahci: soft %s via=%s cap_ok=%u ports=%u\n", szVerdict, szVia,
-            fCapOk != 0 ? 1u : 0u, cPortsImpl);
+    kprintf("ahci: soft inventory %s via=%s ports=%u ncs=%u wave=%u "
+            "areas=%u\n",
+            szVerdict, szViaSafe, cPortsImpl, u32Ncs,
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE,
+            (unsigned)AHCI_SOFT_DEEPEN_AREAS);
+    kprintf("ahci: soft %s via=%s cap_ok=%u ports=%u wave=%u\n", szVerdict,
+            szViaSafe, fCapOk != 0 ? 1u : 0u, cPortsImpl,
+            (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 }
 
 /**
- * Soft identify: map ABAR UC and read CAP/GHC/PI/VS (no GHC.AE write).
- * Then Wave 12 soft inventory (CAP fields + PI + GHC + VS + path honesty).
+ * Soft identify: map ABAR UC and read CAP/GHC/IS/PI/VS/CAP2/BOHC
+ * (no GHC.AE write, no BOHC claim). Then Wave 14 soft inventory.
  */
 static void
 ahci_soft_identify(u64 paAbar)
@@ -315,33 +453,46 @@ ahci_soft_identify(u64 paAbar)
             (unsigned long)paAbar);
     stMap = vmm_map_device_uc((gj_paddr_t)paAbar, 0x1000, &vaMap);
     if (stMap != GJ_OK) {
+        if (g_u32SoftMapFail < 0xffffffffu) {
+            g_u32SoftMapFail++;
+        }
         kprintf("ahci: abar map soft fail st=%d\n", (int)stMap);
         kprintf("ahci: inventory soft SKIP map\n");
         /* Grep: ahci: soft … SKIP (map fail; 0xff.. = unread MMIO) */
-        ahci_soft_inventory("map_fail", 0xffffffffu, 0xffffffffu, 0xffffffffu,
-                            0xffffffffu);
+        ahci_soft_inventory("map_fail", 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu);
         return;
     }
     {
         volatile u32 *pReg = (volatile u32 *)(gj_vaddr_t)vaMap;
         u32 u32Cap = pReg[AHCI_REG_CAP];
         u32 u32Ghc = pReg[AHCI_REG_GHC];
+        u32 u32Is = pReg[AHCI_REG_IS];
         u32 u32Pi = pReg[AHCI_REG_PI];
         u32 u32Vs = pReg[AHCI_REG_VS];
+        u32 u32Cap2 = pReg[AHCI_REG_CAP2];
+        u32 u32Bohc = pReg[AHCI_REG_BOHC];
         u32 u32Np = (u32Cap & AHCI_CAP_NP_MASK) + 1u;
         u32 u32Ncs =
             ((u32Cap >> AHCI_CAP_NCS_SHIFT) & AHCI_CAP_NCS_MASK) + 1u;
 
+        if (g_u32SoftIdentifyOk < 0xffffffffu) {
+            g_u32SoftIdentifyOk++;
+        }
+
         kprintf("ahci: HBA CAP=0x%x GHC=0x%x soft PASS\n", u32Cap, u32Ghc);
         kprintf("ahci: identify PI=0x%x VS=0x%x NP=%u NCS=%u soft PASS\n",
                 u32Pi, u32Vs, u32Np, u32Ncs);
-        ahci_soft_inventory("identify", u32Cap, u32Ghc, u32Pi, u32Vs);
+        ahci_soft_inventory("identify", u32Cap, u32Ghc, u32Is, u32Pi, u32Vs,
+                            u32Cap2, u32Bohc);
     }
 }
 
 /**
- * Scan PCI for AHCI HBAs. Soft-reads CAP/GHC/PI/VS when ABAR is mappable.
- * Returns count of matching functions. Always logs greppable soft PASS/SKIP.
+ * Scan PCI for AHCI HBAs. Soft-reads CAP/GHC/IS/PI/VS/CAP2/BOHC when
+ * ABAR is mappable. Returns count of matching functions. Always logs
+ * greppable soft PASS/SKIP.
  */
 u32
 ahci_probe_scan(void)
@@ -350,6 +501,10 @@ ahci_probe_scan(void)
     u8 u8Slot;
     u8 u8Func;
     u32 cFound = 0;
+
+    if (g_u32SoftProbeLogs < 0xffffffffu) {
+        g_u32SoftProbeLogs++;
+    }
 
     for (u8Bus = 0; u8Bus < 8; u8Bus++) {
         for (u8Slot = 0; u8Slot < 32; u8Slot++) {
@@ -392,12 +547,20 @@ ahci_probe_scan(void)
                 if ((u32BarRaw & 1u) == 0 && paAbar != 0) {
                     ahci_soft_identify(paAbar);
                 } else {
+                    if (g_u32SoftNoAbar < 0xffffffffu) {
+                        g_u32SoftNoAbar++;
+                    }
                     kprintf("ahci: abar empty/io soft SKIP\n");
                     kprintf("ahci: inventory soft SKIP no_abar\n");
                     ahci_soft_inventory("no_abar", 0xffffffffu, 0xffffffffu,
-                                        0xffffffffu, 0xffffffffu);
+                                        0xffffffffu, 0xffffffffu,
+                                        0xffffffffu, 0xffffffffu,
+                                        0xffffffffu);
                 }
                 cFound++;
+                if (g_u32SoftFound < 0xffffffffu) {
+                    g_u32SoftFound++;
+                }
             }
         }
     }
@@ -405,6 +568,7 @@ ahci_probe_scan(void)
         kprintf("ahci: probe none (soft)\n");
         /* Grep: ahci: soft … SKIP (no controller; 0xff.. = unread) */
         ahci_soft_inventory("none", 0xffffffffu, 0xffffffffu, 0xffffffffu,
+                            0xffffffffu, 0xffffffffu, 0xffffffffu,
                             0xffffffffu);
     } else {
         kprintf("ahci: probe count=%u PASS\n", cFound);

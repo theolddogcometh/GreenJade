@@ -21,27 +21,43 @@
  * this tree. Candidate symbols that already live in user/libcgj (or the
  * shipped product TU) must not be redefined here.
  *
- * Soft surface (unwired):
- *   gj_so_batch1_export    — data (0x421); optional future resolve target
- *   gj_so_batch1_init      — restores the marker
- *   gj_so_batch1_id        — returns current marker (-Werror clean)
- *   gj_so_batch1_sysv_hash — classic ELF SysV hash (DT_HASH name hash)
- *   gj_so_batch1_streq     — freestanding string equality for chain match
- *   gj_so_batch1_bucket    — hash % nbucket index helper
+ * Soft surface (unwired; Wave 14 exclusive deepen):
+ *   gj_so_batch1_export      — data (0x421); optional future resolve target
+ *   gj_so_batch1_soft_stamp  — soft companion stamp ('B1s1')
+ *   gj_so_batch1_init        — restores the marker + stamp
+ *   gj_so_batch1_id          — returns current marker (-Werror clean)
+ *   gj_so_batch1_sysv_hash   — classic ELF SysV hash (DT_HASH name hash)
+ *   gj_so_batch1_streq       — freestanding string equality for chain match
+ *   gj_so_batch1_bucket      — hash % nbucket index helper
+ *   gj_so_batch1_soft_get    — soft read of marker
+ *   gj_so_batch1_soft_probe  — soft check + careful restore
+ *
+ * greppable: GJ_SO_BATCH1_SOFT_MARKER
+ * greppable: GJ_SO_BATCH1_SOFT_INIT
+ * greppable: GJ_SO_BATCH1_SOFT_GET
+ * greppable: GJ_SO_BATCH1_SOFT_PROBE
+ * greppable: GJ_SO_BATCH1_SOFT_STAMP
+ * greppable: libgj-so: soft batch1 wave=14
  */
 #include <stddef.h>
 #include <stdint.h>
 
 /* Matches GJ_SO_BATCH1_EXPORT_VALUE in include/gj_so.h (soft section). */
 #define GJ_SO_BATCH1_EXPORT_VALUE  ((uint64_t)0x421)
+#define GJ_SO_BATCH1_STAMP_CANON   ((uint64_t)0x42317331ull) /* 'B1s1' */
 
-/* Product SO batch presence marker (GLOB_DAT / JUMP_SLOT smoke target). */
+/* greppable: GJ_SO_BATCH1_SOFT_MARKER */
 volatile uint64_t gj_so_batch1_export = GJ_SO_BATCH1_EXPORT_VALUE;
+
+/* greppable: GJ_SO_BATCH1_SOFT_STAMP */
+volatile uint64_t gj_so_batch1_soft_stamp = GJ_SO_BATCH1_STAMP_CANON;
 
 void
 gj_so_batch1_init(void)
 {
+	/* greppable: GJ_SO_BATCH1_SOFT_INIT */
 	gj_so_batch1_export = GJ_SO_BATCH1_EXPORT_VALUE;
+	gj_so_batch1_soft_stamp = GJ_SO_BATCH1_STAMP_CANON;
 }
 
 /* Keep TU useful under -Werror -Wunused when only the marker is present. */
@@ -98,4 +114,34 @@ gj_so_batch1_bucket(uint32_t u32Hash, uint32_t u32Nbucket)
 		return 0;
 	}
 	return u32Hash % u32Nbucket;
+}
+
+/*
+ * Soft get of the batch marker. Read-only; does not mutate.
+ */
+uint64_t
+gj_so_batch1_soft_get(void)
+{
+	/* greppable: GJ_SO_BATCH1_SOFT_GET */
+	return gj_so_batch1_export;
+}
+
+/*
+ * Soft probe: 1 if marker is canonical; on soft miss carefully restores
+ * marker + stamp and returns 0. Never hard-fails.
+ */
+int
+gj_so_batch1_soft_probe(void)
+{
+	/* greppable: GJ_SO_BATCH1_SOFT_PROBE */
+	if (gj_so_batch1_export != GJ_SO_BATCH1_EXPORT_VALUE) {
+		gj_so_batch1_export = GJ_SO_BATCH1_EXPORT_VALUE;
+		gj_so_batch1_soft_stamp = GJ_SO_BATCH1_STAMP_CANON;
+		return 0;
+	}
+	if (gj_so_batch1_soft_stamp != GJ_SO_BATCH1_STAMP_CANON) {
+		gj_so_batch1_soft_stamp = GJ_SO_BATCH1_STAMP_CANON;
+		return 0;
+	}
+	return 1;
 }

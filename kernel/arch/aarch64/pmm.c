@@ -5,7 +5,7 @@
  * aarch64 PMM — thin wrap over shared freelist core (kernel/shared/pmm_freelist.c).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 10 exclusive; this unit only — greppable
+ * Soft inventory (Wave 14 exclusive deepen; this unit only — greppable
  * "aarch64: pmm soft …")
  * -------------------------------------------------------------------------
  * Soft pool geometry: base/end/page counts after init (order-0 identity
@@ -16,7 +16,10 @@
  * Soft free-step: single alloc drops free by 1; free restores.
  * Soft null free: free(NULL) is no-op (count unchanged).
  * Soft invariant: free ≤ total, non-zero total, pool geometry coherent.
+ * Soft stats: gate sum + free ratio + log tally (Wave 14).
+ * Soft deepen: area catalog stamp wave=14.
  * Soft path honesty: order-0 shared core only; not ≥1 TiB hierarchical.
+ * Soft honesty: aarch64 product kernel remains OPEN (soft scaffold only).
  *
  * Greppable soft inventory (prefix-stable):
  *   aarch64: pmm soft pool base=… end=… pages=… page_size=… span=…
@@ -25,7 +28,12 @@
  *   aarch64: pmm soft step free0=… free1=… free2=… drop=… restore=…
  *   aarch64: pmm soft inv free=… total=… pool_pages=… self=… multi=…
  *             lifo=… step=… null=… inv=…
+ *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=14
+ *   aarch64: pmm soft inventory wave=14 …
+ *   aarch64: pmm soft deepen wave=14 areas=…
  *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
+ *             product_kernel=OPEN wave=14
+ *   aarch64: pmm soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: pmm soft PASS | FAIL
  *
  * Legacy / product smoke markers (kept greppable):
@@ -52,12 +60,19 @@ extern char __kernel_end[];
 #define PMM_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ull
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
 
+/* Wave 14 soft inventory stamp (greppable wave=14). */
+#define PMM_SOFT_WAVE 14u
+
+/* Soft deepen areas: pool,multi,lifo,step,inv,stats,path,honesty. */
+#define PMM_SOFT_AREAS 8u
+
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
 static unsigned g_cPoolPages;
+static unsigned g_cPmmSoftLogs; /* Wave 14 inventory emit count */
 
 /*
- * Soft inventory snapshot (Wave 10; file-local; never hard-gates boot).
+ * Soft inventory snapshot (Wave 14; file-local; never hard-gates boot).
  * greppable: aarch64: pmm soft
  */
 struct pmm_soft_snap {
@@ -411,7 +426,7 @@ pmm_invariants_soft(void)
 }
 
 /*
- * Wave 10 soft inventory emission — greppable "aarch64: pmm soft …".
+ * Wave 14 soft inventory emission — greppable "aarch64: pmm soft …".
  * Returns 1 if all soft gates held (self/multi/lifo/step/null/inv).
  */
 static int
@@ -420,11 +435,17 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
     unsigned uLifoReuse;
     unsigned uStepDrop;
     unsigned uStepRestore;
+    unsigned cGates;
+    unsigned uRatio;
     int fOk;
 
     if (pSnap == 0) {
         kprintf("aarch64: pmm soft FAIL\n");
         return 0;
+    }
+
+    if (g_cPmmSoftLogs < 0xffffffffu) {
+        g_cPmmSoftLogs++;
     }
 
     uLifoReuse = 0u;
@@ -442,6 +463,15 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
     uStepRestore = 0u;
     if (pSnap->cStepFree2 == pSnap->cStepFree0) {
         uStepRestore = 1u;
+    }
+
+    /* Soft gate sum + free/total ratio (percent; pure integer). */
+    cGates = (unsigned)pSnap->u8SelfOk + (unsigned)pSnap->u8MultiOk +
+             (unsigned)pSnap->u8LifoOk + (unsigned)pSnap->u8StepOk +
+             (unsigned)pSnap->u8NullOk + (unsigned)pSnap->u8InvOk;
+    uRatio = 0u;
+    if (pSnap->cTotal != 0u) {
+        uRatio = (pSnap->cFree * 100u) / pSnap->cTotal;
     }
 
     /* Grep: aarch64: pmm soft pool */
@@ -480,13 +510,42 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
             (unsigned)pSnap->u8LifoOk, (unsigned)pSnap->u8StepOk,
             (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk);
 
+    /* Grep: aarch64: pmm soft stats — Wave 14 rollup. */
+    kprintf("aarch64: pmm soft stats gates=%u free=%u total=%u ratio=%u "
+            "multi_n=%u logs=%u wave=%u\n",
+            cGates, pSnap->cFree, pSnap->cTotal, uRatio,
+            (unsigned)PMM_SOFT_MULTI_N, g_cPmmSoftLogs,
+            (unsigned)PMM_SOFT_WAVE);
+
+    /* Grep: aarch64: pmm soft inventory — Wave 14 stamp. */
+    kprintf("aarch64: pmm soft inventory wave=%u gates=%u free=%u total=%u "
+            "pool_pages=%u logs=%u ok_sum=%u\n",
+            (unsigned)PMM_SOFT_WAVE, cGates, pSnap->cFree, pSnap->cTotal,
+            pSnap->cPoolPages, g_cPmmSoftLogs, cGates);
+
+    /*
+     * Grep: aarch64: pmm soft deepen
+     * Wave 14 area catalog — order-0 soft scaffold only.
+     */
+    kprintf("aarch64: pmm soft deepen wave=%u areas=%u "
+            "catalog=pool,multi,lifo,step,inv,stats,path,honesty "
+            "logs=%u soft_only=1\n",
+            (unsigned)PMM_SOFT_WAVE, (unsigned)PMM_SOFT_AREAS,
+            g_cPmmSoftLogs);
+
     /*
      * Grep: aarch64: pmm soft path
      * Honesty: order-0 shared core only — not hierarchical / TiB product bar.
+     * product_kernel=OPEN: aarch64 product kernel remains OPEN.
      */
     kprintf("aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 "
-            "core=1 multi_n=%u\n",
-            (unsigned)PMM_SOFT_MULTI_N);
+            "core=1 multi_n=%u product_kernel=OPEN hard_gate=0 wave=%u\n",
+            (unsigned)PMM_SOFT_MULTI_N, (unsigned)PMM_SOFT_WAVE);
+
+    /* Grep: aarch64: pmm soft honesty */
+    kprintf("aarch64: pmm soft honesty product_kernel=OPEN soft_only=1 "
+            "no_hier=1 no_tib=1 no_bar3=1 wave=%u\n",
+            (unsigned)PMM_SOFT_WAVE);
 
     fOk = 0;
     if (pSnap->u8SelfOk != 0u && pSnap->u8MultiOk != 0u &&
@@ -496,9 +555,11 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
     }
 
     if (fOk != 0) {
-        kprintf("aarch64: pmm soft PASS\n");
+        kprintf("aarch64: pmm soft PASS wave=%u\n",
+                (unsigned)PMM_SOFT_WAVE);
     } else {
-        kprintf("aarch64: pmm soft FAIL\n");
+        kprintf("aarch64: pmm soft FAIL wave=%u\n",
+                (unsigned)PMM_SOFT_WAVE);
     }
     return fOk;
 }
@@ -562,7 +623,7 @@ aarch64_pmm_init(void)
     snap.u8Pad1 = 0u;
 
     /*
-     * Legacy pool soft line (kept for existing greps) + Wave 10 soft pool
+     * Legacy pool soft line (kept for existing greps) + Wave 14 soft pool
      * line emitted later via pmm_soft_inventory.
      */
     kprintf("aarch64: pmm pool soft base=0x%lx end=0x%lx pages=%u "
@@ -630,8 +691,9 @@ aarch64_pmm_init(void)
     }
 
     /*
-     * Wave 10 combined soft inventory under "aarch64: pmm soft …".
+     * Wave 14 combined soft inventory under "aarch64: pmm soft …".
      * Emits multi-field lamps + final soft PASS|FAIL (smoke greps PASS).
+     * Honesty: soft PASS ≠ hierarchical PMM / product kernel complete.
      */
     fSoft = pmm_soft_inventory(&snap);
     (void)fSoft;

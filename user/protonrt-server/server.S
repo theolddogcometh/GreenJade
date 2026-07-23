@@ -22,6 +22,21 @@
  *   "protonrt-user: soft reply-miss"    — first soft IPC_REPLY fail
  *   "protonrt-user: soft serve-miss"    — first serve copy/arg soft fault
  *
+ * Soft inventory (Wave 14 exclusive deepen — greppable comments; asm-safe):
+ *   greppable: protonrt-user: soft serve ready
+ *   greppable: protonrt-user: soft recv-miss
+ *   greppable: protonrt-user: soft reply-miss
+ *   greppable: protonrt-user: soft serve-miss
+ *   greppable: protonrt-user: soft deepen wave=14
+ *   greppable: protonrt-user: soft inventory areas=6 wave=14
+ * Soft areas (fixed; agent honesty only — not bar3):
+ *   1 up-banner   2 fixed-frame   3 wire-zero
+ *   4 yield-miss  5 one-shot-soft 6 never-exit-soft
+ * Soft flags in r15 (bit inventory, Wave 14):
+ *   bit0 SOFT_F_READY  bit1 SOFT_F_RECV
+ *   bit2 SOFT_F_REPLY  bit3 SOFT_F_SERVE
+ * Soft path (honesty): recv→serve→reply; miss→yield; no EXIT.
+ *
  * Soft deepenings (align with kernel cold_personality_server):
  *   - fixed regs frame allocated once (no per-iter stack thrash)
  *   - zero wire-size frame before each IPC_RECV (no stale i64Ret / NR)
@@ -29,6 +44,7 @@
  *   - reply uses PERSONALITY_SERVE rax (same as cold_ipc_service_local ret)
  *   - one-shot soft markers only (no log spam)
  *   - never EXIT / tear-down on soft errors (clients must not hang)
+ * Wave 14: soft inventory documented above; no new hard markers or exits.
  *
  * Companion A0 wineserver-shaped smokes live in kernel/main.c (winesrv: …).
  */
@@ -48,16 +64,21 @@
 .set REGS_WIRE,        64
 
 /*
- * Soft flags in r15:
- *   bit0 = soft serve ready logged
- *   bit1 = soft recv-miss logged
- *   bit2 = soft reply-miss logged
- *   bit3 = soft serve-miss logged
+ * Soft flags in r15 (Wave 14 soft inventory bit lamps):
+ *   bit0 = soft serve ready logged   (SOFT_F_READY)
+ *   bit1 = soft recv-miss logged     (SOFT_F_RECV)
+ *   bit2 = soft reply-miss logged    (SOFT_F_REPLY)
+ *   bit3 = soft serve-miss logged    (SOFT_F_SERVE)
+ * greppable: protonrt-user: soft deepen wave=14
+ * greppable: SOFT_F_READY SOFT_F_RECV SOFT_F_REPLY SOFT_F_SERVE
  */
 .set SOFT_F_READY,  1
 .set SOFT_F_RECV,   2
 .set SOFT_F_REPLY,  4
 .set SOFT_F_SERVE,  8
+/* Wave 14 soft inventory area count (comment-only stamp; not a runtime). */
+.set SOFT_INV_WAVE,  14
+.set SOFT_INV_AREAS,  6
 
 gj_protonrt_user_blob:
     xor  %r15, %r15                 /* soft flag word */

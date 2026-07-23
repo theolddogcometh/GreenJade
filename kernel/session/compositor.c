@@ -14,18 +14,20 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 12 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 14 exclusive deepen; this unit only):
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
- *     shrink / clamp / fallback + last pages/bytes snap
+ *     shrink / clamp(zero|max) / fallback + last pages/bytes snap
  *   - Present path: enter / ok / fail_ready / fail_backend + live
  *     multi/gen/idx/presents + first_ok / multi_first
  *   - Batch path: enter / ok / partial / fail / frames_ok / stop_rej /
  *     clamp_n / zero_n / req / last_ok
  *   - Peaks: presents / multi / gen / batch_ok high-water
  *   - Query: ready / fb / size / stride / present_n / multi / gen / idx
+ *   - Paint / reinit / ratio / last / size-null / fb-null soft surfaces
  *   - Geom + path honesty catalog + soft verdict INIT|PASS|PARTIAL
  *   greppable: "compositor: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
+ *   Soft ≠ desktop/compositor product bar.
  */
 #include <gj/compositor.h>
 #include <gj/config.h>
@@ -42,6 +44,8 @@
 #define GJ_COMP_MIN_W      32u
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
+/* Wave 14 deepen stamp (file-local; never hard-gates). */
+#define GJ_COMP_SOFT_WAVE  14u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -57,8 +61,8 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 12 exclusive). Cumulative unless noted live/peak.
- * greppable: compositor: soft …
+ * Soft product inventory (Wave 14 exclusive deepen). Cumulative unless noted
+ * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
 static u32 g_u32SoftInitOk;        /* ready after init */
@@ -68,9 +72,12 @@ static u32 g_u32SoftInitFailPmm;   /* PMM could not back tile */
 static u32 g_u32SoftInitFailHhdm;  /* HHDM map missing */
 static u32 g_u32SoftInitShrink;    /* single-page min-tile fallback */
 static u32 g_u32SoftInitClamp;     /* display clamped (max/zero/absurd) */
+static u32 g_u32SoftInitClampZero; /* clamp reason: zero dim */
+static u32 g_u32SoftInitClampMax;  /* clamp reason: > max dim */
 static u32 g_u32SoftInitFallback;  /* forced FALLBACK_W×H geom */
 static u32 g_u32SoftInitLastPages; /* pages backing last ok/fail tile snap */
 static u32 g_u32SoftInitLastBytes; /* bytes of last planned tile snap */
+static u32 g_u32SoftInitReenter;   /* init after a prior present activity */
 static u32 g_u32SoftPresentEnter;  /* present entries */
 static u32 g_u32SoftPresentOk;     /* backend accepted frame */
 static u32 g_u32SoftPresentFailRdy;/* not ready / zero geom */
@@ -87,18 +94,27 @@ static u32 g_u32SoftBatchClamp;    /* N clamped down to GJ_COMP_MULTI_MAX */
 static u32 g_u32SoftBatchZeroN;    /* N==0 promoted to 1 */
 static u32 g_u32SoftBatchReq;      /* sum of requested frames (post-clamp) */
 static u32 g_u32SoftBatchLastOk;   /* ok frames in most recent present_n */
+static u32 g_u32SoftBatchLastReq;  /* requested frames in most recent batch */
 static u32 g_u32SoftPeakPresents;  /* high-water g_u32Presents */
 static u32 g_u32SoftPeakMulti;     /* high-water g_u32Multi */
 static u32 g_u32SoftPeakGen;       /* high-water g_u32FrameGen */
 static u32 g_u32SoftPeakBatchOk;   /* max ok frames in one present_n */
 static u32 g_u32SoftQueryReady;    /* session_compositor_ready reads */
 static u32 g_u32SoftQueryFb;       /* session_compositor_fb reads */
+static u32 g_u32SoftQueryFbNull;   /* fb query while not ready */
+static u32 g_u32SoftQueryFbOk;     /* fb query returned non-NULL */
 static u32 g_u32SoftQuerySize;     /* session_compositor_size reads */
+static u32 g_u32SoftQuerySizeNullW;/* size: pW == NULL */
+static u32 g_u32SoftQuerySizeNullH;/* size: pH == NULL */
 static u32 g_u32SoftQueryStride;   /* session_compositor_stride reads */
 static u32 g_u32SoftQueryPresentN; /* session_compositor_present_count */
 static u32 g_u32SoftQueryMulti;    /* session_compositor_multi_count */
 static u32 g_u32SoftQueryGen;      /* session_compositor_frame_gen */
 static u32 g_u32SoftQueryIdx;      /* session_compositor_soft_index */
+static u32 g_u32SoftPaintEnter;    /* gradient paint runs */
+static u32 g_u32SoftPaintPix;      /* last paint pixel count */
+static u32 g_u32SoftPaintBytes;    /* last paint byte count */
+static u32 g_u32SoftLastPresentSt; /* 0 ok / 1 fail_rdy / 2 fail_be */
 static u32 g_u32SoftLogN;          /* inventory log emissions */
 static u8  g_fSoftOnce;            /* one-shot after first present activity */
 static u8  g_fSoftBatchInFlight;   /* suppress mid-batch maybe_once */
@@ -108,14 +124,16 @@ static void soft_note_peaks(void);
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
 
-/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+/** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
 static void
 comp_soft_inc(u32 *pCtr)
 {
     if (pCtr == NULL) {
         return;
     }
-    (*pCtr)++;
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
 }
 
 /**
@@ -136,18 +154,21 @@ soft_note_peaks(void)
 }
 
 /**
- * Greppable soft compositor inventory (product / smoke; Wave 12 deepen).
+ * Greppable soft compositor inventory (product / smoke; Wave 14 deepen).
  *   compositor: soft inventory …
  *   compositor: soft init …
  *   compositor: soft present …
  *   compositor: soft batch …
  *   compositor: soft geom …
+ *   compositor: soft paint …
  *   compositor: soft peaks …
  *   compositor: soft query …
+ *   compositor: soft ratio …
+ *   compositor: soft last …
  *   compositor: soft path …
  *   compositor: soft PASS|PARTIAL|INIT
  * greppable: compositor: soft
- * Honesty: soft inventory only — not bar3 / full userspace compositor.
+ * Honesty: soft inventory only — not bar3 / desktop compositor product.
  */
 static void
 soft_inventory_log(void)
@@ -164,6 +185,8 @@ soft_inventory_log(void)
     u32 u32Pages;
     u32 u32Bytes;
     u32 u32Gpu;
+    u32 u32OkBp;
+    u32 u32FailBp;
     const char *szVerdict;
 
     comp_soft_inc(&g_u32SoftLogN);
@@ -182,6 +205,16 @@ soft_inventory_log(void)
     u32Bytes = g_u32SoftInitLastBytes;
     u32Pages = g_u32SoftInitLastPages;
     u32Gpu = virtio_gpu_ready() ? 1u : 0u;
+
+    if (g_u32SoftPresentEnter != 0u) {
+        u32OkBp = (g_u32SoftPresentOk * 10000u) / g_u32SoftPresentEnter;
+        u32FailBp = ((g_u32SoftPresentFailRdy + g_u32SoftPresentFailBe) *
+                     10000u) /
+                    g_u32SoftPresentEnter;
+    } else {
+        u32OkBp = 0;
+        u32FailBp = 0;
+    }
 
     /*
      * Soft verdict (inventory only; never hard-gates present):
@@ -202,38 +235,41 @@ soft_inventory_log(void)
     /* Grep: compositor: soft inventory */
     kprintf("compositor: soft inventory ready=%u w=%u h=%u stride=%u "
             "multi_max=%u presents=%u multi=%u gen=%u idx=%u gpu=%u "
-            "logs=%u wave=12\n",
+            "ok_bp=%u logs=%u wave=%u\n",
             u32Ready, u32W, u32H, u32Stride, GJ_COMP_MULTI_MAX, u32Presents,
-            u32Multi, u32Gen, u32Idx, u32Gpu, g_u32SoftLogN);
+            u32Multi, u32Gen, u32Idx, u32Gpu, u32OkBp, g_u32SoftLogN,
+            GJ_COMP_SOFT_WAVE);
 
     /* Grep: compositor: soft init */
     kprintf("compositor: soft init enter=%u ok=%u idem=%u fail_gpu=%u "
-            "fail_pmm=%u fail_hhdm=%u shrink=%u clamp=%u fallback=%u "
-            "last_pages=%u last_bytes=%u\n",
+            "fail_pmm=%u fail_hhdm=%u shrink=%u clamp=%u clamp_zero=%u "
+            "clamp_max=%u fallback=%u reenter=%u last_pages=%u "
+            "last_bytes=%u\n",
             g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftInitIdem,
             g_u32SoftInitFailGpu, g_u32SoftInitFailPmm,
             g_u32SoftInitFailHhdm, g_u32SoftInitShrink, g_u32SoftInitClamp,
-            g_u32SoftInitFallback, g_u32SoftInitLastPages,
-            g_u32SoftInitLastBytes);
+            g_u32SoftInitClampZero, g_u32SoftInitClampMax,
+            g_u32SoftInitFallback, g_u32SoftInitReenter,
+            g_u32SoftInitLastPages, g_u32SoftInitLastBytes);
 
     /* Grep: compositor: soft present */
     kprintf("compositor: soft present enter=%u ok=%u fail_ready=%u "
             "fail_backend=%u multi=%u gen=%u idx=%u presents=%u "
-            "first_ok=%u multi_first=%u\n",
+            "first_ok=%u multi_first=%u last_st=%u\n",
             g_u32SoftPresentEnter, g_u32SoftPresentOk,
             g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe, u32Multi,
             u32Gen, u32Idx, u32Presents, g_u32SoftPresentFirstOk,
-            g_u32SoftPresentMulti1);
+            g_u32SoftPresentMulti1, g_u32SoftLastPresentSt);
 
     /* Grep: compositor: soft batch */
     kprintf("compositor: soft batch enter=%u ok=%u partial=%u fail=%u "
             "frames_ok=%u stop_rej=%u clamp=%u zero_n=%u req=%u "
-            "last_ok=%u peak_ok=%u multi_max=%u\n",
+            "last_ok=%u last_req=%u peak_ok=%u multi_max=%u\n",
             g_u32SoftBatchEnter, g_u32SoftBatchOk, g_u32SoftBatchPartial,
             g_u32SoftBatchFail, g_u32SoftBatchFramesOk,
             g_u32SoftBatchStopRej, g_u32SoftBatchClamp, g_u32SoftBatchZeroN,
-            g_u32SoftBatchReq, g_u32SoftBatchLastOk, g_u32SoftPeakBatchOk,
-            GJ_COMP_MULTI_MAX);
+            g_u32SoftBatchReq, g_u32SoftBatchLastOk, g_u32SoftBatchLastReq,
+            g_u32SoftPeakBatchOk, GJ_COMP_MULTI_MAX);
 
     /* Grep: compositor: soft geom */
     kprintf("compositor: soft geom ready=%u w=%u h=%u stride=%u bpp=%u "
@@ -243,6 +279,12 @@ soft_inventory_log(void)
             u32Bytes, GJ_COMP_MAX_DIM, GJ_COMP_FALLBACK_W, GJ_COMP_FALLBACK_H,
             GJ_COMP_MIN_W, GJ_COMP_MIN_H, (g_pScanout != NULL) ? 1u : 0u);
 
+    /* Grep: compositor: soft paint */
+    kprintf("compositor: soft paint enter=%u last_pix=%u last_bytes=%u "
+            "bpp=%u fill=jade_gradient\n",
+            g_u32SoftPaintEnter, g_u32SoftPaintPix, g_u32SoftPaintBytes,
+            GJ_COMP_BPP);
+
     /* Grep: compositor: soft peaks */
     kprintf("compositor: soft peaks presents=%u multi=%u gen=%u "
             "batch_ok=%u logs=%u\n",
@@ -250,16 +292,33 @@ soft_inventory_log(void)
             g_u32SoftPeakBatchOk, g_u32SoftLogN);
 
     /* Grep: compositor: soft query */
-    kprintf("compositor: soft query ready=%u fb=%u size=%u stride=%u "
+    kprintf("compositor: soft query ready=%u fb=%u fb_ok=%u fb_null=%u "
+            "size=%u size_null_w=%u size_null_h=%u stride=%u "
             "presents=%u multi=%u gen=%u idx=%u\n",
-            g_u32SoftQueryReady, g_u32SoftQueryFb, g_u32SoftQuerySize,
+            g_u32SoftQueryReady, g_u32SoftQueryFb, g_u32SoftQueryFbOk,
+            g_u32SoftQueryFbNull, g_u32SoftQuerySize,
+            g_u32SoftQuerySizeNullW, g_u32SoftQuerySizeNullH,
             g_u32SoftQueryStride, g_u32SoftQueryPresentN, g_u32SoftQueryMulti,
             g_u32SoftQueryGen, g_u32SoftQueryIdx);
+
+    /* Grep: compositor: soft ratio */
+    kprintf("compositor: soft ratio ok_bp=%u fail_bp=%u enter=%u ok=%u "
+            "fail_rdy=%u fail_be=%u batch_ok=%u wave=%u\n",
+            u32OkBp, u32FailBp, g_u32SoftPresentEnter, g_u32SoftPresentOk,
+            g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe,
+            g_u32SoftBatchOk, GJ_COMP_SOFT_WAVE);
+
+    /* Grep: compositor: soft last */
+    kprintf("compositor: soft last present_st=%u batch_ok=%u batch_req=%u "
+            "idx=%u gen=%u presents=%u\n",
+            g_u32SoftLastPresentSt, g_u32SoftBatchLastOk,
+            g_u32SoftBatchLastReq, u32Idx, u32Gen, u32Presents);
 
     /* Grep: compositor: soft path */
     kprintf("compositor: soft path scanout=pmm+hhdm present=virtio_gpu "
             "multi=soft_idx batch=present_n bpp=bgra policy=door "
-            "(soft inventory; not bar3)\n");
+            "wave=%u (soft inventory; not bar3; not desktop product)\n",
+            GJ_COMP_SOFT_WAVE);
 
     /* Grep: compositor: soft PASS|PARTIAL|INIT */
     kprintf("compositor: soft %s ready=%u presents=%u multi=%u gen=%u "
@@ -301,6 +360,11 @@ session_compositor_init(void)
     u8 *p;
 
     comp_soft_inc(&g_u32SoftInitEnter);
+    /* Wave 14: re-init after present activity (soft reenter). */
+    if (g_u32SoftPresentEnter != 0u || g_u32SoftBatchEnter != 0u ||
+        g_u32Presents != 0u) {
+        comp_soft_inc(&g_u32SoftInitReenter);
+    }
 
     if (g_fReady && g_pScanout != NULL && g_u32W != 0 && g_u32H != 0) {
         comp_soft_inc(&g_u32SoftInitIdem);
@@ -338,6 +402,12 @@ session_compositor_init(void)
     if (u32W == 0 || u32H == 0 || u32W > GJ_COMP_MAX_DIM ||
         u32H > GJ_COMP_MAX_DIM) {
         comp_soft_inc(&g_u32SoftInitClamp);
+        if (u32W == 0 || u32H == 0) {
+            comp_soft_inc(&g_u32SoftInitClampZero);
+        }
+        if (u32W > GJ_COMP_MAX_DIM || u32H > GJ_COMP_MAX_DIM) {
+            comp_soft_inc(&g_u32SoftInitClampMax);
+        }
         comp_soft_inc(&g_u32SoftInitFallback);
         u32W = GJ_COMP_FALLBACK_W;
         u32H = GJ_COMP_FALLBACK_H;
@@ -396,6 +466,7 @@ session_compositor_init(void)
     }
 
     p = (u8 *)g_pScanout;
+    comp_soft_inc(&g_u32SoftPaintEnter);
     for (iPix = 0; iPix < g_u32W * g_u32H; iPix++) {
         /* GreenJade green-ish gradient (BGRA) — visual bring-up only. */
         p[iPix * 4u + 0] = 0x20;
@@ -403,13 +474,16 @@ session_compositor_init(void)
         p[iPix * 4u + 2] = 0x10;
         p[iPix * 4u + 3] = 0xff;
     }
+    g_u32SoftPaintPix = g_u32W * g_u32H;
+    g_u32SoftPaintBytes = g_u32SoftPaintPix * GJ_COMP_BPP;
     (void)u32Bytes;
     (void)u32Pages;
 
     g_fReady = 1;
     comp_soft_inc(&g_u32SoftInitOk);
-    kprintf("compositor: scanout %ux%u pa=0x%lx ready (multi-frame soft)\n",
-            g_u32W, g_u32H, (unsigned long)g_paScanout);
+    kprintf("compositor: scanout %ux%u pa=0x%lx ready (multi-frame soft "
+            "wave=%u)\n",
+            g_u32W, g_u32H, (unsigned long)g_paScanout, GJ_COMP_SOFT_WAVE);
     /* Grep: compositor: soft (baseline inventory after ready) */
     soft_inventory_log();
     return 0;
@@ -456,6 +530,7 @@ session_compositor_present(void)
     if (!g_fReady || g_pScanout == NULL || g_u32W == 0 || g_u32H == 0 ||
         g_u32Stride == 0) {
         comp_soft_inc(&g_u32SoftPresentFailRdy);
+        g_u32SoftLastPresentSt = 1u; /* fail_ready */
         if (g_fSoftBatchInFlight == 0) {
             soft_inventory_maybe_once();
         }
@@ -464,9 +539,11 @@ session_compositor_present(void)
     st = virtio_gpu_present(g_u32W, g_u32H, g_pScanout, g_u32Stride);
     if (st == 0) {
         comp_soft_inc(&g_u32SoftPresentOk);
+        g_u32SoftLastPresentSt = 0u; /* ok */
         comp_note_ok_present();
     } else {
         comp_soft_inc(&g_u32SoftPresentFailBe);
+        g_u32SoftLastPresentSt = 2u; /* fail_backend */
     }
     /* Batch path dumps once after batch counters update. */
     if (g_fSoftBatchInFlight == 0) {
@@ -488,6 +565,7 @@ session_compositor_present_n(u32 u32N)
     if (!g_fReady) {
         comp_soft_inc(&g_u32SoftBatchFail);
         g_u32SoftBatchLastOk = 0;
+        g_u32SoftBatchLastReq = 0;
         soft_inventory_maybe_once();
         return -1;
     }
@@ -501,6 +579,7 @@ session_compositor_present_n(u32 u32N)
     }
     u32Req = u32N;
     g_u32SoftBatchReq += u32Req;
+    g_u32SoftBatchLastReq = u32Req;
     g_fSoftBatchInFlight = 1;
     for (i = 0; i < u32N; i++) {
         stLast = session_compositor_present();
@@ -581,8 +660,10 @@ session_compositor_fb(void)
 {
     comp_soft_inc(&g_u32SoftQueryFb);
     if (!g_fReady) {
+        comp_soft_inc(&g_u32SoftQueryFbNull);
         return NULL;
     }
+    comp_soft_inc(&g_u32SoftQueryFbOk);
     return g_pScanout;
 }
 
@@ -598,9 +679,13 @@ session_compositor_size(u32 *pW, u32 *pH)
     comp_soft_inc(&g_u32SoftQuerySize);
     if (pW != NULL) {
         *pW = u32W;
+    } else {
+        comp_soft_inc(&g_u32SoftQuerySizeNullW);
     }
     if (pH != NULL) {
         *pH = u32H;
+    } else {
+        comp_soft_inc(&g_u32SoftQuerySizeNullH);
     }
 }
 

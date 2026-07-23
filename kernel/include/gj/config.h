@@ -7,6 +7,13 @@
  *
  * greppable: GJ_CONFIG_PRODUCT GJ_PAGE_SIZE GJ_MAX_CPUS GJ_CPU_STATIC_MAX
  * greppable: GJ_HHDM_BASE GJ_DEVICE_MMIO GJ_SPIN_CONFIG GJ_CACHELINE
+ *
+ * Soft stamp (Wave 14 exclusive — header comment only):
+ *   Compile-time geometry / SMP / klog knobs. Not a soft inventory helper
+ *   (no runtime tallies). Does not light product lamps, close multi-server
+ *   product, or claim Steam bar3. Continuum high-water toward 15600 is
+ *   documented in companion scripts/docs (CREATE-ONLY soft graph only).
+ * greppable: GJ_CONFIG_SOFT_STAMP_WAVE14
  */
 #pragma once
 

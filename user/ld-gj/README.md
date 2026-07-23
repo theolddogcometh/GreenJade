@@ -43,6 +43,21 @@ Soft resolve/hash depth (userspace freestanding):
 - Lookup order: **GNU hash (+64-bit bloom) → SysV DT_HASH → SYMTAB scan**
 - Prefer `STB_GLOBAL` over `STB_WEAK` across the multi-SO registry
 - Soft probes: `gj_so_export` / `gj_gnu_export` / `gj_so_init` / `gj_gnu_init` + method tags
+- Wave 14 soft deepen companions: `gj_so_soft_*` / `gj_gnu_soft_*` (optional; miss is soft)
+
+### Soft inventory (Wave 14 exclusive deepen)
+
+Greppable prefix `ld-gj: soft …` — diagnostics only; never hard-fails
+`live path PASS` / `scaffold PASS`.
+
+| Marker | Meaning |
+|--------|---------|
+| `ld-gj: soft inventory so=… res_gnu=… … wave=14` | Rollup counters + areas |
+| `ld-gj: soft methods gnu=… sysv=… scan=… builtin=…` | Method-path tallies |
+| `ld-gj: soft so used=… hash=… gnu=… dyn=…` | Loaded-SO dyn-cache lamps |
+| `ld-gj: soft probe so=… gnu=… so_soft=… gnu_soft=… hit=…` | Product + soft companion binds |
+| `ld-gj: soft deepen wave=14 areas=… so=… hit=… meth=…` | Wave stamp |
+| `ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan …` | Honesty path (not bar3) |
 
 Reloc depth (userspace): `R_X86_64_{RELATIVE,GLOB_DAT,JUMP_SLOT,64,COPY}`,
 TLS (`DTPMOD64`/`DTPOFF64`/`TPOFF64`), `IRELATIVE`, `DT_JMPREL`, `DT_INIT`.
@@ -90,6 +105,14 @@ ld-gj: hash/sym gj_gnu_export PASS
 ld-gj: hash/sym sysv path PASS
 ld-gj: hash/sym gnu path PASS
 ld-gj: hash/sym soft resolve PASS
+ld-gj: hash/sym gj_so_soft PASS
+ld-gj: hash/sym gj_gnu_soft PASS
+ld-gj: soft inventory so=… res_gnu=… res_sysv=… res_scan=… res_builtin=… areas=6 wave=14
+ld-gj: soft methods gnu=… sysv=… scan=… builtin=…
+ld-gj: soft so used=… hash=… gnu=… dyn=…
+ld-gj: soft probe so=… gnu=… so_soft=… gnu_soft=… hit=…
+ld-gj: soft deepen wave=14 areas=6 so=… hit=… meth=…
+ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan (soft; not bar3)
 ld-gj: AT_ENTRY ready
 ld-gj: transfer AT_ENTRY
 ld-gj: AT_ENTRY returned

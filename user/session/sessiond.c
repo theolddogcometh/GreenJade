@@ -7,7 +7,8 @@
  *   PRESENT, DISPLAY_INFO, INPUT_POLL, INPUT_POP, STATS,
  *   PRESENT_FB, CLAIM, RELEASE, MAP_SCANOUT
  * Host CI simulates the same present + input fanout protocol shapes.
- * Freestanding live path: sessiond_gj.c.
+ * Freestanding live path: sessiond_gj.c (Wave 14 soft inventory exclusive).
+ * Host A1 here is libc soft-shape only — soft ≠ product multi-server confine.
  *
  * Smoke markers (prefix-stable; scripts/smoke-all.sh greps sessiond: PASS):
  *   sessiond: PRESENT_FB path PASS

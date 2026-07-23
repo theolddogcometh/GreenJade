@@ -3,6 +3,15 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Internal UDX helpers (not for driver .c).
+ *
+ * Soft inventory stamps (Wave 14 remaining exclusive deepen — soft only):
+ *   udx: dma soft …   — src/dma.c
+ *   udx: host soft …  — src/host.c  (windows + BAR poke)
+ *   udx: mmio soft …  — src/mmio.c
+ *   udx: pci soft …   — src/pci.c
+ * Prior exclusive units (not this wave's edit surface):
+ *   udx: soft … / udx: spsc soft … / udx: notify soft …
+ * Freestanding pool constants below feed soft slab/pool inventory lines.
  */
 #pragma once
 
@@ -15,6 +24,7 @@ void udx_work_flush(void);
  * Host MMIO windows: phys → host VA for sim / granted maps.
  * Full GreenJade: filled when process maps MMIO FRAME caps.
  * Also used freestanding when a grant registers a window.
+ * Soft greps: udx: host soft window / udx: host soft lookup
  */
 void  udx_host_window_register(u64 u64Phys, void *pVa, u64 u64Len);
 void  udx_host_window_unregister(u64 u64Phys);
@@ -26,6 +36,8 @@ u32 udx_core_should_run(void);
 /*
  * Freestanding static pools (no libc heap).
  * Host builds use malloc/calloc instead.
+ * Soft: udx: dma soft slab (DMA_SLOTS/SLOT_CB);
+ *       udx: mmio soft pool (IOMEM_SLOTS).
  */
 #if !defined(UDX_HOST_LIBC)
 

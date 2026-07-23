@@ -17,6 +17,17 @@
  *   - Lookup order: GNU hash (+64-bit bloom) → SysV DT_HASH → SYMTAB scan
  *   - Prefer STB_GLOBAL over STB_WEAK across multi-SO registry
  *   - Method-tagged soft probes (gj_so_export / gj_gnu_export / *_init)
+ *   - Soft deepen probes (gj_so_soft_* / gj_gnu_soft_* companions)
+ *
+ * Soft inventory (Wave 14 exclusive deepen — greppable "ld-gj: soft …"):
+ *   ld-gj: soft inventory so=… res_gnu=… res_sysv=… res_scan=… res_builtin=…
+ *                areas=… wave=14
+ *   ld-gj: soft methods gnu=… sysv=… scan=… builtin=…
+ *   ld-gj: soft so used=… hash=… gnu=… dyn=…
+ *   ld-gj: soft probe so=… gnu=… so_soft=… gnu_soft=… hit=…
+ *   ld-gj: soft deepen wave=14 areas=… so=… hit=… meth=…
+ *   ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan (soft; not bar3)
+ * Diagnostics only — never hard-fail live/scaffold PASS.
  *
  * Smoke markers (prefix-stable): ld-gj: handoff magic PASS, multi-SO,
  * hash/sym, AT_ENTRY ready, live path PASS, scaffold PASS.
@@ -90,6 +101,11 @@
 
 /* Chain/scan guards — align with kernel elf_load bring-up bounds */
 #define GJ_LD_HASH_GUARD 4096u
+
+/* Wave 14 soft inventory stamp + fixed greppable area count. */
+#define GJ_LD_SOFT_WAVE   14u
+#define GJ_LD_SOFT_AREAS  6u
+/* areas: inventory methods so probe deepen path */
 
 struct gj_ld_so_ent {
     uint64_t u64Bias;
@@ -183,6 +199,19 @@ static unsigned         g_cResGnu;
 static unsigned         g_cResSysv;
 static unsigned         g_cResScan;
 static unsigned         g_cResBuiltin;
+/*
+ * Wave 14 soft inventory tallies (diagnostics only; never hard-gate).
+ * greppable: ld-gj: soft
+ */
+static unsigned         g_cSoftSoHash;   /* loaded SOs with DT_HASH */
+static unsigned         g_cSoftSoGnu;    /* loaded SOs with DT_GNU_HASH */
+static unsigned         g_cSoftSoDyn;    /* loaded SOs with dyn cache ok */
+static unsigned         g_cSoftProbeHit; /* soft product-name probe hits */
+static unsigned         g_cSoftSoExport; /* gj_so_export soft bind */
+static unsigned         g_cSoftGnuExport;/* gj_gnu_export soft bind */
+static unsigned         g_cSoftSoSoft;   /* gj_so_soft_* soft bind hits */
+static unsigned         g_cSoftGnuSoft;  /* gj_gnu_soft_* soft bind hits */
+static unsigned         g_fSoftHandoff;  /* handoff page seen this run */
 
 static const struct {
     const char *szName;
@@ -913,9 +942,15 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
         if (pSlot->u8HasGnu) {
             cGnu++;
         }
+        if (pSlot->u8DynOk) {
+            g_cSoftSoDyn++;
+        }
         cOk++;
     }
     g_cSoImg = cOk;
+    /* Wave 14 soft inventory: remember hash table lamps across load. */
+    g_cSoftSoHash = cHash;
+    g_cSoftSoGnu = cGnu;
     if (cOk > 0) {
         /* Greppable multi-SO; single-digit n (GJ_LD_SO_MAX ≤ 9) */
         gj_puts("ld-gj: multi-SO load PASS n=");
@@ -943,19 +978,169 @@ resolve_name(const char *szName)
     return soft_resolve_name(szName, NULL);
 }
 
+/* Soft: append decimal digits of u into aLine at *po (leave room for NUL). */
+static void
+soft_append_u(char *aLine, unsigned cb, unsigned *po, unsigned long u)
+{
+    char aDig[20];
+    unsigned n = 0;
+    unsigned i;
+
+    if (aLine == NULL || po == NULL || cb == 0) {
+        return;
+    }
+    if (u == 0) {
+        aDig[n++] = '0';
+    } else {
+        while (u > 0 && n < sizeof(aDig)) {
+            aDig[n++] = (char)('0' + (u % 10ul));
+            u /= 10ul;
+        }
+    }
+    for (i = n; i > 0 && *po + 1u < cb; i--) {
+        aLine[(*po)++] = aDig[i - 1u];
+    }
+}
+
+static void
+soft_append_s(char *aLine, unsigned cb, unsigned *po, const char *sz)
+{
+    if (aLine == NULL || po == NULL || cb == 0 || sz == NULL) {
+        return;
+    }
+    while (*sz != '\0' && *po + 1u < cb) {
+        aLine[(*po)++] = *sz++;
+    }
+}
+
+/*
+ * Soft inventory dump (Wave 14 exclusive deepen).
+ * Greppable prefix: "ld-gj: soft …"
+ * Pure observation — always soft; never gates live/scaffold PASS.
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[192];
+    unsigned o;
+    unsigned uMeth;
+
+    uMeth = g_cResGnu + g_cResSysv + g_cResScan + g_cResBuiltin;
+
+    /* Grep: ld-gj: soft inventory */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft inventory so=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoImg);
+    soft_append_s(aLine, sizeof(aLine), &o, " res_gnu=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResGnu);
+    soft_append_s(aLine, sizeof(aLine), &o, " res_sysv=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResSysv);
+    soft_append_s(aLine, sizeof(aLine), &o, " res_scan=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResScan);
+    soft_append_s(aLine, sizeof(aLine), &o, " res_builtin=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResBuiltin);
+    soft_append_s(aLine, sizeof(aLine), &o, " areas=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_LD_SOFT_AREAS);
+    soft_append_s(aLine, sizeof(aLine), &o, " wave=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_LD_SOFT_WAVE);
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft methods */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft methods gnu=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResGnu);
+    soft_append_s(aLine, sizeof(aLine), &o, " sysv=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResSysv);
+    soft_append_s(aLine, sizeof(aLine), &o, " scan=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResScan);
+    soft_append_s(aLine, sizeof(aLine), &o, " builtin=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cResBuiltin);
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft so */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft so used=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoImg);
+    soft_append_s(aLine, sizeof(aLine), &o, " hash=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoHash);
+    soft_append_s(aLine, sizeof(aLine), &o, " gnu=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoGnu);
+    soft_append_s(aLine, sizeof(aLine), &o, " dyn=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoDyn);
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft probe */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft probe so=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoExport);
+    soft_append_s(aLine, sizeof(aLine), &o, " gnu=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftGnuExport);
+    soft_append_s(aLine, sizeof(aLine), &o, " so_soft=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoSoft);
+    soft_append_s(aLine, sizeof(aLine), &o, " gnu_soft=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftGnuSoft);
+    soft_append_s(aLine, sizeof(aLine), &o, " hit=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftProbeHit);
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft deepen wave (Wave 14 stamp) */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft deepen wave=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_LD_SOFT_WAVE);
+    soft_append_s(aLine, sizeof(aLine), &o, " areas=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_LD_SOFT_AREAS);
+    soft_append_s(aLine, sizeof(aLine), &o, " so=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoImg);
+    soft_append_s(aLine, sizeof(aLine), &o, " hit=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftProbeHit);
+    soft_append_s(aLine, sizeof(aLine), &o, " meth=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)uMeth);
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft path (Wave 14 honesty; not bar3) */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft path handoff=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_fSoftHandoff);
+    soft_append_s(aLine, sizeof(aLine), &o,
+                  " multi=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)(g_cSoImg > 0u));
+    soft_append_s(aLine, sizeof(aLine), &o,
+                  " resolve=sysv+gnu+scan (soft; not bar3)\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+}
+
 /*
  * Soft multi-SO hash/sym probe set. Keeps legacy PASS lines and deepens with
- * function exports + method-path markers. Never hard-fails the product path.
+ * function exports + method-path markers + Wave 14 soft companions.
+ * Never hard-fails the product path.
  */
 static void
 soft_resolve_probe(void)
 {
-    /* Product SO exports (SysV / GNU hash targets + function companions) */
+    /* Product SO exports (SysV / GNU hash targets + function + soft companions) */
     static const char *const aSoNames[] = {
         "gj_so_export",
         "gj_gnu_export",
         "gj_so_init",
         "gj_gnu_init",
+        /* Wave 14 soft deepen companions (optional; miss is soft) */
+        "gj_so_soft_get",
+        "gj_so_soft_probe",
+        "gj_so_soft_touch",
+        "gj_gnu_soft_get",
+        "gj_gnu_soft_probe",
+        "gj_gnu_soft_touch",
     };
     unsigned i;
     unsigned cSoHit = 0;
@@ -975,6 +1160,8 @@ soft_resolve_probe(void)
     }
 
     if (g_cSoImg == 0) {
+        /* Wave 14 soft inventory still greppable with empty SO registry. */
+        soft_inventory_log();
         return;
     }
 
@@ -987,12 +1174,23 @@ soft_resolve_probe(void)
             continue;
         }
         cSoHit++;
+        g_cSoftProbeHit++;
         if (name_eq(aSoNames[i], "gj_so_export")) {
             u64So = u64Val;
             u32MethSo = u32Meth;
+            g_cSoftSoExport = 1u;
         } else if (name_eq(aSoNames[i], "gj_gnu_export")) {
             u64Gnu = u64Val;
             u32MethGnu = u32Meth;
+            g_cSoftGnuExport = 1u;
+        } else if (name_eq(aSoNames[i], "gj_so_soft_get") ||
+                   name_eq(aSoNames[i], "gj_so_soft_probe") ||
+                   name_eq(aSoNames[i], "gj_so_soft_touch")) {
+            g_cSoftSoSoft++;
+        } else if (name_eq(aSoNames[i], "gj_gnu_soft_get") ||
+                   name_eq(aSoNames[i], "gj_gnu_soft_probe") ||
+                   name_eq(aSoNames[i], "gj_gnu_soft_touch")) {
+            g_cSoftGnuSoft++;
         }
     }
 
@@ -1010,6 +1208,13 @@ soft_resolve_probe(void)
         if (u64Gnu != 0) {
             gj_puts("ld-gj: hash/sym gj_gnu_export PASS\n");
         }
+        /* Soft deepen companions (optional; greppable when present) */
+        if (g_cSoftSoSoft > 0) {
+            gj_puts("ld-gj: hash/sym gj_so_soft PASS\n");
+        }
+        if (g_cSoftGnuSoft > 0) {
+            gj_puts("ld-gj: hash/sym gj_gnu_soft PASS\n");
+        }
         /* Method-path soft markers (contain hash/sym for smoke greps) */
         if (g_cResSysv > cBeforeSysv || u32MethSo == GJ_LD_RES_SYSV) {
             gj_puts("ld-gj: hash/sym sysv path PASS\n");
@@ -1026,6 +1231,9 @@ soft_resolve_probe(void)
     } else {
         gj_puts("ld-gj: multi-SO resolve miss\n");
     }
+
+    /* Wave 14 exclusive soft inventory rollup (greppable "ld-gj: soft …"). */
+    soft_inventory_log();
 }
 
 static uint64_t
@@ -1333,6 +1541,7 @@ _start(void)
     pHo = (const struct gj_ld_handoff *)(uintptr_t)GJ_LD_HANDOFF_VA;
     if (pHo->u64Magic == GJ_LD_HANDOFF_MAGIC) {
         fHandoff = 1;
+        g_fSoftHandoff = 1u; /* Wave 14 soft inventory lamp */
         u64Entry = pHo->u64Entry;
         u64Base = pHo->u64Base;
         gj_puts("ld-gj: handoff magic PASS\n");

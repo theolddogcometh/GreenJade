@@ -12,7 +12,7 @@
  * final enable delivers once. Use disable in quiesce before free_irq.
  *
  * -------------------------------------------------------------------------
- * Soft notify path → real Notification (gap doc; exclusive deepen)
+ * Soft notify path → real Notification (gap doc; Wave 14 exclusive deepen)
  * greppable: udx: notify soft …
  *
  * Real GreenJade product path (kernel owns the endpoint):
@@ -39,8 +39,10 @@
  *     kernel/ipc/notify.c (see greppable notify: soft … there)
  *   - Wiring UDX host to a real Notification cap is M4.2 (TODO)
  *
- * Soft deepen catalogs the UDX-side fire_irq → dispatch pulse surface so
- * greps measure readiness without claiming a kernel endpoint.
+ * Honesty (Wave 14): UDX kernel notify product remains OPEN. Soft deepen
+ * catalogs the UDX-side fire_irq → dispatch pulse surface so greps measure
+ * readiness without claiming a kernel endpoint.
+ * greppable: udx: notify soft open
  * -------------------------------------------------------------------------
  */
 #include <udx/irq.h>
@@ -48,6 +50,10 @@
 
 #define UDX_IRQ_MAX 256
 #define UDX_IRQ_SHARE_MAX 4
+
+/* Soft wave stamp + greppable area count (Wave 14 exclusive deepen). */
+#define UDX_NOTIFY_SOFT_WAVE   14u
+#define UDX_NOTIFY_SOFT_AREAS  14u
 
 /*
  * Soft badge protocol: freestanding NOTIFY_WAIT returns a u64; only the low
@@ -79,6 +85,13 @@ struct udx_irq_action {
  *   udx: notify soft pulse bad     — line out of table range
  *   udx: notify soft bind          — request_irq slot filled
  *   udx: notify soft unbind        — free_irq slot cleared
+ *   udx: notify soft mask          — disable/enable/pending geometry
+ *   udx: notify soft table         — live action/slot occupancy
+ *   udx: notify soft badge         — badge word shape + last snap
+ *   udx: notify soft gap           — cannot call kernel notify from sim
+ *   udx: notify soft open          — kernel notify product remains OPEN
+ *   udx: notify soft deepen        — wave=14 stamp + area count
+ *   udx: notify soft sync          — synchronize_irq honesty (soft no-op)
  */
 struct udx_notify_soft_stats {
     u32 u32RequestOk;       /* request_irq bind success */
@@ -99,6 +112,12 @@ struct udx_notify_soft_stats {
     u32 u32LastBadgeLo;     /* last soft badge word low 32 (bit N set) */
     u32 u32LastBadgeHi;     /* last soft badge word high 32 */
     u32 u32BadgeOutOfWord;  /* dispatch line ≥ 64 (beyond NOTIFY badge) */
+    u32 u32Sync;            /* udx_synchronize_irq entries (soft no-op) */
+    u32 u32IsDisabledQ;     /* udx_irq_is_disabled samples */
+    u32 u32IsPendingQ;      /* udx_irq_is_pending samples */
+    u32 u32DepthQ;          /* udx_irq_disable_depth samples */
+    u32 u32NameQ;           /* udx_irq_name samples */
+    u32 u32ActionCountQ;    /* udx_irq_action_count samples */
 };
 
 static struct udx_irq_action g_aIrq[UDX_IRQ_MAX][UDX_IRQ_SHARE_MAX];
@@ -149,19 +168,90 @@ notify_soft_note_line(int nIrq)
     }
 }
 
+/** Soft: walk table for live action / disabled / pending occupancy. */
+static void
+notify_soft_table_snap(u32 *pu32Actions, u32 *pu32LinesUsed,
+                       u32 *pu32Disabled, u32 *pu32Pending)
+{
+    int nIrq;
+    int iSlot;
+    u32 u32Actions;
+    u32 u32Lines;
+    u32 u32Dis;
+    u32 u32Pend;
+
+    u32Actions = 0;
+    u32Lines = 0;
+    u32Dis = 0;
+    u32Pend = 0;
+    for (nIrq = 0; nIrq < UDX_IRQ_MAX; nIrq++) {
+        int fLine = 0;
+
+        for (iSlot = 0; iSlot < UDX_IRQ_SHARE_MAX; iSlot++) {
+            if (g_aIrq[nIrq][iSlot].u8Used) {
+                if (u32Actions < 0xffffffffu) {
+                    u32Actions++;
+                }
+                fLine = 1;
+            }
+        }
+        if (fLine != 0) {
+            if (u32Lines < 0xffffffffu) {
+                u32Lines++;
+            }
+        }
+        if (g_aIrqDisableDepth[nIrq] != 0) {
+            if (u32Dis < 0xffffffffu) {
+                u32Dis++;
+            }
+        }
+        if (g_aIrqPending[nIrq] != 0) {
+            if (u32Pend < 0xffffffffu) {
+                u32Pend++;
+            }
+        }
+    }
+    if (pu32Actions != NULL) {
+        *pu32Actions = u32Actions;
+    }
+    if (pu32LinesUsed != NULL) {
+        *pu32LinesUsed = u32Lines;
+    }
+    if (pu32Disabled != NULL) {
+        *pu32Disabled = u32Dis;
+    }
+    if (pu32Pending != NULL) {
+        *pu32Pending = u32Pend;
+    }
+}
+
 /*
- * Greppable soft notify inventory (toward real Notification).
+ * Greppable soft notify inventory (toward real Notification; Wave 14).
  * Pure observation — never gates skeleton PASS or dispatch behavior.
  *
  *   udx: notify soft protocol …
  *   udx: notify soft inventory …
  *   udx: notify soft pulse inventory …
  *   udx: notify soft stats …
+ *   udx: notify soft mask …
+ *   udx: notify soft table …
+ *   udx: notify soft badge …
+ *   udx: notify soft gap …
+ *   udx: notify soft open …
+ *   udx: notify soft deepen …
+ *   udx: notify soft sync …
  */
 static void
 notify_soft_log(void)
 {
+    u32 u32Actions;
+    u32 u32LinesUsed;
+    u32 u32Disabled;
+    u32 u32Pending;
+
     notify_soft_inc(&g_notifySoft.u32SoftLog);
+    notify_soft_table_snap(&u32Actions, &u32LinesUsed, &u32Disabled,
+                           &u32Pending);
 
     /*
      * Grep: udx: notify soft protocol
@@ -175,22 +265,24 @@ notify_soft_log(void)
                "host_path=fire_irq->dispatch "
                "full_path=notify_pulse->NOTIFY_WAIT->dispatch "
                "kernel_soft=notify:_soft_* "
-               "soft_log=%u\n",
+               "soft_log=%u wave=%u\n",
                (unsigned)UDX_NOTIFY_SOFT_BADGE_BITS,
                (unsigned)UDX_IRQ_MAX,
-               g_notifySoft.u32SoftLog);
+               g_notifySoft.u32SoftLog,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
 
     /* Grep: udx: notify soft inventory */
     udx_printk("udx: notify soft inventory irq_max=%u share_max=%u "
                "paths=request,free,disable,enable,dispatch,"
                "mask_latch,unmask_deliver "
                "bind_ok=%u bind_fail=%u free=%u free_miss=%u "
-               "disable=%u enable=%u soft_log=%u\n",
+               "disable=%u enable=%u soft_log=%u wave=%u\n",
                (unsigned)UDX_IRQ_MAX, (unsigned)UDX_IRQ_SHARE_MAX,
                g_notifySoft.u32RequestOk, g_notifySoft.u32RequestFail,
                g_notifySoft.u32Free, g_notifySoft.u32FreeMiss,
                g_notifySoft.u32Disable, g_notifySoft.u32Enable,
-               g_notifySoft.u32SoftLog);
+               g_notifySoft.u32SoftLog,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
 
     /*
      * Grep: udx: notify soft pulse inventory
@@ -203,13 +295,14 @@ notify_soft_log(void)
                "pulse_unmask=%u pulse_empty=%u pulse_bad=%u "
                "handler_invoke=%u dispatch=%u "
                "last_line=%u last_badge_lo=0x%x last_badge_hi=0x%x "
-               "badge_out_of_word=%u\n",
+               "badge_out_of_word=%u wave=%u\n",
                g_notifySoft.u32PulseHit, g_notifySoft.u32PulseLatch,
                g_notifySoft.u32PulseUnmask, g_notifySoft.u32PulseEmpty,
                g_notifySoft.u32PulseBad, g_notifySoft.u32HandlerInvoke,
                g_notifySoft.u32Dispatch, g_notifySoft.u32LastLine,
                g_notifySoft.u32LastBadgeLo, g_notifySoft.u32LastBadgeHi,
-               g_notifySoft.u32BadgeOutOfWord);
+               g_notifySoft.u32BadgeOutOfWord,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
 
     /* Grep: udx: notify soft stats */
     udx_printk("udx: notify soft stats request_ok=%u request_fail=%u "
@@ -217,7 +310,8 @@ notify_soft_log(void)
                "pulse_hit=%u pulse_latch=%u pulse_unmask=%u "
                "pulse_empty=%u pulse_bad=%u handler_invoke=%u "
                "badge_out_of_word=%u soft_log=%u "
-               "last_line=%u last_badge_lo=0x%x last_badge_hi=0x%x\n",
+               "last_line=%u last_badge_lo=0x%x last_badge_hi=0x%x "
+               "wave=%u\n",
                g_notifySoft.u32RequestOk, g_notifySoft.u32RequestFail,
                g_notifySoft.u32Free, g_notifySoft.u32FreeMiss,
                g_notifySoft.u32Disable, g_notifySoft.u32Enable,
@@ -227,7 +321,72 @@ notify_soft_log(void)
                g_notifySoft.u32HandlerInvoke,
                g_notifySoft.u32BadgeOutOfWord, g_notifySoft.u32SoftLog,
                g_notifySoft.u32LastLine, g_notifySoft.u32LastBadgeLo,
-               g_notifySoft.u32LastBadgeHi);
+               g_notifySoft.u32LastBadgeHi,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /* Grep: udx: notify soft mask (Wave 14 deepen) */
+    udx_printk("udx: notify soft mask disable=%u enable=%u "
+               "pulse_latch=%u pulse_unmask=%u live_disabled=%u "
+               "live_pending=%u nested_depth=1 wave=%u\n",
+               g_notifySoft.u32Disable, g_notifySoft.u32Enable,
+               g_notifySoft.u32PulseLatch, g_notifySoft.u32PulseUnmask,
+               u32Disabled, u32Pending,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /* Grep: udx: notify soft table (Wave 14 deepen) */
+    udx_printk("udx: notify soft table actions=%u lines_used=%u "
+               "disabled=%u pending=%u irq_max=%u share_max=%u "
+               "badge_bits=%u wave=%u\n",
+               u32Actions, u32LinesUsed, u32Disabled, u32Pending,
+               (unsigned)UDX_IRQ_MAX, (unsigned)UDX_IRQ_SHARE_MAX,
+               (unsigned)UDX_NOTIFY_SOFT_BADGE_BITS,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /* Grep: udx: notify soft badge (Wave 14 deepen) */
+    udx_printk("udx: notify soft badge bits=%u last_line=%u "
+               "last_lo=0x%x last_hi=0x%x out_of_word=%u "
+               "shape=bit_N_to_line_N wave=%u\n",
+               (unsigned)UDX_NOTIFY_SOFT_BADGE_BITS,
+               g_notifySoft.u32LastLine, g_notifySoft.u32LastBadgeLo,
+               g_notifySoft.u32LastBadgeHi, g_notifySoft.u32BadgeOutOfWord,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /*
+     * Gap catalog — host sim cannot reach kernel notify endpoint.
+     * greppable: udx: notify soft gap
+     */
+    udx_printk("udx: notify soft gap kernel_pulse=0 notify_install=0 "
+               "notify_msix_global=0 NOTIFY_WAIT_on_libc=0 "
+               "multi_waiter=0 cas_clear=0 cap_bind=0 "
+               "product_close=0 soft=1 wave=%u\n",
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /*
+     * Product OPEN honesty — kernel notify from host sim remains OPEN.
+     * greppable: udx: notify soft open
+     */
+    udx_printk("udx: notify soft open kernel_notify=OPEN "
+               "host_sim_endpoint=OPEN multi_waiter=OPEN "
+               "cap_install=OPEN product=0 soft=1 wave=%u\n",
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
+
+    /* Grep: udx: notify soft deepen wave (Wave 14 stamp) */
+    udx_printk("udx: notify soft deepen wave=%u areas=%u unit=irq "
+               "exclusive=1 prefix=udx:_notify_soft log_n=%u "
+               "(soft inventory; kernel notify product remains OPEN)\n",
+               (unsigned)UDX_NOTIFY_SOFT_WAVE,
+               (unsigned)UDX_NOTIFY_SOFT_AREAS,
+               g_notifySoft.u32SoftLog);
+
+    /* Grep: udx: notify soft sync (Wave 14 deepen) */
+    udx_printk("udx: notify soft sync enter=%u soft_noop=1 "
+               "hard_irq_thread=0 multi_waiter_park=0 "
+               "query_disabled=%u query_pending=%u query_depth=%u "
+               "query_name=%u query_actions=%u wave=%u\n",
+               g_notifySoft.u32Sync, g_notifySoft.u32IsDisabledQ,
+               g_notifySoft.u32IsPendingQ, g_notifySoft.u32DepthQ,
+               g_notifySoft.u32NameQ, g_notifySoft.u32ActionCountQ,
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
 }
 
 /** Soft: one-shot protocol + inventory on first successful bind. */
@@ -240,7 +399,8 @@ notify_soft_log_bind_once(void)
     g_fNotifySoftBindOnce = 1;
     /* greppable: udx: notify soft bind */
     udx_printk("udx: notify soft bind table_only=1 "
-               "delivery=fire_irq_or_NOTIFY_WAIT\n");
+               "delivery=fire_irq_or_NOTIFY_WAIT wave=%u\n",
+               (unsigned)UDX_NOTIFY_SOFT_WAVE);
     if (g_fNotifySoftProtocolOnce == 0) {
         g_fNotifySoftProtocolOnce = 1;
     }
@@ -452,6 +612,7 @@ udx_enable_irq(int nIrq)
 int
 udx_irq_is_disabled(int nIrq)
 {
+    notify_soft_inc(&g_notifySoft.u32IsDisabledQ);
     if (nIrq < 0 || nIrq >= UDX_IRQ_MAX) {
         return 1;
     }
@@ -461,6 +622,7 @@ udx_irq_is_disabled(int nIrq)
 int
 udx_irq_disable_depth(int nIrq)
 {
+    notify_soft_inc(&g_notifySoft.u32DepthQ);
     if (nIrq < 0 || nIrq >= UDX_IRQ_MAX) {
         return 0;
     }
@@ -470,6 +632,7 @@ udx_irq_disable_depth(int nIrq)
 int
 udx_irq_is_pending(int nIrq)
 {
+    notify_soft_inc(&g_notifySoft.u32IsPendingQ);
     if (nIrq < 0 || nIrq >= UDX_IRQ_MAX) {
         return 0;
     }
@@ -483,7 +646,9 @@ udx_synchronize_irq(int nIrq)
      * Host / freestanding soft path: handlers run synchronously in
      * dispatch (no separate hard-IRQ thread). Nothing to wait on.
      * Real Notification multi-waiter park is kernel-side only (gap).
+     * greppable: udx: notify soft sync
      */
+    notify_soft_inc(&g_notifySoft.u32Sync);
     (void)nIrq;
 }
 
@@ -492,6 +657,7 @@ udx_irq_name(int nIrq)
 {
     int iSlot;
 
+    notify_soft_inc(&g_notifySoft.u32NameQ);
     if (nIrq < 0 || nIrq >= UDX_IRQ_MAX) {
         return NULL;
     }
@@ -509,6 +675,7 @@ udx_irq_action_count(int nIrq)
     int iSlot;
     int cActions;
 
+    notify_soft_inc(&g_notifySoft.u32ActionCountQ);
     if (nIrq < 0 || nIrq >= UDX_IRQ_MAX) {
         return 0;
     }

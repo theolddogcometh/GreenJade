@@ -3,10 +3,11 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Product T1 HCL: NVMe PCI class probe — clean-room pure C.
- * Enumerate class 01:08:02; soft identify via CAP/VS through
- * vmm_map_device_uc (high UC window — never identity-map device MMIO
- * over the kernel). No admin queues, no I/O. No GPL source; public PCI
- * class codes + NVM Express register layout only.
+ * Enumerate class 01:08:02; soft identify via CAP field inventory + VS
+ * through vmm_map_device_uc (high UC window — never identity-map device
+ * MMIO over the kernel). Soft-read only: no CC enable, no admin queues
+ * claimed as product, no I/O. No GPL source; public PCI class codes +
+ * NVM Express Base register layout only.
  */
 #include <gj/klog.h>
 #include <gj/types.h>
@@ -18,8 +19,25 @@
 #define NVME_PCI_PROG_IF  0x02u
 
 /* Controller properties (NVM Express Base, capability region) */
-#define NVME_REG_CAP 0x00u /* 64-bit */
+#define NVME_REG_CAP 0x00u /* 64-bit CAP — soft inventory fields below */
 #define NVME_REG_VS  0x08u /* 32-bit Version */
+
+/*
+ * CAP bit fields (public NVM Express Base layout; 0-based MQES).
+ * Inventory only — does not enable the controller or claim queues.
+ */
+#define NVME_CAP_MQES(c)   ((u32)((c) & 0xffffu))
+#define NVME_CAP_CQR(c)    ((u32)(((c) >> 16) & 1u))
+#define NVME_CAP_AMS(c)    ((u32)(((c) >> 17) & 3u))
+#define NVME_CAP_TO(c)     ((u32)(((c) >> 24) & 0xffu))
+#define NVME_CAP_DSTRD(c)  ((u32)(((c) >> 32) & 0xfu))
+#define NVME_CAP_NSSRS(c)  ((u32)(((c) >> 36) & 1u))
+#define NVME_CAP_CSS(c)    ((u32)(((c) >> 37) & 0xffu))
+#define NVME_CAP_BPS(c)    ((u32)(((c) >> 45) & 1u))
+#define NVME_CAP_MPSMIN(c) ((u32)(((c) >> 52) & 0xfu))
+#define NVME_CAP_MPSMAX(c) ((u32)(((c) >> 56) & 0xfu))
+#define NVME_CAP_PMRS(c)   ((u32)(((c) >> 60) & 1u))
+#define NVME_CAP_CMBS(c)   ((u32)(((c) >> 61) & 1u))
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -79,7 +97,8 @@ nvme_bar0_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pf64)
 }
 
 /**
- * Soft identify: map BAR0 UC and read CAP + VS only (no CC write, no queues).
+ * Soft identify: map BAR0 UC and inventory CAP fields + VS.
+ * Read-only MMIO — no CC write, no AQA/ASQ/ACQ, no admin queues as product.
  */
 static void
 nvme_soft_identify(u64 paBar)
@@ -91,7 +110,8 @@ nvme_soft_identify(u64 paBar)
             (unsigned long)paBar);
     stMap = vmm_map_device_uc((gj_paddr_t)paBar, 0x1000, &vaMap);
     if (stMap != GJ_OK) {
-        kprintf("nvme: bar0 map soft fail st=%d\n", (int)stMap);
+        kprintf("nvme: bar0 map soft SKIP st=%d\n", (int)stMap);
+        kprintf("nvme: CAP inventory soft SKIP (unmapped)\n");
         return;
     }
     {
@@ -99,28 +119,61 @@ nvme_soft_identify(u64 paBar)
         u64 u64Cap;
         u32 u32Vs;
         u32 u32Mqes;
+        u32 u32Cqr;
+        u32 u32Ams;
+        u32 u32To;
+        u32 u32Dstrd;
+        u32 u32Nssrs;
+        u32 u32Css;
+        u32 u32Bps;
+        u32 u32MpsMin;
+        u32 u32MpsMax;
+        u32 u32Pmrs;
+        u32 u32Cmbs;
         u32 u32Maj;
         u32 u32Min;
         u32 u32Ter;
 
-        /* CAP @ 0x00 (64-bit LE) */
+        /* CAP @ 0x00 (64-bit LE) — full soft field inventory */
         u64Cap = *(volatile u64 *)(void *)(pMmio + NVME_REG_CAP);
         /* VS @ 0x08: TER:MIN:MAJ in bytes (public layout) */
         u32Vs = *(volatile u32 *)(void *)(pMmio + NVME_REG_VS);
-        u32Mqes = (u32)(u64Cap & 0xffffu); /* MQES field */
+
+        u32Mqes = NVME_CAP_MQES(u64Cap);
+        u32Cqr = NVME_CAP_CQR(u64Cap);
+        u32Ams = NVME_CAP_AMS(u64Cap);
+        u32To = NVME_CAP_TO(u64Cap);
+        u32Dstrd = NVME_CAP_DSTRD(u64Cap);
+        u32Nssrs = NVME_CAP_NSSRS(u64Cap);
+        u32Css = NVME_CAP_CSS(u64Cap);
+        u32Bps = NVME_CAP_BPS(u64Cap);
+        u32MpsMin = NVME_CAP_MPSMIN(u64Cap);
+        u32MpsMax = NVME_CAP_MPSMAX(u64Cap);
+        u32Pmrs = NVME_CAP_PMRS(u64Cap);
+        u32Cmbs = NVME_CAP_CMBS(u64Cap);
+
         u32Ter = u32Vs & 0xffu;
         u32Min = (u32Vs >> 8) & 0xffu;
         u32Maj = (u32Vs >> 16) & 0xffffu;
 
         kprintf("nvme: CAP=0x%lx soft PASS\n", (unsigned long)u64Cap);
-        kprintf("nvme: identify VS=0x%x %u.%u.%u MQES=%u soft PASS\n", u32Vs,
-                u32Maj, u32Min, u32Ter, u32Mqes);
+        kprintf("nvme: CAP inventory MQES=%u CQR=%u AMS=%u TO=%u DSTRD=%u "
+                "soft PASS\n",
+                u32Mqes, u32Cqr, u32Ams, u32To, u32Dstrd);
+        kprintf("nvme: CAP inventory NSSRS=%u CSS=0x%x BPS=%u MPSMIN=%u "
+                "MPSMAX=%u PMRS=%u CMBS=%u soft PASS\n",
+                u32Nssrs, u32Css, u32Bps, u32MpsMin, u32MpsMax, u32Pmrs,
+                u32Cmbs);
+        kprintf("nvme: identify VS=0x%x %u.%u.%u soft PASS\n", u32Vs, u32Maj,
+                u32Min, u32Ter);
+        /* Explicit non-claim: product stop is CAP/VS soft inventory. */
+        kprintf("nvme: admin queues soft SKIP (not claimed)\n");
     }
 }
 
 /**
- * Scan PCI for NVMe controllers. Soft-reads CAP/VS when BAR0 is mappable.
- * Returns count of matching functions. Always logs a greppable product line.
+ * Scan PCI for NVMe controllers. Soft CAP inventory when BAR0 is mapped.
+ * Returns count of matching functions. Always logs greppable soft PASS/SKIP.
  */
 u32
 nvme_probe_scan(void)
@@ -161,7 +214,8 @@ nvme_probe_scan(void)
                     continue;
                 }
                 paBar = nvme_bar0_pa(u8Bus, u8Slot, u8Func, &u32BarRaw, &f64);
-                kprintf("nvme: probe %u:%u.%u vendor=0x%x bar0=0x%x PASS\n",
+                kprintf("nvme: probe %u:%u.%u vendor=0x%x bar0=0x%x soft "
+                        "PASS\n",
                         u8Bus, u8Slot, u8Func, u16Vendor, u32BarRaw);
                 kprintf("nvme: identify %u:%u.%u id=%04x:%04x bar0_pa=0x%lx "
                         "bits=%u soft PASS\n",
@@ -170,17 +224,19 @@ nvme_probe_scan(void)
                 if (paBar != 0 && (u32BarRaw & 1u) == 0) {
                     nvme_soft_identify(paBar);
                 } else {
-                    kprintf("nvme: bar0 empty/io soft skip\n");
+                    kprintf("nvme: bar0 empty/io soft SKIP\n");
+                    kprintf("nvme: CAP inventory soft SKIP (unmapped)\n");
                 }
                 cFound++;
             }
         }
     }
     if (cFound == 0) {
-        kprintf("nvme: probe none (soft)\n");
+        kprintf("nvme: probe none soft SKIP\n");
+        kprintf("nvme: CAP inventory soft SKIP (no controller)\n");
     } else {
-        kprintf("nvme: probe count=%u PASS\n", cFound);
+        kprintf("nvme: probe count=%u soft PASS\n", cFound);
     }
-    kprintf("nvme: probe PASS\n");
+    kprintf("nvme: probe soft PASS\n");
     return cFound;
 }

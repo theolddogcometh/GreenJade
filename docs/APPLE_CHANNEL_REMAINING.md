@@ -397,4 +397,63 @@ Solaris remaining doc stays authoritative for untyped ladder, CDT, CNode lock or
 
 ---
 
-*Accepted Apple-channel decisions v1.1 — task ports, VM objects/views, QoS, session, match→grant. **Proton personality overrides this doc on conflict.***
+## 20. Honesty refresh — soft shipped vs remaining open (2026-07-23)
+
+**Scope of this section:** tree status relative to **this document’s** decisions (§1–§19).  
+**Not a product claim.** Design **Accepted** ≠ desktop product complete. Parallel-wave soft surfaces and greppable smokes **do not** close Deck / Steam / TiB product bars.  
+**Proton personality** still overrides this channel on conflict. Open bars stay open.
+
+| Stamp | Meaning here |
+|-------|----------------|
+| **Design Accepted** | Normative judgment in this doc (unchanged by soft code) |
+| **Soft shipped** | Kernel / session / header surface exists, greppable, often smoke-covered — **bring-up / interim only** |
+| **Open** | Full production path, rights enforcement, or product bar still missing or incomplete |
+
+### Soft shipped (Apple-channel surface only — not product bars)
+
+| § | Decision area | Soft in tree (honest bound) |
+|---|----------------|------------------------------|
+| **§1–§2** | Regions + memory objects; object owns pages; maps as views | Anon + **named** memobj (`kernel/mm/memobj.c`, `GJ_SYS_MEMOBJ_*`); region table; wine-shm / winesrv share; G-MO-1 / G-MO-3 soft. FILE kind reserved, **not** full file-object production. |
+| **§3** | `GJ_CAP_PROCESS` mint to parent on spawn | `process_spawn` + mint/verify (G-PROC-2); rights bits on task cap; death path soft (G-PROC-5). Restricted self-port policy not fully product-hardened. |
+| **§5** | Syscall number table | Numbers live in `kernel/include/gj/syscall.h` (sparse blocks; **do not renumber**). Many `GJ_SYS_*` handled on native path; some still stub / partial vs full §5 semantics. |
+| **§6** | Match → grant → confined host | Virtio + MSI-X / Notification binds + live UDX-shaped hosts exist as soft platform. Full **devmgr personality match → grant graph** production not claimed. |
+| **§7** | Task ledgers / quotas | Soft slot-quota ledger + `GJ_ERR_QUOTA` smoke; hierarchical `pParent` shape soft. Full per-resource task ledger / spawn-slice product roll-up **open**. |
+| **§8** | Thread QoS | Soft QoS classes + `thread_set_qos` / `GJ_SYS_THREAD_SET_QOS` + rank in sched. **Capped PI along Call** still open (turnstile mechanism separate / incomplete for product PI). |
+| **§9** | Futex early + cross-process | `futex_wait` / `futex_wake` + mono timeout; cross-proc via shared PA keys (Proton A0 winesrv). Object-id formal key shape may still lag full §9 prose. |
+| **§10** | W^X + CapJit | Default W^X filter; `GJ_RIGHT_JIT` / CapJit cache; mprotect WX no-JIT / +JIT smokes. **Codesign later** (still open by design). |
+| **§11** | Session / compositor | Interim kernel compositor + session door + input hub; `sessiond` live spawn soft; surface present paths. Full **userspace session TCB / seat policy** not product-closed. |
+| **§12** | Exception ports (≠ pager) | PCB exception port register / deliver **stub** smoke (SEH-shaped); Proton launcher always-on policy not product-closed. |
+| **§16** | UDX + Apple match discipline | UDX / virtio host inject soft; Linux-shaped names for porters. Not a claim of complete DriverKit-class graph. |
+| **Order §18 items 1–5-ish** | Task/spawn, IPC doors, futex, anon/named objects, virtio host | Soft paths greppable in kmain / native / memobj / doors — **interactive product proof** (keyboard → compositor → pixel as product bar) **not** claimed here. |
+
+### Remaining open (do not claim done)
+
+| § / bar | Still open |
+|---------|------------|
+| **§1 fault path** | Production fault: region → object → **Call pager** + cookie + install **views** (fail-closed no-pager kill policy fully on that path). Cluster coalesce to `GJ_FAULT_CLUSTER_MAX` incomplete. |
+| **§2 FILE / shared file objects** | File memory object + vfs pager production; COW shared-lib path as designed. |
+| **§3 rights matrix** | Full PROCESS rights enforcement for all callers; restricted self vs parent matrix product-hard. |
+| **§4 Reply caps** | Kernel **ephemeral single-use `GJ_CAP_REPLY`** on Call (MIG/XPC shape) — **open** (doors reply exists; generic REPLY object path not product). |
+| **§5 freeze + resolve** | Universal `gj_cap_resolve` on all cap ops; every §5 op at full semantics (not only number reservation). |
+| **§6 production bootstrap** | Platform graph → match → grant → UDX host as sole production device story; no free-form bus-master; IOMMU production still out. |
+| **§7 product ledgers** | Hierarchical task ledger charge for pages/endpoints/timers/IRQ/IPC budget; spawn slice from parent remaining as product rule. Soft jetsam still optional. |
+| **§8 product QoS + PI** | Capped priority inheritance on Call chains; interactive/audio as product requirements, not only soft rank. |
+| **§9 formal keys** | Cross-process key fully as `(object_id, offset)` everywhere product code paths require it (beyond PA soft). |
+| **§11 session product** | Single-seat session leader TCB; apps without raw HID/GPU MMIO as **enforced product** policy (not interim door only). |
+| **§12 Proton exception policy** | Always-register exception sink for game tasks + libprotonrt SEH mapping as product path. |
+| **§13 Bootstrap seal** | One-way seal checklist (privileged retype / broad IRQ / root untyped abuse) — **open**. |
+| **§14 Name service restart** | Sticky bootstrap + supervised restart / PEER_DEAD resolve — **open** (P2). |
+| **§15 Firmware blobs** | Out-of-tree load + hash allowlist policy — **open** (P2). |
+| **§18 interactive proof** | Keyboard → compositor → pixel as **product** desktop proof — not closed by soft present/smoke. |
+| **Non-Apple product bars** (out of channel, listed so they are not smuggled) | **bar3** Steam client on DUT — **OPEN**; Deck Top 50 title rows — **NOT-TRIED × 50**; product RAM **≥ 1 TiB** full path — **open** (768G soak ≠ TiB bar). Soft continuum / media READY ≠ client. |
+
+### Explicit non-claims
+
+- Soft greppable `PASS` lines (memobj, futex, qos, sessiond live, CapJit, except port smoke, etc.) are **agent / bring-up honesty**, not “Apple desktop shipped.”
+- This document’s **Accepted** status remains **design judgment** under GreenJade law; it does **not** promote matrix rows or close bar3.
+- Isolation / doors / JIT **production freezes** stay in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); this §20 does not re-freeze them.
+
+---
+
+*Accepted Apple-channel decisions v1.1 — task ports, VM objects/views, QoS, session, match→grant. **Proton personality overrides this doc on conflict.***  
+*§20 honesty refresh 2026-07-23 — soft shipped vs remaining open only; **no product claim**.*

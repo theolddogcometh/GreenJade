@@ -366,6 +366,11 @@
  *            SQE for games); u1tibopen prints 0 (full 1 TiB host soak still
  *            open soft); free exclusive continuum names; soft facts only;
  *            does not claim Deck Top 50 PASS)
+ *           (help/version soft banners: help prints GreenJade soft product +
+ *            shell=native vfs door + bar3=0 before cmds:; version keeps
+ *            "GreenJade shell (native vfs door) v1.68" smoke substring then
+ *            GreenJade soft product + soft=1 + bar3=0; soft facts only —
+ *            not bar3 close, not Deck Top 50 PASS)
  */
 #include <gj/string.h>
 #include <gj/syscalls.h>
@@ -15010,6 +15015,14 @@ run_line(const char *szLine)
         return 0;
     }
     if (gj_strcmp(aCmd, "help") == 0) {
+        /*
+         * Soft product banner (facts only). Identifies GreenJade soft
+         * product continuum shell; bar3=0 (still open). Not Deck Top 50
+         * PASS and not bar3 close. Greppable soft inventory for live logs.
+         */
+        out("GreenJade soft product\n");
+        out("shell=native vfs door\n");
+        out("bar3=0\n");
         out("cmds: help echo cat ls rm stat touch cp mv head tail wc cmp "
             "sleep size true false clear hostname uname id whoami date env "
             "printenv nproc uptime basename dirname cksum grep test printf "
@@ -15308,8 +15321,17 @@ run_line(const char *szLine)
         return 0;
     }
     if (gj_strcmp(aCmd, "version") == 0) {
-        /* Keep substring "GreenJade shell (native vfs door)" for smoke gate */
+        /*
+         * Soft product version banner.
+         * Keep substring "GreenJade shell (native vfs door)" for smoke gate.
+         * Extra lines are soft inventory only: GreenJade soft product identity
+         * and bar3=0 (still open). Does not claim Deck Top 50 PASS or bar3
+         * close. Mirrors help soft banner facts for greppable live logs.
+         */
         out("GreenJade shell (native vfs door) v1.68\n");
+        out("GreenJade soft product\n");
+        out("soft=1\n");
+        out("bar3=0\n");
         return 0;
     }
     if (gj_strcmp(aCmd, "storecap") == 0) {

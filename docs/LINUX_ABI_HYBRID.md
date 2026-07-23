@@ -2,12 +2,12 @@
 
 | Field | Value |
 |-------|--------|
-| **Document** | Linux ABI hybrid **v1.4** |
+| **Document** | Linux ABI hybrid **v1.5** |
 | **Status** | **Accepted** — per-CPU swapgs, scheduler sleep, doors cold path |
 | **Production freezes** | [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) §§1–4 |
 | **Model** | **Option C:** kernel hot paths + **doors** cold personality thread |
-| **License** | Clean-room; **no GPL source** |
-| **Companion** | [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) |
+| **License** | Clean-room dual **MIT OR Apache-2.0** only — **no GPL / no Linux source** |
+| **Companion** | [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
 
@@ -90,4 +90,28 @@ Implementation remaining: code those freezes — design is closed.
 
 ---
 
-*v1.4 — hybrid + production freezes linked.*
+## 5. Honesty bounds (soft surface ≠ product bar)
+
+This section is additive honesty only. It does **not** change Option C architecture or production freezes.
+
+| Claim surface | What shipped means | What it does **not** mean |
+|---------------|--------------------|---------------------------|
+| **Hybrid ABI (this doc)** | Option C design + kernel hot/cold dispatch skeleton (swapgs, doors cold path, hot subset) | Steam client runs; full Linux userspace; **bar3 closed** |
+| **Hot/cold SYSCALL map** | Documented dispatch; some hot paths + cold door stand-in | Every glibc/Steam Runtime NR implemented end-to-end |
+| **io_uring min rings** | Kernel soft surface: setup / enter / register (+ related smokes when greppable) | Full game / title I/O path; Steam Runtime I/O complete |
+| **Continuum graph** | Clean-room CREATE-ONLY soft gates; **target `makefile_max=15000` soft only** (tree may lag; growth ≠ runtime ABI) | Client launch; Deck Top 50 matrix fill; bar3 done |
+| **Deck Top 50** | Product **targeting** only ([PROTON_PERSONALITY.md](PROTON_PERSONALITY.md)) | Any title **PASS** or off **NOT-TRIED** |
+
+**Hard rules for this surface:**
+
+1. Hybrid ABI progress is **soft surface** — kernel smoke / design acceptance — not a Steam product claim.
+2. **Bar3 remains OPEN** until real-DUT Steam **client** launch + matrix work; see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).
+3. **io_uring min rings ≠ full game I/O.** Do not promote ring setup smokes to title or client I/O readiness.
+4. Continuum **makefile_max target 15000** is **soft graph growth only** (parallel CREATE-ONLY decades). Hitting or targeting 15000 does **not** close bar3 or imply Deck Top 50 progress.
+5. **No Deck Top 50 title claims** from this document, hybrid ABI smokes, continuum gates, or io_uring soft PASS alone. Matrix claim level stays **targeting only** until titles are actually tried.
+
+**License / project tone (unchanged):** clean-room dual **MIT OR Apache-2.0**; no GPL import; no Linux kernel source; depth driven by product need, not by pasting foreign trees.
+
+---
+
+*v1.5 — hybrid + production freezes + soft-surface honesty (bar3 open; continuum 15000 soft; io_uring min ≠ game I/O; no Deck Top 50 claims).*

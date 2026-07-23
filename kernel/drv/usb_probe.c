@@ -150,6 +150,19 @@ usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
 }
 
 /**
+ * Greppable soft inventory once per scan. Class 0C:03 only; no HC claim.
+ * Product line: "usb: soft inventory".
+ */
+static void
+usb_soft_log(u32 cFound, u32 cUhci, u32 cOhci, u32 cEhci, u32 cXhci,
+             u32 cOther, u32 cBarIo, u32 cBarMem)
+{
+    kprintf("usb: soft inventory found=%u class=0C:03 uhci=%u ohci=%u "
+            "ehci=%u xhci=%u other=%u bar_io=%u bar_mem=%u\n",
+            cFound, cUhci, cOhci, cEhci, cXhci, cOther, cBarIo, cBarMem);
+}
+
+/**
  * Scan PCI for USB host controllers. Soft BAR map + cap-head identify.
  * Returns total HC count. Always logs a greppable product line (smoke:
  * "usb: probe").
@@ -161,7 +174,13 @@ usb_probe_scan(void)
     u8 u8Slot;
     u8 u8Func;
     u32 cFound = 0;
+    u32 cUhci = 0;
+    u32 cOhci = 0;
+    u32 cEhci = 0;
     u32 cXhci = 0;
+    u32 cOther = 0;
+    u32 cBarIo = 0;
+    u32 cBarMem = 0;
 
     for (u8Bus = 0; u8Bus < 8; u8Bus++) {
         for (u8Slot = 0; u8Slot < 32; u8Slot++) {
@@ -206,14 +225,24 @@ usb_probe_scan(void)
                     /* UHCI: I/O BAR only — no MMIO soft map */
                     kprintf("usb: bar0 io soft path PASS base=0x%lx\n",
                             (unsigned long)paBar);
+                    cBarIo++;
                 } else if (paBar != 0) {
                     usb_soft_identify_mmio(u8Pif, paBar);
+                    cBarMem++;
                 } else {
                     kprintf("usb: bar0 empty soft skip\n");
                 }
                 cFound++;
-                if (u8Pif == USB_PIF_XHCI) {
+                if (u8Pif == USB_PIF_UHCI) {
+                    cUhci++;
+                } else if (u8Pif == USB_PIF_OHCI) {
+                    cOhci++;
+                } else if (u8Pif == USB_PIF_EHCI) {
+                    cEhci++;
+                } else if (u8Pif == USB_PIF_XHCI) {
                     cXhci++;
+                } else {
+                    cOther++;
                 }
             }
         }
@@ -223,6 +252,8 @@ usb_probe_scan(void)
     } else {
         kprintf("usb: probe count=%u xhci=%u PASS\n", cFound, cXhci);
     }
+    /* Soft inventory once: class/prog-if tallies; not full HC / bar3. */
+    usb_soft_log(cFound, cUhci, cOhci, cEhci, cXhci, cOther, cBarIo, cBarMem);
     kprintf("usb: probe PASS\n");
     return cFound;
 }

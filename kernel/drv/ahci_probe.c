@@ -5,7 +5,9 @@
  * Product T1 HCL: AHCI (SATA HBA) PCI class probe — clean-room pure C.
  * Enumerate class 01:06:01; soft identify CAP/GHC/PI/VS via
  * vmm_map_device_uc (high UC window — never identity-map device MMIO
- * over the kernel). No port engines, no command lists. No GPL source;
+ * over the kernel). Soft inventory: ports implemented (PI), command
+ * slots (CAP.NCS) when CAP is readable — greppable soft PASS|SKIP.
+ * No port engines, no command lists, no GHC.AE write. No GPL source;
  * public PCI class codes + AHCI 1.x register layout only.
  */
 #include <gj/klog.h>
@@ -22,6 +24,11 @@
 #define AHCI_REG_GHC 1u  /* 0x04 Global HBA Control */
 #define AHCI_REG_PI  3u  /* 0x0C Ports Implemented */
 #define AHCI_REG_VS  4u  /* 0x10 AHCI Version */
+
+/* CAP field masks (AHCI 1.x; fields are 0's based where noted) */
+#define AHCI_CAP_NP_MASK  0x1fu       /* bits 4:0  Number of Ports */
+#define AHCI_CAP_NCS_SHIFT 8u
+#define AHCI_CAP_NCS_MASK 0x1fu       /* bits 12:8 Number of Command Slots */
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -46,6 +53,22 @@ pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
 
     outl(0xCF8, u32Addr);
     return inl(0xCFC);
+}
+
+/**
+ * Count set bits in a 32-bit value (soft PI inventory; freestanding).
+ */
+static u32
+ahci_popcount32(u32 u32Val)
+{
+    u32 cBits = 0;
+    u32 u32Tmp = u32Val;
+
+    while (u32Tmp != 0) {
+        cBits += u32Tmp & 1u;
+        u32Tmp >>= 1;
+    }
+    return cBits;
 }
 
 /**
@@ -80,7 +103,49 @@ ahci_abar_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pf64)
 }
 
 /**
+ * Soft HBA inventory from CAP/PI only (read-only; no port engines).
+ * Grep: ahci: inventory … soft PASS|SKIP
+ */
+static void
+ahci_soft_inventory(u32 u32Cap, u32 u32Pi)
+{
+    u32 u32Np;
+    u32 u32Ncs;
+    u32 cPortsImpl;
+    int fCapOk;
+
+    /*
+     * All-0 / all-1 CAP is treated as unreadable MMIO for soft path.
+     * Still report PI when non-trivial so smoke can distinguish cases.
+     */
+    fCapOk = (u32Cap != 0u && u32Cap != 0xffffffffu) ? 1 : 0;
+    cPortsImpl = ahci_popcount32(u32Pi);
+
+    if (cPortsImpl > 0u) {
+        kprintf("ahci: inventory ports implemented c=%u pi=0x%x soft PASS\n",
+                cPortsImpl, u32Pi);
+    } else {
+        kprintf("ahci: inventory ports implemented c=0 pi=0x%x soft SKIP\n",
+                u32Pi);
+    }
+
+    if (fCapOk != 0) {
+        u32Np = (u32Cap & AHCI_CAP_NP_MASK) + 1u;
+        u32Ncs = ((u32Cap >> AHCI_CAP_NCS_SHIFT) & AHCI_CAP_NCS_MASK) + 1u;
+        kprintf("ahci: inventory cap np=%u soft PASS\n", u32Np);
+        kprintf("ahci: inventory command slots ncs=%u soft PASS\n", u32Ncs);
+        kprintf("ahci: inventory soft PASS ports=%u slots=%u\n", cPortsImpl,
+                u32Ncs);
+    } else {
+        kprintf("ahci: inventory cap soft SKIP cap=0x%x\n", u32Cap);
+        kprintf("ahci: inventory command slots soft SKIP\n");
+        kprintf("ahci: inventory soft SKIP\n");
+    }
+}
+
+/**
  * Soft identify: map ABAR UC and read CAP/GHC/PI/VS (no GHC.AE write).
+ * Then soft inventory ports implemented + command slots when readable.
  */
 static void
 ahci_soft_identify(u64 paAbar)
@@ -93,6 +158,7 @@ ahci_soft_identify(u64 paAbar)
     stMap = vmm_map_device_uc((gj_paddr_t)paAbar, 0x1000, &vaMap);
     if (stMap != GJ_OK) {
         kprintf("ahci: abar map soft fail st=%d\n", (int)stMap);
+        kprintf("ahci: inventory soft SKIP map\n");
         return;
     }
     {
@@ -101,11 +167,14 @@ ahci_soft_identify(u64 paAbar)
         u32 u32Ghc = pReg[AHCI_REG_GHC];
         u32 u32Pi = pReg[AHCI_REG_PI];
         u32 u32Vs = pReg[AHCI_REG_VS];
-        u32 u32Np = (u32Cap & 0x1fu) + 1u; /* CAP.NP + 1 ports */
+        u32 u32Np = (u32Cap & AHCI_CAP_NP_MASK) + 1u;
+        u32 u32Ncs =
+            ((u32Cap >> AHCI_CAP_NCS_SHIFT) & AHCI_CAP_NCS_MASK) + 1u;
 
         kprintf("ahci: HBA CAP=0x%x GHC=0x%x soft PASS\n", u32Cap, u32Ghc);
-        kprintf("ahci: identify PI=0x%x VS=0x%x NP=%u soft PASS\n", u32Pi,
-                u32Vs, u32Np);
+        kprintf("ahci: identify PI=0x%x VS=0x%x NP=%u NCS=%u soft PASS\n",
+                u32Pi, u32Vs, u32Np, u32Ncs);
+        ahci_soft_inventory(u32Cap, u32Pi);
     }
 }
 
@@ -158,11 +227,12 @@ ahci_probe_scan(void)
                         "bits=%u soft PASS\n",
                         u8Bus, u8Slot, u8Func, u16Vendor, u16Device,
                         (unsigned long)paAbar, f64 != 0 ? 64u : 32u);
-                /* Memory BAR only; soft CAP path for product HCL. */
+                /* Memory BAR only; soft CAP + inventory for product HCL. */
                 if ((u32BarRaw & 1u) == 0 && paAbar != 0) {
                     ahci_soft_identify(paAbar);
                 } else {
-                    kprintf("ahci: abar empty/io soft skip\n");
+                    kprintf("ahci: abar empty/io soft SKIP\n");
+                    kprintf("ahci: inventory soft SKIP no_abar\n");
                 }
                 cFound++;
             }

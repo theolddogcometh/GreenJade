@@ -39,10 +39,22 @@
  * (offset by CNTVOFF_EL2 under hyp; QEMU -kernel EL1 still sees a working
  * virtual counter).
  *
- * Greppable: aarch64: timer PASS
- *            aarch64: timer tick soft PASS
+ * -------------------------------------------------------------------------
+ * Soft inventory deepen (freq soft + tick soft)
+ * -------------------------------------------------------------------------
+ * Greppable family "aarch64: timer soft …" plus focused sub-markers:
+ *   aarch64: timer soft frq=… t0=… t1=… adv=… delta=… hits=…
+ *             spins0=… spins1=… ppi=… ctl_arm=… cval_rb=… ctl_end=…
+ *   aarch64: timer freq soft frq=… ms_ticks=… period_ns=… adv=… range=…
+ *   aarch64: timer freq soft PASS | FAIL
+ *   aarch64: timer tick soft delta=… hits=… spins0=… spins1=… ppi=…
+ *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
+ *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
+ *   aarch64: timer tick soft PASS | FAIL
+ *   aarch64: timer soft PASS | FAIL
+ *   aarch64: timer PASS
  *
- * Freestanding pure C; no GPL Linux timer code.
+ * Freestanding pure C; no NEON; no GPL Linux timer code.
  */
 #include "types_arch.h"
 
@@ -70,6 +82,35 @@ extern void aarch64_uart_put_hex(unsigned long v);
 
 /* Soft tick spin budget (yield loop; virt counter is fast). */
 #define TIMER_SOFT_SPIN_MAX 2000000u
+
+/*
+ * Soft freq plausibility bounds (Hz). QEMU virt is typically 62.5 MHz;
+ * reject zero / all-ones / absurdly tiny or huge for greppable FAIL.
+ */
+#define TIMER_SOFT_FREQ_MIN 1000000u      /* 1 MHz */
+#define TIMER_SOFT_FREQ_MAX 1000000000u   /* 1 GHz */
+
+/* Soft counter advance probe spin count (yield). */
+#define TIMER_SOFT_ADV_SPINS 10000u
+
+/* Soft inventory snapshot from tick path (stack-local via out params). */
+struct timer_tick_soft_inv {
+    unsigned long u64Delta;
+    unsigned long u64CvalWrote;
+    unsigned long u64CvalReadback;
+    unsigned int u32CtlArm;
+    unsigned int u32CtlAfterHit0;
+    unsigned int u32CtlAfterHit1;
+    unsigned int u32CtlEnd;
+    unsigned uSpins0;
+    unsigned uSpins1;
+    unsigned cHits;
+    int fCvalOk;
+    int fEnableArm;
+    int fImaskArm;
+    int fIst0;
+    int fIst1;
+};
 
 static unsigned long
 cntvct(void)
@@ -149,19 +190,20 @@ timer_wait_istatus(unsigned *pSpinsOut)
 /*
  * Soft tick path: arm virtual compare (IMASK), wait ISTATUS, reload CVAL
  * once (product tick reload shape), wait second ISTATUS, disable.
- * Returns number of ISTATUS hits observed (0..2). Non-fatal for M0+.
+ * Fills inventory snapshot for greppable soft lines. Returns hit count 0..2.
  *
  * This is the "IRQ soft arm documentation" half: same register sequence as a
  * real tick setup, except IMASK remains 1 so PPI TIMER_PPI_VIRT never fires.
  */
 static unsigned
-timer_tick_soft(unsigned int u32Frq, unsigned long *pDeltaOut,
-                unsigned *pSpins0, unsigned *pSpins1)
+timer_tick_soft(unsigned int u32Frq, struct timer_tick_soft_inv *pInv)
 {
     unsigned long u64Now;
     unsigned long u64Delta;
     unsigned long u64Cval;
+    unsigned long u64CvalRb;
     unsigned cHits;
+    unsigned int u32Ctl;
     int fStatus;
 
     (void)TIMER_PPI_VIRT;
@@ -176,15 +218,13 @@ timer_tick_soft(unsigned int u32Frq, unsigned long *pDeltaOut,
     } else {
         u64Delta = TIMER_SOFT_DELTA_DEFAULT;
     }
-    if (pDeltaOut != 0) {
-        *pDeltaOut = u64Delta;
-    }
 
     /* Disable first so CVAL is latched cleanly. */
     cntv_ctl_write(0u);
     u64Now = cntvct();
     u64Cval = u64Now + u64Delta;
     cntv_cval_write(u64Cval);
+    u64CvalRb = cntv_cval_read();
 
     /*
      * Soft arm: ENABLE + IMASK.
@@ -192,11 +232,34 @@ timer_tick_soft(unsigned int u32Frq, unsigned long *pDeltaOut,
      * Product arm would drop IMASK here after GIC PPI 27 + IRQ vector ready.
      */
     cntv_ctl_write(CNTV_CTL_ENABLE | CNTV_CTL_IMASK);
+    u32Ctl = cntv_ctl_read();
+
+    if (pInv != 0) {
+        pInv->u64Delta = u64Delta;
+        pInv->u64CvalWrote = u64Cval;
+        pInv->u64CvalReadback = u64CvalRb;
+        pInv->u32CtlArm = u32Ctl;
+        pInv->fEnableArm = ((u32Ctl & CNTV_CTL_ENABLE) != 0u) ? 1 : 0;
+        pInv->fImaskArm = ((u32Ctl & CNTV_CTL_IMASK) != 0u) ? 1 : 0;
+        pInv->fCvalOk = (u64CvalRb == u64Cval) ? 1 : 0;
+        pInv->uSpins0 = 0u;
+        pInv->uSpins1 = 0u;
+        pInv->fIst0 = 0;
+        pInv->fIst1 = 0;
+        pInv->u32CtlAfterHit0 = 0u;
+        pInv->u32CtlAfterHit1 = 0u;
+        pInv->u32CtlEnd = 0u;
+        pInv->cHits = 0u;
+    }
 
     cHits = 0u;
-    fStatus = timer_wait_istatus(pSpins0);
+    fStatus = timer_wait_istatus(pInv != 0 ? &pInv->uSpins0 : 0);
     if (fStatus != 0) {
         cHits = 1u;
+        if (pInv != 0) {
+            pInv->fIst0 = 1;
+            pInv->u32CtlAfterHit0 = cntv_ctl_read();
+        }
     }
 
     /*
@@ -208,18 +271,242 @@ timer_tick_soft(unsigned int u32Frq, unsigned long *pDeltaOut,
         u64Cval = u64Now + u64Delta;
         cntv_cval_write(u64Cval);
         /* Writing CVAL clears ISTATUS until the new deadline. */
-        fStatus = timer_wait_istatus(pSpins1);
+        fStatus = timer_wait_istatus(pInv != 0 ? &pInv->uSpins1 : 0);
         if (fStatus != 0) {
             cHits = 2u;
+            if (pInv != 0) {
+                pInv->fIst1 = 1;
+                pInv->u32CtlAfterHit1 = cntv_ctl_read();
+            }
         }
-    } else if (pSpins1 != 0) {
-        *pSpins1 = 0u;
+    } else if (pInv != 0) {
+        pInv->uSpins1 = 0u;
     }
 
     /* Leave quiet for later IRQ bring-up (no stale ENABLE). */
     cntv_ctl_write(0u);
+    u32Ctl = cntv_ctl_read();
     (void)cntv_cval_read(); /* soft observe final CVAL latched */
+
+    if (pInv != 0) {
+        pInv->u32CtlEnd = u32Ctl;
+        pInv->cHits = cHits;
+    }
     return cHits;
+}
+
+/*
+ * Soft frequency inventory: CNTFRQ shape + counter advance + period helpers.
+ * Returns 1 if frq is in soft-plausible range and counter advanced.
+ *
+ * Greppable:
+ *   aarch64: timer freq soft frq=… ms_ticks=… period_ns=… adv=… range=…
+ *   aarch64: timer freq soft PASS | FAIL
+ */
+static int
+timer_freq_soft_inventory(unsigned int u32Frq, unsigned long u64Adv)
+{
+    unsigned long u64MsTicks;
+    unsigned long u64PeriodNs;
+    int fRange;
+    int fOk;
+
+    /* Soft 1 ms tick count (same shape as tick delta when frq known). */
+    if (u32Frq != 0u) {
+        u64MsTicks = (unsigned long)u32Frq / 1000ul;
+        if (u64MsTicks == 0ul) {
+            u64MsTicks = 1ul;
+        }
+    } else {
+        u64MsTicks = 0ul;
+    }
+
+    /*
+     * Soft period in nanoseconds: 1e9 / frq.
+     * When frq is 0, emit 0 (unknown). Integer math only — pure C.
+     */
+    if (u32Frq != 0u) {
+        u64PeriodNs = 1000000000ul / (unsigned long)u32Frq;
+        if (u64PeriodNs == 0ul) {
+            /* Sub-nanosecond tick (frq > 1 GHz); clamp soft observe to 1. */
+            u64PeriodNs = 1ul;
+        }
+    } else {
+        u64PeriodNs = 0ul;
+    }
+
+    fRange = 0;
+    if (u32Frq >= TIMER_SOFT_FREQ_MIN && u32Frq <= TIMER_SOFT_FREQ_MAX) {
+        fRange = 1;
+    }
+
+    /*
+     * Soft PASS gate:
+     *   - CNTFRQ in [1 MHz, 1 GHz]
+     *   - virtual counter advanced during soft adv spin
+     */
+    fOk = 0;
+    if (fRange != 0 && u64Adv != 0ul) {
+        fOk = 1;
+    }
+
+    aarch64_uart_puts("aarch64: timer freq soft frq=");
+    aarch64_uart_put_hex((unsigned long)u32Frq);
+    aarch64_uart_puts(" ms_ticks=");
+    aarch64_uart_put_hex(u64MsTicks);
+    aarch64_uart_puts(" period_ns=");
+    aarch64_uart_put_hex(u64PeriodNs);
+    aarch64_uart_puts(" adv=");
+    aarch64_uart_put_hex(u64Adv);
+    aarch64_uart_puts(" range=");
+    aarch64_uart_put_hex((unsigned long)fRange);
+    aarch64_uart_puts(" min=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_FREQ_MIN);
+    aarch64_uart_puts(" max=");
+    aarch64_uart_put_hex((unsigned long)TIMER_SOFT_FREQ_MAX);
+    aarch64_uart_puts("\n");
+
+    if (fOk != 0) {
+        aarch64_uart_puts("aarch64: timer freq soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: timer freq soft FAIL\n");
+    }
+    return fOk;
+}
+
+/*
+ * Soft tick inventory detail + verdict. Returns 1 if two ISTATUS hits and
+ * soft arm bits look like ENABLE|IMASK with CVAL readback match.
+ *
+ * Greppable:
+ *   aarch64: timer tick soft delta=… hits=… spins0=… spins1=… ppi=…
+ *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
+ *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
+ *   aarch64: timer tick soft PASS | FAIL
+ */
+static int
+timer_tick_soft_inventory(const struct timer_tick_soft_inv *pInv,
+                          unsigned long u64Adv)
+{
+    int fTickSoft;
+
+    if (pInv == 0) {
+        aarch64_uart_puts("aarch64: timer tick soft FAIL\n");
+        return 0;
+    }
+
+    aarch64_uart_puts("aarch64: timer tick soft delta=");
+    aarch64_uart_put_hex(pInv->u64Delta);
+    aarch64_uart_puts(" hits=");
+    aarch64_uart_put_hex((unsigned long)pInv->cHits);
+    aarch64_uart_puts(" spins0=");
+    aarch64_uart_put_hex((unsigned long)pInv->uSpins0);
+    aarch64_uart_puts(" spins1=");
+    aarch64_uart_put_hex((unsigned long)pInv->uSpins1);
+    aarch64_uart_puts(" ppi=");
+    aarch64_uart_put_hex((unsigned long)TIMER_PPI_VIRT);
+    aarch64_uart_puts(" enable=");
+    aarch64_uart_put_hex((unsigned long)pInv->fEnableArm);
+    aarch64_uart_puts(" imask=");
+    aarch64_uart_put_hex((unsigned long)pInv->fImaskArm);
+    aarch64_uart_puts(" ist0=");
+    aarch64_uart_put_hex((unsigned long)pInv->fIst0);
+    aarch64_uart_puts(" ist1=");
+    aarch64_uart_put_hex((unsigned long)pInv->fIst1);
+    aarch64_uart_puts(" cval_ok=");
+    aarch64_uart_put_hex((unsigned long)pInv->fCvalOk);
+    aarch64_uart_puts(" cval_w=");
+    aarch64_uart_put_hex(pInv->u64CvalWrote);
+    aarch64_uart_puts(" cval_rb=");
+    aarch64_uart_put_hex(pInv->u64CvalReadback);
+    aarch64_uart_puts(" ctl_arm=");
+    aarch64_uart_put_hex((unsigned long)pInv->u32CtlArm);
+    aarch64_uart_puts(" ctl_h0=");
+    aarch64_uart_put_hex((unsigned long)pInv->u32CtlAfterHit0);
+    aarch64_uart_puts(" ctl_h1=");
+    aarch64_uart_put_hex((unsigned long)pInv->u32CtlAfterHit1);
+    aarch64_uart_puts(" ctl_end=");
+    aarch64_uart_put_hex((unsigned long)pInv->u32CtlEnd);
+    aarch64_uart_puts("\n");
+
+    /*
+     * Tick soft PASS: counter advanced during probe AND two ISTATUS hits
+     * (initial deadline + reloaded tick) AND soft arm ENABLE|IMASK held
+     * AND CVAL readback matched write AND final CTL quiet (no ENABLE).
+     */
+    fTickSoft = 0;
+    if (u64Adv != 0ul &&
+        pInv->cHits >= 2u &&
+        pInv->fEnableArm != 0 &&
+        pInv->fImaskArm != 0 &&
+        pInv->fCvalOk != 0 &&
+        (pInv->u32CtlEnd & CNTV_CTL_ENABLE) == 0u) {
+        fTickSoft = 1;
+    }
+
+    if (fTickSoft != 0) {
+        aarch64_uart_puts("aarch64: timer tick soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: timer tick soft FAIL\n");
+    }
+    return fTickSoft;
+}
+
+/*
+ * Combined soft inventory line (greppable "aarch64: timer soft …").
+ * Returns 1 if both freq soft and tick soft passed.
+ */
+static int
+timer_soft_inventory(unsigned int u32Frq, unsigned long u64T0,
+                     unsigned long u64T1, unsigned long u64Adv,
+                     const struct timer_tick_soft_inv *pInv,
+                     int fFreqSoft, int fTickSoft)
+{
+    int fSoft;
+
+    aarch64_uart_puts("aarch64: timer soft frq=");
+    aarch64_uart_put_hex((unsigned long)u32Frq);
+    aarch64_uart_puts(" t0=");
+    aarch64_uart_put_hex(u64T0);
+    aarch64_uart_puts(" t1=");
+    aarch64_uart_put_hex(u64T1);
+    aarch64_uart_puts(" adv=");
+    aarch64_uart_put_hex(u64Adv);
+    if (pInv != 0) {
+        aarch64_uart_puts(" delta=");
+        aarch64_uart_put_hex(pInv->u64Delta);
+        aarch64_uart_puts(" hits=");
+        aarch64_uart_put_hex((unsigned long)pInv->cHits);
+        aarch64_uart_puts(" spins0=");
+        aarch64_uart_put_hex((unsigned long)pInv->uSpins0);
+        aarch64_uart_puts(" spins1=");
+        aarch64_uart_put_hex((unsigned long)pInv->uSpins1);
+        aarch64_uart_puts(" ctl_arm=");
+        aarch64_uart_put_hex((unsigned long)pInv->u32CtlArm);
+        aarch64_uart_puts(" cval_rb=");
+        aarch64_uart_put_hex(pInv->u64CvalReadback);
+        aarch64_uart_puts(" ctl_end=");
+        aarch64_uart_put_hex((unsigned long)pInv->u32CtlEnd);
+    }
+    aarch64_uart_puts(" ppi=");
+    aarch64_uart_put_hex((unsigned long)TIMER_PPI_VIRT);
+    aarch64_uart_puts(" freq_ok=");
+    aarch64_uart_put_hex((unsigned long)fFreqSoft);
+    aarch64_uart_puts(" tick_ok=");
+    aarch64_uart_put_hex((unsigned long)fTickSoft);
+    aarch64_uart_puts("\n");
+
+    fSoft = 0;
+    if (fFreqSoft != 0 && fTickSoft != 0) {
+        fSoft = 1;
+    }
+
+    if (fSoft != 0) {
+        aarch64_uart_puts("aarch64: timer soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: timer soft FAIL\n");
+    }
+    return fSoft;
 }
 
 void
@@ -227,39 +514,48 @@ aarch64_timer_probe(void)
 {
     unsigned long u64T0;
     unsigned long u64T1;
-    unsigned long u64Delta;
     unsigned long u64Adv;
     unsigned int u32Frq;
     unsigned uSpins;
-    unsigned uSpins0;
-    unsigned uSpins1;
     unsigned cTickHits;
+    struct timer_tick_soft_inv inv;
+    int fFreqSoft;
     int fTickSoft;
+    int fSoft;
+
+    /* Zero soft inventory snapshot before tick path. */
+    inv.u64Delta = 0ul;
+    inv.u64CvalWrote = 0ul;
+    inv.u64CvalReadback = 0ul;
+    inv.u32CtlArm = 0u;
+    inv.u32CtlAfterHit0 = 0u;
+    inv.u32CtlAfterHit1 = 0u;
+    inv.u32CtlEnd = 0u;
+    inv.uSpins0 = 0u;
+    inv.uSpins1 = 0u;
+    inv.cHits = 0u;
+    inv.fCvalOk = 0;
+    inv.fEnableArm = 0;
+    inv.fImaskArm = 0;
+    inv.fIst0 = 0;
+    inv.fIst1 = 0;
 
     u32Frq = cntfrq();
     u64T0 = cntvct();
-    for (uSpins = 0u; uSpins < 10000u; uSpins++) {
+    for (uSpins = 0u; uSpins < TIMER_SOFT_ADV_SPINS; uSpins++) {
         __asm__ volatile("yield");
     }
     u64T1 = cntvct();
     u64Adv = u64T1 - u64T0;
 
     /* Soft virtual-timer compare + tick reload (no IRQ). */
-    u64Delta = 0ul;
-    uSpins0 = 0u;
-    uSpins1 = 0u;
-    cTickHits = timer_tick_soft(u32Frq, &u64Delta, &uSpins0, &uSpins1);
+    cTickHits = timer_tick_soft(u32Frq, &inv);
+    (void)cTickHits;
 
     /*
-     * Tick soft PASS: counter advanced during probe AND two ISTATUS hits
-     * (initial deadline + reloaded tick). Single hit still greppable via
-     * detail line; M0+ always emits timer PASS when regs are reachable.
+     * Legacy one-line summary (kept greppable for existing smoke detail).
+     * Deeper soft inventory follows via freq/tick/soft markers.
      */
-    fTickSoft = 0;
-    if (u64Adv != 0ul && cTickHits >= 2u) {
-        fTickSoft = 1;
-    }
-
     aarch64_uart_puts("aarch64: timer frq=");
     aarch64_uart_put_hex((unsigned long)u32Frq);
     aarch64_uart_puts(" t0=");
@@ -269,21 +565,32 @@ aarch64_timer_probe(void)
     aarch64_uart_puts(" adv=");
     aarch64_uart_put_hex(u64Adv);
     aarch64_uart_puts(" delta=");
-    aarch64_uart_put_hex(u64Delta);
+    aarch64_uart_put_hex(inv.u64Delta);
     aarch64_uart_puts(" hits=");
-    aarch64_uart_put_hex((unsigned long)cTickHits);
+    aarch64_uart_put_hex((unsigned long)inv.cHits);
     aarch64_uart_puts(" spins0=");
-    aarch64_uart_put_hex((unsigned long)uSpins0);
+    aarch64_uart_put_hex((unsigned long)inv.uSpins0);
     aarch64_uart_puts(" spins1=");
-    aarch64_uart_put_hex((unsigned long)uSpins1);
+    aarch64_uart_put_hex((unsigned long)inv.uSpins1);
     aarch64_uart_puts(" ppi=");
     aarch64_uart_put_hex((unsigned long)TIMER_PPI_VIRT);
     aarch64_uart_puts("\n");
 
+    /* Soft freq inventory (CNTFRQ range + counter advance). */
+    fFreqSoft = timer_freq_soft_inventory(u32Frq, u64Adv);
+
+    /* Soft tick inventory (arm bits + dual ISTATUS + quiet end). */
+    fTickSoft = timer_tick_soft_inventory(&inv, u64Adv);
+
+    /* Combined soft inventory under "aarch64: timer soft …". */
+    fSoft = timer_soft_inventory(u32Frq, u64T0, u64T1, u64Adv, &inv,
+                                 fFreqSoft, fTickSoft);
+
+    /*
+     * Primary product marker: regs reachable. Always emit when probe runs
+     * (M0+ smoke). Soft FAIL paths remain greppable separately.
+     */
     aarch64_uart_puts("aarch64: timer PASS\n");
-    if (fTickSoft != 0) {
-        aarch64_uart_puts("aarch64: timer tick soft PASS\n");
-    } else {
-        aarch64_uart_puts("aarch64: timer tick soft FAIL\n");
-    }
+
+    (void)fSoft;
 }

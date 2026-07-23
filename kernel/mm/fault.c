@@ -7,23 +7,48 @@
  *
  * Cookies are single-use kernel secrets — never CNode caps (G-PTR / CAP).
  *
+ * Soft deepen (Wave 8 exclusive): soft fault class counters + greppable
+ * "fault: soft …" logs for user/kernel, present/not, write/exec soft.
+ * Diagnostics only — not product SEH / exception-port complete.
+ *
  * greppable: FAULT_MAP_COOKIE
  * greppable: FAULT_SERIALIZATION
  * greppable: FAULT_SERIALIZATION_STATS
  * greppable: FAULT_CLUSTER_COALESCE_SOFT
  * greppable: GJ_FAULT_CLUSTER_MAX
+ * greppable: fault: soft
  */
 #include <gj/config.h>
 #include <gj/fault.h>
+#include <gj/klog.h>
 #include <gj/timer.h>
+#include <gj/user_access.h>
 
 /* Simple global cookie table until per-CPU / slab. */
 #define GJ_COOKIE_TAB 64u
+
+/* Rate-limit per-event soft class lines (first N only; totals still free). */
+#define FAULT_SOFT_CLASS_LOG_MAX 8u
 
 static struct gj_map_cookie g_aCookies[GJ_COOKIE_TAB];
 
 /* greppable: FAULT_SERIALIZATION_STATS */
 static struct gj_fault_stats g_faultStats;
+
+/*
+ * Soft fault class counters (wrap OK; never hard-gate product policy).
+ * Orthogonal axes: user|kernel VA, present|not soft probe, write|exec access.
+ * Not an SEH / exception-port product claim — pager/cookie path only.
+ * greppable: fault: soft
+ */
+static u64 g_u64SoftClassUser;
+static u64 g_u64SoftClassKernel;
+static u64 g_u64SoftClassPresent;
+static u64 g_u64SoftClassNot;
+static u64 g_u64SoftClassWrite;
+static u64 g_u64SoftClassExec;
+static u64 g_u64SoftClassCalls;   /* classified soft events */
+static u32 g_u32SoftClassLogged;  /* per-event log emissions */
 
 /*
  * PRNG for cookies. Seed mixes compile-time salt with mono clock when ready;
@@ -46,6 +71,127 @@ static void
 fault_stat_inc(u64 *pu64Field)
 {
     fault_stat_add(pu64Field, 1ull);
+}
+
+/*
+ * Soft: fault VA in the product user window vs kernel/other.
+ * Uses GJ_USER_VA_* geometry only (no present bits) — class lamp.
+ */
+static int
+fault_va_is_user_soft(u64 u64Va)
+{
+    if (u64Va >= GJ_USER_VA_BASE && u64Va < GJ_USER_VA_END) {
+        return 1;
+    }
+    return 0;
+}
+
+/*
+ * Emit greppable soft class totals.
+ * greppable: fault: soft class
+ * Honesty: soft counters only; not product SEH complete.
+ */
+static void
+fault_class_soft_log(void)
+{
+    kprintf("fault: soft class user=%llu kernel=%llu present=%llu not=%llu "
+            "write=%llu exec=%llu calls=%llu logs=%u (soft; not product SEH)\n",
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassUser,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassKernel,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassPresent,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassNot,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassWrite,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassExec,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftClassCalls,
+                                                __ATOMIC_RELAXED),
+            (unsigned)__atomic_load_n(&g_u32SoftClassLogged,
+                                      __ATOMIC_RELAXED));
+}
+
+/*
+ * Soft-classify one fault-path event and rate-limit a greppable line.
+ *
+ * fPresent: 1 = soft present probe hit on the fault page (or known present);
+ *           0 = soft not-present (NULL probe or probe said absent).
+ * u32Access: GJ_FAULT_ACCESS_* bitmask (write/exec soft axes).
+ *
+ * greppable: fault: soft
+ */
+static void
+fault_class_soft_note(u64 u64Va, u32 u32Access, int fPresent, u32 u32NPages,
+                      const char *szWhere)
+{
+    int fUser;
+    int fWrite;
+    int fExec;
+    u32 u32N;
+    const char *szUk;
+    const char *szPn;
+    const char *szWx;
+
+    fUser = fault_va_is_user_soft(u64Va);
+    fWrite = ((u32Access & GJ_FAULT_ACCESS_W) != 0) ? 1 : 0;
+    fExec = ((u32Access & GJ_FAULT_ACCESS_X) != 0) ? 1 : 0;
+
+    fault_stat_inc(&g_u64SoftClassCalls);
+    if (fUser) {
+        fault_stat_inc(&g_u64SoftClassUser);
+        szUk = "user";
+    } else {
+        fault_stat_inc(&g_u64SoftClassKernel);
+        szUk = "kernel";
+    }
+    if (fPresent) {
+        fault_stat_inc(&g_u64SoftClassPresent);
+        szPn = "present";
+    } else {
+        fault_stat_inc(&g_u64SoftClassNot);
+        szPn = "not";
+    }
+    if (fWrite) {
+        fault_stat_inc(&g_u64SoftClassWrite);
+    }
+    if (fExec) {
+        fault_stat_inc(&g_u64SoftClassExec);
+    }
+
+    /* Access tag for greppable per-event line (write / exec / r soft). */
+    if (fWrite && fExec) {
+        szWx = "write+exec";
+    } else if (fWrite) {
+        szWx = "write";
+    } else if (fExec) {
+        szWx = "exec";
+    } else {
+        szWx = "r";
+    }
+
+    if (szWhere == NULL) {
+        szWhere = "path";
+    }
+
+    /* Rate-limited per-event line; totals dump stays unbounded. */
+    u32N = __atomic_load_n(&g_u32SoftClassLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_SOFT_CLASS_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32SoftClassLogged, &u32N, u32N + 1u,
+                                        0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+            /*
+             * Grep: fault: soft user|kernel present|not write|exec
+             * Soft class lamp only — not SEH product complete.
+             */
+            kprintf("fault: soft %s %s %s va=0x%llx pages=%u access=0x%x "
+                    "via=%s (soft class; not product SEH)\n",
+                    szUk, szPn, szWx,
+                    (unsigned long long)u64Va, (unsigned)u32NPages,
+                    (unsigned)u32Access, szWhere);
+        }
+    }
 }
 
 static u64
@@ -111,6 +257,7 @@ gj_fault_cluster_coalesce_soft(u64 u64FaultVa, u64 u64RegionLo,
     u32 u32CapHit;
     u32 u32PresentStop;
     int fHaveRegion;
+    int fFaultPresentSoft;
 
     fault_stat_inc(&g_faultStats.u64ClusterSoftCalls);
 
@@ -125,6 +272,14 @@ gj_fault_cluster_coalesce_soft(u64 u64FaultVa, u64 u64RegionLo,
 
     u64PageMask = (u64)GJ_PAGE_SIZE - 1ull;
     u64FaultPage = u64FaultVa & ~u64PageMask;
+
+    /*
+     * Soft class: present/not on the fault page itself.
+     * NULL probe ⇒ soft not-present (coalesce freely within caps).
+     * greppable: fault: soft
+     */
+    fFaultPresentSoft =
+        cluster_page_present_soft(pfnPresent, pPresentCtx, u64FaultPage);
 
     fHaveRegion = (u64RegionLo != 0 || u64RegionHi != 0) ? 1 : 0;
     if (fHaveRegion) {
@@ -218,6 +373,14 @@ gj_fault_cluster_coalesce_soft(u64 u64FaultVa, u64 u64RegionLo,
     if (u32PresentStop) {
         fault_stat_inc(&g_faultStats.u64ClusterSoftPresent);
     }
+
+    /*
+     * Soft fault class counters + rate-limited greppable line.
+     * Axes: user/kernel · present/not · write/exec soft.
+     * greppable: fault: soft
+     */
+    fault_class_soft_note(u64FaultPage, u32Access, fFaultPresentSoft, u32N,
+                          "cluster");
 
     return GJ_OK;
 }
@@ -339,6 +502,15 @@ gj_map_cookie_create(struct gj_map_cookie *pOut, void *pSpace, void *pProc,
     pMsg->u32Pad = 0;
 
     fault_stat_inc(&g_faultStats.u64CookieCreateOk);
+
+    /*
+     * Soft class on cookie mint: VA window + access bits.
+     * Present axis soft-unknown here (cookie has no PTE probe) → not.
+     * greppable: fault: soft
+     */
+    fault_class_soft_note(u64ClusterBase, u32Access, /*fPresent*/ 0, u32NPages,
+                          "cookie");
+
     return GJ_OK;
 }
 
@@ -510,6 +682,16 @@ gj_fault_stats_get(struct gj_fault_stats *pOut)
         __atomic_load_n(&g_faultStats.u64ClusterSoftCapHit, __ATOMIC_RELAXED);
     pOut->u64ClusterSoftPresent =
         __atomic_load_n(&g_faultStats.u64ClusterSoftPresent, __ATOMIC_RELAXED);
+
+    /*
+     * Soft class totals log on stats snapshot when any soft class event
+     * has been noted (greppable inventory). Never hard-gates.
+     * Honesty: not product SEH complete.
+     * greppable: fault: soft class
+     */
+    if (__atomic_load_n(&g_u64SoftClassCalls, __ATOMIC_RELAXED) != 0) {
+        fault_class_soft_log();
+    }
 }
 
 void
@@ -532,4 +714,14 @@ gj_fault_stats_reset(void)
     __atomic_store_n(&g_faultStats.u64ClusterSoftPages, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_faultStats.u64ClusterSoftCapHit, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_faultStats.u64ClusterSoftPresent, 0, __ATOMIC_RELAXED);
+
+    /* Soft class counters (file-local; not in gj_fault_stats ABI). */
+    __atomic_store_n(&g_u64SoftClassUser, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassKernel, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassPresent, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassNot, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassWrite, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassExec, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftClassCalls, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32SoftClassLogged, 0, __ATOMIC_RELAXED);
 }

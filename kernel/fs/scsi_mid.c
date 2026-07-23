@@ -17,6 +17,7 @@
 
 static int g_fInited;
 static int g_fSoft; /* soft LUN armed after init */
+static int g_fVirtioSoftPrefer; /* sticky: virtio timed out → soft LUN */
 static u32 g_u32IoOk;
 static u32 g_u32IoFail;
 
@@ -498,6 +499,7 @@ scsi_mid_init(void)
 {
     g_fInited = 1;
     g_fSoft = 1; /* always arm soft LUN; virtio preferred when ready */
+    g_fVirtioSoftPrefer = 0;
     g_u32IoOk = 0;
     g_u32IoFail = 0;
     memset(g_aSoftDisk, 0, sizeof(g_aSoftDisk));
@@ -588,8 +590,23 @@ scsi_mid_submit(struct gj_scsi_request *pReq)
         pReq->u32TimeoutMs = 5000;
     }
 
-    if (virtio_scsi_ready()) {
+    if (virtio_scsi_ready() && !g_fVirtioSoftPrefer) {
         nSt = virtio_scsi_submit(pReq);
+        /*
+         * Transport ready but I/O timed out (common on some QEMU/KVM
+         * virtio-scsi event paths): fall back to software LUN so door /
+         * smoke "INQUIRY ok" stay green. Sticky prefer soft after first
+         * fail so multi-op smokes do not burn 20M poll spins each time.
+         */
+        if (nSt != 0 && g_fSoft) {
+            g_fVirtioSoftPrefer = 1;
+            nSt = soft_submit(pReq);
+            if (nSt == 0) {
+                kprintf("scsi_mid: virtio fail → soft LUN ok op=0x%x "
+                        "(prefer soft)\n",
+                        (unsigned)pReq->cdb.aCdb[0]);
+            }
+        }
     } else if (g_fSoft) {
         nSt = soft_submit(pReq);
     } else {

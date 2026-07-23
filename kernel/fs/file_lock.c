@@ -13,6 +13,12 @@
  *   - GETLK: lowest-start conflict; write preferred on equal start
  *   - Overflow-safe range ends; adjacent same-type coalesce
  *
+ * Soft lock inventory (Wave 8 exclusive deepen):
+ *   - Live held + free slot counts; peak held; waiter / wake_gen snapshot
+ *   - Soft deny tallies: EAGAIN (nonblock conflict), EDEADLK, ENOLCK
+ *   - Cumulative set_ok / unlk_ok / get / get_hit / block / wake / release
+ *   greppable: "file_lock: soft …"
+ *
  * SMP-safe via ticket-free spinlock; pure C11 dual-license product path.
  */
 #include <gj/file_lock.h>
@@ -70,6 +76,29 @@ static struct gj_spinlock  g_lkLock;
 /* Soft multi-waiter block object (all fcntl waiters; re-check on wake). */
 static u32                 g_u32WaitObj;
 
+/*
+ * Soft product inventory (Wave 8). Cumulative unless noted live/peak.
+ * greppable: file_lock: soft …
+ */
+static u32 g_u32SoftHeldPeak;   /* max live held (g_u32NLocks high-water) */
+static u32 g_u32SoftSetOk;      /* successful RDLCK/WRLCK grants */
+static u32 g_u32SoftUnlkOk;     /* successful UNLCK carves */
+static u32 g_u32SoftDeny;       /* soft denies total (eagain+deadlk+nolck) */
+static u32 g_u32SoftDenyEagain; /* nonblock conflict → -EAGAIN */
+static u32 g_u32SoftDenyDeadlk; /* soft cycle → -EDEADLK */
+static u32 g_u32SoftDenyNolck;  /* table full / carve fail → -ENOLCK */
+static u32 g_u32SoftGet;        /* F_GETLK probes */
+static u32 g_u32SoftGetHit;     /* GETLK conflict rewrites */
+static u32 g_u32SoftBlock;      /* times entered F_SETLKW wait path */
+static u32 g_u32SoftWakeCalls;  /* soft multi-wake invocations */
+static u32 g_u32SoftWakeN;      /* waiters woken (sum of thread_wake ret) */
+static u32 g_u32SoftRelFd;      /* slots cleared via release_fd */
+static u32 g_u32SoftRelPid;     /* slots cleared via release_pid */
+
+static void soft_held_note(void);
+static void soft_deny_note(u32 *pu32Bucket);
+static void soft_inventory_log(void);
+
 void
 file_lock_init(void)
 {
@@ -79,9 +108,111 @@ file_lock_init(void)
     g_u32NWaiters = 0;
     g_u32WakeGen = 0;
     g_u32WaitObj = 0;
+    g_u32SoftHeldPeak = 0;
+    g_u32SoftSetOk = 0;
+    g_u32SoftUnlkOk = 0;
+    g_u32SoftDeny = 0;
+    g_u32SoftDenyEagain = 0;
+    g_u32SoftDenyDeadlk = 0;
+    g_u32SoftDenyNolck = 0;
+    g_u32SoftGet = 0;
+    g_u32SoftGetHit = 0;
+    g_u32SoftBlock = 0;
+    g_u32SoftWakeCalls = 0;
+    g_u32SoftWakeN = 0;
+    g_u32SoftRelFd = 0;
+    g_u32SoftRelPid = 0;
     gj_spin_init(&g_lkLock);
     kprintf("file_lock: init slots=%u waiters=%u locks=0\n", GJ_FLOCK_MAX,
             GJ_FLOCK_MAX_WAITERS);
+    /* Grep: file_lock: soft (baseline inventory after init) */
+    soft_inventory_log();
+}
+
+/**
+ * Note live held high-water. Caller holds g_lkLock (or single-threaded init).
+ */
+static void
+soft_held_note(void)
+{
+    if (g_u32NLocks > g_u32SoftHeldPeak) {
+        g_u32SoftHeldPeak = g_u32NLocks;
+    }
+}
+
+/**
+ * Bump soft deny total + optional typed bucket. Caller holds g_lkLock or
+ * is on a terminal return path before unlock is fine either way (u32 only).
+ */
+static void
+soft_deny_note(u32 *pu32Bucket)
+{
+    g_u32SoftDeny++;
+    if (pu32Bucket != NULL) {
+        (*pu32Bucket)++;
+    }
+}
+
+/**
+ * Greppable soft lock inventory (product / smoke).
+ *   file_lock: soft held=… free=… peak=… waiters=… gen=…
+ *   file_lock: soft deny=… eagain=… deadlk=… nolck=… set_ok=… unlk_ok=…
+ *   file_lock: soft get=… get_hit=… block=… wake=… wake_n=… rel_fd=… rel_pid=…
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Held;
+    u32 u32Wait;
+    u32 u32Gen;
+    u32 u32Free;
+    u32 u32Peak;
+    u32 u32Deny;
+    u32 u32Eagain;
+    u32 u32Deadlk;
+    u32 u32Nolck;
+    u32 u32SetOk;
+    u32 u32UnlkOk;
+    u32 u32Get;
+    u32 u32GetHit;
+    u32 u32Block;
+    u32 u32Wake;
+    u32 u32WakeN;
+    u32 u32RelFd;
+    u32 u32RelPid;
+
+    gj_spin_lock(&g_lkLock);
+    u32Held = g_u32NLocks;
+    u32Wait = g_u32NWaiters;
+    u32Gen = g_u32WakeGen;
+    /* Bound free so soft inventory never wraps if counters ever desync. */
+    u32Free = (u32Held < (u32)GJ_FLOCK_MAX) ? ((u32)GJ_FLOCK_MAX - u32Held)
+                                            : 0u;
+    u32Peak = g_u32SoftHeldPeak;
+    u32Deny = g_u32SoftDeny;
+    u32Eagain = g_u32SoftDenyEagain;
+    u32Deadlk = g_u32SoftDenyDeadlk;
+    u32Nolck = g_u32SoftDenyNolck;
+    u32SetOk = g_u32SoftSetOk;
+    u32UnlkOk = g_u32SoftUnlkOk;
+    u32Get = g_u32SoftGet;
+    u32GetHit = g_u32SoftGetHit;
+    u32Block = g_u32SoftBlock;
+    u32Wake = g_u32SoftWakeCalls;
+    u32WakeN = g_u32SoftWakeN;
+    u32RelFd = g_u32SoftRelFd;
+    u32RelPid = g_u32SoftRelPid;
+    gj_spin_unlock(&g_lkLock);
+
+    kprintf("file_lock: soft held=%u free=%u peak=%u waiters=%u gen=%u\n",
+            u32Held, u32Free, u32Peak, u32Wait, u32Gen);
+    kprintf("file_lock: soft deny=%u eagain=%u deadlk=%u nolck=%u "
+            "set_ok=%u unlk_ok=%u\n",
+            u32Deny, u32Eagain, u32Deadlk, u32Nolck, u32SetOk, u32UnlkOk);
+    kprintf("file_lock: soft get=%u get_hit=%u block=%u wake=%u wake_n=%u "
+            "rel_fd=%u rel_pid=%u\n",
+            u32Get, u32GetHit, u32Block, u32Wake, u32WakeN, u32RelFd,
+            u32RelPid);
 }
 
 static i64
@@ -159,6 +290,7 @@ slot_alloc(void)
         if (!g_aLk[iSlot].u8Used) {
             g_aLk[iSlot].u8Used = 1;
             g_u32NLocks++;
+            soft_held_note(); /* live held high-water (soft inventory) */
             return &g_aLk[iSlot];
         }
     }
@@ -175,6 +307,7 @@ slot_free(struct flock_slot *pS)
     if (g_u32NLocks > 0) {
         g_u32NLocks--;
     }
+    /* Peak is never reduced; live held falls with free. */
 }
 
 static void
@@ -203,8 +336,13 @@ wake_gen_bump(void)
 static u32
 soft_wake_waiters(void)
 {
+    u32 u32N;
+
     /* All soft waiters share g_u32WaitObj; they re-check conflict. */
-    return thread_wake(&g_u32WaitObj, GJ_FLOCK_TAG_WAITER, GJ_FLOCK_SOFT_WAKE_MAX);
+    u32N = thread_wake(&g_u32WaitObj, GJ_FLOCK_TAG_WAITER, GJ_FLOCK_SOFT_WAKE_MAX);
+    g_u32SoftWakeCalls++;
+    g_u32SoftWakeN += u32N;
+    return u32N;
 }
 
 /**
@@ -541,6 +679,9 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
         i64St = carve_pid_range(i64Fd, u32Pid, i64Start, i64End);
         if (i64St == 0) {
             wake_gen_bump();
+            g_u32SoftUnlkOk++;
+        } else if (i64St == -LINUX_ENOLCK) {
+            soft_deny_note(&g_u32SoftDenyNolck);
         }
         gj_spin_unlock(&g_lkLock);
         if (i64St == 0) {
@@ -565,6 +706,7 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
                 u32Blocker = pHit->u32Pid;
             }
             if (!fBlock) {
+                soft_deny_note(&g_u32SoftDenyEagain);
                 gj_spin_unlock(&g_lkLock);
                 if (fRegistered) {
                     gj_spin_lock(&g_lkLock);
@@ -575,12 +717,14 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
             }
             /* Soft deadlock before sleeping. greppable: FLOCK_SOFT_DEADLOCK */
             if (soft_deadlock(u32Pid, u32Blocker)) {
+                soft_deny_note(&g_u32SoftDenyDeadlk);
                 if (fRegistered) {
                     waiter_unregister(nWait);
                 }
                 gj_spin_unlock(&g_lkLock);
                 return -(i64)GJ_FLOCK_EDEADLK;
             }
+            g_u32SoftBlock++;
             if (!fRegistered) {
                 nWait = waiter_register(i64Fd, pFl->i16Type, i64Start, i64End,
                                         u32Pid, u32Blocker);
@@ -619,6 +763,9 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
         /* Carve own overlapping ranges, then insert. */
         i64St = carve_pid_range(i64Fd, u32Pid, i64Start, i64End);
         if (i64St != 0) {
+            if (i64St == -LINUX_ENOLCK) {
+                soft_deny_note(&g_u32SoftDenyNolck);
+            }
             if (fRegistered) {
                 waiter_unregister(nWait);
             }
@@ -627,6 +774,7 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
         }
         pNew = slot_alloc();
         if (pNew == NULL) {
+            soft_deny_note(&g_u32SoftDenyNolck);
             if (fRegistered) {
                 waiter_unregister(nWait);
             }
@@ -635,6 +783,7 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
         }
         slot_fill(pNew, i64Fd, pFl->i16Type, i64Start, i64End, u32Pid);
         coalesce_pid(i64Fd, u32Pid);
+        g_u32SoftSetOk++;
         if (fRegistered) {
             waiter_unregister(nWait);
         }
@@ -669,6 +818,7 @@ file_lock_get(i64 i64Fd, struct gj_flock *pFlInOut)
     }
 
     gj_spin_lock(&g_lkLock);
+    g_u32SoftGet++;
     if (conflict(i64Fd, i16Probe, i64Start, i64End, u32Pid, &pHit) &&
         pHit != NULL) {
         pFlInOut->i16Type = pHit->i16Type;
@@ -677,6 +827,7 @@ file_lock_get(i64 i64Fd, struct gj_flock *pFlInOut)
         pFlInOut->i64Len =
             pHit->i64End < 0 ? 0 : (pHit->i64End - pHit->i64Start);
         pFlInOut->u32Pid = pHit->u32Pid;
+        g_u32SoftGetHit++;
         gj_spin_unlock(&g_lkLock);
         return 0;
     }
@@ -694,6 +845,12 @@ file_lock_count(void)
     gj_spin_lock(&g_lkLock);
     u32N = g_u32NLocks;
     gj_spin_unlock(&g_lkLock);
+    /*
+     * Emit soft inventory on stats read so bring-up smoke
+     * (file_lock: count=… PASS) also greps held/deny lines.
+     * greppable: file_lock: soft
+     */
+    soft_inventory_log();
     return u32N;
 }
 
@@ -737,6 +894,7 @@ file_lock_release_fd(i64 i64Fd)
     }
     if (u32Cleared > 0) {
         wake_gen_bump();
+        g_u32SoftRelFd += u32Cleared;
     }
     gj_spin_unlock(&g_lkLock);
     if (u32Cleared > 0) {
@@ -773,6 +931,7 @@ file_lock_release_pid(u32 u32Pid)
     }
     if (u32Cleared > 0) {
         wake_gen_bump();
+        g_u32SoftRelPid += u32Cleared;
     }
     gj_spin_unlock(&g_lkLock);
     if (u32Cleared > 0) {

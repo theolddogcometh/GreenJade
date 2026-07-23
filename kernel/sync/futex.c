@@ -23,6 +23,25 @@
  *   G-FUT-ROBUST — per-thr robust list head + soft exit OWNER_DIED wake
  *                  (grep: futex: robust set/get/exit)
  *
+ * Soft wait/wake inventory (file-local sticky counters; never hard-gate).
+ * Greppable prefix-stable serial markers (futex: soft …):
+ *   futex: soft wait inventory   — capacity + path catalog at init
+ *   futex: soft wake inventory   — wake/bitset/timer/cancel catalog at init
+ *   futex: soft stats            — aggregate wait/wake counters
+ *   futex: soft wait park        — blocked + schedule success path
+ *   futex: soft wait eagain      — value mismatch (fast or under lock)
+ *   futex: soft wait etimedout   — deadline (immediate or timer reap)
+ *   futex: soft wait enomem      — waiter table full
+ *   futex: soft wait einval      — bad args / shared zero PA / no thr
+ *   futex: soft wait cancel      — lost-wake recheck cancel after enqueue
+ *   futex: soft wait bitset      — WAIT_BITSET entry (non-MATCH_ANY)
+ *   futex: soft wake hit         — at least one waiter woken
+ *   futex: soft wake miss        — zero waiters matched
+ *   futex: soft wake bitset      — WAKE_BITSET entry (non-MATCH_ANY)
+ *   futex: soft wake bitset miss — key match, bitset no overlap
+ *   futex: soft timer reap       — timeout wake via futex_timer_check
+ *   futex: soft thr cancel       — cancel_thr cleared dying-thr slots
+ *
  * Wait object for thread_block/wake is the futex_waiter slot itself; tag 0.
  * Fixed table (no heap) — ENOMEM when all slots are in use.
  * Product path never busy-spins (G-FUT-3).
@@ -30,6 +49,7 @@
 #include <gj/cpu.h>
 #include <gj/error.h>
 #include <gj/futex.h>
+#include <gj/klog.h>
 #include <gj/linux_abi.h>
 #include <gj/process.h>
 #include <gj/spinlock.h>
@@ -101,12 +121,165 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
+/*
+ * Soft wait/wake sticky counters (wrap OK; diagnostics only).
+ * Bumped off the product return paths; never hard-gate behavior.
+ * greppable: futex: soft stats
+ */
+struct futex_soft_stats {
+    u64 u64WaitEnter;       /* futex_wait_common entries */
+    u64 u64WaitPark;        /* schedule() after successful block */
+    u64 u64WaitOk;          /* return 0 (wake, not timeout) */
+    u64 u64WaitEagain;      /* value mismatch */
+    u64 u64WaitEtimedout;   /* deadline (immediate or post-park) */
+    u64 u64WaitEnomem;      /* table full */
+    u64 u64WaitEinval;      /* bad args / no thr / zero shared PA */
+    u64 u64WaitCancel;      /* lost-wake cancel after enqueue+block */
+    u64 u64WaitEarlyWake;   /* woken/timed before schedule */
+    u64 u64WaitBitset;      /* WAIT_BITSET entry (bitset != MATCH_ANY) */
+    u64 u64WaitClassic;     /* classic WAIT (MATCH_ANY bitset) */
+    u64 u64WakeEnter;       /* futex_wake_common entries */
+    u64 u64WakeHit;         /* at least one waiter woken */
+    u64 u64WakeMiss;        /* zero waiters matched (count > 0) */
+    u64 u64WakeWoken;       /* total waiter slots woken */
+    u64 u64WakeEinval;      /* null key / bitset0 / shared zero PA */
+    u64 u64WakeZeroCount;   /* u32Count == 0 early return */
+    u64 u64WakeBitset;      /* WAKE_BITSET entry (bitset != MATCH_ANY) */
+    u64 u64WakeClassic;     /* classic WAKE (MATCH_ANY bitset) */
+    u64 u64WakeBitsetMiss;  /* key matched but bitset no overlap */
+    u64 u64TimerReap;       /* futex_timer_check timed-out wakes */
+    u64 u64ThrCancel;       /* slots cleared by futex_cancel_thr */
+    u64 u64SoftLog;         /* times soft inventory/stats printed */
+};
+
+static struct futex_soft_stats g_soft;
+/* One-shot deep print after first product wait/wake activity (soft). */
+static u8 g_fSoftStatsOnce;
+
+/** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
+static void
+futex_soft_inc(u64 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Greppable soft wait/wake inventory + aggregate stats.
+ * Called from futex_init and once after first wait/wake activity.
+ * Never allocates; safe from non-IRQ product paths.
+ * greppable: futex: soft wait inventory
+ * greppable: futex: soft wake inventory
+ * greppable: futex: soft stats
+ */
+static void
+futex_soft_log(void)
+{
+    futex_soft_inc(&g_soft.u64SoftLog);
+
+    /*
+     * Catalog lines (prefix-stable): declare fixed-table capacity and the
+     * wait/wake soft path surface so smoke/scripts can grep product depth
+     * without parsing C.
+     */
+    /* Grep: futex: soft wait inventory */
+    kprintf("futex: soft wait inventory slots=%u park=thread_block+schedule "
+            "paths=eagain,etimedout,enomem,einval,cancel,early_wake,bitset "
+            "lost_wake=recheck_under_lock g_fut3=no_product_spin "
+            "enter=%lu park=%lu ok=%lu eagain=%lu etimedout=%lu enomem=%lu "
+            "einval=%lu cancel=%lu early=%lu bitset=%lu classic=%lu\n",
+            (unsigned)GJ_FUTEX_MAX_WAITERS,
+            (unsigned long)g_soft.u64WaitEnter,
+            (unsigned long)g_soft.u64WaitPark,
+            (unsigned long)g_soft.u64WaitOk,
+            (unsigned long)g_soft.u64WaitEagain,
+            (unsigned long)g_soft.u64WaitEtimedout,
+            (unsigned long)g_soft.u64WaitEnomem,
+            (unsigned long)g_soft.u64WaitEinval,
+            (unsigned long)g_soft.u64WaitCancel,
+            (unsigned long)g_soft.u64WaitEarlyWake,
+            (unsigned long)g_soft.u64WaitBitset,
+            (unsigned long)g_soft.u64WaitClassic);
+
+    /* Grep: futex: soft wake inventory */
+    kprintf("futex: soft wake inventory match=key+bitset_and irqsave_lock=1 "
+            "timer_reap=futex_timer_check thr_cancel=futex_cancel_thr "
+            "enter=%lu hit=%lu miss=%lu woken=%lu einval=%lu zero=%lu "
+            "bitset=%lu classic=%lu bitset_miss=%lu reap=%lu thr_cancel=%lu\n",
+            (unsigned long)g_soft.u64WakeEnter,
+            (unsigned long)g_soft.u64WakeHit,
+            (unsigned long)g_soft.u64WakeMiss,
+            (unsigned long)g_soft.u64WakeWoken,
+            (unsigned long)g_soft.u64WakeEinval,
+            (unsigned long)g_soft.u64WakeZeroCount,
+            (unsigned long)g_soft.u64WakeBitset,
+            (unsigned long)g_soft.u64WakeClassic,
+            (unsigned long)g_soft.u64WakeBitsetMiss,
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned long)g_soft.u64ThrCancel);
+
+    /* Grep: futex: soft stats */
+    kprintf("futex: soft stats wait_enter=%lu wait_park=%lu wait_ok=%lu "
+            "wait_eagain=%lu wait_etimedout=%lu wait_enomem=%lu "
+            "wait_einval=%lu wait_cancel=%lu wait_early=%lu "
+            "wait_bitset=%lu wait_classic=%lu wake_enter=%lu wake_hit=%lu "
+            "wake_miss=%lu wake_woken=%lu wake_einval=%lu wake_zero=%lu "
+            "wake_bitset=%lu wake_classic=%lu wake_bitset_miss=%lu "
+            "timer_reap=%lu thr_cancel=%lu soft_log=%lu\n",
+            (unsigned long)g_soft.u64WaitEnter,
+            (unsigned long)g_soft.u64WaitPark,
+            (unsigned long)g_soft.u64WaitOk,
+            (unsigned long)g_soft.u64WaitEagain,
+            (unsigned long)g_soft.u64WaitEtimedout,
+            (unsigned long)g_soft.u64WaitEnomem,
+            (unsigned long)g_soft.u64WaitEinval,
+            (unsigned long)g_soft.u64WaitCancel,
+            (unsigned long)g_soft.u64WaitEarlyWake,
+            (unsigned long)g_soft.u64WaitBitset,
+            (unsigned long)g_soft.u64WaitClassic,
+            (unsigned long)g_soft.u64WakeEnter,
+            (unsigned long)g_soft.u64WakeHit,
+            (unsigned long)g_soft.u64WakeMiss,
+            (unsigned long)g_soft.u64WakeWoken,
+            (unsigned long)g_soft.u64WakeEinval,
+            (unsigned long)g_soft.u64WakeZeroCount,
+            (unsigned long)g_soft.u64WakeBitset,
+            (unsigned long)g_soft.u64WakeClassic,
+            (unsigned long)g_soft.u64WakeBitsetMiss,
+            (unsigned long)g_soft.u64TimerReap,
+            (unsigned long)g_soft.u64ThrCancel,
+            (unsigned long)g_soft.u64SoftLog);
+}
+
+/**
+ * After first product activity, print soft inventory once (mirrors sched
+ * soft-stats-once pattern). Safe from wait/wake return paths only.
+ */
+static void
+futex_soft_maybe_once(void)
+{
+    if (g_fSoftStatsOnce != 0) {
+        return;
+    }
+    if (g_soft.u64WaitEnter == 0 && g_soft.u64WakeEnter == 0) {
+        return;
+    }
+    g_fSoftStatsOnce = 1;
+    futex_soft_log();
+}
+
 void
 futex_init(void)
 {
     memset(g_aWaiters, 0, sizeof(g_aWaiters));
     memset(g_aRobust, 0, sizeof(g_aRobust));
+    memset(&g_soft, 0, sizeof(g_soft));
+    g_fSoftStatsOnce = 0;
     gj_spin_init(&g_lockFutex);
+    /* Greppable soft wait/wake inventory at bring-up (zeros expected). */
+    futex_soft_log();
 }
 
 /*
@@ -305,6 +478,7 @@ futex_timer_check(void)
     u32 iSlot;
     u64 u64Now;
     u64 u64Flags;
+    u32 u32Reaped = 0;
 
     if (!timer_ready()) {
         return;
@@ -324,9 +498,14 @@ futex_timer_check(void)
             pW->u32TimedOut = 1;
             pW->u8Waiting = 0;
             (void)thread_wake(pW, 0, 1);
+            u32Reaped++;
         }
     }
     gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+    /* futex: soft timer reap — IRQ-safe counter only (no kprintf). */
+    if (u32Reaped > 0) {
+        g_soft.u64TimerReap += (u64)u32Reaped;
+    }
 }
 
 /*
@@ -343,18 +522,36 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
     u32 u32TimedOut;
     u64 u64Flags;
 
+    /* futex: soft wait enter (classic or bitset). */
+    futex_soft_inc(&g_soft.u64WaitEnter);
+    if (u32Bitset != 0 && u32Bitset != GJ_FUTEX_BITSET_MATCH_ANY) {
+        /* futex: soft wait bitset */
+        futex_soft_inc(&g_soft.u64WaitBitset);
+    } else if (u32Bitset == GJ_FUTEX_BITSET_MATCH_ANY) {
+        futex_soft_inc(&g_soft.u64WaitClassic);
+    }
+
     if (pU32 == NULL || pKey == NULL) {
+        /* futex: soft wait einval */
+        futex_soft_inc(&g_soft.u64WaitEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     if ((pKey->u64Uaddr & 3ull) != 0) {
+        futex_soft_inc(&g_soft.u64WaitEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     /* Linux: bitset 0 is EINVAL for WAIT_BITSET; classic uses MATCH_ANY. */
     if (u32Bitset == 0) {
+        futex_soft_inc(&g_soft.u64WaitEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     /* Shared keys with zero PA cannot form a stable queue. */
     if (!pKey->u8Private && pKey->u64Phys == 0) {
+        futex_soft_inc(&g_soft.u64WaitEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
 
@@ -364,11 +561,16 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
      * No schedulable current thread → fail closed (no pause spin).
      */
     if (pThr == NULL) {
+        futex_soft_inc(&g_soft.u64WaitEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
 
     /* Fast path: already mismatched before taking the table lock. */
     if (futex_load_u32(pU32) != u32Val) {
+        /* futex: soft wait eagain */
+        futex_soft_inc(&g_soft.u64WaitEagain);
+        futex_soft_maybe_once();
         return -LINUX_EAGAIN;
     }
 
@@ -383,6 +585,9 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
     }
     if (pW == NULL) {
         gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+        /* futex: soft wait enomem */
+        futex_soft_inc(&g_soft.u64WaitEnomem);
+        futex_soft_maybe_once();
         return -LINUX_ENOMEM;
     }
 
@@ -392,6 +597,8 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
      */
     if (futex_load_u32(pU32) != u32Val) {
         gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+        futex_soft_inc(&g_soft.u64WaitEagain);
+        futex_soft_maybe_once();
         return -LINUX_EAGAIN;
     }
 
@@ -411,6 +618,9 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
         pW->u8Waiting = 0;
         pW->u32Bitset = 0;
         gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+        /* futex: soft wait etimedout */
+        futex_soft_inc(&g_soft.u64WaitEtimedout);
+        futex_soft_maybe_once();
         return -LINUX_ETIMEDOUT;
     }
 
@@ -420,6 +630,10 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
     if (futex_load_u32(pU32) != u32Val) {
         waiter_cancel_blocked(pW);
         gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+        /* futex: soft wait cancel */
+        futex_soft_inc(&g_soft.u64WaitCancel);
+        futex_soft_inc(&g_soft.u64WaitEagain);
+        futex_soft_maybe_once();
         return -LINUX_EAGAIN;
     }
 
@@ -438,13 +652,20 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
             pThr->u32State = GJ_THR_RUNNING;
         }
         gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+        futex_soft_inc(&g_soft.u64WaitEarlyWake);
         if (u32TimedOut) {
+            futex_soft_inc(&g_soft.u64WaitEtimedout);
+            futex_soft_maybe_once();
             return -LINUX_ETIMEDOUT;
         }
+        futex_soft_inc(&g_soft.u64WaitOk);
+        futex_soft_maybe_once();
         return 0;
     }
 
     gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+    /* futex: soft wait park */
+    futex_soft_inc(&g_soft.u64WaitPark);
     schedule();
 
     u64Flags = gj_spin_lock_irqsave(&g_lockFutex);
@@ -455,8 +676,12 @@ futex_wait_common(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKe
     gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
 
     if (u32TimedOut) {
+        futex_soft_inc(&g_soft.u64WaitEtimedout);
+        futex_soft_maybe_once();
         return -LINUX_ETIMEDOUT;
     }
+    futex_soft_inc(&g_soft.u64WaitOk);
+    futex_soft_maybe_once();
     return 0;
 }
 
@@ -473,7 +698,7 @@ futex_wait(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKey,
                              GJ_FUTEX_BITSET_MATCH_ANY);
 }
 
-/* futex: wait_bitset — G-FUT-BITSET soft product */
+/* futex: wait_bitset — G-FUT-BITSET soft product (futex: soft wait bitset) */
 i64
 futex_wait_bitset(volatile u32 *pU32, u32 u32Val, const struct gj_futex_key *pKey,
                   u64 u64DeadlineMonoNsec, u32 u32Bitset)
@@ -491,17 +716,36 @@ futex_wake_common(const struct gj_futex_key *pKey, u32 u32Count, u32 u32Bitset)
     u32 iSlot;
     u32 u32Woken = 0;
     u64 u64Flags;
+    u32 u32BitsetMiss = 0;
+
+    /* futex: soft wake enter (classic or bitset). */
+    futex_soft_inc(&g_soft.u64WakeEnter);
+    if (u32Bitset != 0 && u32Bitset != GJ_FUTEX_BITSET_MATCH_ANY) {
+        /* futex: soft wake bitset */
+        futex_soft_inc(&g_soft.u64WakeBitset);
+    } else if (u32Bitset == GJ_FUTEX_BITSET_MATCH_ANY) {
+        futex_soft_inc(&g_soft.u64WakeClassic);
+    }
 
     if (pKey == NULL) {
+        /* futex: soft wake einval */
+        futex_soft_inc(&g_soft.u64WakeEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     if (u32Bitset == 0) {
+        futex_soft_inc(&g_soft.u64WakeEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     if (u32Count == 0) {
+        futex_soft_inc(&g_soft.u64WakeZeroCount);
+        futex_soft_maybe_once();
         return 0;
     }
     if (!pKey->u8Private && pKey->u64Phys == 0) {
+        futex_soft_inc(&g_soft.u64WakeEinval);
+        futex_soft_maybe_once();
         return -LINUX_EINVAL;
     }
 
@@ -517,6 +761,8 @@ futex_wake_common(const struct gj_futex_key *pKey, u32 u32Count, u32 u32Bitset)
             continue;
         }
         if ((pW->u32Bitset & u32Bitset) == 0) {
+            /* futex: soft wake bitset miss — key ok, mask no overlap */
+            u32BitsetMiss++;
             continue;
         }
         pW->u8Waiting = 0;
@@ -524,6 +770,20 @@ futex_wake_common(const struct gj_futex_key *pKey, u32 u32Count, u32 u32Bitset)
         u32Woken++;
     }
     gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+
+    if (u32BitsetMiss > 0) {
+        /* futex: soft wake bitset miss */
+        g_soft.u64WakeBitsetMiss += (u64)u32BitsetMiss;
+    }
+    if (u32Woken > 0) {
+        /* futex: soft wake hit */
+        futex_soft_inc(&g_soft.u64WakeHit);
+        g_soft.u64WakeWoken += (u64)u32Woken;
+    } else {
+        /* futex: soft wake miss */
+        futex_soft_inc(&g_soft.u64WakeMiss);
+    }
+    futex_soft_maybe_once();
     return (i64)u32Woken;
 }
 
@@ -537,7 +797,7 @@ futex_wake(const struct gj_futex_key *pKey, u32 u32Count)
     return futex_wake_common(pKey, u32Count, GJ_FUTEX_BITSET_MATCH_ANY);
 }
 
-/* futex: wake_bitset — G-FUT-BITSET soft product */
+/* futex: wake_bitset — G-FUT-BITSET soft product (futex: soft wake bitset) */
 i64
 futex_wake_bitset(const struct gj_futex_key *pKey, u32 u32Count, u32 u32Bitset)
 {
@@ -828,5 +1088,9 @@ futex_cancel_thr(struct gj_thread *pThr)
         u32Cleared++;
     }
     gj_spin_unlock_irqrestore(&g_lockFutex, u64Flags);
+    /* futex: soft thr cancel */
+    if (u32Cleared > 0) {
+        g_soft.u64ThrCancel += (u64)u32Cleared;
+    }
     return u32Cleared;
 }

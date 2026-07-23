@@ -54,9 +54,17 @@
  * After enable: re-read L1 block descriptors, MAIR/TCR/TTBR0/SCTLR via MRS,
  * soft-touch DRAM through Attr1 and soft-read a known MMIO FR word through
  * Attr0 (PL011 UART FR @ 0x09000018 — RO status; never writes DR).
+ *
+ * Soft MMU inventory (deepen; pure read of live TCR/TTBR after enable):
+ *   page size soft  — TCR_EL1.TG0 → 4 KiB expected (TG0=0b00)
+ *   TTBR soft presence — TTBR0_EL1 BADDR non-zero / matches L1; TTBR1=0
  * Greppable:
  *   aarch64: mmu PASS
  *   aarch64: mmu map soft PASS   (L1[0] device + L1[1] normal + M/C/I)
+ *   aarch64: mmu soft page_size=… tg0=… t0sz=…
+ *   aarch64: mmu soft ttbr0=… ttbr1=… present=… ttbr1_clear=…
+ *   aarch64: mmu soft PASS | FAIL
+ *   aarch64: mmu soft SKIP (no page)
  *
  * Freestanding pure C; no GPL Linux arch code.
  */
@@ -80,13 +88,26 @@ extern void *aarch64_pmm_alloc(void);
 
 /* TCR_EL1: T0SZ=25 → 39-bit VA; TG0=4K; IPS=40-bit; inner/outer WB walks */
 #define TCR_T0SZ_25   (25ull)
-#define TCR_TG0_4K    (0ull << 14)
+#define TCR_T0SZ_MASK (0x3full)
+#define TCR_TG0_SHIFT 14
+#define TCR_TG0_MASK  (3ull << TCR_TG0_SHIFT)
+#define TCR_TG0_4K    (0ull << TCR_TG0_SHIFT) /* 0b00 → 4 KiB granule */
+#define TCR_TG0_64K   (1ull << TCR_TG0_SHIFT) /* 0b01 → 64 KiB */
+#define TCR_TG0_16K   (2ull << TCR_TG0_SHIFT) /* 0b10 → 16 KiB */
 #define TCR_SH0_IS    (3ull << 12) /* Inner Shareable page-table walks */
 #define TCR_ORGN0_WB  (1ull << 10) /* Outer WB, read alloc (01 encoding) */
 #define TCR_IRGN0_WB  (1ull << 8)  /* Inner WB, read alloc */
 #define TCR_IPS_40    (2ull << 32) /* 40-bit PA */
 #define TCR_EL1_VAL   (TCR_T0SZ_25 | TCR_TG0_4K | TCR_SH0_IS | TCR_ORGN0_WB | \
                        TCR_IRGN0_WB | TCR_IPS_40)
+
+/* Soft page-size decode helpers (bytes; 0 if TG0 reserved/unknown). */
+#define MMU_SOFT_PAGE_4K   4096ul
+#define MMU_SOFT_PAGE_16K  16384ul
+#define MMU_SOFT_PAGE_64K  65536ul
+
+/* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
+#define TTBR_BADDR_MASK (~0xffful)
 
 /* Block / table descriptors (stage-1) */
 #define DESC_VALID    (1ull << 0)
@@ -208,10 +229,10 @@ mmu_map_soft_observe(unsigned long *pL1)
     if (mair != MAIR_EL1_VAL) {
         fOk = 0;
     }
-    if ((tcr & 0x3full) != TCR_T0SZ_25) {
+    if ((tcr & TCR_T0SZ_MASK) != TCR_T0SZ_25) {
         fOk = 0;
     }
-    if ((ttbr0 & ~0xffful) != ((unsigned long)(void *)pL1 & ~0xffful)) {
+    if ((ttbr0 & TTBR_BADDR_MASK) != ((unsigned long)(void *)pL1 & TTBR_BADDR_MASK)) {
         fOk = 0;
     }
     if ((sctlr & (SCTLR_M | SCTLR_C | SCTLR_I)) != (SCTLR_M | SCTLR_C | SCTLR_I)) {
@@ -253,6 +274,120 @@ mmu_map_soft_observe(unsigned long *pL1)
     return fOk;
 }
 
+/*
+ * Soft MMU inventory deepen (non-fatal):
+ *   - page size soft: live TCR.TG0 → expected 4 KiB granule
+ *   - TTBR soft presence: TTBR0 BADDR matches L1; TTBR1 cleared (TTBR0-only)
+ * Emits greppable "aarch64: mmu soft …" lines. Returns 1 on PASS.
+ */
+static int
+mmu_soft_inventory(unsigned long *pL1)
+{
+    unsigned long uTcr;
+    unsigned long uTtbr0;
+    unsigned long uTtbr1;
+    unsigned long uTg0;
+    unsigned long uT0sz;
+    unsigned long cbPage;
+    unsigned long paL1;
+    unsigned long paTtbr0;
+    int fPageOk;
+    int fTtbrPresent;
+    int fTtbr1Clear;
+    int fTtbrMatch;
+    int fOk;
+
+    __asm__ volatile("mrs %0, tcr_el1" : "=r"(uTcr));
+    __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(uTtbr0));
+    __asm__ volatile("mrs %0, ttbr1_el1" : "=r"(uTtbr1));
+
+    uT0sz = uTcr & TCR_T0SZ_MASK;
+    uTg0 = (uTcr & TCR_TG0_MASK) >> TCR_TG0_SHIFT;
+
+    /*
+     * AArch64 TCR_ELx.TG0 encodings (translation granule for TTBR0):
+     *   0b00 = 4 KiB, 0b01 = 64 KiB, 0b10 = 16 KiB, 0b11 reserved.
+     */
+    if (uTg0 == 0ul) {
+        cbPage = MMU_SOFT_PAGE_4K;
+    } else if (uTg0 == 1ul) {
+        cbPage = MMU_SOFT_PAGE_64K;
+    } else if (uTg0 == 2ul) {
+        cbPage = MMU_SOFT_PAGE_16K;
+    } else {
+        cbPage = 0ul;
+    }
+
+    /* Product identity map programs TG0=4K + T0SZ=25. */
+    fPageOk = 0;
+    if (cbPage == MMU_SOFT_PAGE_4K && (uTcr & TCR_TG0_MASK) == TCR_TG0_4K &&
+        uT0sz == TCR_T0SZ_25) {
+        fPageOk = 1;
+    }
+
+    paL1 = (unsigned long)(void *)pL1 & TTBR_BADDR_MASK;
+    paTtbr0 = uTtbr0 & TTBR_BADDR_MASK;
+
+    /* Soft presence: TTBR0 holds a non-zero table base (L1 page). */
+    fTtbrPresent = 0;
+    if (paTtbr0 != 0ul) {
+        fTtbrPresent = 1;
+    }
+
+    /* Soft TTBR1 absence (high half unused on virt -kernel identity). */
+    fTtbr1Clear = 0;
+    if (uTtbr1 == 0ul) {
+        fTtbr1Clear = 1;
+    }
+
+    fTtbrMatch = 0;
+    if (fTtbrPresent != 0 && paTtbr0 == paL1) {
+        fTtbrMatch = 1;
+    }
+
+    fOk = 0;
+    if (fPageOk != 0 && fTtbrPresent != 0 && fTtbr1Clear != 0 &&
+        fTtbrMatch != 0) {
+        fOk = 1;
+    }
+
+    /* Greppable page-size soft inventory. */
+    aarch64_uart_puts("aarch64: mmu soft page_size=");
+    aarch64_uart_put_hex(cbPage);
+    aarch64_uart_puts(" tg0=");
+    aarch64_uart_put_hex(uTg0);
+    aarch64_uart_puts(" t0sz=");
+    aarch64_uart_put_hex(uT0sz);
+    aarch64_uart_puts(" page_ok=");
+    aarch64_uart_put_hex(fPageOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts("\n");
+
+    /* Greppable TTBR soft presence inventory. */
+    aarch64_uart_puts("aarch64: mmu soft ttbr0=");
+    aarch64_uart_put_hex(uTtbr0);
+    aarch64_uart_puts(" ttbr1=");
+    aarch64_uart_put_hex(uTtbr1);
+    aarch64_uart_puts(" present=");
+    aarch64_uart_put_hex(fTtbrPresent != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" ttbr1_clear=");
+    aarch64_uart_put_hex(fTtbr1Clear != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" match=");
+    aarch64_uart_put_hex(fTtbrMatch != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" l1=");
+    aarch64_uart_put_hex(paL1);
+    aarch64_uart_puts("\n");
+
+    if (fOk != 0) {
+        aarch64_uart_puts("aarch64: mmu soft PASS\n");
+    } else {
+        aarch64_uart_puts("aarch64: mmu soft FAIL\n");
+    }
+
+    (void)TCR_TG0_64K;
+    (void)TCR_TG0_16K;
+    return fOk;
+}
+
 void
 aarch64_mmu_init(void)
 {
@@ -262,6 +397,7 @@ aarch64_mmu_init(void)
     unsigned long sctlr;
     unsigned i;
     int fMapSoft;
+    int fInvSoft;
 
     (void)MAIR_DEVICE_nGnRE; /* reserved Attr encoding; documents nGnRE */
     (void)L1_BLOCK_SIZE;
@@ -306,6 +442,10 @@ aarch64_mmu_init(void)
 
     /* Soft map observe + DRAM self-touch (Attr1 normal path). */
     fMapSoft = mmu_map_soft_observe(pL1);
+    /* Soft inventory deepen: page size + TTBR presence (always-on). */
+    fInvSoft = mmu_soft_inventory(pL1);
+    (void)fInvSoft; /* greppable PASS/FAIL already emitted */
+
     if (fMapSoft == 0) {
         aarch64_uart_puts("aarch64: mmu map soft FAIL\n");
         aarch64_uart_puts("aarch64: mmu PASS\n"); /* path present */

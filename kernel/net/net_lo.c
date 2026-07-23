@@ -10,6 +10,7 @@
  *   - SOL_SOCKET subset: REUSEADDR, TYPE, ERROR, BROADCAST, KEEPALIVE,
  *     SNDBUF/RCVBUF (stored), LINGER soft, ACCEPTCONN, REUSEPORT
  *   - bind EADDRINUSE when port taken without reuse
+ *   - soft stats + live-table inventory (grep: "net: lo soft")
  */
 #include <gj/klog.h>
 #include <gj/net_lo.h>
@@ -25,6 +26,8 @@
 #define NET_LO_BACKLOG_MAX 8
 #define NET_LO_RCVBUF_DEF  NET_LO_BUF
 #define NET_LO_SNDBUF_DEF  NET_LO_BUF
+/* Soft log cadence: dump inventory/stats every N ops (wrap-safe). */
+#define NET_LO_SOFT_LOG_EVERY 32u
 
 struct net_lo_sock {
     u8  u8Used;
@@ -52,15 +55,300 @@ struct net_lo_sock {
     u8  aRx[NET_LO_BUF];
 };
 
+/*
+ * Soft product inventory counters — wrap OK; diagnostics only; never
+ * hard-gate product paths. Grep: net: lo soft
+ */
+struct net_lo_soft {
+    u64 u64Ops;          /* total API entries (success + fail) */
+    u64 u64SockOk;
+    u64 u64SockFail;
+    u64 u64BindOk;
+    u64 u64BindFail;
+    u64 u64EaddrInuse;
+    u64 u64ListenOk;
+    u64 u64ListenFail;
+    u64 u64ConnOk;
+    u64 u64ConnFail;
+    u64 u64ConnAgain;    /* backlog full / queue soft reject */
+    u64 u64ConnOrphan;   /* connect with no local listener (soft OK) */
+    u64 u64AcceptOk;
+    u64 u64AcceptFail;
+    u64 u64AcceptAgain;
+    u64 u64SendOk;
+    u64 u64SendFail;
+    u64 u64SendPipe;
+    u64 u64SendSelf;     /* unpaired dgram loop into own RX */
+    u64 u64RecvOk;
+    u64 u64RecvFail;
+    u64 u64RecvAgain;
+    u64 u64RecvEof;
+    u64 u64ShutOk;
+    u64 u64ShutFail;
+    u64 u64CloseOk;
+    u64 u64CloseFail;
+    u64 u64SetoptOk;
+    u64 u64SetoptFail;
+    u64 u64GetoptOk;
+    u64 u64GetoptFail;
+    u64 u64NameOk;
+    u64 u64NameFail;
+    u64 u64PeerOk;
+    u64 u64PeerFail;
+    u64 u64BytesTx;
+    u64 u64BytesRx;
+    u64 u64PushFull;     /* peer RX ring full (short/zero push) */
+    u64 u64PushPartial;  /* short write into ring */
+    u64 u64HwmUsed;      /* high-water live used slots */
+    u64 u64LogDumps;     /* times soft log was emitted */
+};
+
 static struct net_lo_sock g_aSocks[NET_LO_MAX];
+static struct net_lo_soft g_soft;
 /* FDs 64..79 map to socket slots 0..15 (avoid vfs_ram 3..31) */
 #define NET_FD_BASE 64
+
+static void
+lo_soft_bump(u64 *pCnt)
+{
+    if (pCnt == NULL) {
+        return;
+    }
+    (*pCnt)++; /* wrap OK */
+}
+
+/* Live-table tallies for soft inventory (no alloc; walk NET_LO_MAX). */
+static void
+lo_soft_tally(u32 *pUsed, u32 *pFree, u32 *pListen, u32 *pConn,
+              u32 *pStream, u32 *pDgram, u32 *pPending, u32 *pRxBytes,
+              u32 *pShutRd, u32 *pShutWr, u32 *pReuse)
+{
+    u32 i;
+    u32 cUsed = 0;
+    u32 cListen = 0;
+    u32 cConn = 0;
+    u32 cStream = 0;
+    u32 cDgram = 0;
+    u32 cPending = 0;
+    u32 cRx = 0;
+    u32 cShutRd = 0;
+    u32 cShutWr = 0;
+    u32 cReuse = 0;
+
+    for (i = 0; i < NET_LO_MAX; i++) {
+        if (!g_aSocks[i].u8Used) {
+            continue;
+        }
+        cUsed++;
+        if (g_aSocks[i].u8Listening) {
+            cListen++;
+        }
+        if (g_aSocks[i].u8Connected) {
+            cConn++;
+        }
+        if (g_aSocks[i].u8Type == SOCK_STREAM) {
+            cStream++;
+        } else if (g_aSocks[i].u8Type == SOCK_DGRAM) {
+            cDgram++;
+        }
+        cPending += (u32)g_aSocks[i].u8Pending;
+        cRx += g_aSocks[i].u32RxLen;
+        if (g_aSocks[i].u8ShutRd) {
+            cShutRd++;
+        }
+        if (g_aSocks[i].u8ShutWr) {
+            cShutWr++;
+        }
+        if (g_aSocks[i].u8Reuse || g_aSocks[i].u8ReusePort) {
+            cReuse++;
+        }
+    }
+    if (pUsed != NULL) {
+        *pUsed = cUsed;
+    }
+    if (pFree != NULL) {
+        *pFree = NET_LO_MAX - cUsed;
+    }
+    if (pListen != NULL) {
+        *pListen = cListen;
+    }
+    if (pConn != NULL) {
+        *pConn = cConn;
+    }
+    if (pStream != NULL) {
+        *pStream = cStream;
+    }
+    if (pDgram != NULL) {
+        *pDgram = cDgram;
+    }
+    if (pPending != NULL) {
+        *pPending = cPending;
+    }
+    if (pRxBytes != NULL) {
+        *pRxBytes = cRx;
+    }
+    if (pShutRd != NULL) {
+        *pShutRd = cShutRd;
+    }
+    if (pShutWr != NULL) {
+        *pShutWr = cShutWr;
+    }
+    if (pReuse != NULL) {
+        *pReuse = cReuse;
+    }
+    if ((u64)cUsed > g_soft.u64HwmUsed) {
+        g_soft.u64HwmUsed = (u64)cUsed;
+    }
+}
+
+/*
+ * Greppable soft product inventory + stats dump.
+ * Prefix-stable: "net: lo soft …" (smoke / product inventory).
+ */
+static void
+lo_soft_print(void)
+{
+    u32 cUsed = 0;
+    u32 cFree = 0;
+    u32 cListen = 0;
+    u32 cConn = 0;
+    u32 cStream = 0;
+    u32 cDgram = 0;
+    u32 cPending = 0;
+    u32 cRx = 0;
+    u32 cShutRd = 0;
+    u32 cShutWr = 0;
+    u32 cReuse = 0;
+    u32 i;
+    struct net_lo_soft s;
+
+    lo_soft_tally(&cUsed, &cFree, &cListen, &cConn, &cStream, &cDgram,
+                  &cPending, &cRx, &cShutRd, &cShutWr, &cReuse);
+    s = g_soft;
+    lo_soft_bump(&g_soft.u64LogDumps);
+
+    /* Grep: net: lo soft inventory */
+    kprintf("net: lo soft inventory used=%u free=%u listen=%u conn=%u "
+            "stream=%u dgram=%u pending=%u rx_bytes=%u shut_rd=%u "
+            "shut_wr=%u reuse=%u hwm=%llu max=%u fd_base=%u buf=%u "
+            "backlog_max=%u\n",
+            cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
+            cShutRd, cShutWr, cReuse,
+            (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
+            (unsigned)NET_FD_BASE, (unsigned)NET_LO_BUF,
+            (unsigned)NET_LO_BACKLOG_MAX);
+
+    /* Grep: net: lo soft stats */
+    kprintf("net: lo soft stats ops=%llu sock=%llu sock_fail=%llu "
+            "bind=%llu bind_fail=%llu eaddr=%llu listen=%llu listen_fail=%llu "
+            "conn=%llu conn_fail=%llu conn_again=%llu conn_orphan=%llu "
+            "accept=%llu accept_fail=%llu accept_again=%llu "
+            "send=%llu send_fail=%llu send_pipe=%llu send_self=%llu "
+            "recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
+            "shut=%llu shut_fail=%llu close=%llu close_fail=%llu "
+            "setopt=%llu setopt_fail=%llu getopt=%llu getopt_fail=%llu "
+            "name=%llu name_fail=%llu peer=%llu peer_fail=%llu "
+            "tx=%llu rx=%llu push_full=%llu push_partial=%llu dumps=%llu\n",
+            (unsigned long long)s.u64Ops,
+            (unsigned long long)s.u64SockOk,
+            (unsigned long long)s.u64SockFail,
+            (unsigned long long)s.u64BindOk,
+            (unsigned long long)s.u64BindFail,
+            (unsigned long long)s.u64EaddrInuse,
+            (unsigned long long)s.u64ListenOk,
+            (unsigned long long)s.u64ListenFail,
+            (unsigned long long)s.u64ConnOk,
+            (unsigned long long)s.u64ConnFail,
+            (unsigned long long)s.u64ConnAgain,
+            (unsigned long long)s.u64ConnOrphan,
+            (unsigned long long)s.u64AcceptOk,
+            (unsigned long long)s.u64AcceptFail,
+            (unsigned long long)s.u64AcceptAgain,
+            (unsigned long long)s.u64SendOk,
+            (unsigned long long)s.u64SendFail,
+            (unsigned long long)s.u64SendPipe,
+            (unsigned long long)s.u64SendSelf,
+            (unsigned long long)s.u64RecvOk,
+            (unsigned long long)s.u64RecvFail,
+            (unsigned long long)s.u64RecvAgain,
+            (unsigned long long)s.u64RecvEof,
+            (unsigned long long)s.u64ShutOk,
+            (unsigned long long)s.u64ShutFail,
+            (unsigned long long)s.u64CloseOk,
+            (unsigned long long)s.u64CloseFail,
+            (unsigned long long)s.u64SetoptOk,
+            (unsigned long long)s.u64SetoptFail,
+            (unsigned long long)s.u64GetoptOk,
+            (unsigned long long)s.u64GetoptFail,
+            (unsigned long long)s.u64NameOk,
+            (unsigned long long)s.u64NameFail,
+            (unsigned long long)s.u64PeerOk,
+            (unsigned long long)s.u64PeerFail,
+            (unsigned long long)s.u64BytesTx,
+            (unsigned long long)s.u64BytesRx,
+            (unsigned long long)s.u64PushFull,
+            (unsigned long long)s.u64PushPartial,
+            (unsigned long long)(s.u64LogDumps + 1ull));
+
+    /* Per-live-slot soft detail (cap-bounded; product smoke inventory). */
+    for (i = 0; i < NET_LO_MAX; i++) {
+        if (!g_aSocks[i].u8Used) {
+            continue;
+        }
+        /* Grep: net: lo soft slot */
+        kprintf("net: lo soft slot=%u type=%u port=%u listen=%u conn=%u "
+                "peer=%d rx=%u head=%u bl=%u pend=%u reuse=%u reusep=%u "
+                "ka=%u bcast=%u shut_rd=%u shut_wr=%u rcvbuf=%u sndbuf=%u "
+                "linger=%u/%u fd=%u\n",
+                i, (unsigned)g_aSocks[i].u8Type,
+                (unsigned)g_aSocks[i].u16Port,
+                (unsigned)g_aSocks[i].u8Listening,
+                (unsigned)g_aSocks[i].u8Connected,
+                (int)g_aSocks[i].i16Peer,
+                (unsigned)g_aSocks[i].u32RxLen,
+                (unsigned)g_aSocks[i].u32RxHead,
+                (unsigned)g_aSocks[i].u8Backlog,
+                (unsigned)g_aSocks[i].u8Pending,
+                (unsigned)g_aSocks[i].u8Reuse,
+                (unsigned)g_aSocks[i].u8ReusePort,
+                (unsigned)g_aSocks[i].u8Keepalive,
+                (unsigned)g_aSocks[i].u8Broadcast,
+                (unsigned)g_aSocks[i].u8ShutRd,
+                (unsigned)g_aSocks[i].u8ShutWr,
+                (unsigned)g_aSocks[i].u32RcvBuf,
+                (unsigned)g_aSocks[i].u32SndBuf,
+                (unsigned)g_aSocks[i].u8LingerOn,
+                (unsigned)g_aSocks[i].u16LingerSec,
+                (unsigned)(NET_FD_BASE + i));
+    }
+}
+
+/* Cadence + force soft log (table-full / empty / init always force). */
+static void
+lo_soft_maybe_log(int fForce)
+{
+    lo_soft_bump(&g_soft.u64Ops);
+    if (fForce ||
+        (g_soft.u64Ops != 0 &&
+         (g_soft.u64Ops % (u64)NET_LO_SOFT_LOG_EVERY) == 0)) {
+        lo_soft_print();
+    }
+}
 
 void
 net_lo_init(void)
 {
     memset(g_aSocks, 0, sizeof(g_aSocks));
+    memset(&g_soft, 0, sizeof(g_soft));
     kprintf("net_lo: init (loopback + peer ring + sockopt/backlog soft)\n");
+    /* Grep: net: lo soft init */
+    kprintf("net: lo soft init max=%u fd_base=%u buf=%u backlog_max=%u "
+            "rcv_def=%u snd_def=%u log_every=%u\n",
+            (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
+            (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
+            (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF,
+            (unsigned)NET_LO_SOFT_LOG_EVERY);
+    lo_soft_print();
 }
 
 int
@@ -82,9 +370,13 @@ net_lo_socket(int nDomain, int nType, int nProto)
 
     (void)nProto;
     if (nDomain != AF_INET && nDomain != AF_UNIX) {
+        lo_soft_bump(&g_soft.u64SockFail);
+        lo_soft_maybe_log(0);
         return -97; /* EAFNOSUPPORT */
     }
     if (nType != SOCK_STREAM && nType != SOCK_DGRAM) {
+        lo_soft_bump(&g_soft.u64SockFail);
+        lo_soft_maybe_log(0);
         return -22;
     }
     for (i = 0; i < NET_LO_MAX; i++) {
@@ -109,9 +401,19 @@ net_lo_socket(int nDomain, int nType, int nProto)
             g_aSocks[i].i16Peer = -1;
             g_aSocks[i].u32RxLen = 0;
             g_aSocks[i].u32RxHead = 0;
+            /* HWM update via tally walk (outputs unused). */
+            lo_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                          NULL, NULL, NULL);
+            lo_soft_bump(&g_soft.u64SockOk);
+            lo_soft_maybe_log(0);
             return (i64)(NET_FD_BASE + i);
         }
     }
+    lo_soft_bump(&g_soft.u64SockFail);
+    /* Grep: net: lo soft emfile */
+    kprintf("net: lo soft emfile max=%u ops=%llu\n", (unsigned)NET_LO_MAX,
+            (unsigned long long)g_soft.u64Ops);
+    lo_soft_maybe_log(1);
     return -24; /* EMFILE */
 }
 
@@ -148,15 +450,22 @@ net_lo_bind(i64 i64Fd, u16 u16Port)
     u32 u32Slot;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64BindFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     if (port_in_use(u32Slot, u16Port, g_aSocks[u32Slot].u8Type,
                     g_aSocks[u32Slot].u8Reuse ||
                         g_aSocks[u32Slot].u8ReusePort)) {
+        lo_soft_bump(&g_soft.u64BindFail);
+        lo_soft_bump(&g_soft.u64EaddrInuse);
+        lo_soft_maybe_log(0);
         return -98; /* EADDRINUSE-shaped */
     }
     g_aSocks[u32Slot].u16Port = u16Port;
+    lo_soft_bump(&g_soft.u64BindOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -167,6 +476,8 @@ net_lo_listen(i64 i64Fd, int nBacklog)
     int nBl;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64ListenFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
@@ -181,6 +492,12 @@ net_lo_listen(i64 i64Fd, int nBacklog)
     g_aSocks[u32Slot].u8Backlog = (u8)nBl;
     g_aSocks[u32Slot].u8Pending = 0;
     g_aSocks[u32Slot].u8Listening = 1;
+    lo_soft_bump(&g_soft.u64ListenOk);
+    /* Grep: net: lo soft listen */
+    kprintf("net: lo soft listen fd=%lld port=%u backlog=%u\n",
+            (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
+            (unsigned)g_aSocks[u32Slot].u8Backlog);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -191,6 +508,8 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
     u32 i;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64ConnFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
@@ -207,6 +526,8 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
             if (g_aSocks[i].i16Peer >= 0 &&
                 g_aSocks[i].i16Peer != (i16)u32Slot) {
                 /* Queue full (one soft pending slot). */
+                lo_soft_bump(&g_soft.u64ConnAgain);
+                lo_soft_maybe_log(0);
                 return -11; /* EAGAIN */
             }
             if (g_aSocks[i].u8Backlog == 0) {
@@ -214,6 +535,8 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
             }
             if (g_aSocks[i].u8Pending >= g_aSocks[i].u8Backlog &&
                 g_aSocks[i].i16Peer >= 0) {
+                lo_soft_bump(&g_soft.u64ConnAgain);
+                lo_soft_maybe_log(0);
                 return -11;
             }
             g_aSocks[i].i16Peer = (i16)u32Slot;
@@ -223,10 +546,15 @@ net_lo_connect(i64 i64Fd, u16 u16Port)
             g_aSocks[u32Slot].i16Peer = (i16)i;
             g_aSocks[u32Slot].u8Connected = 1;
             g_aSocks[i].u8Connected = 1;
+            lo_soft_bump(&g_soft.u64ConnOk);
+            lo_soft_maybe_log(0);
             return 0;
         }
     }
     g_aSocks[u32Slot].u8Connected = 1;
+    lo_soft_bump(&g_soft.u64ConnOk);
+    lo_soft_bump(&g_soft.u64ConnOrphan);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -238,14 +566,20 @@ net_lo_accept(i64 i64Fd)
     i16 i16Cli;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64AcceptFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     if (!g_aSocks[u32Slot].u8Listening) {
+        lo_soft_bump(&g_soft.u64AcceptFail);
+        lo_soft_maybe_log(0);
         return -22; /* EINVAL */
     }
     i16Cli = g_aSocks[u32Slot].i16Peer;
     if (i16Cli < 0 || (u32)i16Cli >= NET_LO_MAX || !g_aSocks[i16Cli].u8Used) {
+        lo_soft_bump(&g_soft.u64AcceptAgain);
+        lo_soft_maybe_log(0);
         return -11; /* EAGAIN */
     }
     /* Mint accepted socket; pair with client; free listener pending slot */
@@ -276,9 +610,20 @@ net_lo_accept(i64 i64Fd)
             if (g_aSocks[u32Slot].u8Pending > 0) {
                 g_aSocks[u32Slot].u8Pending--;
             }
+            lo_soft_bump(&g_soft.u64AcceptOk);
+            /* Grep: net: lo soft accept */
+            kprintf("net: lo soft accept listen_fd=%lld new_fd=%u "
+                    "cli_slot=%d port=%u\n",
+                    (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
+                    (int)i16Cli, (unsigned)g_aSocks[i].u16Port);
+            lo_soft_maybe_log(0);
             return (i64)(NET_FD_BASE + i);
         }
     }
+    lo_soft_bump(&g_soft.u64AcceptFail);
+    kprintf("net: lo soft emfile max=%u ops=%llu (accept mint)\n",
+            (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
+    lo_soft_maybe_log(1);
     return -24; /* EMFILE */
 }
 
@@ -288,17 +633,20 @@ push_rx(u32 u32Slot, const void *pBuf, u32 cb)
     struct net_lo_sock *pS;
     u32 i;
     u32 u32Cap;
+    u32 u32Want;
 
     if (u32Slot >= NET_LO_MAX || !g_aSocks[u32Slot].u8Used) {
         return -1;
     }
     pS = &g_aSocks[u32Slot];
+    u32Want = cb;
     /* Soft SO_RCVBUF: cap ring use to min(physical buf, advertised rcvbuf). */
     u32Cap = NET_LO_BUF;
     if (pS->u32RcvBuf > 0 && pS->u32RcvBuf < u32Cap) {
         u32Cap = pS->u32RcvBuf;
     }
     if (pS->u32RxLen >= u32Cap) {
+        lo_soft_bump(&g_soft.u64PushFull);
         return 0;
     }
     if (cb > u32Cap - pS->u32RxLen) {
@@ -310,6 +658,9 @@ push_rx(u32 u32Slot, const void *pBuf, u32 cb)
         pS->aRx[pos] = ((const u8 *)pBuf)[i];
         pS->u32RxLen++;
     }
+    if (cb < u32Want) {
+        lo_soft_bump(&g_soft.u64PushPartial);
+    }
     return (int)cb;
 }
 
@@ -319,15 +670,23 @@ net_lo_send(i64 i64Fd, const void *pBuf, size_t cb)
     u32 u32Slot;
     i16 i16Peer;
     u32 u32N;
+    int nPushed;
+    int fSelf = 0;
 
     if (!net_lo_fd_ok(i64Fd) || pBuf == NULL) {
+        lo_soft_bump(&g_soft.u64SendFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     if (cb == 0) {
+        lo_soft_bump(&g_soft.u64SendOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     if (g_aSocks[u32Slot].u8ShutWr) {
+        lo_soft_bump(&g_soft.u64SendPipe);
+        lo_soft_maybe_log(0);
         return -32; /* EPIPE-shaped */
     }
     /* Soft SO_SNDBUF: clamp one-shot write to advertised send buffer. */
@@ -339,8 +698,21 @@ net_lo_send(i64 i64Fd, const void *pBuf, size_t cb)
     if (i16Peer < 0 || (u32)i16Peer >= NET_LO_MAX) {
         /* Unpaired: loop into own RX for dgram smoke */
         i16Peer = (i16)u32Slot;
+        fSelf = 1;
     }
-    return (i64)push_rx((u32)i16Peer, pBuf, u32N);
+    nPushed = push_rx((u32)i16Peer, pBuf, u32N);
+    if (nPushed < 0) {
+        lo_soft_bump(&g_soft.u64SendFail);
+        lo_soft_maybe_log(0);
+        return -9;
+    }
+    if (fSelf) {
+        lo_soft_bump(&g_soft.u64SendSelf);
+    }
+    g_soft.u64BytesTx += (u64)(u32)nPushed; /* wrap OK */
+    lo_soft_bump(&g_soft.u64SendOk);
+    lo_soft_maybe_log(0);
+    return (i64)nPushed;
 }
 
 i64
@@ -352,17 +724,25 @@ net_lo_recv(i64 i64Fd, void *pBuf, size_t cb)
     u32 i;
 
     if (!net_lo_fd_ok(i64Fd) || pBuf == NULL) {
+        lo_soft_bump(&g_soft.u64RecvFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     if (cb == 0) {
+        lo_soft_bump(&g_soft.u64RecvOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     pS = &g_aSocks[u32Slot];
     if (pS->u8ShutRd) {
+        lo_soft_bump(&g_soft.u64RecvEof);
+        lo_soft_maybe_log(0);
         return 0; /* EOF */
     }
     if (pS->u32RxLen == 0) {
+        lo_soft_bump(&g_soft.u64RecvAgain);
+        lo_soft_maybe_log(0);
         return -11; /* EAGAIN */
     }
     u32N = (u32)cb;
@@ -374,6 +754,9 @@ net_lo_recv(i64 i64Fd, void *pBuf, size_t cb)
         pS->u32RxHead = (pS->u32RxHead + 1) % NET_LO_BUF;
         pS->u32RxLen--;
     }
+    g_soft.u64BytesRx += (u64)u32N; /* wrap OK */
+    lo_soft_bump(&g_soft.u64RecvOk);
+    lo_soft_maybe_log(0);
     return (i64)u32N;
 }
 
@@ -383,9 +766,13 @@ net_lo_shutdown(i64 i64Fd, int nHow)
     u32 u32Slot;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64ShutFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     if (nHow < 0 || nHow > 2) {
+        lo_soft_bump(&g_soft.u64ShutFail);
+        lo_soft_maybe_log(0);
         return -22; /* EINVAL — validate before mutating flags */
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
@@ -395,6 +782,8 @@ net_lo_shutdown(i64 i64Fd, int nHow)
     if (nHow == 1 || nHow == 2) {
         g_aSocks[u32Slot].u8ShutWr = 1;
     }
+    lo_soft_bump(&g_soft.u64ShutOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -405,11 +794,15 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
     int v = 0;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64SetoptFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     /* SOL_SOCKET = 1 */
     if (nLevel != 1) {
+        lo_soft_bump(&g_soft.u64SetoptOk); /* soft no-op accept */
+        lo_soft_maybe_log(0);
         return 0; /* ignore other levels (IPPROTO soft no-op) */
     }
     if (pVal != NULL && u32Len >= 4) {
@@ -417,18 +810,26 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
     }
     if (nOpt == 2 /* SO_REUSEADDR */) {
         g_aSocks[u32Slot].u8Reuse = v ? 1u : 0u;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 15 /* SO_REUSEPORT */) {
         g_aSocks[u32Slot].u8ReusePort = v ? 1u : 0u;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 6 /* SO_BROADCAST */) {
         g_aSocks[u32Slot].u8Broadcast = v ? 1u : 0u;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 9 /* SO_KEEPALIVE */) {
         g_aSocks[u32Slot].u8Keepalive = v ? 1u : 0u;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 7 /* SO_SNDBUF */) {
@@ -439,6 +840,8 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
             v = 65536;
         }
         g_aSocks[u32Slot].u32SndBuf = (u32)v;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 8 /* SO_RCVBUF */) {
@@ -449,6 +852,8 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
             v = 65536;
         }
         g_aSocks[u32Slot].u32RcvBuf = (u32)v;
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 13 /* SO_LINGER */) {
@@ -460,12 +865,18 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
             g_aSocks[u32Slot].u16LingerSec =
                 pL[1] < 0 ? 0u : (u16)(pL[1] > 65535 ? 65535 : pL[1]);
         }
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
     /* SO_DEBUG=1, SO_DONTROUTE=5, SO_OOBINLINE=10, timeos — accept no-op */
     if (nOpt == 1 || nOpt == 5 || nOpt == 10 || nOpt == 20 || nOpt == 21) {
+        lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     }
+    lo_soft_bump(&g_soft.u64SetoptOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -476,10 +887,14 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
     int v = 0;
 
     if (!net_lo_fd_ok(i64Fd) || pVal == NULL || pLen == NULL) {
+        lo_soft_bump(&g_soft.u64GetoptFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     if (nLevel != 1) {
+        lo_soft_bump(&g_soft.u64GetoptFail);
+        lo_soft_maybe_log(0);
         return -92; /* ENOPROTOOPT-shaped */
     }
     if (nOpt == 3 /* SO_TYPE */) {
@@ -502,20 +917,28 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
         v = g_aSocks[u32Slot].u8Listening ? 1 : 0;
     } else if (nOpt == 13 /* SO_LINGER */) {
         if (*pLen < 8) {
+            lo_soft_bump(&g_soft.u64GetoptFail);
+            lo_soft_maybe_log(0);
             return -22;
         }
         ((int *)pVal)[0] = g_aSocks[u32Slot].u8LingerOn ? 1 : 0;
         ((int *)pVal)[1] = (int)g_aSocks[u32Slot].u16LingerSec;
         *pLen = 8;
+        lo_soft_bump(&g_soft.u64GetoptOk);
+        lo_soft_maybe_log(0);
         return 0;
     } else {
         v = 0;
     }
     if (*pLen < 4) {
+        lo_soft_bump(&g_soft.u64GetoptFail);
+        lo_soft_maybe_log(0);
         return -22;
     }
     *(int *)pVal = v;
     *pLen = 4;
+    lo_soft_bump(&g_soft.u64GetoptOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -543,14 +966,20 @@ net_lo_getsockname(i64 i64Fd, void *pAddr, u32 *pLen)
     u32 u32Slot;
 
     if (!net_lo_fd_ok(i64Fd) || pAddr == NULL || pLen == NULL) {
+        lo_soft_bump(&g_soft.u64NameFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     if (*pLen < 16) {
+        lo_soft_bump(&g_soft.u64NameFail);
+        lo_soft_maybe_log(0);
         return -22;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     fill_sin((u8 *)pAddr, g_aSocks[u32Slot].u16Port);
     *pLen = 16;
+    lo_soft_bump(&g_soft.u64NameOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -561,18 +990,26 @@ net_lo_getpeername(i64 i64Fd, void *pAddr, u32 *pLen)
     i16 peer;
 
     if (!net_lo_fd_ok(i64Fd) || pAddr == NULL || pLen == NULL) {
+        lo_soft_bump(&g_soft.u64PeerFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     if (*pLen < 16) {
+        lo_soft_bump(&g_soft.u64PeerFail);
+        lo_soft_maybe_log(0);
         return -22;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
     peer = g_aSocks[u32Slot].i16Peer;
     if (peer < 0 || (u32)peer >= NET_LO_MAX) {
+        lo_soft_bump(&g_soft.u64PeerFail);
+        lo_soft_maybe_log(0);
         return -107; /* ENOTCONN */
     }
     fill_sin((u8 *)pAddr, g_aSocks[peer].u16Port);
     *pLen = 16;
+    lo_soft_bump(&g_soft.u64PeerOk);
+    lo_soft_maybe_log(0);
     return 0;
 }
 
@@ -581,8 +1018,11 @@ net_lo_close(i64 i64Fd)
 {
     u32 u32Slot;
     i16 peer;
+    u32 cUsed = 0;
 
     if (!net_lo_fd_ok(i64Fd)) {
+        lo_soft_bump(&g_soft.u64CloseFail);
+        lo_soft_maybe_log(0);
         return -9;
     }
     u32Slot = (u32)(i64Fd - NET_FD_BASE);
@@ -601,5 +1041,10 @@ net_lo_close(i64 i64Fd)
     }
     memset(&g_aSocks[u32Slot], 0, sizeof(g_aSocks[u32Slot]));
     g_aSocks[u32Slot].i16Peer = -1;
+    lo_soft_bump(&g_soft.u64CloseOk);
+    lo_soft_tally(&cUsed, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                  NULL, NULL);
+    /* Force inventory when table empties (soft product end-of-session). */
+    lo_soft_maybe_log(cUsed == 0 ? 1 : 0);
     return 0;
 }

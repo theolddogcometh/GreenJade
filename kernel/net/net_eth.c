@@ -6,7 +6,11 @@
  * UDP echo (port 7), IPv4 TCP demux → net_tcp_input + multi-seg rtx tick.
  *
  * Soft deepen: multi-frame RX drain per poll, VLAN skip, IHL-aware ICMP,
- * frame/drop/tcp demux counters.
+ * frame/drop/tcp demux counters, greppable soft eth inventory log.
+ *
+ * Greppable soft inventory (prefix-stable):
+ *   net: eth soft …
+ *   net_eth: ARP/UDP/ICMP-echo helpers
  */
 #include <gj/klog.h>
 #include <gj/net_eth.h>
@@ -21,6 +25,7 @@ static const u8 g_aOurIp[4] = { 10, 0, 2, 15 };
 /* Max frames drained per net_eth_poll (soft batch). */
 #define NET_ETH_POLL_MAX 8
 
+/* Protocol soft counters (lifetime; door STATS + inventory). */
 static u32 g_u32ArpReplies;
 static u32 g_u32UdpEchoes;
 static u32 g_u32IcmpEchoes;
@@ -28,6 +33,17 @@ static u32 g_u32FramesRx;
 static u32 g_u32FramesDrop;
 static u32 g_u32TcpDemux;
 static u32 g_u32VlanSkip;
+
+/* Soft inventory deepen: poll/batch + demux-ok + link soft state. */
+static u32 g_u32FramesOk;      /* handle_frame recognized ethertype path */
+static u32 g_u32Polls;         /* net_eth_poll entries */
+static u32 g_u32PollsNoDev;    /* polls with virtio-net not ready */
+static u32 g_u32PollsDrain;    /* polls that drained ≥1 frame */
+static u32 g_u32LastBatch;     /* frames drained on last drain poll */
+static u32 g_u32BatchMax;      /* peak frames in one poll drain */
+static u32 g_u32LinkReady;     /* soft shadow of virtio_net_ready() */
+static u32 g_u32LinkChanges;   /* soft link ready 0↔1 transitions */
+static u32 g_u32SoftLogN;      /* inventory log emissions (cap spam) */
 
 static u16
 htons(u16 u16V)
@@ -54,6 +70,62 @@ ip_checksum(const void *p, u32 cb)
     return (u16)~u32Sum;
 }
 
+/**
+ * Soft eth inventory log — greppable product markers only (never hard-gates).
+ *
+ *   net: eth soft PASS|UP|NODEV|PARTIAL frames_rx=… drop=… ok=… vlan=…
+ *        tcp=… arp=… udp=… icmp=… poll_max=…
+ *   net: eth soft link ready=… polls=… nodev=… drain=… last_batch=…
+ *        batch_max=… link_ch=… ip=… mac=…
+ */
+static void
+net_eth_soft_log(void)
+{
+    const char *szVerdict;
+    u32 u32Ready;
+    u32 u32Proto;
+
+    u32Ready = virtio_net_ready() ? 1u : 0u;
+    u32Proto = g_u32ArpReplies + g_u32UdpEchoes + g_u32IcmpEchoes +
+               g_u32TcpDemux;
+
+    /*
+     * Verdict (soft product inventory; door paths unchanged):
+     *   NODEV   — virtio-net not ready (interim / no device)
+     *   UP      — link soft ready, no frames yet
+     *   PASS    — ready + demux-ok or protocol soft activity
+     *   PARTIAL — ready with only drops / vlan skips (no demux-ok/proto)
+     */
+    if (u32Ready == 0u) {
+        szVerdict = "NODEV";
+    } else if (g_u32FramesOk != 0u || u32Proto != 0u) {
+        szVerdict = "PASS";
+    } else if (g_u32FramesDrop != 0u || g_u32VlanSkip != 0u) {
+        szVerdict = "PARTIAL";
+    } else {
+        szVerdict = "UP";
+    }
+
+    if (g_u32SoftLogN < 0xffffffffu) {
+        g_u32SoftLogN++;
+    }
+
+    /* Grep: net: eth soft */
+    kprintf("net: eth soft %s frames_rx=%u drop=%u ok=%u vlan=%u tcp=%u "
+            "arp=%u udp=%u icmp=%u poll_max=%u\n",
+            szVerdict, g_u32FramesRx, g_u32FramesDrop, g_u32FramesOk,
+            g_u32VlanSkip, g_u32TcpDemux, g_u32ArpReplies, g_u32UdpEchoes,
+            g_u32IcmpEchoes, (u32)NET_ETH_POLL_MAX);
+    kprintf("net: eth soft link ready=%u polls=%u nodev=%u drain=%u "
+            "last_batch=%u batch_max=%u link_ch=%u log_n=%u "
+            "ip=%u.%u.%u.%u mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+            u32Ready, g_u32Polls, g_u32PollsNoDev, g_u32PollsDrain,
+            g_u32LastBatch, g_u32BatchMax, g_u32LinkChanges, g_u32SoftLogN,
+            g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
+            g_aOurMac[0], g_aOurMac[1], g_aOurMac[2], g_aOurMac[3],
+            g_aOurMac[4], g_aOurMac[5]);
+}
+
 void
 net_eth_init(void)
 {
@@ -64,9 +136,22 @@ net_eth_init(void)
     g_u32FramesDrop = 0;
     g_u32TcpDemux = 0;
     g_u32VlanSkip = 0;
+    g_u32FramesOk = 0;
+    g_u32Polls = 0;
+    g_u32PollsNoDev = 0;
+    g_u32PollsDrain = 0;
+    g_u32LastBatch = 0;
+    g_u32BatchMax = 0;
+    g_u32LinkReady = 0;
+    g_u32LinkChanges = 0;
+    g_u32SoftLogN = 0;
+    /* Soft shadow of device ready at init (probe may run later). */
+    g_u32LinkReady = virtio_net_ready() ? 1u : 0u;
     kprintf("net_eth: ARP/UDP/ICMP-echo helpers (IP %u.%u.%u.%u) poll_max=%u\n",
             g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
             NET_ETH_POLL_MAX);
+    /* Greppable soft inventory at init (NODEV typical before virtio probe). */
+    net_eth_soft_log();
 }
 
 static void
@@ -271,6 +356,7 @@ handle_udp(const u8 *pFrame, u32 cb)
 /**
  * Soft demux one L2 frame: ARP / IPv4(ICMP|UDP|TCP) / VLAN skip.
  * Returns 1 if recognized path touched, 0 if drop/ignored.
+ * Does not change door STATS packing — only deepens local soft inventory.
  */
 static int
 handle_frame(const u8 *pFrame, u32 cb)
@@ -290,6 +376,7 @@ handle_frame(const u8 *pFrame, u32 cb)
     }
     if (u16Etype == 0x0806u) {
         handle_arp(pFrame, cb);
+        g_u32FramesOk++;
         return 1;
     }
     if (u16Etype == 0x0800u) {
@@ -305,10 +392,12 @@ handle_frame(const u8 *pFrame, u32 cb)
         }
         if (pIp[9] == 1) {
             handle_icmp(pFrame, cb);
+            g_u32FramesOk++;
             return 1;
         }
         if (pIp[9] == 17) {
             handle_udp(pFrame, cb);
+            g_u32FramesOk++;
             return 1;
         }
         if (pIp[9] == 6) {
@@ -316,6 +405,7 @@ handle_frame(const u8 *pFrame, u32 cb)
             if (net_tcp_input(pFrame, cb)) {
                 g_u32TcpDemux++;
             }
+            g_u32FramesOk++;
             return 1;
         }
         g_u32FramesDrop++;
@@ -325,19 +415,52 @@ handle_frame(const u8 *pFrame, u32 cb)
     return 0;
 }
 
+/**
+ * Soft link-state sample: refresh g_u32LinkReady from virtio_net_ready().
+ * On 0↔1 transition, bump link_ch and emit greppable inventory (rate-capped).
+ * Returns current ready (0/1). Never fails door / poll control flow.
+ */
+static u32
+net_eth_soft_link_sample(void)
+{
+    u32 u32Now;
+
+    u32Now = virtio_net_ready() ? 1u : 0u;
+    if (u32Now != g_u32LinkReady) {
+        g_u32LinkReady = u32Now;
+        if (g_u32LinkChanges < 0xffffffffu) {
+            g_u32LinkChanges++;
+        }
+        /* Cap inventory spam: init + first few link flips only. */
+        if (g_u32SoftLogN < 8u) {
+            net_eth_soft_log();
+        }
+    }
+    return u32Now;
+}
+
 void
 net_eth_poll(void)
 {
     static u8 aRx[1518];
     i32 i32N;
     u32 u32Batch;
+    u32 u32Ready;
 
-    if (!virtio_net_ready()) {
+    if (g_u32Polls < 0xffffffffu) {
+        g_u32Polls++;
+    }
+
+    u32Ready = net_eth_soft_link_sample();
+    if (u32Ready == 0u) {
         /*
          * No device: skip RX. Multi-seg rtx only applies to virtio peers;
          * loopback multi-seg advances SndUna inline in net_tcp_send.
          * Still tick TCP soft TIME_WAIT / rtx for any live sockets.
          */
+        if (g_u32PollsNoDev < 0xffffffffu) {
+            g_u32PollsNoDev++;
+        }
         net_tcp_poll();
         return;
     }
@@ -348,6 +471,22 @@ net_eth_poll(void)
             break;
         }
         (void)handle_frame(aRx, (u32)i32N);
+    }
+    if (u32Batch != 0u) {
+        g_u32LastBatch = u32Batch;
+        if (g_u32PollsDrain < 0xffffffffu) {
+            g_u32PollsDrain++;
+        }
+        if (u32Batch > g_u32BatchMax) {
+            g_u32BatchMax = u32Batch;
+        }
+        /*
+         * First drain with traffic: one more greppable inventory line so
+         * smokes see frames soft counters without needing a soft_log export.
+         */
+        if (g_u32PollsDrain == 1u && g_u32SoftLogN < 8u) {
+            net_eth_soft_log();
+        }
     }
     /* Always tick last-seg rtx + TIME_WAIT soft reap after poll attempt. */
     net_tcp_poll();

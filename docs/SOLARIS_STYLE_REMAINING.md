@@ -5,12 +5,15 @@
 | **Document** | Remaining decisions v1.2 |
 | **Status** | **Accepted** — Solaris-first judgment under GreenJade law |
 | **Persona** | “What would a Sun kernel engineer ship?” |
+| **Honesty** | **2026-07-23 Wave 8** — remaining (design→code) vs soft ship (§19); **no bar3 claim** |
 | **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) |
 
 GreenJade law still wins: caps, security-first, pure C, dual MIT/Apache, no GPL, no ambient root.  
 Where Solaris had no caps, we keep **L4/seL4 mechanics** but **Solaris ergonomics and lifecycle**.
 
 **VM / task / session / QoS / futex / JIT:** deferred to **Apple channel** — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) (Accepted). Cookie, cluster, fault lock, W^X checks in §7 still apply.
+
+**Soft stamp (Wave 8):** parallel continuum / kernel / media soft gates on tree do **not** close this channel’s remaining implementation work, and do **not** close Steam **bar3**. See §19.
 ---
 
 ## 0. Solaris engineering instincts used here
@@ -386,3 +389,70 @@ Not derived from child’s root meta (kernel ops only). Parent `wait`/`kill` use
 ---
 
 *Channel Solaris: ship doors-scale IPC, process-scale names, DDI-scale devices, and an honest compatibility tier list — with L4 teeth for revoke and quotas.*
+
+---
+
+## 19. Honesty refresh — remaining vs soft (Wave 8 · 2026-07-23)
+
+**Additive only.** Design decisions in §§1–18 stay **Accepted**. This section is an honesty ledger: what is still **remaining** to implement to product strength vs what is only **soft** on the tree. It does **not** re-litigate architecture.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Accepted** | Design frozen for Solaris channel — ship toward these rules |
+| **Soft** | Partial / greppable / bring-up path exists; not full product close of the decision |
+| **Remaining** | Decision accepted; code/product path still open or incomplete |
+| **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+### 19.1 Soft does not close remaining (or bar3)
+
+| Soft surface (parallel waves / host) | Closes Solaris remaining? | Closes bar3? |
+|--------------------------------------|---------------------------|--------------|
+| Continuum **makefile_max=14900** CREATE-ONLY graph decades | **No** | **No** |
+| Host Steam media inventory **READY** (`steam-bar3-check`) | **No** | **No** |
+| Kernel smokes (doors timeout/peer, cap mint/CDT soft, io_uring min, HDA multi-stream, 768G soak, aarch64 M0) | **No** (may soft-touch related surfaces) | **No** |
+| Live embeds (sessiond / netstackd / sshd / storaged / vfsd / shell / scsi_mid / hda_client) | **No** (product skeleton ≠ full §1–18) | **No** |
+| Design freeze in this file | Decisions only | **No** |
+
+**Hard rule:** never claim bar3 closed, Deck Top 50 title PASS, or “Solaris remaining done” from continuum soft gates, media `STATUS=READY`, or design **Accepted** alone. Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this channel does not promote those rows.
+
+### 19.2 Per-decision ledger (design Accepted → ship honesty)
+
+| § | Decision (short) | Soft on tree (honest bound) | Remaining (do not claim done) |
+|---|------------------|-----------------------------|-------------------------------|
+| **1** Untyped retype | Two classes + size ladder | `GJ_SYS_UNTYPED_RETYPE` / untyped counters soft path; no full RAM vs device resource-pool product | Full power-of-two ladder + recycle-to-parent + device-untyped only via `devmgr` |
+| **2** CDT + `slots_left` | Explicit child list; slot quota | `cap: mint/copy/move+cdt PASS`; `slots_left` + soft CDT; empty-edge soft gap known | Full CDT edges everywhere; R2 try-lock slot walk in deferred revoke; no free infinite C-list product audit |
+| **3** IPC cap transfer | Receiver alloc; all-or-nothing; small K | Doors message path + badge soft; **not** full Scheme A cap transfer K | Cap transfer (copy/move K caps); dest slot kernel-picked; partial-fail atomicity product |
+| **4** Syscall ABI freeze | Stable NRs; Scheme A `(slot,gen)` | Native `GJ_SYS_*` + Linux hybrid live; not universal `gj_cap_resolve` on all ops | Freeze `syscall.h` with Apple §5 surface; no renumber after first userland contract |
+| **5** CNode locking | Per-process CNode mutex; order CNode→Object→Endpoint | Exclusive lock on mutate/resolve v1 soft | Shared resolve / RCU-later; full lock-order audit under load |
+| **6** Process lifecycle | Process owns space+CNode; LWPs; kernel PROCESS mint | Spawn + PROCESS cap to parent; live embeds; death path partial | Full reverse tear-down on spawn fail; complete revoke-all on last-thread exit product |
+| **7–8** Pager map / fault msg | Cookie + cluster + kernel-only PTE; fault lock | Cookie/cluster/fault-lock **policy** in `fault.c`; cluster max compile bound | Region→Call pager→cookie validate→map **views**; single-use cookie end-to-end; kill-on-timeout product path |
+| **9** Pager endpoint lifecycle | Ref on `set_pager`; clear on ep revoke | `gj_process_set_pager` + death clear soft | Full ENDPOINT GRANT ref++; ep DEAD/revoke clears all PCBs + invalidates in-flight cookies |
+| **10** Nested Call / late reply / PI | Depth cap; discard late reply; turnstile PI | Doors single-flight + mono timeout; soft QoS rank | Fixed Call depth; late-reply discard; **turnstile PI** along Call chain within budget |
+| **11** Revoke queue + epoch | Never drop; per-CPU quiescent | Deferred revoke from timer (R7); soft reclaim | Grow reclaim pool / sync clear; epoch across CPUs; stall panic debug |
+| **12** IOMMU API | DDI DMA window caps | Probe + enforce windows + VT-d TE soft (`iommu:* PASS`) | `create_window` as true window **cap**; destroy/revoke HW-first product; no bus-master without IOMMU class |
+| **13** HCL tiers | T0–T3 ship matrix | T0 virtio/OVMF CI path soft; [HCL.md](HCL.md) | Documented T1+ product matrix; no infinite driver promise |
+| **14** TCB inventory | Blast-radius list | Inventory text only | Keep honest as servers gain caps; post-seal `init` limited |
+| **15** `GJ_CAP_CNODE` v1 | Type reserved; no nested | Nested install → not product | Stay `NOSUPPORT` until server feature; no silent nested CNodes |
+| **16** Spawn PROCESS cap | Kernel mint task port | Parent PROCESS mint on spawn live | Rights matrix + self-port rules fully per Apple §3 |
+| **17–18** Avoid / order | Sun pragmatism | Implementation order partially started (process/CNode/doors/virtio soft) | Finish order without ambient fork, permanent pager map-any, or STREAMS |
+
+### 19.3 Explicit non-claims (Wave 8)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Solaris channel design **Accepted**” | **Yes** — this document |
+| “Soft CDT / doors / IOMMU / fault policy greppable” | **Yes** — with soft bound |
+| “All §§1–18 product-complete” | **No** |
+| “Continuum 14900 closes Solaris remaining” | **No** |
+| “Media READY / soft smokes close bar3” | **No** |
+| “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
+
+**Bar3 remains OPEN** (client + matrix). This Wave 8 edit is honesty-only on the Solaris remaining ledger.
+
+### 19.4 Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [TODO.md](TODO.md) — coding boxes (M2 CDT try-lock, set_pager full path, fault→pager Call, cap transfer, PI)  
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) · [HCL.md](HCL.md) — parallel soft stamp; open bars  
+
+*Wave 8 channel Solaris: keep Accepted decisions; ship remaining product paths; never promote soft continuum or media READY to bar3 or “remaining closed.”*

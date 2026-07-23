@@ -40,6 +40,14 @@
 #   serial: soft verify PASS|FAIL|idle   x86 COM1 (serial.c)
 #   aarch64: kmain soft PASS             kmain phase summary
 #   linux: nr class soft PASS|PARTIAL|NONE  NR hot/cold table
+# Soft stats smoke (info only — if greppable in serial log):
+#   spawn/sched/user/native/syscall/trap: soft stats …
+#   scsi_mid-gj: soft stats …            freestanding scsi soft counters
+# Continuum side panel (host helper; soft graph only):
+#   makefile_max=N                       honest Makefile scan
+#   high-water makefile_max=15000        noted when greppable (soft graph ≠ bar3)
+# Bar3 honesty (host media check; always OPEN while client/matrix open):
+#   bar3: OPEN / client launch + Top50 NOT-TRIED
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -199,6 +207,36 @@ if gqa_q 'TCP multi-segment FAIL|multi-segment FAIL'; then
 	echo "  info: multi-seg FAIL present (soft)"
 fi
 
+# Soft stats smoke lines (info only — greppable kernel/embed counters; never hit/miss).
+# Grep: soft stats  (spawn/sched/user/native/syscall/trap/scsi_mid-*)
+echo "  --- soft stats smoke (info only) ---"
+_ss_pat='soft stats'
+if gqa_q "$_ss_pat"; then
+	_ss_n=$(gqa "$_ss_pat" | wc -l | tr -d ' ' || true)
+	case "$_ss_n" in
+	'' | *[!0-9]*) _ss_n=0 ;;
+	esac
+	_ss_line=$(first_line "$_ss_pat")
+	echo "  info: soft stats smoke  (present n=$_ss_n) — ${_ss_line:-present}"
+	# Named subsystem presence (agent-friendly; still soft)
+	for _ss_tag in \
+		"spawn: soft stats" \
+		"sched: soft stats" \
+		"user: soft stats" \
+		"native: soft stats" \
+		"syscall: soft stats" \
+		"trap: soft stats" \
+		"scsi_mid-gj: soft stats" \
+		"scsi_mid-server: soft stats"
+	do
+		if gqa_q "$_ss_tag"; then
+			echo "  info: soft stats  ${_ss_tag%%:*}  (present)"
+		fi
+	done
+else
+	echo "  info: soft stats smoke  (absent)"
+fi
+
 # UEFI / EFI path markers when present (OVMF / real-hw serial)
 info_match "GJ-EFI"            'GJ-EFI'
 info_match "KERNEL.ELF loaded" 'KERNEL\.ELF loaded'
@@ -206,16 +244,49 @@ info_match "source=UEFI"       'source=UEFI'
 
 # Optional host media / continuum side panels (never fail)
 echo "  --- host side panels (soft) ---"
+# Bar3 open honesty: media READY/SKELETON/MISSING is host inventory only.
+# Client launch + Deck Top 50 matrix remain OPEN (never claim closed here).
 if [[ -f "$ROOT/scripts/steam-bar3-check.sh" ]]; then
-	# Capture first status line only (bash so +x not required)
-	bar3_line=$(bash "$ROOT/scripts/steam-bar3-check.sh" 2>/dev/null | head -n1 || true)
+	# Capture status + honesty lines (bash so +x not required)
+	_bar3_out=$(bash "$ROOT/scripts/steam-bar3-check.sh" 2>/dev/null || true)
+	bar3_line=$(printf '%s\n' "$_bar3_out" | head -n1 || true)
 	echo "  info: ${bar3_line:-steam-bar3-check: (no output)}"
+	# Prefer helper's own open/bar3 lines when present
+	_bar3_open=$(printf '%s\n' "$_bar3_out" | grep -E '^\s*(open:|bar3:)' | head -n3 || true)
+	if [[ -n "${_bar3_open:-}" ]]; then
+		while IFS= read -r _bl; do
+			[[ -n "$_bl" ]] && echo "  info: bar3 honesty  ${_bl#"${_bl%%[![:space:]]*}"}"
+		done <<<"$_bar3_open"
+	fi
+	# Always stamp open honesty even if helper output is thin
+	echo "  info: bar3 OPEN  (client launch + Deck Top 50 still NOT-TRIED)"
+	echo "  info: bar3 honesty  media READY ≠ smoke-all PASS ≠ title PASS"
 else
 	echo "  info: steam-bar3-check: (script missing)"
+	echo "  info: bar3 OPEN  (client launch + Deck Top 50 still NOT-TRIED)"
 fi
+# Continuum high-water (honest Makefile scan; soft graph only — not bar3).
+# Note makefile_max=15000 when greppable from helper stdout (N>=15000).
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
+	mx_line=${mx_line//$'\r'/}
+	mx_line=$(printf '%s' "$mx_line" | tr -cd '\11\12\15\40-\176' | head -c 80 || true)
 	echo "  info: continuum ${mx_line:-makefile_max=(unknown)}"
+	# Parse N from makefile_max=N when greppable
+	_mx_n=""
+	if [[ "${mx_line:-}" =~ makefile_max=([0-9]+) ]]; then
+		_mx_n="${BASH_REMATCH[1]}"
+	fi
+	if [[ -n "$_mx_n" ]]; then
+		echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
+		# Wave high-water stamp: note makefile_max=15000 only when greppable
+		if [[ "$_mx_n" -ge 15000 ]]; then
+			echo "  info: continuum high-water  makefile_max=15000 greppable  (soft graph ≠ bar3)"
+		fi
+	else
+		echo "  info: continuum high-water  makefile_max=(unparsed)"
+	fi
+	echo "  info: continuum honesty  soft graph wire ≠ bar3 client / Top50 titles"
 else
 	echo "  info: continuum makefile_max=(helper missing)"
 fi

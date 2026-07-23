@@ -8,9 +8,14 @@
  * Soft fragmentation (internal):
  *   - align:  round-up of request to 16-byte units
  *   - unsplit: free remainder too small for header+16, kept with live block
- * Counters are live (subtracted on free), not lifetime totals.
+ * Live soft bytes are subtracted on free; lifetime soft charged/released
+ * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Greppable: kheap: init | kheap: stats | kheap: counters
+ * Greppable:
+ *   kheap: init
+ *   kheap: stats …
+ *   kheap: counters …
+ *   kheap: soft …   (allocs/frees/bytes soft + deepen)
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -44,8 +49,17 @@ static struct kheap_block *g_pFree;
 static size_t              g_cbUsed;
 static size_t              g_cbFree;
 static size_t              g_cFreeBlocks;
+/* Live soft frag (charged on alloc, released on free). */
 static size_t              g_cbSoftAlign;
 static size_t              g_cbSoftUnsplit;
+/* Soft deepen: lifetime + peak + waste-hit events (not live). */
+static size_t              g_cbSoftPeak;       /* peak live soft_frag */
+static u64                 g_cbSoftCharged;    /* lifetime soft bytes in */
+static u64                 g_cbSoftReleased;   /* lifetime soft bytes out */
+static u64                 g_cSoftWasteAlloc;  /* allocs with any soft waste */
+static u64                 g_cSoftWasteFree;   /* frees releasing soft waste */
+static u64                 g_cSoftAlignHit;    /* allocs with align pad */
+static u64                 g_cSoftUnsplitHit;  /* allocs with unsplit remainder */
 static u64                 g_cAlloc;
 static u64                 g_cFree;
 static u64                 g_cGrow;
@@ -53,6 +67,45 @@ static u64                 g_cSplit;
 static u64                 g_cFail;
 static u64                 g_cDoubleFree;
 static int                 g_fInit;
+
+/**
+ * Soft-account one successful alloc's internal waste.
+ * Updates live soft bytes (caller already added align/unsplit), lifetime
+ * charged, peak live soft_frag, and soft waste-hit event counters.
+ */
+static void
+soft_note_alloc(size_t cbAlignWaste, size_t cbUnsplit)
+{
+    size_t cbSoftLive;
+
+    if (cbAlignWaste > 0) {
+        g_cSoftAlignHit++;
+    }
+    if (cbUnsplit > 0) {
+        g_cSoftUnsplitHit++;
+    }
+    if (cbAlignWaste > 0 || cbUnsplit > 0) {
+        g_cSoftWasteAlloc++;
+        g_cbSoftCharged += (u64)cbAlignWaste + (u64)cbUnsplit;
+    }
+    cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
+    if (cbSoftLive > g_cbSoftPeak) {
+        g_cbSoftPeak = cbSoftLive;
+    }
+}
+
+/**
+ * Soft-account one successful free's released internal waste.
+ * Live soft bytes already decremented by caller.
+ */
+static void
+soft_note_free(size_t cbAlign, size_t cbUnsplit)
+{
+    if (cbAlign > 0 || cbUnsplit > 0) {
+        g_cSoftWasteFree++;
+        g_cbSoftReleased += (u64)cbAlign + (u64)cbUnsplit;
+    }
+}
 
 void
 kheap_init(void)
@@ -63,6 +116,13 @@ kheap_init(void)
     g_cFreeBlocks = 0;
     g_cbSoftAlign = 0;
     g_cbSoftUnsplit = 0;
+    g_cbSoftPeak = 0;
+    g_cbSoftCharged = 0;
+    g_cbSoftReleased = 0;
+    g_cSoftWasteAlloc = 0;
+    g_cSoftWasteFree = 0;
+    g_cSoftAlignHit = 0;
+    g_cSoftUnsplitHit = 0;
     g_cAlloc = 0;
     g_cFree = 0;
     g_cGrow = 0;
@@ -219,6 +279,7 @@ kheap_alloc(size_t cb)
             pBest->u16SoftUnsplit = (u16)cbUnsplit;
             g_cbSoftAlign += cbAlignWaste;
             g_cbSoftUnsplit += cbUnsplit;
+            soft_note_alloc(cbAlignWaste, cbUnsplit);
             g_cbUsed += pBest->cbSize;
             g_cAlloc++;
             pOut = payload_from_block(pBest);
@@ -260,6 +321,7 @@ kheap_free(void *p)
     } else {
         g_cbSoftUnsplit = 0;
     }
+    soft_note_free(cbAlign, cbUnsplit);
     if (g_cbUsed >= pBlk->cbSize) {
         g_cbUsed -= pBlk->cbSize;
     } else {
@@ -324,12 +386,16 @@ kheap_get_stats(struct kheap_stats *pOut)
 void
 kheap_dump_stats(void)
 {
+    size_t cbSoftLive;
+
+    cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
+
     kprintf("kheap: stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_align=%lu soft_unsplit=%lu\n",
             (unsigned long)g_cbUsed,
             (unsigned long)g_cbFree,
             (unsigned long)g_cFreeBlocks,
-            (unsigned long)(g_cbSoftAlign + g_cbSoftUnsplit),
+            (unsigned long)cbSoftLive,
             (unsigned long)g_cbSoftAlign,
             (unsigned long)g_cbSoftUnsplit);
     kprintf("kheap: counters alloc=%lu free=%lu grow=%lu split=%lu "
@@ -340,4 +406,31 @@ kheap_dump_stats(void)
             (unsigned long)g_cSplit,
             (unsigned long)g_cFail,
             (unsigned long)g_cDoubleFree);
+    /*
+     * Soft heap stats deepen — greppable: kheap: soft
+     *   allocs / frees : successful heap ops (soft-visible totals)
+     *   bytes          : live soft frag (align + unsplit)
+     *   align/unsplit  : live soft split of bytes
+     *   peak           : high-water live soft_frag
+     *   charged/released: lifetime soft bytes in/out
+     *   waste_allocs/frees: ops that moved soft waste
+     *   align_hit/unsplit_hit: allocs that charged each kind
+     */
+    kprintf("kheap: soft allocs=%lu frees=%lu bytes=%lu "
+            "align=%lu unsplit=%lu peak=%lu "
+            "charged=%lu released=%lu "
+            "waste_allocs=%lu waste_frees=%lu "
+            "align_hit=%lu unsplit_hit=%lu\n",
+            (unsigned long)g_cAlloc,
+            (unsigned long)g_cFree,
+            (unsigned long)cbSoftLive,
+            (unsigned long)g_cbSoftAlign,
+            (unsigned long)g_cbSoftUnsplit,
+            (unsigned long)g_cbSoftPeak,
+            (unsigned long)g_cbSoftCharged,
+            (unsigned long)g_cbSoftReleased,
+            (unsigned long)g_cSoftWasteAlloc,
+            (unsigned long)g_cSoftWasteFree,
+            (unsigned long)g_cSoftAlignHit,
+            (unsigned long)g_cSoftUnsplitHit);
 }

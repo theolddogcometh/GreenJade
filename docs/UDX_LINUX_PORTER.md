@@ -205,4 +205,17 @@ make udx-example   # build/udx_skeleton
 
 ---
 
+## 13. Soft status (Wave 8)
+
+| Item | State |
+|------|--------|
+| **UDX host soft path** | Present — `make udx` → `libudx.a`, host inject / fire_irq, skeleton example |
+| **Full GJ grants (PCI/IRQ/DMA)** | **Open** — see §12 Host vs Full GJ |
+| **Product multi-server confine** | **Open** — UDX soft path does **not** close multi-server confine product |
+| **bar3 / Steam client** | **Out of scope** for this doc — no claim |
+
+**Soft stamp (2026-07-23):** UDX remains a **host/sim soft path** for clean-room Linux-shaped ports. Host inject ≠ product multi-server confine. Multi-server confine product path stays **open**. **No bar3 claim.**
+
+---
+
 *UDX = Linux-shaped surface, DDI quiesce, GreenJade security underneath.*

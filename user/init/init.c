@@ -15,6 +15,16 @@
  *   greenjade-init: soft deepen PASS    (optional; soft-only surface)
  *   greenjade-init: abi PASS
  *
+ * Soft inventory (grep: init: soft) — deepen counters, never hard-fail:
+ *   init: soft paths ok=… miss=…
+ *   init: soft mmap ok=… miss=…
+ *   init: soft ipc pipe=… efd=…
+ *   init: soft spawn fork=… wait=… miss=…   (Linux fork soft; no native spawn)
+ *   init: soft doors ok=… miss=…
+ *   init: soft memobj ok=… miss=…
+ *   init: soft links ok=… miss=…
+ *   init: soft stats areas=… path=… mmap=… ipc=… spawn=… door=… memobj=…
+ *
  * Soft deepen (never hard-fails boot):
  *   - libgj string/memory helpers (strcmp/memcpy/itoa)
  *   - CLOCK_REALTIME + clock_getres already on hard MONOTONIC path
@@ -51,6 +61,114 @@ struct init_soft_path {
     int nFlags; /* openat flags; 0 = O_RDONLY */
 };
 
+/* ---- Soft inventory counters (grep: init: soft) ------------------------ */
+static unsigned g_cSoftPathOk;
+static unsigned g_cSoftPathMiss;
+static unsigned g_cSoftMmapOk;
+static unsigned g_cSoftMmapMiss;
+static unsigned g_cSoftIpcPipeOk;
+static unsigned g_cSoftIpcEfdOk;
+static unsigned g_cSoftSpawnFork; /* parent saw child pid from soft fork */
+static unsigned g_cSoftSpawnWait; /* wait4 after soft fork */
+static unsigned g_cSoftSpawnMiss; /* fork failed (< 0) */
+static unsigned g_cSoftDoorOk;
+static unsigned g_cSoftDoorMiss;
+static unsigned g_cSoftMemobjOk;
+static unsigned g_cSoftMemobjMiss;
+static unsigned g_cSoftLinkOk;
+static unsigned g_cSoftLinkMiss;
+static unsigned g_cSoftAreas; /* soft deepen suite areas completed */
+
+/* Count one door/native soft call: >=0 ok, else miss. Never hard-fails. */
+static void
+soft_note_door(long i64R)
+{
+    if (i64R >= 0) {
+        g_cSoftDoorOk++;
+    } else {
+        g_cSoftDoorMiss++;
+    }
+}
+
+/*
+ * Emit greppable soft inventory lines (prefix "init: soft ").
+ * Pure observation — always soft; does not gate abi PASS.
+ */
+static void
+soft_inventory_log(void)
+{
+    static char aLine[192];
+    unsigned cIpc;
+    unsigned cSpawnOk;
+
+    cIpc = g_cSoftIpcPipeOk + g_cSoftIpcEfdOk;
+    cSpawnOk = g_cSoftSpawnFork + g_cSoftSpawnWait;
+
+    /* Grep: init: soft paths */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft paths ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftPathOk,
+                      (unsigned long)g_cSoftPathMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft mmap */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft mmap ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftMmapOk,
+                      (unsigned long)g_cSoftMmapMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft ipc */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft ipc pipe=%u efd=%u\n",
+                      (unsigned long)g_cSoftIpcPipeOk,
+                      (unsigned long)g_cSoftIpcEfdOk);
+    gj_puts(aLine);
+
+    /* Grep: init: soft spawn (Linux fork soft counts; native spawn N/A) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft spawn fork=%u wait=%u miss=%u\n",
+                      (unsigned long)g_cSoftSpawnFork,
+                      (unsigned long)g_cSoftSpawnWait,
+                      (unsigned long)g_cSoftSpawnMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft doors */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft doors ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftDoorOk,
+                      (unsigned long)g_cSoftDoorMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft memobj */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft memobj ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftMemobjOk,
+                      (unsigned long)g_cSoftMemobjMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft links */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft links ok=%u miss=%u\n",
+                      (unsigned long)g_cSoftLinkOk,
+                      (unsigned long)g_cSoftLinkMiss);
+    gj_puts(aLine);
+
+    /* Grep: init: soft stats (rollup) */
+    (void)gj_snprintf(aLine, sizeof(aLine),
+                      "init: soft stats areas=%u path=%u mmap=%u ipc=%u "
+                      "spawn=%u door=%u memobj=%u link=%u\n",
+                      (unsigned long)g_cSoftAreas,
+                      (unsigned long)g_cSoftPathOk,
+                      (unsigned long)g_cSoftMmapOk,
+                      (unsigned long)cIpc,
+                      (unsigned long)cSpawnOk,
+                      (unsigned long)g_cSoftDoorOk,
+                      (unsigned long)g_cSoftMemobjOk,
+                      (unsigned long)g_cSoftLinkOk);
+    gj_puts(aLine);
+}
+
 /* Linux mmap errno band: return is -errno in [-4095, -1] on failure. */
 static int
 mmap_is_err(void *pMap)
@@ -69,12 +187,15 @@ soft_open_probe(const char *szPath, size_t cbRead)
     long i64Fd;
 
     if (szPath == 0) {
+        g_cSoftPathMiss++;
         return;
     }
     i64Fd = linux_openat(-100 /* AT_FDCWD */, szPath, 0, 0);
     if (i64Fd < 0) {
+        g_cSoftPathMiss++;
         return;
     }
+    g_cSoftPathOk++;
     (void)linux_fstat((int)i64Fd, aSt);
     if (cbRead > 0u) {
         if (cbRead > sizeof(aBuf)) {
@@ -164,6 +285,9 @@ soft_mmap_extra(void)
         (void)linux_mprotect(pMap, 4096, 3 /* RW */);
         (void)linux_mprotect(pMap, 4096, 1 /* R */);
         (void)linux_munmap(pMap, 8192);
+        g_cSoftMmapOk++;
+    } else {
+        g_cSoftMmapMiss++;
     }
 
     /* High user VA soft FIXED — miss is fine on constrained AS. */
@@ -173,6 +297,9 @@ soft_mmap_extra(void)
     if (!mmap_is_err(pFixed) && pFixed != 0) {
         *(volatile unsigned char *)pFixed = 0x11;
         (void)linux_munmap(pFixed, 4096);
+        g_cSoftMmapOk++;
+    } else {
+        g_cSoftMmapMiss++;
     }
 
     i64Brk = linux_brk(0);
@@ -180,6 +307,9 @@ soft_mmap_extra(void)
         /* Query-only grow attempt; kernel may soft-refuse — ignore. */
         (void)linux_brk((void *)(uintptr_t)((unsigned long)i64Brk + 4096ul));
         (void)linux_brk((void *)(uintptr_t)(unsigned long)i64Brk);
+        g_cSoftMmapOk++; /* brk query surface exercised */
+    } else {
+        g_cSoftMmapMiss++;
     }
 }
 
@@ -214,6 +344,9 @@ soft_rootfs_paths(void)
     if (i64Fd >= 0) {
         (void)linux_getdents64((int)i64Fd, aDent, sizeof(aDent));
         (void)linux_close((int)i64Fd);
+        g_cSoftPathOk++; /* getdents surface on live /tmp */
+    } else {
+        g_cSoftPathMiss++;
     }
 }
 
@@ -229,6 +362,7 @@ soft_fs_links(void)
     static unsigned char aSt[144];
     static char aDent[256];
     long i64Fd;
+    long i64R;
 
     i64Fd = linux_openat(-100, szTouch, 0x41 /* O_WRONLY|O_CREAT */, 0644);
     if (i64Fd >= 0) {
@@ -236,6 +370,9 @@ soft_fs_links(void)
         (void)linux_fsync((int)i64Fd);
         (void)linux_fstat((int)i64Fd, aSt);
         (void)linux_close((int)i64Fd);
+        g_cSoftLinkOk++;
+    } else {
+        g_cSoftLinkMiss++;
     }
 
     i64Fd = linux_openat(-100, szA, 0x41 /* O_WRONLY|O_CREAT */, 0644);
@@ -245,10 +382,27 @@ soft_fs_links(void)
         /* Soft: getdents on non-dir may fail; exercise the NR only */
         (void)linux_getdents64((int)i64Fd, aDent, sizeof(aDent));
         (void)linux_close((int)i64Fd);
-        (void)linux_link(szA, szB);
-        (void)linux_symlink(szA, szSl);
+        i64R = linux_link(szA, szB);
+        if (i64R >= 0) {
+            g_cSoftLinkOk++;
+        } else {
+            g_cSoftLinkMiss++;
+        }
+        i64R = linux_symlink(szA, szSl);
+        if (i64R >= 0) {
+            g_cSoftLinkOk++;
+        } else {
+            g_cSoftLinkMiss++;
+        }
         aLink[0] = '\0';
-        (void)linux_readlink(szSl, aLink, sizeof(aLink));
+        i64R = linux_readlink(szSl, aLink, sizeof(aLink));
+        if (i64R >= 0) {
+            g_cSoftLinkOk++;
+        } else {
+            g_cSoftLinkMiss++;
+        }
+    } else {
+        g_cSoftLinkMiss++;
     }
 }
 
@@ -267,6 +421,7 @@ soft_ipc_fds(void)
         (void)linux_read(aPipe[0], aScratch, 2);
         (void)linux_close(aPipe[0]);
         (void)linux_close(aPipe[1]);
+        g_cSoftIpcPipeOk++;
     }
 
     i64Efd = linux_eventfd2(0, 0);
@@ -275,15 +430,17 @@ soft_ipc_fds(void)
         (void)linux_write((int)i64Efd, &u64One, 8);
         (void)linux_read((int)i64Efd, &u64One, 8);
         (void)linux_close((int)i64Efd);
+        g_cSoftIpcEfdOk++;
     }
 }
 
-/* Soft: nanosleep 1us + fork/wait4 (child may be stub-unscheduled). */
+/* Soft: nanosleep 1us + fork/wait4 (spawn soft counts; child may be stub). */
 static void
 soft_sleep_fork(void)
 {
     long i64Ns[2];
     long i64Child;
+    long i64W;
     int nSt = 0;
 
     i64Ns[0] = 0;
@@ -292,9 +449,15 @@ soft_sleep_fork(void)
 
     i64Child = linux_fork();
     if (i64Child > 0) {
-        (void)linux_wait4((int)i64Child, &nSt, 0, 0);
+        g_cSoftSpawnFork++;
+        i64W = linux_wait4((int)i64Child, &nSt, 0, 0);
+        if (i64W >= 0) {
+            g_cSoftSpawnWait++;
+        }
     } else if (i64Child == 0) {
         /* Child view not scheduled in bring-up fork stub — unused */
+    } else {
+        g_cSoftSpawnMiss++;
     }
 }
 
@@ -315,52 +478,54 @@ soft_native_doors(void)
     long i64R;
 
     /* Platform inventory (op0 IOMMU present, op1 MSI-X count; no wow64 flip). */
-    (void)gj_platform_info(0, 0, 0, 0);
-    (void)gj_platform_info(1, 0, 0, 0);
+    soft_note_door(gj_platform_info(0, 0, 0, 0));
+    soft_note_door(gj_platform_info(1, 0, 0, 0));
 
     /* Notify poll only (block=0). */
-    (void)gj_notify_wait(GJ_NOTIFY_WHICH_MSIX_GLOBAL, 0ul, 0);
+    soft_note_door(gj_notify_wait(GJ_NOTIFY_WHICH_MSIX_GLOBAL, 0ul, 0));
 
-    (void)gj_console_poll();
-    (void)gj_set_qos(0, 0);
-    (void)gj_yield();
-    (void)gj_dlog("greenjade-init: soft dlog\n");
+    soft_note_door(gj_console_poll());
+    soft_note_door(gj_set_qos(0, 0));
+    gj_yield(); /* void return — surface exercised counts as door ok */
+    g_cSoftDoorOk++;
+    soft_note_door(gj_dlog("greenjade-init: soft dlog\n"));
 
     /* Store: STATS + CAP query (no claim/read/write). */
     u32Store[0] = u32Store[1] = u32Store[2] = u32Store[3] = 0;
-    (void)gj_store(GJ_STORE_OP_STATS, (long)(uintptr_t)u32Store, 0, 0);
+    soft_note_door(gj_store(GJ_STORE_OP_STATS, (long)(uintptr_t)u32Store, 0, 0));
     u64Cap = 0;
-    (void)gj_store(GJ_STORE_OP_CAP, (long)(uintptr_t)&u64Cap, 0, 0);
-    (void)gj_store(GJ_STORE_OP_QUEUE_INFO, 0, 0, 0);
+    soft_note_door(gj_store(GJ_STORE_OP_CAP, (long)(uintptr_t)&u64Cap, 0, 0));
+    soft_note_door(gj_store(GJ_STORE_OP_QUEUE_INFO, 0, 0, 0));
 
     /* Net: POLL + STATS (+ TCP_STATS soft). */
-    (void)gj_net(GJ_NET_OP_POLL, 0, 0, 0);
+    soft_note_door(gj_net(GJ_NET_OP_POLL, 0, 0, 0));
     u32Net[0] = u32Net[1] = u32Net[2] = u32Net[3] = 0;
-    (void)gj_net(GJ_NET_OP_STATS, (long)(uintptr_t)u32Net, 0, 0);
-    (void)gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)u32Net, 0, 0);
+    soft_note_door(gj_net(GJ_NET_OP_STATS, (long)(uintptr_t)u32Net, 0, 0));
+    soft_note_door(gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)u32Net, 0, 0));
 
     /* VFS: STATS only. */
     u32Vfs[0] = u32Vfs[1] = u32Vfs[2] = u32Vfs[3] = 0;
-    (void)gj_vfs(GJ_VFS_OP_STATS, (long)(uintptr_t)u32Vfs, 0, 0);
+    soft_note_door(gj_vfs(GJ_VFS_OP_STATS, (long)(uintptr_t)u32Vfs, 0, 0));
 
     /* Session: STATS + DISPLAY_INFO soft (no CLAIM). */
     u32Sess[0] = u32Sess[1] = u32Sess[2] = u32Sess[3] = 0;
-    (void)gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)u32Sess, 0, 0);
-    (void)gj_session(GJ_SESS_OP_DISPLAY_INFO, (long)(uintptr_t)u32Sess, 0, 0);
-    (void)gj_session(GJ_SESS_OP_INPUT_POLL, 0, 0, 0);
+    soft_note_door(gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)u32Sess, 0, 0));
+    soft_note_door(gj_session(GJ_SESS_OP_DISPLAY_INFO, (long)(uintptr_t)u32Sess,
+                              0, 0));
+    soft_note_door(gj_session(GJ_SESS_OP_INPUT_POLL, 0, 0, 0));
 
     /* SCSI: READY + STATS (no READ/WRITE). */
     i64R = gj_scsi(GJ_SCSI_OP_READY, 0, 0, 0);
-    (void)i64R;
+    soft_note_door(i64R);
     u32Scsi[0] = u32Scsi[1] = 0;
-    (void)gj_scsi(GJ_SCSI_OP_STATS, (long)(uintptr_t)u32Scsi, 0, 0);
+    soft_note_door(gj_scsi(GJ_SCSI_OP_STATS, (long)(uintptr_t)u32Scsi, 0, 0));
 
     /* HDA: STATS only (no OPEN/START). */
     u32Hda[0] = u32Hda[1] = u32Hda[2] = 0;
-    (void)gj_hda_stream(GJ_HDA_OP_STATS, (long)(uintptr_t)u32Hda, 0, 0);
+    soft_note_door(gj_hda_stream(GJ_HDA_OP_STATS, (long)(uintptr_t)u32Hda, 0, 0));
 
     /* GPU display info soft (may soft-miss without virtio-gpu). */
-    (void)gj_gpu_display_info(u32Sess);
+    soft_note_door(gj_gpu_display_info(u32Sess));
 }
 
 /* Soft: named memobj product path + second soft name. */
@@ -368,39 +533,63 @@ static void
 soft_named_memobj(void)
 {
     long i64Va;
+    long i64R;
 
-    if (gj_memobj_create_named("init-shm", 1) == 0) {
+    i64R = gj_memobj_create_named("init-shm", 1);
+    if (i64R == 0) {
         i64Va = gj_memobj_map_named("init-shm", 0x35000000ul, 3);
         if (i64Va > 0) {
             *(volatile unsigned *)(uintptr_t)i64Va = 0x494e4954u; /* INIT */
+            g_cSoftMemobjOk++;
             gj_puts("greenjade-init: named memobj PASS\n");
+        } else {
+            g_cSoftMemobjMiss++;
         }
+    } else {
+        g_cSoftMemobjMiss++;
     }
 
     /* Second soft name — create may soft-miss; never hard-fail. */
-    if (gj_memobj_create_named("init-shm2", 1) == 0) {
+    i64R = gj_memobj_create_named("init-shm2", 1);
+    if (i64R == 0) {
         i64Va = gj_memobj_map_named("init-shm2", 0x35100000ul, 3);
         if (i64Va > 0) {
             *(volatile unsigned *)(uintptr_t)i64Va = 0x53484d32u; /* SHM2 */
+            g_cSoftMemobjOk++;
+        } else {
+            g_cSoftMemobjMiss++;
         }
+    } else {
+        g_cSoftMemobjMiss++;
     }
 }
 
-/* Aggregate soft deepen; always ends with soft deepen marker when reached. */
+/* Aggregate soft deepen; inventory log + soft deepen marker when reached. */
 static void
 soft_deepen_all(void)
 {
     soft_libgj_string();
+    g_cSoftAreas++;
     soft_clocks();
+    g_cSoftAreas++;
     soft_arch_prctl();
+    g_cSoftAreas++;
     soft_futex();
+    g_cSoftAreas++;
     soft_mmap_extra();
+    g_cSoftAreas++;
     soft_rootfs_paths();
+    g_cSoftAreas++;
     soft_fs_links();
+    g_cSoftAreas++;
     soft_ipc_fds();
+    g_cSoftAreas++;
     soft_sleep_fork();
+    g_cSoftAreas++;
     soft_native_doors();
-    /* named memobj already emitted its own PASS when green */
+    g_cSoftAreas++;
+    /* named memobj already emitted its own PASS when green; counts ready */
+    soft_inventory_log();
     gj_puts("greenjade-init: soft deepen PASS\n");
 }
 

@@ -2,7 +2,21 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped grp.h (stub surface). Not GNU glibc.
+ * Clean-room glibc-shaped <grp.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * group database accessors (getgrgid/getgrnam and friends). Bring-up may be
+ * minimal (primary gid only) per docs/GLIBC_COMPAT.md.
+ *
+ * Design notes
+ * ------------
+ * Complements <pwd.h> and getgrouplist in <unistd.h>.
+ *
+ * Non-goals
+ * ---------
+ * Full NSS group enumeration backends.
  */
 #pragma once
 

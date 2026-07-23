@@ -12,12 +12,21 @@ root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
 out="${1:-build/rootfs}"
 
-make -j"$(nproc)" userland libcgj >/dev/null
+# Soft: prefer full rebuild; if tree is mid-wave broken, use existing ELFs.
+if ! make -j"$(nproc)" userland libcgj >/dev/null 2>&1; then
+    if [ -f build/user/init.elf ] && [ -f build/user/shell.elf ]; then
+        echo "stage-rootfs: warn: make incomplete; packing existing userland ELFs" >&2
+    else
+        echo "stage-rootfs: FAIL need build/user/init.elf + shell.elf" >&2
+        exit 1
+    fi
+fi
 
 rm -rf "$out"
 mkdir -p "$out/bin" "$out/sbin" "$out/etc" "$out/tmp" "$out/var/tmp" \
          "$out/usr/bin" "$out/usr/sbin" "$out/usr/lib" "$out/lib" "$out/proc" \
-         "$out/dev" "$out/dev/shm" "$out/mnt" "$out/var/log" "$out/etc/ssh"
+         "$out/dev" "$out/dev/shm" "$out/mnt" "$out/var/log" "$out/etc/ssh" \
+         "$out/root" "$out/etc/greenjade"
 
 cp -f build/user/init.elf "$out/sbin/init"
 cp -f build/user/shell.elf "$out/bin/sh"
@@ -28,6 +37,15 @@ cp -f build/user/sessiond.elf "$out/usr/bin/sessiond" 2>/dev/null || true
 cp -f build/user/netstackd.elf "$out/usr/bin/netstackd" 2>/dev/null || true
 cp -f build/user/storaged.elf "$out/usr/bin/storaged" 2>/dev/null || true
 cp -f build/user/vfsd.elf "$out/usr/bin/vfsd" 2>/dev/null || true
+# Product freestanding clients (also kernel-embedded for live spawn)
+if [ -f build/user/scsi_mid.elf ]; then
+	cp -f build/user/scsi_mid.elf "$out/usr/sbin/scsi_mid"
+	cp -f build/user/scsi_mid.elf "$out/sbin/scsi_mid"
+fi
+if [ -f build/user/hda_client.elf ]; then
+	cp -f build/user/hda_client.elf "$out/usr/bin/hda_client"
+	cp -f build/user/hda_client.elf "$out/bin/hda_client"
+fi
 # Product sshd — freestanding ELF, enabled by default on live/hwtest boot
 if [ -f build/user/sshd.elf ]; then
 	cp -f build/user/sshd.elf "$out/usr/sbin/sshd"
@@ -110,6 +128,16 @@ EOF
 chmod +x scripts/stage-steam-tree.sh
 GJ_STEAM_AS_ROOTFS=1 ./scripts/stage-steam-tree.sh "$out" >/dev/null || true
 
+cat >"$out/etc/greenjade/product.env" <<'EOF'
+# GreenJade product rootfs soft inventory (text only; not sourced by kernel)
+GJ_PRODUCT=greenjade
+GJ_SSHD_DEFAULT_ON=1
+GJ_SSHD_PORT=22
+# Kernel multi-stream PASS is not Steam audio; bar3 client remains open.
+GJ_HDA_KERNEL_MULTI_STREAM=1
+GJ_STEAM_BAR3_OPEN=1
+EOF
+
 cat >"$out/README.txt" <<'EOF'
 GreenJade minimal rootfs (freestanding ELFs)
 
@@ -124,14 +152,42 @@ usr/bin/netstackd      — net server ELF
 usr/sbin/sshd          — product SSH daemon (port 22, on by default)
 usr/bin/storaged       — storage server ELF
 usr/bin/vfsd           — block-backed VFS server (store door + named cache)
+usr/sbin/scsi_mid      — freestanding SCSI mid (also kernel-embedded live spawn)
+usr/bin/hda_client     — freestanding HDA client (kernel multi-stream ≠ Steam audio)
 etc/ssh/sshd_config    — freestanding sshd config
 etc/ssh/authorized_keys — hwtest ed25519 pubkey when present
+etc/greenjade/product.env — soft product inventory flags
 opt/steam/             — staged Steam bootstrap (option 2; make steam-fetch)
 usr/bin/steam          — thin launcher → /opt/steam or GJ-PERSIST/steam
 
 Product: Steam via prebuilt tree on media (docs/STEAM_HWTEST.md); in-tree libc is libcgj.
+Never claim Deck Top 50 from media STATUS=READY alone — real DUT client run only.
+
+Soft-scan serial (exit 0):  ./scripts/gj-product-summary.sh <log>
+Hard product keys:          ./scripts/gj-quick-keys.sh <log>
 EOF
 
+# Soft product binary inventory (for operator / packing scripts)
+prod_n=0
+for p in \
+	"$out/sbin/init" \
+	"$out/bin/sh" \
+	"$out/usr/sbin/sshd" \
+	"$out/usr/sbin/scsi_mid" \
+	"$out/usr/bin/hda_client" \
+	"$out/usr/bin/sessiond" \
+	"$out/usr/bin/netstackd" \
+	"$out/usr/bin/storaged" \
+	"$out/usr/bin/vfsd" \
+	"$out/lib/ld-gj.so.1" \
+	"$out/lib/libc.so.6" \
+	"$out/lib/libgj-so.so.1" \
+	"$out/lib/libgj-gnu.so.1"
+do
+	if [ -f "$p" ]; then
+		prod_n=$((prod_n + 1))
+	fi
+done
 n=$(find "$out" -type f | wc -l | tr -d ' ')
 sz=$(du -sk "$out" | awk '{print $1}')
-echo "stage-rootfs: PASS files=$n size_kb=$sz path=$out"
+echo "stage-rootfs: PASS files=$n size_kb=$sz product_bins=$prod_n path=$out"

@@ -3,13 +3,29 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * SCSI mid-layer shapes (product: userspace scsi_mid server).
- * Clean-room public SCSI architecture — dual MIT OR Apache-2.0, pure C,
- * no GPL source. Kernel interim mid fills CDBs and forwards to virtio-scsi;
- * door-shaped submit is the M5 bridge used by GJ_SYS_SCSI / store_door CAP.
+ * Clean-room public SCSI architecture — dual MIT OR Apache-2.0 pure C11
+ * freestanding, no GPL source. Kernel interim mid fills CDBs and forwards
+ * to virtio-scsi; door-shaped submit is the M5 bridge used by GJ_SYS_SCSI
+ * and store_door CAP/R/W fallback.
  *
- * Soft path (interim): when virtio-scsi is absent, a small software LUN
- * answers TUR / INQUIRY / READ_CAPACITY / READ10 / WRITE10 / SYNC / REQUEST
- * SENSE so door smokes stay green. Product path remains userspace mid + HBA.
+ * Transport preference (scsi_mid_submit):
+ *   1) virtio-scsi when ready (product interim HBA)
+ *   2) soft LUN when no HBA (bring-up soft path — always armed after init;
+ *      virtio preferred when ready so soft stays a fallback)
+ *
+ * Soft LUN geometry (interim only; product is userspace + real HBA):
+ *   GJ_SCSI_SOFT_SECTORS × GJ_SCSI_SOFT_SEC_SIZE (64 × 512)
+ *   Answers TUR / INQUIRY / READ_CAPACITY / READ10 / WRITE10 / SYNC /
+ *   REQUEST SENSE so door smokes stay green without hardware.
+ *
+ * Door vs mid:
+ *   scsi_door_req / scsi_door_submit — opcode-shaped API for userspace
+ *   scsi_mid and store CAP (builds CDB then scsi_mid_submit)
+ *   scsi_mid_submit — raw CDB path for kernel callers and soft LUN
+ *
+ * Greppable product markers (keep stable):
+ *   scsi_mid: … PASS / soft LUN / live spawn PASS
+ *   store_door CAP/R/W via scsi_door when blk absent
  */
 #pragma once
 
@@ -32,7 +48,10 @@
 #define GJ_SCSI_OP_WRITE_10           0x2A
 #define GJ_SCSI_OP_SYNCHRONIZE_CACHE  0x35
 
-/** scsi_door_req.u32Op — door-shaped submit opcodes (M5). */
+/**
+ * scsi_door_req.u32Op — door-shaped submit opcodes (M5).
+ * RAW carries aCdb[0..u8CdbLen); others build standard CDBs from LBA/blocks.
+ */
 #define GJ_SCSI_DOOR_OP_INQUIRY    0u
 #define GJ_SCSI_DOOR_OP_READ_CAP   1u
 #define GJ_SCSI_DOOR_OP_READ10     2u
@@ -42,6 +61,7 @@
 #define GJ_SCSI_DOOR_OP_SYNC_CACHE 6u
 #define GJ_SCSI_DOOR_OP_REQ_SENSE  7u
 
+/** SCSI status byte values used by mid / soft LUN. */
 enum gj_scsi_status {
     GJ_SCSI_GOOD            = 0,
     GJ_SCSI_CHECK_CONDITION = 2,
@@ -53,18 +73,25 @@ enum gj_scsi_status {
 #define GJ_SCSI_SK_NO_SENSE        0x0u
 #define GJ_SCSI_SK_ILLEGAL_REQUEST 0x5u
 
+/** CDB container (max 16 bytes; u8CdbLen is wire length). */
 struct gj_scsi_cdb {
     u8 aCdb[GJ_SCSI_CDB_MAX];
     u8 u8CdbLen;
     u8 u8Pad[3];
 };
 
+/** Fixed/descriptor sense buffer from CHECK CONDITION paths. */
 struct gj_scsi_sense {
     u8 aSense[GJ_SCSI_SENSE_MAX];
     u8 u8SenseLen;
     u8 u8Pad[3];
 };
 
+/**
+ * Mid-layer request: LUN + CDB + data buffer direction.
+ * fDataIn=1 device→host (READ/INQUIRY/…); 0 host→device (WRITE).
+ * u8Status / sense filled on return from submit.
+ */
 struct gj_scsi_request {
     u32 u32Lun;
     u32 u32TimeoutMs;
@@ -79,7 +106,7 @@ struct gj_scsi_request {
 /** Build TEST UNIT READY CDB (6-byte). Null pCdb is a no-op. */
 void scsi_cdb_test_unit_ready(struct gj_scsi_cdb *pCdb);
 
-/** Build REQUEST SENSE CDB (6-byte). */
+/** Build REQUEST SENSE CDB (6-byte); u8Alloc is allocation length. */
 void scsi_cdb_request_sense(struct gj_scsi_cdb *pCdb, u8 u8Alloc);
 
 /** Build INQUIRY CDB (6-byte). Null pCdb is a no-op. */
@@ -92,7 +119,7 @@ void scsi_cdb_mode_sense6(struct gj_scsi_cdb *pCdb, u8 u8Page, u8 u8Alloc);
 /** Build READ CAPACITY(10) (10-byte). */
 void scsi_cdb_read_capacity10(struct gj_scsi_cdb *pCdb);
 
-/** Build READ(10) / WRITE(10) (10-byte). */
+/** Build READ(10) / WRITE(10) (10-byte); LBA + block count. */
 void scsi_cdb_read10(struct gj_scsi_cdb *pCdb, u32 u32Lba, u16 u16Blocks);
 void scsi_cdb_write10(struct gj_scsi_cdb *pCdb, u32 u32Lba, u16 u16Blocks);
 
@@ -103,6 +130,7 @@ void scsi_cdb_synchronize_cache10(struct gj_scsi_cdb *pCdb, u32 u32Lba,
 /**
  * Decode fixed-format sense into KEY/ASC/ASCQ.
  * Returns 0 when sense bytes present, -1 if empty/unknown format.
+ * Null out-params ignored for unused fields.
  */
 int scsi_sense_decode(const struct gj_scsi_sense *pSense, u8 *pKey, u8 *pAsc,
                       u8 *pAscq);
@@ -111,23 +139,33 @@ int scsi_sense_decode(const struct gj_scsi_sense *pSense, u8 *pKey, u8 *pAsc,
  * Submit CDB to first available transport:
  *   1) virtio-scsi when ready (product interim HBA)
  *   2) soft LUN when no HBA (bring-up soft path)
- * Returns 0 on GOOD, -1 on error / not inited / bad args.
+ * Returns 0 on GOOD, -1 on error / not inited / bad args / CHECK soft fail.
+ * Updates pReq→u8Status and sense on transport response.
  */
 int scsi_mid_submit(struct gj_scsi_request *pReq);
 
+/** Arm soft LUN + mid state. Soft LUN always armed; virtio preferred later. */
 void scsi_mid_init(void);
+
 /** Non-zero when interim mid is inited and (virtio-scsi or soft LUN) ready. */
 int  scsi_mid_ready(void);
-/** Non-zero when soft LUN is active and virtio-scsi is not preferred. */
+
+/**
+ * Non-zero when soft LUN is active and virtio-scsi is not preferred
+ * (i.e. serving from software disk).
+ */
 int  scsi_mid_soft_active(void);
+
 /** Successful mid submits (virtio + soft). */
 u32  scsi_mid_io_count(void);
+
 /** Failed mid submits (arg / transport / soft CHECK). */
 u32  scsi_mid_fail_count(void);
 
 /**
  * Door-shaped request for userspace scsi_mid (M5) and kernel store CAP
- * fallback. Raw op carries aCdb[0..u8CdbLen).
+ * fallback. Raw op carries aCdb[0..u8CdbLen); other ops fill CDB from
+ * u32Lba / u16Blocks.
  */
 struct scsi_door_req {
     u32 u32Op; /* GJ_SCSI_DOOR_OP_* */
@@ -150,14 +188,19 @@ struct scsi_door_stats {
 };
 
 void scsi_door_init(void);
+
 /**
  * Build CDB from pReq and submit via scsi_mid.
  * Returns 0 on success, -1 on bad args / no transport / I/O error.
+ * pData/cbData must match fDataIn direction and op size rules.
  */
 int  scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData);
+
 /** Lifetime successful door submits (product STATS counter). */
 u32  scsi_door_io_count(void);
+
 /** Lifetime failed door submits (arg reject or mid error). */
 u32  scsi_door_fail_count(void);
+
 /** Fill stats snapshot; null pOut is a no-op returning -1. */
 int  scsi_door_stats(struct scsi_door_stats *pOut);

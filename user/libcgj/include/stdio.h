@@ -2,7 +2,29 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped stdio (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <stdio.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Buffered FILE streams: printf/scanf families, fopen/fdopen/fmemopen/
+ * open_memstream, flockfile + unlocked I/O, fortify printf, and a subset of
+ * libio _IO_* aliases for dynlink graphs. Wide stdio is declared in <wchar.h>
+ * (open_wmemstream lives there).
+ *
+ * Design notes
+ * ------------
+ * FILE is an opaque-to-apps layout implemented as struct gj_cgj_file: fd-
+ * backed, memstream, and cookie streams share one struct. Buffering modes
+ * match ISO C (_IOFBF/_IOLBF/_IONBF). fpos_t is long on this bring-up (LFS
+ * *64 aliases are identity on LP64).
+ *
+ * Non-goals
+ * ---------
+ * Full glibc libio ABI binary layout compatibility with host libio objects;
+ * we export symbols, not the historical FILE memory layout for foreign libc.
+ *
+ * See docs/GLIBC_COMPAT.md (stdio bar).
  */
 #pragma once
 
@@ -16,9 +38,9 @@ extern "C" {
 
 #define EOF     (-1)
 #define BUFSIZ  1024
-#define _IOFBF  0
-#define _IOLBF  1
-#define _IONBF  2
+#define _IOFBF  0  /* fully buffered */
+#define _IOLBF  1  /* line buffered */
+#define _IONBF  2  /* unbuffered */
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -26,6 +48,13 @@ extern "C" {
 
 typedef long fpos_t;
 
+/**
+ * libcgj stream object (apps treat FILE as opaque).
+ *
+ * nFd is the backing descriptor (-1 for pure memory/cookie streams).
+ * Memstream fields track user-visible buffer pointers updated on flush/seek.
+ * Cookie function pointers implement fopencookie custom I/O.
+ */
 typedef struct gj_cgj_file {
     int            nFd;
     int            nFlags;   /* r/w/ownbuf/memstream/wmemstream */
@@ -56,6 +85,7 @@ typedef struct gj_cgj_file {
     int          (*pfnCkClose)(void *);
 } FILE;
 
+/** Callback table for fopencookie (GNU extension). NULL members may ENOSYS. */
 typedef struct {
     ssize_t (*read)(void *pCookie, char *pBuf, size_t cb);
     ssize_t (*write)(void *pCookie, const char *pBuf, size_t cb);
@@ -69,6 +99,8 @@ extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
 
+/* ---- Formatted I/O ------------------------------------------------------ */
+
 int    printf(const char *szFmt, ...);
 int    fprintf(FILE *pF, const char *szFmt, ...);
 int    vfprintf(FILE *pF, const char *szFmt, va_list ap);
@@ -77,21 +109,27 @@ int    sprintf(char *szBuf, const char *szFmt, ...);
 int    vsprintf(char *szBuf, const char *szFmt, va_list ap);
 int    snprintf(char *szBuf, size_t cb, const char *szFmt, ...);
 int    vsnprintf(char *szBuf, size_t cb, const char *szFmt, va_list ap);
-int    asprintf(char **ppBuf, const char *szFmt, ...);
+int    asprintf(char **ppBuf, const char *szFmt, ...);  /* malloc *ppBuf */
 int    __asprintf(char **ppBuf, const char *szFmt, ...);
 int    vasprintf(char **ppBuf, const char *szFmt, va_list ap);
 int    fcloseall(void);
-FILE  *fopen64(const char *szPath, const char *szMode);
+FILE  *fopen64(const char *szPath, const char *szMode); /* LFS alias */
 int    fgetpos64(FILE *pF, fpos_t *pPos);
 int    fsetpos64(FILE *pF, const fpos_t *pPos);
 char  *ctermid(char *sz);
 char  *cuserid(char *sz);
+
+/* ---- Scanf family ------------------------------------------------------- */
+
 int    scanf(const char *szFmt, ...);
 int    fscanf(FILE *pF, const char *szFmt, ...);
 int    sscanf(const char *szBuf, const char *szFmt, ...);
 int    vscanf(const char *szFmt, va_list ap);
 int    vfscanf(FILE *pF, const char *szFmt, va_list ap);
 int    vsscanf(const char *szBuf, const char *szFmt, va_list ap);
+
+/* ---- Character / string / buffer I/O ------------------------------------ */
+
 int    puts(const char *sz);
 int    fputs(const char *sz, FILE *pF);
 int    putchar(int ch);
@@ -111,12 +149,15 @@ void   setbuffer(FILE *pF, char *pBuf, size_t cb);
 void   setlinebuf(FILE *pF);
 size_t fwrite(const void *p, size_t cb, size_t n, FILE *pF);
 size_t fread(void *p, size_t cb, size_t n, FILE *pF);
+
+/* ---- Open / close / seek / status --------------------------------------- */
+
 FILE  *fopen(const char *szPath, const char *szMode);
 FILE  *fdopen(int nFd, const char *szMode);
 FILE  *freopen(const char *szPath, const char *szMode, FILE *pF);
 FILE  *freopen64(const char *szPath, const char *szMode, FILE *pF);
 FILE  *fmemopen(void *pBuf, size_t cb, const char *szMode);
-FILE  *open_memstream(char **ppBuf, size_t *pcb);
+FILE  *open_memstream(char **ppBuf, size_t *pcb); /* updates *ppBuf on flush */
 /* open_wmemstream declared in wchar.h */
 int    fclose(FILE *pF);
 int    fseek(FILE *pF, long off, int nWhence);
@@ -136,6 +177,9 @@ int     dprintf(int nFd, const char *szFmt, ...);
 int     vdprintf(int nFd, const char *szFmt, va_list ap);
 int     fgetpos(FILE *pF, fpos_t *pPos);
 int     fsetpos(FILE *pF, const fpos_t *pPos);
+
+/* ---- Stream locking + unlocked I/O (POSIX / glibc) ---------------------- */
+
 void    flockfile(FILE *pF);
 void    funlockfile(FILE *pF);
 int     ftrylockfile(FILE *pF);
@@ -172,6 +216,8 @@ int     __isoc23_vscanf(const char *szFmt, va_list ap);
 int     __isoc23_vfscanf(FILE *pF, const char *szFmt, va_list ap);
 int     __isoc23_vsscanf(const char *szBuf, const char *szFmt, va_list ap);
 
+/* ---- libio-shaped aliases (symbol graph; not host FILE layout) ---------- */
+
 int     _IO_getc(FILE *pF);
 int     _IO_putc(int ch, FILE *pF);
 int     _IO_feof(FILE *pF);
@@ -191,10 +237,10 @@ int     _IO_fclose(FILE *pF);
 int     _IO_fflush(FILE *pF);
 long    _IO_padn(FILE *pF, int ch, long n);
 size_t  _IO_sgetn(FILE *pF, void *pBuf, size_t cb);
-int     __uflow(FILE *pF);
-int     __overflow(FILE *pF, int ch);
+int     __uflow(FILE *pF);              /* underflow helper */
+int     __overflow(FILE *pF, int ch);   /* overflow helper */
 
-/* Fortify printf family (subset) */
+/* Fortify printf family (subset; nFlag / cbDst from compiler) */
 int     __printf_chk(int nFlag, const char *szFmt, ...);
 int     __fprintf_chk(FILE *pF, int nFlag, const char *szFmt, ...);
 int     __sprintf_chk(char *szBuf, int nFlag, size_t cbDst, const char *szFmt,

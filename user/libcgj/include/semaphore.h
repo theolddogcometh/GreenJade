@@ -2,8 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped semaphore.h (subset). Not GNU glibc.
- * Process-private (pshared=0) via atomic+futex; pshared!=0 → ENOSYS.
+ * Clean-room glibc-shaped <semaphore.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * sem_init/destroy/wait/trywait/timedwait/post/getvalue for unnamed
+ * semaphores; named sem_open path when wired.
+ *
+ * Design notes
+ * ------------
+ * Process-private unnamed semaphores are the bring-up priority (futex).
+ * SEM_FAILED is the named-open error sentinel.
+ *
+ * Non-goals
+ * ---------
+ * Full POSIX named semaphore persistence across reboots.
  */
 #pragma once
 

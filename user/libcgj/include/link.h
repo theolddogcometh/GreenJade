@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped link.h (dl_iterate_phdr). Not GNU glibc.
+ * Clean-room glibc-shaped <link.h> for libcgj / ld-gj (GreenJade).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * link_map / dl_phdr_info and dl_iterate_phdr for introspection of loaded
+ * objects. Complements <dlfcn.h>.
+ *
+ * Design notes
+ * ------------
+ * Real iteration is owned by ld-gj when dynamic; static soft fills may report
+ * the main executable only.
+ *
+ * Non-goals
+ * ---------
+ * Full auditor interface (la_*) surface.
  */
 #pragma once
 

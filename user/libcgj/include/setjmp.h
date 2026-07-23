@@ -2,7 +2,23 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped setjmp.h (x86_64). Not GNU glibc.
+ * Clean-room glibc-shaped <setjmp.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * setjmp/longjmp and sigsetjmp/siglongjmp. Product asm is arch-specific
+ * (x86_64 bring-up first); jmp_buf size must match the saved register set.
+ *
+ * Design notes
+ * ------------
+ * sigsetjmp may not save the signal mask in early bring-up — document callers
+ * should not rely on mask restore until wired. Pure C cannot implement this
+ * portably; see libcgj src for asm.
+ *
+ * Non-goals
+ * ---------
+ * C++ exception personality integration.
  */
 #pragma once
 

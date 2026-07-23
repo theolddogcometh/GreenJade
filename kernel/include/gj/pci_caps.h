@@ -3,11 +3,29 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Product PCI capability scan: MSI/MSI-X presence + table programming.
- * Clean-room pure C (PCI Local Bus Spec). No GPL source.
+ * Clean-room pure C11 freestanding (PCI Local Bus Spec). Dual MIT OR
+ * Apache-2.0. No GPL source.
  *
- * Soft MSI-X table: software shadow of Message Address/Data/Vector Control
- * when MMIO is absent or for smokes (mask, PBA sticky, soft fire → notify).
+ * Hardware path:
+ *   Scan config space for MSI-X (and plain MSI) caps; optional enable of
+ *   Message Control; program table entry 0 when table PA is resolvable
+ *   (message address/data + unmask) for GJ_MSIX_IRQ_VEC delivery.
+ *
+ * Soft MSI-X table (always available; no MMIO required):
+ *   Software shadow of Message Address/Data/Vector Control when MMIO is
+ *   absent or for smokes (mask, PBA sticky, soft fire → notify via
+ *   irq_msix when ready). Depth GJ_MSIX_SOFT_TBL (bounded; not full
+ *   device Table Size).
  * greppable: MSI-X table soft path
+ *
+ * Soft fire contract:
+ *   pci_msix_soft_fire: sticky PBA bit; if unmasked + programmed and
+ *   irq_msix ready, pulse Notification with GJ_MSIX_BADGE_TBL(idx).
+ *   Masked entries set PBA but do not deliver (PCI-shaped).
+ *
+ * Greppable product markers (keep stable):
+ *   MSI-X table soft path
+ *   pci_msix soft table exercise PASS / probe_log product PASS markers
  */
 #pragma once
 
@@ -19,6 +37,11 @@
 /** Vector Control bit 0: Mask (PCI MSI-X). */
 #define GJ_MSIX_VECCTL_MASK 1u
 
+/**
+ * MSI-X capability inventory for one device (scan/probe fill).
+ * u16TableSize is Message Control N+1 entries. u64TablePa is 0 if BAR
+ * resolution failed (soft path still usable).
+ */
 struct gj_pci_msix_info {
     u8  u8Present;
     u8  u8Enabled;
@@ -49,15 +72,21 @@ struct gj_pci_msix_soft_entry {
     u8  u8Pad[2];
 };
 
-/** Scan PCI for MSI-X (and plain MSI) capabilities; fill up to u32Max. */
+/**
+ * Scan PCI for MSI-X (and plain MSI) capabilities; fill up to u32Max.
+ * Returns number of devices written into pOut (0 if none / null).
+ */
 u32 pci_msix_scan(struct gj_pci_msix_info *pOut, u32 u32Max);
 
-/** Inventory + soft enable/program; logs greppable product PASS markers. */
+/**
+ * Inventory + soft enable/program; logs greppable product PASS markers.
+ * Safe when no MSI-X devices are present.
+ */
 void pci_msix_probe_log(void);
 
 /**
  * Software-enable MSI-X Message Control on first N devices.
- * Does not program table entries.
+ * Does not program table entries. Returns how many enabled.
  */
 u32 pci_msix_enable_first(u32 u32Max);
 
@@ -78,7 +107,8 @@ void pci_msix_soft_table_init(void);
 
 /**
  * Program soft table entry u16Idx (0..GJ_MSIX_SOFT_TBL-1).
- * u32Mask: non-zero → masked (VecCtl bit0). Returns 1 on success.
+ * u32Mask: non-zero → masked (VecCtl bit0). Returns 1 on success, 0 if
+ * idx out of range.
  */
 u32 pci_msix_soft_program(u16 u16Idx, u32 u32AddrLo, u32 u32Data, u32 u32Mask);
 
@@ -90,8 +120,8 @@ u32 pci_msix_soft_read(u16 u16Idx, struct gj_pci_msix_soft_entry *pOut);
 
 /**
  * Soft-fire entry u16Idx: sticky PBA bit; if unmasked and irq_msix ready,
- * pulse Notification badge bit (idx). Returns 1 if delivery attempted
- * (unmasked + programmed), 0 if masked/invalid.
+ * pulse Notification badge bit (idx via GJ_MSIX_BADGE_TBL). Returns 1 if
+ * delivery attempted (unmasked + programmed), 0 if masked/invalid.
  */
 u32 pci_msix_soft_fire(u16 u16Idx);
 
@@ -101,8 +131,11 @@ u64 pci_msix_soft_pba(void);
 /** Clear soft PBA bits in u64Mask; returns previous PBA & mask. */
 u64 pci_msix_soft_pba_clear(u64 u64Mask);
 
+/** Soft table programmed-entry count / lifetime soft-fire count. */
 u32 pci_msix_soft_programmed_count(void);
 u32 pci_msix_soft_fire_count(void);
+
+/** Non-zero after soft table init. */
 int pci_msix_soft_ready(void);
 
 /**

@@ -2,7 +2,24 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sockets (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/socket.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * socket/socketpair/bind/listen/accept/connect/send/recv family, sockaddr
+ * shapes, SOL_SOCKET options, MSG_* flags, and CMSG_* macros for SCM_RIGHTS
+ * control messages. AF_*/SOCK_* numbers are Linux-shaped.
+ *
+ * Design notes
+ * ------------
+ * Backed by netstackd / net doors on GreenJade; bring-up may support loopback
+ * and virtio-net paths first. sockaddr_storage is large enough for IPv6.
+ *
+ * Non-goals
+ * ---------
+ * Every obscure SOL_* protocol option; raw packet sockets full feature set.
+ * See docs/GLIBC_COMPAT.md.
  */
 #pragma once
 

@@ -2,7 +2,28 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped pthread (bring-up subset). Not GNU glibc/NPTL.
+ * Clean-room glibc-shaped <pthread.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc/NPTL source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Bring-up POSIX threads: create/join/detach, mutex (+recursive/robust attr),
+ * cond (+clock), once/keys, rwlock, spinlock, barrier, affinity, atfork,
+ * cancel hooks, setname_np, and SysV x86_64 __tls_get_addr.
+ *
+ * Design notes
+ * ------------
+ * Sync primitives are process-private by default; futex-backed where the
+ * kernel hybrid path provides them. Types are libcgj layouts — not bit-
+ * identical to host NPTL structs; ABI is symbol-level for freestanding and
+ * staged libc.so.6, not for dlopen of foreign libpthread.
+ *
+ * Non-goals
+ * ---------
+ * Full priority inheritance hardware, process-shared robust recovery across
+ * all failure modes, and complete cancelation cleanup stacks.
+ *
+ * See docs/GLIBC_COMPAT.md (pthread / TLS bar).
  */
 #pragma once
 
@@ -18,6 +39,7 @@ extern "C" {
 
 typedef unsigned long pthread_t;
 
+/** Thread attributes (stack, detach, optional affinity mask). */
 typedef struct pthread_attr {
     void     *pStack;
     size_t    cbStack;
@@ -27,6 +49,7 @@ typedef struct pthread_attr {
     cpu_set_t cpuset;
 } pthread_attr_t;
 
+/** Futex-shaped mutex; nType selects normal/recursive/errorcheck. */
 typedef struct pthread_mutex {
     volatile int  nLock; /* 0 free, 1 locked */
     int           nType;
@@ -49,6 +72,7 @@ typedef struct pthread_mutexattr {
 #define PTHREAD_MUTEX_ROBUST 1
 #endif
 
+/** Sequence condvar; nClock selects absolute wait clock. */
 typedef struct pthread_cond {
     volatile unsigned uSeq;
     int               nClock; /* CLOCK_REALTIME / CLOCK_MONOTONIC */
@@ -80,6 +104,8 @@ typedef unsigned pthread_key_t;
 #define PTHREAD_PRIO_INHERIT 1
 #define PTHREAD_PRIO_PROTECT 2
 
+/* ---- Lifecycle ---------------------------------------------------------- */
+
 int  pthread_create(pthread_t *pTid, const pthread_attr_t *pAttr,
                     void *(*pfnStart)(void *), void *pArg);
 int  pthread_join(pthread_t tid, void **ppRet);
@@ -93,6 +119,8 @@ pthread_t pthread_self(void);
 int  pthread_equal(pthread_t a, pthread_t b);
 void pthread_exit(void *pRet) __attribute__((noreturn));
 int  pthread_yield(void);
+
+/* ---- Mutex -------------------------------------------------------------- */
 
 int  pthread_mutexattr_init(pthread_mutexattr_t *pA);
 int  pthread_mutexattr_destroy(pthread_mutexattr_t *pA);
@@ -113,6 +141,8 @@ int  pthread_mutex_unlock(pthread_mutex_t *pM);
 int  pthread_mutex_timedlock(pthread_mutex_t *pM, const struct timespec *pAbs);
 int  pthread_mutex_consistent(pthread_mutex_t *pM);
 
+/* ---- Condition variables ------------------------------------------------ */
+
 int  pthread_condattr_init(pthread_condattr_t *pA);
 int  pthread_condattr_destroy(pthread_condattr_t *pA);
 int  pthread_condattr_setclock(pthread_condattr_t *pA, clockid_t clk);
@@ -127,6 +157,8 @@ int  pthread_cond_timedwait(pthread_cond_t *pC, pthread_mutex_t *pM,
                             const struct timespec *pAbs);
 int  pthread_cond_signal(pthread_cond_t *pC);
 int  pthread_cond_broadcast(pthread_cond_t *pC);
+
+/* ---- Once / TLS keys / attributes --------------------------------------- */
 
 int  pthread_once(pthread_once_t *pOnce, void (*pfn)(void));
 int  pthread_key_create(pthread_key_t *pKey, void (*pfnDtor)(void *));
@@ -164,7 +196,7 @@ int pthread_getschedparam(pthread_t tid, int *pPolicy,
 int pthread_setschedprio(pthread_t tid, int nPrio);
 int pthread_getcpuclockid(pthread_t tid, clockid_t *pClk);
 
-/* Fork handlers */
+/* Fork handlers (prepare/parent/child; DSO-aware registration for graphs) */
 int pthread_atfork(void (*pfnPrepare)(void), void (*pfnParent)(void),
                    void (*pfnChild)(void));
 int __register_atfork(void (*pfnPrepare)(void), void (*pfnParent)(void),
@@ -217,7 +249,7 @@ int pthread_getattr_default_np(pthread_attr_t *pA);
 int pthread_setattr_default_np(const pthread_attr_t *pA);
 int pthread_sigqueue(pthread_t tid, int nSig, const union sigval value);
 
-/* Spin locks (process-private; busy-wait CAS) */
+/* Spin locks (process-private; busy-wait CAS — short critical sections only) */
 typedef struct pthread_spinlock {
     volatile int nLock;
 } pthread_spinlock_t;
@@ -231,7 +263,7 @@ int pthread_spin_lock(pthread_spinlock_t *pS);
 int pthread_spin_trylock(pthread_spinlock_t *pS);
 int pthread_spin_unlock(pthread_spinlock_t *pS);
 
-/* Barriers */
+/* Barriers (one generation serial thread gets PTHREAD_BARRIER_SERIAL_THREAD) */
 typedef struct pthread_barrier {
     pthread_mutex_t mtx;
     pthread_cond_t  cv;
@@ -256,6 +288,7 @@ int pthread_barrierattr_setpshared(pthread_barrierattr_t *pA, int nPshared);
 int pthread_barrierattr_getpshared(const pthread_barrierattr_t *pA,
                                    int *pPshared);
 
+/* Cancelation (bring-up: state bits + testcancel points) */
 int pthread_setcancelstate(int nState, int *pOld);
 int pthread_setcanceltype(int nType, int *pOld);
 void pthread_testcancel(void);
@@ -265,11 +298,14 @@ int pthread_cancel(pthread_t tid);
 int pthread_setname_np(pthread_t tid, const char *szName);
 int pthread_getname_np(pthread_t tid, char *szName, size_t cb);
 
-/* Signal interaction */
+/* Signal interaction (mask size matches <signal.h> Linux 1024-bit set) */
 int pthread_kill(pthread_t tid, int nSig);
 int pthread_sigmask(int nHow, const sigset_t *pSet, sigset_t *pOld);
 
-/* TLS descriptor ABI (SysV x86_64) */
+/*
+ * TLS descriptor ABI (SysV x86_64): module + offset → address of TLS object.
+ * Used by the dynlinker and IE/GD TLS codegen; must stay binary-shaped.
+ */
 struct __tls_get_addr_arg {
     unsigned long long u64Module;
     unsigned long long u64Offset;

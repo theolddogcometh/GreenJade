@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room strings.h (BSD/glibc ffs family). Not GNU glibc.
+ * Clean-room glibc-shaped <strings.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * BSD/legacy string helpers: bcopy/bzero/bcmp, index/rindex, ffs/ffsl/ffsll,
+ * strcasecmp (also in string.h). Complements <string.h>.
+ *
+ * Design notes
+ * ------------
+ * New code should prefer memcpy/memset/strchr. These exist for graphs that
+ * still include <strings.h>.
+ *
+ * Non-goals
+ * ---------
+ * Locale-aware case folding beyond C locale.
  */
 #pragma once
 

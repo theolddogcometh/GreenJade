@@ -1,0 +1,124 @@
+Notes — continuum milestone 14700 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_14700.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_14700.c  (host dyn + direct KATs)
+  - user/libgj-so/src/graph_so_batch1.c           (SysV SO soft batch 1)
+  - user/libgj-so/src/graph_so_batch2.c           (SysV SO soft batch 2)
+
+libcgj continuum markers (graph_batch14691.c … graph_batch14700.c) are
+product tree TUs (already on CGJ_SRCS); this NOTES + soft probe only
+document and soft-gate them. libgj-so soft batches stay unwired (product
+SO remains libgj_so.c alone until parent lists the batch TUs).
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c                 static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
+  - cgj_soft_milestone_14500.c  prior decade soft probe
+  - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14800.c  later decade soft probe
+  - cgj_soft_milestone_14900.c  later decade soft probe
+
+New CREATE-ONLY soft host probe (fills gap deferred by NOTES_14600):
+  - cgj_soft_milestone_14700.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 14700 marker surfaces (batches 14691–14700)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_14700           1          graph_batch14691.c
+gj_libcgj_green_14700          1          graph_batch14692.c
+gj_bar3_ready_14700            0          graph_batch14693.c  (bar3 open)
+gj_product_score_14700         0          graph_batch14694.c  (score open)
+gj_continuum_ready_14700       1          graph_batch14695.c
+gj_smoke_soft_14700            1          graph_batch14696.c
+gj_dyn_soft_14700              1          graph_batch14697.c
+gj_milestone_tag_14700         14700      graph_batch14698.c
+gj_continuum_wave_14700        14700      graph_batch14699.c
+gj_batch_id_14700              14700      graph_batch14700.c
+gj_graph_milestone_14700       14700      graph_batch14700.c
+__libcgj_batch14NNN_marker     string     matching batch TU
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Companion soft: user/libgj-so/src (unwired SysV SO deepen)
+---------------------------------------------------------
+Product SO source of truth remains user/libgj-so/libgj_so.c
+(gj_so_export = 0x42, gj_so_init / gj_so_get_export / gj_so_sysv_hash).
+Soft batch TUs are freestanding scaffolds; not linked into libgj-so.so.1.
+Declarations live in user/libgj-so/include/gj_so.h (soft section).
+
+Symbol                         Expected / role              Source TU
+-----------------------------  ---------------------------  --------------------
+gj_so_batch1_export            0x421                        graph_so_batch1.c
+gj_so_batch1_init              restore marker               graph_so_batch1.c
+gj_so_batch1_id                returns marker               graph_so_batch1.c
+gj_so_batch1_sysv_hash         classic ELF SysV name hash   graph_so_batch1.c
+gj_so_batch1_streq             freestanding streq           graph_so_batch1.c
+gj_so_batch1_bucket            hash % nbucket               graph_so_batch1.c
+gj_so_batch2_export_a / _b     0x422 / 0x423                graph_so_batch2.c
+gj_so_batch2_init              restore both markers         graph_so_batch2.c
+gj_so_batch2_id                XOR of markers               graph_so_batch2.c
+gj_so_batch2_chain_next        one DT_HASH chain step       graph_so_batch2.c
+gj_so_batch2_chain_find        soft bucket→chain probe      graph_so_batch2.c
+
+Ownership: only MISSING SysV/product-SO symbols; do not redefine libcgj
+or the shipped product TU. Soft only — not bar3 / Top-50 evidence.
+cgj_soft_milestone_14700.c does not dlopen libgj-so.so.1 for these;
+host freestanding compile-check of the batch TUs is enough until wire-up.
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. CGJ_SRCS already lists graph_batch14691.c … graph_batch14700.c
+   (decade continuum on the product tree). Rebuild may still lag
+   build/user/libcgj.a / libc.so.6 until make libcgj runs.
+2. libc.map may lag milestone 14700 globals; add 14700 symbols under
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
+5. Soft gates only; bar3 remains open (gj_bar3_ready_14700 == 0).
+6. libgj-so: parent must list graph_so_batch1.c / graph_so_batch2.c
+   on the libgj-so link line to ship those exports; today only
+   libgj_so.c is linked (make libgj-so).
+
+Manual run
+----------
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_14700 \
+  user/libcgj/tests/cgj_soft_milestone_14700.c -ldl
+./build/cgj_soft_milestone_14700
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M14700_DIRECT \
+  -o build/cgj_soft_milestone_14700_direct \
+  user/libcgj/tests/cgj_soft_milestone_14700.c \
+  user/libcgj/src/graph_batch14691.c \
+  user/libcgj/src/graph_batch14692.c \
+  user/libcgj/src/graph_batch14693.c \
+  user/libcgj/src/graph_batch14694.c \
+  user/libcgj/src/graph_batch14695.c \
+  user/libcgj/src/graph_batch14696.c \
+  user/libcgj/src/graph_batch14697.c \
+  user/libcgj/src/graph_batch14698.c \
+  user/libcgj/src/graph_batch14699.c \
+  user/libcgj/src/graph_batch14700.c
+./build/cgj_soft_milestone_14700_direct
+
+# Companion SO soft batches (compile-only; not product-linked):
+cc -c -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
+  -Wall -Wextra -Werror -O2 -Iuser/libgj-so/include \
+  -o /tmp/graph_so_batch1.o user/libgj-so/src/graph_so_batch1.c
+cc -c -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
+  -Wall -Wextra -Werror -O2 -Iuser/libgj-so/include \
+  -o /tmp/graph_so_batch2.o user/libgj-so/src/graph_so_batch2.c

@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped spawn.h (posix_spawn subset). Not GNU glibc.
+ * Clean-room glibc-shaped <spawn.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * posix_spawn/posix_spawnp with attr and file_actions (fork+exec shaped
+ * bring-up). Preferred over raw fork/exec for thread-heavy parents.
+ *
+ * Design notes
+ * ------------
+ * File actions cover open/close/dup2 sequences applied in the child before
+ * exec. Soft paths may not implement every POSIX_SPAWN_* flag.
+ *
+ * Non-goals
+ * ---------
+ * vfork-only spawn without a working process model.
  */
 #pragma once
 

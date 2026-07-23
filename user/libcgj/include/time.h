@@ -2,7 +2,24 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped time.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <time.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * clock_gettime/settime/getres, nanosleep, timers, calendar conversion
+ * (gmtime/localtime/mktime/strftime), and CLOCK_* / TIMER_ABSTIME constants
+ * matching Linux clock ids for hybrid syscalls.
+ *
+ * Design notes
+ * ------------
+ * timespec/timeval/tm layouts are LP64 Linux-shaped. CLOCKS_PER_SEC is 1e6
+ * (glibc). Bring-up timezone is often UTC/C only.
+ *
+ * Non-goals
+ * ---------
+ * Full tzdb leap-second policy and every obscure clock id.
+ * See docs/GLIBC_COMPAT.md.
  */
 #pragma once
 
@@ -12,6 +29,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ---- Clock ids / TIMER_ABSTIME (Linux) --------------------------------- */
 
 #define CLOCK_REALTIME           0
 #define CLOCK_MONOTONIC          1
@@ -28,6 +47,8 @@ extern "C" {
 typedef void *timer_t;
 
 clock_t clock(void);
+
+/* ---- Time structures --------------------------------------------------- */
 
 struct timespec {
     time_t tv_sec;

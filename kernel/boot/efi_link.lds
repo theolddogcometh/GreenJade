@@ -1,6 +1,9 @@
-/* SPDX-License-Identifier: MIT OR Apache-2.0 */
-/* Copyright (c) 2026 Project GreenJade contributors */
-/* Shared ELF for objcopy → pei-x86-64 EFI (gnu-efi style). Pure linker script. */
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Shared ELF for objcopy → pei-x86-64 EFI (gnu-efi style). Pure linker script.
+ */
 OUTPUT_FORMAT("elf64-x86-64")
 ENTRY(efi_main)
 SECTIONS

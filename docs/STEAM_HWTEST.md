@@ -1,6 +1,6 @@
 # Steam on hardware-test media (options 2 + 3)
 
-**Bar3 status (product ceiling):** media path + host prep are **wired**.  
+**Bar3 status (product ceiling):** **OPEN.** Media path + host prep are **wired**.  
 **Kernel/surface done does not equal bar3 client run.** Continuum **makefile_max=14900** is soft graph growth only.  
 Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  
@@ -22,6 +22,17 @@ Valve’s Steam client is **proprietary**. Binaries are **not** committed to thi
 Options **2 and 3 share the same tree** (`build/steam-tree/`).  
 2 bakes it in when building the image; 3 pushes it later onto a stick you already wrote.
 
+## Script surface (host only — honesty)
+
+| Script | PASS / READY means | Does **not** mean |
+|--------|--------------------|-------------------|
+| `scripts/fetch-steam-bootstrap.sh` | Host extract + `build/steam-tree/` | Client run / Top-50 |
+| `scripts/stage-steam-tree.sh` | `STATUS=READY\|SKELETON` on stage tree | Client run / bar3 closed |
+| `scripts/steam-host-prep.sh` | Fetch/stage/copy/pack on lab host | Client run / title PASS |
+| `scripts/steam-bar3-check.sh` | Soft READY \| SKELETON \| MISSING (exit 0) | smoke-all green / bar3 done |
+
+Soft stamps (when written): `MANIFEST.txt`, `STAGE_META.txt`, `HOST_PREP_META.txt` — agent honesty only; never promote matrix rows.
+
 ## Bar3 checklist (what works vs open)
 
 Host soft check (no download, always exit 0):
@@ -29,17 +40,19 @@ Host soft check (no download, always exit 0):
 ```sh
 ./scripts/steam-bar3-check.sh
 # → READY | SKELETON | MISSING
+# → bar3: OPEN (always while client/matrix open)
 ```
 
 ### Works today (media + kernel surface)
 
 | Item | Status | Evidence / how to verify |
 |------|--------|---------------------------|
-| Host fetch bootstrap (`.deb` extract only) | **wired** | `make steam-fetch` → `build/steam-tree/` + `READY` |
-| Stage tree with `STATUS` | **wired** | `make steam-stage` → `build/steam-stage/steam/STATUS` = `READY` or `SKELETON` |
+| Host fetch bootstrap (`.deb` extract only) | **wired** | `./scripts/fetch-steam-bootstrap.sh` or `make steam-fetch` → `build/steam-tree/` + `READY` |
+| Stage tree with `STATUS` | **wired** | `./scripts/stage-steam-tree.sh` or `make steam-stage` → `STATUS` = `READY` or `SKELETON` |
 | Pack into hwtest image (option 2) | **wired** | `make hwtest-img` → p2 `GJ-PERSIST/steam/` |
 | Host prep onto stick/image (option 3) | **wired** | `scripts/steam-host-prep.sh --to-label` / `--to-img` / `--to-mount` |
-| Offline / skip re-download | **wired** | `GJ_SKIP_FETCH=1` or `make steam-stage` alone → skeleton if no tree |
+| Offline / skip re-download | **wired** | `GJ_SKIP_FETCH=1` or stage alone → skeleton if no tree |
+| Soft media inventory | **wired** | `./scripts/steam-bar3-check.sh` (file counts, launcher, blob, STATUS hits) |
 | Product **sshd** live at boot | **done** | `sshd.elf` embed; TCP **:22**; `sshd: live spawn PASS` |
 | **scsi_mid** live embed | **done** | `scsi_mid.elf` boot spawn; `GJ_SYS_SCSI` + virtio-scsi path |
 | **HDA multi-stream (kernel)** | **PASS** | SD0 DMA + multi-stream mixer; `hda: multi-stream mixer PASS` — **kernel only** |
@@ -176,12 +189,14 @@ GJ_SKIP_FETCH=1 sudo ./scripts/steam-host-prep.sh --to-label
 ## Inspect
 
 ```sh
-./scripts/steam-bar3-check.sh          # soft: READY | SKELETON | MISSING
+./scripts/steam-bar3-check.sh          # soft: READY | SKELETON | MISSING; bar3 OPEN
 
 sudo mount -L GJ-PERSIST /mnt/gj-persist
 cat /mnt/gj-persist/steam/STATUS    # READY or SKELETON
 ls /mnt/gj-persist/steam/
 cat /mnt/gj-persist/steam/MANIFEST.txt
+# soft honesty stamps when present:
+#   STAGE_META.txt   HOST_PREP_META.txt
 ```
 
 ## Without network
@@ -193,7 +208,7 @@ make hwtest-img     # still packs steam/README + STATUS
 GJ_SKIP_FETCH=1 make steam-stage
 ```
 
-## Runtime (bar #3 — still open)
+## Runtime (bar #3 — still **OPEN**)
 
 Staging does **not** mean Steam runs on the DUT yet:
 
@@ -209,8 +224,12 @@ Launch candidates when ready:
 /usr/bin/steam
 ```
 
+**Do not** invent Deck Top 50 `PASS` from host fetch/stage/`STATUS=READY` alone.  
+See [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) for the product ceiling stamp.
+
 ## Related
 
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 honesty / READY vs NOT-TRIED  
 - [HCL.md](HCL.md) — hardware-test USB flow  
 - [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) — Deck Top 50  
 - [GLIBC_COMPAT.md](GLIBC_COMPAT.md) — libc / Steam ABI policy  

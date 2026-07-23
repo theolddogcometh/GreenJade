@@ -2,19 +2,63 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Page-fault / pager protocol:
- *   CAP_ADDRESSING v1.6 + SOLARIS_STYLE_REMAINING §7 + APPLE_CHANNEL §1–2
+ * Page-fault / pager protocol (kernel-side cookie + space serialization).
  *
- * - Region → memory object → pager (PCB default pager is fallback)
- * - Kernel-only map cookie (not a CNode cap)
- * - Multi-page fault cluster (region-bounded)
- * - Object owns pages; maps are views
- * - One fault lock per address space
+ * Pure C11 freestanding. Dual license: MIT OR Apache-2.0.
+ * Implementation: kernel/mm/fault.c.
  *
- * greppable: FAULT_MAP_COOKIE
- * greppable: FAULT_SERIALIZATION
- * greppable: FAULT_CLUSTER_COALESCE_SOFT
- * greppable: GJ_FAULT_CLUSTER_MAX
+ * Scope
+ * -----
+ * Mechanism for demand-fill and multi-page fault clusters without treating
+ * the map cookie as a CNode capability. Objects own pages; maps are views
+ * (Apple channel + CAP_ADDRESSING). One fault lock per address space so
+ * concurrent faults in the same space serialize (Solaris-style L1–L4).
+ *
+ * Design anchors
+ * --------------
+ *   docs/CAP_ADDRESSING.md           v1.6 pager / map cookie (not a cap)
+ *   docs/SOLARIS_STYLE_REMAINING.md  §7 fault serialization; C1–C2 cluster
+ *   docs/APPLE_CHANNEL_REMAINING.md  §1–2 objects vs maps; default pager
+ *   docs/SECURITY_CORE_DESIGN.md     single-use secrets; fail closed; DoS
+ *   docs/DESIGN_SPEC_COMPLETE.md     G-MO / G-AS fault path notes
+ *
+ * Protocol sketch
+ * ---------------
+ *   1. #PF / soft fault → region lookup → memory object (or PCB default pager)
+ *   2. gj_space_fault_enter (one lock per space)
+ *   3. gj_fault_cluster_coalesce_soft (region-bounded, max GJ_FAULT_CLUSTER_MAX)
+ *   4. gj_map_cookie_create → fill gj_fault_msg; doors-like Call to pager
+ *   5. Pager fills frames / prep → reply echoes cookie
+ *   6. gj_map_cookie_consume (single-use) → install maps / bind memobj soft
+ *   7. On FAIL/death/timeout → gj_map_cookie_invalidate
+ *   8. gj_space_fault_leave
+ *
+ * Security properties (normative)
+ * -------------------------------
+ *   - Cookie is a kernel-only secret pair (lo/hi); not a CNode slot/gen.
+ *     Userspace must not treat it as a capability (confused-deputy safe).
+ *   - Consume is single-use: replay → fail (u64CookieReplay).
+ *   - Optional mono deadline → GJ_ERR_TIMEOUT past ceiling.
+ *   - Cluster size capped (DoS): GJ_FAULT_CLUSTER_MAX.
+ *   - Zero-access / misaligned base / empty cluster rejected at create.
+ *
+ * Soft product surface
+ * --------------------
+ *   FAULT_MAP_COOKIE            — create / consume / invalidate / live count
+ *   FAULT_MAP_COOKIE_MEMOBJ_SOFT— bind object pointer on live cookie
+ *   FAULT_SERIALIZATION         — enter / leave / waiter soft count
+ *   FAULT_CLUSTER_COALESCE_SOFT — multi-page expand with present probe
+ *   FAULT_SERIALIZATION_STATS   — global counters snapshot/reset
+ *
+ * Layering
+ * --------
+ *   process.fault (gj_space_fault) until true gj_space exists
+ *   memobj regions supply object + VA bounds for cluster
+ *   vmm_map_page / COW break complete install after consume
+ *   door Call carries gj_fault_msg (kernel → pager)
+ *
+ * greppable: FAULT_MAP_COOKIE FAULT_SERIALIZATION FAULT_CLUSTER_COALESCE_SOFT
+ * greppable: GJ_FAULT_CLUSTER_MAX FAULT_MSG_CLUSTER FAULT_MAP_COOKIE_MEMOBJ_SOFT
  */
 #pragma once
 
@@ -24,15 +68,21 @@
 /* Max pages per fault cluster (security + DoS bound). greppable: GJ_FAULT_CLUSTER_MAX */
 #define GJ_FAULT_CLUSTER_MAX 16u
 
-/* Access bits for fault / map */
+/* Access bits for fault / map (pager policy + W^X at map time). */
 #define GJ_FAULT_ACCESS_R (1u << 0)
 #define GJ_FAULT_ACCESS_W (1u << 1)
 #define GJ_FAULT_ACCESS_X (1u << 2)
 
 /*
  * Fault message kernel → pager (doors-like Call payload).
+ *
  * u64Cookie* is a kernel-only secret; pager must echo it on reply.
  * Userspace must not treat cookie as a capability.
+ *
+ * u64ClusterBase  page-aligned first VA of the cluster
+ * u32NPages       1 .. GJ_FAULT_CLUSTER_MAX
+ * u32Access       GJ_FAULT_ACCESS_* bitmask from the fault
+ * u32Flags        reserved / soft policy bits (0 in v1 soft path)
  *
  * greppable: FAULT_MSG_CLUSTER
  */
@@ -46,7 +96,7 @@ struct gj_fault_msg {
     u32 u32Pad;
 };
 
-/* Pager reply status */
+/** Pager reply status (payload side; not gj_status_t). */
 enum gj_fault_reply_status {
     GJ_FAULT_REPLY_OK   = 0,
     GJ_FAULT_REPLY_FAIL = 1,
@@ -55,6 +105,10 @@ enum gj_fault_reply_status {
 /*
  * Kernel-side cookie table entry (not exposed as cap type).
  * Bound to one space + cluster; single-use; optional mono deadline.
+ *
+ * pSpace / pMemObj / pProc / pThread are kernel pointers (opaque void* until
+ * full types are always visible). pMemObj may be set via bind_memobj_soft
+ * after create, before consume.
  *
  * greppable: FAULT_MAP_COOKIE
  */
@@ -75,17 +129,17 @@ struct gj_map_cookie {
 
 /*
  * Space fault serialization: one lock per address space (L1–L4).
+ * v1: simple flag + waiter count; full impl uses mutex + CV (Solaris-style).
  * greppable: FAULT_SERIALIZATION
  */
 struct gj_space_fault {
-    /* v1: simple flag; full impl uses mutex + CV (Solaris-style) */
     u32 u32FaultInProgress; /* 0 free, 1 busy */
     u32 u32Waiters;         /* soft waiter count (BUSY path bumps) */
 };
 
 /*
  * Global fault-path counters (serialization + cookie + soft cluster).
- * Atomic updates; snapshot via gj_fault_stats_get.
+ * Atomic updates; snapshot via gj_fault_stats_get. Wrap OK; diagnostics only.
  *
  * greppable: FAULT_SERIALIZATION_STATS
  * greppable: FAULT_CLUSTER_COALESCE_SOFT
@@ -110,6 +164,10 @@ struct gj_fault_stats {
     u64 u64ClusterSoftPresent;  /* soft walk hit a "present" probe stop */
 };
 
+/**
+ * Zero space fault serialization state (free, no waiters).
+ * Safe on NULL (no-op). Call when creating/embedding gj_space_fault.
+ */
 static inline void
 gj_space_fault_init(struct gj_space_fault *pF)
 {
@@ -122,13 +180,18 @@ gj_space_fault_init(struct gj_space_fault *pF)
 
 /**
  * Try to enter fault path for a space (one lock per space).
- * Returns GJ_OK if acquired; GJ_ERR_BUSY if another fault is in progress.
+ *
+ * Returns GJ_OK if acquired; GJ_ERR_BUSY if another fault is in progress
+ * (bumps waiter soft count). GJ_ERR_INVAL if pF NULL.
  * Full impl: sleep on CV with mono timeout instead of BUSY.
  * greppable: FAULT_SERIALIZATION
  */
 gj_status_t gj_space_fault_enter(struct gj_space_fault *pF);
 
-/** Leave fault path; wake waiters when implemented. greppable: FAULT_SERIALIZATION */
+/**
+ * Leave fault path; wake waiters when CV path is implemented.
+ * greppable: FAULT_SERIALIZATION
+ */
 void gj_space_fault_leave(struct gj_space_fault *pF);
 
 /**
@@ -148,6 +211,7 @@ void gj_space_fault_leave(struct gj_space_fault *pF);
  * recorded for policy callers (W^X checked at map time); soft coalesce
  * itself only needs contiguous VA intent.
  *
+ * On success writes *pu64ClusterBase and *pu32NPages (required non-NULL).
  * greppable: FAULT_CLUSTER_COALESCE_SOFT
  * greppable: GJ_FAULT_CLUSTER_MAX
  */
@@ -164,8 +228,10 @@ gj_status_t gj_fault_cluster_coalesce_soft(u64 u64FaultVa,
 
 /**
  * Create a single-use kernel map cookie for this cluster.
- * Fills pMsg cookie fields; registers in kernel cookie table.
- * Rejects zero-access, misaligned base, or empty/oversized cluster.
+ *
+ * Fills pMsg cookie fields when pMsg non-NULL; registers in kernel cookie
+ * table. Rejects zero-access, misaligned base, or empty/oversized cluster.
+ * u64DeadlineMono 0 = no deadline; else timer_mono_nsec ceiling at consume.
  * greppable: FAULT_MAP_COOKIE
  */
 gj_status_t gj_map_cookie_create(struct gj_map_cookie *pOut,
@@ -176,15 +242,20 @@ gj_status_t gj_map_cookie_create(struct gj_map_cookie *pOut,
 
 /**
  * Validate cookie from pager reply; must match live entry.
- * On success, marks cookie used and not live (single-use).
- * Returns GJ_ERR_TIMEOUT if past u64DeadlineMono (when set).
+ *
+ * On success, marks cookie used and not live (single-use); optional copy
+ * to pOutCopy. Returns GJ_ERR_TIMEOUT if past u64DeadlineMono (when set);
+ * fail closed on miss / mismatch / replay.
  * greppable: FAULT_MAP_COOKIE
  */
 gj_status_t gj_map_cookie_consume(u64 u64CookieLo, u64 u64CookieHi,
                                   u64 u64ClusterBase, u32 u32NPages,
                                   struct gj_map_cookie *pOutCopy);
 
-/** Invalidate cookie without map (FAIL, timeout, death). greppable: FAULT_MAP_COOKIE */
+/**
+ * Invalidate cookie without map (FAIL, timeout, death, early drop).
+ * Idempotent soft if already dead. greppable: FAULT_MAP_COOKIE
+ */
 void gj_map_cookie_invalidate(u64 u64CookieLo, u64 u64CookieHi);
 
 /**
@@ -195,11 +266,19 @@ void gj_map_cookie_invalidate(u64 u64CookieLo, u64 u64CookieHi);
 gj_status_t gj_map_cookie_bind_memobj_soft(u64 u64CookieLo, u64 u64CookieHi,
                                            void *pMemObj);
 
-/** Snapshot global fault stats (relaxed atomics). greppable: FAULT_SERIALIZATION_STATS */
+/**
+ * Snapshot global fault stats (relaxed atomics) into *pOut.
+ * No-op if pOut NULL. greppable: FAULT_SERIALIZATION_STATS
+ */
 void gj_fault_stats_get(struct gj_fault_stats *pOut);
 
-/** Zero global fault stats. greppable: FAULT_SERIALIZATION_STATS */
+/**
+ * Zero global fault stats. greppable: FAULT_SERIALIZATION_STATS
+ */
 void gj_fault_stats_reset(void);
 
-/** Count currently live map cookies (table scan). greppable: FAULT_MAP_COOKIE */
+/**
+ * Count currently live map cookies (table scan).
+ * greppable: FAULT_MAP_COOKIE
+ */
 u32 gj_map_cookie_live_count(void);

@@ -2,7 +2,28 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped unistd (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <unistd.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * POSIX-ish process, fd, path, and identity APIs plus Linux extensions
+ * (gettid, clone, close_range, copy_file_range, pidfd_*, prctl, …) that
+ * desktop and Steam-shaped graphs resolve from libc.
+ *
+ * Design notes
+ * ------------
+ * Constants (STDIN_FILENO, access bits, SEEK_*, _SC_*, _PC_*) use Linux
+ * glibc numbers so sysconf/pathconf probes match host expectations on LP64.
+ * LFS *64 aliases are identity on x86_64/aarch64 LP64. Many calls are thin
+ * syscall wrappers into the GreenJade Linux ABI hybrid path.
+ *
+ * Non-goals
+ * ---------
+ * Full feature parity for every Linux syscall flag; soft fills may return
+ * ENOSYS until the kernel personality wires the path.
+ *
+ * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
  */
 #pragma once
 
@@ -27,6 +48,8 @@ extern "C" {
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+/* ---- fd I/O / sync / seek ----------------------------------------------- */
+
 ssize_t read(int nFd, void *pBuf, size_t cb);
 ssize_t write(int nFd, const void *pBuf, size_t cb);
 ssize_t pread(int nFd, void *pBuf, size_t cb, off_t off);
@@ -43,7 +66,10 @@ int     euidaccess(const char *szPath, int nMode);
 int     eaccess(const char *szPath, int nMode);
 int     faccessat(int nDfd, const char *szPath, int nMode, int nFlags);
 int     faccessat2(int nDfd, const char *szPath, int nMode, int nFlags);
-char   *canonicalize_file_name(const char *szPath);
+char   *canonicalize_file_name(const char *szPath); /* malloc'd realpath */
+
+/* ---- Process / thread identity + Linux control -------------------------- */
+
 pid_t   getpid(void);
 pid_t   getppid(void);
 pid_t   gettid(void);
@@ -61,6 +87,9 @@ int     execveat(int nDfd, const char *szPath, char *const aArgv[],
 int     ioprio_set(int nWhich, int nWho, int nIoprio);
 int     ioprio_get(int nWhich, int nWho);
 int     membarrier(int nCmd, unsigned uFlags, int nCpuId);
+
+/* ---- Credentials / groups ----------------------------------------------- */
+
 uid_t   getuid(void);
 gid_t   getgid(void);
 uid_t   geteuid(void);
@@ -80,6 +109,9 @@ int     setgroups(size_t nSize, const gid_t *pList);
 int     initgroups(const char *szUser, gid_t gid);
 int     getgrouplist(const char *szUser, gid_t gid, gid_t *pGroups,
                      int *pNgids);
+
+/* ---- Heap break / tty / sleep / pipes / dup ----------------------------- */
+
 void   *sbrk(intptr_t i64Delta);
 int     brk(void *p);
 int     isatty(int nFd);
@@ -90,6 +122,9 @@ int     pipe2(int aFd[2], int nFlags);
 int     dup(int nFd);
 int     dup2(int nOld, int nNew);
 int     dup3(int nOld, int nNew, int nFlags);
+
+/* ---- Fork / exec -------------------------------------------------------- */
+
 pid_t   fork(void);
 int     execve(const char *szPath, char *const aArgv[], char *const aEnvp[]);
 /* execveat declared above with *at helpers */
@@ -103,6 +138,9 @@ int     access(const char *szPath, int nMode);
 char   *get_current_dir_name(void);
 char   *getlogin(void);
 int     getlogin_r(char *szBuf, size_t cb);
+
+/* ---- Path / filesystem ops ---------------------------------------------- */
+
 int     unlink(const char *szPath);
 int     unlinkat(int nDfd, const char *szPath, int nFlags);
 int     rmdir(const char *szPath);
@@ -141,6 +179,9 @@ int     truncate(const char *szPath, off_t cbLen);
 #ifndef F_ULOCK
 int     lockf(int nFd, int nCmd, off_t cbLen);
 #endif
+
+/* ---- Configuration / host / process control ----------------------------- */
+
 long    sysconf(int nName);
 long    __sysconf(int nName);
 int     __libc_current_sigrtmin(void);
@@ -150,7 +191,7 @@ int     gethostname(char *szName, size_t cb);
 long    gethostid(void);
 int     sethostid(long nId);
 int     closefrom(int nLowfd);
-int     arch_prctl(int nCode, unsigned long uAddr);
+int     arch_prctl(int nCode, unsigned long uAddr); /* x86_64 TLS / FSGS */
 int     __arch_prctl(int nCode, unsigned long uAddr);
 int     clone(int (*fn)(void *), void *pStack, int nFlags, void *pArg, ...);
 int     __clone(int (*fn)(void *), void *pStack, int nFlags, void *pArg, ...);
@@ -177,7 +218,7 @@ int     setdomainname(const char *szName, size_t cb);
 pid_t   tcgetpgrp(int nFd);
 int     tcsetpgrp(int nFd, pid_t pgrp);
 
-/* sysconf names (glibc-shaped subset) */
+/* sysconf names (glibc-shaped subset; numbers match Linux) */
 #define _SC_PAGESIZE           30
 #define _SC_PAGE_SIZE          _SC_PAGESIZE
 #define _SC_CLK_TCK            2
@@ -215,8 +256,10 @@ int     tcsetpgrp(int nFd, pid_t pgrp);
 
 #define AT_EACCESS 0x200
 
+/* ---- Extras / BSD / pidfd / LFS ----------------------------------------- */
+
 int     group_member(gid_t gid);
-char   *getwd(char *szBuf);
+char   *getwd(char *szBuf); /* obsolete; prefer getcwd */
 int     killpg(int nPgrp, int nSig);
 int     getpeereid(int nFd, uid_t *pUid, gid_t *pGid);
 int     lchmod(const char *szPath, mode_t mode);
@@ -228,7 +271,7 @@ int     pidfd_open(pid_t pid, unsigned int uFlags);
 int     pidfd_send_signal(int nPidfd, int nSig, void *pInfo, unsigned int uFlags);
 int     pidfd_getfd(int nPidfd, int nTargetFd, unsigned int uFlags);
 
-/* LFS aliases (identity on x86_64) */
+/* LFS aliases (identity on LP64 x86_64 / aarch64) */
 int     open64(const char *szPath, int nFlags, ...);
 int     __open64(const char *szPath, int nFlags, ...);
 int     __open64_2(const char *szPath, int nFlags);
@@ -243,9 +286,9 @@ pid_t   vfork(void);
 int     fexecve(int nFd, char *const aArgv[], char *const aEnvp[]);
 ssize_t getdents64(int nFd, void *pDirp, size_t cb);
 int     getdents(int nFd, void *pDirp, unsigned cb);
-int     issetugid(void);
-void    strmode(mode_t mode, char *szBuf);
-long    syscall(long nNr, ...);
+int     issetugid(void); /* non-zero if process is "tainted" by setuid */
+void    strmode(mode_t mode, char *szBuf); /* BSD: mode → "drwxr-xr-x" */
+long    syscall(long nNr, ...); /* raw Linux syscall; use sparingly */
 
 #ifdef __cplusplus
 }

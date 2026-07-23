@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped poll (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <poll.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * poll/ppoll and POLL* event bits for fd readiness. select(2) is provided
+ * via <sys/select.h> (may be implemented on top of poll).
+ *
+ * Design notes
+ * ------------
+ * Event bit values match Linux. ppoll takes sigset_t and timespec for
+ * atomic mask + timeout (glibc shape).
+ *
+ * Non-goals
+ * ---------
+ * Every Linux-specific POLL* extension used only by niche drivers.
  */
 #pragma once
 

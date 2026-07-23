@@ -6,17 +6,46 @@
  * Option C: HOT in kernel; COLD via doors (product) / sync service /
  * legacy queue (GJ_SYS_COLD_DEQUEUE/REPLY). Pure C11 dual-license.
  *
- * Soft deepen surfaces (no redesign):
- *   greppable: GJ_COLD_MODE_ / cold_ipc_register_service / cold_ipc_stats
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Bridge from gj_linux_syscall_dispatch COLD classification to a personality
+ * that can implement openat/read/… without putting full VFS in the kernel
+ * hot path. Product preference is doors (door_call ↔ personality server);
+ * bring-up also supports an in-process sync service and a fixed-depth queue.
+ *
+ * Submit preference (soft mode flags)
+ * -----------------------------------
+ *   SERVICE_FIRST (default bring-up): service → doors → queue
+ *   DOORS_FIRST:                      doors → service → queue
+ * Paths gated by MODE_SERVICE / MODE_DOORS / MODE_QUEUE.
+ * MODE_REQUIRE_SERVER: doors only when pServer live (avoids hang on stale ep).
+ *
+ * Soft deepen surfaces (no redesign)
+ * ----------------------------------
+ *   greppable: GJ_COLD_MODE_
+ *   greppable: cold_ipc_register_service
+ *   greppable: cold_ipc_register_queue_consumer
+ *   greppable: cold_ipc_stats
  *   - Mode flags control doors/service/queue preference (soft product path)
  *   - Service + queue consumer registration with soft generation cookies
  *   - Product counters (wrap OK; diagnostics / smoke)
+ *
+ * Lifecycle of a queue slot
+ * -------------------------
+ *   FREE → PENDING (submit) → CLAIMED (dequeue) → DONE (reply) → FREE
+ * Soft: reply also accepts PENDING (service path may skip CLAIMED).
+ *
+ * Related: gj/linux_dispatch.h, gj/linux_abi.h, gj/syscall.h (GJ_SYS_COLD_*),
+ *          gj/door.h (product doors), docs/LINUX_ABI_HYBRID.md §cold,
+ *          docs/PROTON_PERSONALITY.md
  */
 #pragma once
 
 #include <gj/linux_abi.h>
 #include <gj/types.h>
 
+/** Fixed-depth legacy queue (bring-up / soft; not unbounded). */
 #define GJ_COLD_QUEUE_DEPTH 32
 
 /*
@@ -41,6 +70,10 @@
     (GJ_COLD_MODE_DOORS | GJ_COLD_MODE_SERVICE | GJ_COLD_MODE_QUEUE |           \
      GJ_COLD_MODE_SERVICE_FIRST | GJ_COLD_MODE_REQUIRE_SERVER)
 
+/**
+ * Queue slot state machine (see file banner).
+ * CLAIMED is soft: dequeued by personality, await COLD_REPLY.
+ */
 enum gj_cold_state {
     GJ_COLD_FREE    = 0,
     GJ_COLD_PENDING = 1,
@@ -49,9 +82,13 @@ enum gj_cold_state {
     GJ_COLD_CLAIMED = 3,
 };
 
+/**
+ * One cold request slot (queue path) or service argument bundle.
+ * In: regs filled by submitter; Out: i64Ret when DONE / service return.
+ */
 struct gj_cold_request {
-    u64                  u64Id;
-    u32                  u32State;
+    u64                  u64Id;     /* opaque token for reply match */
+    u32                  u32State;  /* gj_cold_state */
     u32                  u32Pad;
     struct gj_linux_regs regs; /* in: args; out: i64Ret when DONE */
 };
@@ -59,6 +96,9 @@ struct gj_cold_request {
 /**
  * Product counters + soft registration snapshot (wrap OK).
  * greppable: cold_ipc_stats
+ *
+ * Live mirrors (not cumulative): u32ModeFlags, gens, pending, attached bits.
+ * Reset clears counters only; registration / mode / queue slots preserved.
  */
 struct gj_cold_ipc_stats {
     u64 u64Submits;
@@ -88,6 +128,7 @@ struct gj_cold_ipc_stats {
     u32 u32Pad;
 };
 
+/** Zero queue + bind default mode. Call once from syscall init path. */
 void cold_ipc_init(void);
 
 /**
@@ -97,6 +138,8 @@ void cold_ipc_init(void);
  * Paths gated by MODE_SERVICE / MODE_DOORS / MODE_QUEUE.
  * MODE_REQUIRE_SERVER: doors only when pServer live (default).
  * u64TimeoutNsec reserved (0 = default).
+ *
+ * Returns Linux-style i64 (handler result or -ENOSYS / -EAGAIN / -EINVAL).
  */
 i64 cold_ipc_submit(struct gj_linux_regs *pRegs, u64 u64TimeoutNsec);
 
@@ -109,6 +152,7 @@ int cold_ipc_dequeue(struct gj_cold_request *pOut);
 /**
  * Personality: complete request u64Id (PENDING or CLAIMED) with i64Ret.
  * Soft: wakes submit_queue waiter on DONE.
+ * Returns non-zero on success; soft miss increments u64ReplyMiss.
  */
 int cold_ipc_reply(u64 u64Id, i64 i64Ret);
 
@@ -198,7 +242,10 @@ void cold_ipc_stats_get(struct gj_cold_ipc_stats *pOut);
 /** Zero counters only; soft registration / mode / queue slots preserved. */
 void cold_ipc_stats_reset(void);
 
-/** Kernel thread entry: door_recv loop + service + door_reply (bring-up). */
+/**
+ * Kernel thread entry: door_recv loop + service + door_reply (bring-up).
+ * Stand-in for userspace personality process until G-PERS maps protonrt-user.
+ */
 void cold_personality_server(void *pArg);
 
 /**
@@ -207,6 +254,10 @@ void cold_personality_server(void *pArg);
  */
 i64 cold_ipc_service_local(struct gj_linux_regs *pRegs);
 
-/* Native GJ_SYS numbers for personality (also in syscall.h) */
+/*
+ * Native GJ_SYS numbers for personality (also in syscall.h).
+ * Duplicated so cold_ipc consumers need not include the full native table.
+ * Do not diverge — syscall.h is authoritative for the frozen number set.
+ */
 #define GJ_SYS_COLD_DEQUEUE 80
 #define GJ_SYS_COLD_REPLY   81

@@ -3,6 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Notification objects — badge bitmask pulse/wait (SECURITY / Apple channel).
+ * Pure C11 freestanding, dual MIT OR Apache-2.0.
  *
  * greppable: NOTIFY_BADGE_PULSE_WAIT
  * greppable: NOTIFY_SOFT_MULTI_WAITER
@@ -16,6 +17,22 @@
  *   - Pulse wakes up to NOTIFY_SOFT_MULTI_MAX waiters; they race CAS-clear on
  *     u64Pending (matched badge bits go to one waiter; others re-sleep).
  *   - pWaiter is a non-authoritative hint only (fast IRQ “has waiter?” path).
+ *   - u32Waiters is an atomic soft count for stats / has-waiter.
+ *
+ * Object lifecycle:
+ *   notify_init → LIVE + ready; notify_mark_dead → DEAD + soft multi-wake
+ *   (gj_obj_revoke_begin when still LIVE so CNode hygiene can follow).
+ *   notify_abort_waiter soft multi-wakes without posting a badge.
+ *
+ * MSI-X bind:
+ *   notify_msix_global() is the product delivery Notification for vector
+ *   GJ_MSIX_IRQ_VEC (see irq_msix.h); pulse from hard IRQ + soft inject.
+ *
+ * Protocol (badge pulse / wait):
+ *   producer  notify_pulse(badge)  → OR pending, soft multi-wake
+ *   consumer  notify_wait(mask,1)  → CAS-clear matched bits, return them
+ *   poll      notify_poll(mask)    → wait non-blocking
+ *   Badge 0 coalesces to bit 0 (“any event”).
  */
 #pragma once
 
@@ -37,6 +54,10 @@ struct gj_process;
  */
 #define NOTIFY_TAG_WAITER 1u
 
+/**
+ * Notification object (first field = obj_hdr for CNode / revoke).
+ * u64Pending is atomic RMW; other fields soft/stats unless noted.
+ */
 struct gj_notify {
     struct gj_obj_hdr   hdr;         /* first: NOTIFICATION object header */
     u32                 u32Ready;
@@ -47,6 +68,7 @@ struct gj_notify {
     u32                 u32Waiters;  /* soft multi-waiter count (atomic) */
 };
 
+/** Zero object, init hdr LIVE, mark ready. Null pN is a no-op. */
 void notify_init(struct gj_notify *pN);
 
 /**
@@ -54,6 +76,7 @@ void notify_init(struct gj_notify *pN);
  * greppable: NOTIFY_BADGE_PULSE
  * IRQ-safe (no alloc, atomics only).
  * Badge 0 is coalesced to bit 0 (bit 0 always means “any event”).
+ * No-op if null / not ready / DEAD.
  *
  * notify_pulse is the product name; notify_signal remains the stable alias.
  */
@@ -104,10 +127,17 @@ void notify_mark_dead(struct gj_notify *pN);
 /**
  * Install notify as GJ_CAP_NOTIFICATION into process CNode.
  * Default rights if u16Rights == 0: READ | WAIT | IDENTIFY.
+ * Returns GJ_OK or GJ_ERR_*; fills *pOutRef on success when non-NULL.
  */
 gj_status_t notify_install(struct gj_process *pProc, struct gj_notify *pN,
                            u16 u16Rights, struct gj_cap_ref *pOutRef);
 
-/** Global MSI-X delivery Notification (vector 0x41 bind). */
+/**
+ * Global MSI-X delivery Notification (vector 0x41 bind).
+ * Valid after notify_msix_init(); may return non-NULL static even before
+ * ready — callers should notify_is_live / irq_msix_ready as needed.
+ */
 struct gj_notify *notify_msix_global(void);
+
+/** Init global MSI-X Notification object (idempotent soft). */
 void notify_msix_init(void);

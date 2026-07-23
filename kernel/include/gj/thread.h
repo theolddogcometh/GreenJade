@@ -3,12 +3,23 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Kernel threads + cooperative scheduler (block/wake/yield).
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
  *
- * Dual stacks per thread:
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Per-thread control blocks, dual stacks, cooperative pick_next, and the
+ * hard invariants that keep SYSCALL + IRQ stacks from smashing each other.
+ * Used by doors cold path, personality servers, spawn first-thread, PE32
+ * user entry, and AP idle loops.
+ *
+ * Dual stacks per thread
+ * ----------------------
  *   aStack  — cooperative switch_context (schedule / trampoline)
  *   aKstack — per-thr SYSCALL stack so door_recv can block mid-call (G-PERS)
  *
- * Hard invariants (prior residual-#UD fix — do not regress):
+ * Hard invariants (prior residual-#UD fix — do not regress)
+ * --------------------------------------------------------
  *   1) TSS.RSP0 always the dedicated IRQ stack (tss_use_irq_rsp0). Never
  *      pin RSP0 to a thr aKstack: a parked thr mid-syscall has frames there;
  *      another thr's ring-3 IRQ would smash them → garbage RIP / kernel #UD.
@@ -17,6 +28,23 @@
  *      correct user context after another thr has run.
  *   3) Install thr SYSCALL kstack (u64KernelRsp) only after switch_context
  *      (or from the user-entry trampoline) — never while still on pCur.
+ *
+ * Soft product surfaces
+ * ---------------------
+ *   QoS classes GJ_QOS_* (Apple-shaped pick rank + capped PI boost)
+ *   Kstack base + mid canaries + poison high-water soft scan
+ *   greppable: "sched: soft stats"
+ *   greppable: GJ_QOS_ GJ_THR_F_USER GJ_THR_KSTACK_CANARY
+ *
+ * Code map
+ * --------
+ *   kernel/sched/thread.c          — create / block / wake / pick / QoS
+ *   kernel/arch/x86_64/switch.S    — switch_context
+ *   kernel/cpu/cpu.c               — GS USER_* / u64KernelRsp / TSS.RSP0
+ *
+ * Related: gj/process.h (pProc owner), gj/spawn.h, gj/user_task.h,
+ *          gj/except.h (block tags on exception port).
+ * docs/LINUX_ABI_HYBRID.md · docs/APPLE_CHANNEL_REMAINING.md §8 (QoS spirit)
  */
 #pragma once
 
@@ -25,6 +53,11 @@
 struct gj_process;
 struct gj_thread;
 
+/**
+ * Thread lifecycle states.
+ * UNUSED slots may be recycled; EXITED threads stay until reaped by product
+ * policy (bring-up may leave them occupied — fixed GJ_MAX_THREADS table).
+ */
 enum gj_thread_state {
     GJ_THR_UNUSED   = 0,
     GJ_THR_RUNNABLE = 1,
@@ -38,6 +71,9 @@ enum gj_thread_state {
  * frames overflowed, corrupted saved RSP frames, and produced kernel #UD with
  * garbage RIP (e.g. 0x510e2002 near store door tokens) while thr=sshd was
  * current. Canary at aKstack[0] catches further growth pressure.
+ *
+ * aStack remains smaller: pure cooperative switch frames only.
+ * Mid canary + poison fill give early overflow soft signals before base smash.
  */
 #define GJ_THR_STACK_SIZE    (16u * 1024u)
 #define GJ_THR_KSTACK_SIZE   (32u * 1024u)
@@ -55,6 +91,7 @@ enum gj_thread_state {
  * used by syscalls / main personality; 3..4 deepen soft desktop classes.
  * Rank (higher first): DRIVER > INTERACTIVE > NORMAL > UTILITY > BACKGROUND.
  * Capped soft PI boost (thread_qos_boost_soft) may temporarily lift rank.
+ * Out-of-range class clamps to NORMAL (soft clamp counted).
  */
 #define GJ_QOS_NORMAL       0u
 #define GJ_QOS_INTERACTIVE  1u
@@ -65,19 +102,31 @@ enum gj_thread_state {
 /* Soft boost residual cap (Apple §8 capped PI spirit; no unbounded lift). */
 #define GJ_QOS_BOOST_CAP    4u
 
-#define GJ_THR_F_USER_ENTRY   (1u << 0) /* enter ring-3 (64-bit) on first run */
-#define GJ_THR_F_USER32_ENTRY (1u << 1) /* enter ring-3 compat CS32 via iretq */
+/** First schedule enters 64-bit ring-3 at u64UserRip / u64UserRsp. */
+#define GJ_THR_F_USER_ENTRY   (1u << 0)
+/** First schedule enters compat CS32 via iretq (PE32 / WoW64 path). */
+#define GJ_THR_F_USER32_ENTRY (1u << 1)
 
+/**
+ * Kernel thread control block (fixed table entry; not a heap object).
+ *
+ * Security / correctness notes:
+ *   - u64Cr3: 0 means "use CPU default / boot CR3" (shared AS bring-up).
+ *   - pBlockObj + u32BlockTag form the wait key for thread_wake (pointer
+ *     identity; no refcount — object must outlive waiters or wake-all first).
+ *   - u64SysUser* valid only while mid-SYSCALL (u32SysUserValid != 0).
+ *   - aKstack grows down from u64KstackTop; base + mid canaries planted on create.
+ */
 struct gj_thread {
     u32                 u32Id;
-    u32                 u32State;
+    u32                 u32State;        /* GJ_THR_* */
     struct gj_process  *pProc;
     u64                 u64Cr3;          /* address space; 0 = use cpu default */
     /* Saved kernel context for switch_context (aStack or mid-syscall aKstack) */
     u64                 u64Rsp;
     void               *pBlockObj;       /* futex key / cold request id owner */
     u32                 u32BlockTag;
-    u32                 u32Flags;
+    u32                 u32Flags;        /* GJ_THR_F_* */
     void              (*pfnEntry)(void *pArg);
     void               *pArg;
     u64                 u64UserRip;      /* first ring-3 entry (G-PERS) */
@@ -97,28 +146,32 @@ struct gj_thread {
     u8                  aKstack[GJ_THR_KSTACK_SIZE] __attribute__((aligned(16)));
 };
 
+/** Initialize BSP thread table + idle. Call once before thread_create. */
 void thread_init(void);
 
 /**
  * Create runnable kernel thread. Returns thread id or 0 on failure.
- * pfn may be NULL for user-entry threads.
+ * pfn may be NULL for user-entry threads (flags / user fields set by other APIs).
+ * Failure modes: table full, bad args (implementation soft-counted).
  */
 u32 thread_create(struct gj_process *pProc, void (*pfn)(void *), void *pArg);
 
 /**
  * Create a thread that enters ring-3 at u64Entry with stack u64Stack on first
- * schedule (G-PERS userspace personality).
+ * schedule (G-PERS userspace personality). Sets GJ_THR_F_USER_ENTRY.
  */
 u32 thread_create_user(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
 
 /**
  * Create a thread that enters 32-bit compat ring-3 (CS32) via iretq.
+ * Sets GJ_THR_F_USER32_ENTRY. Used by PE32 / pe32_hw_enter paths.
  */
 u32 thread_create_user32(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
 
 /**
  * After execve: rewrite all user-entry threads of pProc to (entry, stack).
  * Returns count of threads updated. Does not create new threads.
+ * Kernel-only threads of pProc are left alone.
  */
 u32 thread_exec_replace(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
 
@@ -127,25 +180,36 @@ u32 thread_exec_replace(struct gj_process *pProc, u64 u64Entry, u64 u64Stack);
  */
 u32 thread_get_state(u32 u32Id);
 
+/** Voluntary cooperative yield (becomes RUNNABLE; schedule picks next). */
 void thread_yield(void);
 /** Soft preemption: set flag; next schedule/idle path yields. */
 void thread_yield_request(void);
 /** Consume pending yield request; returns 1 if yield was requested. */
 int  thread_yield_pending(void);
+/** Current thread → EXITED and schedule away (does not return). */
 void thread_exit(void);
 
-/** Block current thread (caller must schedule()). */
+/**
+ * Block current thread (caller must schedule()).
+ * pBlockObj + u32Tag form the wake key; see EXCEPT_TAG_* for exception port.
+ */
 void thread_block(void *pBlockObj, u32 u32Tag);
 
-/** Wake up to u32Max threads blocked on pBlockObj (u32Tag 0 = any tag). */
+/**
+ * Wake up to u32Max threads blocked on pBlockObj (u32Tag 0 = any tag).
+ * Returns number woken. Safe when no waiters (returns 0).
+ */
 u32  thread_wake(void *pBlockObj, u32 u32Tag, u32 u32Max);
 
+/** Current thread TCB or NULL if called off-thread / before init. */
 struct gj_thread *thread_current(void);
 
 /**
  * Cooperative context switch. Saves/restores SYSCALL USER_* on the thr,
  * keeps TSS.RSP0 on the dedicated IRQ stack, installs next thr kstack only
  * after switch_context returns on that thr.
+ * Must not be called while holding spinlocks (STYLE / SECURITY: no schedule
+ * under spinlock).
  */
 void schedule(void);
 
@@ -155,7 +219,7 @@ void schedule(void);
  */
 void thread_install_kstack(struct gj_thread *pThr);
 
-/** Enter scheduler forever (idle + others). */
+/** Enter scheduler forever (idle + others). BSP product path. */
 void scheduler_run(void) __attribute__((noreturn));
 
 /**
@@ -206,6 +270,8 @@ u32  thread_qos_effective_rank(u32 u32ThrId);
 /*
  * Greppable soft product counters (pick_next / QoS / kstack canary).
  * Prefix-stable line: "sched: soft stats ..."
+ * Wrap OK; diagnostics only — never hard-gate scheduling decisions beyond
+ * canary fail (which is a halt path when base/mid mismatch).
  */
 struct gj_sched_soft_stats {
     u64 u64PickTotal;        /* non-null pick_next returns */

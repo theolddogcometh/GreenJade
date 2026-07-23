@@ -3,11 +3,31 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Product MSI-X vector → Notification bind (hard IRQ + soft pulse paths).
- * Clean-room pure C. No GPL source.
+ * Clean-room pure C11 freestanding. Dual MIT OR Apache-2.0. No GPL source.
+ *
+ * Delivery model:
+ *   IDT gate @ GJ_MSIX_IRQ_VEC (0x41) → irq_msix_handler →
+ *   notify_pulse on global MSI-X Notification (notify_msix_global) + EOI.
+ *   Soft paths inject the same Notification without self-IPI during early
+ *   kmain (self-IPI risks #DF before APIC/IDT fully settled).
  *
  * Soft pulse path: inject / hw-sim / table-soft fire → badge OR on the
- * global MSI-X Notification (no self-IPI during early kmain).
+ * global MSI-X Notification. Path tags attribute last pulse for stats.
  * greppable: MSI-X soft pulse path
+ *
+ * Badge bits (OR into Notification pending):
+ *   GJ_MSIX_BADGE_SOFT  — soft inject (bit 0)
+ *   GJ_MSIX_BADGE_HW    — hw-sim pulse (bit 1)
+ *   GJ_MSIX_BADGE_TBL(i)— soft table entry i (bit 2+i%61) so smoke masks
+ *                         0x7 still observe table-soft fire of entry 0
+ *
+ * Order: call irq_msix_init after idt_init + APIC (+ notify_msix_init).
+ * pci_msix soft table fire routes through this path when ready.
+ *
+ * Greppable product markers (keep stable):
+ *   MSI-X soft pulse path
+ *   notify: MSI-X IRQ PASS (with notify bind)
+ *   irq_msix soft path exercise PASS
  */
 #pragma once
 
@@ -33,13 +53,22 @@
 #define GJ_MSIX_PATH_IRQ   3u
 #define GJ_MSIX_PATH_TBL   4u
 
-/** Install IDT gate + bind global Notification. Call after idt_init + APIC. */
+/**
+ * Install IDT gate + bind global Notification.
+ * Call after idt_init + APIC (+ notify_msix_init). Idempotent soft.
+ */
 void irq_msix_init(void);
 
-/** C handler for MSI-X vector (from isr stub); signals Notification + EOI. */
+/**
+ * C handler for MSI-X vector (from isr stub); signals Notification + EOI.
+ * Live device IRQs enter here; soft paths do not.
+ */
 void irq_msix_handler(void);
 
-/** Software inject (smoke / host inject without device fire). */
+/**
+ * Software inject (smoke / host inject without device fire).
+ * OR @u64Badge into the MSI-X Notification; updates soft count / last path.
+ */
 void irq_msix_soft_inject(u64 u64Badge);
 
 /**
@@ -70,11 +99,19 @@ u32 irq_msix_soft_table_pulse(u16 u16Idx);
  */
 u32 irq_msix_soft_path_exercise(void);
 
+/** Lifetime hard IRQ handler entries (stats). */
 u32 irq_msix_count(void);
+/** Lifetime soft injects (stats). */
 u32 irq_msix_soft_count(void);
+/** Lifetime hw-sim pulses (stats). */
 u32 irq_msix_hw_count(void);
+/** Lifetime soft pulse-path calls (stats). */
 u32 irq_msix_soft_pulse_path_count(void);
+/** Lifetime soft table pulses (stats). */
 u32 irq_msix_table_pulse_count(void);
+/** Last pulsed badge word (stats). */
 u64 irq_msix_last_badge(void);
+/** Last path tag GJ_MSIX_PATH_* (stats). */
 u32 irq_msix_last_path(void);
+/** Non-zero after successful irq_msix_init. */
 int irq_msix_ready(void);

@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room locale stubs (C locale only). Not GNU glibc.
+ * Clean-room glibc-shaped <locale.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * setlocale, localeconv, and newlocale/uselocale/duplocale/freelocale for
+ * C-locale objects. locale_t is shared with string *_l and ctype.
+ *
+ * Design notes
+ * ------------
+ * Bring-up is C/POSIX locale only; non-C names may still return "C".
+ * lconv fields reflect C locale numeric conventions.
+ *
+ * Non-goals
+ * ---------
+ * Full ICU/tzdata-backed locale databases.
  */
 #pragma once
 

@@ -2,7 +2,23 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sys/stat.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/stat.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * struct stat / statx-shaped fields, S_IF* mode bits, and stat/fstat/lstat/
+ * fstatat/chmod/mkdir/mknod/utimensat family used by shells and package tools.
+ *
+ * Design notes
+ * ------------
+ * Layout targets Linux LP64 so host-built objects agree on st_size/st_ino
+ * widths. *64 aliases are identity on product arches.
+ *
+ * Non-goals
+ * ---------
+ * Bit-identical padding with every historical glibc stat version node.
+ * See docs/GLIBC_COMPAT.md.
  */
 #pragma once
 

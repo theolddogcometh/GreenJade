@@ -2,13 +2,36 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room errno. Not GNU glibc.
+ * Clean-room <errno.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Thread-oriented errno access (__errno_location) plus Linux x86_64 errno
+ * number values so host-built binaries and kernel negative-errno returns
+ * agree on numeric codes (EAGAIN, ENOSYS, socket range, …).
+ *
+ * Design notes
+ * ------------
+ * errno is a modifiable lvalue. Bring-up may use a process-global int;
+ * __errno_location is the glibc-shaped TLS hook apps and libpthread expect.
+ * error_t matches GNU argz/envz (typedef int on Linux).
+ *
+ * Gaps vs full Linux
+ * ------------------
+ * Some historical codes between classic and socket ranges are omitted when
+ * unused by the product surface; add numbers only when a real caller needs
+ * binary identity (do not invent non-Linux values).
+ *
+ * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
  */
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ---- Thread-local errno access ------------------------------------------ */
 
 extern int errno;
 
@@ -19,6 +42,8 @@ int *__errno_location(void);
 #ifndef errno
 /* Prefer macro so TLS-shaped code can use __errno_location later */
 #endif
+
+/* ---- Classic / file / process (Linux numbers) --------------------------- */
 
 #define EPERM            1
 #define ENOENT           2
@@ -58,10 +83,11 @@ int *__errno_location(void);
 #define ELOOP           40
 #define EWOULDBLOCK     EAGAIN
 #define ENOMSG          42
-#define ENOTSUP         95
-#define EOPNOTSUPP      95
 #define EOVERFLOW       75
 #define EILSEQ          84
+
+/* ---- Socket / network (Linux; ENOTSUP == EOPNOTSUPP) -------------------- */
+
 #define ENOTSOCK        88
 #define EDESTADDRREQ    89
 #define EMSGSIZE        90
@@ -69,6 +95,8 @@ int *__errno_location(void);
 #define ENOPROTOOPT     92
 #define EPROTONOSUPPORT 93
 #define ESOCKTNOSUPPORT 94
+#define ENOTSUP         95
+#define EOPNOTSUPP      95
 #define EPFNOSUPPORT    96
 #define EAFNOSUPPORT    97
 #define EADDRINUSE      98
@@ -89,6 +117,9 @@ int *__errno_location(void);
 #define EHOSTUNREACH    113
 #define EALREADY        114
 #define EINPROGRESS     115
+
+/* ---- Extended Linux codes used by modern graphs ------------------------- */
+
 #define ESTALE          116
 #define EUCLEAN         117
 #define ENOTNAM         118
@@ -103,7 +134,7 @@ int *__errno_location(void);
 #define EKEYEXPIRED     127
 #define EKEYREVOKED     128
 #define EKEYREJECTED    129
-#define EOWNERDEAD      130
+#define EOWNERDEAD      130   /* robust mutex owner died */
 #define ENOTRECOVERABLE 131
 #define ERFKILL         132
 #define EHWPOISON       133

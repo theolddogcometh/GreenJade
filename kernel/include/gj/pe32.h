@@ -4,14 +4,44 @@
  *
  * PE32/PE32+ header + section parse (clean-room MS PE layout) for WoW64 /
  * Proton bring-up. Pure C; dual MIT OR Apache-2.0 — no Wine/GPL paste.
- * Full process spawn stays userspace; kernel validates and can stage/map.
+ *
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Kernel validates PE images and can stage/map them for smoke and early
+ * Proton paths. Full process spawn policy stays userspace-oriented; this
+ * module is the clean-room layout + soft-exec / compat-frame surface.
+ *
+ * Product pipeline (typical)
+ * --------------------------
+ *   pe32_parse → pe32_parse_sections → pe32_image_stage
+ *     → pe32_load_soft_validate → pe32_load_soft_va / pe32_soft_relocate
+ *     → pe32_map_user or pe32_load_process → thread_create_user32
+ *
+ * Soft-exec / compat (no GPL PE loaders)
+ * --------------------------------------
+ *   pe32_i386_soft_exec — tiny interpreter for smoke exit/int80 sequences
+ *   pe32_compat_*       — iret frame prep + GDT CS32 validate (hw enter later)
+ *   pe32_hw_*           — hardware CS32 enter / int80 surface smokes
+ *
+ * greppable: pe32: compat  pe32: int80  pe32: hw ready  pe32: vfs load
+ *            pe32: enter prep  pe32_smoke pe32_spawn_smoke pe32_wow64_smoke
+ *
+ * Related: gj/wow64.h (NR thunk), gj/thread.h (USER32_ENTRY), gj/elf_load.h
+ *          (ELF is separate clean-room path; PE is Windows-shaped only).
+ * docs/PROTON_PERSONALITY.md
  */
 #pragma once
 
 #include <gj/types.h>
 
+/** Max section table entries accepted by soft parse/stage. */
 #define GJ_PE32_MAX_SECTIONS 16u
 
+/**
+ * Parsed PE optional + COFF facts needed for stage/map/relocate.
+ * Zero-fill before pe32_parse; u32Ready set by parser on success paths.
+ */
 struct gj_pe32_info {
     u16 u16Machine;   /* 0x14c = i386, 0x8664 = amd64 */
     u16 u16Chars;
@@ -36,6 +66,10 @@ struct gj_pe32_info {
     u32 u32Ready;
 };
 
+/**
+ * One section table entry (8-char name + sizes/RVAs).
+ * aName is always NUL-terminated (9 bytes: 8 + NUL).
+ */
 struct gj_pe32_section {
     char aName[9]; /* 8 + NUL */
     u32  u32VirtSize;
@@ -47,13 +81,14 @@ struct gj_pe32_section {
 
 /**
  * Parse DOS+NT headers from a buffer. Bounds-checked (e_lfanew/opt overflow).
- * Returns 0 on valid PE, -1 otherwise.
+ * Returns 0 on valid PE, -1 otherwise. Does not require section table.
  */
 int pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut);
 
 /**
  * Parse section table after a successful pe32_parse.
  * Rejects truncated tables; returns section count or -1.
+ * u32MaxSec caps write into pSec (typically GJ_PE32_MAX_SECTIONS).
  */
 int pe32_parse_sections(const void *pBuf, u32 cbLen,
                         const struct gj_pe32_info *pInfo,
@@ -81,6 +116,10 @@ int pe32_map_user(const void *pImage, u32 cbImage, u64 u64VaBase,
 
 struct gj_process;
 
+/**
+ * Result of pe32_load_process: mapped image VA + entry + stack top.
+ * u32Ready non-zero when load completed soft-ok.
+ */
 struct gj_pe32_load {
     u64 u64ImageVa;  /* where image is mapped */
     u64 u64Entry;    /* absolute entry VA */

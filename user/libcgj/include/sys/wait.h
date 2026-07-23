@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sys/wait.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/wait.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * wait/waitpid/wait3/wait4, W* status macros, and idtype waitid shapes used
+ * after fork/posix_spawn.
+ *
+ * Design notes
+ * ------------
+ * Status packing macros match Linux. Hybrid process model maps to GreenJade
+ * tasks/doors under the Linux personality.
+ *
+ * Non-goals
+ * ---------
+ * Every historical rusage field accuracy on soft paths.
  */
 #pragma once
 

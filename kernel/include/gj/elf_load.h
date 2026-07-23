@@ -3,7 +3,35 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Clean-room ELF64 ET_EXEC / ET_DYN loader + PT_INTERP / PT_DYNAMIC / RELA.
- * Product: probe → load → SO map → relocs → auxv handoff → INTERP-first (ld-gj).
+ * Pure C11 freestanding; dual MIT OR Apache-2.0. No binutils/glibc paste.
+ *
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Kernel product path for Linux-shaped ET_EXEC/ET_DYN images:
+ *   probe → load PT_LOAD → SO map (DT_NEEDED) → relocs → auxv handoff
+ *   → INTERP-first (ld-gj) when PT_INTERP present.
+ *
+ * Product pipeline
+ * ----------------
+ *   elf_probe_image          — validate + collect INTERP/NEEDED (no map)
+ *   elf_load_image[_bias]    — map PT_LOAD + relative relocs
+ *   elf_resolve_needed_vfs   — soft path openability of DT_NEEDED
+ *   elf_load_needed_sos      — map SOs into pProc; fills SO registry
+ *   elf_fill_auxv            — PCB auxv pairs for dynlinker
+ *   elf_publish_handoff      - map GJ_LD_HANDOFF_VA + seed /proc/self/auxv etc
+ *   elf_apply_interp_first   — start entry = INTERP; rewrite user thr
+ *   elf_ld_handoff_verify    — smoke: magic/entry/phdr live
+ *
+ * Fixed handoff VAs (high user band)
+ * ----------------------------------
+ *   GJ_LD_HANDOFF_VA / STACK / RANDOM — away from PE 0x400000 and typical
+ *   ELF load biases so PE and ELF smokes do not collide.
+ *
+ * greppable: GJ_ELF_INFO_ GJ_LD_HANDOFF GJ_AT_ elf_interp_soft
+ * Related: gj/process.h (PCB exec fields), gj/user_task.h, gj/spawn.h,
+ *          user/ld-gj (userspace dynlinker consumer of handoff).
+ * docs/GLIBC_COMPAT.md · docs/LINUX_ABI_HYBRID.md
  */
 #pragma once
 
@@ -15,6 +43,10 @@
 #define GJ_ELF_NEEDED_LEN 64u
 #define GJ_AUXV_MAX       24u
 
+/**
+ * Probe/load result for one ELF image (main or INTERP or SO).
+ * Flags are GJ_ELF_INFO_*; string fields are soft-truncated + NUL.
+ */
 struct gj_elf_info {
     u64 u64Entry;
     u64 u64LoadMin;
@@ -44,7 +76,7 @@ struct gj_elf_info {
 /* INTERP path present and soft-ok (absolute); dynlinker may still be embed */
 #define GJ_ELF_INFO_INTERP_SOFT 64u
 
-/* Linux AT_* (clean-room numbers for auxv handoff) */
+/* Linux AT_* (clean-room numbers for auxv handoff; public ABI docs only) */
 #define GJ_AT_NULL     0u
 #define GJ_AT_PHDR     3u
 #define GJ_AT_PHENT    4u
@@ -77,7 +109,10 @@ struct gj_elf_info {
 
 #define GJ_LD_SO_MAX 4u
 
-/* One mapped DT_NEEDED object for userspace multi-SO resolve */
+/**
+ * One mapped DT_NEEDED object for userspace multi-SO resolve.
+ * Soft registry also keeps these for elf_so_registry_find.
+ */
 struct gj_ld_so_ent {
     u64  u64Bias;       /* load bias (base for ET_DYN) */
     u32  cbImg;         /* file image size (if staged) */
@@ -85,6 +120,11 @@ struct gj_ld_so_ent {
     char szName[56];    /* basename / soname e.g. libgj-so.so.1 */
 };
 
+/**
+ * Kernel→ld-gj handoff page (mapped at GJ_LD_HANDOFF_VA).
+ * Magic must be GJ_LD_HANDOFF_MAGIC before ld-gj trusts fields.
+ * aAuxv is flat key/value pairs (not terminated until AT_NULL pair written).
+ */
 struct gj_ld_handoff {
     u64  u64Magic;
     u64  u64Entry;      /* AT_ENTRY — main binary */
@@ -113,12 +153,14 @@ gj_status_t elf_probe_image(const void *pImage, u64 cb, struct gj_elf_info *pInf
 
 /**
  * Parse ELF64 image, map PT_LOAD into pProc AS, apply R_X86_64_RELATIVE if present.
+ * Auto bias for ET_DYN. Sets GJ_ELF_INFO_LOADED / RELOC_OK soft flags.
  */
 gj_status_t elf_load_image(struct gj_process *pProc, const void *pImage, u64 cb,
                            struct gj_elf_info *pInfo);
 
 /**
  * Load with explicit bias (0 = auto).
+ * Non-zero bias is page-aligned request for ET_DYN placement control.
  */
 gj_status_t elf_load_image_bias(struct gj_process *pProc, const void *pImage,
                                 u64 cb, u64 u64BiasReq,
@@ -127,25 +169,28 @@ gj_status_t elf_load_image_bias(struct gj_process *pProc, const void *pImage,
 /**
  * Build auxv-shaped key/value pairs for dynlinker handoff into pProc.
  * cPairs written to pProc->cAuxv; pairs in pProc->aAuxv.
+ * pInterp may be NULL when no PT_INTERP (AT_BASE 0).
  */
 void elf_fill_auxv(struct gj_process *pProc, const struct gj_elf_info *pMain,
                    const struct gj_elf_info *pInterp);
 
 /**
  * Resolve DT_NEEDED names against vfs paths (/lib, /usr/lib).
- * Returns count openable; logs each hit.
+ * Returns count openable; logs each hit. Does not map.
  */
 u32 elf_resolve_needed_vfs(const struct gj_elf_info *pInfo);
 
 /**
  * Map DT_NEEDED shared objects that are ELF64 into pProc (ET_DYN bias).
  * Returns count successfully loaded. Non-ELF stubs (placeholders) are skipped.
+ * Updates soft SO registry for elf_so_registry_*.
  */
 u32 elf_load_needed_sos(struct gj_process *pProc, const struct gj_elf_info *pInfo);
 
 /**
  * INTERP-first: set pProc start entry/stack; rewrite user threads of pProc.
  * u64Stack 0 → GJ_LD_STACK_VA. Returns 0 on success.
+ * After this, first user thr enters ld-gj, not main.
  */
 gj_status_t elf_apply_interp_first(struct gj_process *pProc,
                                    const struct gj_elf_info *pMain,
@@ -211,5 +256,6 @@ int elf_so_registry_find(const char *szName, u64 *pBias, u32 *pcb);
 /**
  * INTERP soft gate: non-empty absolute path, fits GJ_ELF_INTERP_MAX-1.
  * Relative paths fail (caller may soft-normalize first).
+ * Sets/clears GJ_ELF_INFO_INTERP_SOFT in product path after probe.
  */
 int elf_interp_soft_ok(const char *szInterp);

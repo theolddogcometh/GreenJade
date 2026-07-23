@@ -3,13 +3,42 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Ring-3 trampoline + freestanding personality server map (G-PERS).
+ * Pure C freestanding; dual MIT OR Apache-2.0.
  *
- * Soft product surface (grep: user: ring3 map soft | user: personality map soft):
- *   Post-map PTE soft verify (P|U, code RX / stack RW) + payload soft match
- *   VA window soft checks vs GJ_USER_VA_BASE..END + layout non-overlap
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Install fixed user VA windows for:
+ *   1) Linux-shaped ring-3 smoke trampoline (sysret enter)
+ *   2) Freestanding protonrt-user door server (native IPC_* personality)
+ *
+ * Both paths fail closed on soft map verify (PTE P|U, code RX / stack RW,
+ * payload soft match, VA window inside user band, non-overlapping layout).
+ *
+ * Product VA layout
+ * -----------------
+ * High enough to clear kernel identity BSS / embeds; stays inside the
+ * canonical user band [GJ_USER_VA_BASE, GJ_USER_VA_END):
+ *
+ *   GJ_USER_CODE_VA / STACK_TOP  — ring-3 Linux smoke
+ *   GJ_PERS_CODE_VA / STACK_TOP  — native personality server
+ *
+ * Soft product surface
+ * --------------------
+ *   greppable: "user: soft stats"
+ *   greppable: "user: ring3 map soft"
+ *   greppable: "user: personality map soft"
+ *   Post-map PTE soft verify + payload soft match
  *   Cumulative map ok/fail + soft PASS/soft_bad + enter counters
  *
- * Pure C freestanding; dual MIT OR Apache-2.0.
+ * Enter contract
+ * --------------
+ * user_task_enter_ring3 does not return on success (sysret). Soft re-verify
+ * before enter; greppable soft skip when not mapped / SYSCALL not ready.
+ *
+ * Related: gj/process.h, gj/thread.h (create_user), gj/syscall.h,
+ *          gj/cold_ipc.h (personality server), gj/elf_load.h (full ELF path).
+ * docs/PROTON_PERSONALITY.md · docs/LINUX_ABI_HYBRID.md
  */
 #pragma once
 
@@ -20,6 +49,7 @@
 /*
  * Product VA layout (high enough to clear kernel identity BSS / embeds).
  * Windows stay inside the canonical user band [GJ_USER_VA_BASE, GJ_USER_VA_END).
+ * Stack grows down from *_STACK_TOP; code is RX soft-verified pages.
  */
 #define GJ_USER_CODE_VA       0x0000000001000000ull
 #define GJ_USER_STACK_TOP     0x0000000001100000ull
@@ -33,6 +63,9 @@
 /**
  * Soft map / enter counters (observability; not a hard ABI).
  * Grep: user: soft stats
+ *
+ * u32Ring3Mapped / u32PersMapped are live 0/1 mirrors (not cumulative).
+ * Soft PASS means post-map PTE + payload verify succeeded.
  */
 struct gj_user_task_stats {
     u32 u32Ring3Ok;       /* successful user_task_map_ring3 */
@@ -63,6 +96,7 @@ int user_task_map_ring3(struct gj_process *pProc);
 /**
  * Enter ring3 via sysret (does not return on success).
  * Soft re-verify of mapped windows before enter; greppable soft skip on refuse.
+ * Requires prior successful user_task_map_ring3 and ready LSTAR/sysret path.
  */
 void user_task_enter_ring3(void);
 

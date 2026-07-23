@@ -1,6 +1,25 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
-# Full bring-up smoke: Multiboot kernel + OVMF EFI.
+#
+# Full bring-up smoke: Multiboot kernel + OVMF EFI + host packaging gates.
+#
+# HARD GATES (exit 1 on miss) — do not soften:
+#   need_mb "…" Multiboot serial markers (product bar)
+#   OVMF hard: GJ-EFI on serial
+#   host ICD / sessiond / netstackd / storaged PASS
+#   stage-esp / stage-rootfs / libcgj / install-img / license
+#
+# Soft deepen (inventory only — never fails the smoke):
+#   soft_mb / soft_efi   optional serial companions
+#   TRAP #UD count       volume signal for agents
+#   product-summary      scripts/gj-product-summary.sh when present
+#   live-iso artifact    presence only (build via make live-iso separately)
+#   nvme CAP             already soft (RHEL QEMU splits)
+#
+# Contrast:
+#   scripts/gj-quick-keys.sh      hard presence keys (subset)
+#   scripts/gj-product-summary.sh soft inventory always exit 0
+#   scripts/gj-soak-large-ram.sh  soft large-RAM path (not required here)
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -19,6 +38,14 @@ need_mb() {
         exit 1
     fi
     echo "  ok: $1"
+}
+# Soft Multiboot companion — report only; never fails smoke-all.
+soft_mb() {
+    if grep -a -q "$1" "$log_mb" 2>/dev/null; then
+        echo "  soft ok: $1"
+    else
+        echo "  soft miss: $1"
+    fi
 }
 need_mb "M0 OK"
 need_mb "x2apic: supported="
@@ -309,32 +336,66 @@ need_mb "linux: aio_epoll PASS"
 need_mb "linux: mount PASS"
 need_mb "linux: getsid_pers PASS"
 
+# --- soft Multiboot companions (never fail smoke-all) ---------------------
+echo "== Multiboot soft companions =="
+soft_mb "sshd: live spawn PASS"
+soft_mb "scsi_mid: live spawn PASS"
+soft_mb "hda: multi-stream mixer PASS"
+soft_mb "TCP multi-segment PASS"
+soft_mb "hda_client: live spawn PASS"
+soft_mb "sshd-gj: live path PASS"
+soft_mb "scsi_mid-gj: READY PASS"
+soft_mb "linux: io_uring min rings PASS"
+soft_mb "pmm: soak_tib PASS"
+soft_mb "pmm: soak_tib SKIP"
+soft_mb "cap: mint"
+soft_mb "door: timeout"
+# TRAP #UD volume (soft — agents care about count; hard smoke stays green either way)
+ud_n=$(grep -a -E 'TRAP[[:space:]]+#UD' "$log_mb" 2>/dev/null | wc -l | tr -d ' ' || true)
+case "$ud_n" in
+    '' | *[!0-9]*) ud_n=0 ;;
+esac
+echo "  soft info: TRAP #UD count=$ud_n (Multiboot)"
+# Soft product-summary panel when helper is present
+if [ -x scripts/gj-product-summary.sh ]; then
+    echo "  --- gj-product-summary (soft) ---"
+    ./scripts/gj-product-summary.sh "$log_mb" 2>/dev/null || true
+fi
+
 echo "== OVMF EFI =="
 # Ensure Multiboot kernel is staged as KERNEL.ELF on ESP
 make -j"$(nproc)" build/greenjade.elf >/dev/null
 log_efi="${TMPDIR:-/tmp}/gj-smoke-efi.$$.log"
 timeout 45 ./scripts/run-ovmf.sh build/GreenJade.efi >"$log_efi" 2>&1 || true
+# HARD gate: GJ-EFI must appear (firmware path alive).
 if ! grep -a -q "GJ-EFI" "$log_efi"; then
     echo "FAIL OVMF: missing GJ-EFI" >&2
     tr -cd '\11\12\15\40-\176\n' <"$log_efi" | tail -30
     exit 1
 fi
 echo "  ok: GJ-EFI"
-if grep -a -q "GJ-OVMF" "$log_efi"; then
-    echo "  ok: GJ-OVMF"
-fi
-if grep -a -q "KERNEL.ELF loaded" "$log_efi"; then
-    echo "  ok: KERNEL.ELF loaded"
-fi
-if grep -a -q "ExitBootServices ok" "$log_efi"; then
-    echo "  ok: ExitBootServices"
-fi
-if grep -a -q "source=UEFI" "$log_efi"; then
-    echo "  ok: kmain_uefi"
-fi
-if grep -a -q "M0 OK" "$log_efi"; then
-    echo "  ok: M0 OK (UEFI)"
-fi
+# Soft OVMF companions — deepen inventory; never hard-fail smoke here.
+soft_efi() {
+    if grep -a -q "$1" "$log_efi" 2>/dev/null; then
+        echo "  soft ok: $1"
+    else
+        echo "  soft miss: $1"
+    fi
+}
+soft_efi "GJ-OVMF"
+soft_efi "GJ-EFI: OVMF"
+soft_efi "KERNEL.ELF loaded"
+soft_efi "ExitBootServices ok"
+soft_efi "source=UEFI"
+soft_efi "M0 OK"
+soft_efi "GJ-EFI: GOP soft PASS"
+soft_efi "GJ-EFI: GOP soft SKIP"
+soft_efi "GJ-EFI: memmap soft PASS"
+soft_efi "GJ-EFI: memmap soft REJECT"
+soft_efi "GJ-EFI: handoff soft PASS"
+soft_efi "GJ-EFI: handoff soft PARTIAL"
+soft_efi "GJ-EFI: jump kmain_uefi"
+soft_efi "run-ovmf: staged EFI/GREENJADE/KERNEL.ELF"
 
 echo "== host Vulkan ICD =="
 make vulkan-icd-host
@@ -561,6 +622,32 @@ echo "  ok: install-img PASS"
 
 echo "== license =="
 make license
+
+# --- soft host artifact companions (never fail; packaging is hard above) -
+echo "== soft host artifacts =="
+for art in \
+    build/greenjade.elf \
+    build/GreenJade.efi \
+    build/greenjade-install.img \
+    build/greenjade-live.iso \
+    build/user/sshd.elf \
+    build/user/scsi_mid.elf \
+    build/user/libc.so.6 \
+    build/user/libgj-so.so.1 \
+    build/user/libgj-gnu.so.1
+do
+    if [ -f "$art" ]; then
+        echo "  soft ok: artifact $art"
+    else
+        echo "  soft miss: artifact $art"
+    fi
+done
+# live-iso is a separate make target; soft presence only here
+if [ -f build/greenjade-live.iso ]; then
+    echo "  soft ok: live-iso present (run: ./scripts/run-live-iso.sh)"
+else
+    echo "  soft miss: live-iso (make live-iso — not required by smoke-all)"
+fi
 
 echo "smoke-all: PASS"
 rm -f "$log_mb" "$log_efi"

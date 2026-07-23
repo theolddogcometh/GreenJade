@@ -2,7 +2,21 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped pwd.h (stub surface). Not GNU glibc.
+ * Clean-room glibc-shaped <pwd.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * passwd database accessors (getpwuid/getpwnam and reentrant forms). Bring-up
+ * may return root + self only until a real /etc/passwd path exists.
+ *
+ * Design notes
+ * ------------
+ * struct passwd field order matches Linux glibc expectations for common apps.
+ *
+ * Non-goals
+ * ---------
+ * Full NSS (LDAP/SSSD) modules inside libc.
  */
 #pragma once
 

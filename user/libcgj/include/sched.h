@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sched.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sched.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * sched_yield, affinity (cpu_set_t / CPU_* macros), sched_param, and
+ * policy/priority helpers used by pthread and desktop runtimes.
+ *
+ * Design notes
+ * ------------
+ * cpu_set_t size targets glibc CPU_SETSIZE bring-up; __sched_cpucount is
+ * exported for CPU_COUNT. Affinity may soft-fill to single-CPU masks early.
+ *
+ * Non-goals
+ * ---------
+ * Full deadline/FIFO realtime guarantees on the microkernel scheduler.
  */
 #pragma once
 

@@ -2,7 +2,25 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped signal.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <signal.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Linux x86_64-shaped sigset_t (1024 signals → 16 × unsigned long), classic
+ * signal numbers, sigaction/sigprocmask/sig*set, sigevent/siginfo_t, and
+ * realtime queue helpers used by pthread and desktop graphs.
+ *
+ * Design notes
+ * ------------
+ * Kernel hybrid paths may use an 8-byte sigset in some bring-up bridges;
+ * userspace still exports the glibc 128-byte set for binary shape. SIG_DFL /
+ * SIG_IGN / SIG_ERR are function-pointer sentinels, not small integers alone.
+ *
+ * Non-goals
+ * ---------
+ * Full realtime signal delivery semantics and SA_SIGINFO for every signal.
+ * See docs/GLIBC_COMPAT.md, docs/LINUX_ABI_HYBRID.md.
  */
 #pragma once
 
@@ -12,6 +30,8 @@
 extern "C" {
 #endif
 
+/* ---- Types ------------------------------------------------------------- */
+
 typedef int sig_atomic_t;
 
 /* Linux x86_64: 1024 signals → 16 × unsigned long */
@@ -19,9 +39,13 @@ typedef struct {
     unsigned long __val[16];
 } sigset_t;
 
+/* ---- Disposition sentinels --------------------------------------------- */
+
 #define SIG_DFL ((void (*)(int))0)
 #define SIG_IGN ((void (*)(int))1)
 #define SIG_ERR ((void (*)(int))-1)
+
+/* ---- Signal numbers (Linux) -------------------------------------------- */
 
 #define SIGHUP   1
 #define SIGINT   2

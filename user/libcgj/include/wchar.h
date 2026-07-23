@@ -2,7 +2,23 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped wchar.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <wchar.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Wide string (wcs*), wide memory (wmem*), conversion (mbrtowc/wcrtomb…),
+ * wide stdio (fwprintf/fwscanf), and open_wmemstream. Complements <stdio.h>
+ * byte streams and <uchar.h> char16/32.
+ *
+ * Design notes
+ * ------------
+ * C locale / UTF-8 oriented bring-up; MB_CUR_MAX is small. Orientation of
+ * FILE (byte vs wide) is tracked in struct gj_cgj_file (nWide).
+ *
+ * Non-goals
+ * ---------
+ * Full ISO 10646 locale multibyte state machines for every encoding.
  */
 #pragma once
 

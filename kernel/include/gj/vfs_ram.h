@@ -3,12 +3,33 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Tiny in-kernel ramdisk for cold personality bring-up (G-PERS cold FS).
- * Product: move to userspace vfsd; this is interim only.
+ * Pure C11 freestanding, dual MIT OR Apache-2.0.
+ *
+ * Product direction: move durable FS to userspace vfsd + vfs_door; this
+ * module remains the interim Linux ABI surface for open/read/write, pipes,
+ * eventfd, epoll, timerfd, signalfd, pidfd, inotify, and io_uring soft fds.
+ * Independent of the vfs_door LBA mini-FS (different FD namespace).
+ *
+ * Capacity (vfs_ram.c — soft product limits, not ABI):
+ *   VFS_MAX_FILES 64, VFS_MAX_FDS 96, path ≤128, file data ≤32 KiB
+ *   (room for packaged ld-gj.so.1 ~30 KiB + small ELFs)
+ *   pipes 16×2 KiB; eventfd/epoll/timerfd/signalfd/inotify fixed tables
+ *
+ * Block mounts (optional, after device probe):
+ *   vfs_ram_mount_blk  → /dev/vda over virtio-blk (sector R/W)
+ *   vfs_ram_mount_scsi → /dev/sda over scsi_mid LUN0 READ10 path
+ *
+ * FD policy:
+ *   open returns fd ≥ 3 or -errno; kinds RAM/BLK/SCSI/PIPE/EVENTFD/…
+ *   poll/epoll readiness via vfs_ram_poll_mask (Linux-shaped ERR/HUP bits)
+ *
+ * Greppable: vfs_ram / cold FS / linux: io_uring … via this surface
  */
 #pragma once
 
 #include <gj/types.h>
 
+/** Seed default paths/files and clear FD tables. Safe to re-call soft. */
 void vfs_ram_init(void);
 
 /**
@@ -18,35 +39,37 @@ void vfs_ram_init(void);
 void vfs_ram_mount_blk(void);
 
 /**
- * Mount scsi_mid LUN0 as /dev/sda when virtio-scsi ready (READ10 path).
+ * Mount scsi_mid LUN0 as /dev/sda when virtio-scsi (or soft LUN) ready
+ * (READ10 / WRITE10 path through scsi_mid).
  */
 void vfs_ram_mount_scsi(void);
 
 /**
- * Open path (absolute). Returns fd >= 3 or negative Linux errno.
- * fCreate: create empty file if missing (O_CREAT-like).
+ * Open path (absolute preferred). Returns fd >= 3 or negative Linux errno.
+ * fCreate: create empty file if missing (O_CREAT-like). Directories need
+ * mkdir first for DIR kind; block/scsi nodes appear after mount_*.
  */
 i64 vfs_ram_open(const char *szPath, int fCreate);
 
 /** Read from fd into kernel buffer. Returns bytes or -errno. */
 i64 vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb);
 
-/** Write to fd from kernel buffer. */
+/** Write to fd from kernel buffer. Returns bytes or -errno. */
 i64 vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb);
 
-/** Close fd. */
+/** Close fd; releases pipe/eventfd/epoll watches as needed. */
 i64 vfs_ram_close(i64 i64Fd);
 
-/** Lseek: whence 0=SET 1=CUR 2=END. */
+/** Lseek: whence 0=SET 1=CUR 2=END. Returns new offset or -errno. */
 i64 vfs_ram_lseek(i64 i64Fd, i64 i64Off, int nWhence);
 
-/** Non-zero if fd is a live ramdisk fd. */
+/** Non-zero if fd is a live ramdisk / special fd in this table. */
 int vfs_ram_fd_ok(i64 i64Fd);
 
 /**
  * Create a connected pipe pair (socketpair-shaped / pipe2).
  * Writes aFds[0] and aFds[1] (kernel buffer or caller array).
- * Returns 0 or -errno.
+ * Returns 0 or -errno. nFlags soft-ignored for bring-up.
  */
 i64 vfs_ram_pipe2(i32 *pFds, int nFlags);
 
@@ -71,7 +94,7 @@ i64 vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb);
 i64 vfs_ram_pread(i64 i64Fd, void *pBuf, size_t cb, u64 u64Off);
 i64 vfs_ram_pwrite(i64 i64Fd, const void *pBuf, size_t cb, u64 u64Off);
 
-/** dup / dup2 — clone fd table entry. */
+/** dup / dup2 — clone fd table entry (kind + offset shared soft). */
 i64 vfs_ram_dup(i64 i64Fd);
 i64 vfs_ram_dup2(i64 i64Old, i64 i64New);
 
@@ -83,13 +106,13 @@ i64 vfs_ram_readlink(const char *szPath, char *pBuf, size_t cb);
 
 /**
  * access-shaped: 0 if path exists (F_OK) or is openable; -ENOENT otherwise.
- * mode bits ignored for bring-up (all files R/W).
+ * mode bits ignored for bring-up (all files R/W soft).
  */
 i64 vfs_ram_access(const char *szPath, int nMode);
 
 /**
  * Fill a Linux x86_64 struct stat (144-byte public layout) for an open fd.
- * Returns 0 or -errno.
+ * Returns 0 or -errno. cbStat must be large enough.
  */
 i64 vfs_ram_fstat(i64 i64Fd, void *pStat, size_t cbStat);
 
@@ -105,13 +128,13 @@ i64 vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat);
 /** rename: move path (ram files + symlink table). Returns 0 or -errno. */
 i64 vfs_ram_rename(const char *szOld, const char *szNew);
 
-/** ftruncate: set RAM file size (zero-fill or clip). */
+/** ftruncate: set RAM file size (zero-fill or clip). Rejects dirs/specials. */
 i64 vfs_ram_ftruncate(i64 i64Fd, i64 i64Len);
 
 /** Path-based truncate (RAM files only). */
 i64 vfs_ram_truncate(const char *szPath, i64 i64Len);
 
-/** Path-based chmod (RAM files only). */
+/** Path-based chmod (RAM files only; mode stored for fstat). */
 i64 vfs_ram_chmod(const char *szPath, u32 u32Mode);
 
 /** mkdir-shaped: create empty directory marker at path. */
@@ -135,7 +158,7 @@ i64 vfs_ram_symlink(const char *szTarget, const char *szLink);
 /** utimensat-shaped: touch path (create empty if missing when flags allow). */
 i64 vfs_ram_utimens(const char *szPath);
 
-/** hard link: new path shares RAM file data. */
+/** hard link: new path shares RAM file data (nlink soft). */
 i64 vfs_ram_link(const char *szOld, const char *szNew);
 
 /** unlink RAM file or symlink by path. */
@@ -203,7 +226,7 @@ i64 vfs_ram_timerfd_gettime(i64 i64Fd, u64 *pValueNsec, u64 *pIntervalNsec);
 
 /**
  * signalfd4: i64Fd < 0 creates new; else updates mask.
- * Inject pending via vfs_ram_signalfd_inject.
+ * Inject pending via vfs_ram_signalfd_inject (test/smoke path).
  */
 i64 vfs_ram_signalfd4(i64 i64Fd, u64 u64Mask, int nFlags);
 void vfs_ram_signalfd_inject(u32 u32Signo);

@@ -41,6 +41,12 @@ need mcopy
 need mmd
 need sgdisk
 
+cleanup() {
+	rm -rf "$esp_dir" "$persist_dir"
+}
+trap cleanup EXIT INT TERM HUP
+
+mkdir -p "$(dirname "$out")"
 echo "make-hwtest-img: stage-esp + stage-rootfs..."
 chmod +x scripts/stage-esp.sh scripts/stage-rootfs.sh
 ./scripts/stage-esp.sh "$esp_dir" >/dev/null
@@ -52,6 +58,9 @@ if [ ! -f build/hwtest-keys/id_ed25519 ]; then
 	if command -v ssh-keygen >/dev/null 2>&1; then
 		ssh-keygen -t ed25519 -N "" -C "greenjade-hwtest@lab" \
 			-f build/hwtest-keys/id_ed25519 >/dev/null
+		echo "make-hwtest-img: generated build/hwtest-keys/id_ed25519"
+	else
+		echo "make-hwtest-img: warn: ssh-keygen missing; persist has no authorized_keys" >&2
 	fi
 fi
 
@@ -100,6 +109,16 @@ SSH remote debug (Grok / operator)
     sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh
 
   Then: ssh -i <tree>/build/hwtest-keys/id_ed25519 root@<lab-host>
+
+Soft-scan serial captures (host)
+  ./scripts/gj-product-summary.sh logs/serial-….txt   # soft exit 0
+  ./scripts/gj-quick-keys.sh logs/serial-….txt        # hard miss exit 1
+  ./scripts/steam-bar3-check.sh                       # media READY/SKELETON
+
+Honesty
+  STATUS=READY means bootstrap tree on media — not Steam client run.
+  Kernel HDA multi-stream PASS is not Steam audio. Deck Top 50 stays
+  NOT-TRIED until real DUT title results.
 EOF
 
 cat >"$persist_dir/logs/README.txt" <<'EOF'
@@ -202,12 +221,15 @@ cp -f "$esp_dir/EFI/GREENJADE/INSTALL.txt" \
 	"$esp_dir/EFI/GREENJADE/HWTEST.txt" 2>/dev/null || true
 cat >"$esp_dir/EFI/GREENJADE/HWTEST.txt" <<'EOF'
 GreenJade hardware-test USB layout
-  p1 ESP (this partition) — boot GreenJade
-  p2 GJ-PERSIST — durable logs + lab SSH enable script
+  p1 ESP (this partition) — boot GreenJade + user/ + lib/ + rootfs-full/
+  p2 GJ-PERSIST — durable logs + lab SSH enable + steam/
 
 Boot: UEFI → BOOTX64.EFI → serial GJ-EFI / M0 OK
+      soft markers: sshd/scsi_mid/hda_client live spawn when embeds run
 Logs: mount -L GJ-PERSIST; see README.txt
 SSH:  sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh  (lab host)
+Soft: ./scripts/gj-product-summary.sh <serial-log>
+Keys: ./scripts/gj-quick-keys.sh <serial-log>
 EOF
 
 # Image geometry (defaults): 640 MiB total
@@ -249,14 +271,43 @@ mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/HWTEST.txt" ::/EFI/GREENJAD
 mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/VERSION" ::/EFI/GREENJADE/VERSION 2>/dev/null || true
 
 # User ELFs + libs
+user_n=0
 for f in "$esp_dir/EFI/GREENJADE/user/"*; do
 	[ -f "$f" ] || continue
 	mcopy -o -i "$out@@$ESP_OFF" "$f" "::/EFI/GREENJADE/user/$(basename "$f")"
+	user_n=$((user_n + 1))
 done
+lib_n=0
 for f in "$esp_dir/EFI/GREENJADE/lib/"*; do
 	[ -f "$f" ] || continue
 	mcopy -o -i "$out@@$ESP_OFF" "$f" "::/EFI/GREENJADE/lib/$(basename "$f")"
+	lib_n=$((lib_n + 1))
 done
+
+# Thin rootfs-full snapshot on ESP (sbin/bin/usr/lib/etc — no opt/steam bulk)
+# Prepared above under $esp_dir; best-effort recursive mcopy, then fallbacks.
+rootfs_n=0
+if [ -d "$esp_dir/EFI/GREENJADE/rootfs-full" ]; then
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/rootfs-full 2>/dev/null || true
+	if mcopy -s -o -i "$out@@$ESP_OFF" \
+		"$esp_dir/EFI/GREENJADE/rootfs-full" ::/EFI/GREENJADE/ 2>/dev/null; then
+		rootfs_n=$(find "$esp_dir/EFI/GREENJADE/rootfs-full" -type f 2>/dev/null | wc -l | tr -d ' ')
+	else
+		for d in sbin bin usr lib etc; do
+			if [ -d "$esp_dir/EFI/GREENJADE/rootfs-full/$d" ]; then
+				mmd -i "$out@@$ESP_OFF" "::/EFI/GREENJADE/rootfs-full/$d" 2>/dev/null || true
+				# One level of files; nested dirs best-effort
+				find "$esp_dir/EFI/GREENJADE/rootfs-full/$d" -type f 2>/dev/null | while read -r rf; do
+					rel=${rf#"$esp_dir/EFI/GREENJADE/rootfs-full/"}
+					parent=$(dirname "$rel")
+					mmd -i "$out@@$ESP_OFF" "::/EFI/GREENJADE/rootfs-full/$parent" 2>/dev/null || true
+					mcopy -o -i "$out@@$ESP_OFF" "$rf" "::/EFI/GREENJADE/rootfs-full/$rel" 2>/dev/null || true
+				done
+			fi
+		done
+		rootfs_n=$(find "$esp_dir/EFI/GREENJADE/rootfs-full" -type f 2>/dev/null | wc -l | tr -d ' ')
+	fi
+fi
 
 # Format persist + copy tree (mcopy -s recursive when available)
 mformat -i "$out@@$PERSIST_OFF" -F -v GJ-PERSIST ::
@@ -300,12 +351,14 @@ if [ -d "$persist_dir/steam" ]; then
 	fi
 fi
 
-rm -rf "$esp_dir" "$persist_dir"
 sz=$(wc -c <"$out" | tr -d ' ')
-echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status"
+echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} rootfs_files=${rootfs_n}"
 echo "  layout: p1 ESP(GREENJADE) + p2 FAT32(GJ-PERSIST) logs+ssh+steam"
 echo "  write:  sudo ./scripts/install-hwtest-usb.sh /dev/sdX"
 echo "  SSH:    after plug-in on lab host:"
 echo "          sudo mount -L GJ-PERSIST /mnt/gj-persist"
 echo "          sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh"
+echo "  Soft:   ./scripts/gj-product-summary.sh <serial-log>   # exit 0"
+echo "  Keys:   ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1"
 echo "  Steam:  docs/STEAM_HWTEST.md  (make steam-fetch for READY tree)"
+echo "  Note:   READY/media ≠ Steam client run; Top-50 remains NOT-TRIED"

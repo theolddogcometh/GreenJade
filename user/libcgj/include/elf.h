@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room ELF types (subset for link.h / dl_iterate_phdr). Not GNU glibc.
+ * Clean-room ELF types/constants for libcgj / ld-gj consumers.
+ * Not binutils or GNU libc headers; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Elf*_Ehdr/Phdr/Shdr/Dyn/Sym shapes and common EM_*/PT_*/DT_*/STT_* macros
+ * needed by dynlink and tools. Kernel has a separate loader surface.
+ *
+ * Design notes
+ * ------------
+ * Prefer matching System V / Linux ELF numbers used by product arches
+ * (x86_64, aarch64). Expand only when a real relocation/graph needs it.
+ *
+ * Non-goals
+ * ---------
+ * Full ELF gABI encyclopedia of every OS-specific note.
  */
 #pragma once
 

@@ -1,5 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
  * aarch64 QEMU virt linker script (product scaffold).
  * Load at DRAM base 0x4000_0000 (QEMU -kernel EL1 identity).
  */

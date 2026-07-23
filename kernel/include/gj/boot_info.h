@@ -3,12 +3,20 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Unified firmware handoff (Multiboot2 and UEFI fill this).
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
  *
+ * -------------------------------------------------------------------------
  * Contract
- * --------
+ * -------------------------------------------------------------------------
  * Both product (UEFI) and dev (Multiboot2) paths publish one snapshot via
  * boot_info_set_global() so late boot (kmain, SMP, IOMMU, FB) never keeps
  * live firmware protocol pointers after ExitBootServices / loader return.
+ *
+ * Platform profile: docs/X86_64_INTEL_PLATFORM.md
+ *   P-BOOT-1  UEFI primary product path
+ *   P-BOOT-2  Multiboot2 / QEMU -kernel is dev-only
+ *   P-BOOT-3  consume UEFI memory map after ExitBootServices
+ *   P-BOOT-4  locate ACPI RSDP from UEFI configuration table
  *
  * Field ownership by source (P-BOOT-1 product UEFI; P-BOOT-2 Multiboot dev):
  *
@@ -29,14 +37,24 @@
  * Consumers should prefer flags when present, but still tolerate flags==0 and
  * probe non-zero fields (older fillers).
  *
+ * Magic / version
+ * ---------------
+ *   u32Magic   == GJ_BOOT_INFO_MAGIC ('GJBI' LE)
+ *   u32Version == GJ_BOOT_INFO_VERSION (bump only on breaking layout)
+ * boot_info_valid() is the soft gate for "this is a GreenJade handoff".
+ *
+ * -------------------------------------------------------------------------
  * Soft product surface (this module / UEFI handoff only)
- * ------------------------------------------------------
+ * -------------------------------------------------------------------------
  * Soft = greppable observability + classify helpers; never hard-fails the
  * product path. Callers may ignore soft_* return codes.
  *
  *   boot_info_soft_memmap()  — walk EFI MD array; count usable reclaim types
  *   boot_info_soft_gop_ok()  — soft FB geometry sanity (base/size/bpp)
  *   boot_info_soft_log()     — serial markers (call after serial_init)
+ *
+ * EFI types soft-reclaimed as usable RAM (must match kmain_uefi + stub):
+ *   LoaderCode/Data, BootServicesCode/Data, Conventional, ACPIReclaim
  *
  * Grep markers (kernel side, kprintf after serial_init):
  *   boot: handoff soft PASS|PARTIAL|STUB …
@@ -49,7 +67,11 @@
  *   GJ-EFI: memmap soft PASS|REJECT …
  *   GJ-EFI: handoff soft PASS|PARTIAL …
  *
- * Pure C11 freestanding; dual MIT OR Apache-2.0.
+ * greppable: boot: handoff soft
+ * greppable: boot: memmap soft
+ * greppable: boot: GOP soft
+ * greppable: GJ_BOOT_F_ GJ_BOOT_SRC_ GJ_BOOT_INFO_MAGIC
+ * greppable: P-BOOT-1 P-BOOT-3 kmain_uefi
  */
 #pragma once
 
@@ -80,7 +102,10 @@
 #define GJ_BOOT_EFI_MT_CONVENTIONAL 7u
 #define GJ_BOOT_EFI_MT_ACPI_RECLAIM 9u
 
-/* Minimum EFI_MEMORY_DESCRIPTOR layout used by soft memmap walks. */
+/**
+ * Minimum EFI_MEMORY_DESCRIPTOR layout used by soft memmap walks.
+ * Stride may be larger than sizeof(this); walk with u64MemDescSize.
+ */
 struct gj_boot_efi_md {
     u32 u32Type;
     u32 u32Pad;
@@ -105,6 +130,11 @@ struct gj_boot_soft_memmap {
     u32 fOk;           /* 1 if present and cUsablePages > 0 */
 };
 
+/**
+ * Process-global firmware handoff snapshot.
+ * Filled by Multiboot or UEFI stub; published via boot_info_set_global.
+ * Consumers must not retain firmware protocol pointers beyond this struct.
+ */
 struct gj_boot_info {
     u32  u32Magic;       /* GJ_BOOT_INFO_MAGIC */
     u32  u32Version;     /* GJ_BOOT_INFO_VERSION */
@@ -166,18 +196,20 @@ int boot_info_soft_gop_ok(const struct gj_boot_info *pInfo);
  * Soft: greppable handoff / memmap / GOP serial markers.
  * Call after serial_init (UEFI: identity_map path). Never hard-fails.
  * Grep: boot: handoff soft | boot: memmap soft | boot: GOP soft
+ * greppable: boot: handoff soft
  */
 void boot_info_soft_log(const struct gj_boot_info *pInfo);
 
 /**
  * Product UEFI entry (long mode, identity map from firmware).
  * Filled gj_boot_info: magic, EFI memory map, optional RSDP/FB.
- * Does not return.
+ * Does not return. P-BOOT-1 product path.
  */
 void kmain_uefi(struct gj_boot_info *pInfo) __attribute__((noreturn));
 
 /**
  * Install kernel-owned 4 GiB identity map (UEFI path).
  * Multiboot builds the same layout in arch boot.S before kmain.
+ * Soft marker: boot: identity soft PASS (implementation side).
  */
 void boot_install_identity_4gib(void);

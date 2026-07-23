@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped malloc.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <malloc.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * GNU malloc extras: memalign, malloc_usable_size, mallinfo/malloc_stats
+ * shapes as implemented. Core malloc lives in <stdlib.h>.
+ *
+ * Design notes
+ * ------------
+ * Heap is freelist bring-up; statistics may be zeroed or approximate.
+ * Prefer <stdlib.h> for portable code.
+ *
+ * Non-goals
+ * ---------
+ * Full glibc ptmalloc arena tuning APIs.
  */
 #pragma once
 

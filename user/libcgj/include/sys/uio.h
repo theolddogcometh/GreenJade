@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sys/uio.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/uio.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * struct iovec, readv/writev (and preadv/pwritev when present). Shared by
+ * sockets, splice, and process_madvise.
+ *
+ * Design notes
+ * ------------
+ * iov_base/iov_len layout is LP64 Linux. Total length across vectors is
+ * limited by SSIZE_MAX / kernel caps.
+ *
+ * Non-goals
+ * ---------
+ * Guaranteed atomicity of multi-vector writes across all fd types.
  */
 #pragma once
 

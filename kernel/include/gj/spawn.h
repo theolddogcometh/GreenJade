@@ -3,11 +3,38 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * posix_spawn-like process create + PROCESS task cap (G-PROC-*).
- * Product lifecycle: spawn → kill (process_death) → wait (reap + recycle slot).
+ * Pure C11 freestanding; dual MIT OR Apache-2.0.
  *
- * Soft product surface (grep: spawn: soft | spawn: mint soft):
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Product process lifecycle for GreenJade:
+ *   spawn → kill (process_death) → wait (reap + recycle slot)
+ *
+ * On spawn the parent receives a minted GJ_CAP_PROCESS in its CNode (Scheme A
+ * handle: slot + gen). That cap is the transferable task port; root meta in
+ * slot 0 is NOT a factory for PROCESS caps (docs/CAP_ADDRESSING.md K1–K6).
+ *
+ * Product lifecycle (G-PROC-*)
+ * ----------------------------
+ *   G-PROC-2  mint PROCESS into parent with base rights (+ JIT when set)
+ *   G-PROC-5  process_death reclaims AS/CNode; wait recycles fixed slot
+ *   Soft post-mint verify: type / rights / obj / gen (fail counted, not ABI)
+ *
+ * Soft product surface
+ * --------------------
+ *   greppable: "spawn: soft stats"
+ *   greppable: "spawn: mint soft"
  *   PROCESS cap mint verify (type/rights/obj/gen) after parent install
  *   Cumulative + live + fail/kill/wait/mint counters
+ *
+ * Failure policy
+ * --------------
+ * Any failure after partial install reverse tear-downs (no orphan AS/cap).
+ * Fixed table GJ_SPAWN_MAX; full table → spawn fail (soft u32Fail).
+ *
+ * Related: gj/process.h, gj/cap.h, gj/thread.h, gj/elf_load.h, gj/user_task.h
+ * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md
  */
 #pragma once
 
@@ -17,7 +44,9 @@
 
 struct gj_process;
 
+/** Child CNode slot count at spawn (bring-up size; not hierarchical quota). */
 #define GJ_SPAWN_CNODE_SLOTS 64ull
+/** Fixed spawn-table capacity (live children not yet reaped). */
 #define GJ_SPAWN_MAX         8u
 
 /* Default PROCESS task rights (G-PROC-2); JIT is OR'd when CapJit is set. */
@@ -29,6 +58,11 @@ struct gj_process;
 #define GJ_SPAWN_PROCESS_RIGHTS_CORE                                       \
     ((u16)(GJ_RIGHT_DESTROY | GJ_RIGHT_WAIT | GJ_RIGHT_VM))
 
+/**
+ * Spawn arguments for the first child thread / personality.
+ * pfnEntry may be a kernel thr entry or paired with user_task maps later.
+ * u32Personality: 0 native (GJ_SYS_*), 1 linux (Option C hybrid).
+ */
 struct gj_spawn_args {
     void              (*pfnEntry)(void *pArg);
     void               *pArg;
@@ -39,6 +73,9 @@ struct gj_spawn_args {
 /**
  * Soft spawn / PROCESS-mint counters (observability; not a hard ABI).
  * Grep: spawn: soft stats
+ *
+ * u32Live is occupied fixed slots (not cumulative ok).
+ * Mint soft PASS/FAIL is post-install verify only (install already returned).
  */
 struct gj_spawn_stats {
     u32 u32Ok;         /* cumulative successful process_spawn */
@@ -65,7 +102,10 @@ gj_status_t process_spawn(struct gj_process *pParent,
                           struct gj_process **ppOutChild,
                           struct gj_cap_ref *pOutCap);
 
-/** Look up child by PROCESS cap in parent CNode. */
+/**
+ * Look up child by PROCESS cap in parent CNode.
+ * Fail closed on type/gen mismatch (returns NULL; no stale object use).
+ */
 struct gj_process *process_from_cap(struct gj_process *pParent,
                                     const struct gj_cap_ref *pRef);
 
@@ -110,7 +150,7 @@ u32 process_spawn_stats_soft(void);
 
 /**
  * Kill child process (DESTROY right). Calls process_death (G-PROC-5).
- * Idempotent if already dead.
+ * Idempotent if already dead. Requires parent ownership of the PROCESS cap.
  */
 gj_status_t process_kill(struct gj_process *pParent, const struct gj_cap_ref *pRef,
                          u32 u32ExitCode);

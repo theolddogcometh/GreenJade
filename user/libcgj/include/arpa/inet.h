@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped arpa/inet.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <arpa/inet.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * inet_pton/ntop/aton/ntoa/addr and byte-order helpers used with <netinet/in.h>.
+ * Pure computation — no network I/O.
+ *
+ * Design notes
+ * ------------
+ * htonl/htons/ntohl/ntohs may also be exported from other headers for dynlink
+ * graphs; keep semantics identical (big-endian wire order).
+ *
+ * Non-goals
+ * ---------
+ * Classful legacy network macros beyond common app needs.
  */
 #pragma once
 

@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped dirent (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <dirent.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * DIR streams, opendir/fdopendir/readdir/readdir_r, seekdir/telldir, scandir,
+ * alphasort/versionsort, and dirfd.
+ *
+ * Design notes
+ * ------------
+ * Directory iteration uses getdents64 under the hood on Linux personality.
+ * d_type may be DT_UNKNOWN when the filesystem does not provide type.
+ *
+ * Non-goals
+ * ---------
+ * Full NFS readdir cookie persistence quirks.
  */
 #pragma once
 

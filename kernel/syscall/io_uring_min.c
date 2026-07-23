@@ -96,8 +96,13 @@
 #define IOSQE_FIXED_FILE   (1u << 0)
 
 /* Linux open flags (public x86_64). */
+/* LINUX_O_CREAT / LINUX_O_TRUNC: from linux_abi.h (do not redefine). */
+#ifndef LINUX_O_CREAT
 #define LINUX_O_CREAT  0x40u
+#endif
+#ifndef LINUX_O_TRUNC
 #define LINUX_O_TRUNC  0x200u
+#endif
 
 /* mmap offsets (public Linux uapi) */
 #define IORING_OFF_SQ_RING  0ull

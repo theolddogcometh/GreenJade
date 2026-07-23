@@ -3,15 +3,50 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * GreenJade native syscall numbers + hybrid Linux personality entry.
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0 (project root LICENSE).
  *
- * Product contract:
- *   - Native mode: rax/x0 is GJ_SYS_* (this table). Numbers are frozen after
- *     first userland; do not renumber (docs/APPLE_CHANNEL §5).
- *   - Linux mode: rax/x0 is a Linux NR; hybrid hot/cold path (Option C).
+ * -------------------------------------------------------------------------
+ * Role
+ * -------------------------------------------------------------------------
+ * Top-level SYSCALL surface for ring-3 → kernel. Two personalities share one
+ * LSTAR/SVC entry; routing is decided from the bound process PCB (or the
+ * kernel default personality when no process is bound):
+ *
+ *   Native  — rax/x0 is GJ_SYS_* (this table); gj_native_syscall_dispatch
+ *   Linux   — rax/x0 is a Linux NR; Option C hot/cold hybrid path
+ *             (gj_linux_syscall_dispatch → linux_hot / cold_ipc)
+ *
+ * Product contract
+ * ----------------
+ *   - Native mode: GJ_SYS_* numbers are frozen after first userland.
+ *     Do not renumber; append in sparse subsystem blocks only
+ *     (docs/APPLE_CHANNEL_REMAINING.md §5 number stability).
+ *   - Linux mode: numbers are the public Linux ABI (gj/linux_abi.h).
  *   - Top-level entry is gj_syscall_dispatch(); personality comes from the
  *     current process PCB (default LINUX until a native app sets 0).
+ *   - Arg pointers are never trusted without user_range_ok + copy_{to,from}_user.
+ *   - Soft counters wrap OK and never hard-gate product paths.
  *
- * Pure C11. Dual-licensed MIT OR Apache-2.0 (project root LICENSE).
+ * Code map (implementation elsewhere; this header is the contract)
+ * ----------------------------------------------------------------
+ *   kernel/syscall/entry_bridge.c  — LSTAR bridge soft note
+ *   kernel/syscall/dispatch.c      — personality route + entry stats
+ *   kernel/syscall/native.c        — GJ_SYS_* switch + native stats
+ *   kernel/syscall/linux_*.c       — hybrid Option C (see linux_dispatch.h)
+ *   kernel/arch/x86_64/syscall_entry.S — LSTAR → C bridge
+ *
+ * Soft product surfaces (greppable)
+ * ---------------------------------
+ *   greppable: SYSCALL_ENTRY_SOFT_STATS
+ *   greppable: "syscall: soft stats"
+ *   greppable: "native: soft stats"
+ *   greppable: GJ_SYS_
+ *
+ * Related headers
+ * ---------------
+ *   gj/linux_abi.h, gj/linux_dispatch.h, gj/cold_ipc.h, gj/process.h,
+ *   gj/error.h (native returns gj_status_t-shaped i64Ret on many ops)
+ * docs/LINUX_ABI_HYBRID.md · docs/PROTON_PERSONALITY.md
  */
 #pragma once
 
@@ -19,7 +54,12 @@
 #include <gj/types.h>
 
 /* ---- Native GJ syscall numbers (distinct from Linux 0..n) --------------- */
-/* Keep sparse blocks by subsystem so new ops can land without renumbering. */
+/*
+ * Sparse blocks by subsystem so new ops land without renumbering.
+ * Convention: arg0..arg5 map to u64Arg0..u64Arg5; result in i64Ret.
+ * Negative i64Ret is usually GJ_ERR_* (native) or -LINUX_E* (Linux path).
+ * Reserved / stub numbers must return GJ_ERR_NOSUPPORT, not silent success.
+ */
 
 /* Diagnostics / scheduling */
 #define GJ_SYS_DEBUG_LOG   0  /* arg0=user buf, arg1=len → bytes written */
@@ -144,6 +184,9 @@
  * Personality mode for a task (PCB field when tasks exist).
  * Linux mode: rax is Linux NR; hybrid hot/cold dispatch.
  * Native mode: rax is GJ_SYS_*.
+ *
+ * Stored on struct gj_process::u32Personality (0/1). Default for unbound
+ * dispatch is LINUX so glibc/Proton bring-up works before native apps land.
  */
 enum gj_personality {
     GJ_PERSONALITY_NATIVE = 0,
@@ -152,24 +195,37 @@ enum gj_personality {
 
 /**
  * Register frame for native / top-level dispatch.
- * Arch entry (or smoke tests) fill nr + arg0..5; handlers write i64Ret.
- * Never trust arg pointers without user_range_ok + copy_{to,from}_user.
+ *
+ * Arch entry (or smoke tests) fill u64Nr + u64Arg0..5; handlers write i64Ret.
+ * On x86_64 LSTAR this is rebuilt from the user register save area; on aarch64
+ * SVC the same shape is filled from x0..x5 / x8-style NR conventions in the
+ * arch bridge (see arch SVC path).
+ *
+ * Security: never trust arg pointers without user_range_ok + copy_{to,from}_user.
+ * Soft: NULL frames are counted and rejected at each entry edge.
  */
 struct gj_syscall_regs {
-    u64 u64Nr;
+    u64 u64Nr;    /* GJ_SYS_* or Linux NR (personality decides interpretation) */
     u64 u64Arg0;
     u64 u64Arg1;
     u64 u64Arg2;
     u64 u64Arg3;
     u64 u64Arg4;
     u64 u64Arg5;
-    i64 i64Ret;
+    i64 i64Ret;   /* out: success ≥0 or negative status / -errno */
 };
 
-/** Bring up cold IPC, futex, and Linux hybrid tables. Call once at boot. */
+/**
+ * Bring up cold IPC, futex, and Linux hybrid tables.
+ * Call once at boot after memory and early CPU are live. Idempotence is
+ * implementation-defined; product path calls once from kmain.
+ */
 void gj_syscall_init(void);
 
-/** Override default personality used when no current process is bound. */
+/**
+ * Override default personality used when no current process is bound.
+ * Soft counters: u64SetPersOk / u64SetPersReject on the entry stats surface.
+ */
 void gj_syscall_set_default_personality(enum gj_personality e);
 enum gj_personality gj_syscall_get_default_personality(void);
 
@@ -177,12 +233,16 @@ enum gj_personality gj_syscall_get_default_personality(void);
  * Top-level entry (from asm or tests).
  * Routes by current task personality (default LINUX until native apps exist).
  * NULL pRegs is a no-op (defensive). Soft counters: SYSCALL_ENTRY_SOFT_STATS.
+ *
+ * Order: soft-count enter → resolve PCB personality → native or linux path →
+ * outcome soft (ret sign buckets + last nr/ret snapshot).
  */
 void gj_syscall_dispatch(struct gj_syscall_regs *pRegs);
 
 /**
  * Asm LSTAR edge (syscall_entry.S → C). Soft-notes bridge then dispatches.
  * NULL pRegs is a soft-counted no-op (defensive).
+ * Smoke tests that call gj_syscall_dispatch directly skip bridge counters.
  */
 void gj_syscall_entry_asm_bridge(struct gj_syscall_regs *pRegs);
 
@@ -193,12 +253,16 @@ void gj_syscall_entry_asm_bridge(struct gj_syscall_regs *pRegs);
  */
 void gj_syscall_entry_soft_note_bridge(struct gj_syscall_regs *pRegs);
 
-/** Force Linux hybrid path (Option C). Declared here; implemented in linux_*. */
+/**
+ * Force Linux hybrid path (Option C). Declared here; implemented in linux_*.
+ * See gj/linux_dispatch.h for classify / hot / cold contracts.
+ */
 void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
 
 /**
  * Native GJ path: switch on GJ_SYS_*.
  * Unimplemented / reserved numbers return GJ_ERR_NOSUPPORT.
+ * Soft: gj_native_dispatch_stats_* for smoke (never hard-gate).
  */
 void gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs);
 
@@ -286,7 +350,11 @@ void gj_native_dispatch_stats_reset(void);
  */
 u64 gj_native_dispatch_stats_soft(void);
 
-/* Stats for smoke / debugging (Linux hybrid path). */
+/**
+ * Coarse Linux hybrid hit counters (hot vs cold vs ENOSYS).
+ * Deeper NR-table inventory lives in gj_linux_nr_class_stats (linux_dispatch.h).
+ * Kept here for historical smoke that includes syscall.h only.
+ */
 struct gj_linux_dispatch_stats {
     u64 u64HotHits;
     u64 u64ColdHits;

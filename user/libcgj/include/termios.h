@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped termios.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <termios.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * tcgetattr/tcsetattr, cfsetispeed/cfsetospeed, and termios flag constants
+ * for TTYs (shells, sshd, getpass). Typically backed by TCGETS/TCSETS ioctl.
+ *
+ * Design notes
+ * ------------
+ * Flag bit values match Linux. Bring-up may soft-fill when no real tty is
+ * attached (pipes return ENOTTY).
+ *
+ * Non-goals
+ * ---------
+ * Full hardware flow-control matrix for every UART.
  */
 #pragma once
 

@@ -12,6 +12,10 @@
 # Usage:
 #   ./scripts/make-live-iso.sh [out.iso]
 # Default: build/greenjade-live.iso
+#
+# Operator soft-scan after boot:
+#   ./scripts/gj-product-summary.sh <serial-log>   # soft exit 0
+#   ./scripts/gj-quick-keys.sh <serial-log>        # hard keys; exit 1 on miss
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -31,6 +35,11 @@ if [ -z "$MKRESCUE" ]; then
 	exit 1
 fi
 
+cleanup() {
+	rm -rf "$stage"
+}
+trap cleanup EXIT INT TERM HUP
+
 echo "make-live-iso: staging ESP + rootfs..."
 chmod +x scripts/stage-esp.sh scripts/stage-rootfs.sh
 ./scripts/stage-esp.sh build/esp >/dev/null
@@ -44,12 +53,13 @@ mkdir -p "$stage/boot/grub" \
 	"$stage/live/rootfs" \
 	"$stage/live/ssh" \
 	"$stage/live/logs"
+mkdir -p "$(dirname "$out")"
 
 # Multiboot kernel
 cp -f build/greenjade.elf "$stage/boot/greenjade.elf"
 cp -f build/greenjade.elf "$stage/EFI/GREENJADE/KERNEL.ELF"
 cp -f build/GreenJade.efi "$stage/EFI/BOOT/BOOTX64.EFI"
-# Full product ESP tree (user ELFs, libcgj)
+# Full product ESP tree (user ELFs, libcgj, INSTALL/VERSION)
 cp -a build/esp/EFI/GREENJADE/. "$stage/EFI/GREENJADE/" 2>/dev/null || true
 # Rootfs snapshot on the ISO (read-only live content)
 cp -a build/rootfs/. "$stage/live/rootfs/" 2>/dev/null || true
@@ -77,6 +87,8 @@ if [ ! -f build/hwtest-keys/id_ed25519 ]; then
 		ssh-keygen -t ed25519 -N "" -C "greenjade-hwtest@lab" \
 			-f build/hwtest-keys/id_ed25519 >/dev/null
 		echo "make-live-iso: generated build/hwtest-keys/id_ed25519"
+	else
+		echo "make-live-iso: warn: ssh-keygen missing; ISO has no authorized_keys" >&2
 	fi
 fi
 if [ -f build/hwtest-keys/id_ed25519.pub ]; then
@@ -103,6 +115,8 @@ GreenJade — hardware-test live ISO
 
 This ISO boots the GreenJade kernel (Multiboot2 via GRUB; UEFI BOOTX64.EFI).
 Product sshd is **on by default** (embedded sshd.elf, port 22 / net door).
+Product embeds also include scsi_mid + hda_client (kernel multi-stream PASS
+is not Steam audio; bar3 client remains open).
 
 Persistent logs (USB)
 ---------------------
@@ -114,12 +128,18 @@ companion GPT image instead of (or in addition to) the ISO:
 
 That image has:
   p1  EFI System Partition  — GreenJade boot + product tree
-  p2  FAT32 label GJ-PERSIST — logs/, journal/, ssh/
+  p2  FAT32 label GJ-PERSIST — logs/, journal/, ssh/, steam/
 
 After a test run, remount GJ-PERSIST on a lab host and collect:
   logs/serial-*.txt
   logs/dmesg-*.txt
   logs/hwtest-*.log
+
+Soft-scan / hard keys (host)
+----------------------------
+  ./scripts/gj-product-summary.sh logs/serial-….txt   # soft exit 0
+  ./scripts/gj-quick-keys.sh logs/serial-….txt        # hard miss exit 1
+  ./scripts/steam-bar3-check.sh                       # media READY/SKELETON
 
 SSH (remote debug for operators / Grok)
 ---------------------------------------
@@ -148,11 +168,14 @@ QEMU quick test of this ISO
     -device virtio-net-pci,netdev=n0 -netdev user,id=n0,hostfwd=tcp::2222-:22
 
 Policy: pure C product, dual MIT OR Apache-2.0; BSD third-party OK; no GPL.
+Never claim Deck Top 50 from media alone — real DUT client/title run only.
 EOF
 
 cat >"$stage/live/logs/README.txt" <<'EOF'
 ISO /live/logs is not writable at runtime.
 Write durable logs to the GJ-PERSIST partition (make hwtest-img).
+Soft-scan: ./scripts/gj-product-summary.sh <serial-log>
+Hard keys: ./scripts/gj-quick-keys.sh <serial-log>
 EOF
 
 cat >"$stage/EFI/GREENJADE/HWTEST.txt" <<'EOF'
@@ -162,15 +185,23 @@ GreenJade hardware-test media (ISO + USB)
 2. Boot UEFI → BOOTX64.EFI → expect GJ-EFI / M0 OK on serial
 3. Logs → second partition label GJ-PERSIST (/logs on host mount)
 4. Remote: sudo ./scripts/hwtest-ssh-setup.sh on lab host; SSH with build/hwtest-keys/
+5. Soft: ./scripts/gj-product-summary.sh <serial-log>
+6. Keys: ./scripts/gj-quick-keys.sh <serial-log>
 EOF
 
 echo "make-live-iso: packing $out ..."
 "$MKRESCUE" -o "$out" "$stage" >/dev/null 2>&1 || \
 	"$MKRESCUE" -o "$out" "$stage"
 
-rm -rf "$stage"
 sz=$(wc -c <"$out" | tr -d ' ')
-echo "make-live-iso: PASS iso=$out size=${sz}B"
+# Soft inventory from staged trees (best-effort)
+live_users=0
+if [ -d build/esp/EFI/GREENJADE/user ]; then
+	live_users=$(find build/esp/EFI/GREENJADE/user -type f 2>/dev/null | wc -l | tr -d ' ')
+fi
+echo "make-live-iso: PASS iso=$out size=${sz}B esp_user_files=${live_users}"
 echo "  QEMU:  qemu-system-x86_64 -cdrom $out -m 2G -serial stdio"
 echo "  USB:   prefer make hwtest-img (ESP + GJ-PERSIST for logs)"
+echo "  Soft:  ./scripts/gj-product-summary.sh <serial-log>   # exit 0"
+echo "  Keys:  ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1"
 echo "  SSH:   product sshd on by default; lab host: sudo ./scripts/hwtest-ssh-setup.sh"

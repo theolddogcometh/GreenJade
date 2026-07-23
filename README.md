@@ -6,9 +6,9 @@
 
 **A pure-C microkernel desktop OS** — dual-licensed **MIT OR Apache-2.0**, no GPL in the tree.
 
-GreenJade is a from-scratch, capability-based kernel and userspace personality aimed at a **general-purpose desktop / workstation**. Think: small trusted core, doors and caps for isolation, a clean-room Linux ABI path so desktop software (and eventually Steam via Proton) can run without pasting copyleft kernel code.
+GreenJade is a from-scratch, capability-based kernel and userspace personality aimed at a **general-purpose desktop / workstation**. Small trusted core, doors and caps for isolation, and a clean-room Linux ABI path so desktop software (and eventually Steam via Proton) can run without pasting copyleft kernel code.
 
-If you just cloned the repo: you only need a normal toolchain and QEMU.
+If you just cloned the repo: a normal host toolchain and QEMU are enough to build and smoke.
 
 ---
 
@@ -22,19 +22,19 @@ If you just cloned the repo: you only need a normal toolchain and QEMU.
 | **License** | **MIT OR Apache-2.0** (dual) — **no GPL/copyleft source** |
 | **Language** | Pure C only in-tree (no C++, Rust, …) |
 | **Firmware** | **UEFI** product path; Multiboot2 bring-up for QEMU |
-| **Adoption bar** | **Steam Deck Top 50** via Proton when installable on real hardware |
+| **Adoption bar** | **Steam Deck Top 50** via Proton on real hardware — **target**, not claimed done |
 | **Hardware bar** | **≥ 1 TiB RAM**, SMP, SAS/SCSI (product goals; bring-up runs on modest QEMU) |
 | **Style** | Hungarian notation — [STYLE.md](STYLE.md) |
 
 ---
 
-**What you *do* need on the host:**
+**Host tools you need:**
 
 - `gcc` or `clang`, `ld` (binutils), `make`
 - For QEMU run: `qemu-system-x86_64` / `qemu-kvm`
-- Optional: `grub2-mkrescue` (live ISO), OVMF (UEFI smoke), `aarch64-linux-gnu-gcc` (optional aarch64 product)
+- Optional: `grub2-mkrescue` (live ISO), OVMF (UEFI smoke), `aarch64-linux-gnu-gcc` (optional aarch64 scaffold)
 
-Clone → build → run. Nothing under `build/` has to be committed or downloaded.
+Clone → build → run. Artifacts land under `build/` (local only).
 
 ```sh
 git clone git@github.com:theolddogcometh/GreenJade.git
@@ -76,9 +76,11 @@ make license        # coarse GPL guard
 
 USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setup — see [docs/STEAM_HWTEST.md](docs/STEAM_HWTEST.md) and [docs/HCL.md](docs/HCL.md).
 
-**Bring-up today:** Multiboot2 + OVMF UEFI, SMP, virtio, hybrid Linux ABI, PE32 Wine int80, ELF dynlinker, fork COW, doors/session/ICD, packaging. Product smoke aims for **M0 OK** / **UD=0**.
+**Bring-up today (QEMU / soft product markers):** Multiboot2 + OVMF UEFI, SMP, virtio, hybrid Linux ABI surface, PE32 Wine int80 path, ELF dynlinker, fork COW, doors/session/ICD, packaging. Kernel smoke aims for **M0 OK** / **UD=0**. Media may stage a Steam tree as **READY**; that is bootstrap only.
 
-**Still open:** real-hardware Steam client, Deck Top 50 matrix fill, full multi-server confine product.
+**Bar3 honesty:** Bar3 means a real-DUT path where the Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`. Host/media staging, kernel smokes, and continuum soft gates are **not** bar3 completion. Client launch, title runs, and matrix fill are **open** — see [docs/STEAM_BAR3_STATUS.md](docs/STEAM_BAR3_STATUS.md).
+
+**Still open:** real-hardware UEFI install + Steam client, Deck Top 50 (matrix remains **NOT-TRIED**), full multi-server confine product, full ≥ 1 TiB soak when host allows.
 
 ---
 
@@ -91,6 +93,7 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 | [Security core](docs/SECURITY_CORE_DESIGN.md) | Caps, revoke, IPC, SMP, quotas |
 | [Cap addressing](docs/CAP_ADDRESSING.md) | Scheme A; root meta; pager |
 | [Proton personality](docs/PROTON_PERSONALITY.md) | Deck Top 50; clean-room Linux ABI |
+| [Steam bar3 status](docs/STEAM_BAR3_STATUS.md) | Honest product ceiling (READY ≠ titles) |
 | [glibc compat](docs/GLIBC_COMPAT.md) | Clean-room **libcgj** → `libc.so.6` |
 | [Linux ABI hybrid](docs/LINUX_ABI_HYBRID.md) | Option C hot/cold SYSCALL |
 | [Apple channel](docs/APPLE_CHANNEL_REMAINING.md) | VM objects, task ports, QoS, session |

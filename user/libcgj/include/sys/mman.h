@@ -2,7 +2,24 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sys/mman.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/mman.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * mmap/munmap/mprotect/msync/madvise, mremap, mlock*, mincore, memfd_create,
+ * shm_open/shm_unlink, pkey_*, and userfaultfd. PROT_*/MAP_* bit values match
+ * Linux so kernel hybrid mmap flags need no translation on product arches.
+ *
+ * Design notes
+ * ------------
+ * MAP_FAILED is (void *)-1. Anonymous maps use MAP_ANONYMOUS (MAP_ANON alias).
+ * memfd/shm paths may soft-fill until VFS/storage doors expose backing.
+ *
+ * Non-goals
+ * ---------
+ * Full hugetlb/NUMA policy surface; process_madvise may ENOSYS early.
+ * See docs/GLIBC_COMPAT.md.
  */
 #pragma once
 
@@ -18,6 +35,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ---- Protection / map flags -------------------------------------------- */
 
 #define PROT_NONE       0x0
 #define PROT_READ       0x1
@@ -41,6 +60,8 @@ extern "C" {
 #define MADV_WILLNEED   3
 #define MADV_DONTNEED   4
 
+/* ---- Core mapping ------------------------------------------------------ */
+
 void *mmap(void *pAddr, size_t cb, int nProt, int nFlags, int nFd, off_t off);
 int   munmap(void *pAddr, size_t cb);
 int   mprotect(void *pAddr, size_t cb, int nProt);
@@ -56,6 +77,8 @@ int   posix_madvise(void *pAddr, size_t cb, int nAdvice);
 #endif
 void *mremap(void *pOld, size_t cbOld, size_t cbNew, int nFlags, ...);
 
+/* ---- memfd / POSIX shm ------------------------------------------------- */
+
 /* memfd / POSIX shm-shaped (clean-room names) */
 #define MFD_CLOEXEC 1u
 #define MFD_ALLOW_SEALING 2u
@@ -64,6 +87,8 @@ int memfd_create(const char *szName, unsigned uFlags);
 int memfd_secret(unsigned uFlags);
 int shm_open(const char *szName, int nFlags, mode_t mode);
 int shm_unlink(const char *szName);
+
+/* ---- Locking / residency / keys ---------------------------------------- */
 
 #define MCL_CURRENT 1
 #define MCL_FUTURE  2

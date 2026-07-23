@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped getopt / getopt_long (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <getopt.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * getopt, getopt_long, getopt_long_only, and optarg/optind/opterr/optopt
+ * globals for CLI parsing in tools and daemons.
+ *
+ * Design notes
+ * ------------
+ * GNU permutation of argv is commonly expected; keep behavior stable for
+ * scripts. struct option matches glibc field order.
+ *
+ * Non-goals
+ * ---------
+ * Full argp (see <argp.h>) feature parity in this header.
  */
 #pragma once
 

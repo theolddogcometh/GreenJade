@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped select (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/select.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * fd_set, FD_* macros, select/pselect. Often implemented via poll in libcgj
+ * while preserving the classic API for older code.
+ *
+ * Design notes
+ * ------------
+ * FD_SETSIZE and bit layout target Linux glibc compatibility for fortify
+ * __fdelt_chk. Prefer poll/epoll for new code with large fd counts.
+ *
+ * Non-goals
+ * ---------
+ * Efficient O(1) readiness for thousands of fds (use epoll).
  */
 #pragma once
 

@@ -3,10 +3,13 @@
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-07-23 |
+| **Bar3** | **OPEN** |
 | **Companion** | [STEAM_HWTEST.md](STEAM_HWTEST.md) · [HCL.md](HCL.md) · [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) |
 
 **Bar3** = real-DUT path where Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`.  
 Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
+
+**Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. No title PASS invented from host scripts.
 
 ---
 
@@ -18,6 +21,7 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | **SKELETON** | Media | Placeholder tree without full bootstrap extract |
 | **MISSING** | Host soft check | No stage tree yet (`scripts/steam-bar3-check.sh`) |
 | **NOT-TRIED** | **Matrix title rows only** | No Deck Top 50 title has been launched on GreenJade |
+| **host-prep / fetch / stage PASS** | Lab-host scripts only | Extract, copy, or pack succeeded — **not** client run |
 
 | Claim | Allowed? |
 |-------|----------|
@@ -25,8 +29,30 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | “Bar3 done because STATUS=READY” | **No** |
 | “Top-50 PASS because kernel smokes green” | **No** |
 | “Titles tried” without a client launch | **No** — rows stay **NOT-TRIED** |
+| “Bar3 closed by continuum / io_uring / 768G / aarch64” | **No** |
 
 **Hard rule:** never mark Top-50 rows `PASS` (or off `NOT-TRIED`) from host stage/`STATUS=READY`, continuum soft gates, or kernel ship gates alone.
+
+---
+
+## Media path scripts (soft surface — not bar3)
+
+Strict host path for option 2+3 (no DUT client claim):
+
+| Script | Role | What PASS / READY means | What it does **not** mean |
+|--------|------|-------------------------|---------------------------|
+| `scripts/fetch-steam-bootstrap.sh` | Host fetch + extract Valve bootstrap `.deb` | Tree under `build/steam-tree/` + `READY` stamp | Client ran; Runtime downloaded; titles tried |
+| `scripts/stage-steam-tree.sh` | Stage into `build/steam-stage` (+ optional rootfs) | `STATUS=READY` or `SKELETON` written | Client ran; bar3 closed |
+| `scripts/steam-host-prep.sh` | Option 2 pack / option 3 copy onto img/USB/mount | Host copy or image pack succeeded | Client ran; Top-50 PASS |
+| `scripts/steam-bar3-check.sh` | Soft media inventory (always exit 0) | Prints READY \| SKELETON \| MISSING | smoke-all green; bar3 done |
+
+Soft inventory (agent honesty) includes: file counts (capped), launcher kind, bootstrap blob presence, MANIFEST keys, STATUS multi-layout agreement, `STAGE_META.txt` / `HOST_PREP_META.txt` when present.
+
+```sh
+./scripts/steam-bar3-check.sh
+# → steam-bar3-check: READY|SKELETON|MISSING
+# → always ends with bar3: OPEN
+```
 
 ---
 
@@ -57,16 +83,20 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | Full 1 TiB host soak | **open** (separate from bar3) |
 | **Deck Top 50** title rows | **NOT-TRIED** × 50 — claim level **targeting only** |
 
-No bar3 titles have been tried. Matrix remains **NOT-TRIED: 50**.
+No bar3 titles have been tried. Matrix remains **NOT-TRIED: 50**.  
+**Bar3 is OPEN.**
 
 ---
 
 ## Operator check (media only)
 
 ```sh
-./scripts/steam-bar3-check.sh          # READY | SKELETON | MISSING
+./scripts/fetch-steam-bootstrap.sh     # host extract only
+./scripts/stage-steam-tree.sh          # STATUS=READY|SKELETON
+./scripts/steam-bar3-check.sh          # soft inventory; exit 0; bar3 OPEN
 # on stick:
 # cat /mnt/gj-persist/steam/STATUS     # READY or SKELETON
+# cat /mnt/gj-persist/steam/STAGE_META.txt   # soft honesty stamp if staged
 ```
 
 When client path unblocks: fill [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) from real runs only.

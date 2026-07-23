@@ -2,7 +2,23 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped netdb.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <netdb.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * getaddrinfo/freeaddrinfo/gai_strerror/getnameinfo and hostent/servent
+ * shapes for numeric and localhost resolution without shipping a full DNS
+ * client in libc (DNS may live in netstackd later).
+ *
+ * Design notes
+ * ------------
+ * AI_*/EAI_*/NI_* constants are Linux/glibc-shaped. Bring-up resolves
+ * numeric hosts and "localhost"; other names may fail with EAI_NONAME.
+ *
+ * Non-goals
+ * ---------
+ * Full NSS modules and DNSSEC in process.
  */
 #pragma once
 

@@ -1,11 +1,32 @@
 /*
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Clean-room glibc-shaped <fcntl.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * open/openat/openat2, fcntl, creat, flock/lockf shapes, fallocate/posix_fadvise,
+ * and Linux splice/tee/vmsplice. O_* / F_* / AT_* / RESOLVE_* numbers match
+ * Linux so flag bits survive the hybrid ABI boundary.
+ *
+ * Design notes
+ * ------------
+ * open_how is the openat2(2) structure. LFS creat64/fallocate64 are identity
+ * on LP64. lockf commands (F_ULOCK/F_LOCK/…) coexist with fcntl F_GETLK.
+ *
+ * Non-goals
+ * ---------
+ * Full advisory lock fairness across all filesystems; soft fills may ENOSYS.
+ * See docs/GLIBC_COMPAT.md.
  */
 #pragma once
 
 #include <stdint.h>
 #include <sys/types.h>
+
+/* ---- open(2) flags (Linux octal values) -------------------------------- */
 
 #define O_RDONLY    0
 #define O_WRONLY    1
@@ -19,6 +40,8 @@
 #define O_DIRECTORY 0200000
 #define O_CLOEXEC   02000000
 
+/* ---- *at(2) dirfd / symlink flags -------------------------------------- */
+
 #define AT_FDCWD            (-100)
 #define AT_SYMLINK_NOFOLLOW 0x100
 #define AT_REMOVEDIR        0x200
@@ -26,7 +49,8 @@
 #define AT_EMPTY_PATH       0x1000
 #define AT_EACCESS          0x200
 
-/* openat2(2) */
+/* ---- openat2(2) -------------------------------------------------------- */
+
 struct open_how {
     uint64_t flags;
     uint64_t mode;
@@ -42,6 +66,8 @@ struct open_how {
 #define RENAME_NOREPLACE  (1 << 0)
 #define RENAME_EXCHANGE   (1 << 1)
 #define RENAME_WHITEOUT   (1 << 2)
+
+/* ---- fcntl commands / FD_CLOEXEC / flock ------------------------------- */
 
 #define F_DUPFD     0
 #define F_GETFD     1

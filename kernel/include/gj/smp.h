@@ -2,18 +2,53 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * SMP discovery (MADT) + AP bring-up + one-shot AP work handoff.
+ * SMP discovery (ACPI MADT) + AP bring-up + one-shot AP work handoff.
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
  *
+ * -------------------------------------------------------------------------
+ * Scope
+ * -------------------------------------------------------------------------
+ * Product multi-CPU path for x86_64 (P-SMP-1..6):
+ *   1. Discover local APICs via ACPI MADT (RSDP from UEFI or Multiboot scan).
+ *   2. Bring up APs with INIT-SIPI + low trampoline (identity-mapped).
+ *   3. Publish online inventory for affinity, IPI resched, TLB shootdown.
+ *   4. Optional one-shot smp_ap_run work drained on the AP schedule loop.
+ *
+ * Soft helpers below are boot telemetry and affinity probes — not hot-path
+ * locks. Soft never hard-gates product; wrap-OK counters only.
+ *
+ * Bring-up ceiling
+ * ----------------
  * Online inventory: MADT fills aApicId[]; smp_start_aps publishes slots
- * 1..N into the static bring-up pool (percpu + park stacks). Soft helpers
- * below are for boot telemetry and affinity probes — not hot-path locks.
+ * 1..N into the static bring-up pool (percpu + park stacks). smp_bringup_cap()
+ * is the soft/static ceiling (always >= 1 for BSP). Full GJ_MAX_CPUS needs
+ * scaled park stacks / idle arrays; PMM percpu growth in cpu_init_ap is
+ * ready for higher ids once those pools scale.
+ *
+ * AP lifecycle (soft phase ladder, sticky max)
+ * --------------------------------------------
+ *   ENTRY → PERCPU → X2APIC → TIMER → IDLE → SCHED
+ * See GJ_SMP_AP_PHASE_* and smp_bringup_soft_phase().
+ *
+ * Cross-module: gj/cpu.h (percpu), gj/apic.h / gj/x2apic.h (IPI), gj/gdt.h
+ * + gj/idt.h (AP must load GDT then IDT before unmasking IRQs).
+ *
+ * greppable: smp: bringup soft
+ * greppable: GJ_SMP_SOFT_SLOT_ GJ_SMP_AP_PHASE_
+ * greppable: smp_start_aps smp_ap_run smp_bringup_soft_log
+ * greppable: MADT INIT-SIPI P-SMP
  */
 #pragma once
 
 #include <gj/types.h>
 
+/** Soft cap on MADT local-APIC ids stored in gj_smp_info::aApicId[]. */
 #define GJ_SMP_MAX_APICS 64
 
+/**
+ * MADT-derived topology snapshot (discovery view, not live online count alone).
+ * fHasMadt=0 still yields a valid BSP-only inventory after smp_init_*.
+ */
 struct gj_smp_info {
     u32 u32NLocalApic;     /* processors listed in MADT */
     u32 u32NOnline;        /* currently running (BSP inventory view) */
@@ -64,18 +99,25 @@ struct gj_smp_bringup_soft {
 
 /**
  * Parse Multiboot2 tags for ACPI RSDP → MADT local APICs.
- * Safe on UP: always reports at least BSP.
+ * Safe on UP: always reports at least BSP. Dev path (P-BOOT-2); product
+ * prefers smp_init_from_rsdp with the UEFI config-table RSDP.
  */
 void smp_init_from_mb2(u32 paMb2Info);
 
 /**
  * MADT discovery from a known RSDP physical address (UEFI config table).
  * Falls back to BIOS scan if u64Rsdp is 0 or invalid.
+ * Product path: P-BOOT-4 / P-SMP-2.
  */
 void smp_init_from_rsdp(u64 u64Rsdp);
 
+/** Pointer to static MADT/online inventory (never NULL after any smp_init_*). */
 const struct gj_smp_info *smp_info(void);
+
+/** MADT local-APIC count (enabled+disabled listings); at least 1 (BSP). */
 u32 smp_cpu_count_detected(void);
+
+/** Currently running CPUs in the bring-up inventory (BSP + successful APs). */
 u32 smp_cpu_count_online(void);
 
 /**
@@ -87,13 +129,19 @@ u32 smp_bringup_cap(void);
 /** Soft: 1 if u32CpuSlot is within published online inventory (incl. BSP). */
 int smp_cpu_online(u32 u32CpuSlot);
 
-/** Bring up APs (INIT-SIPI + trampoline). */
+/**
+ * Bring up APs (INIT-SIPI + trampoline).
+ * For each MADT-enabled AP under smp_bringup_cap: send INIT/SIPI, wait for
+ * ready handshake, soft-tag ONLINE|TIMEOUT|FAIL. Idempotent soft notes if
+ * re-entered. Call after apic_init / idt / gdt product paths are ready.
+ */
 void smp_start_aps(void);
 
 /**
  * Run pfn(pArg) once on AP slot u32CpuSlot (1..online-1).
  * BSP waits until done (or timeout). Returns 0 on success, -1 if no AP / busy.
  * Posts work into the AP schedule path (affinity thread or one-shot slot).
+ * Not a general remote call — one outstanding work item at a time.
  */
 int  smp_ap_run(u32 u32CpuSlot, void (*pfn)(void *), void *pArg);
 
@@ -128,5 +176,6 @@ u32  smp_bringup_soft_spins(u32 u32CpuSlot);
  *   smp: bringup soft PASS|PARTIAL|UP|NONE …
  *   smp: bringup soft slot=… status=… phase=… spins=… apic=…
  *   + x2apic_icr_soft_log() when x2APIC ICR soft counters are armed.
+ * greppable: smp: bringup soft
  */
 void smp_bringup_soft_log(void);

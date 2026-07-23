@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Minimal Linux io_uring ABI shapes for syscall wrappers. Not kernel headers.
+ * Clean-room Linux-shaped <linux/io_uring.h> for libcgj / GreenJade hybrid I/O.
+ * Not Linux kernel UAPI headers verbatim; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * Minimal SQE/CQE structures and opcodes for the product min+mmap io_uring
+ * path (kernel/syscall/io_uring_min.c). Enough for apps probing IORING_*.
+ *
+ * Design notes
+ * ------------
+ * Keep field order and sizes compatible with the kernel bring-up
+ * implementation; expand carefully when new opcodes are wired.
+ *
+ * Non-goals
+ * ---------
+ * Full upstream io_uring feature set (registered buffers, all ops).
  */
 #pragma once
 

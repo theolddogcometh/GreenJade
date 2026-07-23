@@ -22,12 +22,19 @@
 #   ./scripts/gj-quick-keys.sh <serial-log>        # hard product keys
 # Do not treat media READY as smoke-all green or bar3 client done.
 #
+# Soft deepen / honesty:
+#   - Inventory tree/stage/rootfs file counts (capped)
+#   - Soft STATUS consistency across layouts
+#   - Soft launcher kind + bootstrap blob presence
+#   - Soft MANIFEST / READY / STAGE_META stamps
+#   - Always: bar3 client run OPEN; Top50 NOT-TRIED
+#
 # Env:
 #   GJ_STEAM_TREE   host cache (default build/steam-tree)
 #   GJ_STEAM_STAGE  staged tree root (default build/steam-stage)
 #   GJ_STEAM_ROOTFS rootfs steam path (default build/rootfs)
 #
-# See also: docs/STEAM_HWTEST.md, scripts/gj-product-summary.sh (serial PASSes)
+# See also: docs/STEAM_BAR3_STATUS.md, docs/STEAM_HWTEST.md
 set -euo pipefail
 
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -50,11 +57,12 @@ read_status() {
 
 has_client_tree() {
 	local base=$1
-	[[ -e "$base/usr/bin/steam" || -e "$base/bin/steam" ||
+	[[ -e "$base/usr/bin/steam" || -L "$base/usr/bin/steam" ||
+		-e "$base/bin/steam" ||
 		-d "$base/usr/lib/steam" || -d "$base/usr" ]]
 }
 
-# Soft count of non-empty files under a tree (agent honesty; 0 on miss).
+# Soft count of files under a tree (agent honesty; 0 on miss).
 soft_file_count() {
 	local d=$1
 	if [[ ! -d "$d" ]]; then
@@ -65,7 +73,63 @@ soft_file_count() {
 	find "$d" -type f 2>/dev/null | head -n 5000 | wc -l | tr -d ' ' || echo 0
 }
 
+soft_launcher_kind() {
+	local base=$1
+	if [[ ! -d "$base" ]]; then
+		echo "n/a"
+		return 0
+	fi
+	if [[ -L "$base/usr/bin/steam" ]]; then
+		echo "symlink→$(readlink "$base/usr/bin/steam" 2>/dev/null || echo ?)"
+	elif [[ -f "$base/usr/bin/steam" ]]; then
+		# soft: shebang peek (first 32 bytes printable)
+		local head
+		head=$(head -c 32 "$base/usr/bin/steam" 2>/dev/null | tr -cd '\11\12\15\40-\176' || true)
+		if [[ "$head" == \#!* ]]; then
+			echo "script"
+		else
+			echo "file"
+		fi
+	elif [[ -f "$base/bin/steam" ]]; then
+		echo "bin/steam"
+	elif [[ -f "$base/bin/steam.placeholder" ]]; then
+		echo "placeholder"
+	else
+		echo "missing"
+	fi
+}
+
+soft_bootstrap_blob() {
+	local base=$1
+	local b
+	shopt -s nullglob 2>/dev/null || true
+	for b in "$base/usr/lib/steam"/bootstraplinux_*.tar.xz \
+		"$base/usr/lib/steam"/bootstraplinux_*.tar.gz; do
+		if [[ -f "$b" ]]; then
+			local sz
+			sz=$(wc -c <"$b" 2>/dev/null | tr -d ' ' || echo 0)
+			echo "$(basename "$b") (${sz}B)"
+			return 0
+		fi
+	done
+	echo "none"
+}
+
+soft_deb_cache() {
+	local deb="$tree/download/steam.deb"
+	if [[ -f "$deb" ]]; then
+		local sz
+		sz=$(wc -c <"$deb" 2>/dev/null | tr -d ' ' || echo 0)
+		echo "present (${sz}B)"
+	else
+		echo "absent"
+	fi
+}
+
 # Prefer explicit STATUS under common stage / media / rootfs layouts
+# (dedupe by real path so rootfs env alias does not double-hit)
+declare -a status_hits=()
+declare -A status_seen=()
 for cand in \
 	"$stage/steam/STATUS" \
 	"$tree/steam/STATUS" \
@@ -77,9 +141,17 @@ for cand in \
 	"build/rootfs-steam-test/opt/steam/STATUS"
 do
 	if [[ -f "$cand" ]]; then
-		status=$(read_status "$cand")
-		source=$cand
-		break
+		_rp=$(readlink -f "$cand" 2>/dev/null || echo "$cand")
+		if [[ -n "${status_seen[$_rp]:-}" ]]; then
+			continue
+		fi
+		status_seen[$_rp]=1
+		_st=$(read_status "$cand")
+		status_hits+=("${cand}=${_st}")
+		if [[ -z "$status" ]]; then
+			status=$_st
+			source=$cand
+		fi
 	fi
 done
 
@@ -137,25 +209,83 @@ echo "  rootfs: $rootfs"
 # Soft inventory of media depth (never fails; honesty bounds for agents)
 tree_n=$(soft_file_count "$tree")
 stage_n=$(soft_file_count "$stage")
-echo "  files:  tree≈$tree_n stage≈$stage_n (capped sample; soft)"
+rootfs_steam_n=0
+if [[ -d "$rootfs/steam" ]]; then
+	rootfs_steam_n=$(soft_file_count "$rootfs/steam")
+elif [[ -d "$rootfs/opt/steam" ]]; then
+	rootfs_steam_n=$(soft_file_count "$rootfs/opt/steam")
+fi
+echo "  files:  tree≈$tree_n stage≈$stage_n rootfs_steam≈$rootfs_steam_n (capped sample; soft)"
+
+# Soft STATUS multi-hit consistency (agent honesty when layouts diverge)
+if [[ ${#status_hits[@]} -gt 0 ]]; then
+	echo "  hits:   ${status_hits[*]}"
+	_norm_set=""
+	_diverge=0
+	for h in "${status_hits[@]}"; do
+		_v=${h##*=}
+		case "$_v" in
+		READY | ready | Ready) _v=READY ;;
+		SKELETON | skeleton | Skeleton) _v=SKELETON ;;
+		esac
+		if [[ -z "$_norm_set" ]]; then
+			_norm_set=$_v
+		elif [[ "$_norm_set" != "$_v" ]]; then
+			_diverge=1
+		fi
+	done
+	if [[ "$_diverge" -eq 1 ]]; then
+		echo "  warn:   STATUS tokens diverge across layouts (soft; inspect hits)"
+	else
+		echo "  agree:  STATUS tokens consistent across hits (soft)"
+	fi
+fi
+
+# Soft launcher / blob probes
+lk_tree=$(soft_launcher_kind "$tree/steam")
+lk_stage=$(soft_launcher_kind "$stage/steam")
+bb_tree=$(soft_bootstrap_blob "$tree/steam")
+bb_stage=$(soft_bootstrap_blob "$stage/steam")
+echo "  launch: tree=$lk_tree stage=$lk_stage"
+echo "  blob:   tree=$bb_tree"
+echo "  blob:   stage=$bb_stage"
+echo "  deb:    $(soft_deb_cache)"
 
 case "$status" in
 READY)
 	echo "  media:  bootstrap tree present (option 2/3 path)"
 	echo "  open:   DUT launch + Deck Top 50 still NOT-TRIED (bar3 client run)"
+	echo "  claim:  targeting only — media READY ≠ title PASS"
 	# Optional manifest / READY stamp for agents
 	if [[ -f "$tree/READY" ]]; then
-		echo "  stamp:  $tree/READY present"
+		_ready=$(tr -d '\r' <"$tree/READY" 2>/dev/null | head -n1 | head -c 40 || true)
+		echo "  stamp:  $tree/READY present${_ready:+ ($_ready)}"
 	fi
 	if [[ -f "$tree/MANIFEST.txt" ]]; then
 		echo "  manif:  $tree/MANIFEST.txt present"
-		# First non-empty line of manifest (soft; may be long — truncate)
-		_ml=$(tr -d '\r' <"$tree/MANIFEST.txt" 2>/dev/null | head -n1 | head -c 120 || true)
+		# Soft key lines (url / sha / honesty)
+		while IFS= read -r _line; do
+			case "$_line" in
+			url=* | deb_sha256=* | deb_bytes=* | honesty=* | launcher=* | bootstrap_blob=*)
+				# truncate long lines softly
+				_show=$(printf '%s' "$_line" | head -c 140)
+				echo "  manif:  $_show"
+				;;
+			esac
+		done <"$tree/MANIFEST.txt" 2>/dev/null || true
+	fi
+	if [[ -f "$stage/steam/STAGE_META.txt" ]]; then
+		echo "  meta:   $stage/steam/STAGE_META.txt present"
+		_ml=$(tr -d '\r' <"$stage/steam/STAGE_META.txt" 2>/dev/null | grep -E '^(status|honesty|files)' | head -n3 || true)
 		if [[ -n "${_ml:-}" ]]; then
-			echo "  manif0: $_ml"
+			while IFS= read -r _l; do
+				[[ -n "$_l" ]] && echo "  meta:   $_l"
+			done <<<"$_ml"
 		fi
 	fi
-	# Soft launcher probes
+	if [[ -f "$stage/steam/HOST_PREP_META.txt" ]]; then
+		echo "  meta:   $stage/steam/HOST_PREP_META.txt present (option 3 stamp)"
+	fi
 	if has_client_tree "$tree/steam"; then
 		echo "  launch: tree/steam launcher paths present"
 	fi
@@ -168,16 +298,20 @@ READY)
 	;;
 SKELETON)
 	echo "  media:  placeholders only"
-	echo "  next:   make steam-fetch && make steam-stage   # or GJ_SKIP_FETCH=1 if deb cached"
+	echo "  open:   bar3 client run + Deck Top 50 still NOT-TRIED"
+	echo "  next:   ./scripts/fetch-steam-bootstrap.sh && ./scripts/stage-steam-tree.sh"
+	echo "  next:   # or: make steam-fetch && make steam-stage"
 	;;
 MISSING)
 	echo "  media:  no steam-tree / stage found"
-	echo "  next:   make steam-fetch && make steam-stage"
+	echo "  open:   bar3 client run + Deck Top 50 still NOT-TRIED"
+	echo "  next:   ./scripts/fetch-steam-bootstrap.sh && ./scripts/stage-steam-tree.sh"
 	;;
 esac
 
 echo "  note:   soft check — exit 0 always; does not download or run Steam"
 echo "  note:   media READY ≠ smoke-all PASS ≠ bar3 client / Top50"
+echo "  bar3:   OPEN (client launch + matrix fill still required)"
+echo "  see:    docs/STEAM_BAR3_STATUS.md  docs/STEAM_HWTEST.md"
 echo "  see:    scripts/gj-product-summary.sh  scripts/gj-quick-keys.sh"
-echo "  see:    scripts/gj-continuum-makefile-snippet.sh  docs/STEAM_HWTEST.md"
 exit 0

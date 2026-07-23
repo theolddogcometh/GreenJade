@@ -3,6 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Kernel interim session compositor (A1 / Proton T0).
+ * Pure C11 freestanding, dual MIT OR Apache-2.0.
  *
  * Owns one BGRA scanout tile backed by PMM + HHDM, presented through
  * virtio-gpu. Policy ownership lives on the session door (CLAIM); this
@@ -11,15 +12,26 @@
  *
  * Soft multi-frame (v1 deepen, no redesign):
  *   - One physical scanout; a soft double-buffer index (0/1) flips on each
- *     successful present for swapchain-shaped sequencing.
+ *     successful present for swapchain-shaped sequencing (metadata only).
  *   - Frame generation bumps on each ok present (wrap OK).
  *   - session_compositor_present_n() drains up to N soft frames in one
- *     call (capped) for multi-frame bring-up without a second alloc.
+ *     call (capped by GJ_COMP_MULTI_MAX) for multi-frame bring-up without
+ *     a second alloc. Stops the soft batch on first backend reject.
+ *
+ * Geometry (compositor.c):
+ *   clamp ≤ GJ_COMP_MAX_DIM (256); fallback 64×64; min 32×32
+ *   stride = width * 4 (BGRA); prefer session_compositor_stride() for
+ *   MAP_SCANOUT consistency over recomputing from size
  *
  * Invariants while ready:
  *   - session_compositor_fb() is a non-NULL HHDM pointer
  *   - width/height/stride describe a contiguous BGRA buffer (stride = w*4)
- *   - dimensions are clamped to a small bring-up tile (≤ 256)
+ *   - never returns a dangling FB pointer after a failed init
+ *
+ * Greppable:
+ *   compositor: scanout … ready (multi-frame soft)
+ *   compositor: multi-frame soft
+ *   compositor multi-frame soft
  */
 #pragma once
 

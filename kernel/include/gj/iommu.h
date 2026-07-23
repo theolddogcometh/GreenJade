@@ -2,8 +2,28 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * IOMMU (VT-d / AMD-Vi) presence + enforce windows (M7).
+ * IOMMU (VT-d / AMD-Vi) presence + enforce windows (M7 / A2 partial).
  * Clean-room GreenJade policy/API — not a Linux/GPL VT-d driver.
+ * Pure C11 freestanding, dual MIT OR Apache-2.0.
+ *
+ * Layers:
+ *   1) Inventory: ACPI DMAR (Intel) / IVRS (AMD) presence + unit counts
+ *   2) Enforce windows: software BDF → PA range grants; bus-master deny
+ *      under enforce (devmgr-shaped); inventory still records when off
+ *   3) VT-d tables: root/context/SLPT identity cover (bring-up first 1 GiB)
+ *   4) TE arm: SOFT (tables ready, no DRHD MMIO) or HW (RTADDR + GCMD.TE)
+ *   5) Soft domain pool: software DIDs; optional context DID write on bus-0
+ *
+ * Soft vs hard:
+ *   Soft-probe and soft-only TE stay green without DRHD (QEMU default).
+ *   HW TE when DMAR provides a programmed DRHD (e.g. GJ_INTEL_IOMMU=1).
+ *   CAP/ECAP may be synthetic when MMIO is absent (SOFT_FEAT_CAP_SOFT).
+ *
+ * Greppable product markers (keep stable):
+ *   iommu: probe PASS / enforce PASS
+ *   iommu: vtd tables PASS / vtd soft-only … PASS / vtd soft-probe PASS
+ *   iommu: vtd identity grant PASS / vtd TE soft-arm/path PASS
+ *   iommu: vtd TE live-ready PASS / vtd domain soft PASS
  */
 #pragma once
 
@@ -33,6 +53,10 @@
 #define GJ_IOMMU_SOFT_FEAT_TE_HW    (1u << 6)
 #define GJ_IOMMU_SOFT_FEAT_DOMAIN   (1u << 7)
 
+/**
+ * Platform IOMMU inventory (probe + enforce counters).
+ * u8Enforce: production policy armed (no open bus-master without window).
+ */
 struct gj_iommu_info {
     u8  u8Present;   /* RSDP/DMAR or IVRS found */
     u8  u8Vendor;    /* GJ_IOMMU_VENDOR_* */
@@ -46,6 +70,7 @@ struct gj_iommu_info {
 /**
  * VT-d soft-probe inventory (tables + DMAR struct counts + CAP soft).
  * Safe without DRHD; CAP/ECAP may be synthetic.
+ * u64IdentityLimit: bring-up SLPT cover end (1 GiB).
  */
 struct gj_iommu_vtd_soft {
     u8  u8TablesReady;
@@ -72,6 +97,7 @@ struct gj_iommu_vtd_soft {
 
 #define GJ_IOMMU_MAX_WINDOWS 16u
 
+/** Software DMA window grant (BDF + PA range). */
 struct gj_iommu_window {
     u8  u8Bus;
     u8  u8Slot;
@@ -81,11 +107,19 @@ struct gj_iommu_window {
     u64 u64Cb;
 };
 
+/** Walk ACPI for DMAR/IVRS; fill presence inventory. Safe without IOMMU HW. */
 void iommu_probe(void);
+
+/** Non-zero if DMAR or IVRS was found (inventory present). */
 int  iommu_present(void);
+
+/** Copy inventory snapshot; null pOut is a no-op. */
 void iommu_info_get(struct gj_iommu_info *pOut);
 
-/** Arm/disarm production enforce (no open bus-master without window). */
+/**
+ * Arm/disarm production enforce (no open bus-master without window).
+ * fOn non-zero → enforce on. QEMU/dev typically leave off until product.
+ */
 void iommu_enforce_set(int fOn);
 int  iommu_enforce_get(void);
 
@@ -95,7 +129,8 @@ int  iommu_enforce_get(void);
  * When enforce is off, still records for inventory.
  */
 int  iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb);
-/** Revoke all windows for BDF. */
+
+/** Revoke all windows for BDF (no-op if none). */
 void iommu_window_revoke(u8 bus, u8 slot, u8 func);
 
 /**
@@ -103,42 +138,64 @@ void iommu_window_revoke(u8 bus, u8 slot, u8 func);
  * Enforce off → always allow (dev/QEMU). Enforce on → need matching window.
  */
 int  iommu_busmaster_ok(u8 bus, u8 slot, u8 func);
+
+/** Active software window count / lifetime deny count (stats). */
 u32  iommu_window_count(void);
 u32  iommu_deny_count(void);
 
 /* ---- VT-d hardware page tables (software construct; optional MMIO) ---- */
-/** Build root/context/SLPT identity tables in RAM. */
+
+/** Build root/context/SLPT identity tables in RAM. Returns 0 or -1. */
 int  iommu_vtd_init_tables(void);
+
 /** Record DRHD register base from DMAR (0 if none / clear). */
 void iommu_vtd_set_drhd(u64 u64Base);
+
+/** Root table physical address (0 if tables not built). */
 u64  iommu_vtd_root_pa(void);
+
+/** Non-zero when identity tables are ready. */
 int  iommu_vtd_ready(void);
+
+/** Pages allocated for root/context/SLPT construct (stats). */
 u32  iommu_vtd_pages(void);
-/** Program DRHD RTADDR+TE if base known; else soft-only. Returns 1 if MMIO. */
+
+/**
+ * Program DRHD RTADDR+TE if base known; else soft-only.
+ * Returns 1 if MMIO programmed, 0 if soft / fail.
+ */
 int  iommu_vtd_program_hw(void);
-/** Smoke: tables built → PASS log. */
+
+/** Smoke: tables built → PASS log. Returns 1 on PASS, 0 on FAIL. */
 int  iommu_vtd_smoke(void);
+
 /**
  * Non-zero if VT-d identity SLPT covers [pa, pa+cb) (bring-up: first 1 GiB).
  * Used when software window grant integrates with VT-d tables.
  */
 int  iommu_vtd_identity_covers(u64 pa, u64 cb);
+
 /**
  * Grant software window and verify identity SLPT coverage when tables ready.
- * Returns 0 on grant ok; -1 on grant fail; covers reported via *pCovered (0/1).
+ * Returns 0 on grant ok; -1 on grant fail; covers reported via *pCovered (0/1)
+ * when pCovered non-NULL.
  */
 int  iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb,
                             int *pCovered);
+
 /**
  * Soft-arm translation enable (TE) when tables ready.
  * With DRHD: programs MMIO (mode=HW). Without / on MMIO fail: soft policy
  * (mode=SOFT). Returns 1 if TE considered armed, 0 otherwise.
  */
 int  iommu_vtd_te_arm(void);
+
 /** Non-zero if TE soft-armed or MMIO programmed. */
 int  iommu_vtd_te_armed(void);
+
 /** GJ_IOMMU_TE_NONE / GJ_IOMMU_TE_SOFT / GJ_IOMMU_TE_HW. */
 int  iommu_vtd_te_mode(void);
+
 /**
  * Product live-ready check: tables + TE + identity window.
  * Soft mode when no DRHD; HW when DMAR provides a programmed DRHD.
@@ -146,41 +203,53 @@ int  iommu_vtd_te_mode(void);
 int  iommu_vtd_te_live_ready(void);
 
 /* ---- VT-d soft probe (deep inventory; no commit to HW required) ---- */
+
 /**
  * Feed DMAR remapping-structure inventory from ACPI walk (probe path).
  * Counts are soft-only; safe with zeros when no DMAR.
  */
 void iommu_vtd_soft_dmar_inventory(u32 cDrhd, u32 cRmrr, u32 cAtsr, u32 cRhsa,
                                    u32 cOther);
+
 /**
  * Soft-probe: ensure tables, verify root/context, CAP/ECAP soft or MMIO,
  * domain pool defaults, DMAR inventory. Logs `iommu: vtd soft-probe PASS`.
  * Returns 1 on soft-ready, 0 on hard fail (no tables).
  */
 int  iommu_vtd_soft_probe(void);
-/** Copy last soft-probe snapshot (zeros if never probed). */
+
+/** Copy last soft-probe snapshot (zeros if never probed). Null is no-op. */
 void iommu_vtd_soft_info_get(struct gj_iommu_vtd_soft *pOut);
+
 /** Non-zero after a successful soft-probe. */
 int  iommu_vtd_soft_probed(void);
 
 /* ---- VT-d domain soft (software DID; optional context DID write) ---- */
+
 /**
  * Create a soft domain. Returns DID (0..DOMAIN_MAX-1) or INVALID.
  * Domain 0 is the default identity domain after tables init.
  */
 u32  iommu_vtd_domain_create(void);
+
 /** Destroy soft domain (not 0). Fails if still attached. Returns 0 or -1. */
 int  iommu_vtd_domain_destroy(u32 u32Did);
+
 /**
  * Attach BDF to soft domain. Updates bus-0 context DID when tables ready.
  * Returns 0 or -1.
  */
 int  iommu_vtd_domain_attach(u32 u32Did, u8 bus, u8 slot, u8 func);
+
 /** Detach BDF (rebind bus-0 context to domain 0 when tables ready). */
 int  iommu_vtd_domain_detach(u8 bus, u8 slot, u8 func);
+
 /** Lookup soft DID for BDF; INVALID if none / default unbound. */
 u32  iommu_vtd_domain_lookup(u8 bus, u8 slot, u8 func);
+
+/** Soft domains currently in use (stats). */
 u32  iommu_vtd_domain_count(void);
+
 /**
  * Soft domain smoke: create → attach → lookup → detach → destroy.
  * Logs `iommu: vtd domain soft PASS`. Returns 1 on success, 0 on fail.

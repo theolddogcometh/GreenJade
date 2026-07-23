@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped sys/epoll.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <sys/epoll.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * epoll_create/create1/ctl/wait/pwait and EPOLL* event/ctl flags. epoll_event
+ * is packed as on Linux x86_64 (events + epoll_data union).
+ *
+ * Design notes
+ * ------------
+ * EPOLLET is 1u<<31; EPOLLONESHOT is 1u<<30. CLOEXEC uses Linux open bit.
+ * Hybrid kernel path must preserve these values for host-built binaries.
+ *
+ * Non-goals
+ * ---------
+ * Full EPOLLEXCLUSIVE / wakeup-source tuning until product needs them.
  */
 #pragma once
 

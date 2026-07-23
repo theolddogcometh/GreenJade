@@ -49,7 +49,7 @@ fi
 
 # Refuse obvious system disks when possible
 case "$dev" in
-*/sda|*/nvme0n1|*/vda)
+*/sda|*/nvme0n1|*/vda|*/mmcblk0)
 	if [ "${GJ_FORCE_DISK:-0}" != "1" ]; then
 		echo "refusing $dev (looks like primary disk). Set GJ_FORCE_DISK=1 to override." >&2
 		exit 1
@@ -57,7 +57,25 @@ case "$dev" in
 	;;
 esac
 
-echo "install-hwtest-usb: image=$img"
+img_sz=$(wc -c <"$img" | tr -d ' ')
+# Soft: refuse if target looks smaller than image (best-effort)
+base=$(basename "$dev")
+sys_name=$base
+case "$base" in
+nvme*n*p*|mmcblk*p*)
+	sys_name=$(echo "$base" | sed 's/p[0-9][0-9]*$//')
+	;;
+esac
+if [ -f "/sys/block/$sys_name/size" ]; then
+	sectors=$(cat "/sys/block/$sys_name/size")
+	dev_sz=$((sectors * 512))
+	if [ "$dev_sz" -gt 0 ] && [ "$dev_sz" -lt "$img_sz" ]; then
+		echo "install-hwtest-usb: FAIL device ${dev_sz}B < image ${img_sz}B" >&2
+		exit 1
+	fi
+fi
+
+echo "install-hwtest-usb: image=$img (${img_sz}B)"
 ls -la "$img"
 echo "install-hwtest-usb: TARGET=$dev (ALL DATA WILL BE ERASED)"
 echo "install-hwtest-usb: 5 second abort window (Ctrl-C)..."
@@ -69,6 +87,10 @@ sync
 if command -v partprobe >/dev/null 2>&1; then
 	partprobe "$dev" 2>/dev/null || true
 fi
+# Soft: try to report labels after write (may need udev settle)
+if command -v lsblk >/dev/null 2>&1; then
+	lsblk -o NAME,SIZE,FSTYPE,LABEL "$dev" 2>/dev/null || true
+fi
 echo "install-hwtest-usb: PASS wrote $img → $dev"
 echo "  Boot:  UEFI → GreenJade BOOTX64.EFI (serial: GJ-EFI / M0 OK)"
 echo "  Logs:  mount -L GJ-PERSIST  →  logs/"
@@ -78,3 +100,4 @@ echo "  Keys:  ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1
 echo "  Steam: if STATUS=SKELETON, host prep (option 3):"
 echo "         sudo make steam-to-persist   # or steam-host-prep --to-label"
 echo "         docs/STEAM_HWTEST.md"
+echo "  Note:  READY/media ≠ Steam client; Top-50 stays NOT-TRIED until DUT run"

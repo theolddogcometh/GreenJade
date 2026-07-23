@@ -1,5 +1,7 @@
-/* SPDX-License-Identifier: MIT OR Apache-2.0 */
 /*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
  * Freestanding userspace ELF linker script (shared by init, shell, servers).
  * Base above kernel BSS (see GJ_USER_CODE_VA). Parent Makefile owns the
  * link line; this tree only ships the script.

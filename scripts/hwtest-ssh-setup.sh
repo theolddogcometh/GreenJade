@@ -47,6 +47,11 @@ if [ ! -f build/hwtest-keys/id_ed25519 ]; then
 	echo "hwtest-ssh-setup: generated build/hwtest-keys/id_ed25519"
 fi
 PUB="$(cat build/hwtest-keys/id_ed25519.pub)"
+# Soft fingerprint for operator logs (never print private key)
+FP="unknown"
+if command -v ssh-keygen >/dev/null 2>&1; then
+	FP=$(ssh-keygen -lf build/hwtest-keys/id_ed25519.pub 2>/dev/null | awk '{print $2}') || FP="unknown"
+fi
 
 if [ "$USER_NAME" = "root" ]; then
 	HOME_DIR=/root
@@ -80,16 +85,22 @@ EOF
 fi
 
 # Start/enable sshd (RHEL/Rocky: sshd; Debian: ssh)
+sshd_unit="none"
 if command -v systemctl >/dev/null 2>&1; then
-	if systemctl list-unit-files | grep -q '^sshd\.service'; then
+	if systemctl list-unit-files 2>/dev/null | grep -q '^sshd\.service'; then
 		systemctl enable --now sshd
 		systemctl reload sshd || systemctl restart sshd
-	elif systemctl list-unit-files | grep -q '^ssh\.service'; then
+		sshd_unit="sshd"
+	elif systemctl list-unit-files 2>/dev/null | grep -q '^ssh\.service'; then
 		systemctl enable --now ssh
 		systemctl reload ssh || systemctl restart ssh
+		sshd_unit="ssh"
 	else
 		echo "warn: no sshd/ssh unit found" >&2
 	fi
+elif command -v service >/dev/null 2>&1; then
+	service sshd start 2>/dev/null || service ssh start 2>/dev/null || true
+	sshd_unit="service"
 fi
 
 # Open firewall port 22 when firewalld is active
@@ -98,9 +109,27 @@ if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>
 	firewall-cmd --reload >/dev/null 2>&1 || true
 fi
 
+# Soft: confirm something is listening on :22
+listen_note="listen=:22 unknown"
+if command -v ss >/dev/null 2>&1; then
+	if ss -ltn 2>/dev/null | grep -qE ':22[[:space:]]'; then
+		listen_note="listen=:22 ok"
+	else
+		listen_note="listen=:22 miss (sshd may still be starting)"
+		echo "hwtest-ssh-setup: warn: nothing listening on :22 yet" >&2
+	fi
+elif command -v netstat >/dev/null 2>&1; then
+	if netstat -ltn 2>/dev/null | grep -qE ':22[[:space:]]'; then
+		listen_note="listen=:22 ok"
+	else
+		listen_note="listen=:22 miss"
+	fi
+fi
+
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 HOST="$(hostname -f 2>/dev/null || hostname)"
-echo "hwtest-ssh-setup: PASS sshd ready for user=$USER_NAME"
+echo "hwtest-ssh-setup: PASS sshd ready for user=$USER_NAME unit=$sshd_unit $listen_note"
+echo "  pubkey fingerprint: $FP"
 echo "  from workstation:"
 echo "    ssh -i $root/build/hwtest-keys/id_ed25519 ${USER_NAME}@${IP:-$HOST}"
 echo "  then on lab host, attach DUT serial:"
@@ -108,3 +137,7 @@ echo "    picocom -b 115200 /dev/ttyUSB0"
 echo "    # or tee into USB GJ-PERSIST:"
 echo "    sudo mount -L GJ-PERSIST /mnt/gj-persist"
 echo "    picocom -b 115200 /dev/ttyUSB0 | sudo tee /mnt/gj-persist/logs/serial-\$(date -u +%Y%m%dT%H%MZ).txt"
+echo "  Soft-scan capture:"
+echo "    ./scripts/gj-product-summary.sh /mnt/gj-persist/logs/serial-….txt"
+echo "    ./scripts/gj-quick-keys.sh /mnt/gj-persist/logs/serial-….txt"
+echo "  Note: product DUT sshd (sshd.elf :22) is separate from this lab-host OpenSSH"

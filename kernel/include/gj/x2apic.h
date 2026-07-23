@@ -3,39 +3,83 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * x2APIC capability + mode (product path) + ICR soft observability.
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
+ *
+ * -------------------------------------------------------------------------
+ * Scope
+ * -------------------------------------------------------------------------
+ * Prefer x2APIC when CPUID + firmware allow it (P-IRQ-1, P-SMP-3):
+ *   - Destination field is a full 32-bit APIC id (large logical CPU counts).
+ *   - ICR / EOI / self-IPI via MSRs (no MMIO race with mapped LAPIC page).
+ *
+ * Product enable order (typical BSP):
+ *   apic_init() → x2apic_probe() or x2apic_enable() → IPIs use MSR path.
+ * APs may re-enable after their own long-mode entry (see smp AP phase X2APIC).
  *
  * Soft helpers below are boot/bring-up telemetry (counters + greppable
  * logs) — not hot-path locks. ICR soft tracks MSR 0x830 / self-IPI writes
  * so INIT/SIPI/fixed paths are visible without MMIO decode.
+ *
+ * Soft never hard-gates IPI delivery. Counters wrap OK.
+ *
+ * Cross-module: gj/apic.h (xAPIC fallback + timer + resched vectors),
+ *               gj/smp.h (INIT-SIPI soft summary chains x2apic_icr_soft_log).
+ *
+ * greppable: x2apic: icr soft
+ * greppable: GJ_X2APIC_ICR_MODE_
+ * greppable: x2apic_enable x2apic_probe x2apic_send_ipi
+ * greppable: MSR 0x830 0x83F P-IRQ-1
  */
 #pragma once
 
 #include <gj/types.h>
 
-/** CPUID leaf 1 ECX bit 21 = x2APIC. Non-zero if supported. */
+/**
+ * CPUID leaf 1 ECX bit 21 = x2APIC feature.
+ * Non-zero if the logical processor advertises x2APIC support.
+ * Does not imply the mode is currently enabled (see x2apic_enabled).
+ */
 int  x2apic_supported(void);
 
-/** Non-zero after successful x2apic_enable(). */
+/**
+ * Non-zero after successful x2apic_enable().
+ * When set, apic_send_* / EOI product paths should prefer MSR writes.
+ */
 int  x2apic_enabled(void);
 
 /**
  * Switch local APIC to x2APIC mode (IA32_APIC_BASE bit 10).
- * Requires apic_init first. Returns 0 on success.
+ * Requires apic_init first (LAPIC base known / enabled).
+ * Returns 0 on success; non-zero if unsupported or enable rejected.
  */
 int  x2apic_enable(void);
 
-/** Detect and enable when supported. */
+/**
+ * Detect (CPUID) and enable when supported.
+ * Soft no-op when feature bit clear; safe to call on UP and AP.
+ */
 void x2apic_probe(void);
 
-/** Fixed IPI via x2APIC ICR MSR (only when x2apic_enabled). */
+/**
+ * Fixed-delivery IPI via x2APIC ICR MSR (only when x2apic_enabled).
+ * u32ApicId is the full x2APIC destination id; u8Vector is the IDT vector.
+ */
 void x2apic_send_ipi(u32 u32ApicId, u8 u8Vector);
-/** Self-IPI (x2APIC MSR 0x83F). */
+
+/**
+ * Self-IPI (x2APIC MSR 0x83F).
+ * Used for local vector delivery without full ICR encode (e.g. soft tests).
+ */
 void x2apic_send_self_ipi(u8 u8Vector);
 
-/** Raw 64-bit ICR write (INIT/SIPI delivery modes). */
+/**
+ * Raw 64-bit ICR write (INIT/SIPI and non-fixed delivery modes).
+ * Caller encodes delivery mode, level, vector, and destination per SDM.
+ * Soft counters decode mode/vector/dest from this value.
+ */
 void x2apic_send_ipi_raw(u64 u64Icr);
 
-/** EOI via x2APIC MSR. */
+/** EOI via x2APIC MSR (device/IRQ completion when mode is x2APIC). */
 void x2apic_eoi(void);
 
 /* ------------------------------------------------------------------ */
@@ -78,5 +122,6 @@ u8   x2apic_icr_soft_last_vector(void);
  *   x2apic: icr soft writes=… fixed=… init=… sipi=… self=… other=…
  *   x2apic: icr soft last dest=… mode=… vec=… val=0x…
  * Safe anytime; no-op-ish if no writes yet (still prints zeros).
+ * greppable: x2apic: icr soft
  */
 void x2apic_icr_soft_log(void);

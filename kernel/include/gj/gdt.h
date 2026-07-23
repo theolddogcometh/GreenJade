@@ -2,8 +2,43 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Runtime GDT + TSS. Soft user-segment observability: CS32 / DS / CS64
- * descriptor inventory, LAR probe counters, greppable soft logs.
+ * Runtime GDT + TSS (long mode) and soft user-segment observability.
+ * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
+ *
+ * -------------------------------------------------------------------------
+ * Scope
+ * -------------------------------------------------------------------------
+ * Product x86_64 segmentation for kernel and ring-3 (P-ABI / Option C):
+ *   - Kernel CS/DS for IDT gates and SYSCALL kernel entry.
+ *   - User CS32 / DS / CS64 layout matching IA32_STAR user base 0x18.
+ *   - TSS with RSP0 (IRQ/exception ring-3 stack) and soft IST snapshot.
+ *
+ * Soft user-segment observability: CS32 / DS / CS64 descriptor inventory,
+ * LAR probe counters, greppable soft logs. Soft never hard-gates boot.
+ *
+ * STAR / selector layout (canonical for this GDT)
+ * -----------------------------------------------
+ *   Index 1  0x08  kernel CS
+ *   Index 2  0x10  kernel DS
+ *   Index 3  0x18  user CS32 (compat / WoW64) — STAR user base
+ *   Index 4  0x20  user DS   → selector | RPL3 = 0x23
+ *   Index 5  0x28  user CS64 → selector | RPL3 = 0x2B  (SYSRETQ target)
+ *   Index 6  0x30  TSS
+ *
+ * TSS.RSP0 rule
+ * -------------
+ * Never point TSS.RSP0 at a thread SYSCALL kstack — that collides with a
+ * parked thr's mid-syscall frames when another thr takes an IRQ.
+ * gdt_init installs a dedicated IRQ stack (tss_irq_rsp0); restore via
+ * tss_use_irq_rsp0 after any temporary RSP0 retarget.
+ *
+ * AP load order: gdt_load_ap() before idt_load_ap() — IRQ gates use kernel CS.
+ * Shared TSS is BSP-only (AP LTR is not performed by gdt_load_ap).
+ *
+ * greppable: gdt: user soft
+ * greppable: GJ_GDT_USER_ CS32 LAR TSS.RSP0
+ * greppable: gdt_init gdt_load_ap gdt_user_soft_log
+ * greppable: STAR 0x18 WoW64
  */
 #pragma once
 
@@ -17,6 +52,10 @@
 #define GJ_GDT_USER_CS   0x2Bu /* index 5 | RPL3 — long mode user code */
 #define GJ_GDT_TSS_SEL   0x30u
 
+/**
+ * Build and load the product GDT + TSS on the BSP.
+ * Soft-notes user segment bytes and readiness lamps; stamps soft init.
+ */
 void gdt_init(void);
 
 /** Non-zero if GDT has a usable 32-bit user code descriptor (WoW64 ready). */
@@ -44,6 +83,7 @@ void gdt_load_ap(void);
 
 /** Update TSS.RSP0 (ring-3 interrupt stack). */
 void tss_set_rsp0(u64 u64Rsp0);
+/** Read current TSS.RSP0. */
 u64  tss_get_rsp0(void);
 /**
  * Dedicated IRQ/exception stack from gdt_init (g_aRsp0Stack).
@@ -61,6 +101,7 @@ void tss_use_irq_rsp0(void);
 /**
  * Soft snapshot of user segment descriptors + readiness lamps.
  * Access/gran are raw GDT bytes; flags are soft verify results.
+ * Zeroed until gdt_init soft note.
  */
 struct gj_gdt_user_soft {
     u8  u8Cs32Access;  /* index 3 access byte */
@@ -137,5 +178,6 @@ int  gdt_user_soft_info_get(struct gj_gdt_user_soft *pOut);
  *   gdt: user soft ds acc=0x… ok=… sel=0x… cs64 acc=0x… gran=0x… long=… sel=0x…
  *   gdt: user soft tss rsp0=0x… ist1=0x… lar_ar=0x…
  *   gdt: user soft verify PASS|FAIL|idle
+ * greppable: gdt: user soft
  */
 void gdt_user_soft_log(void);

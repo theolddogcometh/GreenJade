@@ -2,7 +2,22 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room POSIX regex.h — freestanding ERE subset engine. Not GNU glibc.
+ * Clean-room glibc-shaped <regex.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * regcomp/regexec/regerror/regfree and POSIX regex flags/error codes.
+ * Bring-up may stub with REG_BADPAT / REG_NOMATCH until a full engine lands.
+ *
+ * Design notes
+ * ------------
+ * API shape matches POSIX/glibc so graphs link; do not assume full ERE/BRE
+ * feature parity from the header alone.
+ *
+ * Non-goals
+ * ---------
+ * PCRE/Oniguruma engines in-tree.
  */
 #pragma once
 

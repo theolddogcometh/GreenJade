@@ -2,7 +2,21 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room glibc-shaped netinet/in.h (subset). Not GNU glibc.
+ * Clean-room glibc-shaped <netinet/in.h> for libcgj (GreenJade freestanding libc).
+ * Not GNU glibc source; dual MIT OR Apache-2.0 only.
+ *
+ * Scope
+ * -----
+ * sockaddr_in/sockaddr_in6, in_addr, IPPROTO_*, and INADDR_* constants for
+ * IPv4/IPv6 with <sys/socket.h> and <arpa/inet.h>.
+ *
+ * Design notes
+ * ------------
+ * Layout and constant values follow Linux LP64 so wire and ioctl paths agree.
+ *
+ * Non-goals
+ * ---------
+ * Every historic BSD multicast option name.
  */
 #pragma once
 

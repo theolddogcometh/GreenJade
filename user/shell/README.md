@@ -26,11 +26,69 @@ boot spawn live outside this tree.
 2. **Console poll** — non-blocking `gj_console_poll` (must not hang smoke)
 3. **Scripted suite** — echo/cat/ls/… continuum utilities over VFS door
 4. **Store / net soft** — storecap, storestats, storeflush, netstats
-5. **Readline** — idle timeout in QEMU smoke → `readline idle PASS`; live serial → install mode (≤8 lines)
-6. **Aggregate PASS** lines + `vfs PASS` + `interactive PASS` + exit(0)
+5. **Soft status one-liners** — product readiness / continuum soft tags (see below)
+6. **Readline** — idle timeout in QEMU smoke → `readline idle PASS`; live serial → install mode (≤8 lines)
+7. **Aggregate PASS** lines (incl. soft-status group lines) + `vfs PASS` + `interactive PASS` + exit(0)
 
 Boot embed (parent): `kernel/proc/shell_embed.S` (`.incbin` of
 `build/user/shell.elf`). Kernel spawn markers include `shell: live spawn PASS`.
+
+## Soft status notes (scripted one-liners)
+
+Soft readiness / continuum tags run in the freestanding script **before**
+`version` / `install` / `exit`. They print simple facts (`0` / `1` or two
+short lines for `ubar3soft`) and **never** hard-fail the interactive path.
+
+**Honesty bounds (do not invent bar3):**
+
+- Soft tags are **not** Deck Top 50 evidence and **not** bar3 close.
+- `ubar3soft` / `ubar3open` / `usteamrun` stay soft inventory only — matrix
+  title rows remain **NOT-TRIED** until a real client launch (see
+  `docs/STEAM_BAR3_STATUS.md`).
+- `1` means “path/soft surface wired or shipped as a soft fact”; `0` means
+  “still open / not live yet” — not a FAIL of the shell smoke.
+
+### Soft one-liners in the smoke script (product v1.65–v1.68)
+
+| Cmd | Prints | Soft meaning |
+|-----|--------|--------------|
+| `ubar3soft` | `media path wired=1` / `steam client run=0` | Bar3 soft inventory (media READY path ≠ client run) |
+| `umediapath` | `1` | Media path wired soft |
+| `usteamrun` | `0` | Steam client run soft (still open) |
+| `uhdamulti` | `0` | HDA multi soft ready tag until real |
+| `uscsimid` | `0` | scsi mid live soft ready tag until real |
+| `usshd` | `0` | sshd soft ready tag until real |
+| `unetstack` | `0` | netstack soft ready tag until real |
+| `upmmhier` | `0` | PMM hierarchical soft ready tag until real |
+| `ucontinuum14500` | `1` | Continuum decade 14500 wired soft |
+| `uhda_client` | `0` | hda_client embed soft tag until real |
+| `uscsi_live` | `0` | scsi live soft tag until real |
+| `u768gsoak` | `1` | Large-RAM soak path shipped soft (not bar3) |
+| `umakefile14600` | `1` | Makefile decade soft fact |
+| `ubar3open` | `0` | Bar3 still open soft |
+| `ucontinuum14600` | `1` | Continuum decade 14600 wired soft |
+| `uioringmin` | `1` | io_uring min rings soft surface shipped (not full SQE for games) |
+| `u1tibopen` | `0` | Full 1 TiB host soak still open soft |
+
+Earlier soft tags (`ubar3checklist`, `uprotonsoft`, `umesasoft`, …) exist as
+named cmds but are **not** in the default Multiboot script table above.
+
+### Aggregate soft-status PASS lines
+
+After the continuum utilities pass lines, freestanding emits greppable group
+lines (prefix-stable; do not rename):
+
+```text
+greenjade-shell: ubar3soft umediapath usteamrun PASS
+greenjade-shell: uhdamulti uscsimid usshd PASS
+greenjade-shell: unetstack upmmhier PASS
+greenjade-shell: ucontinuum14500 uhda_client uscsi_live PASS
+greenjade-shell: u768gsoak umakefile14600 ubar3open PASS
+greenjade-shell: ucontinuum14600 uioringmin u1tibopen PASS
+```
+
+These mean the scripted soft-status cmds returned success (printed their
+facts), **not** that bar3/Top-50 product bars closed.
 
 ## Smoke markers
 
@@ -52,6 +110,10 @@ greenjade-shell: whoami date env PASS
 GreenJade shell
 ```
 
+Soft-status group lines above are bring-up inventory (not required by
+`smoke-all` alone). Store/net soft cmds: `storecap` / `storestats` /
+`storeflush` / `netstats` → matching `… PASS` lines.
+
 ### Typical freestanding sequence
 
 ```text
@@ -61,11 +123,30 @@ greenjade-shell: console poll PASS
 greenjade-shell: interactive script start
 greenjade-shell$ echo …
 …
+greenjade-shell$ ubar3soft
+media path wired=1
+steam client run=0
+greenjade-shell$ umediapath
+1
+…
+greenjade-shell$ ucontinuum14600
+1
+greenjade-shell$ uioringmin
+1
+greenjade-shell$ u1tibopen
+0
+…
 greenjade-shell: readline test
 greenjade-shell: readline idle PASS
 greenjade-shell: install ready PASS
 greenjade-shell: stat touch cp PASS
 …
+greenjade-shell: ubar3soft umediapath usteamrun PASS
+greenjade-shell: uhdamulti uscsimid usshd PASS
+greenjade-shell: unetstack upmmhier PASS
+greenjade-shell: ucontinuum14500 uhda_client uscsi_live PASS
+greenjade-shell: u768gsoak umakefile14600 ubar3open PASS
+greenjade-shell: ucontinuum14600 uioringmin u1tibopen PASS
 greenjade-shell: storeflush PASS
 greenjade-shell: vfs PASS
 greenjade-shell: interactive PASS
@@ -76,6 +157,7 @@ greenjade-shell: interactive PASS
 | `ready` / `abi PASS` | `_start` entered; ABI banner |
 | `console poll PASS` | Non-blocking console poll returned ≥ 0 |
 | `interactive script start` | Scripted command loop begins |
+| soft-status group `… PASS` | Soft one-liners in that group returned 0 (facts only) |
 | `readline idle PASS` | No serial input in smoke (timeout) |
 | `install ready PASS` | Install-mode path finished or idle path OK |
 | `vfs PASS` | VFS door command path green (required) |

@@ -1,4 +1,10 @@
-/* SPDX-License-Identifier: MIT */
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * x86_64 Multiboot2 / long-mode kernel linker script (product scaffold).
+ * Load at 1 MiB; .boot holds Multiboot2 header.
+ */
 ENTRY(_start)
 
 SECTIONS

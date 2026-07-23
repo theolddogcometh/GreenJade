@@ -11,13 +11,25 @@
  * Soft CDT edges (gj_cdt_edge_*) and soft slot-quota hooks live here so
  * mint/ledger can wire without changing the resolve/install surface.
  *
+ * Full soft CDT companion to R2: mint/copy/move always attempt the edge
+ * pool; empty-edge gap is soft FAIL/PARTIAL when the pool is exhausted
+ * (install still succeeds — slots_left remains authoritative).
+ *
  * Grep: cap:cdt  — edge pool, link/unlink, mint wiring
+ * Grep: cap: cdt mint|copy|move — per-op edge coverage stats
+ * Grep: cap: cdt soft — empty-edge gap + slots_left/quota tallies
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  */
 #include <gj/cap.h>
+#include <gj/klog.h>
 #include <gj/types.h>
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
+static void cdt_soft_tally_install(struct gj_cnode *pCnode,
+                                  struct gj_obj_hdr *pObj);
+static void cdt_edge_try_wire(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
+                              u64 u64Slot, const char *szOp, u32 *pAttempt,
+                              u32 *pOk, u32 *pMiss);
 
 void
 gj_obj_hdr_init(struct gj_obj_hdr *pHdr)
@@ -316,8 +328,10 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     /*
      * Soft CDT: mint/copy/move with edge pool call gj_cdt_edge_link() after.
      * Until edges exist, deferred revoke uses slots_left + known-CNode scan.
-     * Grep: cap:cdt soft
+     * Soft slots_left / quota interaction tallies (install path).
+     * Grep: cap:cdt soft / cap: cdt soft
      */
+    cdt_soft_tally_install(pCnode, pObj);
 
     *pOutRef = gj_cap_ref_make(u64Slot, pSlot->u32Gen);
     return GJ_OK;
@@ -408,12 +422,61 @@ gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj,
 }
 
 /* ---- Soft CDT edge pool + mint/copy/move/delete ------------------------ */
-/* Grep: cap:cdt pool */
+/* Grep: cap:cdt pool / cap: cdt mint|copy|move / cap: cdt soft */
 
 #define GJ_CDT_EDGE_POOL 256u
 
 static struct gj_cdt_edge g_aCdtPool[GJ_CDT_EDGE_POOL];
 static u8 g_aCdtUsed[GJ_CDT_EDGE_POOL];
+static u32 g_u32CdtPoolUsed;   /* live edges checked out of pool */
+static u32 g_u32CdtPoolAllocOk;
+static u32 g_u32CdtPoolAllocMiss; /* pool exhaust */
+
+/*
+ * Per-op soft CDT coverage (always attempt edge pool on mint/copy/move).
+ * Grep: cap: cdt mint|copy|move
+ */
+static u32 g_u32CdtMintAttempt;
+static u32 g_u32CdtMintEdgeOk;
+static u32 g_u32CdtMintEdgeMiss;
+static u32 g_u32CdtCopyAttempt;
+static u32 g_u32CdtCopyEdgeOk;
+static u32 g_u32CdtCopyEdgeMiss;
+static u32 g_u32CdtMoveAttempt;
+static u32 g_u32CdtMoveEdgeOk;
+static u32 g_u32CdtMoveEdgeMiss;
+static u32 g_u32CdtMoveUnlink;
+
+/*
+ * Soft slots_left / quota interaction tallies (install + charge/refund).
+ * Grep: cap: cdt soft
+ */
+static u32 g_u32SoftSlotsLeftInc;     /* install ++slots_left */
+static u32 g_u32SoftQuotaChargeOk;    /* charge returned GJ_OK with account */
+static u32 g_u32SoftQuotaChargeFail;  /* charge GJ_ERR_QUOTA */
+static u32 g_u32SoftQuotaChargeNop;   /* charge with NULL account */
+static u32 g_u32SoftQuotaRefundOk;    /* refund decremented used */
+static u32 g_u32SoftQuotaRefundNop;   /* refund with NULL account */
+static u32 g_u32SoftMoveNet0;         /* move: charge+install then refund+inv */
+static u32 g_u32SoftDeleteRefund;     /* delete path explicit refund */
+
+/* Once-markers: avoid timer/boot log spam. Grep: cap: cdt soft */
+static u8 g_u8CdtPoolExhLogged;
+static u8 g_u8CdtSoftTallyLogged;
+
+static void
+cdt_soft_inc(u32 *pCtr)
+{
+    if (pCtr != NULL && *pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+static u32
+cdt_edge_pool_used(void)
+{
+    return g_u32CdtPoolUsed;
+}
 
 static struct gj_cdt_edge *
 cdt_edge_alloc(void)
@@ -426,9 +489,12 @@ cdt_edge_alloc(void)
             g_aCdtPool[i].pNext = NULL;
             g_aCdtPool[i].pCnode = NULL;
             g_aCdtPool[i].u64Slot = 0;
+            cdt_soft_inc(&g_u32CdtPoolUsed);
+            cdt_soft_inc(&g_u32CdtPoolAllocOk);
             return &g_aCdtPool[i];
         }
     }
+    cdt_soft_inc(&g_u32CdtPoolAllocMiss);
     return NULL;
 }
 
@@ -442,6 +508,9 @@ cdt_edge_free(struct gj_cdt_edge *pEdge)
     }
     for (i = 0; i < GJ_CDT_EDGE_POOL; i++) {
         if (&g_aCdtPool[i] == pEdge) {
+            if (g_aCdtUsed[i] != 0u && g_u32CdtPoolUsed > 0u) {
+                g_u32CdtPoolUsed--;
+            }
             g_aCdtUsed[i] = 0;
             pEdge->pNext = NULL;
             pEdge->pCnode = NULL;
@@ -456,6 +525,145 @@ static void
 cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge)
 {
     cdt_edge_free(pEdge);
+}
+
+/*
+ * Soft slots_left / quota interaction tally after a successful install.
+ * Grep: cap: cdt soft
+ */
+static void
+cdt_soft_tally_log(void)
+{
+    /* Grep: cap: cdt soft slots_left / quota */
+    kprintf("cap: cdt soft slots_left_inc=%u quota_ch_ok=%u "
+            "quota_ch_fail=%u quota_ch_nop=%u quota_rf_ok=%u "
+            "quota_rf_nop=%u move_net0=%u del_rf=%u "
+            "mint_ok=%u copy_ok=%u move_ok=%u pool_used=%u\n",
+            g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
+            g_u32SoftQuotaChargeFail, g_u32SoftQuotaChargeNop,
+            g_u32SoftQuotaRefundOk, g_u32SoftQuotaRefundNop,
+            g_u32SoftMoveNet0, g_u32SoftDeleteRefund,
+            g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
+            cdt_edge_pool_used());
+    /* Grep: cap: cdt soft coverage (mint|copy|move attempts / pool) */
+    kprintf("cap: cdt soft coverage mint=%u/%u miss_m=%u copy=%u/%u "
+            "miss_c=%u move=%u/%u miss_v=%u move_unlink=%u "
+            "pool_alloc=%u pool_miss=%u pool_sz=%u\n",
+            g_u32CdtMintEdgeOk, g_u32CdtMintAttempt, g_u32CdtMintEdgeMiss,
+            g_u32CdtCopyEdgeOk, g_u32CdtCopyAttempt, g_u32CdtCopyEdgeMiss,
+            g_u32CdtMoveEdgeOk, g_u32CdtMoveAttempt, g_u32CdtMoveEdgeMiss,
+            g_u32CdtMoveUnlink, g_u32CdtPoolAllocOk, g_u32CdtPoolAllocMiss,
+            GJ_CDT_EDGE_POOL);
+}
+
+static void
+cdt_soft_tally_install(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj)
+{
+    cdt_soft_inc(&g_u32SoftSlotsLeftInc);
+    (void)pCnode;
+    (void)pObj;
+    /*
+     * Emit greppable tallies once on first install so early smokes see
+     * slots_left/quota coupling; a richer re-log may follow first mint.
+     */
+    if (!g_u8CdtSoftTallyLogged) {
+        g_u8CdtSoftTallyLogged = 1;
+        cdt_soft_tally_log();
+    }
+}
+
+/*
+ * Empty-edge gap honesty when the soft edge pool is exhausted.
+ * Install/mint still returns GJ_OK (slots_left authoritative); CDT walk
+ * cannot see the slot until edges exist — soft FAIL or PARTIAL.
+ *
+ *   FAIL    — pool miss with zero successful edges for this op family
+ *   PARTIAL — pool miss after at least one edge_ok for this op family
+ *
+ * Grep: cap: cdt soft FAIL|PARTIAL
+ */
+static void
+cdt_soft_empty_edge_gap(const char *szOp, u32 u32Ok, u32 u32Miss, u32 u32Attempt)
+{
+    const char *szVerdict;
+
+    if (szOp == NULL) {
+        szOp = "?";
+    }
+    szVerdict = (u32Ok == 0u) ? "FAIL" : "PARTIAL";
+
+    if (!g_u8CdtPoolExhLogged) {
+        g_u8CdtPoolExhLogged = 1;
+        kprintf("cap: cdt soft %s empty-edge pool exhaust op=%s "
+                "miss=%u ok=%u attempt=%u pool_used=%u pool_sz=%u "
+                "alloc_miss=%u\n",
+                szVerdict, szOp, u32Miss, u32Ok, u32Attempt,
+                cdt_edge_pool_used(), GJ_CDT_EDGE_POOL,
+                g_u32CdtPoolAllocMiss);
+    }
+}
+
+/*
+ * Always attempt edge pool after mint/copy/move install success.
+ * Does not change install status — edge miss is soft empty-edge gap only.
+ * Grep: cap: cdt mint|copy|move
+ */
+static void
+cdt_edge_try_wire(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
+                  u64 u64Slot, const char *szOp, u32 *pAttempt, u32 *pOk,
+                  u32 *pMiss)
+{
+    struct gj_cdt_edge *pEdge;
+    gj_status_t st;
+    u32 u32Slots;
+
+    cdt_soft_inc(pAttempt);
+    u32Slots = (pObj != NULL) ? pObj->u32SlotsLeft : 0u;
+
+    pEdge = cdt_edge_alloc();
+    if (pEdge == NULL) {
+        cdt_soft_inc(pMiss);
+        cdt_soft_empty_edge_gap(szOp, *pOk, *pMiss, *pAttempt);
+        /* Grep: cap: cdt mint|copy|move … coverage */
+        kprintf("cap: cdt %s edge_ok=0 miss=%u attempt=%u ok=%u "
+                "slots_left=%u pool_used=%u sl_inc=%u q_ch=%u q_rf=%u\n",
+                szOp, *pMiss, *pAttempt, *pOk, u32Slots,
+                cdt_edge_pool_used(), g_u32SoftSlotsLeftInc,
+                g_u32SoftQuotaChargeOk, g_u32SoftQuotaRefundOk);
+        return;
+    }
+
+    st = gj_cdt_edge_link(pObj, pEdge, pCnode, u64Slot);
+    if (st != GJ_OK) {
+        cdt_edge_free(pEdge);
+        cdt_soft_inc(pMiss);
+        /* Link refused (double-link etc.) — soft miss, not pool exhaust. */
+        kprintf("cap: cdt %s edge_ok=0 link_st=%d miss=%u attempt=%u "
+                "ok=%u slots_left=%u pool_used=%u sl_inc=%u q_ch=%u "
+                "q_rf=%u\n",
+                szOp, (int)st, *pMiss, *pAttempt, *pOk, u32Slots,
+                cdt_edge_pool_used(), g_u32SoftSlotsLeftInc,
+                g_u32SoftQuotaChargeOk, g_u32SoftQuotaRefundOk);
+        return;
+    }
+
+    cdt_soft_inc(pOk);
+    /* Grep: cap: cdt mint|copy|move … coverage */
+    kprintf("cap: cdt %s edge_ok=1 ok=%u attempt=%u miss=%u "
+            "slots_left=%u pool_used=%u sl_inc=%u q_ch=%u q_rf=%u\n",
+            szOp, *pOk, *pAttempt, *pMiss, u32Slots, cdt_edge_pool_used(),
+            g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
+            g_u32SoftQuotaRefundOk);
+
+    /*
+     * Re-log soft tallies once after first charge-backed mint/copy/move so
+     * interaction counters are visible with real quota attach (boot door
+     * install may have logged only nop charge earlier).
+     */
+    if (g_u8CdtSoftTallyLogged < 2u && g_u32SoftQuotaChargeOk > 0u) {
+        g_u8CdtSoftTallyLogged = 2;
+        cdt_soft_tally_log();
+    }
 }
 
 /* ---- Soft quota (flat + hierarchical parent roll-up) ------------------- */
@@ -554,6 +762,8 @@ gj_cap_quota_slot_charge(void *pAccount)
     u32 u32Depth;
 
     if (pQ == NULL) {
+        /* Soft: NULL account no-op. Grep: cap:quota soft / cap: cdt soft */
+        cdt_soft_inc(&g_u32SoftQuotaChargeNop);
         return GJ_OK;
     }
 
@@ -563,6 +773,7 @@ gj_cap_quota_slot_charge(void *pAccount)
          u32Depth++) {
         if (pWalk->u32Used >= pWalk->u32Limit) {
             pWalk->u32Exhaust++;
+            cdt_soft_inc(&g_u32SoftQuotaChargeFail);
             return GJ_ERR_QUOTA; /* cap:quota exhaust */
         }
         pWalk = pWalk->pParent;
@@ -579,6 +790,7 @@ gj_cap_quota_slot_charge(void *pAccount)
         pWalk->u32ChargeOk++;
         pWalk = pWalk->pParent;
     }
+    cdt_soft_inc(&g_u32SoftQuotaChargeOk); /* cap: cdt soft quota interact */
     return GJ_OK;
 }
 
@@ -594,6 +806,8 @@ gj_cap_quota_slot_refund(void *pAccount)
     u32 u32Depth;
 
     if (pQ == NULL) {
+        /* Soft: NULL account no-op. Grep: cap:quota soft / cap: cdt soft */
+        cdt_soft_inc(&g_u32SoftQuotaRefundNop);
         return GJ_OK;
     }
 
@@ -606,6 +820,7 @@ gj_cap_quota_slot_refund(void *pAccount)
         }
         pWalk = pWalk->pParent;
     }
+    cdt_soft_inc(&g_u32SoftQuotaRefundOk); /* cap: cdt soft quota interact */
     return GJ_OK;
 }
 
@@ -620,7 +835,6 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
             u16 u16Rights, struct gj_cnode *pDstCnode, struct gj_cap_ref *pOut)
 {
     struct gj_cap_resolved res;
-    struct gj_cdt_edge *pEdge;
     gj_status_t st;
     u16 u16New;
 
@@ -646,11 +860,13 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
-    /* Grep: cap:cdt mint */
-    pEdge = cdt_edge_alloc();
-    if (pEdge != NULL) {
-        (void)gj_cdt_edge_link(res.pObj, pEdge, pDstCnode, pOut->u64Slot);
-    }
+    /*
+     * Always attempt edge pool (soft empty-edge gap if exhausted).
+     * Grep: cap: cdt mint / cap:cdt mint
+     */
+    cdt_edge_try_wire(res.pObj, pDstCnode, pOut->u64Slot, "mint",
+                      &g_u32CdtMintAttempt, &g_u32CdtMintEdgeOk,
+                      &g_u32CdtMintEdgeMiss);
     return GJ_OK;
 }
 
@@ -659,7 +875,6 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
             u16 u16Rights, struct gj_cap_ref *pOut)
 {
     struct gj_cap_resolved res;
-    struct gj_cdt_edge *pEdge;
     gj_status_t st;
     u16 u16New;
 
@@ -678,11 +893,13 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
-    /* Grep: cap:cdt copy */
-    pEdge = cdt_edge_alloc();
-    if (pEdge != NULL) {
-        (void)gj_cdt_edge_link(res.pObj, pEdge, pCnode, pOut->u64Slot);
-    }
+    /*
+     * Always attempt edge pool (soft empty-edge gap if exhausted).
+     * Grep: cap: cdt copy / cap:cdt copy
+     */
+    cdt_edge_try_wire(res.pObj, pCnode, pOut->u64Slot, "copy",
+                      &g_u32CdtCopyAttempt, &g_u32CdtCopyEdgeOk,
+                      &g_u32CdtCopyEdgeMiss);
     return GJ_OK;
 }
 
@@ -692,7 +909,6 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
 {
     struct gj_cap_resolved res;
     struct gj_cap_slot *pSrc;
-    struct gj_cdt_edge *pEdge;
     gj_status_t st;
 
     if (pOut == NULL) {
@@ -713,16 +929,23 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
-    /* Retarget CDT: unlink old slot, link new. Grep: cap:cdt move */
+    /*
+     * Retarget CDT: unlink old slot (returns edge to pool), then always
+     * attempt wire on the new slot. Net slots_left / quota are restored
+     * by the source invalidate below (move net-zero).
+     * Grep: cap: cdt move / cap:cdt move
+     */
     gj_cdt_unlink_slot(res.pObj, pCnode, u64SrcSlot);
-    pEdge = cdt_edge_alloc();
-    if (pEdge != NULL) {
-        (void)gj_cdt_edge_link(res.pObj, pEdge, pCnode, pOut->u64Slot);
-    }
+    cdt_soft_inc(&g_u32CdtMoveUnlink);
+    cdt_edge_try_wire(res.pObj, pCnode, pOut->u64Slot, "move",
+                      &g_u32CdtMoveAttempt, &g_u32CdtMoveEdgeOk,
+                      &g_u32CdtMoveEdgeMiss);
     /* Invalidate source without double-counting object death. */
     pSrc = &pCnode->pSlots[u64SrcSlot];
     (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
     gj_cap_slot_invalidate_locked(pSrc, res.pObj);
+    /* Soft: charge on install + refund on source = net-zero interact. */
+    cdt_soft_inc(&g_u32SoftMoveNet0); /* cap: cdt soft */
     return GJ_OK;
 }
 
@@ -745,6 +968,7 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
     }
     gj_cdt_unlink_slot(res.pObj, pCnode, u64Slot); /* cap:cdt delete */
     (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
+    cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
     gj_cap_slot_invalidate_locked(res.pSlot, res.pObj);
     return GJ_OK;
 }

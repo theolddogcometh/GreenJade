@@ -3,6 +3,9 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Bridge: cold_ipc service → vfs_ram + protonrt_cold_linux.
+ * Soft multi-server confine deepen: expose path policy, promise-denial
+ * ledger, death-cleanup soft note (product multi-server confine OPEN).
+ * Grep: confine: expose soft | confine: ledger soft | confine: death soft
  */
 #include <gj/cold_ipc.h>
 #include <gj/cpu.h>
@@ -38,6 +41,269 @@ static char g_szCwd[96] = "/";
 #define GJ_LINUX_O_RDWR    0x2u
 #define GJ_LINUX_O_CREAT   0x40u
 
+/*
+ * Soft multi-server confine deepen (cold personality only).
+ * Product multi-server confine remains OPEN (expose in vfsd, sealed servers).
+ * Grep: confine: expose soft | confine: ledger soft | confine: death soft
+ * Preserve: main.c "confine: soft PASS" / hot socket policy PASS.
+ */
+
+/* Soft expose path rights (vfsd-shaped; not product). */
+#define GJ_EXPOSE_SOFT_R  (1u << 0)
+#define GJ_EXPOSE_SOFT_W  (1u << 1)
+#define GJ_EXPOSE_SOFT_X  (1u << 2)
+
+#define GJ_EXPOSE_SOFT_MAX 8u
+#define GJ_EXPOSE_SOFT_PATH 64u
+
+struct gj_expose_soft_ent {
+    u8  u8Used;
+    u8  u8Rights;
+    u8  u8Pad[2];
+    char szPath[GJ_EXPOSE_SOFT_PATH];
+};
+
+/* Soft ledger: promise violations / expose denials / death-cleanup notes. */
+static u32 g_u32ConfinePromiseDeny;
+static u32 g_u32ConfineExposeDeny;
+static u32 g_u32ConfineDeathCleanup;
+static u32 g_u32ExposeSoftCount;
+static u8  g_u8ConfineSoftOnce;
+static u8  g_u8DeathSoftOnce;
+static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
+
+/**
+ * Soft promise require with ledger count on denial.
+ * Ambient / NULL proc still 0 (preserves bring-up smokes).
+ */
+static i64
+confine_soft_promise_require(u32 u32Promise)
+{
+    i64 i64R;
+
+    i64R = (i64)gj_process_promise_require(g_pLinuxProc, u32Promise);
+    if (i64R != 0) {
+        g_u32ConfinePromiseDeny++;
+    }
+    return i64R;
+}
+
+/** Soft path prefix match (NUL-terminated; empty prefix never matches). */
+static int
+confine_soft_path_prefix(const char *szPath, const char *szPref)
+{
+    size_t i;
+
+    if (szPath == NULL || szPref == NULL || szPref[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; szPref[i] != '\0'; i++) {
+        if (szPath[i] != szPref[i]) {
+            return 0;
+        }
+    }
+    /* Exact or directory boundary (/, end). */
+    if (szPath[i] == '\0' || szPath[i] == '/' || szPref[i - 1] == '/') {
+        return 1;
+    }
+    return 0;
+}
+
+/** 1 if path matches any soft-exposed prefix with needed rights bits. */
+static int
+confine_soft_expose_match(const char *szPath, u32 u32Need)
+{
+    u32 i;
+
+    if (szPath == NULL || szPath[0] == '\0') {
+        return 0;
+    }
+    for (i = 0; i < GJ_EXPOSE_SOFT_MAX; i++) {
+        if (g_aExposeSoft[i].u8Used == 0u) {
+            continue;
+        }
+        if ((g_aExposeSoft[i].u8Rights & (u8)u32Need) != (u8)u32Need) {
+            continue;
+        }
+        if (confine_soft_path_prefix(szPath, g_aExposeSoft[i].szPath)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Soft expose path policy (OpenBSD expose-shaped; product: vfsd).
+ * Deny ambient expose when confined — confined subjects cannot expand
+ * path reveal set. Ambient may soft-register a prefix.
+ * Grep: confine: expose soft
+ * Returns 0 or -LINUX_EACCES / -LINUX_EINVAL / -LINUX_ENOSPC.
+ */
+static i64
+confine_soft_expose(const char *szPath, u32 u32Rights)
+{
+    u32 i;
+    u32 iFree = GJ_EXPOSE_SOFT_MAX;
+    size_t n;
+
+    if (szPath == NULL || szPath[0] == '\0' || u32Rights == 0u) {
+        return -LINUX_EINVAL;
+    }
+    /* Deny ambient expose when confined (no product vfsd policy yet). */
+    if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
+        g_u32ConfineExposeDeny++;
+        kprintf("confine: expose soft deny confined path=%s rights=0x%x\n",
+                szPath, u32Rights);
+        return -LINUX_EACCES;
+    }
+    /* Update existing prefix or take a free slot. */
+    for (i = 0; i < GJ_EXPOSE_SOFT_MAX; i++) {
+        if (g_aExposeSoft[i].u8Used != 0u) {
+            if (confine_soft_path_prefix(szPath, g_aExposeSoft[i].szPath) &&
+                confine_soft_path_prefix(g_aExposeSoft[i].szPath, szPath)) {
+                g_aExposeSoft[i].u8Rights =
+                    (u8)(g_aExposeSoft[i].u8Rights | (u8)u32Rights);
+                kprintf("confine: expose soft update path=%s rights=0x%x\n",
+                        szPath, (u32)g_aExposeSoft[i].u8Rights);
+                return 0;
+            }
+        } else if (iFree == GJ_EXPOSE_SOFT_MAX) {
+            iFree = i;
+        }
+    }
+    if (iFree >= GJ_EXPOSE_SOFT_MAX) {
+        g_u32ConfineExposeDeny++;
+        kprintf("confine: expose soft full deny path=%s\n", szPath);
+        return -LINUX_ENOSPC;
+    }
+    g_aExposeSoft[iFree].u8Used = 1u;
+    g_aExposeSoft[iFree].u8Rights = (u8)u32Rights;
+    for (n = 0; n + 1u < GJ_EXPOSE_SOFT_PATH && szPath[n] != '\0'; n++) {
+        g_aExposeSoft[iFree].szPath[n] = szPath[n];
+    }
+    g_aExposeSoft[iFree].szPath[n] = '\0';
+    g_u32ExposeSoftCount++;
+    kprintf("confine: expose soft allow path=%s rights=0x%x slot=%u\n",
+            g_aExposeSoft[iFree].szPath, u32Rights, iFree);
+    return 0;
+}
+
+/**
+ * Soft path open policy after promise gates.
+ * Confined + non-empty expose table ⇒ path must match (soft unveil spirit).
+ * Empty table ⇒ promise-only (preserves confine soft PASS / RPATH smokes).
+ * Grep: confine: expose soft path
+ */
+static i64
+confine_soft_path_policy(const char *szPath, u32 u32Need)
+{
+    if (g_pLinuxProc == NULL || g_pLinuxProc->u32Confined == 0u) {
+        return 0; /* ambient */
+    }
+    if (g_u32ExposeSoftCount == 0u) {
+        return 0; /* soft: no expose set yet → promise gates only */
+    }
+    if (confine_soft_expose_match(szPath, u32Need)) {
+        return 0;
+    }
+    g_u32ConfineExposeDeny++;
+    kprintf("confine: expose soft path deny path=%s need=0x%x\n",
+            szPath != NULL ? szPath : "", u32Need);
+    return -LINUX_EACCES;
+}
+
+/**
+ * Soft death cleanup hook for cold personality.
+ * Product process_death is hot-path (linux_hot → process_death G-PROC-5).
+ * If death paths call into cold (dead PCB, teardown-shaped cold ops), scrub
+ * soft expose ledger for the subject and note greppably.
+ * Grep: confine: death soft
+ */
+static void
+confine_soft_death_cleanup(struct gj_process *pProc)
+{
+    u32 i;
+
+    (void)pProc;
+    for (i = 0; i < GJ_EXPOSE_SOFT_MAX; i++) {
+        if (g_aExposeSoft[i].u8Used != 0u) {
+            memset(&g_aExposeSoft[i], 0, sizeof(g_aExposeSoft[i]));
+        }
+    }
+    g_u32ExposeSoftCount = 0u;
+    g_u32ConfineDeathCleanup++;
+    kprintf("confine: death soft cleanup note calls=%u "
+            "promise_deny=%u expose_deny=%u (product multi-server OPEN)\n",
+            g_u32ConfineDeathCleanup, g_u32ConfinePromiseDeny,
+            g_u32ConfineExposeDeny);
+}
+
+/** Soft ledger inventory (grep: confine: ledger soft). */
+static void
+confine_soft_ledger_log(void)
+{
+    kprintf("confine: ledger soft promise_deny=%u expose_deny=%u "
+            "death_cleanup=%u expose_ents=%u\n",
+            g_u32ConfinePromiseDeny, g_u32ConfineExposeDeny,
+            g_u32ConfineDeathCleanup, g_u32ExposeSoftCount);
+}
+
+/**
+ * One-shot soft multi-server confine probe at cold attach.
+ * Restores g_pLinuxProc confine mask; does not claim product seal.
+ */
+static void
+confine_soft_selfprobe(void)
+{
+    u32 u32SavedConf = 0;
+    u32 u32SavedProm = GJ_PROMISE_ALL;
+    i64 i64R;
+    int fOk = 0;
+
+    if (g_u8ConfineSoftOnce != 0u) {
+        return;
+    }
+    g_u8ConfineSoftOnce = 1u;
+
+    if (g_pLinuxProc == NULL) {
+        kprintf("confine: expose soft skip (no proc)\n");
+        kprintf("confine: multi-server product OPEN\n");
+        return;
+    }
+
+    u32SavedConf = g_pLinuxProc->u32Confined;
+    u32SavedProm = g_pLinuxProc->u32Promises;
+
+    /* Ambient: soft expose allow */
+    g_pLinuxProc->u32Confined = 0u;
+    g_pLinuxProc->u32Promises = GJ_PROMISE_ALL;
+    i64R = confine_soft_expose("/tmp/gj-expose-soft", GJ_EXPOSE_SOFT_R);
+    if (i64R == 0) {
+        kprintf("confine: expose soft ambient PASS\n");
+    }
+
+    /* Confined: deny ambient expose */
+    g_pLinuxProc->u32Confined = 1u;
+    g_pLinuxProc->u32Promises = GJ_PROMISE_STDIO | GJ_PROMISE_RPATH;
+    i64R = confine_soft_expose("/etc/shadow", GJ_EXPOSE_SOFT_R | GJ_EXPOSE_SOFT_W);
+    if (i64R == -(i64)LINUX_EACCES) {
+        fOk = 1;
+        kprintf("confine: expose soft PASS\n");
+    } else {
+        kprintf("confine: expose soft FAIL ret=%ld\n", (long)i64R);
+    }
+
+    /* Soft death cleanup note (cold personality surface; hot death separate). */
+    confine_soft_death_cleanup(g_pLinuxProc);
+    confine_soft_ledger_log();
+    kprintf("confine: multi-server product OPEN\n");
+    (void)fOk;
+
+    /* Restore caller confine mask (preserve main.c confine soft PASS). */
+    g_pLinuxProc->u32Confined = u32SavedConf;
+    g_pLinuxProc->u32Promises = u32SavedProm;
+}
+
 /**
  * Soft path promise gate for open/openat/creat/openat2.
  * RDONLY → RPATH; WRONLY → WPATH; RDWR → RPATH|WPATH; O_CREAT → +CPATH.
@@ -51,43 +317,43 @@ promise_gate_open_flags(u32 u32Flags, int fCreatForce)
     i64 i64R;
 
     if (fCreat) {
-        i64R = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_CPATH);
+        i64R = confine_soft_promise_require(GJ_PROMISE_CPATH);
         if (i64R != 0) {
             return i64R;
         }
     }
     u32Acc = u32Flags & GJ_LINUX_O_ACCMODE;
     if (u32Acc == GJ_LINUX_O_RDONLY) {
-        return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+        return confine_soft_promise_require(GJ_PROMISE_RPATH);
     }
     if (u32Acc == GJ_LINUX_O_WRONLY) {
-        return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+        return confine_soft_promise_require(GJ_PROMISE_WPATH);
     }
     /* O_RDWR (and any other non-zero accmode): need both read + write path */
-    i64R = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+    i64R = confine_soft_promise_require(GJ_PROMISE_RPATH);
     if (i64R != 0) {
         return i64R;
     }
-    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+    return confine_soft_promise_require(GJ_PROMISE_WPATH);
 }
 
 /* Soft path promise helpers (ambient / NULL proc ⇒ 0). */
 static i64
 promise_gate_rpath(void)
 {
-    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+    return confine_soft_promise_require(GJ_PROMISE_RPATH);
 }
 
 static i64
 promise_gate_wpath(void)
 {
-    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+    return confine_soft_promise_require(GJ_PROMISE_WPATH);
 }
 
 static i64
 promise_gate_cpath(void)
 {
-    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_CPATH);
+    return confine_soft_promise_require(GJ_PROMISE_CPATH);
 }
 
 static void
@@ -143,9 +409,21 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return -LINUX_EINVAL;
     }
 
+    /*
+     * Soft death cleanup: if a dead PCB still hits cold personality, scrub
+     * soft expose/ledger once. Product death is hot (process_death).
+     * Grep: confine: death soft
+     */
+    if (g_pLinuxProc != NULL && g_pLinuxProc->u32Alive == 0u &&
+        g_u8DeathSoftOnce == 0u) {
+        g_u8DeathSoftOnce = 1u;
+        confine_soft_death_cleanup(g_pLinuxProc);
+    }
+
     switch (pRegs->u64Nr) {
     case LINUX_NR_openat: {
         i64 i64Gate;
+        u32 u32Need;
 
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
@@ -153,6 +431,14 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         }
         /* a2 flags: bit 6 = O_CREAT (0x40) on Linux x86_64 */
         i64Gate = promise_gate_open_flags((u32)pRegs->u64Arg2, 0);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        u32Need = GJ_EXPOSE_SOFT_R;
+        if ((pRegs->u64Arg2 & GJ_LINUX_O_ACCMODE) != GJ_LINUX_O_RDONLY) {
+            u32Need |= GJ_EXPOSE_SOFT_W;
+        }
+        i64Gate = confine_soft_path_policy(szPath, u32Need);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -169,12 +455,21 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u32 u32Flags = (pRegs->u64Nr == LINUX_NR_creat)
                            ? (GJ_LINUX_O_WRONLY | GJ_LINUX_O_CREAT)
                            : (u32)pRegs->u64Arg1;
+        u32 u32Need;
 
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
         }
         i64Gate = promise_gate_open_flags(u32Flags, fCreat);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        u32Need = GJ_EXPOSE_SOFT_R;
+        if ((u32Flags & GJ_LINUX_O_ACCMODE) != GJ_LINUX_O_RDONLY) {
+            u32Need |= GJ_EXPOSE_SOFT_W;
+        }
+        i64Gate = confine_soft_path_policy(szPath, u32Need);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -695,7 +990,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64Gate;
 
         /* Soft multi-server confine: INET promise gates ambient sockets. */
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1085,7 +1380,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_bind: {
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1106,7 +1401,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_listen: {
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1117,7 +1412,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_accept4: {
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1442,7 +1737,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_connect: {
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1680,7 +1975,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64Gate;
 
         /* Soft confine: PROC gates kill-shaped ambient ops. */
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_PROC);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1699,7 +1994,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
          */
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_PROC);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -1721,6 +2016,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
+        }
+        i64Gate = confine_soft_path_policy(szPath, GJ_EXPOSE_SOFT_R);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
         return vfs_ram_access(szPath, nMode);
     }
@@ -1766,6 +2065,10 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
         }
+        i64Gate = confine_soft_path_policy(szPath, GJ_EXPOSE_SOFT_R);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         memset(aStat, 0, sizeof(aStat));
         st = vfs_ram_stat(szPath, aStat, sizeof(aStat));
         if (st != 0) {
@@ -1794,6 +2097,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
         /* Soft: confined processes have no chroot privilege (no promise bit). */
         if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
+            g_u32ConfinePromiseDeny++;
             return -LINUX_EACCES;
         }
         i64Gate = promise_gate_rpath();
@@ -1814,8 +2118,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         /*
          * Soft: confined processes have no mount privilege (no promise bit).
          * Ambient (u32Confined==0) still soft-succeeds for probe.
+         * Ambient expose-shaped mount is also denied when confined
+         * (grep: confine: expose soft — product: vfsd path policy).
          */
         if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
+            g_u32ConfinePromiseDeny++;
+            g_u32ConfineExposeDeny++;
+            kprintf("confine: expose soft mount deny (confined)\n");
             return -LINUX_EACCES;
         }
         /* No real VFS mounts — success for probe (product: vfsd) */
@@ -2408,8 +2717,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                                                            : pRegs->u64Arg0;
 
         {
-            i64 i64Gate =
-                (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_EXEC);
+            i64 i64Gate = confine_soft_promise_require(GJ_PROMISE_EXEC);
             if (i64Gate != 0) {
                 return i64Gate;
             }
@@ -2585,7 +2893,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u32 u32Pid;
         i64 i64Gate;
 
-        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_PROC);
         if (i64Gate != 0) {
             return i64Gate;
         }
@@ -2639,4 +2947,9 @@ gj_protonrt_attach_cold(void)
     cold_ipc_set_service(protonrt_service, NULL);
     cold_ipc_set_doors_mode(1);
     cold_ipc_set_personality_attached(1);
+    /*
+     * Soft multi-server confine deepen probe (expose / ledger / death).
+     * Product multi-server confine stays OPEN. Preserves confine soft PASS.
+     */
+    confine_soft_selfprobe();
 }

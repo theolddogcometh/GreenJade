@@ -3,12 +3,20 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Early mono clock: PIT ch0 @ GJ_TIMER_HZ on remapped IRQ0 (vector 32).
- * After LAPIC calibrate, jiffies/mono switch to the local APIC (vector 48).
+ * After LAPIC calibrate, jiffies/mono prefer the local APIC (vector 48);
+ * PIT is demoted to soft-fallback only (IRQ0 masked; no mono advance).
  *
  * Soft mono (timer_mono_nsec_soft / mono soft snapshot) may interpolate
  * within the current APIC period using LAPIC CUR; coarse mono stays
  * jiffy-stable for futex/door deadlines. Quantum soft-preempt counters
  * deepen tick → yield-request → preempt_check observability.
+ *
+ * Mono source preference (APIC/x2APIC armed):
+ *   mono/jiffies advance from timer_tick_apic only; timer_tick EOIs PIC
+ *   but never increments jiffies while g_fApicSource is set.
+ * Honesty: full x2APIC ICR/timer replace of the 8259+PIT product path
+ * remains PARTIAL when the hardware path is incomplete (xAPIC timer
+ * handoff alone ≠ complete x2APIC ICR/timer replace).
  *
  * Soft timer inventory (Wave 10 exclusive): greppable "timer: soft …"
  * rollup over mono / preempt / source axes. Diagnostics only — never
@@ -22,6 +30,11 @@
  * greppable: timer: soft FAIL
  * greppable: timer: mono soft
  * greppable: timer: preempt soft
+ * greppable: timer: mono source APIC soft
+ * greppable: timer: mono source PIT soft
+ * greppable: timer: pit demoted soft
+ * greppable: timer: apic mono preferred PASS
+ * greppable: timer: x2apic mono replace soft
  */
 #include <gj/apic.h>
 #include <gj/cap.h>
@@ -32,6 +45,7 @@
 #include <gj/thread.h>
 #include <gj/timer.h>
 #include <gj/types.h>
+#include <gj/x2apic.h>
 
 #define PIT_CH0     0x40
 #define PIT_CMD     0x43
@@ -62,6 +76,8 @@ static u64          g_u64QuantumTicks;
 static u64          g_u64PitTicks;
 static u64          g_u64ApicMonoTicks;
 static u64          g_u64SourceSwitch;
+static u64          g_u64PitDemotions;      /* PIT→APIC soft demotions */
+static u64          g_u64MonoPrefLogs;      /* mono preference soft log emits */
 
 /*
  * Soft timer inventory extras (Wave 10 exclusive; file-local).
@@ -71,6 +87,7 @@ static u64          g_u64SourceSwitch;
 static u64          g_u64SoftInventoryLogs;
 
 static void timer_soft_inventory_log(void);
+static void timer_mono_pref_soft_log(void);
 
 static void
 outb(u16 u16Port, u8 u8Val)
@@ -118,6 +135,11 @@ revoke_hygiene_tick(void)
 void
 timer_tick(void)
 {
+    /*
+     * Mono preference: when APIC/x2APIC timer source is armed, jiffies/mono
+     * advance only from timer_tick_apic. PIT IRQ0 is soft-fallback only —
+     * still EOI the PIC if a stray IRQ arrives, but do not advance mono.
+     */
     if (!g_fApicSource) {
         g_u64Jiffies++;
         g_u64PitTicks++;
@@ -254,6 +276,8 @@ timer_init(void)
     g_u64PitTicks = 0;
     g_u64ApicMonoTicks = 0;
     g_u64SourceSwitch = 0;
+    g_u64PitDemotions = 0;
+    g_u64MonoPrefLogs = 0;
     g_u64Preempts = 0;
     g_u64YieldRequests = 0;
     g_u64PreemptChecks = 0;
@@ -271,6 +295,8 @@ timer_init(void)
     kprintf("timer: PIT %u Hz IRQ0 vector 32 nsec/tick=%lu quantum=%u\n",
             (unsigned)GJ_TIMER_HZ, (unsigned long)g_u64NsecPerTick,
             (unsigned)g_u32Quantum);
+    /* Early boot: mono prefers PIT until APIC/x2APIC timer source armed. */
+    timer_mono_pref_soft_log();
     /* Wave 10: baseline soft inventory (zeros/jiffies=0 expected early). */
     timer_soft_inventory_log();
 }
@@ -278,19 +304,35 @@ timer_init(void)
 void
 timer_set_apic_source(u64 u64NsecPerTick)
 {
+    int fFirstHandoff;
+
     if (u64NsecPerTick == 0) {
         return;
     }
     g_u64NsecPerTick = u64NsecPerTick;
+    fFirstHandoff = 0;
     if (!g_fApicSource) {
         g_u64SourceSwitch++;
+        g_u64PitDemotions++;
+        fFirstHandoff = 1;
     }
+    /*
+     * Prefer APIC for mono/jiffies. Mask PIT IRQ0 so mono advances only
+     * from the APIC timer; PIT remains soft-fallback telemetry only.
+     */
     g_fApicSource = 1;
-    /* Mask PIT IRQ0 so mono advances only from the APIC timer */
     outb(PIC1_DATA, 0xFF);
-    kprintf("timer: mono source=APIC nsec/tick=%lu (PIT masked) switches=%lu\n",
-            (unsigned long)g_u64NsecPerTick,
-            (unsigned long)g_u64SourceSwitch);
+
+    /* Greppable mono preference + demotion lamps (product / smoke). */
+    timer_mono_pref_soft_log();
+    if (fFirstHandoff != 0) {
+        /* Continuity: keep nsec/tick on serial for older greps / humans. */
+        kprintf("timer: mono handoff APIC nsec/tick=%lu switches=%lu "
+                "pit_demotions=%lu\n",
+                (unsigned long)g_u64NsecPerTick,
+                (unsigned long)g_u64SourceSwitch,
+                (unsigned long)g_u64PitDemotions);
+    }
     /* Wave 10: soft inventory after PIT→APIC handoff. */
     timer_soft_inventory_log();
 }
@@ -400,6 +442,116 @@ timer_preempt_soft_snapshot(struct gj_timer_preempt_soft *pOut)
 }
 
 /**
+ * Mono clock source preference soft log (APIC preferred when armed).
+ * Prefix-stable markers:
+ *   timer: mono source APIC soft …  — mono prefers APIC/x2APIC timer
+ *   timer: mono source PIT soft …   — early boot / unarmed APIC path
+ *   timer: pit demoted soft …       — PIT soft-fallback only (IRQ0 masked)
+ *   timer: apic mono preferred PASS — product lamp when source is APIC
+ *   timer: x2apic mono replace soft PARTIAL|… — honesty on full replace
+ *
+ * Never hard-gates boot; pure telemetry. Preserves quantum/preempt soft.
+ * greppable: timer: mono source
+ * greppable: timer: pit demoted soft
+ * greppable: timer: apic mono preferred PASS
+ */
+static void
+timer_mono_pref_soft_log(void)
+{
+    const char *szSrc;
+    const char *szPreferred;
+    const char *szReplace;
+    int fApic;
+    int fX2En;
+    int fX2Supp;
+    u32 u32Init;
+    u32 u32Cur;
+
+    if (g_u64MonoPrefLogs < ~0ull) {
+        g_u64MonoPrefLogs++;
+    }
+
+    fApic = g_fApicSource ? 1 : 0;
+    if (!g_fTimerReady) {
+        szSrc = "NONE";
+        szPreferred = "NONE";
+    } else if (fApic != 0) {
+        szSrc = "APIC";
+        szPreferred = "APIC";
+    } else {
+        szSrc = "PIT";
+        szPreferred = "PIT";
+    }
+
+    fX2En = x2apic_enabled() ? 1 : 0;
+    fX2Supp = x2apic_supported() ? 1 : 0;
+
+    u32Init = 0;
+    u32Cur = 0;
+    if (fApic != 0) {
+        u32Init = apic_timer_init_count();
+        u32Cur = apic_timer_cur_count();
+    }
+
+    /*
+     * Grep: timer: mono source APIC soft | timer: mono source PIT soft
+     * When APIC armed: preferred=APIC, pit_soft_fallback=1 (demoted).
+     */
+    kprintf("timer: mono source %s soft preferred=%s pit_soft_fallback=%u "
+            "ready=%u jiffies=%lu npt=%lu switches=%lu "
+            "pit_ticks=%lu apic_ticks=%lu demotions=%lu logs=%lu\n",
+            szSrc, szPreferred,
+            (unsigned)(fApic != 0 ? 1u : 0u),
+            (unsigned)(g_fTimerReady ? 1u : 0u),
+            (unsigned long)g_u64Jiffies,
+            (unsigned long)g_u64NsecPerTick,
+            (unsigned long)g_u64SourceSwitch,
+            (unsigned long)g_u64PitTicks,
+            (unsigned long)g_u64ApicMonoTicks,
+            (unsigned long)g_u64PitDemotions,
+            (unsigned long)g_u64MonoPrefLogs);
+
+    if (fApic != 0) {
+        /*
+         * PIT demoted: soft-fallback only — no mono advance from IRQ0.
+         * Grep: timer: pit demoted soft
+         */
+        kprintf("timer: pit demoted soft irq0_masked=1 mono_advance=0 "
+                "soft_fallback=1 demotions=%lu switches=%lu "
+                "vector_pit=32 vector_apic=48\n",
+                (unsigned long)g_u64PitDemotions,
+                (unsigned long)g_u64SourceSwitch);
+
+        /*
+         * Soft product lamp when mono source is APIC.
+         * Grep: timer: apic mono preferred PASS
+         */
+        kprintf("timer: apic mono preferred PASS\n");
+    }
+
+    /*
+     * Honesty: full x2APIC ICR/timer replace of PIT remains PARTIAL while
+     * the hardware product path is incomplete. APIC mono preference (even
+     * with x2APIC mode on + INIT armed) does not claim complete 8259/PIT
+     * product exit — ICR/timer replace is still partial today.
+     * Grep: timer: x2apic mono replace soft
+     */
+    if (fApic != 0) {
+        szReplace = "PARTIAL";
+    } else {
+        szReplace = "PIT";
+    }
+    kprintf("timer: x2apic mono replace soft %s apic_src=%u x2apic_en=%u "
+            "x2apic_supp=%u init_cnt=%u cur_cnt=%u "
+            "honesty=full_x2apic_icr_timer_replace_incomplete\n",
+            szReplace,
+            (unsigned)(fApic != 0 ? 1u : 0u),
+            (unsigned)(fX2En != 0 ? 1u : 0u),
+            (unsigned)(fX2Supp != 0 ? 1u : 0u),
+            (unsigned)u32Init, (unsigned)u32Cur);
+}
+
+/**
  * Greppable soft timer inventory (Wave 10 exclusive; product / smoke).
  * Prefix-stable markers (timer: soft …):
  *   timer: soft inventory  — ready/src/hz/quantum + surface catalog + logs
@@ -461,7 +613,8 @@ timer_soft_inventory_log(void)
     /* Grep: timer: soft inventory */
     kprintf("timer: soft inventory ready=%u src=%s hz=%u quantum=%u "
             "jiffies=%lu npt=%lu logs=%lu "
-            "g_timer_mono=1 soft_mono=1 apic_src=1 preempt=1\n",
+            "g_timer_mono=1 soft_mono=1 apic_src=1 preempt=1 "
+            "apic_pref=1 pit_fallback=1\n",
             (unsigned)stMono.u32Ready, szSrc, (unsigned)u32Hz,
             (unsigned)stPre.u32Quantum,
             (unsigned long)stMono.u64Jiffies,
@@ -493,16 +646,21 @@ timer_soft_inventory_log(void)
             (unsigned long)stPre.u64QuantumSets,
             (unsigned long)stPre.u64QuantumTicks);
 
-    /* Grep: timer: soft source */
-    kprintf("timer: soft source=%s apic=%u init_cnt=%u cur_cnt=%u "
-            "vector_pit=32 vector_apic=48 switches=%lu\n",
+    /* Grep: timer: soft source — preferred APIC; PIT soft-fallback when demoted */
+    kprintf("timer: soft source=%s apic=%u preferred=%s pit_soft_fallback=%u "
+            "init_cnt=%u cur_cnt=%u vector_pit=32 vector_apic=48 "
+            "switches=%lu demotions=%lu\n",
             szSrc, (unsigned)(g_fApicSource ? 1u : 0u),
+            g_fApicSource ? "APIC" : "PIT",
+            (unsigned)(g_fApicSource ? 1u : 0u),
             (unsigned)u32Init, (unsigned)u32Cur,
-            (unsigned long)stMono.u64SourceSwitch);
+            (unsigned long)stMono.u64SourceSwitch,
+            (unsigned long)g_u64PitDemotions);
 
     /*
      * Soft lamp only — ready + non-zero quantum. Never hard-gates boot.
      * Grep: timer: soft PASS | timer: soft FAIL
+     * Does not touch preemption quantum product lamp (main.c).
      */
     fSoftPass = 0;
     if (stMono.u32Ready != 0 && stPre.u32Quantum > 0) {
@@ -568,6 +726,12 @@ timer_soft_log(void)
     } else {
         kprintf("timer: preempt soft FAIL\n");
     }
+
+    /*
+     * Mono source preference deepen: APIC preferred when armed; PIT
+     * soft-fallback + honesty on partial x2APIC ICR/timer replace.
+     */
+    timer_mono_pref_soft_log();
 
     /* Wave 10 exclusive: greppable timer: soft … inventory rollup. */
     timer_soft_inventory_log();

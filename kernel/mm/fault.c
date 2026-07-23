@@ -11,12 +11,25 @@
  * "fault: soft …" logs for user/kernel, present/not, write/exec soft.
  * Diagnostics only — not product SEH / exception-port complete.
  *
+ * Soft deepen (pager + views): region→pager→views inventory toward the
+ * product fault path (CAP §1.6 / Apple §1). Shape only — freestanding soft:
+ *   create cookie → soft "Call pager" tally
+ *   consume → soft install views of object pages (counts + greppable)
+ *   FAIL/death invalidate + kill-on-timeout counters
+ * Honesty: soft deepen toward region→pager→views; not product pager
+ * complete; not bar3; door Call + FRAME validate + real vmm_map still open.
+ *
  * greppable: FAULT_MAP_COOKIE
  * greppable: FAULT_SERIALIZATION
  * greppable: FAULT_SERIALIZATION_STATS
  * greppable: FAULT_CLUSTER_COALESCE_SOFT
  * greppable: GJ_FAULT_CLUSTER_MAX
  * greppable: fault: soft
+ * greppable: fault: pager call soft
+ * greppable: fault: cookie view map soft
+ * greppable: fault: view install
+ * greppable: fault: kill-on-timeout soft
+ * greppable: fault: fail invalidate soft
  */
 #include <gj/config.h>
 #include <gj/fault.h>
@@ -49,6 +62,33 @@ static u64 g_u64SoftClassWrite;
 static u64 g_u64SoftClassExec;
 static u64 g_u64SoftClassCalls;   /* classified soft events */
 static u32 g_u32SoftClassLogged;  /* per-event log emissions */
+
+/*
+ * Soft pager Call + view-install inventory (file-local; not gj_fault_stats ABI).
+ * Protocol shape: create → Call pager soft → consume/views | FAIL invalidate |
+ * kill-on-timeout. Maps are views of object pages (Apple §2); soft counts only
+ * until door Call + FRAME list + vmm_map_page product wire.
+ * greppable: fault: pager call soft
+ * greppable: fault: cookie view map soft
+ * greppable: fault: view install
+ * greppable: fault: kill-on-timeout soft
+ * greppable: fault: fail invalidate soft
+ */
+static u64 g_u64PagerCallSoft;        /* soft Call after cookie mint */
+static u64 g_u64PagerCallPages;       /* sum of cluster pages on Call soft */
+static u64 g_u64ViewInstallSoft;      /* consume → view install soft events */
+static u64 g_u64ViewInstallPages;     /* sum of pages soft-recorded as views */
+static u64 g_u64ViewInstallMemobj;    /* installs with pMemObj bound */
+static u64 g_u64ViewInstallNoMemobj;  /* installs without bound object */
+static u64 g_u64KillOnTimeoutSoft;    /* consume past deadline → kill policy soft */
+static u64 g_u64FailInvalidateSoft;   /* FAIL/death/early drop invalidate live */
+static u32 g_u32PagerCallLogged;
+static u32 g_u32ViewInstallLogged;
+static u32 g_u32KillTimeoutLogged;
+static u32 g_u32FailInvLogged;
+
+/* Rate-limit pager-path per-event lines (totals still free). */
+#define FAULT_PAGER_PATH_LOG_MAX 8u
 
 /*
  * PRNG for cookies. Seed mixes compile-time salt with mono clock when ready;
@@ -190,6 +230,199 @@ fault_class_soft_note(u64 u64Va, u32 u32Access, int fPresent, u32 u32NPages,
                     szUk, szPn, szWx,
                     (unsigned long long)u64Va, (unsigned)u32NPages,
                     (unsigned)u32Access, szWhere);
+        }
+    }
+}
+
+/*
+ * Soft pager-path inventory dump (create→Call→views | FAIL | kill-timeout).
+ * Honesty: soft shape inventory only; not product pager / not bar3.
+ * greppable: fault: pager call soft
+ * greppable: fault: cookie view map soft
+ * greppable: fault: view install
+ * greppable: fault: kill-on-timeout soft
+ * greppable: fault: fail invalidate soft
+ */
+static void
+fault_pager_path_inventory_log(void)
+{
+    kprintf("fault: pager call soft calls=%llu pages=%llu "
+            "view_install=%llu view_pages=%llu memobj=%llu no_memobj=%llu "
+            "kill_timeout=%llu fail_inv=%llu "
+            "(soft region→pager→views; not product pager; not bar3)\n",
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallSoft,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallPages,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64ViewInstallSoft,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64ViewInstallPages,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64ViewInstallMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64ViewInstallNoMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64KillOnTimeoutSoft,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64FailInvalidateSoft,
+                                                __ATOMIC_RELAXED));
+}
+
+/*
+ * Soft "Call pager" after a live cookie is minted (doors-like Call shape).
+ * Product: ipc_call(pager, fault_msg) with mono timeout; pager never
+ * ambient-maps the client. Soft: tally + greppable only.
+ * greppable: fault: pager call soft
+ */
+static void
+fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages, u32 u32Access,
+                      void *pSpace, void *pMemObj)
+{
+    u32 u32N;
+    const char *szObj;
+
+    fault_stat_inc(&g_u64PagerCallSoft);
+    fault_stat_add(&g_u64PagerCallPages, (u64)u32NPages);
+
+    szObj = (pMemObj != NULL) ? "memobj" : "default_pager";
+
+    u32N = __atomic_load_n(&g_u32PagerCallLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32PagerCallLogged, &u32N, u32N + 1u,
+                                        0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+            /*
+             * Grep: fault: pager call soft
+             * Soft Call inventory — not door IPC product complete.
+             */
+            kprintf("fault: pager call soft base=0x%llx pages=%u access=0x%x "
+                    "space=%p via=%s "
+                    "(soft Call; not product door pager)\n",
+                    (unsigned long long)u64ClusterBase,
+                    (unsigned)u32NPages,
+                    (unsigned)u32Access,
+                    pSpace,
+                    szObj);
+        }
+    }
+}
+
+/*
+ * Soft install views of object pages after single-use cookie consume.
+ *
+ * Product path (open): validate FRAMEs from pager reply, then vmm_map_page
+ * under the fault space CR3; pages owned by memory object; maps are views
+ * (Apple §2 / CAP §1.6). Soft path: record view-install counts + greppable
+ * success — no ambient PTE write without validated frames (fail closed soft).
+ *
+ * greppable: fault: cookie view map soft
+ * greppable: fault: view install
+ */
+static void
+fault_view_install_soft(const struct gj_map_cookie *pCookie)
+{
+    u32 u32N;
+    u32 u32Pages;
+    int fMemObj;
+    const char *szBind;
+
+    if (pCookie == NULL) {
+        return;
+    }
+
+    u32Pages = pCookie->u32NPages;
+    if (u32Pages == 0 || u32Pages > GJ_FAULT_CLUSTER_MAX) {
+        return;
+    }
+
+    fMemObj = (pCookie->pMemObj != NULL) ? 1 : 0;
+    szBind = fMemObj ? "memobj_view" : "unbound_view";
+
+    fault_stat_inc(&g_u64ViewInstallSoft);
+    fault_stat_add(&g_u64ViewInstallPages, (u64)u32Pages);
+    if (fMemObj) {
+        fault_stat_inc(&g_u64ViewInstallMemobj);
+    } else {
+        fault_stat_inc(&g_u64ViewInstallNoMemobj);
+    }
+
+    /*
+     * Product would call vmm_map_page per cluster page with validated FRAME
+     * PAs and access→prot (W^X at map time). Soft: no PTE write without
+     * frames — document as views, count install success soft only.
+     * greppable: fault: view install
+     */
+    u32N = __atomic_load_n(&g_u32ViewInstallLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32ViewInstallLogged, &u32N,
+                                        u32N + 1u, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            kprintf("fault: cookie view map soft base=0x%llx pages=%u "
+                    "access=0x%x memobj=%p bind=%s "
+                    "(views of object pages; soft install; not product map)\n",
+                    (unsigned long long)pCookie->u64ClusterBase,
+                    (unsigned)u32Pages,
+                    (unsigned)pCookie->u32Access,
+                    pCookie->pMemObj,
+                    szBind);
+            kprintf("fault: view install pages=%u ok soft "
+                    "(region→pager→views deepen; not product pager; not bar3)\n",
+                    (unsigned)u32Pages);
+        }
+    }
+}
+
+/*
+ * Consume past mono deadline: soft kill-on-timeout policy (CAP: kill thread).
+ * Cookie already marked dead by caller; product resumes as kill path.
+ * greppable: fault: kill-on-timeout soft
+ */
+static void
+fault_kill_on_timeout_soft(u64 u64ClusterBase, u32 u32NPages, u64 u64Deadline,
+                           u64 u64Now)
+{
+    u32 u32N;
+
+    fault_stat_inc(&g_u64KillOnTimeoutSoft);
+
+    u32N = __atomic_load_n(&g_u32KillTimeoutLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32KillTimeoutLogged, &u32N,
+                                        u32N + 1u, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            kprintf("fault: kill-on-timeout soft base=0x%llx pages=%u "
+                    "deadline=%llu now=%llu "
+                    "(soft kill policy; not product thread kill complete)\n",
+                    (unsigned long long)u64ClusterBase,
+                    (unsigned)u32NPages,
+                    (unsigned long long)u64Deadline,
+                    (unsigned long long)u64Now);
+        }
+    }
+}
+
+/*
+ * FAIL / death / early drop: invalidate live cookie without map.
+ * greppable: fault: fail invalidate soft
+ */
+static void
+fault_fail_invalidate_soft(u64 u64CookieLo, u64 u64CookieHi,
+                           u64 u64ClusterBase, u32 u32NPages)
+{
+    u32 u32N;
+
+    fault_stat_inc(&g_u64FailInvalidateSoft);
+
+    u32N = __atomic_load_n(&g_u32FailInvLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32FailInvLogged, &u32N, u32N + 1u,
+                                        0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+            kprintf("fault: fail invalidate soft cookie=%llx:%llx "
+                    "base=0x%llx pages=%u "
+                    "(FAIL/death/drop; soft; not product pager complete)\n",
+                    (unsigned long long)u64CookieLo,
+                    (unsigned long long)u64CookieHi,
+                    (unsigned long long)u64ClusterBase,
+                    (unsigned)u32NPages);
         }
     }
 }
@@ -511,6 +744,14 @@ gj_map_cookie_create(struct gj_map_cookie *pOut, void *pSpace, void *pProc,
     fault_class_soft_note(u64ClusterBase, u32Access, /*fPresent*/ 0, u32NPages,
                           "cookie");
 
+    /*
+     * Soft Call-pager shape after mint (product: doors Call with mono
+     * timeout carrying gj_fault_msg). Inventory only until IPC wired.
+     * greppable: fault: pager call soft
+     */
+    fault_pager_call_soft(u64ClusterBase, u32NPages, u32Access, pSpace,
+                          pSlot->pMemObj);
+
     return GJ_OK;
 }
 
@@ -559,6 +800,13 @@ gj_map_cookie_consume(u64 u64CookieLo, u64 u64CookieHi, u64 u64ClusterBase,
             /* greppable: FAULT_MAP_COOKIE timeout */
             fault_stat_inc(&g_faultStats.u64CookieTimeout);
             fault_stat_inc(&g_faultStats.u64CookieConsumeFail);
+            /*
+             * Kill-on-timeout soft (CAP / Solaris: kill faulting thread).
+             * greppable: fault: kill-on-timeout soft
+             */
+            fault_kill_on_timeout_soft(pCookie->u64ClusterBase,
+                                       pCookie->u32NPages,
+                                       pCookie->u64DeadlineMono, u64Now);
             return GJ_ERR_TIMEOUT;
         }
 
@@ -568,6 +816,15 @@ gj_map_cookie_consume(u64 u64CookieLo, u64 u64CookieHi, u64 u64ClusterBase,
             *pOutCopy = *pCookie;
         }
         fault_stat_inc(&g_faultStats.u64CookieConsumeOk);
+
+        /*
+         * Soft view install: maps are views of object pages (Apple §2).
+         * Product: vmm_map_page after FRAME validate; soft records counts.
+         * greppable: fault: cookie view map soft
+         * greppable: fault: view install
+         */
+        fault_view_install_soft(pCookie);
+
         return GJ_OK;
     }
     fault_stat_inc(&g_faultStats.u64CookieConsumeFail);
@@ -587,10 +844,22 @@ gj_map_cookie_invalidate(u64 u64CookieLo, u64 u64CookieHi)
 
         if (pCookie->u8Live && pCookie->u64CookieLo == u64CookieLo &&
             pCookie->u64CookieHi == u64CookieHi) {
+            u64 u64Base;
+            u32 u32N;
+
+            u64Base = pCookie->u64ClusterBase;
+            u32N = pCookie->u32NPages;
             pCookie->u8Live = 0;
             pCookie->u8Used = 0;
             /* greppable: FAULT_MAP_COOKIE invalidate */
             fault_stat_inc(&g_faultStats.u64CookieInvalidate);
+            /*
+             * FAIL / death / early drop path (no map). Soft kill policy
+             * inventory; product ties to thread kill / resume fail.
+             * greppable: fault: fail invalidate soft
+             */
+            fault_fail_invalidate_soft(u64CookieLo, u64CookieHi, u64Base,
+                                       u32N);
             return;
         }
     }
@@ -598,6 +867,7 @@ gj_map_cookie_invalidate(u64 u64CookieLo, u64 u64CookieHi)
 
 /*
  * Soft bind of memory-object pointer on a live cookie (Apple §2 prep).
+ * Views installed at consume record memobj_view when this pointer is set.
  * greppable: FAULT_MAP_COOKIE_MEMOBJ_SOFT
  */
 gj_status_t
@@ -692,6 +962,19 @@ gj_fault_stats_get(struct gj_fault_stats *pOut)
     if (__atomic_load_n(&g_u64SoftClassCalls, __ATOMIC_RELAXED) != 0) {
         fault_class_soft_log();
     }
+
+    /*
+     * Soft pager path inventory when any Call / view / kill / FAIL soft
+     * activity has been noted. Never hard-gates.
+     * Honesty: soft region→pager→views deepen; not product pager; not bar3.
+     * greppable: fault: pager call soft
+     */
+    if (__atomic_load_n(&g_u64PagerCallSoft, __ATOMIC_RELAXED) != 0 ||
+        __atomic_load_n(&g_u64ViewInstallSoft, __ATOMIC_RELAXED) != 0 ||
+        __atomic_load_n(&g_u64KillOnTimeoutSoft, __ATOMIC_RELAXED) != 0 ||
+        __atomic_load_n(&g_u64FailInvalidateSoft, __ATOMIC_RELAXED) != 0) {
+        fault_pager_path_inventory_log();
+    }
 }
 
 void
@@ -724,4 +1007,18 @@ gj_fault_stats_reset(void)
     __atomic_store_n(&g_u64SoftClassExec, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_u64SoftClassCalls, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_u32SoftClassLogged, 0, __ATOMIC_RELAXED);
+
+    /* Soft pager Call + view install + kill/FAIL path (file-local). */
+    __atomic_store_n(&g_u64PagerCallSoft, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64PagerCallPages, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64ViewInstallSoft, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64ViewInstallPages, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64ViewInstallMemobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64ViewInstallNoMemobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64KillOnTimeoutSoft, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64FailInvalidateSoft, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32PagerCallLogged, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32ViewInstallLogged, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32KillTimeoutLogged, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32FailInvLogged, 0, __ATOMIC_RELAXED);
 }

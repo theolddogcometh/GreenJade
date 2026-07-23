@@ -5,6 +5,17 @@
  * Scan RSDP → RSDT/XSDT for DMAR (Intel) or IVRS (AMD) signatures.
  * Inventory + software enforce windows + hand-off to VT-d table builder.
  * Deep DMAR structure soft inventory (DRHD/RMRR/ATSR/RHSA) for soft-probe.
+ *
+ * UDX → IOMMU window caps soft product (window side; software BDF table):
+ *   create_window-shaped grant path + destroy/revoke soft tallies.
+ * Greppable soft product markers (prefix-stable; greppable: iommu: window cap soft):
+ *   "iommu: window cap soft inventory …"
+ *   "iommu: window cap soft create_window …"  (create_window soft inventory)
+ *   "iommu: window cap soft destroy …"       (destroy/revoke soft tallies)
+ *   "iommu: window cap soft grant|update|full|reject|revoke …"
+ * Honesty: soft software window table only — not full cap-typed window
+ * object product (P-DMA-2 remaining: create_window as true window cap).
+ *
  * Clean-room; dual-licensed pure C (not a GPL VT-d driver paste).
  */
 #include <gj/boot_info.h>
@@ -44,9 +55,27 @@ static u32 g_cDrhdAccepted; /* page-aligned non-zero bases handed to VT-d */
 static u64 g_u64RmrrFirstBase;
 static u64 g_u64RmrrFirstLimit;
 
+/*
+ * Window cap soft product tallies (UDX→IOMMU window side).
+ * Software BDF→PA table only — not cap object mint / HW-first revoke.
+ */
+static u32 g_cWinCreateOk;     /* create_window soft: new slot grant */
+static u32 g_cWinCreateUpdate; /* create_window soft: same-BDF update */
+static u32 g_cWinCreateFail;   /* grant failed (full / reject) */
+static u32 g_cWinFull;         /* table full on create */
+static u32 g_cWinReject;       /* bad BDF / zero cb / pa+cb overflow */
+static u32 g_cWinDestroy;      /* slots cleared by revoke (destroy soft) */
+static u32 g_cWinRevokeCall;   /* iommu_window_revoke entries */
+static u32 g_cWinRevokeMiss;   /* revoke with no matching used slot */
+static u32 g_cWinRevokeBad;    /* revoke rejected (bad BDF) */
+static u32 g_cWinSoftInvLogs;  /* times soft inventory printed */
+static int g_fWinSoftInvOnce;  /* first-activity inventory emitted */
+
 static void iommu_dmar_parse(u8 *pDmar, u32 u32MapMax);
 static void iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb);
 static void iommu_soft_probe_handoff(void);
+static void iommu_window_cap_soft_inventory(void);
+static void iommu_window_cap_soft_maybe_once(void);
 
 static int
 sig_n(const void *p, const char *sz, u32 cb)
@@ -104,6 +133,65 @@ bdf_ok(u8 u8Bus, u8 u8Slot, u8 u8Func)
     return 1;
 }
 
+/**
+ * Greppable UDX→IOMMU window cap soft product inventory.
+ *   iommu: window cap soft inventory …
+ *   iommu: window cap soft create_window …   (create_window soft inventory)
+ *   iommu: window cap soft destroy …        (destroy/revoke soft tallies)
+ * Honesty: software window table only — not full cap-typed window object
+ * product; not HW-first Phase A revoke product (P-DMA-2/3 remaining).
+ */
+static void
+iommu_window_cap_soft_inventory(void)
+{
+    u32 cUsed;
+
+    if (g_cWinSoftInvLogs < 0xffffffffu) {
+        g_cWinSoftInvLogs++;
+    }
+    cUsed = iommu_window_count();
+
+    /* Grep: iommu: window cap soft inventory */
+    kprintf("iommu: window cap soft inventory used=%u max=%u create_ok=%u "
+            "update=%u destroy=%u revoke=%u full=%u fail=%u reject=%u "
+            "logs=%u (soft; not full cap-typed window object product)\n",
+            cUsed, (unsigned)GJ_IOMMU_MAX_WINDOWS, g_cWinCreateOk,
+            g_cWinCreateUpdate, g_cWinDestroy, g_cWinRevokeCall, g_cWinFull,
+            g_cWinCreateFail, g_cWinReject, g_cWinSoftInvLogs);
+
+    /* Grep: iommu: window cap soft create_window / create_window soft inventory */
+    kprintf("iommu: window cap soft create_window ok=%u update=%u fail=%u "
+            "full=%u reject=%u max=%u (create_window soft inventory; "
+            "not create_window cap product)\n",
+            g_cWinCreateOk, g_cWinCreateUpdate, g_cWinCreateFail, g_cWinFull,
+            g_cWinReject, (unsigned)GJ_IOMMU_MAX_WINDOWS);
+
+    /* Grep: iommu: window cap soft destroy (destroy/revoke soft tallies) */
+    kprintf("iommu: window cap soft destroy revoke_calls=%u slots_cleared=%u "
+            "miss=%u bad=%u live=%u (soft tallies; not HW-first revoke "
+            "product)\n",
+            g_cWinRevokeCall, g_cWinDestroy, g_cWinRevokeMiss, g_cWinRevokeBad,
+            cUsed);
+}
+
+/**
+ * After first create_window soft activity, print inventory once
+ * (mirrors memobj/vmm soft-stats-once). Diagnostics only.
+ */
+static void
+iommu_window_cap_soft_maybe_once(void)
+{
+    if (g_fWinSoftInvOnce != 0) {
+        return;
+    }
+    if (g_cWinCreateOk == 0 && g_cWinCreateUpdate == 0 &&
+        g_cWinDestroy == 0 && g_cWinCreateFail == 0) {
+        return;
+    }
+    g_fWinSoftInvOnce = 1;
+    iommu_window_cap_soft_inventory();
+}
+
 /** Publish DMAR inventory + run VT-d soft-probe / domain soft smoke. */
 static void
 iommu_soft_probe_handoff(void)
@@ -122,6 +210,11 @@ iommu_soft_probe_handoff(void)
     }
     (void)iommu_vtd_soft_probe();
     (void)iommu_vtd_domain_soft_smoke();
+    /*
+     * Baseline window cap soft inventory at probe hand-off (zeros typical).
+     * Grep: iommu: window cap soft inventory
+     */
+    iommu_window_cap_soft_inventory();
 }
 
 void
@@ -147,6 +240,18 @@ iommu_probe(void)
     g_cDrhdAccepted = 0;
     g_u64RmrrFirstBase = 0;
     g_u64RmrrFirstLimit = 0;
+    /* Window cap soft product tallies (create_window / destroy soft) */
+    g_cWinCreateOk = 0;
+    g_cWinCreateUpdate = 0;
+    g_cWinCreateFail = 0;
+    g_cWinFull = 0;
+    g_cWinReject = 0;
+    g_cWinDestroy = 0;
+    g_cWinRevokeCall = 0;
+    g_cWinRevokeMiss = 0;
+    g_cWinRevokeBad = 0;
+    g_cWinSoftInvLogs = 0;
+    g_fWinSoftInvOnce = 0;
 
     pBi = boot_info_get();
     if (pBi != NULL) {
@@ -394,27 +499,53 @@ iommu_enforce_get(void)
     return g_fEnforce;
 }
 
+/**
+ * create_window soft product path (UDX→IOMMU window side).
+ * Software BDF→PA grant; not a cap-typed window object mint.
+ * Grep: iommu: window cap soft grant|update|full|reject
+ */
 int
 iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
 {
     u32 iWin;
+    u32 cUsed;
 
     if (cb == 0 || !bdf_ok(bus, slot, func)) {
+        g_cWinReject++;
+        g_cWinCreateFail++;
+        /* Grep: iommu: window cap soft reject */
+        kprintf("iommu: window cap soft reject %u:%u.%u cb=0x%lx "
+                "(create_window soft; bad bdf/cb)\n",
+                bus, slot, func, (unsigned long)cb);
+        iommu_window_cap_soft_maybe_once();
         return -1;
     }
     /* Reject pa+cb overflow */
     if (pa + cb < pa) {
+        g_cWinReject++;
+        g_cWinCreateFail++;
+        /* Grep: iommu: window cap soft reject */
+        kprintf("iommu: window cap soft reject %u:%u.%u pa=0x%lx cb=0x%lx "
+                "(create_window soft; overflow)\n",
+                bus, slot, func, (unsigned long)pa, (unsigned long)cb);
+        iommu_window_cap_soft_maybe_once();
         return -1;
     }
-    /* Update existing BDF window if present */
+    /* Update existing BDF window if present (create_window soft rebind) */
     for (iWin = 0; iWin < GJ_IOMMU_MAX_WINDOWS; iWin++) {
         if (g_aWin[iWin].u8Used && g_aWin[iWin].u8Bus == bus &&
             g_aWin[iWin].u8Slot == slot && g_aWin[iWin].u8Func == func) {
             g_aWin[iWin].u64PaBase = pa;
             g_aWin[iWin].u64Cb = cb;
-            g_Info.u32Windows = iommu_window_count();
-            kprintf("iommu: window update %u:%u.%u pa=0x%lx cb=0x%lx\n", bus,
-                    slot, func, (unsigned long)pa, (unsigned long)cb);
+            g_cWinCreateUpdate++;
+            cUsed = iommu_window_count();
+            g_Info.u32Windows = cUsed;
+            /* Grep: iommu: window cap soft update */
+            kprintf("iommu: window cap soft update %u:%u.%u pa=0x%lx "
+                    "cb=0x%lx used=%u (create_window soft inventory)\n",
+                    bus, slot, func, (unsigned long)pa, (unsigned long)cb,
+                    cUsed);
+            iommu_window_cap_soft_maybe_once();
             return 0;
         }
     }
@@ -426,31 +557,72 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
             g_aWin[iWin].u8Func = func;
             g_aWin[iWin].u64PaBase = pa;
             g_aWin[iWin].u64Cb = cb;
-            g_Info.u32Windows = iommu_window_count();
-            kprintf("iommu: window grant %u:%u.%u pa=0x%lx cb=0x%lx\n", bus,
-                    slot, func, (unsigned long)pa, (unsigned long)cb);
+            g_cWinCreateOk++;
+            cUsed = iommu_window_count();
+            g_Info.u32Windows = cUsed;
+            /* Grep: iommu: window cap soft grant */
+            kprintf("iommu: window cap soft grant %u:%u.%u pa=0x%lx "
+                    "cb=0x%lx used=%u (create_window soft; not cap object)\n",
+                    bus, slot, func, (unsigned long)pa, (unsigned long)cb,
+                    cUsed);
+            iommu_window_cap_soft_maybe_once();
             return 0;
         }
     }
-    kprintf("iommu: window grant FULL %u:%u.%u\n", bus, slot, func);
+    g_cWinFull++;
+    g_cWinCreateFail++;
+    /* Grep: iommu: window cap soft full */
+    kprintf("iommu: window cap soft full %u:%u.%u used=%u max=%u "
+            "(create_window soft inventory FULL)\n",
+            bus, slot, func, iommu_window_count(),
+            (unsigned)GJ_IOMMU_MAX_WINDOWS);
+    iommu_window_cap_soft_maybe_once();
     return -1;
 }
 
+/**
+ * Destroy/revoke soft product path (UDX→IOMMU window side).
+ * Clears software window slot(s) for BDF; not HW-first remapping disable.
+ * Grep: iommu: window cap soft revoke|destroy
+ */
 void
 iommu_window_revoke(u8 bus, u8 slot, u8 func)
 {
     u32 iWin;
+    u32 cCleared = 0;
 
+    g_cWinRevokeCall++;
     if (!bdf_ok(bus, slot, func)) {
+        g_cWinRevokeBad++;
+        /* Grep: iommu: window cap soft revoke */
+        kprintf("iommu: window cap soft revoke bad %u:%u.%u "
+                "(destroy soft tallies; bad bdf)\n",
+                bus, slot, func);
+        iommu_window_cap_soft_maybe_once();
         return;
     }
     for (iWin = 0; iWin < GJ_IOMMU_MAX_WINDOWS; iWin++) {
         if (g_aWin[iWin].u8Used && g_aWin[iWin].u8Bus == bus &&
             g_aWin[iWin].u8Slot == slot && g_aWin[iWin].u8Func == func) {
             memset(&g_aWin[iWin], 0, sizeof(g_aWin[iWin]));
+            cCleared++;
+            g_cWinDestroy++;
         }
     }
     g_Info.u32Windows = iommu_window_count();
+    if (cCleared == 0) {
+        g_cWinRevokeMiss++;
+        /* Grep: iommu: window cap soft revoke */
+        kprintf("iommu: window cap soft revoke miss %u:%u.%u "
+                "(destroy soft tallies; no window)\n",
+                bus, slot, func);
+    } else {
+        /* Grep: iommu: window cap soft destroy */
+        kprintf("iommu: window cap soft destroy %u:%u.%u slots=%u live=%u "
+                "(soft revoke tallies; not HW-first product)\n",
+                bus, slot, func, cCleared, g_Info.u32Windows);
+    }
+    iommu_window_cap_soft_maybe_once();
 }
 
 int

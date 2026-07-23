@@ -143,6 +143,24 @@ Design all structures for **SMP** and **>1 TiB** even if M1 tests are smaller.
 **Goal:** implement [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §§1–5.  
 Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
+**Progress note (2026-07-23 — substantial incomplete soft product, not closed):**  
+Exclusive deepen shipped greppable soft product surfaces for the open list — **none close product** / bar3:
+
+| Track | Soft greps (shipped) | Still open (product) |
+|-------|----------------------|----------------------|
+| Fault → pager + views | `fault: pager call soft` / `fault: cookie view map soft` / kill-timeout | Real door Call + FRAME map under CR3 |
+| Ephemeral REPLY / transfer | `door: reply single-use soft PASS` / badge transfer counters | CNode `GJ_CAP_REPLY` MIG product |
+| CDT R2 try-lock revoke | `cap: revoke try-lock` / `cap:cdt R2 soft` | Real CNode mutex/turnstile |
+| CDT edges everywhere | `cap: cdt mint\|copy\|move` coverage | No empty-edge product audit |
+| Bootstrap seal §13 | `process: bootstrap seal soft` / death tallies | Full retype / seal checklist product |
+| Higher-half move | `vmm: higher-half soft OPEN` | Kernel image relocate |
+| x2APIC mono vs PIT | `timer: apic mono preferred PASS` | Full x2APIC ICR/timer replace |
+| IOMMU no open bus-master | `iommu: no open bus-master soft PASS` | Production default always-on HW |
+| IOMMU window caps | `iommu: window cap soft` | Cap-typed window object |
+| UDX Notification | `udx: notify soft` | Kernel notify from host sim |
+| SPSC driver host | `udx: spsc soft` | Multi-process driver-host |
+| Multi-server confine | `confine: expose soft` / ledger / death soft | Product seal + vfsd expose |
+
 ### M2.1 Capability tables
 - [x] CNode allocate/slots (soft slot-quota ledger; hierarchical **task ledger** still soft) — `gj_cap_alloc_install` + `gj_cap_quota_*`
 - [ ] cap types: CNODE, THREAD, SPACE, **PROCESS (task)**, ENDPOINT, NOTIFICATION, FRAME, REPLY, … (enum + PROCESS/ENDPOINT/NOTIFICATION/ROOT_META/MEMORY_OBJECT live; REPLY/FRAME/SPACE user path still open)
@@ -150,7 +168,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 - [x] **§1.1 policy + stubs**: DEAD/gen first, mandatory deferred slot invalidate — `cap.h` / `revoke.c`
 - [x] **x86_64 addressing Scheme A**: `u64` slot + `u32` gen; slot 0 root meta — `cnode.c` + [CAP_ADDRESSING.md](CAP_ADDRESSING.md)
 - [x] **Apple channel Accepted**: regions/objects, task ports, QoS, futex, session — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)
-- [ ] Wire CDT + CNode try-lock slot walk into `gj_revoke_process_deferred` (soft CDT walk PASS; R2 full try-lock still soft)
+- [ ] Wire CDT + CNode try-lock slot walk into `gj_revoke_process_deferred` (soft CDT walk PASS + R2 soft try-lock/retry; product mutex still open)
 - [x] Process + shared CNode + root meta + default pager PCB — `process.h` / `process.c` (+ smoke in `kmain`)
 - [x] Root meta = **kernel ops only** (no mint PROCESS/CNODE from slot 0) — CAP_ADDRESSING v1.6
 - [x] `GJ_CAP_PROCESS` mint to parent on spawn; rights matrix (KILL/WAIT/VM/…) — `spawn.c`

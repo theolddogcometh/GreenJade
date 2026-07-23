@@ -6,6 +6,8 @@
  * Builds root + context + second-level identity map in memory.
  * Soft-probe: CAP/ECAP soft or MMIO, root/context verify, DMAR inventory.
  * Domain soft: software DID pool; bus-0 context DID write when tables ready.
+ * Product soft (P-DMA-4): production-default enforce arm — no open bus-master
+ * without a window; soft-only PASS without intel-iommu; honesty open_bus=0.
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  */
@@ -68,6 +70,19 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
+/*
+ * Product-default soft BDF (P-DMA-4 smoke). Kept off main enforce 0:2.0 and
+ * domain soft 0:3.0 so bring-up greps stay independent.
+ */
+#define VTD_PROD_SOFT_BUS  0u
+#define VTD_PROD_SOFT_SLOT 4u
+#define VTD_PROD_SOFT_FUNC 0u
+#define VTD_PROD_SOFT_PA   0x3000ull
+#define VTD_PROD_SOFT_CB   0x1000ull
+/* Ungranted BDF for deny-path counter smoke (not 0:31.0 — main uses that). */
+#define VTD_PROD_DENY_SLOT 31u
+#define VTD_PROD_DENY_FUNC 7u
+
 struct vtd_domain_soft {
     u8  u8Used;
     u8  u8Pad;
@@ -109,6 +124,9 @@ static int                     g_fCapFromMmio;
 static struct vtd_domain_soft g_aDom[GJ_IOMMU_DOMAIN_MAX];
 static struct vtd_attach_soft g_aAtt[VTD_SOFT_ATTACH_MAX];
 static u32                    g_u32DomUsed;
+
+/* Product-default soft (P-DMA-4): local deny-path ticks while enforce armed */
+static u32 g_u32ProdSoftDeny;
 
 static void *
 vtd_virt(gj_paddr_t pa)
@@ -683,6 +701,117 @@ iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb, int *pCovered)
 
 /* ---- Soft probe ---- */
 
+/**
+ * Production-default soft path (P-DMA-4): arm enforce, deny open bus-master
+ * without a window, grant+allow with window, honesty production_default_open_bus=0.
+ *
+ * Soft-only: PASSes on QEMU without intel-iommu / DRHD (software policy + tables).
+ * Does not leave enforce armed (bring-up may keep off after smoke); restores
+ * prior enforce and revokes the soft window so main `iommu: enforce PASS` stays
+ * independent. Not a claim that product IOMMU default is shipped/closed.
+ *
+ * Greppable:
+ *   iommu: enforce default soft …
+ *   iommu: no open bus-master soft PASS
+ */
+static int
+vtd_product_default_soft(void)
+{
+    int fPrior;
+    int fOk;
+    int fDenyBare;
+    int fDenyOther;
+    int fCovered = 0;
+    u32 u32Denies0;
+    u32 u32Denies1;
+    u32 u32Denies2;
+    u32 u32SoftDeny0;
+    /* production_default_open_bus=0 when enforce intended (honesty) */
+    const int fOpenBus = 0;
+
+    if (!g_fVtdReady) {
+        if (iommu_vtd_init_tables() != 0) {
+            kprintf("iommu: enforce default soft tables FAIL\n");
+            return 0;
+        }
+    }
+
+    fPrior = iommu_enforce_get();
+    u32Denies0 = iommu_deny_count();
+    u32SoftDeny0 = g_u32ProdSoftDeny;
+
+    /* Arm production-default enforce (soft policy; not HW product close). */
+    iommu_enforce_set(1);
+    kprintf("iommu: enforce default soft arm prior=%d te_mode=%d "
+            "production_default_open_bus=%d\n",
+            fPrior, iommu_vtd_te_mode(), fOpenBus);
+
+    /*
+     * Deny path: enforce armed, no window for product soft BDF → bus-master
+     * denied and platform deny counter must tick.
+     */
+    fDenyBare = iommu_busmaster_ok(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
+                                   VTD_PROD_SOFT_FUNC);
+    u32Denies1 = iommu_deny_count();
+    if (fDenyBare != 0 || u32Denies1 <= u32Denies0) {
+        kprintf("iommu: enforce default soft deny-path FAIL ok=%d "
+                "denies=%u→%u\n",
+                fDenyBare, u32Denies0, u32Denies1);
+        iommu_enforce_set(fPrior);
+        return 0;
+    }
+    g_u32ProdSoftDeny++;
+
+    /* Grant software window (+ VT-d identity cover when tables ready). */
+    if (iommu_vtd_window_grant(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
+                               VTD_PROD_SOFT_FUNC, VTD_PROD_SOFT_PA,
+                               VTD_PROD_SOFT_CB, &fCovered) != 0) {
+        kprintf("iommu: enforce default soft grant FAIL\n");
+        iommu_enforce_set(fPrior);
+        return 0;
+    }
+
+    fOk = iommu_busmaster_ok(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
+                             VTD_PROD_SOFT_FUNC);
+    /* Still no open bus-master for ungranted BDF under armed enforce. */
+    fDenyOther = iommu_busmaster_ok(VTD_PROD_SOFT_BUS, VTD_PROD_DENY_SLOT,
+                                    VTD_PROD_DENY_FUNC);
+    u32Denies2 = iommu_deny_count();
+    if (!fOk || fDenyOther != 0 || u32Denies2 <= u32Denies1) {
+        kprintf("iommu: enforce default soft grant-check FAIL ok=%d deny=%d "
+                "denies=%u→%u\n",
+                fOk, fDenyOther, u32Denies1, u32Denies2);
+        iommu_window_revoke(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
+                            VTD_PROD_SOFT_FUNC);
+        iommu_enforce_set(fPrior);
+        return 0;
+    }
+    g_u32ProdSoftDeny++;
+
+    /*
+     * Honesty line: when enforce is the intended production default,
+     * open bus-master is 0 (no free-form DMA without a window).
+     */
+    kprintf("iommu: enforce default soft armed=%u denies=%u soft_denies=%u "
+            "windows=%u cover=%d te_mode=%d production_default_open_bus=%d\n",
+            iommu_enforce_get() ? 1u : 0u, u32Denies2,
+            g_u32ProdSoftDeny - u32SoftDeny0, iommu_window_count(), fCovered,
+            iommu_vtd_te_mode(), fOpenBus);
+
+    /* Cleanup: revoke soft window; restore prior enforce (bring-up off). */
+    iommu_window_revoke(VTD_PROD_SOFT_BUS, VTD_PROD_SOFT_SLOT,
+                        VTD_PROD_SOFT_FUNC);
+    iommu_enforce_set(fPrior);
+
+    /*
+     * Soft PASS without requiring DRHD / intel-iommu. Soft ≠ product close:
+     * production no-open-bus-master default remains a soft path only here.
+     */
+    kprintf("iommu: no open bus-master soft PASS soft_denies=%u\n",
+            g_u32ProdSoftDeny);
+    return 1;
+}
+
 void
 iommu_vtd_soft_dmar_inventory(u32 cDrhd, u32 cRmrr, u32 cAtsr, u32 cRhsa,
                               u32 cOther)
@@ -749,6 +878,11 @@ iommu_vtd_soft_probe(void)
             g_Soft.u32DrhdCount, g_Soft.u32RmrrCount, g_Soft.u32AtsrCount,
             g_Soft.u32RhsaCount, g_Soft.u32OtherCount);
     kprintf("iommu: vtd soft-probe PASS\n");
+    /*
+     * Production-default soft (P-DMA-4): no open bus-master when enforce
+     * intended. Soft-only; independent of existing soft-probe PASS.
+     */
+    (void)vtd_product_default_soft();
     return 1;
 }
 

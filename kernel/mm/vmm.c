@@ -15,11 +15,22 @@
  *   - Cumulative create/destroy/break/share/table counters
  *   greppable: "vmm: soft …"
  *
+ * Soft higher-half readiness inventory (exclusive deepen; soft only):
+ *   - HHDM base / mapped span (P-MEM-5 data map; not kernel image move)
+ *   - Identity bridge residual (low PML4 still shared into private AS)
+ *   - User half empty goal lamp (empty user half without identity share)
+ *   greppable: "vmm: higher-half soft …"
+ *   lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
+ * Honesty: higher-half kernel move OPEN; soft inventory only — no relocate.
+ *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
  *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
  *            "vmm: ensure_identity_rw" (… soft PASS)
  *            "vmm: soft inventory" "vmm: soft as" "vmm: soft cow"
  *            "vmm: soft hhdm" "vmm: soft device_uc" "vmm: soft ensure_id"
+ *            "vmm: higher-half soft inventory" "vmm: higher-half soft lamps"
+ *            "vmm: higher-half soft path" "vmm: higher-half soft residual"
+ *            "vmm: higher-half soft OPEN"
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -83,8 +94,32 @@ static u32 g_cAsLivePeak;   /* high-water private AS live count */
 static u32 g_cSoftInvLogs;  /* soft_inventory_log emissions */
 static u8  g_fSoftInvOnce;  /* one-shot deep dump after product activity */
 
+/*
+ * Soft higher-half readiness (progress counters only — not product move).
+ * greppable: vmm: higher-half soft
+ *
+ * Lamps (software observe; never hard-gate):
+ *   hhdm_ready            — vmm_hhdm_init succeeded (data HHDM)
+ *   identity_bridge       — residual low-half identity still in template
+ *                           and still shared into as_create (bring-up debt)
+ *   user_half_empty_goal  — 1 soft only when empty user half without
+ *                           identity share is product-true; else 0 soft
+ *
+ * Honesty: higher-half kernel image move remains OPEN.
+ */
+static u32 g_cHhSoftLogs;         /* higher_half_soft_inventory emissions */
+static u32 g_cHhSoftPathNotes;    /* soft path note line emissions */
+static u32 g_cHhAsShareIdentity;  /* as_create while identity still shared */
+static u32 g_cHhSoftGoalSnap0;    /* times user_half_empty_goal reported 0 */
+
+/* Soft product target for kernel image VA (observe only; not relocated). */
+#define GJ_VMM_SOFT_KERNEL_HH_BASE 0xffffffff80000000ull
+/* PML4 low half = user / identity bridge; high half = kernel maps (HHDM). */
+#define GJ_VMM_PML4_USER_SLOTS     256u
+
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
+static void higher_half_soft_inventory(void);
 
 static u64
 read_cr3(void)
@@ -192,6 +227,124 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
 }
 
 /**
+ * Soft higher-half readiness inventory (product / smoke).
+ * Prefix-stable markers (vmm: higher-half soft …):
+ *   vmm: higher-half soft inventory  — HHDM base + residual geometry
+ *   vmm: higher-half soft lamps      — hhdm_ready / identity_bridge /
+ *                                      user_half_empty_goal=0|1 soft
+ *   vmm: higher-half soft residual   — low/high PML4 present slot counts
+ *   vmm: higher-half soft path       — empty user half without identity
+ *                                      share notes (progress counters only)
+ *   vmm: higher-half soft OPEN       — honesty: kernel image move not done
+ *
+ * Never relocates the kernel. Never hard-gates AS/HHDM policy.
+ * greppable: vmm: higher-half soft
+ */
+static void
+higher_half_soft_inventory(void)
+{
+    u32 iSlot;
+    u32 cLowPresent = 0;
+    u32 cHighPresent = 0;
+    int fHhdmReady;
+    int fIdentityBridge;
+    int fUserHalfEmptyGoal;
+    u64 u64Anon;
+
+    if (g_cHhSoftLogs < 0xffffffffu) {
+        g_cHhSoftLogs++;
+    }
+    if (g_cHhSoftPathNotes < 0xffffffffu) {
+        g_cHhSoftPathNotes++;
+    }
+
+    fHhdmReady = g_fHhdmReady ? 1 : 0;
+    u64Anon = (g_pAnonCursor != NULL) ? *g_pAnonCursor : g_u64AnonNext;
+
+    /*
+     * Soft residual walk: present PML4 slots in low half (identity bridge /
+     * user) vs high half (HHDM / kernel maps). No table COW; read-only.
+     */
+    if (g_pKernelPml4 != NULL) {
+        for (iSlot = 0; iSlot < GJ_VMM_PML4_USER_SLOTS; iSlot++) {
+            if ((g_pKernelPml4[iSlot] & PTE_P) != 0) {
+                cLowPresent++;
+            }
+        }
+        for (iSlot = GJ_VMM_PML4_USER_SLOTS; iSlot < 512u; iSlot++) {
+            if ((g_pKernelPml4[iSlot] & PTE_P) != 0) {
+                cHighPresent++;
+            }
+        }
+    }
+
+    /*
+     * identity_bridge residual: low-half present slots still exist on the
+     * kernel template (boot identity / shared lower). as_create still copies
+     * full PML4 including those slots — bridge remains until product empty
+     * user half without identity share.
+     */
+    fIdentityBridge = (cLowPresent > 0) ? 1 : 0;
+
+    /*
+     * user_half_empty_goal soft lamp: 1 only when product path creates AS
+     * with empty user half and no identity share. Still OPEN → always 0 soft.
+     */
+    fUserHalfEmptyGoal = 0;
+    if (g_cHhSoftGoalSnap0 < 0xffffffffu) {
+        g_cHhSoftGoalSnap0++;
+    }
+
+    /* Grep: vmm: higher-half soft inventory */
+    kprintf("vmm: higher-half soft inventory hhdm_base=0x%lx mapped=0x%lx "
+            "hhdm_ready=%d ker_cr3=0x%lx soft_kernel_hh=0x%lx "
+            "anon_next=0x%lx as_live=%u logs=%u "
+            "(soft readiness; not kernel image move)\n",
+            (unsigned long)GJ_HHDM_BASE, (unsigned long)g_u64HhdmMapped,
+            fHhdmReady, (unsigned long)g_u64KernelCr3,
+            (unsigned long)GJ_VMM_SOFT_KERNEL_HH_BASE,
+            (unsigned long)u64Anon, g_cAsLive, g_cHhSoftLogs);
+
+    /*
+     * Grep: vmm: higher-half soft lamps
+     * Lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
+     */
+    kprintf("vmm: higher-half soft lamps hhdm_ready=%d identity_bridge=%d "
+            "user_half_empty_goal=%d soft "
+            "(0=goal open; 1=empty user half without identity share)\n",
+            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal);
+
+    /* Grep: vmm: higher-half soft residual */
+    kprintf("vmm: higher-half soft residual identity_bridge=%d "
+            "low_pml4_present=%u high_pml4_present=%u "
+            "as_share_id=%u ensure_id_calls=%u ensure_id_fix=%u "
+            "(identity residual; soft only)\n",
+            fIdentityBridge, cLowPresent, cHighPresent,
+            g_cHhAsShareIdentity, g_cEnsureIdCall, g_cEnsureIdFix);
+
+    /*
+     * Soft path notes: empty user half without identity share.
+     * Progress counters only — does not implement G-AS-2 product empty half.
+     * Grep: vmm: higher-half soft path
+     */
+    kprintf("vmm: higher-half soft path empty_user_half_without_id_share=OPEN "
+            "as_share_id=%u goal_snap0=%u notes=%u as_create=%u "
+            "as_destroy=%u hhdm_ready=%d identity_bridge=%d "
+            "(progress counters only; not product empty user half)\n",
+            g_cHhAsShareIdentity, g_cHhSoftGoalSnap0, g_cHhSoftPathNotes,
+            g_cAsCreate, g_cAsDestroy, fHhdmReady, fIdentityBridge);
+
+    /*
+     * Honesty close: higher-half kernel move remains OPEN.
+     * Grep: vmm: higher-half soft OPEN
+     */
+    kprintf("vmm: higher-half soft OPEN move=OPEN inventory_only=1 "
+            "hhdm_ready=%d identity_bridge=%d user_half_empty_goal=%d soft "
+            "kernel_image_hh=0 (soft inventory; higher-half move not done)\n",
+            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal);
+}
+
+/**
  * Greppable soft VMM inventory (product / smoke).
  *   vmm: soft inventory …
  *   vmm: soft as …
@@ -199,8 +352,10 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
  *   vmm: soft hhdm …
  *   vmm: soft device_uc …
  *   vmm: soft ensure_id …
+ *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
  * Honesty: soft counters only — not product AS/COW/HHDM complete or bar3.
+ * Higher-half kernel move stays OPEN (soft inventory only).
  */
 static void
 soft_inventory_log(void)
@@ -264,6 +419,9 @@ soft_inventory_log(void)
     /* Grep: vmm: soft ensure_id */
     kprintf("vmm: soft ensure_id calls=%u fixed=%u\n", g_cEnsureIdCall,
             g_cEnsureIdFix);
+
+    /* Higher-half readiness lamps + path notes (move OPEN; soft only). */
+    higher_half_soft_inventory();
 }
 
 /**
@@ -647,7 +805,8 @@ vmm_get_anon_cursor(void)
  *   New PML4 shares all lower tables with the kernel template so identity
  *   access to PMM frames and kernel data still works under the child CR3.
  *   First user map COWs the page-table path (walk_pte) so PTE installs are
- *   private to this AS. True empty user half lands with HHDM later.
+ *   private to this AS. True empty user half without identity share remains
+ *   OPEN (soft: user_half_empty_goal=0; identity_bridge residual).
  */
 u64
 vmm_as_create(void)
@@ -682,6 +841,13 @@ vmm_as_create(void)
     g_cAsLive++;
     if (g_cAsLive > g_cAsLivePeak) {
         g_cAsLivePeak = g_cAsLive;
+    }
+    /*
+     * Soft progress: every create still shares identity bridge residual.
+     * Product empty user half without identity share would stop this count.
+     */
+    if (g_cHhAsShareIdentity < 0xffffffffu) {
+        g_cHhAsShareIdentity++;
     }
     kprintf("vmm: as_create cr3=0x%lx shared_slots=%u live=%u total=%u "
             "(shared lower, COW on map) PASS\n",

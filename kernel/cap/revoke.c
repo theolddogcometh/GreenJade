@@ -12,7 +12,15 @@
  * Soft CDT: edges on pObj->pCdtHead when mint wires them; empty list with
  * slots_left > 0 is a known soft gap (grep: cap:cdt soft).
  *
+ * R2 try-lock slot walk (this file):
+ *   Soft CNode lock is gj_cnode_trylock (u32SoftLock CAS). Product-true
+ *   mutex/turnstile is still missing — R2 is intentionally PARTIAL.
+ *   Policy is sleep-not-spin: never busy-wait a busy CNode; leave the edge
+ *   linked, try siblings, soft-retry a bounded number of re-walks, then
+ *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
+ *
  * Grep: cap:cdt deferred / cap:cdt walk / cap:quota soft
+ * Grep: cap: revoke try-lock / cap:cdt R2 soft / cap:cdt trylock
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -20,6 +28,13 @@
 
 /* Max objects waiting for slot hygiene / reclaim on this simple M0–M2 queue. */
 #define GJ_REVOKE_Q_MAX 64u
+
+/*
+ * Bounded soft re-walks of busy CDT edges within one batch (R2).
+ * Not a spin: each pass only try-locks once per edge; further progress
+ * yields to the deferred driver (timer/idle) — sleep-not-spin.
+ */
+#define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -34,6 +49,21 @@ static u32                   g_u32RevokeQCursor;
 static u8                    g_u8CdtSoftLogged;
 /* Soft once-marker: try-lock busy deferred an edge (cap:cdt trylock). */
 static u8                    g_u8CdtTrylockLogged;
+/* Soft once-marker: R2 try-lock walk summary (cap: revoke try-lock). */
+static u8                    g_u8RevokeTrylockLogged;
+/* Soft once-marker: R2 soft defer while edges remain (cap:cdt R2 soft). */
+static u8                    g_u8CdtR2SoftLogged;
+
+/*
+ * R2 observability counters (lifetime, process-wide soft stats).
+ *   spins_avoided — try-lock busy → deferred (did not spin)
+ *   retries       — soft re-walk passes after a busy edge
+ *   slots_cleared — structured invalidates via CDT walk batch
+ * Grep: cap: revoke try-lock / cap:cdt R2 soft
+ */
+static u32 g_u32R2SpinsAvoided;
+static u32 g_u32R2Retries;
+static u32 g_u32R2SlotsCleared;
 
 /*
  * Enqueue once per object. Scan for duplicates before taking a free slot so
@@ -221,20 +251,28 @@ gj_cap_slot_invalidate_locked(struct gj_cap_slot *pSlot, struct gj_obj_hdr *pObj
 /*
  * Soft CDT walk (Phase A′ batch). Iterative; work-limited; does not delay S1.
  *
- * R2: try-lock each CNode; if busy, leave that edge and continue (do not
- * unlink). Stale/bad edges are unlinked. Cleared slots get quota refund
- * against the owning CNode account.
+ * R2 try-lock slot walk:
+ *   - Soft try-lock each CNode (gj_cnode_trylock / u32SoftLock).
+ *   - If busy: count spins_avoided, leave edge linked, try siblings.
+ *   - After a pass with busy edges, soft-retry up to
+ *     GJ_REVOKE_R2_SOFT_RETRY_MAX re-walks (not a spin: one try-lock per
+ *     edge per pass). If still busy, return; deferred driver redrives (R7).
+ *   - Sleep-not-spin: never busy-wait trylock in a tight loop. A product
+ *     path with a real mutex would sleep on the CNode turnstile; that
+ *     mutex is still missing — R2 product try-lock remains PARTIAL.
+ *   - Stale/bad edges are unlinked. Cleared slots get quota refund against
+ *     the owning CNode account.
  *
- * Grep: cap:cdt walk
+ * Grep: cap:cdt walk / cap: revoke try-lock / cap:cdt R2 soft
  */
 u32
 gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
 {
-    struct gj_cdt_edge *pEdge;
-    struct gj_cdt_edge *pNext;
     u32 u32Cleared = 0;
     u32 u32Busy = 0;
     u32 u32Visited = 0;
+    u32 u32Pass;
+    u32 u32Stale = 0;
     /* Bound visits so a long list under lock contention cannot spin. */
     const u32 u32VisitCap = u32MaxSlots * 4u + 8u;
 
@@ -242,73 +280,139 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
         return 0;
     }
 
-    pEdge = pObj->pCdtHead;
-    while (pEdge != NULL && u32Cleared < u32MaxSlots &&
-           u32Visited < u32VisitCap) {
-        struct gj_cnode *pCnode;
-        u64 u64Slot;
-        int fUnlink = 0;
+    /*
+     * Soft multi-pass: walk → soft-retry busy edges → defer if still held.
+     * Pass 0 is the primary walk; passes 1..SOFT_RETRY_MAX are retries
+     * after at least one busy try-lock (sleep-not-spin policy).
+     */
+    for (u32Pass = 0;
+         u32Pass <= GJ_REVOKE_R2_SOFT_RETRY_MAX &&
+         u32Cleared < u32MaxSlots &&
+         u32Visited < u32VisitCap;
+         u32Pass++) {
+        struct gj_cdt_edge *pEdge;
+        struct gj_cdt_edge *pNext;
+        u32 u32BusyThisPass = 0;
 
-        u32Visited++;
-        pNext = pEdge->pNext;
-        pCnode = pEdge->pCnode;
-        u64Slot = pEdge->u64Slot;
+        if (pObj->pCdtHead == NULL) {
+            break;
+        }
 
-        if (pCnode == NULL || pCnode->pSlots == NULL ||
-            u64Slot >= pCnode->cSlots) {
-            /* Stale edge — drop. Grep: cap:cdt stale */
-            fUnlink = 1;
-        } else if (!gj_cnode_trylock(pCnode)) {
+        if (u32Pass > 0) {
             /*
-             * R2: CNode busy — leave edge linked, try siblings, defer rest.
-             * Grep: cap:cdt trylock
+             * Soft retry after busy (R2): do NOT spin. Re-scan remaining
+             * edges once; holder may have dropped the soft lock. If still
+             * busy after SOFT_RETRY_MAX, yield to deferred driver (R7) —
+             * that is the "sleep" half of sleep-not-spin without a real
+             * turnstile.
+             * Grep: cap:cdt R2 soft
              */
-            u32Busy++;
-            if (!g_u8CdtTrylockLogged) {
-                g_u8CdtTrylockLogged = 1;
-                kprintf("cap:cdt trylock busy (once)\n");
+            g_u32R2Retries++;
+        }
+
+        pEdge = pObj->pCdtHead;
+        while (pEdge != NULL && u32Cleared < u32MaxSlots &&
+               u32Visited < u32VisitCap) {
+            struct gj_cnode *pCnode;
+            u64 u64Slot;
+            int fUnlink = 0;
+
+            u32Visited++;
+            pNext = pEdge->pNext;
+            pCnode = pEdge->pCnode;
+            u64Slot = pEdge->u64Slot;
+
+            if (pCnode == NULL || pCnode->pSlots == NULL ||
+                u64Slot >= pCnode->cSlots) {
+                /* Stale edge — drop. Grep: cap:cdt stale */
+                fUnlink = 1;
+                u32Stale++;
+            } else if (!gj_cnode_trylock(pCnode)) {
+                /*
+                 * R2: CNode busy — leave edge linked, try siblings, soft
+                 * retry later. Count as spin avoided (never busy-wait).
+                 * Grep: cap:cdt trylock / cap: revoke try-lock
+                 */
+                u32BusyThisPass++;
+                g_u32R2SpinsAvoided++;
+                if (!g_u8CdtTrylockLogged) {
+                    g_u8CdtTrylockLogged = 1;
+                    kprintf("cap:cdt trylock busy (once)\n");
+                }
+                pEdge = pNext;
+                continue;
+            } else {
+                struct gj_cap_slot *pSlot = &pCnode->pSlots[u64Slot];
+
+                if (pSlot->u16Type != (u16)GJ_CAP_INVALID &&
+                    pSlot->pObj == (void *)pObj) {
+                    /* Refund against owning CNode account when known. */
+                    /* Grep: cap:quota refund */
+                    (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount);
+                    /*
+                     * slots_left decremented inside invalidate_locked; avoid
+                     * double soft-quota by passing account only above once.
+                     * invalidate_locked still calls refund(NULL) — soft no-op.
+                     */
+                    gj_cap_slot_invalidate_locked(pSlot, pObj);
+                    u32Cleared++;
+                    g_u32R2SlotsCleared++;
+                    fUnlink = 1;
+                } else {
+                    /* Slot already cleared or retargeted — drop edge. */
+                    fUnlink = 1;
+                    u32Stale++;
+                }
+                gj_cnode_unlock(pCnode);
+            }
+
+            if (fUnlink) {
+                gj_cdt_edge_unlink(pObj, pEdge);
             }
             pEdge = pNext;
-            continue;
-        } else {
-            struct gj_cap_slot *pSlot = &pCnode->pSlots[u64Slot];
-
-            if (pSlot->u16Type != (u16)GJ_CAP_INVALID &&
-                pSlot->pObj == (void *)pObj) {
-                /* Refund against owning CNode account when known. */
-                /* Grep: cap:quota refund */
-                (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount);
-                /*
-                 * slots_left decremented inside invalidate_locked; avoid
-                 * double soft-quota by passing account only above once.
-                 * invalidate_locked still calls refund(NULL) — soft no-op.
-                 */
-                gj_cap_slot_invalidate_locked(pSlot, pObj);
-                u32Cleared++;
-                fUnlink = 1;
-            } else {
-                /* Slot already cleared or retargeted — drop edge. */
-                fUnlink = 1;
-            }
-            gj_cnode_unlock(pCnode);
         }
 
-        if (fUnlink) {
-            gj_cdt_edge_unlink(pObj, pEdge);
+        u32Busy = u32BusyThisPass;
+        if (u32BusyThisPass == 0) {
+            /* Clean pass — no soft-retry needed. */
+            break;
         }
-        pEdge = pNext;
+        /* Busy edges remain: soft-retry next pass, or exit at max. */
     }
 
-    (void)u32Busy; /* observability via once-log; full impl may export */
+    /*
+     * Greppable R2 summary (once). Honesty: soft u32SoftLock only —
+     * product try-lock still partial without a real CNode mutex.
+     * Grep: cap: revoke try-lock
+     */
+    if (!g_u8RevokeTrylockLogged &&
+        (u32Cleared > 0 || g_u32R2SpinsAvoided > 0 || u32Stale > 0)) {
+        g_u8RevokeTrylockLogged = 1;
+        kprintf("cap: revoke try-lock walk cleared=%u spins_avoided=%u "
+                "retries=%u slots_cleared=%u busy_left=%u "
+                "soft_partial (once)\n",
+                u32Cleared, g_u32R2SpinsAvoided, g_u32R2Retries,
+                g_u32R2SlotsCleared, u32Busy);
+    }
+
     return u32Cleared;
 }
 
 /*
  * Phase A′: drive deferred slot work (bounded; R2 — no spin on CNode locks).
- * Prefer CDT walk when edges exist; round-robin across queue so one lagging
- * object cannot starve siblings (R7). Soft-marker if slots lag without edges.
+ * Prefer full CDT try-lock walk when edges exist (primary, more complete
+ * than the empty-edge soft gap). Round-robin across queue so one lagging
+ * object cannot starve siblings (R7). Soft-marker only if slots lag
+ * without edges.
  *
- * Grep: cap:cdt deferred
+ * Sleep-not-spin (R2): walk batch may soft-retry busy CNodes; if edges
+ * still remain, keep the object queued and return — timer/idle redrives.
+ * Never tight-loop trylock here.
+ *
+ * Honesty: R2 product try-lock is still PARTIAL (soft u32SoftLock, not a
+ * real CNode mutex/turnstile).
+ *
+ * Grep: cap:cdt deferred / cap: revoke try-lock / cap:cdt R2 soft
  */
 u32
 gj_revoke_process_deferred(u32 u32MaxSlots)
@@ -368,19 +472,54 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         u32Budget = u32MaxSlots - u32Cleared;
 
         /*
-         * Always run CDT walk when edges exist — primary hygiene path.
-         * Grep: cap:cdt walk
+         * Edges present: full CDT try-lock batch is the primary hygiene path
+         * (more complete than empty-edge soft gap). Walk batch itself does
+         * bounded soft retries under sleep-not-spin.
+         * Grep: cap:cdt walk / cap: revoke try-lock
          */
         if (pObj->pCdtHead != NULL) {
             u32Batch = gj_revoke_cdt_walk_batch(pObj, u32Budget);
             u32Cleared += u32Batch;
+
+            /*
+             * Second soft push within this deferred tick if edges remain and
+             * budget remains: one more batch only (not a spin). Further work
+             * stays on the queue for R7 redrive.
+             * Grep: cap:cdt R2 soft
+             */
+            if (pObj->pCdtHead != NULL && u32Cleared < u32MaxSlots) {
+                u32 u32Push;
+
+                u32Budget = u32MaxSlots - u32Cleared;
+                u32Push = gj_revoke_cdt_walk_batch(pObj, u32Budget);
+                if (u32Push > 0) {
+                    g_u32R2Retries++; /* outer deferred soft push */
+                }
+                u32Cleared += u32Push;
+            }
+
             /* Advance cursor past this ent so next call rotates fairly. */
             g_u32RevokeQCursor = (iEnt + 1u) % u32Limit;
+
             if (pObj->u32SlotsLeft == 0 && pObj->pCdtHead == NULL) {
                 continue;
             }
+
             /* Edges remain (budget or try-lock busy) — keep queued (R7). */
             if (pObj->pCdtHead != NULL) {
+                /*
+                 * Soft R2 defer: edges still linked after try-lock walks.
+                 * Product mutex still missing — partial R2.
+                 * Grep: cap:cdt R2 soft / cap: revoke try-lock
+                 */
+                if (!g_u8CdtR2SoftLogged) {
+                    g_u8CdtR2SoftLogged = 1;
+                    kprintf("cap:cdt R2 soft defer edges remain "
+                            "spins_avoided=%u retries=%u slots_cleared=%u "
+                            "soft_partial (once)\n",
+                            g_u32R2SpinsAvoided, g_u32R2Retries,
+                            g_u32R2SlotsCleared);
+                }
                 continue;
             }
         }
@@ -389,6 +528,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
          * Soft gap: derived slots counted but no CDT edges to walk.
          * Security already done (DEAD/gen); accounting complete needs mint
          * to wire edges or a known-CNode scan (gj_cnode_invalidate_obj_slots).
+         * Only when edges are absent — walk path above is preferred.
          * Grep: cap:cdt soft
          */
         if (pObj->u32SlotsLeft > 0 && pObj->pCdtHead == NULL) {

@@ -6,7 +6,20 @@
  * G-PROC-5 death (CNode wipe + private AS reclaim for wait-registered children).
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
- * docs/CAP_ADDRESSING.md · docs/SOLARIS_STYLE_REMAINING.md §6 · §9
+ *
+ * Soft product paths (this file only; not product-complete; no bar3):
+ *   Apple §13 bootstrap seal checklist — greppable:
+ *     process: bootstrap seal soft …
+ *     process: seal checklist …
+ *     enumerates root meta, ambient drop lamps, pager empty, promises
+ *   G-PROC-5 death tallies — greppable process: death …
+ *     pager clear, fault_lock force, CNode wipe, AS destroy
+ *   Soft confine exposes PCB u32Confined / u32Promises (ambient drop lamps)
+ *
+ * Honesty: seal checklist is soft inventory only — not product multi-server
+ * seal, not Apple §13 closed, not bar3.
+ * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md §13 ·
+ * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/SECURITY_CORE_DESIGN.md §13
  */
 #include <gj/cap.h>
 #include <gj/cpu.h>
@@ -69,6 +82,108 @@ gj_process_set_jit(struct gj_process *pProc, int fEnable)
     pProc->u32Jit = fEnable ? 1u : 0u;
 }
 
+/*
+ * Soft Apple §13 bootstrap seal checklist (process.c only).
+ * Enumerates PCB lamps: root meta, ambient/confine, pager empty, promises.
+ * One-way soft lamp is inventory only — does NOT seal retype/IRQ/untyped.
+ * Grep: process: bootstrap seal soft | process: seal checklist
+ * Honesty: not product-complete; no bar3.
+ */
+static u32 g_u32SealChecklistLogs;
+static u32 g_u32BootstrapSealSoftLamp; /* 0 open, 1 soft-attempted once */
+#define GJ_SEAL_SOFT_LOG_MAX 8u
+
+/* Soft G-PROC-5 death tallies (grep: process: death). */
+static u64 g_u64DeathTotal;
+static u64 g_u64DeathPagerClear;
+static u64 g_u64DeathFaultForce;
+static u64 g_u64DeathCnodeWipe;
+static u64 g_u64DeathCnodeSlots;
+static u64 g_u64DeathAsDestroyOk;
+static u64 g_u64DeathAsDestroyFail;
+static u64 g_u64DeathAsSkip;
+
+static void
+process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
+{
+    int fRootMeta;
+    int fPagerEmpty;
+    int fAmbient;
+    u32 u32Confined;
+    u32 u32Promises;
+    const char *szViaSafe;
+
+    if (pProc == NULL) {
+        return;
+    }
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    /*
+     * Rate-limit root_meta installs (many PE smokes); always emit on
+     * confine (ambient authority drop is the soft seal edge).
+     */
+    if (strcmp(szViaSafe, "confine") != 0 &&
+        g_u32SealChecklistLogs >= GJ_SEAL_SOFT_LOG_MAX) {
+        return;
+    }
+    g_u32SealChecklistLogs++;
+    fRootMeta = (pProc->pRootMeta != NULL) ? 1 : 0;
+    /*
+     * Const path: gen!=0 and LIVE when pPagerEpObj known.
+     * Empty gen ⇒ pager empty (expected post-init before set_pager).
+     */
+    fPagerEmpty = 0;
+    if (gj_cap_ref_is_null(&pProc->refPager)) {
+        fPagerEmpty = 1;
+    } else if (pProc->pPagerEpObj != NULL &&
+               pProc->pPagerEpObj->u32State != (u32)GJ_OBJ_LIVE) {
+        fPagerEmpty = 1; /* dead ep treated as empty for seal lamp */
+    }
+    u32Confined = pProc->u32Confined;
+    u32Promises = pProc->u32Promises;
+    fAmbient = (u32Confined == 0u) ? 1 : 0;
+
+    /* Grep: process: bootstrap seal soft */
+    kprintf("process: bootstrap seal soft via=%s logs=%u lamp=%u "
+            "(Apple s13 soft checklist)\n",
+            szViaSafe, g_u32SealChecklistLogs, g_u32BootstrapSealSoftLamp);
+
+    /* Grep: process: seal checklist … */
+    kprintf("process: seal checklist root_meta=%u pager_empty=%u "
+            "ambient=%u confined=%u promises=0x%x soft\n",
+            fRootMeta, fPagerEmpty, fAmbient, u32Confined, u32Promises);
+
+    /* Ambient authority drop lamps (soft confine PCB flags exposed). */
+    kprintf("process: seal checklist ambient_drop_lamp confined=%u "
+            "promises=0x%x ambient=%u soft\n",
+            u32Confined, u32Promises, fAmbient);
+
+    kprintf("process: seal checklist root_meta_installed=%u "
+            "pager_empty=%u promises=0x%x soft\n",
+            fRootMeta, fPagerEmpty, u32Promises);
+
+    /* Honesty: not product multi-server seal; Apple s13 remains open. */
+    kprintf("process: bootstrap seal soft not product-complete "
+            "(Apple s13 open; no bar3)\n");
+}
+
+/*
+ * Soft one-way seal lamp (Apple s13). Records checklist; never product-seals
+ * privileged retype / broad IRQ / root untyped. Grep: process: bootstrap seal soft
+ */
+static void
+process_bootstrap_seal_soft_try(struct gj_process *pProc, const char *szVia)
+{
+    if (pProc == NULL) {
+        return;
+    }
+    if (g_u32BootstrapSealSoftLamp == 0u) {
+        g_u32BootstrapSealSoftLamp = 1u;
+        kprintf("process: bootstrap seal soft one-way lamp=1 "
+                "(soft only; not product-complete; no bar3)\n");
+    }
+    process_seal_checklist_soft(pProc, szVia);
+}
+
 void
 gj_process_confine(struct gj_process *pProc, u32 u32Promises)
 {
@@ -78,6 +193,16 @@ gj_process_confine(struct gj_process *pProc, u32 u32Promises)
     /* Soft: set confined; promises are the allowed ambient set. */
     pProc->u32Confined = 1u;
     pProc->u32Promises = u32Promises;
+    /*
+     * Soft confine expose PCB flags + ambient authority drop lamp.
+     * Grep: process: confine soft | process: seal checklist
+     * Not product multi-server; no bar3.
+     */
+    kprintf("process: confine soft confined=%u promises=0x%x "
+            "ambient_drop=1 (soft; not product multi-server; no bar3)\n",
+            pProc->u32Confined, pProc->u32Promises);
+    /* Confine is the soft ambient-drop edge — re-emit seal checklist lamps. */
+    process_bootstrap_seal_soft_try(pProc, "confine");
 }
 
 int
@@ -157,6 +282,13 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
     if (pOutRef != NULL) {
         *pOutRef = ref;
     }
+    /*
+     * Soft Apple §13 seal checklist after root meta install.
+     * Enumerates root_meta / pager_empty / ambient / promises (rate-limited).
+     * Grep: process: bootstrap seal soft | process: seal checklist
+     * Honesty: not product-complete; no bar3.
+     */
+    process_seal_checklist_soft(pProc, "root_meta");
     return GJ_OK;
 }
 
@@ -676,7 +808,7 @@ process_wait_zombie_count(u32 u32Ppid)
  * Soft G-PROC-5 CNode wipe: kernel-authority slot clear with quota refund +
  * CDT unlink (never rights-gated like user gj_cap_delete). Boot/init CNodes
  * are not passed here — only wait-registered children.
- * Grep: process:death cnode
+ * Grep: process: death cnode | process:death cnode
  */
 static u32
 process_death_cnode_wipe(struct gj_process *pProc)
@@ -737,6 +869,13 @@ process_death_scrub_exec(struct gj_process *pProc)
     memset(pProc->aAuxv, 0, sizeof(pProc->aAuxv));
     memset(pProc->szExecPath, 0, sizeof(pProc->szExecPath));
     pProc->u64AnonNext = 0x0000000040000000ull;
+    /*
+     * Soft multi-server confine death cleanup: drop PCB confine flags so a
+     * recycled wait-table slot cannot inherit ambient-drop state.
+     * Grep: process: death confine_scrub
+     */
+    pProc->u32Confined = 0;
+    pProc->u32Promises = 0;
 }
 
 void
@@ -749,6 +888,12 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     u32 u32Cleared = 0;
     u32 u32SelfPid;
     u32 u32Reparented;
+    u32 u32RegionsDropped = 0;
+    u32 u32FaultWasBusy = 0;
+    u32 u32HadPager = 0;
+    u32 u32AsOk = 0;
+    u32 u32AsFail = 0;
+    u32 u32AsSkip = 0;
     int fWaitChild;
 
     if (pProc == NULL) {
@@ -760,10 +905,19 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
         return;
     }
 
+    g_u64DeathTotal++;
     u32SelfPid = process_wait_pid_of(pProc);
     pProc->u32ExitCode = u32ExitCode;
     pProc->u32Alive = 0;
+
+    /* ---- pager clear (G-PROC-5) ---------------------------------------- */
+    u32HadPager = gj_process_has_pager(pProc) ? 1u : 0u;
     gj_process_clear_pager(pProc);
+    g_u64DeathPagerClear++;
+    /* Grep: process: death pager */
+    kprintf("process: death pager_clear had=%u soft (G-PROC-5)\n",
+            u32HadPager);
+
     /* Drop exception port (handler thr may already be gone) */
     pProc->excPort.u8Live = 0;
     pProc->excPort.u8Pending = 0;
@@ -774,14 +928,25 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     pProc->excPort.u64Rip = 0;
     pProc->excPort.u64Cr2 = 0;
 
-    /* Soft: force-clear fault serialization so death cannot leave AS locked. */
+    /*
+     * Soft: force-clear fault serialization so death cannot leave AS locked.
+     * Grep: process: death fault_lock
+     */
+    u32FaultWasBusy = (pProc->fault.u32FaultInProgress != 0u ||
+                       pProc->fault.u32Waiters != 0u)
+                          ? 1u
+                          : 0u;
     pProc->fault.u32FaultInProgress = 0;
     pProc->fault.u32Waiters = 0;
+    g_u64DeathFaultForce++;
+    kprintf("process: death fault_lock force was_busy=%u soft (G-PROC-5)\n",
+            u32FaultWasBusy);
 
     /* Drop region views (object owns pages; maps are views — G-MO) */
     for (iReg = 0; iReg < GJ_PROC_REGION_MAX; iReg++) {
         if (pProc->aRegions[iReg].u8Used) {
             memset(&pProc->aRegions[iReg], 0, sizeof(pProc->aRegions[iReg]));
+            u32RegionsDropped++;
         }
     }
 
@@ -798,20 +963,32 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     /*
      * G-PROC-5: wipe CNode for wait-registered children only (never boot/init).
      * Soft deepen: quota refund + CDT unlink per slot, then process revoke.
+     * Grep: process: death cnode_wipe | process: cnode_clear
      */
     if (fWaitChild) {
         u32Cleared = process_death_cnode_wipe(pProc);
+        g_u64DeathCnodeWipe++;
+        g_u64DeathCnodeSlots += (u64)u32Cleared;
         (void)gj_obj_revoke_begin(&pProc->hdr);
         (void)gj_revoke_cdt_walk_batch(&pProc->hdr, 16);
         (void)gj_revoke_process_deferred(16);
+        kprintf("process: death cnode_wipe slots=%u wait_child=1 soft "
+                "(G-PROC-5)\n",
+                u32Cleared);
         kprintf("process: cnode_clear slots=%u PASS\n", u32Cleared);
         process_death_scrub_exec(pProc);
+        kprintf("process: death confine_scrub confined=0 promises=0 soft\n");
+    } else {
+        /* Long-lived PCB: leave CNode; still note skip for tallies. */
+        kprintf("process: death cnode_wipe slots=0 wait_child=0 skip soft "
+                "(G-PROC-5)\n");
     }
     /*
      * Destroy private AS only for wait-registered children (PE/spawn/fork).
      * Never free boot/init AS — ring-3 smokes share it with the rest of kmain.
      * Save/restore caller CR3: death may run mid-syscall on the parent AS
      * (e.g. vfork child exit while parent PE32 is current).
+     * Grep: process: death as_destroy | process: as_destroy
      */
     u64SavedCr3 = cpu_read_cr3();
     u64Cr3 = pProc->u64Cr3;
@@ -821,9 +998,19 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
         cpu_load_cr3(u64Ker);
         vmm_set_anon_cursor(NULL);
         if (vmm_as_destroy(u64Cr3) == GJ_OK) {
+            u32AsOk = 1;
+            g_u64DeathAsDestroyOk++;
+            kprintf("process: death as_destroy cr3=0x%lx ok=1 soft "
+                    "(G-PROC-5)\n",
+                    (unsigned long)u64Cr3);
             kprintf("process: as_destroy cr3=0x%lx PASS\n",
                     (unsigned long)u64Cr3);
         } else {
+            u32AsFail = 1;
+            g_u64DeathAsDestroyFail++;
+            kprintf("process: death as_destroy cr3=0x%lx ok=0 soft "
+                    "(G-PROC-5)\n",
+                    (unsigned long)u64Cr3);
             kprintf("process: as_destroy cr3=0x%lx FAIL\n",
                     (unsigned long)u64Cr3);
         }
@@ -831,11 +1018,22 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     } else if (u64Cr3 != 0 && u64Ker != 0 &&
                (u64Cr3 & ~0xfffull) != (u64Ker & ~0xfffull)) {
         /* Long-lived process: leave AS; switch off if we were on it */
+        u32AsSkip = 1;
+        g_u64DeathAsSkip++;
+        kprintf("process: death as_destroy cr3=0x%lx skip=long_lived soft "
+                "(G-PROC-5)\n",
+                (unsigned long)u64Cr3);
         if ((u64SavedCr3 & ~0xfffull) == (u64Cr3 & ~0xfffull)) {
             cpu_load_cr3(u64Ker);
             vmm_set_anon_cursor(NULL);
             u64SavedCr3 = u64Ker;
         }
+    } else {
+        u32AsSkip = 1;
+        g_u64DeathAsSkip++;
+        kprintf("process: death as_destroy cr3=0x%lx skip=none soft "
+                "(G-PROC-5)\n",
+                (unsigned long)u64Cr3);
     }
     /* Restore caller address space when it was not the victim */
     if (u64SavedCr3 != 0 &&
@@ -846,8 +1044,27 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     }
     process_wait_note_exit(pProc, u32ExitCode);
     pProc->pParent = NULL;
-    kprintf("process: death exit=%u reparent=%u (G-PROC-5)\n", u32ExitCode,
-            u32Reparented);
+
+    /*
+     * Aggregate G-PROC-5 death tallies (soft product observability).
+     * Grep: process: death exit= | process: death tallies
+     */
+    kprintf("process: death tallies total=%llu pager_clear=%llu "
+            "fault_force=%llu cnode_wipe=%llu cnode_slots=%llu "
+            "as_ok=%llu as_fail=%llu as_skip=%llu soft (G-PROC-5)\n",
+            (unsigned long long)g_u64DeathTotal,
+            (unsigned long long)g_u64DeathPagerClear,
+            (unsigned long long)g_u64DeathFaultForce,
+            (unsigned long long)g_u64DeathCnodeWipe,
+            (unsigned long long)g_u64DeathCnodeSlots,
+            (unsigned long long)g_u64DeathAsDestroyOk,
+            (unsigned long long)g_u64DeathAsDestroyFail,
+            (unsigned long long)g_u64DeathAsSkip);
+    kprintf("process: death exit=%u reparent=%u regions=%u "
+            "cnode_slots=%u as_ok=%u as_fail=%u as_skip=%u "
+            "wait_child=%d soft (G-PROC-5)\n",
+            u32ExitCode, u32Reparented, u32RegionsDropped, u32Cleared,
+            u32AsOk, u32AsFail, u32AsSkip, fWaitChild);
 }
 
 /* Stub children for Linux fork/vfork (no full AS clone until product spawn). */

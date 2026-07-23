@@ -18,6 +18,14 @@
  *   pop_order_split: exact order, else split a higher block and push
  *   sibling buddies back (rearranges nodes only — never invents frames).
  *
+ * Wave 10 soft inventory (prefix-stable; greppable: pmm: soft):
+ *   "pmm: soft inventory …"  free/total, zones, pending, hierarchy snapshot
+ *   "pmm: soft zones …"      low/high free frames + release state
+ *   "pmm: soft hier …"       max_order, nodes, splits, high-order pushes
+ *   "pmm: soft design …"     design max_order / block size (soft only)
+ *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
+ * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3.
+ *
  * 1 TiB design observability (no 1 TiB host required — soft markers):
  *   Zone free frame counts (low/high) + per-order node counts.
  *   "pmm: orders tag=..." histogram after init / high-release / soak.
@@ -29,6 +37,7 @@
  * Serial markers (scripts/gj-soak-large-ram.sh, smoke-all, product-summary):
  *   "pmm: freelist free="
  *   "pmm: high released free="
+ *   "pmm: soft inventory"
  *   "pmm: soak PASS"
  *   "pmm: soak_tib PASS" | "pmm: soak_tib SKIP soft" | "pmm: soak_tib FAIL"
  * Large-RAM path: main.c calls pmm_soak_tib(768ull<<30) — GJ_MEM=768G.
@@ -71,11 +80,14 @@ static gj_paddr_t g_paKernel1;
 static struct pmm_pending g_aHigh[PMM_HIGH_PENDING_MAX];
 static u32        g_cHigh;
 static int        g_fHighReleased;
+/* Wave 10: times soft inventory printed (product / smoke observability). */
+static u32        g_cSoftInvLogs;
 
 static gj_paddr_t pop_order_split(u32 u32Order);
 static u64        high_order_nodes(void);
 static void       log_order_hist(const char *szTag);
 static void       log_tib_design_soft(void);
+static void       pmm_soft_inventory(const char *szWhere);
 static u32        soft_hier_exercise(u32 *pOutBig);
 
 static void *
@@ -367,6 +379,7 @@ log_order_hist(const char *szTag)
 /**
  * Always-on 1 TiB design soft marker (does not require 1 TiB host).
  * Greppable: pmm: tib_design soft | pmm: tib_host soft PASS|SKIP
+ * Soft host/design observability only — not a 1 TiB product claim.
  */
 static void
 log_tib_design_soft(void)
@@ -377,21 +390,23 @@ log_tib_design_soft(void)
     /* Greppable: pmm: tib_design soft */
     kprintf("pmm: tib_design soft max_order=%u max_block_pages=%u "
             "max_block_bytes=%lu design_ceil_tib=%u max_pa=0x%lx free=%lu "
-            "high_order_nodes=%lu hierarchical free (no 1TiB host required)\n",
+            "high_order_nodes=%lu hierarchical free (no 1TiB host required; "
+            "not 1TiB product claim)\n",
             PMM_MAX_ORDER, 1u << PMM_MAX_ORDER, (unsigned long)cbBlock,
             (unsigned)GJ_PMM_MAX_PHYS_TIB, (unsigned long)g_paMaxSeen,
             (unsigned long)g_cFramesFree, (unsigned long)cHi);
 
     if (g_paMaxSeen >= PMM_TIB_BYTES) {
-        /* Greppable: pmm: tib_host soft PASS */
+        /* Greppable: pmm: tib_host soft PASS (host size soft gate only). */
         kprintf("pmm: tib_host soft PASS max_pa=0x%lx need=0x%lx free=%lu "
-                "high_order_nodes=%lu\n",
+                "high_order_nodes=%lu (host size soft; not 1TiB product)\n",
                 (unsigned long)g_paMaxSeen, (unsigned long)PMM_TIB_BYTES,
                 (unsigned long)g_cFramesFree, (unsigned long)cHi);
     } else {
         /* Greppable: pmm: tib_host soft SKIP */
         kprintf("pmm: tib_host soft SKIP max_pa=0x%lx need=0x%lx free=%lu "
-                "high_order_nodes=%lu (host/QEMU below 1TiB; design path ready)\n",
+                "high_order_nodes=%lu (host/QEMU below 1TiB; design path ready; "
+                "not 1TiB product claim)\n",
                 (unsigned long)g_paMaxSeen, (unsigned long)PMM_TIB_BYTES,
                 (unsigned long)g_cFramesFree, (unsigned long)cHi);
     }
@@ -401,6 +416,115 @@ log_tib_design_soft(void)
             "free_high=%lu hierarchical free\n",
             (unsigned long)cHi, PMM_MAX_ORDER,
             (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh);
+}
+
+/**
+ * Wave 10 greppable soft PMM inventory dump (product / smoke).
+ * Prefix-stable markers (pmm: soft …):
+ *   pmm: soft inventory  — free/total, zones, pending, hierarchy snapshot
+ *   pmm: soft zones      — low/high free frames + release state
+ *   pmm: soft hier       — max_order, nodes, splits, high-order pushes
+ *   pmm: soft design     — design max_order / block size (soft only)
+ *
+ * Never allocates. Safe after pmm_init (and later release/soak paths).
+ * Honesty: soft inventory ≠ 1 TiB product claim; never closes P-MEM-3.
+ * greppable: pmm: soft
+ */
+static void
+pmm_soft_inventory(const char *szWhere)
+{
+    u64 cHi = high_order_nodes();
+    u64 cbBlock = (u64)GJ_PAGE_SIZE << PMM_MAX_ORDER;
+    u64 cInUse;
+    const char *szReady;
+    int fReady;
+
+    if (szWhere == 0) {
+        szWhere = "path";
+    }
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
+
+    if (g_cFramesTotal >= g_cFramesFree) {
+        cInUse = g_cFramesTotal - g_cFramesFree;
+    } else {
+        cInUse = 0;
+    }
+
+    /*
+     * Soft readiness only: freelist has frames after init.
+     * Does not encode host RAM class or 1 TiB product.
+     */
+    fReady = 0;
+    if (g_cFramesFree > 0 && g_cFramesTotal > 0) {
+        szReady = "READY";
+        fReady = 1;
+    } else if (g_cFramesTotal > 0) {
+        szReady = "EMPTY";
+    } else {
+        szReady = "NONE";
+    }
+
+    /* Grep: pmm: soft inventory */
+    kprintf("pmm: soft inventory via=%s ready=%s free=%lu total=%lu "
+            "in_use=%lu free_low=%lu free_high=%lu max_pa=0x%lx "
+            "high_pending=%u high_released=%u max_order=%u "
+            "high_order_nodes=%lu logs=%u hierarchical free "
+            "(soft; not 1TiB product)\n",
+            szWhere, szReady,
+            (unsigned long)g_cFramesFree, (unsigned long)g_cFramesTotal,
+            (unsigned long)cInUse,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh,
+            (unsigned long)g_paMaxSeen, g_cHigh,
+            g_fHighReleased ? 1u : 0u, PMM_MAX_ORDER,
+            (unsigned long)cHi, g_cSoftInvLogs);
+
+    /* Grep: pmm: soft zones */
+    kprintf("pmm: soft zones free_low=%lu free_high=%lu pending=%u "
+            "released=%u low_head=%u high_head=%u kernel0=0x%lx "
+            "kernel1=0x%lx\n",
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh,
+            g_cHigh, g_fHighReleased ? 1u : 0u,
+            g_paFreeLow != 0 ? 1u : 0u, g_paFreeHigh != 0 ? 1u : 0u,
+            (unsigned long)g_paKernel0, (unsigned long)g_paKernel1);
+
+    /* Grep: pmm: soft hier */
+    kprintf("pmm: soft hier max_order=%u o0=%lu high_order_nodes=%lu "
+            "splits=%lu high_order_push=%lu block_pages=%u "
+            "block_bytes=%lu hierarchical free\n",
+            PMM_MAX_ORDER, (unsigned long)g_aOrderCount[0],
+            (unsigned long)cHi, (unsigned long)g_cSplit,
+            (unsigned long)g_cHighOrderPush, 1u << PMM_MAX_ORDER,
+            (unsigned long)cbBlock);
+
+    /* Grep: pmm: soft design — design geometry only; not product 1 TiB. */
+    kprintf("pmm: soft design max_order=%u max_block_pages=%u "
+            "max_block_bytes=%lu design_ceil_tib=%u max_pa=0x%lx "
+            "page_size=%u (soft inventory only; not 1TiB product claim)\n",
+            PMM_MAX_ORDER, 1u << PMM_MAX_ORDER, (unsigned long)cbBlock,
+            (unsigned)GJ_PMM_MAX_PHYS_TIB, (unsigned long)g_paMaxSeen,
+            (unsigned)GJ_PAGE_SIZE);
+
+    /*
+     * Close markers: freelist soft readiness only.
+     * Grep: pmm: soft PASS | pmm: soft EMPTY | pmm: soft NONE
+     * Never "1TiB product PASS".
+     */
+    if (fReady) {
+        /* Grep: pmm: soft PASS | pmm: soft inventory PASS */
+        kprintf("pmm: soft PASS via=%s free=%lu hierarchical free "
+                "(soft inventory; not 1TiB product)\n",
+                szWhere, (unsigned long)g_cFramesFree);
+        kprintf("pmm: soft inventory PASS via=%s logs=%u "
+                "(soft; not 1TiB product)\n",
+                szWhere, g_cSoftInvLogs);
+    } else {
+        kprintf("pmm: soft %s via=%s free=%lu total=%lu "
+                "(soft inventory; not 1TiB product)\n",
+                szReady, szWhere, (unsigned long)g_cFramesFree,
+                (unsigned long)g_cFramesTotal);
+    }
 }
 
 /**
@@ -522,6 +646,7 @@ pmm_init(const struct gj_mem_region *pRegions, size_t cRegions,
     g_cHighOrderPush = 0;
     g_cHigh = 0;
     g_fHighReleased = 0;
+    g_cSoftInvLogs = 0;
     {
         u32 o;
 
@@ -582,6 +707,8 @@ pmm_init(const struct gj_mem_region *pRegions, size_t cRegions,
             (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh);
     log_order_hist("init");
     log_tib_design_soft();
+    /* Wave 10: greppable pmm: soft … inventory (not 1TiB product). */
+    pmm_soft_inventory("init");
 }
 
 void
@@ -608,6 +735,8 @@ pmm_release_high(void)
             "max_order=%u hierarchical free\n",
             (unsigned long)high_order_nodes(),
             (unsigned long)g_cFramesFreeHigh, PMM_MAX_ORDER);
+    /* Wave 10: greppable pmm: soft … after high release. */
+    pmm_soft_inventory("high_release");
 }
 
 gj_paddr_t
@@ -827,6 +956,8 @@ pmm_log_orders(void)
 {
     log_order_hist("api");
     log_tib_design_soft();
+    /* Wave 10: greppable pmm: soft … on explicit order dump. */
+    pmm_soft_inventory("api");
 }
 
 size_t
@@ -874,6 +1005,8 @@ pmm_soak_tib(u64 u64NeedBytes)
                 1u << PMM_MAX_ORDER);
         log_order_hist("soak_soft");
         log_tib_design_soft();
+        /* Wave 10: soft inventory even on soak_tib SKIP (small hosts). */
+        pmm_soft_inventory("soak_soft");
         return 0;
     }
     /* Large machine: alloc/free multi-page blocks via order freelists. */
@@ -911,6 +1044,8 @@ pmm_soak_tib(u64 u64NeedBytes)
             (unsigned long)g_cSplit);
     log_order_hist("soak_tib");
     log_tib_design_soft();
+    /* Wave 10: greppable pmm: soft … after large-RAM hierarchical soak. */
+    pmm_soft_inventory("soak_tib");
     return 0;
 }
 
@@ -958,5 +1093,7 @@ pmm_soak(u32 u32Singles, u32 u32Contig)
             (unsigned long)g_cFramesTotal, (unsigned long)g_paMaxSeen);
     /* Greppable: pmm: soak PASS (smoke-all hard gate) */
     kprintf("pmm: soak PASS\n");
+    /* Wave 10: greppable pmm: soft … after hard soak PASS. */
+    pmm_soft_inventory("soak");
     return 0;
 }

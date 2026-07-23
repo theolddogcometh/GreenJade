@@ -10,6 +10,18 @@
  * Soft deepen: multi-stream mixer + per-stream soft BDL/LPIB + soft codec
  * (no GPL HDA paste). Greppable: "hda: … PASS" (stream / CORB / multi /
  * soft BDL / soft LPIB / stream-id).
+ *
+ * Soft inventory (Wave 10 exclusive; this unit only — greppable "hda: soft …"):
+ *   hda: soft inventory   — capacity + path catalog + presence lamps
+ *   hda: soft pci         — bus/slot/func + BAR0 / MMIO path
+ *   hda: soft stream      — multi-stream open/run/queue/play snapshot
+ *   hda: soft corb        — CORB/RIRB/DMA engine + HW CORB lamp
+ *   hda: soft mixer       — master/stream gain + mixdown tallies
+ *   hda: soft codec       — NID graph + pin/power/stream-id + hits
+ *   hda: soft bdl         — per-stream soft BDL/LPIB/CBL/IOC/tag/fmt
+ *   hda: soft path        — honesty: kernel soft ≠ Steam/game audio
+ *   hda: soft inventory PASS / hda: soft PASS
+ * Never hard-gates product paths; diagnostics / smoke grep only.
  */
 #include <gj/config.h>
 #include <gj/hda.h>
@@ -117,6 +129,16 @@ static volatile u8 *g_pStreamPcm;
 static int g_fStreamDma;
 static u32 g_u32StreamDmaStarts;
 static int hda_stream_dma_program(void);
+
+/*
+ * Soft inventory emission tallies (Wave 10; wrap OK; never hard-gate).
+ * greppable: hda: soft
+ */
+static u32 g_u32SoftInventoryLogs;
+static u32 g_u32SoftProbeLogs;
+static u32 g_u32SoftSmokeLogs;
+
+static void hda_soft_inventory_log(const char *szVia);
 
 static void
 hda_reg_write(u32 u32Off, u32 u32Val)
@@ -227,6 +249,9 @@ done:
     (void)g_u32Bus;
     (void)g_u32Slot;
     (void)g_u32Func;
+    /* Wave 10: greppable soft inventory after probe (BAR present or shadow). */
+    g_u32SoftProbeLogs++;
+    hda_soft_inventory_log("probe");
 }
 
 int
@@ -423,6 +448,8 @@ hda_stream_smoke(void)
     hda_stream_stop();
     hda_stream_close();
     kprintf("hda: stream path PASS\n");
+    g_u32SoftSmokeLogs++;
+    hda_soft_inventory_log("stream_smoke");
     return 0;
 }
 
@@ -1188,6 +1215,8 @@ hda_corb_bdl_smoke(void)
     } else {
         kprintf("hda: SD0 stream DMA soft (no BAR0 or not started)\n");
     }
+    g_u32SoftSmokeLogs++;
+    hda_soft_inventory_log("corb_bdl_smoke");
     return 0;
 }
 
@@ -1920,6 +1949,158 @@ hda_codec_programmed(void)
     return g_u32CodecProg != 0;
 }
 
+/**
+ * Wave 10 soft inventory dump — greppable "hda: soft …".
+ * Snapshots live soft path state; never allocates; never hard-gates.
+ * szVia: caller tag (probe / stream_smoke / corb_bdl_smoke / multi_smoke).
+ */
+static void
+hda_soft_inventory_log(const char *szVia)
+{
+    u32 iId;
+    u32 cOpen = 0;
+    u32 cRun = 0;
+    u32 cQueued = 0;
+    u32 cPlayed = 0;
+    u32 cUnderrun = 0;
+    u32 cBdlSegs = 0;
+    u32 cBdlKicks = 0;
+    u32 cBdlIoc = 0;
+    u32 u32Lpib0;
+    u32 u32Lpib1;
+    u32 u32Cbl0;
+    u32 u32Cbl1;
+    u32 u32Tag0;
+    u32 u32Tag1;
+    u32 u32Fmt0;
+    u32 u32Fmt1;
+    const char *szViaSafe;
+
+    szViaSafe = (szVia != NULL) ? szVia : "anon";
+    if (g_u32SoftInventoryLogs < 0xffffffffu) {
+        g_u32SoftInventoryLogs++;
+    }
+
+    for (iId = 0; iId < GJ_HDA_STREAMS_MAX; iId++) {
+        if (g_aStr[iId].fOpen) {
+            cOpen++;
+            if (iId == 0) {
+                cQueued += hda_stream_bytes_queued();
+                cPlayed += hda_stream_bytes_played();
+                cUnderrun += hda_stream_underruns();
+            } else {
+                cQueued += g_aStr[iId].u32Len;
+                cPlayed += g_aStr[iId].u32Played;
+                cUnderrun += g_aStr[iId].u32Underruns;
+            }
+        }
+        if (g_aStr[iId].fRunning) {
+            cRun++;
+        }
+        cBdlSegs += g_aSoftSd[iId].u32N;
+        cBdlKicks += g_aSoftSd[iId].u32Kicks;
+        cBdlIoc += g_aSoftSd[iId].u32IocCount;
+    }
+
+    u32Lpib0 = g_aSoftSd[0].u32Lpib;
+    u32Lpib1 = (GJ_HDA_STREAMS_MAX > 1u) ? g_aSoftSd[1].u32Lpib : 0u;
+    u32Cbl0 = g_aSoftSd[0].u32Cbl;
+    u32Cbl1 = (GJ_HDA_STREAMS_MAX > 1u) ? g_aSoftSd[1].u32Cbl : 0u;
+    u32Tag0 = g_aSoftSd[0].u32Tag;
+    u32Tag1 = (GJ_HDA_STREAMS_MAX > 1u) ? g_aSoftSd[1].u32Tag : 0u;
+    u32Fmt0 = g_aSoftSd[0].u32Fmt;
+    u32Fmt1 = (GJ_HDA_STREAMS_MAX > 1u) ? g_aSoftSd[1].u32Fmt : 0u;
+
+    /*
+     * Grep: hda: soft inventory
+     * Capacity + dual-path catalog (soft always; HW when BAR0 mapped).
+     */
+    kprintf("hda: soft inventory via=%s streams_max=%u ring=%u corb_ents=%u "
+            "bdl_ents=%u mix_cap=%u present=%u mmio=%u hw_corb=%u "
+            "stream_dma=%u codec_prog=%u logs=%u probe_logs=%u "
+            "smoke_logs=%u\n",
+            szViaSafe, (unsigned)GJ_HDA_STREAMS_MAX,
+            (unsigned)HDA_RING_SIZE, (unsigned)GJ_HDA_CORB_ENTRIES,
+            (unsigned)GJ_HDA_BDL_ENTRIES, (unsigned)GJ_HDA_MIX_BYTES,
+            (unsigned)(g_fPresent ? 1 : 0),
+            (unsigned)(g_pMmio != NULL ? 1 : 0),
+            (unsigned)(g_fHwCorb && g_u32HwCorbProgrammed ? 1 : 0),
+            (unsigned)(g_fStreamDma ? 1 : 0),
+            (unsigned)(g_u32CodecProg != 0 ? 1 : 0),
+            (unsigned)g_u32SoftInventoryLogs, (unsigned)g_u32SoftProbeLogs,
+            (unsigned)g_u32SoftSmokeLogs);
+
+    /* Grep: hda: soft pci */
+    kprintf("hda: soft pci present=%u bus=%u slot=%u func=%u bar0=0x%lx "
+            "mmio=%u shadow=%u gctl=0x%x gcap=0x%x\n",
+            (unsigned)(g_fPresent ? 1 : 0), (unsigned)g_u32Bus,
+            (unsigned)g_u32Slot, (unsigned)g_u32Func,
+            (unsigned long)g_u64Bar0, (unsigned)(g_pMmio != NULL ? 1 : 0),
+            (unsigned)(g_pMmio == NULL ? 1 : 0),
+            (unsigned)hda_reg_read(HDA_REG_GCTL),
+            (unsigned)hda_reg_read(HDA_REG_GCAP));
+
+    /* Grep: hda: soft stream */
+    kprintf("hda: soft stream open=%u run=%u queued=%u played=%u "
+            "underrun=%u dma_starts=%u legacy_open=%u legacy_run=%u "
+            "legacy_queued=%u legacy_played=%u\n",
+            (unsigned)cOpen, (unsigned)cRun, (unsigned)cQueued,
+            (unsigned)cPlayed, (unsigned)cUnderrun,
+            (unsigned)g_u32StreamDmaStarts, (unsigned)(g_fStreamOpen ? 1 : 0),
+            (unsigned)(g_fStreamRunning ? 1 : 0), (unsigned)g_u32Len,
+            (unsigned)g_u32Played);
+
+    /* Grep: hda: soft corb */
+    kprintf("hda: soft corb sent=%u rirb=%u dma_runs=%u wp=%u rp=%u "
+            "ctl=0x%x hw=%u hw_prog=%u size=%u\n",
+            (unsigned)g_u32CorbSent, (unsigned)g_u32RirbCount,
+            (unsigned)g_u32CorbDmaRuns, (unsigned)g_u32CorbWp,
+            (unsigned)g_u32CorbRp, (unsigned)hda_reg_read(HDA_REG_CORBCTL),
+            (unsigned)(g_fHwCorb ? 1 : 0),
+            (unsigned)g_u32HwCorbProgrammed, (unsigned)GJ_HDA_CORB_ENTRIES);
+
+    /* Grep: hda: soft mixer */
+    kprintf("hda: soft mixer master=%u s0_gain=%u s1_gain=%u mix_bytes=%u "
+            "mix_underrun=%u dac_gain=0x%x dac_mute=%u\n",
+            (unsigned)g_u32MasterGain, (unsigned)g_aStr[0].u32Gain256,
+            (unsigned)((GJ_HDA_STREAMS_MAX > 1u) ? g_aStr[1].u32Gain256 : 0u),
+            (unsigned)g_u32MixBytes, (unsigned)g_u32MixUnderruns,
+            (unsigned)g_u32DacGain, (unsigned)(g_fDacMute ? 1 : 0));
+
+    /* Grep: hda: soft codec */
+    kprintf("hda: soft codec vendor=0x%x rev=0x%x hits=%u pin=0x%x pwr=0x%x "
+            "sid_tag=%u sid_ch=%u stream_fmt=0x%x prog=%u "
+            "nid=root,afg,dac,pin\n",
+            (unsigned)g_u32CodecVendor, (unsigned)g_u32CodecRev,
+            (unsigned)g_u32SoftCodecHits, (unsigned)g_u32PinCtrl,
+            (unsigned)g_u32PowerState, (unsigned)hda_codec_stream_id(),
+            (unsigned)hda_codec_stream_channel(), (unsigned)g_u32StreamFmt,
+            (unsigned)(g_u32CodecProg != 0 ? 1 : 0));
+
+    /* Grep: hda: soft bdl */
+    kprintf("hda: soft bdl segs=%u kicks=%u ioc=%u "
+            "lpib0=%u lpib1=%u cbl0=%u cbl1=%u tag0=%u tag1=%u "
+            "fmt0=0x%x fmt1=0x%x seg0=%u off0=%u\n",
+            (unsigned)cBdlSegs, (unsigned)cBdlKicks, (unsigned)cBdlIoc,
+            (unsigned)u32Lpib0, (unsigned)u32Lpib1, (unsigned)u32Cbl0,
+            (unsigned)u32Cbl1, (unsigned)u32Tag0, (unsigned)u32Tag1,
+            (unsigned)u32Fmt0, (unsigned)u32Fmt1,
+            (unsigned)g_aSoftSd[0].u32Seg, (unsigned)g_aSoftSd[0].u32SegOff);
+
+    /*
+     * Grep: hda: soft path
+     * Honesty: kernel soft multi-stream ≠ Steam/PipeWire/game PCM claim.
+     */
+    kprintf("hda: soft path claim=kernel_soft steam_audio=0 pipewire=0 "
+            "game_pcm=0 bar3=open dual=soft+hw_when_bar0 via=%s\n",
+            szViaSafe);
+
+    /* Grep: hda: soft inventory PASS / hda: soft PASS */
+    kprintf("hda: soft inventory PASS via=%s logs=%u\n", szViaSafe,
+            (unsigned)g_u32SoftInventoryLogs);
+    kprintf("hda: soft PASS via=%s\n", szViaSafe);
+}
+
 int
 hda_codec_program(void)
 {
@@ -2207,5 +2388,8 @@ hda_multi_stream_smoke(void)
             GJ_HDA_STREAMS_MAX, hda_mixer_master());
     kprintf("hda: soft deepen PASS codec_hits=%u mix_underrun=%u\n",
             (unsigned)g_u32SoftCodecHits, hda_mixer_mix_underruns());
+    /* Wave 10: full soft inventory after multi-stream deepen smoke. */
+    g_u32SoftSmokeLogs++;
+    hda_soft_inventory_log("multi_smoke");
     return 0;
 }

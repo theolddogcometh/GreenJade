@@ -4,7 +4,7 @@
  *
  * Clean-room virtio-input: event queue 0 with multi-slot DMA + soft ring.
  * Soft abs/rel axis state for keyboard/tablet/pointer fan-in (OASIS layout).
- * No Linux virtio source. Dual MIT OR Apache-2.0 only.
+ * No Linux virtio source. Dual MIT OR Apache-2.0 only. Pure C11 freestanding.
  *
  * Geometry:
  *   q0 event — N device-write slots (parallel HW fills)
@@ -15,6 +15,18 @@
  *   virtio-input: ready PASS
  *   virtio-input: event ring soft PASS
  *   virtio-input: abs/rel axes soft PASS
+ *
+ * Wave 10 soft inventory (prefix-stable; never hard-gates):
+ *   virtio-input: soft inventory …
+ *   virtio-input: soft ring …
+ *   virtio-input: soft slots …
+ *   virtio-input: soft axes …
+ *   virtio-input: soft caps …
+ *   virtio-input: soft absinfo …
+ *   virtio-input: soft stats …
+ *   virtio-input: soft path …
+ *   virtio-input: soft inventory PASS|SKIP
+ *   virtio-input: soft PASS|SKIP
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -328,6 +340,88 @@ cfg_r32(volatile u8 *pBase, u32 u32Off)
 }
 
 /*
+ * Wave 10 soft inventory — greppable "virtio-input: soft …".
+ * Pure observation at probe; does not gate ready PASS or poll paths.
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Pending;
+    u32 u32Key;
+    u32 u32Rel;
+    u32 u32Abs;
+
+    (void)ring_sane();
+    u32Pending = g_u32Len;
+    u32Key = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_KEY) ? 1u : 0u;
+    u32Rel = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_REL) ? 1u : 0u;
+    u32Abs = (g_u32Caps & GJ_VIRTIO_INPUT_CAP_ABS) ? 1u : 0u;
+
+    /* Grep: virtio-input: soft inventory */
+    kprintf("virtio-input: soft inventory ready=%u slots=%u ring=%u q=%u "
+            "posted=%u caps=0x%x\n",
+            (unsigned)(g_fReady ? 1 : 0), (unsigned)VI_SLOTS,
+            (unsigned)VI_RING, (unsigned)VI_Q_SIZE, (unsigned)g_cPosted,
+            (unsigned)g_u32Caps);
+
+    /* Grep: virtio-input: soft ring */
+    kprintf("virtio-input: soft ring head=%u len=%u depth=%u events=%u "
+            "dropped=%u drop_oldest=1\n",
+            (unsigned)g_u32Head, (unsigned)g_u32Len, (unsigned)VI_RING,
+            (unsigned)g_u32EventCount, (unsigned)g_u32Dropped);
+
+    /* Grep: virtio-input: soft slots */
+    kprintf("virtio-input: soft slots posted=%u max=%u drain_max=%u "
+            "poll_spins=%u\n",
+            (unsigned)g_cPosted, (unsigned)VI_SLOTS, (unsigned)VI_DRAIN_MAX,
+            (unsigned)VI_POLL_SPINS);
+
+    /* Grep: virtio-input: soft axes */
+    kprintf("virtio-input: soft axes abs_x=%d abs_y=%d abs_seen=%u "
+            "rel_x=%d rel_y=%d rel_wheel=%d rel_seen=%u\n",
+            (int)g_i32AbsX, (int)g_i32AbsY, (unsigned)(g_fAbsSeen ? 1 : 0),
+            (int)g_i32RelX, (int)g_i32RelY, (int)g_i32RelWheel,
+            (unsigned)(g_fRelSeen ? 1 : 0));
+
+    /* Grep: virtio-input: soft caps */
+    kprintf("virtio-input: soft caps mask=0x%x key=%u rel=%u abs=%u\n",
+            (unsigned)g_u32Caps, (unsigned)u32Key, (unsigned)u32Rel,
+            (unsigned)u32Abs);
+
+    /* Grep: virtio-input: soft absinfo */
+    kprintf("virtio-input: soft absinfo x=%d..%d seen=%u y=%d..%d seen=%u "
+            "soft_default=%d..%d\n",
+            (int)g_AbsX.i32Min, (int)g_AbsX.i32Max,
+            (unsigned)(g_fAbsInfoX ? 1 : 0), (int)g_AbsY.i32Min,
+            (int)g_AbsY.i32Max, (unsigned)(g_fAbsInfoY ? 1 : 0),
+            (int)VI_ABS_SOFT_MIN, (int)VI_ABS_SOFT_MAX);
+
+    /* Grep: virtio-input: soft stats */
+    kprintf("virtio-input: soft stats events=%u pending=%u dropped=%u "
+            "posted=%u ready=%u\n",
+            (unsigned)g_u32EventCount, (unsigned)u32Pending,
+            (unsigned)g_u32Dropped, (unsigned)g_cPosted,
+            (unsigned)(g_fReady ? 1 : 0));
+
+    /*
+     * Grep: virtio-input: soft path
+     * Honesty: product input path is this driver (claim=1 when ready).
+     * Multi-slot q0 + soft ring + soft axes + cfg EV_BITS/ABS_INFO soft probe.
+     */
+    kprintf("virtio-input: soft path claim=%u q0_event=1 multi_slot=1 "
+            "soft_ring=1 soft_axes=1 cfg_ev_bits=1 cfg_abs_info=1\n",
+            (unsigned)(g_fReady ? 1 : 0));
+
+    if (g_fReady) {
+        kprintf("virtio-input: soft inventory PASS\n");
+        kprintf("virtio-input: soft PASS\n");
+    } else {
+        kprintf("virtio-input: soft inventory SKIP\n");
+        kprintf("virtio-input: soft SKIP\n");
+    }
+}
+
+/*
  * Soft probe of device config: EV_BITS for KEY/REL/ABS + ABS_INFO for X/Y.
  * Failure is non-fatal — axes soft defaults remain.
  */
@@ -439,24 +533,28 @@ virtio_input_probe(void)
     }
     if (g_pIn == NULL) {
         kprintf("virtio-input: no device\n");
+        soft_inventory_log();
         return -1;
     }
     st = virtio_pci_setup(g_pIn);
     if (st != GJ_OK || g_pIn->pCommon == NULL) {
         kprintf("virtio-input: setup failed %d\n", (int)st);
         g_pIn = NULL;
+        soft_inventory_log();
         return -1;
     }
     st = virtio_negotiate(g_pIn, GJ_VIRTIO_F_VERSION_1);
     if (st != GJ_OK) {
         kprintf("virtio-input: negotiate failed %d\n", (int)st);
         g_pIn = NULL;
+        soft_inventory_log();
         return -1;
     }
     st = virtio_q_setup(g_pIn, &g_qEvent, 0, (u16)VI_Q_SIZE);
     if (st != GJ_OK) {
         kprintf("virtio-input: event queue failed %d\n", (int)st);
         g_pIn = NULL;
+        soft_inventory_log();
         return -1;
     }
     virtio_set_status(g_pIn, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
@@ -473,6 +571,8 @@ virtio_input_probe(void)
             (unsigned)g_cPosted);
     kprintf("virtio-input: abs/rel axes soft PASS caps=0x%x absinfo=%d/%d\n",
             (unsigned)g_u32Caps, g_fAbsInfoX, g_fAbsInfoY);
+    /* Wave 10: greppable virtio-input: soft … inventory (never hard-gates). */
+    soft_inventory_log();
     return 0;
 }
 

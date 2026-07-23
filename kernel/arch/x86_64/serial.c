@@ -10,20 +10,26 @@
  * -------------------------------------------------------------------------
  * Soft init notes: after 8N1/FIFO/MCR program, snapshot IER/LCR/MCR +
  * divisor readback (DLAB peek) and live LSR/MSR/IIR. Bumps soft inits.
- * Soft status: live LSR lamps (DR/THRE/TEMT/errors), MSR modem bits,
- * TX spin budget + char/poll/getc counters.
+ * Soft status: live LSR lamps (DR/THRE/TEMT/errors), MSR modem lamps,
+ * MCR path lamps, IIR noint/id, TX spin budget + char/poll/getc counters.
  * Soft verify: IER=0 (polled), LCR=8N1 DLAB-off, MCR DTR|RTS|OUT2,
- * divisor lo/hi match 38400 program (0x0003). Never reprograms UART.
+ * divisor lo/hi match 38400 program (0x0003), live not floating 0xFF.
+ * Soft expect subflags (ier_ok/lcr_ok/mcr_ok/div_ok/live_ok) deepen the
+ * greppable inventory without extra reprogram or IRQ claim. Never
+ * reprograms UART after init; FCR is write-only (program shadow only).
  *
- * Greppable (product / smoke inventory):
- *   serial: soft inits=… chars=… spinmax=… thrwait=… poll=… getc=…
+ * Greppable (product / smoke inventory — Wave 10 deepen, prefix-stable):
+ *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
- *   serial: soft div=0x… thre=… temt=… dr=… dlab=… oe=… pe=… fe=… bi=…
+ *   serial: soft div=0x… thre=… temt=… dr=… dlab=… oe=… pe=… fe=… bi=… err=…
+ *   serial: soft msr cts=… dsr=… ri=… dcd=… dcts=… ddsr=… teri=… ddcd=…
+ *   serial: soft path polled=1 irq=0 fcr=0x… spin_cap=… ready=… live=…
+ *   serial: soft expect ier_ok=… lcr_ok=… mcr_ok=… div_ok=… live_ok=…
  *   serial: soft verify PASS|FAIL|idle (ok=… bad=…)
  *
  * Soft APIs (linkable; no main hook required — serial_init self-logs):
  *   serial_soft_inits / chars / spinmax / thr_waits / polls / getcs
- *   serial_soft_verify_ok / verify_bad / ready
+ *   serial_soft_verify_ok / verify_bad / ready / txfull / log_n
  *   serial_soft_port / ier / lcr / mcr / lsr / msr / iir / div
  *   serial_soft_status_refresh / serial_soft_verify / serial_soft_log
  */
@@ -86,6 +92,10 @@
 /* Soft TX wait budget (match UEFI stub / aarch64 PL011 spin ceiling). */
 #define UART_SOFT_SPIN_MAX 100000u
 
+/* IIR soft lamps (read path; FCR is write-only at same offset). */
+#define UART_IIR_NOINT  0x01u /* 1 = no interrupt pending */
+#define UART_IIR_ID_MASK 0x0eu
+
 /* Soft snapshot of last programmed + last live status peeks. */
 struct serial_soft_snap {
     u16 u16Port;
@@ -96,6 +106,8 @@ struct serial_soft_snap {
     u8  u8Lsr;
     u8  u8Msr;
     u8  u8Iir;
+    u8  u8FcrProg;  /* FCR write shadow (classic 16550 is write-only) */
+    u8  u8Scr;      /* scratch reg live peek */
     u8  u8Thre;     /* LSR.THRE lamp */
     u8  u8Temt;     /* LSR.TEMT lamp */
     u8  u8Dr;       /* LSR.DR lamp */
@@ -104,7 +116,32 @@ struct serial_soft_snap {
     u8  u8Pe;       /* parity */
     u8  u8Fe;       /* framing */
     u8  u8Bi;       /* break */
-    u8  u8VerifyOk; /* last soft verify result */
+    u8  u8Err;      /* LSR.ERR (fifo error) lamp */
+    /* MSR modem lamps (live). */
+    u8  u8Cts;
+    u8  u8Dsr;
+    u8  u8Ri;
+    u8  u8Dcd;
+    u8  u8Dcts;
+    u8  u8Ddsr;
+    u8  u8Teri;
+    u8  u8Ddcd;
+    /* MCR path lamps. */
+    u8  u8Dtr;
+    u8  u8Rts;
+    u8  u8Out2;
+    /* IIR soft. */
+    u8  u8Noint;    /* IIR no-interrupt-pending */
+    u8  u8IirId;    /* IIR ID field (bits 1..3) */
+    /* Soft float / live presence. */
+    u8  u8Float;    /* LSR+MSR all-ones → missing I/O */
+    u8  u8LiveOk;   /* not floating */
+    /* Soft expect subflags (last verify). */
+    u8  u8IerOk;
+    u8  u8LcrOk;
+    u8  u8McrOk;
+    u8  u8DivOk;
+    u8  u8VerifyOk; /* last soft verify aggregate */
     u8  u8Pad;
 };
 
@@ -122,6 +159,7 @@ static volatile u32 g_u32SoftThrWaits;
 static volatile u32 g_u32SoftPolls;
 static volatile u32 g_u32SoftGetcs;
 static volatile u32 g_u32SoftTxFullHits;
+static volatile u32 g_u32SoftLogN; /* serial_soft_log emissions (cap spam) */
 
 static inline void
 outb(u16 uPort, u8 u8Val)
@@ -158,10 +196,51 @@ serial_soft_decode_lsr(struct serial_soft_snap *pSnap, u8 u8Lsr)
     pSnap->u8Pe = (u8)((u8Lsr & UART_LSR_PE) != 0u);
     pSnap->u8Fe = (u8)((u8Lsr & UART_LSR_FE) != 0u);
     pSnap->u8Bi = (u8)((u8Lsr & UART_LSR_BI) != 0u);
+    pSnap->u8Err = (u8)((u8Lsr & UART_LSR_ERR) != 0u);
 }
 
 /**
- * Soft: read live IER/LCR/MCR/LSR/MSR/IIR + divisor via brief DLAB.
+ * Soft: decode MSR modem lamps. Pure observability.
+ */
+static void
+serial_soft_decode_msr(struct serial_soft_snap *pSnap, u8 u8Msr)
+{
+    pSnap->u8Msr = u8Msr;
+    pSnap->u8Dcts = (u8)((u8Msr & UART_MSR_DCTS) != 0u);
+    pSnap->u8Ddsr = (u8)((u8Msr & UART_MSR_DDSR) != 0u);
+    pSnap->u8Teri = (u8)((u8Msr & UART_MSR_TERI) != 0u);
+    pSnap->u8Ddcd = (u8)((u8Msr & UART_MSR_DDCD) != 0u);
+    pSnap->u8Cts = (u8)((u8Msr & UART_MSR_CTS) != 0u);
+    pSnap->u8Dsr = (u8)((u8Msr & UART_MSR_DSR) != 0u);
+    pSnap->u8Ri = (u8)((u8Msr & UART_MSR_RI) != 0u);
+    pSnap->u8Dcd = (u8)((u8Msr & UART_MSR_DCD) != 0u);
+}
+
+/**
+ * Soft: decode MCR path lamps. Pure observability.
+ */
+static void
+serial_soft_decode_mcr(struct serial_soft_snap *pSnap, u8 u8Mcr)
+{
+    pSnap->u8Mcr = u8Mcr;
+    pSnap->u8Dtr = (u8)((u8Mcr & UART_MCR_DTR) != 0u);
+    pSnap->u8Rts = (u8)((u8Mcr & UART_MCR_RTS) != 0u);
+    pSnap->u8Out2 = (u8)((u8Mcr & UART_MCR_OUT2) != 0u);
+}
+
+/**
+ * Soft: decode IIR noint + ID. Pure observability.
+ */
+static void
+serial_soft_decode_iir(struct serial_soft_snap *pSnap, u8 u8Iir)
+{
+    pSnap->u8Iir = u8Iir;
+    pSnap->u8Noint = (u8)((u8Iir & UART_IIR_NOINT) != 0u);
+    pSnap->u8IirId = (u8)((u8Iir & UART_IIR_ID_MASK) >> 1);
+}
+
+/**
+ * Soft: read live IER/LCR/MCR/LSR/MSR/IIR/SCR + divisor via brief DLAB.
  * Restores LCR (clears DLAB). Safe on QEMU 16550 and real COM1.
  */
 static void
@@ -172,15 +251,20 @@ serial_soft_status_refresh_inner(void)
     u8 u8Dll;
     u8 u8Dlh;
     u8 u8Lsr;
+    u8 u8Msr;
+    u8 u8Iir;
 
     g_SoftSnap.u16Port = uPort;
     g_SoftSnap.u8Ier = inb((u16)(uPort + UART_IER));
     g_SoftSnap.u8Lcr = inb((u16)(uPort + UART_LCR));
-    g_SoftSnap.u8Mcr = inb((u16)(uPort + UART_MCR));
+    serial_soft_decode_mcr(&g_SoftSnap, inb((u16)(uPort + UART_MCR)));
     u8Lsr = inb((u16)(uPort + UART_LSR));
     serial_soft_decode_lsr(&g_SoftSnap, u8Lsr);
-    g_SoftSnap.u8Msr = inb((u16)(uPort + UART_MSR));
-    g_SoftSnap.u8Iir = inb((u16)(uPort + UART_IIR));
+    u8Msr = inb((u16)(uPort + UART_MSR));
+    serial_soft_decode_msr(&g_SoftSnap, u8Msr);
+    u8Iir = inb((u16)(uPort + UART_IIR));
+    serial_soft_decode_iir(&g_SoftSnap, u8Iir);
+    g_SoftSnap.u8Scr = inb((u16)(uPort + UART_SCR));
     g_SoftSnap.u8Dlab = (u8)((g_SoftSnap.u8Lcr & UART_LCR_DLAB) != 0u);
 
     /*
@@ -197,16 +281,27 @@ serial_soft_status_refresh_inner(void)
     g_SoftSnap.u8Lcr = inb((u16)(uPort + UART_LCR));
     g_SoftSnap.u8Dlab = (u8)((g_SoftSnap.u8Lcr & UART_LCR_DLAB) != 0u);
     g_SoftSnap.u8Ier = inb((u16)(uPort + UART_IER));
+
+    /* Floating bus: LSR+MSR all-ones → no COM1 / unmapped. */
+    g_SoftSnap.u8Float =
+        (u8)((g_SoftSnap.u8Lsr == 0xffu && g_SoftSnap.u8Msr == 0xffu) ? 1u : 0u);
+    g_SoftSnap.u8LiveOk = (u8)(g_SoftSnap.u8Float == 0u ? 1u : 0u);
 }
 
 /**
  * Soft: compare live regs to product program. Bumps ok/bad. Returns 1 PASS.
+ * Records per-field expect subflags for greppable soft expect inventory.
  */
 static int
 serial_soft_verify_inner(void)
 {
     int fOk = 1;
     u16 u16ExpectDiv;
+    u8 u8IerOk;
+    u8 u8LcrOk;
+    u8 u8McrOk;
+    u8 u8DivOk;
+    u8 u8LiveOk;
 
     if (!g_fSoftSnapLive || !g_fSerialReady) {
         return 0;
@@ -216,24 +311,25 @@ serial_soft_verify_inner(void)
 
     u16ExpectDiv = (u16)(UART_SOFT_DIV_LO | ((u16)UART_SOFT_DIV_HI << 8));
 
-    if (g_SoftSnap.u8Ier != UART_IER_SOFT_NONE) {
-        fOk = 0;
-    }
-    if ((g_SoftSnap.u8Lcr & 0x3fu) != UART_SOFT_LCR) {
-        /* Ignore spare/break bits; require 8N1 + DLAB clear in low fields. */
-        fOk = 0;
-    }
-    if ((g_SoftSnap.u8Lcr & UART_LCR_DLAB) != 0u) {
-        fOk = 0;
-    }
-    if ((g_SoftSnap.u8Mcr & UART_MCR_SOFT) != UART_MCR_SOFT) {
-        fOk = 0;
-    }
-    if (g_SoftSnap.u16Div != u16ExpectDiv) {
-        fOk = 0;
-    }
+    u8IerOk = (u8)(g_SoftSnap.u8Ier == UART_IER_SOFT_NONE ? 1u : 0u);
+    /* Ignore spare/break bits; require 8N1 + DLAB clear in low fields. */
+    u8LcrOk = (u8)(((g_SoftSnap.u8Lcr & 0x3fu) == UART_SOFT_LCR &&
+                    (g_SoftSnap.u8Lcr & UART_LCR_DLAB) == 0u)
+                       ? 1u
+                       : 0u);
+    u8McrOk =
+        (u8)(((g_SoftSnap.u8Mcr & UART_MCR_SOFT) == UART_MCR_SOFT) ? 1u : 0u);
+    u8DivOk = (u8)(g_SoftSnap.u16Div == u16ExpectDiv ? 1u : 0u);
     /* LSR all-ones often means missing I/O port (no COM1). Soft FAIL. */
-    if (g_SoftSnap.u8Lsr == 0xffu && g_SoftSnap.u8Msr == 0xffu) {
+    u8LiveOk = g_SoftSnap.u8LiveOk;
+
+    g_SoftSnap.u8IerOk = u8IerOk;
+    g_SoftSnap.u8LcrOk = u8LcrOk;
+    g_SoftSnap.u8McrOk = u8McrOk;
+    g_SoftSnap.u8DivOk = u8DivOk;
+
+    if (u8IerOk == 0u || u8LcrOk == 0u || u8McrOk == 0u || u8DivOk == 0u ||
+        u8LiveOk == 0u) {
         fOk = 0;
     }
 
@@ -255,6 +351,7 @@ serial_soft_note_init(void)
     g_u32SoftInits++;
     g_fSoftSnapLive = 1;
     g_SoftSnap.u16Port = serial_port();
+    g_SoftSnap.u8FcrProg = UART_FCR_SOFT;
     serial_soft_status_refresh_inner();
 }
 
@@ -277,6 +374,7 @@ serial_init(void)
     /*
      * Soft bring-up lines (self-contained; no main hook). kprintf →
      * console_putchar → serial_putchar once UART is programmed above.
+     * Keep to a tight set — full inventory is serial_soft_log (Wave 10).
      */
     kprintf("serial: soft program port=0x%x div=0x%x lcr=0x%x mcr=0x%x "
             "fcr=0x%x ier=0x%x\n",
@@ -291,16 +389,24 @@ serial_init(void)
             (unsigned)g_SoftSnap.u8Lsr, (unsigned)g_SoftSnap.u8Msr,
             (unsigned)g_SoftSnap.u8Iir, (unsigned)g_SoftSnap.u16Div);
     kprintf("serial: soft lamps thre=%u temt=%u dr=%u dlab=%u "
-            "oe=%u pe=%u fe=%u bi=%u\n",
+            "oe=%u pe=%u fe=%u bi=%u err=%u float=%u\n",
             (unsigned)g_SoftSnap.u8Thre, (unsigned)g_SoftSnap.u8Temt,
             (unsigned)g_SoftSnap.u8Dr, (unsigned)g_SoftSnap.u8Dlab,
             (unsigned)g_SoftSnap.u8Oe, (unsigned)g_SoftSnap.u8Pe,
-            (unsigned)g_SoftSnap.u8Fe, (unsigned)g_SoftSnap.u8Bi);
+            (unsigned)g_SoftSnap.u8Fe, (unsigned)g_SoftSnap.u8Bi,
+            (unsigned)g_SoftSnap.u8Err, (unsigned)g_SoftSnap.u8Float);
+    kprintf("serial: soft path polled=1 irq=0 fcr=0x%x spin_cap=%u "
+            "ready=%u live=%u noint=%u\n",
+            (unsigned)g_SoftSnap.u8FcrProg, (unsigned)UART_SOFT_SPIN_MAX,
+            (unsigned)g_fSerialReady, (unsigned)g_SoftSnap.u8LiveOk,
+            (unsigned)g_SoftSnap.u8Noint);
 
     if (serial_soft_verify_inner()) {
-        kprintf("serial: soft verify PASS inits=%u\n", g_u32SoftInits);
+        kprintf("serial: soft verify PASS inits=%u\n",
+                (unsigned)g_u32SoftInits);
     } else {
-        kprintf("serial: soft verify FAIL inits=%u\n", g_u32SoftInits);
+        kprintf("serial: soft verify FAIL inits=%u\n",
+                (unsigned)g_u32SoftInits);
     }
 }
 
@@ -410,6 +516,12 @@ serial_soft_txfull(void)
 }
 
 u32
+serial_soft_log_n(void)
+{
+    return g_u32SoftLogN;
+}
+
+u32
 serial_soft_polls(void)
 {
     return g_u32SoftPolls;
@@ -507,52 +619,77 @@ serial_soft_verify(void)
 
 /**
  * Greppable soft summary (product / smoke inventory).
+ * Wave 10 deepen: denser MSR/path/expect lines; re-verify once per log.
+ * Not hot-path — call from soft stats smoke only.
  */
 void
 serial_soft_log(void)
 {
-    if (g_fSoftSnapLive) {
+    if (g_u32SoftLogN < 0xffffffffu) {
+        g_u32SoftLogN++;
+    }
+
+    if (g_fSoftSnapLive && g_fSerialReady) {
+        /* Fresh snap + expect subflags for this inventory emission. */
+        (void)serial_soft_verify_inner();
+    } else if (g_fSoftSnapLive) {
         serial_soft_status_refresh_inner();
     }
 
+    /* Grep: serial: soft inits=… */
     kprintf("serial: soft inits=%u chars=%u spinmax=%u thrwait=%u "
-            "txfull=%u poll=%u getc=%u\n",
-            g_u32SoftInits, g_u32SoftChars, g_u32SoftSpinMax,
-            g_u32SoftThrWaits, g_u32SoftTxFullHits, g_u32SoftPolls,
-            g_u32SoftGetcs);
+            "txfull=%u poll=%u getc=%u log_n=%u\n",
+            (unsigned)g_u32SoftInits, (unsigned)g_u32SoftChars,
+            (unsigned)g_u32SoftSpinMax, (unsigned)g_u32SoftThrWaits,
+            (unsigned)g_u32SoftTxFullHits, (unsigned)g_u32SoftPolls,
+            (unsigned)g_u32SoftGetcs, (unsigned)g_u32SoftLogN);
+    /* Grep: serial: soft port=… */
     kprintf("serial: soft port=0x%x ier=0x%x lcr=0x%x mcr=0x%x "
-            "lsr=0x%x msr=0x%x iir=0x%x\n",
+            "lsr=0x%x msr=0x%x iir=0x%x scr=0x%x\n",
             (unsigned)g_SoftSnap.u16Port, (unsigned)g_SoftSnap.u8Ier,
             (unsigned)g_SoftSnap.u8Lcr, (unsigned)g_SoftSnap.u8Mcr,
             (unsigned)g_SoftSnap.u8Lsr, (unsigned)g_SoftSnap.u8Msr,
-            (unsigned)g_SoftSnap.u8Iir);
+            (unsigned)g_SoftSnap.u8Iir, (unsigned)g_SoftSnap.u8Scr);
+    /* Grep: serial: soft div=… */
     kprintf("serial: soft div=0x%x thre=%u temt=%u dr=%u dlab=%u "
-            "oe=%u pe=%u fe=%u bi=%u\n",
+            "oe=%u pe=%u fe=%u bi=%u err=%u\n",
             (unsigned)g_SoftSnap.u16Div, (unsigned)g_SoftSnap.u8Thre,
             (unsigned)g_SoftSnap.u8Temt, (unsigned)g_SoftSnap.u8Dr,
             (unsigned)g_SoftSnap.u8Dlab, (unsigned)g_SoftSnap.u8Oe,
             (unsigned)g_SoftSnap.u8Pe, (unsigned)g_SoftSnap.u8Fe,
-            (unsigned)g_SoftSnap.u8Bi);
+            (unsigned)g_SoftSnap.u8Bi, (unsigned)g_SoftSnap.u8Err);
+    /* Grep: serial: soft msr … — modem lamps (was define-only). */
+    kprintf("serial: soft msr cts=%u dsr=%u ri=%u dcd=%u "
+            "dcts=%u ddsr=%u teri=%u ddcd=%u\n",
+            (unsigned)g_SoftSnap.u8Cts, (unsigned)g_SoftSnap.u8Dsr,
+            (unsigned)g_SoftSnap.u8Ri, (unsigned)g_SoftSnap.u8Dcd,
+            (unsigned)g_SoftSnap.u8Dcts, (unsigned)g_SoftSnap.u8Ddsr,
+            (unsigned)g_SoftSnap.u8Teri, (unsigned)g_SoftSnap.u8Ddcd);
+    /* Grep: serial: soft path … — polled policy + FCR shadow. */
+    kprintf("serial: soft path polled=1 irq=0 fcr=0x%x spin_cap=%u "
+            "ready=%u live=%u float=%u noint=%u iir_id=%u "
+            "dtr=%u rts=%u out2=%u\n",
+            (unsigned)g_SoftSnap.u8FcrProg, (unsigned)UART_SOFT_SPIN_MAX,
+            (unsigned)g_fSerialReady, (unsigned)g_SoftSnap.u8LiveOk,
+            (unsigned)g_SoftSnap.u8Float, (unsigned)g_SoftSnap.u8Noint,
+            (unsigned)g_SoftSnap.u8IirId, (unsigned)g_SoftSnap.u8Dtr,
+            (unsigned)g_SoftSnap.u8Rts, (unsigned)g_SoftSnap.u8Out2);
+    /* Grep: serial: soft expect … — per-field verify subflags. */
+    kprintf("serial: soft expect ier_ok=%u lcr_ok=%u mcr_ok=%u "
+            "div_ok=%u live_ok=%u match=%u\n",
+            (unsigned)g_SoftSnap.u8IerOk, (unsigned)g_SoftSnap.u8LcrOk,
+            (unsigned)g_SoftSnap.u8McrOk, (unsigned)g_SoftSnap.u8DivOk,
+            (unsigned)g_SoftSnap.u8LiveOk, (unsigned)g_SoftSnap.u8VerifyOk);
 
+    /* Grep: serial: soft verify PASS|FAIL|idle — smoke scripts stable. */
     if (!g_fSoftSnapLive) {
         kprintf("serial: soft verify idle (ok=%u bad=%u)\n",
-                g_u32SoftVerifyOk, g_u32SoftVerifyBad);
-    } else if (g_SoftSnap.u8VerifyOk) {
+                (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad);
+    } else if (g_SoftSnap.u8VerifyOk != 0u) {
         kprintf("serial: soft verify PASS (ok=%u bad=%u)\n",
-                g_u32SoftVerifyOk, g_u32SoftVerifyBad);
+                (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad);
     } else {
         kprintf("serial: soft verify FAIL (ok=%u bad=%u)\n",
-                g_u32SoftVerifyOk, g_u32SoftVerifyBad);
+                (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad);
     }
-
-    (void)UART_LSR_ERR;
-    (void)UART_MSR_DCTS;
-    (void)UART_MSR_DDSR;
-    (void)UART_MSR_TERI;
-    (void)UART_MSR_DDCD;
-    (void)UART_MSR_CTS;
-    (void)UART_MSR_DSR;
-    (void)UART_MSR_RI;
-    (void)UART_MSR_DCD;
-    (void)UART_SCR;
 }

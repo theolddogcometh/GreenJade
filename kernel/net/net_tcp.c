@@ -19,6 +19,12 @@
  * Stats (accepts, segments, bytes_rx/tx, retransmits):
  *   segs = TX segments + RX segments seen by net_tcp_input
  *   rtx  = successful last-segment retransmits from net_tcp_poll
+ *
+ * Soft inventory (Wave 10 exclusive deepen) — diagnostics only, never
+ * hard-gates product paths. Greppable prefix-stable lines:
+ *   net: tcp soft …
+ *   net_tcp: soft …
+ * Emit on init, cadence after API ops, forced on table-full / stats getters.
  */
 #include <gj/klog.h>
 #include <gj/net_tcp.h>
@@ -38,6 +44,8 @@
 #define TCP_RTX_MAX  8
 #define TCP_TW_MS    1000 /* soft TIME_WAIT reclaim */
 #define TCP_BACKLOG_MAX 8
+/* Soft log cadence: dump inventory/stats every N ops (wrap-safe). */
+#define TCP_SOFT_LOG_EVERY 32u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -105,6 +113,314 @@ static u32 g_u32TxB;
 static u32 g_u32Rtx;
 static u32 g_u32TwReap;
 static u16 g_u16IpId;
+
+/*
+ * Soft product inventory counters — wrap OK; diagnostics only; never
+ * hard-gate product paths. Grep: net: tcp soft / net_tcp: soft
+ */
+struct tcp_soft {
+	u64 u64Ops;          /* total API entries (success + fail) */
+	u64 u64SockOk;
+	u64 u64SockFail;     /* EMFILE-shaped table full */
+	u64 u64BindOk;
+	u64 u64BindFail;
+	u64 u64ListenOk;
+	u64 u64ListenFail;
+	u64 u64ConnOk;
+	u64 u64ConnFail;
+	u64 u64ConnAgain;    /* backlog full soft reject */
+	u64 u64ConnRefused;  /* no local listener */
+	u64 u64AcceptOk;
+	u64 u64AcceptFail;
+	u64 u64AcceptAgain;
+	u64 u64SendOk;
+	u64 u64SendFail;
+	u64 u64SendAgain;
+	u64 u64SendPartial;  /* short multi-seg write */
+	u64 u64SendMulti;    /* calls that used ≥2 MSS chunks */
+	u64 u64SendWndLim;   /* peer window clamped a chunk */
+	u64 u64RecvOk;
+	u64 u64RecvFail;
+	u64 u64RecvAgain;
+	u64 u64RecvEof;
+	u64 u64CloseOk;
+	u64 u64CloseFail;
+	u64 u64InputHit;     /* net_tcp_input consumed frame */
+	u64 u64InputMiss;    /* ignored / not ours */
+	u64 u64InputSyn;     /* passive SYN accepted into table */
+	u64 u64InputSynDrop; /* SYN dropped (backlog / pending) */
+	u64 u64InputRst;
+	u64 u64InputFin;
+	u64 u64InputData;
+	u64 u64PollTicks;
+	u64 u64PollRtx;
+	u64 u64PollTw;
+	u64 u64PushFull;     /* RX ring full / short push */
+	u64 u64PushPartial;
+	u64 u64HwmUsed;      /* high-water live used slots */
+	u64 u64LogDumps;     /* times soft log was emitted */
+	u32 u32SoftLogN;     /* inventory log emissions (u32 twin) */
+};
+
+static struct tcp_soft g_soft;
+
+static void
+tcp_soft_bump(u64 *pCnt)
+{
+	if (pCnt == NULL) {
+		return;
+	}
+	(*pCnt)++; /* wrap OK */
+}
+
+/* Live-table tallies for soft inventory (no alloc; walk TCP_MAX). */
+static void
+tcp_soft_tally(u32 *pUsed, u32 *pFree, u32 *pListen, u32 *pEstab,
+	       u32 *pSyn, u32 *pCw, u32 *pFw, u32 *pTw, u32 *pLoop,
+	       u32 *pPending, u32 *pRxBytes, u32 *pRtxLive)
+{
+	u32 i;
+	u32 cUsed = 0;
+	u32 cListen = 0;
+	u32 cEstab = 0;
+	u32 cSyn = 0;
+	u32 cCw = 0;
+	u32 cFw = 0;
+	u32 cTw = 0;
+	u32 cLoop = 0;
+	u32 cPending = 0;
+	u32 cRx = 0;
+	u32 cRtx = 0;
+
+	for (i = 0; i < TCP_MAX; i++) {
+		if (!g_aT[i].u8Used) {
+			continue;
+		}
+		cUsed++;
+		if (g_aT[i].u8Listening || g_aT[i].u8State == ST_LISTEN) {
+			cListen++;
+		}
+		if (g_aT[i].u8State == ST_ESTABLISHED) {
+			cEstab++;
+		}
+		if (g_aT[i].u8State == ST_SYN_RCVD) {
+			cSyn++;
+		}
+		if (g_aT[i].u8State == ST_CLOSE_WAIT ||
+		    g_aT[i].u8State == ST_LAST_ACK) {
+			cCw++;
+		}
+		if (g_aT[i].u8State == ST_FIN_WAIT1 ||
+		    g_aT[i].u8State == ST_FIN_WAIT2) {
+			cFw++;
+		}
+		if (g_aT[i].u8State == ST_TIME_WAIT) {
+			cTw++;
+		}
+		if (g_aT[i].u8IsLoop) {
+			cLoop++;
+		}
+		cPending += (u32)g_aT[i].u8Pending;
+		cRx += g_aT[i].u32RxLen;
+		if (g_aT[i].u8RtxValid) {
+			cRtx++;
+		}
+	}
+	if (pUsed != NULL) {
+		*pUsed = cUsed;
+	}
+	if (pFree != NULL) {
+		*pFree = TCP_MAX - cUsed;
+	}
+	if (pListen != NULL) {
+		*pListen = cListen;
+	}
+	if (pEstab != NULL) {
+		*pEstab = cEstab;
+	}
+	if (pSyn != NULL) {
+		*pSyn = cSyn;
+	}
+	if (pCw != NULL) {
+		*pCw = cCw;
+	}
+	if (pFw != NULL) {
+		*pFw = cFw;
+	}
+	if (pTw != NULL) {
+		*pTw = cTw;
+	}
+	if (pLoop != NULL) {
+		*pLoop = cLoop;
+	}
+	if (pPending != NULL) {
+		*pPending = cPending;
+	}
+	if (pRxBytes != NULL) {
+		*pRxBytes = cRx;
+	}
+	if (pRtxLive != NULL) {
+		*pRtxLive = cRtx;
+	}
+	if ((u64)cUsed > g_soft.u64HwmUsed) {
+		g_soft.u64HwmUsed = (u64)cUsed;
+	}
+}
+
+/*
+ * Greppable soft product inventory + stats dump (Wave 10 exclusive).
+ * Prefix-stable: "net: tcp soft …" and twin "net_tcp: soft …".
+ */
+static void
+tcp_soft_print(void)
+{
+	u32 cUsed = 0;
+	u32 cFree = 0;
+	u32 cListen = 0;
+	u32 cEstab = 0;
+	u32 cSyn = 0;
+	u32 cCw = 0;
+	u32 cFw = 0;
+	u32 cTw = 0;
+	u32 cLoop = 0;
+	u32 cPending = 0;
+	u32 cRx = 0;
+	u32 cRtxLive = 0;
+	u32 i;
+	struct tcp_soft s;
+
+	tcp_soft_tally(&cUsed, &cFree, &cListen, &cEstab, &cSyn, &cCw, &cFw,
+		       &cTw, &cLoop, &cPending, &cRx, &cRtxLive);
+	s = g_soft;
+	tcp_soft_bump(&g_soft.u64LogDumps);
+	if (g_soft.u32SoftLogN < 0xffffffffu) {
+		g_soft.u32SoftLogN++;
+	}
+
+	/* Grep: net: tcp soft inventory */
+	kprintf("net: tcp soft inventory used=%u free=%u listen=%u estab=%u "
+		"syn=%u close_wait=%u fin_wait=%u time_wait=%u loop=%u "
+		"pending=%u rx_bytes=%u rtx_live=%u hwm=%llu max=%u "
+		"fd_base=%u mss=%u wnd=%u rx_max=%u tx_max=%u "
+		"backlog_max=%u rtx_ms=%u tw_ms=%u\n",
+		cUsed, cFree, cListen, cEstab, cSyn, cCw, cFw, cTw, cLoop,
+		cPending, cRx, cRtxLive, (unsigned long long)s.u64HwmUsed,
+		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
+		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
+		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
+		(unsigned)TCP_TW_MS);
+
+	/* Grep: net_tcp: soft inventory (twin prefix) */
+	kprintf("net_tcp: soft inventory used=%u free=%u listen=%u estab=%u "
+		"hwm=%llu accepts=%u segs=%u rx=%u tx=%u rtx=%u tw_reap=%u "
+		"log_n=%u\n",
+		cUsed, cFree, cListen, cEstab,
+		(unsigned long long)s.u64HwmUsed, g_u32Accepts, g_u32Segs,
+		g_u32RxB, g_u32TxB, g_u32Rtx, g_u32TwReap, g_soft.u32SoftLogN);
+
+	/* Grep: net: tcp soft stats */
+	kprintf("net: tcp soft stats ops=%llu sock=%llu sock_fail=%llu "
+		"bind=%llu bind_fail=%llu listen=%llu listen_fail=%llu "
+		"conn=%llu conn_fail=%llu conn_again=%llu conn_refused=%llu "
+		"accept=%llu accept_fail=%llu accept_again=%llu "
+		"send=%llu send_fail=%llu send_again=%llu send_partial=%llu "
+		"send_multi=%llu send_wnd=%llu "
+		"recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
+		"close=%llu close_fail=%llu "
+		"input_hit=%llu input_miss=%llu input_syn=%llu "
+		"input_syn_drop=%llu input_rst=%llu input_fin=%llu "
+		"input_data=%llu poll=%llu poll_rtx=%llu poll_tw=%llu "
+		"push_full=%llu push_partial=%llu dumps=%llu\n",
+		(unsigned long long)s.u64Ops,
+		(unsigned long long)s.u64SockOk,
+		(unsigned long long)s.u64SockFail,
+		(unsigned long long)s.u64BindOk,
+		(unsigned long long)s.u64BindFail,
+		(unsigned long long)s.u64ListenOk,
+		(unsigned long long)s.u64ListenFail,
+		(unsigned long long)s.u64ConnOk,
+		(unsigned long long)s.u64ConnFail,
+		(unsigned long long)s.u64ConnAgain,
+		(unsigned long long)s.u64ConnRefused,
+		(unsigned long long)s.u64AcceptOk,
+		(unsigned long long)s.u64AcceptFail,
+		(unsigned long long)s.u64AcceptAgain,
+		(unsigned long long)s.u64SendOk,
+		(unsigned long long)s.u64SendFail,
+		(unsigned long long)s.u64SendAgain,
+		(unsigned long long)s.u64SendPartial,
+		(unsigned long long)s.u64SendMulti,
+		(unsigned long long)s.u64SendWndLim,
+		(unsigned long long)s.u64RecvOk,
+		(unsigned long long)s.u64RecvFail,
+		(unsigned long long)s.u64RecvAgain,
+		(unsigned long long)s.u64RecvEof,
+		(unsigned long long)s.u64CloseOk,
+		(unsigned long long)s.u64CloseFail,
+		(unsigned long long)s.u64InputHit,
+		(unsigned long long)s.u64InputMiss,
+		(unsigned long long)s.u64InputSyn,
+		(unsigned long long)s.u64InputSynDrop,
+		(unsigned long long)s.u64InputRst,
+		(unsigned long long)s.u64InputFin,
+		(unsigned long long)s.u64InputData,
+		(unsigned long long)s.u64PollTicks,
+		(unsigned long long)s.u64PollRtx,
+		(unsigned long long)s.u64PollTw,
+		(unsigned long long)s.u64PushFull,
+		(unsigned long long)s.u64PushPartial,
+		(unsigned long long)(s.u64LogDumps + 1ull));
+
+	/* Grep: net_tcp: soft stats (twin) */
+	kprintf("net_tcp: soft stats ops=%llu multi=%llu wnd=%llu "
+		"syn_drop=%llu rtx=%u tw=%u dumps=%llu\n",
+		(unsigned long long)s.u64Ops,
+		(unsigned long long)s.u64SendMulti,
+		(unsigned long long)s.u64SendWndLim,
+		(unsigned long long)s.u64InputSynDrop, g_u32Rtx, g_u32TwReap,
+		(unsigned long long)(s.u64LogDumps + 1ull));
+
+	/* Per-live-slot soft detail (cap-bounded; product smoke inventory). */
+	for (i = 0; i < TCP_MAX; i++) {
+		if (!g_aT[i].u8Used) {
+			continue;
+		}
+		/* Grep: net: tcp soft slot */
+		kprintf("net: tcp soft slot=%u state=%u listen=%u loop=%u "
+			"lport=%u rport=%u peer=%d bl=%u pend=%u "
+			"rx=%u head=%u peer_wnd=%u rtx_v=%u rtx_n=%u "
+			"fin=%u snd_una=%u snd_nxt=%u rcv_nxt=%u fd=%u\n",
+			i, (unsigned)g_aT[i].u8State,
+			(unsigned)g_aT[i].u8Listening,
+			(unsigned)g_aT[i].u8IsLoop,
+			(unsigned)g_aT[i].u16Lport,
+			(unsigned)g_aT[i].u16Rport, (int)g_aT[i].i16Peer,
+			(unsigned)g_aT[i].u8Backlog,
+			(unsigned)g_aT[i].u8Pending,
+			(unsigned)g_aT[i].u32RxLen,
+			(unsigned)g_aT[i].u32RxHead,
+			(unsigned)g_aT[i].u16PeerWnd,
+			(unsigned)g_aT[i].u8RtxValid,
+			(unsigned)g_aT[i].u32RtxCount,
+			(unsigned)g_aT[i].u8FinSent,
+			(unsigned)g_aT[i].u32SndUna,
+			(unsigned)g_aT[i].u32SndNxt,
+			(unsigned)g_aT[i].u32RcvNxt,
+			(unsigned)(TCP_FD_BASE + i));
+	}
+}
+
+/* Cadence + force soft log (table-full / stats / init always force). */
+static void
+tcp_soft_maybe_log(int fForce)
+{
+	tcp_soft_bump(&g_soft.u64Ops);
+	if (fForce ||
+	    (g_soft.u64Ops != 0 &&
+	     (g_soft.u64Ops % (u64)TCP_SOFT_LOG_EVERY) == 0)) {
+		tcp_soft_print();
+	}
+}
 
 static u16
 ip_cksum(const void *p, u32 cb)
@@ -203,11 +519,15 @@ push_rx(u32 s, const u8 *p, u32 cb)
 		return -1;
 	}
 	if (cb == 0 || g_aT[s].u32RxLen >= TCP_RX_MAX) {
+		if (cb != 0 && g_aT[s].u32RxLen >= TCP_RX_MAX) {
+			tcp_soft_bump(&g_soft.u64PushFull);
+		}
 		return 0;
 	}
 	cbFree = TCP_RX_MAX - g_aT[s].u32RxLen;
 	if (cb > cbFree) {
 		cb = cbFree;
+		tcp_soft_bump(&g_soft.u64PushPartial);
 	}
 	for (i = 0; i < cb; i++) {
 		u32 pos = (g_aT[s].u32RxHead + g_aT[s].u32RxLen) % TCP_RX_MAX;
@@ -410,6 +730,7 @@ void
 net_tcp_init(void)
 {
 	memset(g_aT, 0, sizeof(g_aT));
+	memset(&g_soft, 0, sizeof(g_soft));
 	g_u32Accepts = 0;
 	g_u32Segs = 0;
 	g_u32RxB = 0;
@@ -421,6 +742,18 @@ net_tcp_init(void)
 		"tw_ms=%u\n",
 		TCP_FD_BASE, TCP_FD_BASE + TCP_MAX - 1, TCP_RTX_MS, TCP_WND,
 		TCP_MSS, TCP_TW_MS);
+	/* Grep: net: tcp soft init / net_tcp: soft init */
+	kprintf("net: tcp soft init max=%u fd_base=%u mss=%u wnd=%u "
+		"rx_max=%u tx_max=%u backlog_max=%u rtx_ms=%u tw_ms=%u "
+		"log_every=%u\n",
+		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
+		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
+		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
+		(unsigned)TCP_TW_MS, (unsigned)TCP_SOFT_LOG_EVERY);
+	kprintf("net_tcp: soft init max=%u fd_base=%u mss=%u bulk=3000 "
+		"wave=10\n",
+		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS);
+	tcp_soft_print();
 }
 
 i64
@@ -429,9 +762,20 @@ net_tcp_socket(void)
 	int s = alloc_slot();
 
 	if (s < 0) {
+		tcp_soft_bump(&g_soft.u64SockFail);
+		/* Grep: net: tcp soft emfile */
+		kprintf("net: tcp soft emfile max=%u ops=%llu\n",
+			(unsigned)TCP_MAX,
+			(unsigned long long)g_soft.u64Ops);
+		tcp_soft_maybe_log(1);
 		return -24;
 	}
 	g_aT[s].u8State = ST_CLOSED;
+	/* HWM via tally walk (outputs unused). */
+	tcp_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+		       NULL, NULL, NULL);
+	tcp_soft_bump(&g_soft.u64SockOk);
+	tcp_soft_maybe_log(0);
 	return slot_to_fd((u32)s);
 }
 
@@ -449,9 +793,13 @@ net_tcp_bind(i64 fd, u16 port)
 	u32 s;
 
 	if (fd_to_slot(fd, &s) != 0) {
+		tcp_soft_bump(&g_soft.u64BindFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	g_aT[s].u16Lport = port;
+	tcp_soft_bump(&g_soft.u64BindOk);
+	tcp_soft_maybe_log(0);
 	return 0;
 }
 
@@ -462,6 +810,8 @@ net_tcp_listen(i64 fd, int backlog)
 	int nBl;
 
 	if (fd_to_slot(fd, &s) != 0) {
+		tcp_soft_bump(&g_soft.u64ListenFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	/* Soft backlog clamp (Linux-shaped: 0 → 1). */
@@ -478,6 +828,15 @@ net_tcp_listen(i64 fd, int backlog)
 	g_aT[s].u8State = ST_LISTEN;
 	kprintf("net_tcp: LISTEN :%u fd=%ld backlog=%u\n", g_aT[s].u16Lport,
 		(long)fd, g_aT[s].u8Backlog);
+	tcp_soft_bump(&g_soft.u64ListenOk);
+	/* Grep: net: tcp soft listen / net_tcp: soft listen */
+	kprintf("net: tcp soft listen fd=%lld port=%u backlog=%u\n",
+		(long long)fd, (unsigned)g_aT[s].u16Lport,
+		(unsigned)g_aT[s].u8Backlog);
+	kprintf("net_tcp: soft listen fd=%lld port=%u backlog=%u\n",
+		(long long)fd, (unsigned)g_aT[s].u16Lport,
+		(unsigned)g_aT[s].u8Backlog);
+	tcp_soft_maybe_log(0);
 	return 0;
 }
 
@@ -488,6 +847,8 @@ net_tcp_connect(i64 fd, u16 port)
 	u32 i;
 
 	if (fd_to_slot(fd, &s) != 0) {
+		tcp_soft_bump(&g_soft.u64ConnFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	for (i = 0; i < TCP_MAX; i++) {
@@ -500,10 +861,15 @@ net_tcp_connect(i64 fd, u16 port)
 				g_aT[i].u8Backlog = 1;
 			}
 			if (g_aT[i].u8Pending >= g_aT[i].u8Backlog) {
+				tcp_soft_bump(&g_soft.u64ConnAgain);
+				tcp_soft_maybe_log(0);
 				return -11; /* EAGAIN */
 			}
 			ns = alloc_slot();
 			if (ns < 0) {
+				tcp_soft_bump(&g_soft.u64ConnFail);
+				tcp_soft_bump(&g_soft.u64SockFail);
+				tcp_soft_maybe_log(1);
 				return -24;
 			}
 			g_aT[ns].u8State = ST_ESTABLISHED;
@@ -527,9 +893,19 @@ net_tcp_connect(i64 fd, u16 port)
 				g_aT[i].u8Pending++;
 			}
 			g_u32Accepts++;
+			tcp_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL,
+				       NULL, NULL, NULL, NULL, NULL, NULL);
+			tcp_soft_bump(&g_soft.u64ConnOk);
+			/* Grep: net: tcp soft connect */
+			kprintf("net: tcp soft connect fd=%lld port=%u "
+				"peer_slot=%d loop=1\n",
+				(long long)fd, (unsigned)port, ns);
+			tcp_soft_maybe_log(0);
 			return 0;
 		}
 	}
+	tcp_soft_bump(&g_soft.u64ConnRefused);
+	tcp_soft_maybe_log(0);
 	return -113;
 }
 
@@ -540,23 +916,40 @@ net_tcp_accept(i64 fd)
 	i16 peer;
 
 	if (fd_to_slot(fd, &s) != 0) {
+		tcp_soft_bump(&g_soft.u64AcceptFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	if (!g_aT[s].u8Listening) {
+		tcp_soft_bump(&g_soft.u64AcceptFail);
+		tcp_soft_maybe_log(0);
 		return -22;
 	}
 	peer = g_aT[s].i16Peer;
 	if (peer < 0 || (u32)peer >= TCP_MAX || !g_aT[peer].u8Used) {
+		tcp_soft_bump(&g_soft.u64AcceptAgain);
+		tcp_soft_maybe_log(0);
 		return -11;
 	}
 	if (g_aT[peer].u8State != ST_ESTABLISHED &&
 	    g_aT[peer].u8State != ST_SYN_RCVD) {
+		tcp_soft_bump(&g_soft.u64AcceptAgain);
+		tcp_soft_maybe_log(0);
 		return -11;
 	}
 	g_aT[s].i16Peer = -1;
 	if (g_aT[s].u8Pending > 0) {
 		g_aT[s].u8Pending--;
 	}
+	tcp_soft_bump(&g_soft.u64AcceptOk);
+	/* Grep: net: tcp soft accept / net_tcp: soft accept */
+	kprintf("net: tcp soft accept listen_fd=%lld new_fd=%u peer_slot=%d "
+		"state=%u\n",
+		(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer), (int)peer,
+		(unsigned)g_aT[peer].u8State);
+	kprintf("net_tcp: soft accept listen_fd=%lld new_fd=%u\n",
+		(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer));
+	tcp_soft_maybe_log(0);
 	return slot_to_fd((u32)peer);
 }
 
@@ -566,9 +959,12 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 	u32 s;
 	i64 n = 0;
 	u32 left;
+	u32 cSegs = 0;
 	const u8 *p = (const u8 *)pBuf;
 
 	if (fd_to_slot(fd, &s) != 0 || pBuf == NULL) {
+		tcp_soft_bump(&g_soft.u64SendFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	if (cb == 0) {
@@ -580,9 +976,13 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 	 */
 	if (g_aT[s].u8State != ST_ESTABLISHED &&
 	    g_aT[s].u8State != ST_CLOSE_WAIT) {
+		tcp_soft_bump(&g_soft.u64SendFail);
+		tcp_soft_maybe_log(0);
 		return -32;
 	}
 	if (g_aT[s].u8FinSent) {
+		tcp_soft_bump(&g_soft.u64SendFail);
+		tcp_soft_maybe_log(0);
 		return -32;
 	}
 	/*
@@ -606,6 +1006,7 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 
 		if (in_flight + chunk > g_aT[s].u16PeerWnd &&
 		    g_aT[s].u16PeerWnd > 0) {
+			tcp_soft_bump(&g_soft.u64SendWndLim);
 			if (g_aT[s].u16PeerWnd > in_flight) {
 				chunk = g_aT[s].u16PeerWnd - in_flight;
 			} else if (n > 0) {
@@ -623,7 +1024,18 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 		}
 		r = tcp_tx(s, (u8)(FL_ACK | FL_PSH), p, chunk);
 		if (r < 0) {
-			return n > 0 ? n : -11;
+			if (n > 0) {
+				tcp_soft_bump(&g_soft.u64SendPartial);
+				tcp_soft_bump(&g_soft.u64SendOk);
+				if (cSegs >= 2u) {
+					tcp_soft_bump(&g_soft.u64SendMulti);
+				}
+				tcp_soft_maybe_log(0);
+				return n;
+			}
+			tcp_soft_bump(&g_soft.u64SendAgain);
+			tcp_soft_maybe_log(0);
+			return -11;
 		}
 		/* Loopback: peer has no ACK path — advance una immediately. */
 		if (g_aT[s].u8IsLoop) {
@@ -633,11 +1045,30 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 		p += (u32)r;
 		left -= (u32)r;
 		n += r;
+		cSegs++;
 		/* Short segment (peer RX full): stop; prior segs already OK. */
 		if ((u32)r < chunk) {
+			tcp_soft_bump(&g_soft.u64SendPartial);
 			break;
 		}
 	}
+	if (n > 0) {
+		tcp_soft_bump(&g_soft.u64SendOk);
+		if (cSegs >= 2u) {
+			tcp_soft_bump(&g_soft.u64SendMulti);
+			/* Grep: net: tcp soft multi-seg */
+			kprintf("net: tcp soft multi-seg fd=%lld bytes=%lld "
+				"segs=%u mss=%u\n",
+				(long long)fd, (long long)n, (unsigned)cSegs,
+				(unsigned)TCP_MSS);
+			kprintf("net_tcp: soft multi-seg fd=%lld bytes=%lld "
+				"segs=%u\n",
+				(long long)fd, (long long)n, (unsigned)cSegs);
+		}
+	} else {
+		tcp_soft_bump(&g_soft.u64SendAgain);
+	}
+	tcp_soft_maybe_log(0);
 	return n;
 }
 
@@ -650,6 +1081,8 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 	u8 *p = (u8 *)pBuf;
 
 	if (fd_to_slot(fd, &s) != 0 || pBuf == NULL) {
+		tcp_soft_bump(&g_soft.u64RecvFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	if (cb == 0) {
@@ -661,8 +1094,12 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 		    g_aT[s].u8State == ST_TIME_WAIT ||
 		    g_aT[s].u8State == ST_LAST_ACK ||
 		    g_aT[s].u8State == ST_CLOSED) {
+			tcp_soft_bump(&g_soft.u64RecvEof);
+			tcp_soft_maybe_log(0);
 			return 0;
 		}
+		tcp_soft_bump(&g_soft.u64RecvAgain);
+		tcp_soft_maybe_log(0);
 		return -11; /* EAGAIN */
 	}
 	/* Multi-seg drain: short reads OK; cap to ring depth and caller buf. */
@@ -678,6 +1115,8 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 		g_aT[s].u32RxHead = (g_aT[s].u32RxHead + 1) % TCP_RX_MAX;
 		g_aT[s].u32RxLen--;
 	}
+	tcp_soft_bump(&g_soft.u64RecvOk);
+	tcp_soft_maybe_log(0);
 	return (i64)n;
 }
 
@@ -687,6 +1126,8 @@ net_tcp_close(i64 fd)
 	u32 s;
 
 	if (fd_to_slot(fd, &s) != 0) {
+		tcp_soft_bump(&g_soft.u64CloseFail);
+		tcp_soft_maybe_log(0);
 		return -9;
 	}
 	/*
@@ -719,6 +1160,8 @@ net_tcp_close(i64 fd)
 		}
 	}
 	memset(&g_aT[s], 0, sizeof(g_aT[s]));
+	tcp_soft_bump(&g_soft.u64CloseOk);
+	tcp_soft_maybe_log(0);
 	return 0;
 }
 
@@ -739,20 +1182,25 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	int cs = -1;
 
 	if (pFrame == NULL || cb < 14 + 20 + 20) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	if (pFrame[12] != 0x08 || pFrame[13] != 0x00) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	pIp = pFrame + 14;
 	if ((pIp[0] >> 4) != 4 || pIp[9] != 6) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	ihl = (u16)((pIp[0] & 0x0f) * 4);
 	if (cb < 14u + ihl + 20u) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	pTcp = pIp + ihl;
@@ -766,11 +1214,13 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	flags = pTcp[13];
 	wnd = (u16)((pTcp[14] << 8) | pTcp[15]);
 	if (doff < 20 || 14u + ihl + doff > cb) {
+		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
 	pay_off = 14u + ihl + doff;
 	pay_len = cb > pay_off ? cb - pay_off : 0;
 	g_u32Segs++;
+	tcp_soft_bump(&g_soft.u64InputHit);
 
 	for (i = 0; i < TCP_MAX; i++) {
 		if (g_aT[i].u8Used && !g_aT[i].u8Listening &&
@@ -789,6 +1239,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	}
 
 	if (flags & FL_RST) {
+		tcp_soft_bump(&g_soft.u64InputRst);
 		if (cs >= 0) {
 			memset(&g_aT[cs], 0, sizeof(g_aT[cs]));
 		}
@@ -803,14 +1254,23 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			g_aT[ls].u8Backlog = 1;
 		}
 		if (g_aT[ls].u8Pending >= g_aT[ls].u8Backlog) {
+			tcp_soft_bump(&g_soft.u64InputSynDrop);
+			/* Grep: net: tcp soft syn_drop */
+			kprintf("net: tcp soft syn_drop port=%u pending=%u "
+				"backlog=%u\n",
+				(unsigned)dport, (unsigned)g_aT[ls].u8Pending,
+				(unsigned)g_aT[ls].u8Backlog);
 			return 1;
 		}
 		if (g_aT[ls].i16Peer >= 0) {
 			/* One soft pending child at a time on listener slot. */
+			tcp_soft_bump(&g_soft.u64InputSynDrop);
 			return 1;
 		}
 		ns = alloc_slot();
 		if (ns < 0) {
+			tcp_soft_bump(&g_soft.u64InputSynDrop);
+			tcp_soft_bump(&g_soft.u64SockFail);
 			return 1;
 		}
 		g_aT[ns].u8State = ST_SYN_RCVD;
@@ -827,6 +1287,16 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		if (g_aT[ls].u8Pending < 255u) {
 			g_aT[ls].u8Pending++;
 		}
+		tcp_soft_bump(&g_soft.u64InputSyn);
+		tcp_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+			       NULL, NULL, NULL, NULL);
+		/* Grep: net: tcp soft syn / net_tcp: soft syn */
+		kprintf("net: tcp soft syn port=%u sport=%u slot=%d "
+			"pending=%u\n",
+			(unsigned)dport, (unsigned)sport, ns,
+			(unsigned)g_aT[ls].u8Pending);
+		kprintf("net_tcp: soft syn port=%u slot=%d\n",
+			(unsigned)dport, ns);
 		return 1;
 	}
 
@@ -889,6 +1359,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			got = push_rx((u32)cs, pFrame + pay_off, cbTake);
 			if (got > 0) {
 				g_aT[cs].u32RcvNxt += (u32)got;
+				tcp_soft_bump(&g_soft.u64InputData);
 				(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
 			}
 		}
@@ -896,6 +1367,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			if (seq == g_aT[cs].u32RcvNxt ||
 			    seq + pay_len == g_aT[cs].u32RcvNxt) {
 				g_aT[cs].u32RcvNxt++;
+				tcp_soft_bump(&g_soft.u64InputFin);
 				if (g_aT[cs].u8State == ST_ESTABLISHED ||
 				    g_aT[cs].u8State == ST_SYN_RCVD) {
 					g_aT[cs].u8State = ST_CLOSE_WAIT;
@@ -923,6 +1395,10 @@ net_tcp_poll(void)
 {
 	u32 i;
 	u32 t = now_ms();
+	u32 cRtx = 0;
+	u32 cTw = 0;
+
+	tcp_soft_bump(&g_soft.u64PollTicks);
 
 	/* Last unacked data segment retransmit (virtio path only). */
 	for (i = 0; i < TCP_MAX; i++) {
@@ -934,6 +1410,8 @@ net_tcp_poll(void)
 			if (t - g_aT[i].u32TwTick >= TCP_TW_MS) {
 				memset(&g_aT[i], 0, sizeof(g_aT[i]));
 				g_u32TwReap++;
+				tcp_soft_bump(&g_soft.u64PollTw);
+				cTw++;
 			}
 			continue;
 		}
@@ -954,13 +1432,34 @@ net_tcp_poll(void)
 			g_aT[i].u32RtxTick = t;
 			g_aT[i].u32RtxCount++;
 			g_u32Rtx++;
+			tcp_soft_bump(&g_soft.u64PollRtx);
+			cRtx++;
 		}
+	}
+	/*
+	 * Soft inventory on poll only when rtx/TW work happened (rate-friendly).
+	 * Stats getters force a full dump for smoke greps.
+	 */
+	if (cRtx != 0u || cTw != 0u) {
+		/* Grep: net: tcp soft poll */
+		kprintf("net: tcp soft poll rtx=%u tw_reap=%u total_rtx=%u "
+			"total_tw=%u ticks=%llu\n",
+			(unsigned)cRtx, (unsigned)cTw, g_u32Rtx, g_u32TwReap,
+			(unsigned long long)g_soft.u64PollTicks);
+		kprintf("net_tcp: soft poll rtx=%u tw=%u\n", (unsigned)cRtx,
+			(unsigned)cTw);
+		tcp_soft_print();
 	}
 }
 
 u32
 net_tcp_accepts(void)
 {
+	/*
+	 * Emit soft inventory on stats read so door TCP_STATS / bring-up
+	 * smoke can grep "net: tcp soft …" / "net_tcp: soft …".
+	 */
+	tcp_soft_print();
 	return g_u32Accepts;
 }
 

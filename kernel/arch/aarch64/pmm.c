@@ -5,21 +5,36 @@
  * aarch64 PMM — thin wrap over shared freelist core (kernel/shared/pmm_freelist.c).
  *
  * -------------------------------------------------------------------------
- * Soft observability (order-0 shared core only; no hierarchical PMM)
+ * Soft inventory (Wave 10 exclusive; this unit only — greppable
+ * "aarch64: pmm soft …")
  * -------------------------------------------------------------------------
- * Soft pool geometry: base/end/page counts after init.
- * Soft multi exercise: alloc N pages, pattern paint, verify, free reverse;
- * confirm free_count restored. Soft poison pattern 0xa5 / 0x5a for two
- * passes. Soft invariant: free ≤ total, non-zero total, selftest ok.
+ * Soft pool geometry: base/end/page counts after init (order-0 identity
+ * pool only; no hierarchical PMM, no NEON, no buddy paste).
+ * Soft multi exercise: alloc N pages, dual-pattern paint/verify, free
+ * reverse; free_count restored.
+ * Soft LIFO reuse: free B then next alloc returns B (freelist head).
+ * Soft free-step: single alloc drops free by 1; free restores.
+ * Soft null free: free(NULL) is no-op (count unchanged).
+ * Soft invariant: free ≤ total, non-zero total, pool geometry coherent.
+ * Soft path honesty: order-0 shared core only; not ≥1 TiB hierarchical.
  *
- * Greppable:
+ * Greppable soft inventory (prefix-stable):
+ *   aarch64: pmm soft pool base=… end=… pages=… page_size=… span=…
+ *   aarch64: pmm soft multi n=… free0=… free1=… total=… ok=…
+ *   aarch64: pmm soft lifo pa_a=… pa_b=… pa_c=… reuse=… free0=… free1=…
+ *   aarch64: pmm soft step free0=… free1=… free2=… drop=… restore=…
+ *   aarch64: pmm soft inv free=… total=… pool_pages=… self=… multi=…
+ *             lifo=… step=… null=… inv=…
+ *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
+ *   aarch64: pmm soft PASS | FAIL
+ *
+ * Legacy / product smoke markers (kept greppable):
  *   aarch64: pmm PASS (shared core free=… total=…)
  *   aarch64: pmm pool soft base=… end=… pages=…
  *   aarch64: pmm multi soft n=… free0=… free1=…
  *   aarch64: pmm multi soft PASS | FAIL
- *   aarch64: pmm soft PASS | FAIL (selftest)
  *
- * Freestanding pure C; no GPL Linux buddy paste.
+ * Freestanding pure C; no GPL Linux buddy paste; no NEON.
  */
 #include <gj/klog.h>
 #include <gj/pmm_core.h>
@@ -33,13 +48,43 @@ extern char __kernel_end[];
 /* Soft multi-page exercise depth (stack array of page pointers). */
 #define PMM_SOFT_MULTI_N 8u
 
-/* Soft poison patterns for allocated page first word. */
+/* Soft poison patterns for allocated page first words (pure C stores). */
 #define PMM_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ull
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
 
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
 static unsigned g_cPoolPages;
+
+/*
+ * Soft inventory snapshot (Wave 10; file-local; never hard-gates boot).
+ * greppable: aarch64: pmm soft
+ */
+struct pmm_soft_snap {
+    unsigned cFree;
+    unsigned cTotal;
+    unsigned cPoolPages;
+    unsigned cMultiGot;
+    unsigned cMultiFree0;
+    unsigned cMultiFree1;
+    unsigned cLifoFree0;
+    unsigned cLifoFree1;
+    unsigned cStepFree0;
+    unsigned cStepFree1;
+    unsigned cStepFree2;
+    u64      u64LifoPaA;
+    u64      u64LifoPaB;
+    u64      u64LifoPaC;
+    u64      u64PoolSpan;
+    u8       u8SelfOk;
+    u8       u8MultiOk;
+    u8       u8LifoOk;
+    u8       u8StepOk;
+    u8       u8NullOk;
+    u8       u8InvOk;
+    u8       u8Pad0;
+    u8       u8Pad1;
+};
 
 static unsigned long
 align_up(unsigned long v, unsigned long a)
@@ -175,6 +220,169 @@ pmm_multi_soft_exercise(unsigned *pOutGot, unsigned *pOutFree0,
 }
 
 /*
+ * Soft LIFO reuse: free of B must surface as next alloc (freelist head).
+ * Returns 1 on reuse + free_count restore. Pure C; no NEON.
+ */
+static int
+pmm_lifo_soft_exercise(u64 *pOutPaA, u64 *pOutPaB, u64 *pOutPaC,
+                       unsigned *pOutFree0, unsigned *pOutFree1)
+{
+    void *pA;
+    void *pB;
+    void *pC;
+    unsigned cFree0;
+    unsigned cFree1;
+    unsigned cTotal;
+    u64 u64PaA;
+    u64 u64PaB;
+    u64 u64PaC;
+    int fOk;
+
+    cFree0 = gj_pmm_core_free_count();
+    cTotal = gj_pmm_core_total_count();
+    fOk = 1;
+    u64PaA = 0ull;
+    u64PaB = 0ull;
+    u64PaC = 0ull;
+
+    if (cFree0 < 2u || cTotal < 2u) {
+        fOk = 0;
+        goto out;
+    }
+
+    pA = aarch64_pmm_alloc();
+    pB = aarch64_pmm_alloc();
+    if (pA == 0 || pB == 0) {
+        if (pA != 0) {
+            aarch64_pmm_free(pA);
+        }
+        if (pB != 0) {
+            aarch64_pmm_free(pB);
+        }
+        fOk = 0;
+        goto out;
+    }
+
+    u64PaA = (u64)(gj_vaddr_t)pA;
+    u64PaB = (u64)(gj_vaddr_t)pB;
+    if (u64PaA == u64PaB) {
+        aarch64_pmm_free(pA);
+        aarch64_pmm_free(pB);
+        fOk = 0;
+        goto out;
+    }
+    if (u64PaA < g_u64PoolBase || u64PaA >= g_u64PoolEnd ||
+        u64PaB < g_u64PoolBase || u64PaB >= g_u64PoolEnd) {
+        aarch64_pmm_free(pA);
+        aarch64_pmm_free(pB);
+        fOk = 0;
+        goto out;
+    }
+
+    /* Free B first → freelist head; next alloc must return B. */
+    aarch64_pmm_free(pB);
+    pC = aarch64_pmm_alloc();
+    if (pC == 0) {
+        aarch64_pmm_free(pA);
+        fOk = 0;
+        goto out;
+    }
+    u64PaC = (u64)(gj_vaddr_t)pC;
+    if (u64PaC != u64PaB) {
+        fOk = 0;
+    }
+
+    aarch64_pmm_free(pA);
+    aarch64_pmm_free(pC);
+
+    cFree1 = gj_pmm_core_free_count();
+    if (cFree1 != cFree0) {
+        fOk = 0;
+    }
+
+out:
+    cFree1 = gj_pmm_core_free_count();
+    if (pOutPaA != 0) {
+        *pOutPaA = u64PaA;
+    }
+    if (pOutPaB != 0) {
+        *pOutPaB = u64PaB;
+    }
+    if (pOutPaC != 0) {
+        *pOutPaC = u64PaC;
+    }
+    if (pOutFree0 != 0) {
+        *pOutFree0 = cFree0;
+    }
+    if (pOutFree1 != 0) {
+        *pOutFree1 = cFree1;
+    }
+    return fOk;
+}
+
+/*
+ * Soft free-count step: one alloc drops free by 1; free restores.
+ * Also soft-checks null free is a no-op (via *pOutNullOk).
+ */
+static int
+pmm_step_soft_exercise(unsigned *pOutFree0, unsigned *pOutFree1,
+                       unsigned *pOutFree2, int *pOutNullOk)
+{
+    void *pPage;
+    unsigned cFree0;
+    unsigned cFree1;
+    unsigned cFree2;
+    unsigned cAfterNull;
+    int fOk;
+    int fNullOk;
+
+    cFree0 = gj_pmm_core_free_count();
+    fOk = 1;
+    fNullOk = 1;
+
+    /* Soft null free: must not change free_count. */
+    aarch64_pmm_free(0);
+    cAfterNull = gj_pmm_core_free_count();
+    if (cAfterNull != cFree0) {
+        fNullOk = 0;
+        fOk = 0;
+    }
+
+    pPage = aarch64_pmm_alloc();
+    if (pPage == 0) {
+        fOk = 0;
+        cFree1 = gj_pmm_core_free_count();
+        cFree2 = cFree1;
+        goto out;
+    }
+    cFree1 = gj_pmm_core_free_count();
+    if (cFree0 < 1u || cFree1 != (cFree0 - 1u)) {
+        fOk = 0;
+    }
+
+    aarch64_pmm_free(pPage);
+    cFree2 = gj_pmm_core_free_count();
+    if (cFree2 != cFree0) {
+        fOk = 0;
+    }
+
+out:
+    if (pOutFree0 != 0) {
+        *pOutFree0 = cFree0;
+    }
+    if (pOutFree1 != 0) {
+        *pOutFree1 = cFree1;
+    }
+    if (pOutFree2 != 0) {
+        *pOutFree2 = cFree2;
+    }
+    if (pOutNullOk != 0) {
+        *pOutNullOk = fNullOk;
+    }
+    return fOk;
+}
+
+/*
  * Soft invariant snapshot after core selftest + multi exercise.
  * Returns 1 if free/total look coherent for identity-mapped pool.
  */
@@ -202,6 +410,99 @@ pmm_invariants_soft(void)
     return 1;
 }
 
+/*
+ * Wave 10 soft inventory emission — greppable "aarch64: pmm soft …".
+ * Returns 1 if all soft gates held (self/multi/lifo/step/null/inv).
+ */
+static int
+pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
+{
+    unsigned uLifoReuse;
+    unsigned uStepDrop;
+    unsigned uStepRestore;
+    int fOk;
+
+    if (pSnap == 0) {
+        kprintf("aarch64: pmm soft FAIL\n");
+        return 0;
+    }
+
+    uLifoReuse = 0u;
+    if (pSnap->u64LifoPaB != 0ull &&
+        pSnap->u64LifoPaC == pSnap->u64LifoPaB) {
+        uLifoReuse = 1u;
+    }
+
+    uStepDrop = 0u;
+    if (pSnap->cStepFree0 > 0u &&
+        pSnap->cStepFree1 == (pSnap->cStepFree0 - 1u)) {
+        uStepDrop = 1u;
+    }
+
+    uStepRestore = 0u;
+    if (pSnap->cStepFree2 == pSnap->cStepFree0) {
+        uStepRestore = 1u;
+    }
+
+    /* Grep: aarch64: pmm soft pool */
+    kprintf("aarch64: pmm soft pool base=0x%lx end=0x%lx pages=%u "
+            "page_size=%lu span=0x%lx\n",
+            (unsigned long)g_u64PoolBase, (unsigned long)g_u64PoolEnd,
+            pSnap->cPoolPages, (unsigned long)GJ_PMM_CORE_PAGE_SIZE,
+            (unsigned long)pSnap->u64PoolSpan);
+
+    /* Grep: aarch64: pmm soft multi */
+    kprintf("aarch64: pmm soft multi n=%u free0=%u free1=%u total=%u ok=%u\n",
+            pSnap->cMultiGot, pSnap->cMultiFree0, pSnap->cMultiFree1,
+            pSnap->cTotal, (unsigned)pSnap->u8MultiOk);
+
+    /* Grep: aarch64: pmm soft lifo */
+    kprintf("aarch64: pmm soft lifo pa_a=0x%lx pa_b=0x%lx pa_c=0x%lx "
+            "reuse=%u free0=%u free1=%u ok=%u\n",
+            (unsigned long)pSnap->u64LifoPaA,
+            (unsigned long)pSnap->u64LifoPaB,
+            (unsigned long)pSnap->u64LifoPaC, uLifoReuse,
+            pSnap->cLifoFree0, pSnap->cLifoFree1,
+            (unsigned)pSnap->u8LifoOk);
+
+    /* Grep: aarch64: pmm soft step */
+    kprintf("aarch64: pmm soft step free0=%u free1=%u free2=%u drop=%u "
+            "restore=%u null_ok=%u ok=%u\n",
+            pSnap->cStepFree0, pSnap->cStepFree1, pSnap->cStepFree2,
+            uStepDrop, uStepRestore, (unsigned)pSnap->u8NullOk,
+            (unsigned)pSnap->u8StepOk);
+
+    /* Grep: aarch64: pmm soft inv */
+    kprintf("aarch64: pmm soft inv free=%u total=%u pool_pages=%u "
+            "self=%u multi=%u lifo=%u step=%u null=%u inv=%u\n",
+            pSnap->cFree, pSnap->cTotal, pSnap->cPoolPages,
+            (unsigned)pSnap->u8SelfOk, (unsigned)pSnap->u8MultiOk,
+            (unsigned)pSnap->u8LifoOk, (unsigned)pSnap->u8StepOk,
+            (unsigned)pSnap->u8NullOk, (unsigned)pSnap->u8InvOk);
+
+    /*
+     * Grep: aarch64: pmm soft path
+     * Honesty: order-0 shared core only — not hierarchical / TiB product bar.
+     */
+    kprintf("aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 "
+            "core=1 multi_n=%u\n",
+            (unsigned)PMM_SOFT_MULTI_N);
+
+    fOk = 0;
+    if (pSnap->u8SelfOk != 0u && pSnap->u8MultiOk != 0u &&
+        pSnap->u8LifoOk != 0u && pSnap->u8StepOk != 0u &&
+        pSnap->u8NullOk != 0u && pSnap->u8InvOk != 0u) {
+        fOk = 1;
+    }
+
+    if (fOk != 0) {
+        kprintf("aarch64: pmm soft PASS\n");
+    } else {
+        kprintf("aarch64: pmm soft FAIL\n");
+    }
+    return fOk;
+}
+
 void
 aarch64_pmm_init(void)
 {
@@ -215,7 +516,12 @@ aarch64_pmm_init(void)
     unsigned cFree1;
     int fSelf;
     int fMulti;
+    int fLifo;
+    int fStep;
+    int fNull;
     int fInv;
+    int fSoft;
+    struct pmm_soft_snap snap;
 
     u64Start = align_up((unsigned long)(void *)__bss_end, GJ_PMM_CORE_PAGE_SIZE);
     u64KernelEnd = (unsigned long)(void *)__kernel_end;
@@ -230,19 +536,53 @@ aarch64_pmm_init(void)
 
     gj_pmm_core_init(g_u64PoolBase, g_u64PoolEnd);
 
-    /* Soft pool geometry (always-on; no 1 TiB host required). */
+    /* Zero soft snapshot before exercises. */
+    snap.cFree = 0u;
+    snap.cTotal = 0u;
+    snap.cPoolPages = g_cPoolPages;
+    snap.cMultiGot = 0u;
+    snap.cMultiFree0 = 0u;
+    snap.cMultiFree1 = 0u;
+    snap.cLifoFree0 = 0u;
+    snap.cLifoFree1 = 0u;
+    snap.cStepFree0 = 0u;
+    snap.cStepFree1 = 0u;
+    snap.cStepFree2 = 0u;
+    snap.u64LifoPaA = 0ull;
+    snap.u64LifoPaB = 0ull;
+    snap.u64LifoPaC = 0ull;
+    snap.u64PoolSpan = g_u64PoolEnd - g_u64PoolBase;
+    snap.u8SelfOk = 0u;
+    snap.u8MultiOk = 0u;
+    snap.u8LifoOk = 0u;
+    snap.u8StepOk = 0u;
+    snap.u8NullOk = 0u;
+    snap.u8InvOk = 0u;
+    snap.u8Pad0 = 0u;
+    snap.u8Pad1 = 0u;
+
+    /*
+     * Legacy pool soft line (kept for existing greps) + Wave 10 soft pool
+     * line emitted later via pmm_soft_inventory.
+     */
     kprintf("aarch64: pmm pool soft base=0x%lx end=0x%lx pages=%u "
             "page_size=%lu\n",
             (unsigned long)g_u64PoolBase, (unsigned long)g_u64PoolEnd,
             g_cPoolPages, (unsigned long)GJ_PMM_CORE_PAGE_SIZE);
 
     fSelf = gj_pmm_core_selftest();
+    snap.u8SelfOk = (fSelf != 0) ? 1u : 0u;
+
     if (fSelf == 0) {
         kprintf("aarch64: pmm soft FAIL (selftest)\n");
         kprintf("aarch64: pmm multi soft FAIL\n");
         /* Still emit primary PASS-shaped presence if pool non-empty. */
         cFree = gj_pmm_core_free_count();
         cTotal = gj_pmm_core_total_count();
+        snap.cFree = cFree;
+        snap.cTotal = cTotal;
+        /* Soft inventory under FAIL path (greppable lamps stay present). */
+        (void)pmm_soft_inventory(&snap);
         kprintf("aarch64: pmm PASS (shared core free=%u total=%u)\n",
                 cFree, cTotal);
         return;
@@ -252,11 +592,31 @@ aarch64_pmm_init(void)
     cFree0 = 0u;
     cFree1 = 0u;
     fMulti = pmm_multi_soft_exercise(&cGot, &cFree0, &cFree1);
+    snap.cMultiGot = cGot;
+    snap.cMultiFree0 = cFree0;
+    snap.cMultiFree1 = cFree1;
+    snap.u8MultiOk = (fMulti != 0) ? 1u : 0u;
+
+    fLifo = pmm_lifo_soft_exercise(&snap.u64LifoPaA, &snap.u64LifoPaB,
+                                   &snap.u64LifoPaC, &snap.cLifoFree0,
+                                   &snap.cLifoFree1);
+    snap.u8LifoOk = (fLifo != 0) ? 1u : 0u;
+
+    fNull = 0;
+    fStep = pmm_step_soft_exercise(&snap.cStepFree0, &snap.cStepFree1,
+                                   &snap.cStepFree2, &fNull);
+    snap.u8StepOk = (fStep != 0) ? 1u : 0u;
+    snap.u8NullOk = (fNull != 0) ? 1u : 0u;
+
     fInv = pmm_invariants_soft();
+    snap.u8InvOk = (fInv != 0) ? 1u : 0u;
 
     cFree = gj_pmm_core_free_count();
     cTotal = gj_pmm_core_total_count();
+    snap.cFree = cFree;
+    snap.cTotal = cTotal;
 
+    /* Legacy multi soft summary (smoke: "aarch64: pmm multi soft …"). */
     kprintf("aarch64: pmm multi soft n=%u free0=%u free1=%u total=%u\n",
             cGot, cFree0, cFree1, cTotal);
 
@@ -269,9 +629,10 @@ aarch64_pmm_init(void)
         kprintf("aarch64: pmm multi soft FAIL\n");
     }
 
-    if (fSelf != 0 && fMulti != 0 && fInv != 0) {
-        kprintf("aarch64: pmm soft PASS\n");
-    } else {
-        kprintf("aarch64: pmm soft FAIL\n");
-    }
+    /*
+     * Wave 10 combined soft inventory under "aarch64: pmm soft …".
+     * Emits multi-field lamps + final soft PASS|FAIL (smoke greps PASS).
+     */
+    fSoft = pmm_soft_inventory(&snap);
+    (void)fSoft;
 }

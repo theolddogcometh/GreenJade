@@ -45,7 +45,7 @@
 #   scsi_mid-gj: soft stats …            freestanding scsi soft counters
 # Continuum side panel (host helper; soft graph only):
 #   makefile_max=N                       honest Makefile scan
-#   high-water makefile_max=15000        noted when greppable (soft graph ≠ bar3)
+#   high-water makefile_max=15200        noted when greppable (soft graph ≠ bar3)
 # Bar3 honesty (host media check; always OPEN while client/matrix open):
 #   bar3: OPEN / client launch + Top50 NOT-TRIED
 set -euo pipefail
@@ -266,7 +266,7 @@ else
 	echo "  info: bar3 OPEN  (client launch + Deck Top 50 still NOT-TRIED)"
 fi
 # Continuum high-water (honest Makefile scan; soft graph only — not bar3).
-# Note makefile_max=15000 when greppable from helper stdout (N>=15000).
+# Note makefile_max=15200 when greppable from helper stdout (N>=15200).
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
 	mx_line=${mx_line//$'\r'/}
@@ -279,9 +279,9 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	fi
 	if [[ -n "$_mx_n" ]]; then
 		echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
-		# Wave high-water stamp: note makefile_max=15000 only when greppable
-		if [[ "$_mx_n" -ge 15000 ]]; then
-			echo "  info: continuum high-water  makefile_max=15000 greppable  (soft graph ≠ bar3)"
+		# Wave high-water stamp: note makefile_max=15200 only when greppable
+		if [[ "$_mx_n" -ge 15200 ]]; then
+			echo "  info: continuum high-water  makefile_max=15200 greppable  (soft graph ≠ bar3)"
 		fi
 	else
 		echo "  info: continuum high-water  makefile_max=(unparsed)"

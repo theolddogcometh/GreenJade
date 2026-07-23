@@ -3,7 +3,8 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Freestanding sessiond — session door ownership live path:
- *   CLAIM → DISPLAY_INFO → PRESENT_FB → soft health → RELEASE
+ *   CLAIM → DISPLAY_INFO → PRESENT_FB → soft health → RELEASE →
+ *   soft free → soft inventory (Wave 10) → ownership path PASS
  * Built as user ELF for embed/spawn (kernel/proc/sessiond_embed.S).
  * Host A1 smoke remains sessiond.c (libc).
  *
@@ -23,6 +24,19 @@
  *   sessiond-gj: STATS soft …
  *   sessiond-gj: soft health PASS | soft health soft-skip
  *   sessiond-gj: soft PRESENT_FB PASS | soft PRESENT soft-skip
+ *   sessiond-gj: free soft | free RELEASE soft
+ *
+ * Soft inventory (Wave 10 exclusive deepen — greppable "sessiond-gj: soft …"):
+ *   sessiond-gj: soft inventory health_ok=… health_skip=… free_ok=… free_skip=…
+ *                flags_ok=… wave=10
+ *   sessiond-gj: soft health display=… map=… input=… reclaim=… stats=…
+ *                present=… fb2=… fb3=… multi=… bits=…
+ *   sessiond-gj: soft free own=… release=… bits=…
+ *   sessiond-gj: soft flags ready=… input=… owned=… user_fb=… multi=…
+ *                reclaim=… drop=… bits=…
+ *   sessiond-gj: soft stats ok=… skip=… p=… in=… c=… f=… own=0x… pend=…
+ *                w=… h=… stride=… drained=…
+ * Diagnostics only — never hard-fail ownership path PASS; not a compositor claim.
  *
  * Soft health deepens door surface beyond hard claim/present/release:
  *   DISPLAY_INFO recheck, MAP_SCANOUT geometry, INPUT_POLL/POP drain,
@@ -37,6 +51,8 @@
  *   bit0 ready  bit1 input ready  bit2 owned
  *   bits8..15 pending input (0..255)
  *   bit16 drop sticky  bit17 user PRESENT_FB  bit18 multi-frame  bit19 reclaim
+ *
+ * Pure C freestanding. Dual-licensed MIT OR Apache-2.0 (no GPL).
  *
  *   make sessiond-gj → build/user/sessiond.elf
  */
@@ -77,6 +93,30 @@
 /* Soft INPUT_POP drain cap (defensive; empty ring is fine). */
 #define SESS_SOFT_POP_CAP 64u
 
+/* Soft health sub-step bits (Wave 10 inventory). */
+#define SOFT_H_DISPLAY  (1u << 0)
+#define SOFT_H_MAP      (1u << 1)
+#define SOFT_H_INPUT    (1u << 2)
+#define SOFT_H_RECLAIM  (1u << 3)
+#define SOFT_H_STATS    (1u << 4)
+#define SOFT_H_PRESENT  (1u << 5)
+#define SOFT_H_FB2      (1u << 6)
+#define SOFT_H_FB3      (1u << 7)
+#define SOFT_H_MULTI    (1u << 8)
+
+/* Soft free-path bits (Wave 10 inventory). */
+#define SOFT_F_OWN      (1u << 0)
+#define SOFT_F_RELEASE  (1u << 1)
+
+/* Soft STATS flag observability bits (Wave 10 inventory). */
+#define SOFT_FLG_READY   (1u << 0)
+#define SOFT_FLG_INPUT   (1u << 1)
+#define SOFT_FLG_OWNED   (1u << 2)
+#define SOFT_FLG_USER_FB (1u << 3)
+#define SOFT_FLG_MULTI   (1u << 4)
+#define SOFT_FLG_RECLAIM (1u << 5)
+#define SOFT_FLG_DROP    (1u << 6)
+
 /* Matches kernel struct gj_input_event layout (type, code, value). */
 struct sess_input_ev {
     unsigned short u16Type;
@@ -85,6 +125,29 @@ struct sess_input_ev {
 };
 
 static unsigned g_uToken;
+
+/*
+ * Soft inventory tallies (Wave 10 exclusive deepen).
+ * Wrap-OK counters; diagnostics only — never gate ownership path PASS.
+ * greppable: sessiond-gj: soft
+ */
+static unsigned g_cSoftHealthOk;
+static unsigned g_cSoftHealthSkip;
+static unsigned g_uSoftHealthBits;
+static unsigned g_cSoftFreeOk;
+static unsigned g_cSoftFreeSkip;
+static unsigned g_uSoftFreeBits;
+static unsigned g_cSoftFlagsOk;
+static unsigned g_uSoftFlagBits;
+/* Last soft snapshots for inventory lines. */
+static unsigned g_aSoftStats[5];
+static unsigned g_uSoftDispW;
+static unsigned g_uSoftDispH;
+static unsigned g_uSoftMapW;
+static unsigned g_uSoftMapH;
+static unsigned g_uSoftMapStride;
+static unsigned g_cSoftDrained;
+static unsigned g_cSoftPend;
 
 static void
 msg(const char *sz)
@@ -255,6 +318,203 @@ msg_input_soft(unsigned cPop, unsigned cPend)
     msg(aLine);
 }
 
+/* Note one soft health sub-step into Wave 10 inventory counters. */
+static void
+soft_health_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftHealthBits |= uBit;
+        if (g_cSoftHealthOk < 0xffffffffu) {
+            g_cSoftHealthOk++;
+        }
+    } else if (g_cSoftHealthSkip < 0xffffffffu) {
+        g_cSoftHealthSkip++;
+    }
+}
+
+/* Note one soft free sub-step into Wave 10 inventory counters. */
+static void
+soft_free_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftFreeBits |= uBit;
+        if (g_cSoftFreeOk < 0xffffffffu) {
+            g_cSoftFreeOk++;
+        }
+    } else if (g_cSoftFreeSkip < 0xffffffffu) {
+        g_cSoftFreeSkip++;
+    }
+}
+
+/*
+ * Note a STATS flag observation (set only). Unset flags are not skips —
+ * they are door-state dependent and optional.
+ */
+static void
+soft_flags_note(unsigned uBit)
+{
+    if ((g_uSoftFlagBits & uBit) == 0u) {
+        g_uSoftFlagBits |= uBit;
+        if (g_cSoftFlagsOk < 0xffffffffu) {
+            g_cSoftFlagsOk++;
+        }
+    } else {
+        g_uSoftFlagBits |= uBit;
+    }
+}
+
+/*
+ * Soft inventory dump (Wave 10 exclusive deepen).
+ * Greppable prefix: "sessiond-gj: soft …"
+ * Pure observation — always soft; never gates ownership path PASS.
+ *
+ *   sessiond-gj: soft inventory …
+ *   sessiond-gj: soft health …
+ *   sessiond-gj: soft free …
+ *   sessiond-gj: soft flags …
+ *   sessiond-gj: soft stats …
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[256];
+    unsigned o;
+    unsigned cOk;
+    unsigned cSkip;
+
+    cOk = g_cSoftHealthOk + g_cSoftFreeOk + g_cSoftFlagsOk;
+    cSkip = g_cSoftHealthSkip + g_cSoftFreeSkip;
+
+    /* Grep: sessiond-gj: soft inventory */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft inventory health_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftHealthOk);
+    append_s(aLine, sizeof(aLine), &o, " health_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftHealthSkip);
+    append_s(aLine, sizeof(aLine), &o, " free_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeOk);
+    append_s(aLine, sizeof(aLine), &o, " free_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeSkip);
+    append_s(aLine, sizeof(aLine), &o, " flags_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFlagsOk);
+    append_s(aLine, sizeof(aLine), &o, " wave=10\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: sessiond-gj: soft health */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft health display=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_DISPLAY) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " map=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_MAP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " input=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_INPUT) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_RECLAIM) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_STATS) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " present=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_PRESENT) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " fb2=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_FB2) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " fb3=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_FB3) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " multi=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftHealthBits & SOFT_H_MULTI) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftHealthBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: sessiond-gj: soft free */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft free own=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFreeBits & SOFT_F_OWN) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " release=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFreeBits & SOFT_F_RELEASE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: sessiond-gj: soft flags */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft flags ready=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_READY) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " input=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_INPUT) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " owned=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_OWNED) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " user_fb=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_USER_FB) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " multi=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_MULTI) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_RECLAIM) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " drop=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFlagBits & SOFT_FLG_DROP) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFlagBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: sessiond-gj: soft stats (rollup + last snapshots) */
+    {
+        unsigned uW = g_uSoftDispW != 0u ? g_uSoftDispW : g_uSoftMapW;
+        unsigned uH = g_uSoftDispH != 0u ? g_uSoftDispH : g_uSoftMapH;
+
+        o = 0u;
+        append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft stats ok=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)cOk);
+        append_s(aLine, sizeof(aLine), &o, " skip=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)cSkip);
+        append_s(aLine, sizeof(aLine), &o, " p=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftStats[0]);
+        append_s(aLine, sizeof(aLine), &o, " in=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftStats[1]);
+        append_s(aLine, sizeof(aLine), &o, " c=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftStats[2]);
+        append_s(aLine, sizeof(aLine), &o, " f=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftStats[3]);
+        append_s(aLine, sizeof(aLine), &o, " own=0x");
+        append_hex(aLine, sizeof(aLine), &o, (unsigned long)g_aSoftStats[4]);
+        append_s(aLine, sizeof(aLine), &o, " pend=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPend);
+        append_s(aLine, sizeof(aLine), &o, " w=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)uW);
+        append_s(aLine, sizeof(aLine), &o, " h=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)uH);
+        append_s(aLine, sizeof(aLine), &o, " stride=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftMapStride);
+        append_s(aLine, sizeof(aLine), &o, " drained=");
+        append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDrained);
+        append_s(aLine, sizeof(aLine), &o, "\n");
+        aLine[o] = '\0';
+        msg(aLine);
+    }
+}
+
 static void
 fail_exit(const char *szWhy)
 {
@@ -286,6 +546,7 @@ fb_fill(unsigned char *pFb, unsigned char b, unsigned char g, unsigned char r)
  * Soft-decode STATS flags after ownership / multi-frame work.
  * Emits ready / input-ready / ownership / user-fb / multi-frame / reclaim
  * markers when the corresponding door bits are set. Never hard-fails.
+ * Tallies Wave 10 soft flag inventory (sessiond-gj: soft flags …).
  * Returns number of soft markers that counted as success.
  */
 static unsigned
@@ -300,35 +561,42 @@ soft_stats_flags(const unsigned *aSt)
     }
     uFlags = aSt[3];
     cPend = (uFlags >> SESS_STAT_PEND_SHIFT) & SESS_STAT_PEND_MASK;
-    (void)cPend;
+    g_cSoftPend = cPend;
 
     if ((uFlags & SESS_STAT_F_READY) != 0u) {
         msg("sessiond-gj: ready soft\n");
+        soft_flags_note(SOFT_FLG_READY);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_INPUT) != 0u) {
         msg("sessiond-gj: input-ready soft\n");
+        soft_flags_note(SOFT_FLG_INPUT);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_OWNED) != 0u && aSt[4] == g_uToken) {
         msg("sessiond-gj: ownership soft\n");
+        soft_flags_note(SOFT_FLG_OWNED);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_USER_FB) != 0u) {
         msg("sessiond-gj: user-fb soft\n");
+        soft_flags_note(SOFT_FLG_USER_FB);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_MULTI) != 0u) {
         msg("sessiond-gj: multi-frame soft\n");
+        soft_flags_note(SOFT_FLG_MULTI);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_RECLAIM) != 0u) {
         msg("sessiond-gj: reclaim flag soft\n");
+        soft_flags_note(SOFT_FLG_RECLAIM);
         cOk++;
     }
     if ((uFlags & SESS_STAT_F_DROP) != 0u) {
         /* Observability only — sticky drop is rare; not a soft success. */
         msg("sessiond-gj: drop sticky soft\n");
+        soft_flags_note(SOFT_FLG_DROP);
     }
     return cOk;
 }
@@ -339,6 +607,7 @@ soft_stats_flags(const unsigned *aSt)
  *   same-token CLAIM reclaim, STATS ownership/ready/user-fb/reclaim flags,
  *   interim PRESENT, second PRESENT_FB tint, multi-frame STATS recheck.
  * Never aborts the hard ownership path.
+ * Tallies Wave 10 soft inventory (sessiond-gj: soft …).
  */
 static void
 soft_health(unsigned char *pFb)
@@ -359,10 +628,14 @@ soft_health(unsigned char *pFb)
     aWh[0] = aWh[1] = 0;
     n = gj_session(GJ_SESS_OP_DISPLAY_INFO, (long)(uintptr_t)aWh, 0, 0);
     if (n == 0 && aWh[0] != 0u && aWh[1] != 0u) {
+        g_uSoftDispW = aWh[0];
+        g_uSoftDispH = aWh[1];
         msg_display_soft(aWh[0], aWh[1]);
+        soft_health_note(SOFT_H_DISPLAY, 1);
         cSoftOk++;
     } else {
         msg("sessiond-gj: DISPLAY_INFO soft-skip\n");
+        soft_health_note(SOFT_H_DISPLAY, 0);
     }
     (void)aWh;
 
@@ -372,10 +645,15 @@ soft_health(unsigned char *pFb)
     n = gj_session(GJ_SESS_OP_MAP_SCANOUT, (long)(uintptr_t)&u64Va,
                    (long)(uintptr_t)aInfo, 0);
     if (n == 0 && aInfo[0] != 0u && aInfo[1] != 0u && aInfo[2] != 0u) {
+        g_uSoftMapW = aInfo[0];
+        g_uSoftMapH = aInfo[1];
+        g_uSoftMapStride = aInfo[2];
         msg_map_soft(aInfo[0], aInfo[1], aInfo[2]);
+        soft_health_note(SOFT_H_MAP, 1);
         cSoftOk++;
     } else {
         msg("sessiond-gj: MAP_SCANOUT soft-skip\n");
+        soft_health_note(SOFT_H_MAP, 0);
     }
     (void)u64Va;
     (void)aInfo;
@@ -384,6 +662,7 @@ soft_health(unsigned char *pFb)
     n = gj_session(GJ_SESS_OP_INPUT_POLL, 0, 0, 0);
     if (n != 0) {
         msg("sessiond-gj: INPUT soft-skip\n");
+        soft_health_note(SOFT_H_INPUT, 0);
     } else {
         for (;;) {
             n = gj_session(GJ_SESS_OP_INPUT_POP, (long)(uintptr_t)&ev, 0, 0);
@@ -401,7 +680,10 @@ soft_health(unsigned char *pFb)
         if (n == 0) {
             cPend = (aStats[3] >> SESS_STAT_PEND_SHIFT) & SESS_STAT_PEND_MASK;
         }
+        g_cSoftDrained = cPop;
+        g_cSoftPend = cPend;
         msg_input_soft(cPop, cPend);
+        soft_health_note(SOFT_H_INPUT, 1);
         cSoftOk++;
     }
     (void)ev;
@@ -414,32 +696,45 @@ soft_health(unsigned char *pFb)
         n = gj_session_claim(g_uToken);
         if (n == 0) {
             msg("sessiond-gj: reclaim soft\n");
+            soft_health_note(SOFT_H_RECLAIM, 1);
             cSoftOk++;
         } else {
             msg_fail_ret("reclaim soft", n);
             msg("sessiond-gj: reclaim soft-skip\n");
+            soft_health_note(SOFT_H_RECLAIM, 0);
         }
     } else {
         msg("sessiond-gj: reclaim soft-skip\n");
+        soft_health_note(SOFT_H_RECLAIM, 0);
     }
 
     /* STATS — ownership + ready + user-fb (from hard PRESENT_FB) + reclaim */
     aStats[0] = aStats[1] = aStats[2] = aStats[3] = aStats[4] = 0;
     n = gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)aStats, 0, 0);
     if (n == 0) {
+        g_aSoftStats[0] = aStats[0];
+        g_aSoftStats[1] = aStats[1];
+        g_aSoftStats[2] = aStats[2];
+        g_aSoftStats[3] = aStats[3];
+        g_aSoftStats[4] = aStats[4];
         msg_stats_soft(aStats);
+        soft_health_note(SOFT_H_STATS, 1);
         cSoftOk += soft_stats_flags(aStats);
+        cSoftOk++;
     } else {
         msg("sessiond-gj: STATS soft-skip\n");
+        soft_health_note(SOFT_H_STATS, 0);
     }
 
     /* Interim PRESENT of kernel scanout (soft — policy prefers PRESENT_FB) */
     n = gj_session(GJ_SESS_OP_PRESENT, 0, 0, 0);
     if (n == 0) {
         msg("sessiond-gj: soft PRESENT PASS\n");
+        soft_health_note(SOFT_H_PRESENT, 1);
         cSoftOk++;
     } else {
         msg("sessiond-gj: soft PRESENT soft-skip\n");
+        soft_health_note(SOFT_H_PRESENT, 0);
     }
 
     /* Second PRESENT_FB with alternate tint (multi-frame soft → bit18) */
@@ -448,10 +743,12 @@ soft_health(unsigned char *pFb)
         n = gj_session_present_fb(GJ_SESS_FB_W, GJ_SESS_FB_H, pFb);
         if (n == 0) {
             msg("sessiond-gj: soft PRESENT_FB PASS\n");
+            soft_health_note(SOFT_H_FB2, 1);
             cSoftOk++;
         } else {
             msg_fail_ret("soft PRESENT_FB", n);
             msg("sessiond-gj: soft PRESENT_FB soft-skip\n");
+            soft_health_note(SOFT_H_FB2, 0);
         }
 
         /* Third tint — deepen multi-frame bookkeeping without hard-fail */
@@ -459,10 +756,12 @@ soft_health(unsigned char *pFb)
         n = gj_session_present_fb(GJ_SESS_FB_W, GJ_SESS_FB_H, pFb);
         if (n == 0) {
             msg("sessiond-gj: soft PRESENT_FB2 PASS\n");
+            soft_health_note(SOFT_H_FB3, 1);
             cSoftOk++;
         } else {
             msg_fail_ret("soft PRESENT_FB2", n);
             msg("sessiond-gj: soft PRESENT_FB2 soft-skip\n");
+            soft_health_note(SOFT_H_FB3, 0);
         }
     }
 
@@ -473,23 +772,34 @@ soft_health(unsigned char *pFb)
     aStats[0] = aStats[1] = aStats[2] = aStats[3] = aStats[4] = 0;
     n = gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)aStats, 0, 0);
     if (n == 0) {
+        g_aSoftStats[0] = aStats[0];
+        g_aSoftStats[1] = aStats[1];
+        g_aSoftStats[2] = aStats[2];
+        g_aSoftStats[3] = aStats[3];
+        g_aSoftStats[4] = aStats[4];
         msg_stats_soft(aStats);
         if ((aStats[3] & SESS_STAT_F_USER_FB) != 0u) {
             msg("sessiond-gj: user-fb soft\n");
+            soft_flags_note(SOFT_FLG_USER_FB);
             cSoftOk++;
         }
         if ((aStats[3] & SESS_STAT_F_MULTI) != 0u) {
             msg("sessiond-gj: multi-frame soft\n");
+            soft_flags_note(SOFT_FLG_MULTI);
+            soft_health_note(SOFT_H_MULTI, 1);
             cSoftOk++;
         } else {
             msg("sessiond-gj: multi-frame soft-skip\n");
+            soft_health_note(SOFT_H_MULTI, 0);
         }
         if ((aStats[3] & SESS_STAT_F_RECLAIM) != 0u) {
             msg("sessiond-gj: reclaim flag soft\n");
+            soft_flags_note(SOFT_FLG_RECLAIM);
             cSoftOk++;
         }
         if ((aStats[3] & SESS_STAT_F_OWNED) != 0u && aStats[4] == g_uToken) {
             msg("sessiond-gj: ownership soft\n");
+            soft_flags_note(SOFT_FLG_OWNED);
             cSoftOk++;
         }
     } else {
@@ -550,10 +860,16 @@ _start(void)
     aStats[0] = aStats[1] = aStats[2] = aStats[3] = aStats[4] = 0;
     n = gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)aStats, 0, 0);
     if (n == 0) {
+        g_aSoftStats[0] = aStats[0];
+        g_aSoftStats[1] = aStats[1];
+        g_aSoftStats[2] = aStats[2];
+        g_aSoftStats[3] = aStats[3];
+        g_aSoftStats[4] = aStats[4];
         msg_stats_soft(aStats);
         /* Early user-fb soft after hard present (bit17) — optional */
         if ((aStats[3] & SESS_STAT_F_USER_FB) != 0u) {
             msg("sessiond-gj: user-fb soft\n");
+            soft_flags_note(SOFT_FLG_USER_FB);
         }
     } else {
         msg("sessiond-gj: STATS soft-skip\n");
@@ -574,26 +890,43 @@ _start(void)
     /*
      * Soft free path: RELEASE when already free is 0 (door contract).
      * Confirm STATS no longer owned — never fails ownership path PASS.
+     * Tallies Wave 10 soft free inventory (sessiond-gj: soft free …).
      */
     aStats[0] = aStats[1] = aStats[2] = aStats[3] = aStats[4] = 0;
     n = gj_session(GJ_SESS_OP_STATS, (long)(uintptr_t)aStats, 0, 0);
     if (n == 0) {
+        g_aSoftStats[0] = aStats[0];
+        g_aSoftStats[1] = aStats[1];
+        g_aSoftStats[2] = aStats[2];
+        g_aSoftStats[3] = aStats[3];
+        g_aSoftStats[4] = aStats[4];
         msg_stats_soft(aStats);
         if ((aStats[3] & SESS_STAT_F_OWNED) == 0u && aStats[4] == 0u) {
             msg("sessiond-gj: free soft\n");
+            soft_free_note(SOFT_F_OWN, 1);
         } else {
             msg("sessiond-gj: free soft-skip\n");
+            soft_free_note(SOFT_F_OWN, 0);
         }
         /* Soft double-RELEASE when free → 0 */
         n = gj_session_release(SESS_TOKEN);
         if (n == 0) {
             msg("sessiond-gj: free RELEASE soft\n");
+            soft_free_note(SOFT_F_RELEASE, 1);
         } else {
             msg("sessiond-gj: free RELEASE soft-skip\n");
+            soft_free_note(SOFT_F_RELEASE, 0);
         }
     } else {
         msg("sessiond-gj: free soft-skip\n");
+        soft_free_note(SOFT_F_OWN, 0);
     }
+
+    /*
+     * Wave 10 exclusive soft inventory rollup (greppable "sessiond-gj: soft …").
+     * Emitted after all soft sub-paths; never gates ownership path PASS.
+     */
+    soft_inventory_log();
 
     /* Required by scripts/smoke-all.sh — do not rename */
     msg("sessiond-gj: ownership path PASS\n");

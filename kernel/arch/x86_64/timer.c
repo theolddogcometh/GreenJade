@@ -9,6 +9,19 @@
  * within the current APIC period using LAPIC CUR; coarse mono stays
  * jiffy-stable for futex/door deadlines. Quantum soft-preempt counters
  * deepen tick → yield-request → preempt_check observability.
+ *
+ * Soft timer inventory (Wave 10 exclusive): greppable "timer: soft …"
+ * rollup over mono / preempt / source axes. Diagnostics only — never
+ * hard-gates boot or product deadlines. Pure C; this file only.
+ *
+ * greppable: timer: soft inventory
+ * greppable: timer: soft mono
+ * greppable: timer: soft preempt
+ * greppable: timer: soft source
+ * greppable: timer: soft PASS
+ * greppable: timer: soft FAIL
+ * greppable: timer: mono soft
+ * greppable: timer: preempt soft
  */
 #include <gj/apic.h>
 #include <gj/cap.h>
@@ -49,6 +62,15 @@ static u64          g_u64QuantumTicks;
 static u64          g_u64PitTicks;
 static u64          g_u64ApicMonoTicks;
 static u64          g_u64SourceSwitch;
+
+/*
+ * Soft timer inventory extras (Wave 10 exclusive; file-local).
+ * Emission count only — never hard product gates. wrap OK.
+ * greppable: timer: soft
+ */
+static u64          g_u64SoftInventoryLogs;
+
+static void timer_soft_inventory_log(void);
 
 static void
 outb(u16 u16Port, u8 u8Val)
@@ -249,6 +271,8 @@ timer_init(void)
     kprintf("timer: PIT %u Hz IRQ0 vector 32 nsec/tick=%lu quantum=%u\n",
             (unsigned)GJ_TIMER_HZ, (unsigned long)g_u64NsecPerTick,
             (unsigned)g_u32Quantum);
+    /* Wave 10: baseline soft inventory (zeros/jiffies=0 expected early). */
+    timer_soft_inventory_log();
 }
 
 void
@@ -267,6 +291,8 @@ timer_set_apic_source(u64 u64NsecPerTick)
     kprintf("timer: mono source=APIC nsec/tick=%lu (PIT masked) switches=%lu\n",
             (unsigned long)g_u64NsecPerTick,
             (unsigned long)g_u64SourceSwitch);
+    /* Wave 10: soft inventory after PIT→APIC handoff. */
+    timer_soft_inventory_log();
 }
 
 int
@@ -373,6 +399,122 @@ timer_preempt_soft_snapshot(struct gj_timer_preempt_soft *pOut)
     pOut->u64QuantumTicks = g_u64QuantumTicks;
 }
 
+/**
+ * Greppable soft timer inventory (Wave 10 exclusive; product / smoke).
+ * Prefix-stable markers (timer: soft …):
+ *   timer: soft inventory  — ready/src/hz/quantum + surface catalog + logs
+ *   timer: soft mono       — coarse/soft mono delta + pit/apic tick axes
+ *   timer: soft preempt    — quantum slice + soft preempt_check counters
+ *   timer: soft source     — PIT/APIC handoff + LAPIC INIT/CUR sample
+ *   timer: soft PASS|FAIL  — soft lamp (ready + quantum); never hard-gates
+ *
+ * Never allocates; safe from boot soft-smoke / timer_soft_log.
+ * greppable: timer: soft
+ */
+static void
+timer_soft_inventory_log(void)
+{
+    struct gj_timer_mono_soft stMono;
+    struct gj_timer_preempt_soft stPre;
+    const char *szSrc;
+    u64 u64SoftDelta;
+    u32 u32Init;
+    u32 u32Cur;
+    u32 u32Hz;
+    int fSoftPass;
+
+    timer_mono_soft_snapshot(&stMono);
+    timer_preempt_soft_snapshot(&stPre);
+
+    if (g_u64SoftInventoryLogs < ~0ull) {
+        g_u64SoftInventoryLogs++;
+    }
+
+    if (stMono.u32Source == GJ_TIMER_SRC_APIC) {
+        szSrc = "APIC";
+    } else if (stMono.u32Source == GJ_TIMER_SRC_PIT) {
+        szSrc = "PIT";
+    } else {
+        szSrc = "NONE";
+    }
+
+    u64SoftDelta = 0;
+    if (stMono.u64MonoSoftNsec >= stMono.u64MonoNsec) {
+        u64SoftDelta = stMono.u64MonoSoftNsec - stMono.u64MonoNsec;
+    }
+
+    u32Init = 0;
+    u32Cur = 0;
+    if (g_fApicSource != 0) {
+        u32Init = apic_timer_init_count();
+        u32Cur = apic_timer_cur_count();
+    }
+
+    u32Hz = GJ_TIMER_HZ;
+    if (stMono.u64NsecPerTick != 0) {
+        u32Hz = (u32)(1000000000ull / stMono.u64NsecPerTick);
+        if (u32Hz == 0) {
+            u32Hz = GJ_TIMER_HZ;
+        }
+    }
+
+    /* Grep: timer: soft inventory */
+    kprintf("timer: soft inventory ready=%u src=%s hz=%u quantum=%u "
+            "jiffies=%lu npt=%lu logs=%lu "
+            "g_timer_mono=1 soft_mono=1 apic_src=1 preempt=1\n",
+            (unsigned)stMono.u32Ready, szSrc, (unsigned)u32Hz,
+            (unsigned)stPre.u32Quantum,
+            (unsigned long)stMono.u64Jiffies,
+            (unsigned long)stMono.u64NsecPerTick,
+            (unsigned long)g_u64SoftInventoryLogs);
+
+    /* Grep: timer: soft mono */
+    kprintf("timer: soft mono coarse=%lu soft=%lu delta=%lu "
+            "jiffies=%lu npt=%lu pit_ticks=%lu apic_ticks=%lu switches=%lu\n",
+            (unsigned long)stMono.u64MonoNsec,
+            (unsigned long)stMono.u64MonoSoftNsec,
+            (unsigned long)u64SoftDelta,
+            (unsigned long)stMono.u64Jiffies,
+            (unsigned long)stMono.u64NsecPerTick,
+            (unsigned long)stMono.u64PitTicks,
+            (unsigned long)stMono.u64ApicTicks,
+            (unsigned long)stMono.u64SourceSwitch);
+
+    /* Grep: timer: soft preempt */
+    kprintf("timer: soft preempt quantum=%u slice_left=%u preempts=%lu "
+            "yields=%lu checks=%lu hits=%lu check_yields=%lu sets=%lu "
+            "q_ticks=%lu\n",
+            (unsigned)stPre.u32Quantum, (unsigned)stPre.u32SliceLeft,
+            (unsigned long)stPre.u64Preempts,
+            (unsigned long)stPre.u64YieldRequests,
+            (unsigned long)stPre.u64PreemptChecks,
+            (unsigned long)stPre.u64PreemptCheckHits,
+            (unsigned long)stPre.u64PreemptCheckYields,
+            (unsigned long)stPre.u64QuantumSets,
+            (unsigned long)stPre.u64QuantumTicks);
+
+    /* Grep: timer: soft source */
+    kprintf("timer: soft source=%s apic=%u init_cnt=%u cur_cnt=%u "
+            "vector_pit=32 vector_apic=48 switches=%lu\n",
+            szSrc, (unsigned)(g_fApicSource ? 1u : 0u),
+            (unsigned)u32Init, (unsigned)u32Cur,
+            (unsigned long)stMono.u64SourceSwitch);
+
+    /*
+     * Soft lamp only — ready + non-zero quantum. Never hard-gates boot.
+     * Grep: timer: soft PASS | timer: soft FAIL
+     */
+    fSoftPass = 0;
+    if (stMono.u32Ready != 0 && stPre.u32Quantum > 0) {
+        fSoftPass = 1;
+    }
+    if (fSoftPass != 0) {
+        kprintf("timer: soft PASS\n");
+    } else {
+        kprintf("timer: soft FAIL\n");
+    }
+}
+
 void
 timer_soft_log(void)
 {
@@ -426,6 +568,9 @@ timer_soft_log(void)
     } else {
         kprintf("timer: preempt soft FAIL\n");
     }
+
+    /* Wave 10 exclusive: greppable timer: soft … inventory rollup. */
+    timer_soft_inventory_log();
 }
 
 void

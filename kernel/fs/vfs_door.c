@@ -14,6 +14,12 @@
  *   (reclaim soft); a different token → BUSY. RELEASE when free is a soft
  *   no-op (0). Format/mount allowed when free (bring-up smokes) or claimed
  *   (product vfsd). Soft RAM disk when virtio-blk is absent.
+ *
+ * Soft door inventory (Wave 10 exclusive deepen):
+ *   - Live owned/mounted/files/fds; peaks for files + open door fds
+ *   - Cumulative claim/reclaim/release + format/mount + name + fd ops
+ *   - Soft deny tallies by errno shape (inval/busy/noent/nomem/io/…)
+ *   greppable: "vfs_door: soft …"
  */
 #include <gj/error.h>
 #include <gj/klog.h>
@@ -81,10 +87,62 @@ static int                g_fRam;
 static struct vfs_fd      g_aFd[VFS_FD_MAX];
 static struct gj_spinlock g_lkVfs;
 
+/*
+ * Soft product inventory (Wave 10 exclusive). Cumulative unless noted
+ * live/peak. greppable: vfs_door: soft …
+ */
+static u32 g_u32SoftReleaseOk;    /* RELEASE while owned (token match) */
+static u32 g_u32SoftReleaseFree;  /* RELEASE when free (soft no-op) */
+static u32 g_u32SoftClaimBusy;    /* CLAIM different token → BUSY */
+static u32 g_u32SoftFormatOk;
+static u32 g_u32SoftFormatFail;
+static u32 g_u32SoftMountOk;
+static u32 g_u32SoftMountFail;
+static u32 g_u32SoftCreateOk;
+static u32 g_u32SoftCreateFail;
+static u32 g_u32SoftWriteOk;
+static u32 g_u32SoftWriteFail;
+static u32 g_u32SoftReadOk;
+static u32 g_u32SoftReadFail;
+static u32 g_u32SoftUnlinkOk;
+static u32 g_u32SoftUnlinkFail;
+static u32 g_u32SoftStatOk;
+static u32 g_u32SoftStatFail;
+static u32 g_u32SoftListOk;
+static u32 g_u32SoftListFail;
+static u32 g_u32SoftOpenOk;
+static u32 g_u32SoftOpenFail;
+static u32 g_u32SoftCloseOk;
+static u32 g_u32SoftCloseFail;
+static u32 g_u32SoftReadfdOk;
+static u32 g_u32SoftReadfdFail;
+static u32 g_u32SoftWritefdOk;
+static u32 g_u32SoftWritefdFail;
+static u32 g_u32SoftSeekfdOk;
+static u32 g_u32SoftSeekfdFail;
+static u32 g_u32SoftStatsOk;      /* STATS copy-out successes */
+static u32 g_u32SoftDenyInval;
+static u32 g_u32SoftDenyBusy;
+static u32 g_u32SoftDenyNoent;
+static u32 g_u32SoftDenyNomem;
+static u32 g_u32SoftDenyIo;
+static u32 g_u32SoftDenyNodev;
+static u32 g_u32SoftDenyNosup;
+static u32 g_u32SoftDenyFault;
+static u32 g_u32SoftDenyPerm;
+static u32 g_u32SoftDenyOther;
+static u32 g_u32SoftFilesPeak;    /* high-water g_u32Files */
+static u32 g_u32SoftFdPeak;       /* high-water open door fds */
+static u32 g_u32SoftInvSamples;   /* soft inventory dump count */
+
 static int do_format(void);
 static int do_mount(u32 *pOut);
 static i64 do_create_or_write(const char *szName, const u8 *pData, u32 cb,
                               int fCreateOnly);
+static void soft_peak_note(void);
+static void soft_deny_note(i64 i64Ret);
+static void soft_note_result(u32 u32Op, i64 i64Ret);
+static void soft_inventory_log(void);
 
 /* ---- small helpers ------------------------------------------------------ */
 
@@ -402,6 +460,343 @@ file_data_store(u32 u32Lba0, const u8 *pData, u32 u32Size)
     return 0;
 }
 
+/**
+ * Note live files + open-fd high-water. Caller holds g_lkVfs (or init).
+ */
+static void
+soft_peak_note(void)
+{
+    u32 u32Fds;
+
+    if (g_u32Files > g_u32SoftFilesPeak) {
+        g_u32SoftFilesPeak = g_u32Files;
+    }
+    u32Fds = fd_count_used();
+    if (u32Fds > g_u32SoftFdPeak) {
+        g_u32SoftFdPeak = u32Fds;
+    }
+}
+
+/**
+ * Bump soft deny bucket by error shape. Caller holds g_lkVfs.
+ */
+static void
+soft_deny_note(i64 i64Ret)
+{
+    if (i64Ret >= 0) {
+        return;
+    }
+    if (i64Ret == GJ_ERR_INVAL) {
+        g_u32SoftDenyInval++;
+    } else if (i64Ret == GJ_ERR_BUSY) {
+        g_u32SoftDenyBusy++;
+    } else if (i64Ret == GJ_ERR_NOENT) {
+        g_u32SoftDenyNoent++;
+    } else if (i64Ret == GJ_ERR_NOMEM) {
+        g_u32SoftDenyNomem++;
+    } else if (i64Ret == GJ_ERR_IO) {
+        g_u32SoftDenyIo++;
+    } else if (i64Ret == GJ_ERR_NODEV) {
+        g_u32SoftDenyNodev++;
+    } else if (i64Ret == GJ_ERR_NOSUPPORT) {
+        g_u32SoftDenyNosup++;
+    } else if (i64Ret == GJ_ERR_FAULT) {
+        g_u32SoftDenyFault++;
+    } else if (i64Ret == GJ_ERR_PERM) {
+        g_u32SoftDenyPerm++;
+    } else {
+        g_u32SoftDenyOther++;
+    }
+}
+
+/**
+ * Soft inventory op/result tally. Caller holds g_lkVfs.
+ * Never alters i64Ret; diagnostics only.
+ */
+static void
+soft_note_result(u32 u32Op, i64 i64Ret)
+{
+    int fOk = (i64Ret >= 0);
+
+    soft_peak_note();
+    if (!fOk) {
+        soft_deny_note(i64Ret);
+    }
+
+    switch (u32Op) {
+    case GJ_VFS_OP_CLAIM:
+        /* first/reclaim already counted in g_u32Claims / g_u32Reclaims. */
+        if (!fOk && i64Ret == GJ_ERR_BUSY) {
+            g_u32SoftClaimBusy++;
+        }
+        break;
+    case GJ_VFS_OP_RELEASE:
+        /* free_rel / release ok tallied at case sites (path-specific). */
+        break;
+    case GJ_VFS_OP_FORMAT:
+        if (fOk) {
+            g_u32SoftFormatOk++;
+        } else {
+            g_u32SoftFormatFail++;
+        }
+        break;
+    case GJ_VFS_OP_MOUNT:
+        if (fOk) {
+            g_u32SoftMountOk++;
+        } else {
+            g_u32SoftMountFail++;
+        }
+        break;
+    case GJ_VFS_OP_CREATE:
+        if (fOk) {
+            g_u32SoftCreateOk++;
+        } else {
+            g_u32SoftCreateFail++;
+        }
+        break;
+    case GJ_VFS_OP_WRITE:
+        if (fOk) {
+            g_u32SoftWriteOk++;
+        } else {
+            g_u32SoftWriteFail++;
+        }
+        break;
+    case GJ_VFS_OP_READ:
+        if (fOk) {
+            g_u32SoftReadOk++;
+        } else {
+            g_u32SoftReadFail++;
+        }
+        break;
+    case GJ_VFS_OP_UNLINK:
+        if (fOk) {
+            g_u32SoftUnlinkOk++;
+        } else {
+            g_u32SoftUnlinkFail++;
+        }
+        break;
+    case GJ_VFS_OP_STAT:
+        if (fOk) {
+            g_u32SoftStatOk++;
+        } else {
+            g_u32SoftStatFail++;
+        }
+        break;
+    case GJ_VFS_OP_LIST:
+        if (fOk) {
+            g_u32SoftListOk++;
+        } else {
+            g_u32SoftListFail++;
+        }
+        break;
+    case GJ_VFS_OP_STATS:
+        if (fOk) {
+            g_u32SoftStatsOk++;
+        }
+        break;
+    case GJ_VFS_OP_OPEN:
+        if (fOk) {
+            g_u32SoftOpenOk++;
+        } else {
+            g_u32SoftOpenFail++;
+        }
+        break;
+    case GJ_VFS_OP_CLOSE:
+        if (fOk) {
+            g_u32SoftCloseOk++;
+        } else {
+            g_u32SoftCloseFail++;
+        }
+        break;
+    case GJ_VFS_OP_READFD:
+        if (fOk) {
+            g_u32SoftReadfdOk++;
+        } else {
+            g_u32SoftReadfdFail++;
+        }
+        break;
+    case GJ_VFS_OP_WRITEFD:
+        if (fOk) {
+            g_u32SoftWritefdOk++;
+        } else {
+            g_u32SoftWritefdFail++;
+        }
+        break;
+    case GJ_VFS_OP_SEEKFD:
+        if (fOk) {
+            g_u32SoftSeekfdOk++;
+        } else {
+            g_u32SoftSeekfdFail++;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+/**
+ * Greppable soft VFS door inventory (product / smoke).
+ *   vfs_door: soft inventory …
+ *   vfs_door: soft claim …
+ *   vfs_door: soft layout …
+ *   vfs_door: soft name …
+ *   vfs_door: soft fd …
+ *   vfs_door: soft fmt …
+ *   vfs_door: soft deny …
+ *   vfs_door: soft peak …
+ * greppable: vfs_door: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Calls;
+    u32 u32Owned;
+    u32 u32Mounted;
+    u32 u32Files;
+    u32 u32Fds;
+    u32 u32Claims;
+    u32 u32Reclaims;
+    u32 u32RelOk;
+    u32 u32RelFree;
+    u32 u32Busy;
+    u32 u32Ram;
+    u32 u32FmtOk;
+    u32 u32FmtFail;
+    u32 u32MntOk;
+    u32 u32MntFail;
+    u32 u32CreateOk;
+    u32 u32CreateFail;
+    u32 u32WriteOk;
+    u32 u32WriteFail;
+    u32 u32ReadOk;
+    u32 u32ReadFail;
+    u32 u32UnlinkOk;
+    u32 u32UnlinkFail;
+    u32 u32StatOk;
+    u32 u32StatFail;
+    u32 u32ListOk;
+    u32 u32ListFail;
+    u32 u32OpenOk;
+    u32 u32OpenFail;
+    u32 u32CloseOk;
+    u32 u32CloseFail;
+    u32 u32ReadfdOk;
+    u32 u32ReadfdFail;
+    u32 u32WritefdOk;
+    u32 u32WritefdFail;
+    u32 u32SeekfdOk;
+    u32 u32SeekfdFail;
+    u32 u32StatsOk;
+    u32 u32DenyInval;
+    u32 u32DenyBusy;
+    u32 u32DenyNoent;
+    u32 u32DenyNomem;
+    u32 u32DenyIo;
+    u32 u32DenyNodev;
+    u32 u32DenyNosup;
+    u32 u32DenyFault;
+    u32 u32DenyPerm;
+    u32 u32DenyOther;
+    u32 u32FilesPeak;
+    u32 u32FdPeak;
+    u32 u32Samples;
+
+    gj_spin_lock(&g_lkVfs);
+    soft_peak_note();
+    u32Calls = g_u32Calls;
+    u32Owned = g_u32Owner ? 1u : 0u;
+    u32Mounted = g_u32Mounted;
+    u32Files = g_u32Files;
+    u32Fds = fd_count_used();
+    u32Claims = g_u32Claims;
+    u32Reclaims = g_u32Reclaims;
+    u32RelOk = g_u32SoftReleaseOk;
+    u32RelFree = g_u32SoftReleaseFree;
+    u32Busy = g_u32SoftClaimBusy;
+    u32Ram = g_fRam ? 1u : 0u;
+    u32FmtOk = g_u32SoftFormatOk;
+    u32FmtFail = g_u32SoftFormatFail;
+    u32MntOk = g_u32SoftMountOk;
+    u32MntFail = g_u32SoftMountFail;
+    u32CreateOk = g_u32SoftCreateOk;
+    u32CreateFail = g_u32SoftCreateFail;
+    u32WriteOk = g_u32SoftWriteOk;
+    u32WriteFail = g_u32SoftWriteFail;
+    u32ReadOk = g_u32SoftReadOk;
+    u32ReadFail = g_u32SoftReadFail;
+    u32UnlinkOk = g_u32SoftUnlinkOk;
+    u32UnlinkFail = g_u32SoftUnlinkFail;
+    u32StatOk = g_u32SoftStatOk;
+    u32StatFail = g_u32SoftStatFail;
+    u32ListOk = g_u32SoftListOk;
+    u32ListFail = g_u32SoftListFail;
+    u32OpenOk = g_u32SoftOpenOk;
+    u32OpenFail = g_u32SoftOpenFail;
+    u32CloseOk = g_u32SoftCloseOk;
+    u32CloseFail = g_u32SoftCloseFail;
+    u32ReadfdOk = g_u32SoftReadfdOk;
+    u32ReadfdFail = g_u32SoftReadfdFail;
+    u32WritefdOk = g_u32SoftWritefdOk;
+    u32WritefdFail = g_u32SoftWritefdFail;
+    u32SeekfdOk = g_u32SoftSeekfdOk;
+    u32SeekfdFail = g_u32SoftSeekfdFail;
+    u32StatsOk = g_u32SoftStatsOk;
+    u32DenyInval = g_u32SoftDenyInval;
+    u32DenyBusy = g_u32SoftDenyBusy;
+    u32DenyNoent = g_u32SoftDenyNoent;
+    u32DenyNomem = g_u32SoftDenyNomem;
+    u32DenyIo = g_u32SoftDenyIo;
+    u32DenyNodev = g_u32SoftDenyNodev;
+    u32DenyNosup = g_u32SoftDenyNosup;
+    u32DenyFault = g_u32SoftDenyFault;
+    u32DenyPerm = g_u32SoftDenyPerm;
+    u32DenyOther = g_u32SoftDenyOther;
+    u32FilesPeak = g_u32SoftFilesPeak;
+    u32FdPeak = g_u32SoftFdPeak;
+    g_u32SoftInvSamples++;
+    u32Samples = g_u32SoftInvSamples;
+    gj_spin_unlock(&g_lkVfs);
+
+    /* Grep: vfs_door: soft inventory */
+    kprintf("vfs_door: soft inventory ver=%u ram=%u calls=%u owned=%u "
+            "mounted=%u files=%u fds=%u\n",
+            VFS_VERSION, u32Ram, u32Calls, u32Owned, u32Mounted, u32Files,
+            u32Fds);
+    /* Grep: vfs_door: soft claim */
+    kprintf("vfs_door: soft claim first=%u reclaim=%u release=%u "
+            "free_rel=%u busy=%u\n",
+            u32Claims, u32Reclaims, u32RelOk, u32RelFree, u32Busy);
+    /* Grep: vfs_door: soft layout */
+    kprintf("vfs_door: soft layout inodes=%u fd_max=%u file_max=%u "
+            "secs=%u\n",
+            INODE_MAX, VFS_FD_MAX, FILE_MAX_BYTES, VFS_RAM_SECS);
+    /* Grep: vfs_door: soft name */
+    kprintf("vfs_door: soft name create=%u/%u write=%u/%u read=%u/%u "
+            "unlink=%u/%u stat=%u/%u list=%u/%u\n",
+            u32CreateOk, u32CreateFail, u32WriteOk, u32WriteFail, u32ReadOk,
+            u32ReadFail, u32UnlinkOk, u32UnlinkFail, u32StatOk, u32StatFail,
+            u32ListOk, u32ListFail);
+    /* Grep: vfs_door: soft fd */
+    kprintf("vfs_door: soft fd open=%u/%u close=%u/%u readfd=%u/%u "
+            "writefd=%u/%u seekfd=%u/%u\n",
+            u32OpenOk, u32OpenFail, u32CloseOk, u32CloseFail, u32ReadfdOk,
+            u32ReadfdFail, u32WritefdOk, u32WritefdFail, u32SeekfdOk,
+            u32SeekfdFail);
+    /* Grep: vfs_door: soft fmt */
+    kprintf("vfs_door: soft fmt ok=%u fail=%u mnt_ok=%u mnt_fail=%u "
+            "stats=%u\n",
+            u32FmtOk, u32FmtFail, u32MntOk, u32MntFail, u32StatsOk);
+    /* Grep: vfs_door: soft deny */
+    kprintf("vfs_door: soft deny inval=%u busy=%u noent=%u nomem=%u "
+            "io=%u nodev=%u nosup=%u fault=%u perm=%u other=%u\n",
+            u32DenyInval, u32DenyBusy, u32DenyNoent, u32DenyNomem, u32DenyIo,
+            u32DenyNodev, u32DenyNosup, u32DenyFault, u32DenyPerm,
+            u32DenyOther);
+    /* Grep: vfs_door: soft peak */
+    kprintf("vfs_door: soft peak files=%u fds=%u samples=%u\n", u32FilesPeak,
+            u32FdPeak, u32Samples);
+}
+
 void
 vfs_door_init(void)
 {
@@ -415,9 +810,54 @@ vfs_door_init(void)
     g_fRam = virtio_blk_ready() ? 0 : 1;
     memset(g_aRam, 0, sizeof(g_aRam));
     memset(g_aFd, 0, sizeof(g_aFd));
+    g_u32SoftReleaseOk = 0;
+    g_u32SoftReleaseFree = 0;
+    g_u32SoftClaimBusy = 0;
+    g_u32SoftFormatOk = 0;
+    g_u32SoftFormatFail = 0;
+    g_u32SoftMountOk = 0;
+    g_u32SoftMountFail = 0;
+    g_u32SoftCreateOk = 0;
+    g_u32SoftCreateFail = 0;
+    g_u32SoftWriteOk = 0;
+    g_u32SoftWriteFail = 0;
+    g_u32SoftReadOk = 0;
+    g_u32SoftReadFail = 0;
+    g_u32SoftUnlinkOk = 0;
+    g_u32SoftUnlinkFail = 0;
+    g_u32SoftStatOk = 0;
+    g_u32SoftStatFail = 0;
+    g_u32SoftListOk = 0;
+    g_u32SoftListFail = 0;
+    g_u32SoftOpenOk = 0;
+    g_u32SoftOpenFail = 0;
+    g_u32SoftCloseOk = 0;
+    g_u32SoftCloseFail = 0;
+    g_u32SoftReadfdOk = 0;
+    g_u32SoftReadfdFail = 0;
+    g_u32SoftWritefdOk = 0;
+    g_u32SoftWritefdFail = 0;
+    g_u32SoftSeekfdOk = 0;
+    g_u32SoftSeekfdFail = 0;
+    g_u32SoftStatsOk = 0;
+    g_u32SoftDenyInval = 0;
+    g_u32SoftDenyBusy = 0;
+    g_u32SoftDenyNoent = 0;
+    g_u32SoftDenyNomem = 0;
+    g_u32SoftDenyIo = 0;
+    g_u32SoftDenyNodev = 0;
+    g_u32SoftDenyNosup = 0;
+    g_u32SoftDenyFault = 0;
+    g_u32SoftDenyPerm = 0;
+    g_u32SoftDenyOther = 0;
+    g_u32SoftFilesPeak = 0;
+    g_u32SoftFdPeak = 0;
+    g_u32SoftInvSamples = 0;
     gj_spin_init(&g_lkVfs);
     kprintf("vfs_door: init ver=%u ram=%d inodes=%u file_max=%u secs=%u\n",
             VFS_VERSION, g_fRam, INODE_MAX, FILE_MAX_BYTES, VFS_RAM_SECS);
+    /* Grep: vfs_door: soft (baseline inventory after init) */
+    soft_inventory_log();
 }
 
 /* ---- freemap ------------------------------------------------------------ */
@@ -1096,6 +1536,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     char     szName[NAME_MAX];
     static u8 aTmp[FILE_MAX_BYTES];
     i64      i64Ret;
+    int      fSoftInv = 0;
 
     if (!g_fInit) {
         return GJ_ERR_NODEV;
@@ -1129,6 +1570,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_VFS_OP_RELEASE:
         /* Soft free path: already unowned → 0 (no token match required). */
         if (g_u32Owner == 0) {
+            g_u32SoftReleaseFree++;
             i64Ret = 0;
             break;
         }
@@ -1138,6 +1580,7 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         }
         kprintf("vfs_door: RELEASE token=0x%x\n", g_u32Owner);
         g_u32Owner = 0;
+        g_u32SoftReleaseOk++;
         i64Ret = 0;
         break;
     case GJ_VFS_OP_FORMAT:
@@ -1250,6 +1693,12 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             break;
         }
         i64Ret = 0;
+        /*
+         * Emit soft inventory on STATS so bring-up smoke greps
+         * vfs_door: soft … lines. Dump after unlock (kprintf under lock
+         * avoided). greppable: vfs_door: soft
+         */
+        fSoftInv = 1;
         break;
     }
     case GJ_VFS_OP_OPEN:
@@ -1276,6 +1725,11 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         break;
     }
 
+    /* Wave 10 soft inventory tallies (never mutates i64Ret). */
+    soft_note_result(u32Op, i64Ret);
     gj_spin_unlock(&g_lkVfs);
+    if (fSoftInv) {
+        soft_inventory_log();
+    }
     return i64Ret;
 }

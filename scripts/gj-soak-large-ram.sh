@@ -13,6 +13,26 @@
 #   - kernel `pmm: soak_tib SKIP soft` (max_pa below 768 GiB need)
 #   - soak_tib PASS missing from the log
 #
+# ---------------------------------------------------------------------------
+# Wave 10 soft honesty — product ≥ 1 TiB bar stays OPEN
+# ---------------------------------------------------------------------------
+# This runner exercises the 768 GiB-class hierarchical soak only
+# (main.c → pmm_soak_tib(768ull<<30)). Soft honesty bounds:
+#   - soak_tib PASS ≠ full 1 TiB product bar met
+#   - GJ_SOAK_MEM=1T / -m 1T is optional operator override; not claimed closed
+#   - pmm: tib_host soft SKIP  → host/QEMU below 1 TiB (expected on modest decks)
+#   - pmm: tib_host soft PASS  → true ≥1 TiB max_pa greppable (soft only)
+#   - pmm: tib_design soft     → always-on design observability (no 1 TiB host)
+# Full 1 TiB host soak remains OPEN until a real ≥1 TiB host path is claimed
+# elsewhere (HCL / matrix). Soft-SKIP paths never hard-fail this script.
+# ---------------------------------------------------------------------------
+#
+# Soft-SKIP paths (all exit 0 — clear and greppable):
+#   SKIP host too small     host MemTotal < min for -m $GJ_SOAK_MEM
+#   SKIP soft (kernel)      pmm: soak_tib SKIP soft  (max_pa below need)
+#   MISS ... soft-exit 0    parse / ELF / timeout / FAIL / no PASS line
+# Never promote 768G PASS → “desktop 1 TiB bar met” or bar3 / Steam ready.
+#
 # Usage:
 #   ./scripts/gj-soak-large-ram.sh
 #   GJ_SOAK_MEM=512G GJ_SOAK_TIMEOUT=900 ./scripts/gj-soak-large-ram.sh
@@ -27,9 +47,11 @@
 #   QEMU_BIN          forwarded via run-qemu (optional)
 #
 # Kernel markers (kernel/mm/pmm.c pmm_soak_tib; kernel/main.c with 768ull<<30):
-#   pmm: soak_tib PASS   hierarchical free exercised at TiB-class max_pa
-#   pmm: soak_tib SKIP soft   host/QEMU below threshold (not a fail)
-#   pmm: soak_tib FAIL   alloc path failed (still soft-exit 0 here)
+#   pmm: soak_tib PASS            hierarchical free exercised at TiB-class max_pa
+#   pmm: soak_tib SKIP soft       host/QEMU below threshold (not a fail; soft-SKIP)
+#   pmm: soak_tib FAIL            alloc path failed (still soft-exit 0 here)
+#   pmm: tib_design soft          1 TiB design path ready (no 1 TiB host required)
+#   pmm: tib_host soft PASS|SKIP  true ≥1 TiB max_pa gate (soft; bar stays open)
 #
 # Contrast:
 #   scripts/smoke-all.sh     hard-requires small `pmm: soak PASS` (not this script)
@@ -40,7 +62,7 @@
 #   ./scripts/gj-product-summary.sh "$log"
 #   ./scripts/gj-quick-keys.sh "$log"   # hard keys; soak_tib is soft info only
 #
-# See also: docs/HCL.md, docs/STEAM_HWTEST.md (768G soak scope / honesty bounds)
+# See also: docs/HCL.md, docs/STEAM_HWTEST.md (768G soak scope / 1 TiB open honesty)
 set -u
 
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -59,10 +81,12 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	echo "usage: $0 [path/to/greenjade.elf]" >&2
 	echo "  GJ_SOAK_MEM=$GJ_SOAK_MEM  GJ_SOAK_TIMEOUT=${GJ_SOAK_TIMEOUT}s" >&2
 	echo "  Soft exit 0 on host-too-small / miss / SKIP (never hard-fail)." >&2
+	echo "  Honesty: 768G soak ≠ product ≥1 TiB bar (1 TiB path remains OPEN)." >&2
 	exit 0
 fi
 
 echo "gj-soak-large-ram: mem=$GJ_SOAK_MEM timeout=${GJ_SOAK_TIMEOUT}s log=$log"
+echo "gj-soak-large-ram: honesty  product ≥1 TiB full path OPEN (768G class only; Wave 10 soft)"
 
 # --- helpers ----------------------------------------------------------------
 # Parse size token like 768G / 512g / 1T / 65536M / bare bytes → KiB (integer).
@@ -95,10 +119,12 @@ size_to_kib() {
 soft_done() {
 	_msg=$1
 	echo "gj-soak-large-ram: $_msg soft-exit 0"
+	# Wave 10: restate open bar on every soft exit (agent-greppable honesty).
+	echo "gj-soak-large-ram: honesty  product ≥1 TiB full path OPEN (soft-SKIP/MISS ≠ closed)"
 	exit 0
 }
 
-# --- host gate (too small → soft exit 0) ------------------------------------
+# --- host gate (too small → soft-SKIP exit 0) -------------------------------
 need_kib=$(size_to_kib "$GJ_SOAK_MEM")
 if [ "$need_kib" -eq 0 ]; then
 	soft_done "MISS: cannot parse GJ_SOAK_MEM='$GJ_SOAK_MEM'"
@@ -120,6 +146,7 @@ esac
 echo "gj-soak-large-ram: host_MemTotal_KiB=$host_kib need_guest_KiB=$need_kib min_host_KiB=$min_host_kib"
 
 if [ "$host_kib" -gt 0 ] && [ "$host_kib" -lt "$min_host_kib" ]; then
+	# Soft-SKIP path A: host cannot back QEMU -m (clear, never hard-fail).
 	soft_done "SKIP host too small (MemTotal ${host_kib} KiB < ${min_host_kib} KiB for -m $GJ_SOAK_MEM)"
 fi
 
@@ -172,19 +199,50 @@ if gqa_q 'hierarchical free ready|hierarchical free'; then
 	echo "gj-soak-large-ram: info hierarchical free markers present"
 fi
 
+# ---------------------------------------------------------------------------
+# Wave 10 soft honesty companions (1 TiB design / host — info only, never fail)
+# ---------------------------------------------------------------------------
+# tib_design: always-on design path (no 1 TiB host required).
+# tib_host soft SKIP: expected below 1 TiB — product bar stays OPEN.
+# tib_host soft PASS: greppable ≥1 TiB max_pa only; still soft (≠ bar3/Steam).
+if gqa_q 'pmm: tib_design soft'; then
+	line=$(grep -a -E 'pmm: tib_design soft' "$log" 2>/dev/null | head -n1 || true)
+	echo "gj-soak-large-ram: info tib_design soft present — $line"
+else
+	echo "gj-soak-large-ram: info tib_design soft absent (soft)"
+fi
+
+if gqa_q 'pmm: tib_host soft PASS'; then
+	line=$(grep -a -E 'pmm: tib_host soft PASS' "$log" 2>/dev/null | head -n1 || true)
+	echo "gj-soak-large-ram: info tib_host soft PASS — $line"
+	echo "gj-soak-large-ram: honesty  tib_host PASS greppable; product ≥1 TiB bar still OPEN (Wave 10 soft)"
+elif gqa_q 'pmm: tib_host soft SKIP'; then
+	line=$(grep -a -E 'pmm: tib_host soft SKIP' "$log" 2>/dev/null | head -n1 || true)
+	# Soft-SKIP path B: true 1 TiB host gate skipped (clear, never hard-fail).
+	echo "gj-soak-large-ram: info tib_host soft SKIP — $line"
+	echo "gj-soak-large-ram: honesty  tib_host soft-SKIP; product ≥1 TiB full path OPEN"
+else
+	echo "gj-soak-large-ram: info tib_host soft marker absent (soft)"
+	echo "gj-soak-large-ram: honesty  product ≥1 TiB full path OPEN (no tib_host claim)"
+fi
+
 # Optional soft product inventory (never fails this script; ignore helper exit).
 if [ -f "$root/scripts/gj-product-summary.sh" ]; then
 	echo "gj-soak-large-ram: --- soft product-summary ---"
 	bash "$root/scripts/gj-product-summary.sh" "$log" 2>/dev/null || true
 fi
 
+# --- soak_tib verdicts (all soft-exit 0) ------------------------------------
 if gqa_q 'pmm: soak_tib PASS|soak_tib PASS'; then
 	line=$(grep -a -E 'pmm: soak_tib PASS|soak_tib PASS' "$log" 2>/dev/null | head -n1 || true)
 	echo "gj-soak-large-ram: PASS  ($line)"
+	# Wave 10 honesty: 768G-class PASS does not close the ≥1 TiB product bar.
+	echo "gj-soak-large-ram: honesty  soak_tib PASS is 768G-class; product ≥1 TiB full path OPEN"
 	echo "gj-soak-large-ram: log=$log soft-exit 0"
 	exit 0
 fi
 
+# Soft-SKIP path C: kernel max_pa below soak need (clear, never hard-fail).
 if gqa_q 'pmm: soak_tib SKIP soft|soak_tib SKIP'; then
 	line=$(grep -a -E 'pmm: soak_tib SKIP' "$log" 2>/dev/null | head -n1 || true)
 	soft_done "SKIP soft (kernel host/QEMU below threshold) — $line"

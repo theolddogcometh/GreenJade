@@ -10,6 +10,18 @@
  *   virtio-net: ready PASS
  *   virtio-net: features
  *   virtio-net: multi-buf
+ *
+ * Soft inventory (Wave 10 exclusive; this unit only; never hard-gates):
+ * greppable: "virtio-net: soft …"
+ *   virtio-net: soft inventory …
+ *   virtio-net: soft multi-buf …
+ *   virtio-net: soft tx-chain …
+ *   virtio-net: soft bounce …
+ *   virtio-net: soft queue …
+ *   virtio-net: soft features …
+ *   virtio-net: soft stats …
+ *   virtio-net: soft inventory PASS|NODEV
+ *   virtio-net: soft PASS
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -169,6 +181,119 @@ stats_reset(void)
     memset(&g_Stats, 0, sizeof(g_Stats));
 }
 
+/*
+ * Greppable soft inventory (Wave 10 exclusive; diagnostics only).
+ * Prefix-stable "virtio-net: soft …" for product smoke / HCL greps.
+ * Never hard-gates probe or TX/RX paths. Safe when !g_fReady (zeros).
+ *
+ * greppable: virtio-net: soft inventory
+ * greppable: virtio-net: soft multi-buf
+ * greppable: virtio-net: soft tx-chain
+ * greppable: virtio-net: soft bounce
+ * greppable: virtio-net: soft queue
+ * greppable: virtio-net: soft features
+ * greppable: virtio-net: soft stats
+ */
+static void
+virtio_net_soft_inventory(void)
+{
+    u32 i;
+    u32 cLive = 0;
+    u32 cBounceUsed = 0;
+    u16 u16RxSize = 0;
+    u16 u16TxSize = 0;
+    u16 u16RxFree = 0;
+    u16 u16TxFree = 0;
+    unsigned fMac;
+    unsigned fStatus;
+    unsigned fMrg;
+    unsigned fV1;
+
+    for (i = 0; i < GJ_VIRTIO_NET_RX_N; i++) {
+        if (g_aRxSlotLive[i] != 0) {
+            cLive++;
+        }
+    }
+    for (i = 0; i < GJ_NET_BOUNCE_N; i++) {
+        if (g_aBounceUsed[i] != 0) {
+            cBounceUsed++;
+        }
+    }
+    if (g_fReady) {
+        u16RxSize = g_qRx.u16Size;
+        u16TxSize = g_qTx.u16Size;
+        u16RxFree = g_qRx.u16NumFree;
+        u16TxFree = g_qTx.u16NumFree;
+    }
+
+    fMac = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_MAC) != 0);
+    fStatus = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_STATUS) != 0);
+    fMrg = (unsigned)((g_Stats.u64Features & VIRTIO_NET_F_MRG_RXBUF) != 0);
+    fV1 = (unsigned)((g_Stats.u64Features & GJ_VIRTIO_F_VERSION_1) != 0);
+
+    /*
+     * Grep: virtio-net: soft inventory
+     * Aggregated presence / geometry snapshot for product smoke.
+     */
+    kprintf("virtio-net: soft inventory ready=%u rx_slots=%u rx_sz=%u "
+            "bounce_n=%u bounce_sz=%u tx_chain=2desc "
+            "paths=tx,rx,bounce,udx,export mac_have=%u\n",
+            (unsigned)g_fReady, (unsigned)GJ_VIRTIO_NET_RX_N,
+            (unsigned)GJ_VIRTIO_NET_RX_SZ, (unsigned)GJ_NET_BOUNCE_N,
+            (unsigned)GJ_NET_BOUNCE_SZ, (unsigned)g_fHaveMac);
+
+    /* Grep: virtio-net: soft multi-buf */
+    kprintf("virtio-net: soft multi-buf rx_n=%u posted=%u live=%u "
+            "post_fail=%u merge=%u mrg_feat=%u\n",
+            (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)g_Stats.u32RxPosted,
+            (unsigned)cLive, (unsigned)g_Stats.u32RxPostFail,
+            (unsigned)g_Stats.u32RxMerge, fMrg);
+
+    /* Grep: virtio-net: soft tx-chain */
+    kprintf("virtio-net: soft tx-chain prefer=2desc fallback=1desc "
+            "multi=%u single=%u fail=%u timeout=%u\n",
+            (unsigned)g_Stats.u32TxMulti, (unsigned)g_Stats.u32TxSingle,
+            (unsigned)g_Stats.u32TxFail, (unsigned)g_Stats.u32TxTimeout);
+
+    /* Grep: virtio-net: soft bounce */
+    kprintf("virtio-net: soft bounce slots=%u sz=%u used=%u "
+            "avail_push=%u user_ring=%u\n",
+            (unsigned)GJ_NET_BOUNCE_N, (unsigned)GJ_NET_BOUNCE_SZ,
+            (unsigned)cBounceUsed, (unsigned)g_Stats.u32AvailPushes,
+            (unsigned)g_Stats.u32UserRingPushes);
+
+    /* Grep: virtio-net: soft queue */
+    kprintf("virtio-net: soft queue rx_size=%u rx_free=%u tx_size=%u "
+            "tx_free=%u kicks=%u reaps=%u\n",
+            (unsigned)u16RxSize, (unsigned)u16RxFree,
+            (unsigned)u16TxSize, (unsigned)u16TxFree,
+            (unsigned)g_Stats.u32Kicks, (unsigned)g_Stats.u32Reaps);
+
+    /* Grep: virtio-net: soft features */
+    kprintf("virtio-net: soft features guest=0x%lx dev=0x%lx "
+            "mac=%u status=%u mrg=%u v1=%u\n",
+            (unsigned long)g_Stats.u64Features,
+            (unsigned long)g_Stats.u64FeaturesDev,
+            fMac, fStatus, fMrg, fV1);
+
+    /* Grep: virtio-net: soft stats */
+    kprintf("virtio-net: soft stats tx=%u rx=%u tx_bytes=%lu rx_bytes=%lu "
+            "drop=%u empty=%u\n",
+            (unsigned)g_Stats.u32TxCount, (unsigned)g_Stats.u32RxCount,
+            (unsigned long)g_Stats.u64TxBytes,
+            (unsigned long)g_Stats.u64RxBytes,
+            (unsigned)g_Stats.u32RxDrop, (unsigned)g_Stats.u32RxEmpty);
+
+    if (g_fReady) {
+        /* Grep: virtio-net: soft inventory PASS / soft PASS */
+        kprintf("virtio-net: soft inventory PASS\n");
+        kprintf("virtio-net: soft PASS\n");
+    } else {
+        /* Grep: virtio-net: soft inventory NODEV */
+        kprintf("virtio-net: soft inventory NODEV\n");
+    }
+}
+
 static void
 net_kick(struct gj_virtq *pQ)
 {
@@ -284,12 +409,15 @@ virtio_net_probe(void)
     }
     if (g_pNet == NULL) {
         kprintf("virtio-net: no device\n");
+        /* Wave 10 soft inventory — greppable virtio-net: soft (NODEV). */
+        virtio_net_soft_inventory();
         return -1;
     }
     st = virtio_pci_setup(g_pNet);
     if (st != GJ_OK || g_pNet->pCommon == NULL) {
         kprintf("virtio-net: setup failed %d\n", (int)st);
         g_pNet = NULL;
+        virtio_net_soft_inventory();
         return -1;
     }
 
@@ -308,6 +436,7 @@ virtio_net_probe(void)
             if (st != GJ_OK) {
                 kprintf("virtio-net: negotiate failed %d\n", (int)st);
                 g_pNet = NULL;
+                virtio_net_soft_inventory();
                 return -1;
             }
         }
@@ -324,12 +453,14 @@ virtio_net_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-net: rx queue failed %d\n", (int)st);
         g_pNet = NULL;
+        virtio_net_soft_inventory();
         return -1;
     }
     st = virtio_q_setup(g_pNet, &g_qTx, 1, 64);
     if (st != GJ_OK) {
         kprintf("virtio-net: tx queue failed %d\n", (int)st);
         g_pNet = NULL;
+        virtio_net_soft_inventory();
         return -1;
     }
 
@@ -356,6 +487,8 @@ virtio_net_probe(void)
         kprintf("virtio-net: ready PASS bus=%x slot=%x\n",
                 (unsigned)g_pNet->u8Bus, (unsigned)g_pNet->u8Slot);
     }
+    /* Wave 10 soft inventory — greppable virtio-net: soft (PASS). */
+    virtio_net_soft_inventory();
     return 0;
 }
 

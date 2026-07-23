@@ -9,15 +9,20 @@
  *   q0 request — hdr (device-R) + data (R or W) + status (device-W)
  *                FLUSH: hdr + status only (no data)
  *
- * Product soft depth:
+ * Product soft depth (Wave 10 exclusive deepen in this file):
  *   queue stats, multi-segment soft bounce (GJ_VIRTIO_BLK_SOFT_SEGS),
- *   FLUSH/sync serial depth-1.
+ *   FLUSH/sync serial depth-1, greppable soft inventory rollup.
  *
- * Greppable product markers (serial; prefix-stable):
+ * Greppable product markers (serial; prefix-stable "virtio-blk: soft …"):
  *   "virtio-blk: ready …"
- *   "virtio-blk: soft queue stats …"
+ *   "virtio-blk: soft inventory …"
+ *   "virtio-blk: soft queue …"
  *   "virtio-blk: soft multi-seg …"
  *   "virtio-blk: soft flush …"
+ *   "virtio-blk: soft counters …"
+ *   "virtio-blk: soft path …"
+ *   "virtio-blk: soft ring …"
+ *   "virtio-blk: soft PASS|NODEV|PARTIAL"
  * Export/map via store_door.
  */
 #include <gj/config.h>
@@ -71,6 +76,13 @@ static u32 g_u32BytesOut;
 static u16 g_u16FreeMin;
 static int g_fFlushBusy; /* soft depth-1: non-zero while FLUSH in flight */
 
+/* Wave 10 soft inventory telemetry (never hard-gates product I/O). */
+static u32 g_u32SoftLogN;    /* inventory emissions */
+static int g_fSoftOnce;      /* first post-activity inventory emitted */
+static u32 g_u32MapQ;        /* map_q_user successes */
+static u32 g_u32ExportQ;     /* export_q successes */
+static u32 g_u32KickApi;     /* kick_q API calls (distinct from desc kicks) */
+
 /*
  * One outstanding request buffers (identity-mapped BSS; PA == VA on this path).
  * Soft multi-seg bounce: up to GJ_VIRTIO_BLK_SOFT_SEGS sectors per chain.
@@ -113,6 +125,144 @@ q_kick_counted(void)
     virtio_q_kick(&g_qReq);
     g_u32Kicks++;
     q_note_free();
+}
+
+/**
+ * Greppable Wave 10 soft inventory dump (product / smoke).
+ * Prefix-stable "virtio-blk: soft …" — never hard-gates; kprintf only.
+ *
+ *   virtio-blk: soft inventory  — ready + PCI + capacity + queue geometry
+ *   virtio-blk: soft queue      — size / free watermark / free now
+ *   virtio-blk: soft multi-seg  — bounce ceiling + multi-seg tallies
+ *   virtio-blk: soft flush      — depth-1 serial barrier + soft UNSUP
+ *   virtio-blk: soft counters   — io / kicks / bytes / errors
+ *   virtio-blk: soft path       — product surface catalog (claim honesty)
+ *   virtio-blk: soft ring       — export/map/kick soft tallies
+ *   virtio-blk: soft PASS|NODEV|PARTIAL
+ *
+ * greppable: virtio-blk: soft
+ */
+static void
+blk_soft_inventory(const char *szVia)
+{
+    const char *szVerdict;
+    u16 u16FreeNow;
+    u16 u16QSize;
+    u8 u8Bus;
+    u8 u8Slot;
+    u32 u32CapKiB;
+    u32 u32BounceKiB;
+
+    if (szVia == NULL) {
+        szVia = "path";
+    }
+
+    if (g_u32SoftLogN < 0xffffffffu) {
+        g_u32SoftLogN++;
+    }
+
+    u16QSize = g_fReady ? g_qReq.u16Size : 0;
+    u16FreeNow = g_fReady ? virtio_q_num_free(&g_qReq) : 0;
+    if (g_fReady) {
+        q_note_free();
+    }
+    u8Bus = (g_pBlk != NULL) ? g_pBlk->u8Bus : 0;
+    u8Slot = (g_pBlk != NULL) ? g_pBlk->u8Slot : 0;
+    u32CapKiB = (u32)((g_u64Capacity * (u64)GJ_VIRTIO_BLK_SECTOR) / 1024ull);
+    u32BounceKiB =
+        (u32)((GJ_VIRTIO_BLK_SOFT_SEGS * GJ_VIRTIO_BLK_SECTOR) / 1024u);
+
+    /*
+     * Soft verdict (inventory only; I/O path unchanged):
+     *   NODEV    — not ready / no device
+     *   PASS     — ready + any completed io/flush
+     *   PARTIAL  — ready, no completed product I/O yet (post-probe)
+     */
+    if (!g_fReady) {
+        szVerdict = "NODEV";
+    } else if (g_u32IoCount != 0u || g_u32FlushCount != 0u ||
+               g_u32FlushSoft != 0u) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /* Grep: virtio-blk: soft inventory */
+    kprintf("virtio-blk: soft inventory via=%s ready=%u bus=%x slot=%x "
+            "cap_secs=%lu cap_kib=%u q_size=%u free=%u free_min=%u "
+            "soft_segs=%u flush_depth=%u sector=%u log_n=%u\n",
+            szVia, g_fReady ? 1u : 0u, (unsigned)u8Bus, (unsigned)u8Slot,
+            (unsigned long)g_u64Capacity, u32CapKiB, (unsigned)u16QSize,
+            (unsigned)u16FreeNow, (unsigned)g_u16FreeMin,
+            (unsigned)GJ_VIRTIO_BLK_SOFT_SEGS,
+            (unsigned)VIRTIO_BLK_FLUSH_DEPTH, (unsigned)GJ_VIRTIO_BLK_SECTOR,
+            g_u32SoftLogN);
+
+    /* Grep: virtio-blk: soft queue */
+    kprintf("virtio-blk: soft queue stats size=%u free=%u free_min=%u "
+            "q_idx=%u notify_off=%u free_head=%u\n",
+            (unsigned)u16QSize, (unsigned)u16FreeNow, (unsigned)g_u16FreeMin,
+            (unsigned)(g_fReady ? g_qReq.u16QueueIdx : 0u),
+            (unsigned)(g_fReady ? g_qReq.u16NotifyOff : 0u),
+            (unsigned)(g_fReady ? g_qReq.u16FreeHead : 0u));
+
+    /* Grep: virtio-blk: soft multi-seg */
+    kprintf("virtio-blk: soft multi-seg max=%u (%u KiB bounce) ops=%u "
+            "segs=%u\n",
+            (unsigned)GJ_VIRTIO_BLK_SOFT_SEGS, u32BounceKiB, g_u32MultiSegOps,
+            g_u32MultiSegs);
+
+    /* Grep: virtio-blk: soft flush */
+    kprintf("virtio-blk: soft flush depth=%u busy=%u ok=%u soft_unsup=%u "
+            "serial=1\n",
+            (unsigned)VIRTIO_BLK_FLUSH_DEPTH, g_fFlushBusy ? 1u : 0u,
+            g_u32FlushCount, g_u32FlushSoft);
+
+    /* Grep: virtio-blk: soft counters */
+    kprintf("virtio-blk: soft counters io=%u kicks=%u err=%u bin=%u bout=%u "
+            "flush=%u flush_soft=%u multi_ops=%u multi_segs=%u\n",
+            g_u32IoCount, g_u32Kicks, g_u32Errors, g_u32BytesIn, g_u32BytesOut,
+            g_u32FlushCount, g_u32FlushSoft, g_u32MultiSegOps, g_u32MultiSegs);
+
+    /*
+     * Grep: virtio-blk: soft path
+     * Honesty catalog: product surfaces this driver exposes (store_door /
+     * storaged / vfsd). claim=1 only when DRIVER_OK + q0 live.
+     */
+    kprintf("virtio-blk: soft path claim=%u rw=1 flush=1 export_q=1 map_q=1 "
+            "kick_q=1 q_stats=1 multi_seg=1 depth1_flush=1 "
+            "t_in=%u t_out=%u t_flush=%u\n",
+            g_fReady ? 1u : 0u, (unsigned)VIRTIO_BLK_T_IN,
+            (unsigned)VIRTIO_BLK_T_OUT, (unsigned)VIRTIO_BLK_T_FLUSH);
+
+    /* Grep: virtio-blk: soft ring */
+    kprintf("virtio-blk: soft ring export=%u map=%u kick_api=%u "
+            "desc_kicks=%u pa_desc=0x%lx\n",
+            g_u32ExportQ, g_u32MapQ, g_u32KickApi, g_u32Kicks,
+            (unsigned long)(g_fReady ? (u64)g_qReq.paDesc : 0ull));
+
+    /* Grep: virtio-blk: soft PASS | NODEV | PARTIAL */
+    kprintf("virtio-blk: soft %s via=%s ready=%u io=%u err=%u log_n=%u\n",
+            szVerdict, szVia, g_fReady ? 1u : 0u, g_u32IoCount, g_u32Errors,
+            g_u32SoftLogN);
+}
+
+/**
+ * After first product R/W/FLUSH activity, print soft inventory once
+ * (mirrors door/futex soft-stats-once). Safe from xfer/flush return paths.
+ */
+static void
+blk_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32IoCount == 0u && g_u32FlushCount == 0u &&
+        g_u32FlushSoft == 0u && g_u32Errors == 0u) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    blk_soft_inventory("activity");
 }
 
 /*
@@ -170,6 +320,7 @@ blk_xfer(u32 u32Type, u64 u64Sector, void *pBuf, u32 cbLen)
                           (gj_paddr_t)(gj_vaddr_t)&g_u8Status, 1, 1) < 0) {
             kprintf("virtio-blk: q_add3 failed\n");
             g_u32Errors++;
+            blk_soft_maybe_once();
             return -1;
         }
         q_kick_counted();
@@ -179,6 +330,7 @@ blk_xfer(u32 u32Type, u64 u64Sector, void *pBuf, u32 cbLen)
             kprintf("virtio-blk: timeout type=%u sector=%lu\n",
                     u32Type, (unsigned long)g_Req.u64Sector);
             g_u32Errors++;
+            blk_soft_maybe_once();
             return -1;
         }
         if (g_u8Status != VIRTIO_BLK_S_OK) {
@@ -186,6 +338,7 @@ blk_xfer(u32 u32Type, u64 u64Sector, void *pBuf, u32 cbLen)
                     (unsigned)g_u8Status, u32Type,
                     (unsigned long)g_Req.u64Sector);
             g_u32Errors++;
+            blk_soft_maybe_once();
             return -1;
         }
         if (u32Type == VIRTIO_BLK_T_IN) {
@@ -201,6 +354,7 @@ blk_xfer(u32 u32Type, u64 u64Sector, void *pBuf, u32 cbLen)
         u32Off += cbChunk;
         g_u32IoCount++;
     }
+    blk_soft_maybe_once();
     return 0;
 }
 
@@ -229,6 +383,11 @@ virtio_blk_probe(void)
     g_u32BytesOut = 0;
     g_u16FreeMin = 0xffffu;
     g_fFlushBusy = 0;
+    g_u32SoftLogN = 0;
+    g_fSoftOnce = 0;
+    g_u32MapQ = 0;
+    g_u32ExportQ = 0;
+    g_u32KickApi = 0;
 
     c = virtio_dev_count();
     /* kind==2 (product), transitional 0x1001, or modern blk device ID */
@@ -246,6 +405,8 @@ virtio_blk_probe(void)
     }
     if (g_pBlk == NULL) {
         kprintf("virtio-blk: no device\n");
+        /* Grep: virtio-blk: soft … NODEV (Wave 10 soft inventory) */
+        blk_soft_inventory("nodev");
         return -1;
     }
 
@@ -253,6 +414,7 @@ virtio_blk_probe(void)
     if (st != GJ_OK || g_pBlk->pCommon == NULL) {
         kprintf("virtio-blk: pci setup failed %d\n", (int)st);
         g_pBlk = NULL;
+        blk_soft_inventory("pci_fail");
         return -1;
     }
 
@@ -263,6 +425,7 @@ virtio_blk_probe(void)
         if (st != GJ_OK) {
             kprintf("virtio-blk: negotiate failed %d\n", (int)st);
             g_pBlk = NULL;
+            blk_soft_inventory("negotiate_fail");
             return -1;
         }
     }
@@ -274,6 +437,7 @@ virtio_blk_probe(void)
     if (st != GJ_OK) {
         kprintf("virtio-blk: request queue failed %d\n", (int)st);
         g_pBlk = NULL;
+        blk_soft_inventory("q_fail");
         return -1;
     }
 
@@ -288,14 +452,11 @@ virtio_blk_probe(void)
             (unsigned)g_pBlk->u8Bus, (unsigned)g_pBlk->u8Slot,
             (unsigned long)g_u64Capacity,
             (unsigned long)((g_u64Capacity * GJ_VIRTIO_BLK_SECTOR) / 1024ull));
-    /* Soft product depth markers (greppable; do not rename prefixes). */
-    kprintf("virtio-blk: soft queue stats size=%u free=%u\n",
-            (unsigned)g_qReq.u16Size, (unsigned)g_u16FreeMin);
-    kprintf("virtio-blk: soft multi-seg max=%u (%u KiB bounce)\n",
-            (unsigned)GJ_VIRTIO_BLK_SOFT_SEGS,
-            (unsigned)((GJ_VIRTIO_BLK_SOFT_SEGS * GJ_VIRTIO_BLK_SECTOR) / 1024u));
-    kprintf("virtio-blk: soft flush depth=%u\n",
-            (unsigned)VIRTIO_BLK_FLUSH_DEPTH);
+    /*
+     * Wave 10 soft inventory rollup (prefix-stable "virtio-blk: soft …").
+     * Replaces the prior three one-liners with a greppable catalog + PASS.
+     */
+    blk_soft_inventory("probe");
     return 0;
 }
 
@@ -346,6 +507,7 @@ virtio_blk_flush(void)
     if (g_fFlushBusy) {
         /* Soft depth exceeded: serial product path rejects concurrent FLUSH. */
         g_u32Errors++;
+        blk_soft_maybe_once();
         return -1;
     }
 
@@ -361,6 +523,7 @@ virtio_blk_flush(void)
         kprintf("virtio-blk: flush q_add2 failed\n");
         g_u32Errors++;
         g_fFlushBusy = 0;
+        blk_soft_maybe_once();
         return -1;
     }
     q_kick_counted();
@@ -371,20 +534,24 @@ virtio_blk_flush(void)
     if (i32Len < 0) {
         kprintf("virtio-blk: flush timeout\n");
         g_u32Errors++;
+        blk_soft_maybe_once();
         return -1;
     }
     if (g_u8Status == VIRTIO_BLK_S_OK) {
         g_u32FlushCount++;
         g_u32IoCount++;
+        blk_soft_maybe_once();
         return 0;
     }
     if (g_u8Status == VIRTIO_BLK_S_UNSUP) {
         /* Soft fsync: device lacks FLUSH; barrier treated as success. */
         g_u32FlushSoft++;
+        blk_soft_maybe_once();
         return 0;
     }
     kprintf("virtio-blk: flush status=%u\n", (unsigned)g_u8Status);
     g_u32Errors++;
+    blk_soft_maybe_once();
     return -1;
 }
 
@@ -414,6 +581,8 @@ virtio_blk_q_stats(struct gj_virtio_blk_q_stats *pOut)
     }
     memset(pOut, 0, sizeof(*pOut));
     if (!g_fReady) {
+        /* Soft inventory on stats miss so smoke greps NODEV surface. */
+        blk_soft_inventory("q_stats");
         return -1;
     }
     pOut->u32IoCount = g_u32IoCount;
@@ -429,6 +598,12 @@ virtio_blk_q_stats(struct gj_virtio_blk_q_stats *pOut)
     pOut->u16FreeMin = g_u16FreeMin;
     pOut->u16FreeNow = virtio_q_num_free(&g_qReq);
     pOut->u16FlushDepth = (u16)VIRTIO_BLK_FLUSH_DEPTH;
+    /*
+     * Emit soft inventory on stats read so bring-up smoke also greps
+     * virtio-blk: soft … lines (mirrors door_stats / file_lock_count).
+     * greppable: virtio-blk: soft
+     */
+    blk_soft_inventory("q_stats");
     return 0;
 }
 
@@ -455,6 +630,7 @@ virtio_blk_export_q(struct gj_virtq_export *pOut)
     pOut->u16FreeHead = g_qReq.u16FreeHead;
     pOut->u16NumFree = g_qReq.u16NumFree;
     q_note_free();
+    g_u32ExportQ++;
     return 0;
 }
 
@@ -464,6 +640,7 @@ virtio_blk_kick_q(void)
     if (!g_fReady) {
         return -1;
     }
+    g_u32KickApi++;
     q_kick_counted();
     return 0;
 }
@@ -513,6 +690,7 @@ virtio_blk_map_q_user(u64 u64VaBase, struct gj_virtq_export *pOut)
     if (pOut != NULL) {
         *pOut = ex;
     }
+    g_u32MapQ++;
     kprintf("virtio-blk: map_q va=0x%lx size=%u\n", (unsigned long)u64VaBase,
             ex.u16Size);
     return 0;

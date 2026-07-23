@@ -7,6 +7,19 @@
  *
  * Soft user-segment observability: CS32/DS/CS64 descriptor inventory,
  * LAR probe counters, full soft verify, greppable product logs.
+ *
+ * Wave 10 soft GDT inventory (prefix-stable, pure C, deepen-only):
+ *   "gdt: soft inventory …"
+ *   "gdt: soft slots …"
+ *   "gdt: soft user …"
+ *   "gdt: soft tss …"
+ *   "gdt: soft lamps …"
+ *   "gdt: soft counters …"
+ *   "gdt: soft star …"
+ *   "gdt: soft path …"
+ *   "gdt: soft inventory PASS|FAIL|idle"
+ *   "gdt: soft PASS|FAIL|idle"
+ * Soft never hard-gates boot. No bar3 claim.
  */
 #include <gj/gdt.h>
 #include <gj/klog.h>
@@ -74,6 +87,7 @@ static volatile u32 g_u32SoftLarOk;
 static volatile u32 g_u32SoftLarBad;
 static volatile u32 g_u32SoftVerifyOk;
 static volatile u32 g_u32SoftVerifyBad;
+static volatile u32 g_u32SoftInvLogs; /* gdt: soft inventory emit count */
 static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
@@ -145,6 +159,136 @@ gdt_user_soft_refresh(void)
     g_SoftSnap.u8DsOk = (g_aGdt[4].u8Access == 0xf2u) ? 1u : 0u;
     g_SoftSnap.u8Init = 1;
     g_fSoftSnapLive = 1;
+}
+
+/**
+ * Wave 10 soft GDT inventory — greppable "gdt: soft …".
+ * Pure observability; never mutates descriptors or hard-gates boot.
+ * Covers slot map, user STAR layout, TSS RSP0/IST1, lamps, counters.
+ */
+static void
+gdt_soft_inventory(void)
+{
+    u8 u8KcodeAcc;
+    u8 u8KcodeGran;
+    u8 u8KdataAcc;
+    u8 u8TssAcc;
+    u8 u8TssGran;
+    u8 u8NullAcc;
+    u32 u32Limit;
+    u32 u32Slots;
+    int fPass;
+
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
+    }
+
+    if (g_fSoftSnapLive) {
+        gdt_user_soft_refresh();
+    }
+
+    u8NullAcc = g_aGdt[0].u8Access;
+    u8KcodeAcc = g_aGdt[1].u8Access;
+    u8KcodeGran = g_aGdt[1].u8Gran;
+    u8KdataAcc = g_aGdt[2].u8Access;
+    u8TssAcc = g_aGdt[6].u8Access;
+    u8TssGran = g_aGdt[6].u8Gran;
+    u32Slots = (u32)(sizeof(g_aGdt) / sizeof(g_aGdt[0]));
+    u32Limit = (u32)g_GdtPtr.u16Limit;
+
+    fPass = 0;
+    if (g_fSoftSnapLive && g_SoftSnap.u8Cs32Compat && g_SoftSnap.u8Cs64Long &&
+        g_SoftSnap.u8DsOk && u8KcodeAcc == 0x9au && u8KdataAcc == 0x92u &&
+        u8TssAcc == 0x89u) {
+        fPass = 1;
+    }
+
+    /*
+     * Grep: gdt: soft inventory
+     * Aggregated presence snapshot for product smoke / agent greps.
+     */
+    kprintf("gdt: soft inventory slots=%u limit=%u base=0x%lx live=%u "
+            "inits=%u ap=%u logs=%u tss_sel=0x%x\n",
+            u32Slots, u32Limit, (unsigned long)g_GdtPtr.u64Base,
+            (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,
+            g_u32SoftApLoads, g_u32SoftInvLogs,
+            (unsigned)GJ_GDT_TSS_SEL_LOCAL);
+
+    /* Grep: gdt: soft slots — raw access/gran per product index */
+    kprintf("gdt: soft slots null_acc=0x%x kcode_acc=0x%x kcode_gran=0x%x "
+            "kdata_acc=0x%x cs32_acc=0x%x cs32_gran=0x%x ds_acc=0x%x "
+            "cs64_acc=0x%x cs64_gran=0x%x tss_acc=0x%x tss_gran=0x%x\n",
+            (unsigned)u8NullAcc, (unsigned)u8KcodeAcc, (unsigned)u8KcodeGran,
+            (unsigned)u8KdataAcc, (unsigned)g_SoftSnap.u8Cs32Access,
+            (unsigned)g_SoftSnap.u8Cs32Gran, (unsigned)g_SoftSnap.u8DsAccess,
+            (unsigned)g_SoftSnap.u8Cs64Access, (unsigned)g_SoftSnap.u8Cs64Gran,
+            (unsigned)u8TssAcc, (unsigned)u8TssGran);
+
+    /*
+     * Grep: gdt: soft user — STAR user base 0x18 layout (RPL3 selectors).
+     * Index 3=CS32 0x1B, 4=DS 0x23, 5=CS64 0x2B.
+     */
+    kprintf("gdt: soft user cs32_sel=0x%x ds_sel=0x%x cs64_sel=0x%x "
+            "cs32_ready=%u cs32_compat=%u cs64_long=%u ds_ok=%u "
+            "star_base=0x18\n",
+            (unsigned)g_SoftSnap.u16Cs32Sel, (unsigned)g_SoftSnap.u16DsSel,
+            (unsigned)g_SoftSnap.u16Cs64Sel, (unsigned)g_SoftSnap.u8Cs32Ready,
+            (unsigned)g_SoftSnap.u8Cs32Compat, (unsigned)g_SoftSnap.u8Cs64Long,
+            (unsigned)g_SoftSnap.u8DsOk);
+
+    /* Grep: gdt: soft tss — RSP0 / IST1 / dedicated IRQ stack */
+    kprintf("gdt: soft tss rsp0=0x%lx ist1=0x%lx irq_rsp0=0x%lx "
+            "iomap=%u tss_bytes=%u busy_ap_ltr=0\n",
+            (unsigned long)g_SoftSnap.u64Rsp0,
+            (unsigned long)g_SoftSnap.u64Ist1,
+            (unsigned long)g_u64IrqRsp0, (unsigned)g_Tss.u16IomapBase,
+            (unsigned)sizeof(g_Tss));
+
+    /* Grep: gdt: soft lamps — readiness bits (software verify only) */
+    kprintf("gdt: soft lamps ready=%u compat=%u long=%u ds_ok=%u "
+            "kcode_ok=%u kdata_ok=%u tss_ok=%u lar_ok=%u\n",
+            (unsigned)g_SoftSnap.u8Cs32Ready,
+            (unsigned)g_SoftSnap.u8Cs32Compat,
+            (unsigned)g_SoftSnap.u8Cs64Long, (unsigned)g_SoftSnap.u8DsOk,
+            (unsigned)(u8KcodeAcc == 0x9au ? 1u : 0u),
+            (unsigned)(u8KdataAcc == 0x92u ? 1u : 0u),
+            (unsigned)(u8TssAcc == 0x89u ? 1u : 0u),
+            (unsigned)g_SoftSnap.u8LarOk);
+
+    /* Grep: gdt: soft counters — monotonic soft tallies */
+    kprintf("gdt: soft counters inits=%u ap=%u lar_probe=%u lar_ok=%u "
+            "lar_bad=%u verify_ok=%u verify_bad=%u inv_logs=%u\n",
+            g_u32SoftInits, g_u32SoftApLoads, g_u32SoftLarProbes,
+            g_u32SoftLarOk, g_u32SoftLarBad, g_u32SoftVerifyOk,
+            g_u32SoftVerifyBad, g_u32SoftInvLogs);
+
+    /*
+     * Grep: gdt: soft star — IA32_STAR user-base selector geometry.
+     * Product SYSRETQ expects CS64=base+16|RPL3, SS=base+8|RPL3.
+     */
+    kprintf("gdt: soft star user_base=0x18 cs32=0x1b ds=0x23 cs64=0x2b "
+            "kcs=0x08 kds=0x10 tss=0x30 idx_cs32=3 idx_ds=4 idx_cs64=5\n");
+
+    /*
+     * Grep: gdt: soft path — explicit non-claim bounds.
+     * Soft inventory ≠ product multi-CPU TSS, ≠ bar3, ≠ full SEH.
+     */
+    kprintf("gdt: soft path claim=0 bar3=0 per_cpu_tss=0 seh=0 "
+            "shared_gdt=1 bsp_ltr=1 ap_ltr=0 hard_gate=0\n");
+
+    if (!g_fSoftSnapLive) {
+        /* Grep: gdt: soft inventory idle */
+        kprintf("gdt: soft inventory idle (GDT not loaded)\n");
+        kprintf("gdt: soft idle\n");
+    } else if (fPass) {
+        /* Grep: gdt: soft inventory PASS */
+        kprintf("gdt: soft inventory PASS\n");
+        kprintf("gdt: soft PASS\n");
+    } else {
+        /* Grep: gdt: soft inventory FAIL */
+        kprintf("gdt: soft inventory FAIL\n");
+        kprintf("gdt: soft FAIL\n");
+    }
 }
 
 void
@@ -255,6 +399,9 @@ gdt_init(void)
         g_u32SoftVerifyBad++;
         kprintf("gdt: user soft verify FAIL inits=%u\n", g_u32SoftInits);
     }
+
+    /* Wave 10: greppable "gdt: soft …" inventory at BSP load. */
+    gdt_soft_inventory();
 }
 
 int
@@ -533,6 +680,7 @@ gdt_user_soft_log(void)
      *   gdt: user soft inits=… ap=… lar_probe=… lar_ok=… lar_bad=… …
      *   gdt: user soft cs32 / ds / cs64 descriptor bytes + lamps
      *   gdt: user soft tss rsp0 / ist1 / lar_ar
+     * Wave 10 also emits prefix-stable "gdt: soft …" inventory.
      */
     if (g_fSoftSnapLive) {
         gdt_user_soft_refresh();
@@ -572,4 +720,7 @@ gdt_user_soft_log(void)
     } else {
         kprintf("gdt: user soft verify FAIL\n");
     }
+
+    /* Wave 10 exclusive: greppable "gdt: soft …" soft inventory rollup. */
+    gdt_soft_inventory();
 }

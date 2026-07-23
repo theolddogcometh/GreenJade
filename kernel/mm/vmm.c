@@ -10,9 +10,16 @@
  * pmm_release_high after success (main.c) for hierarchical free on large
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
+ * Soft VMM inventory (Wave 10 exclusive deepen):
+ *   - Live AS / COW table / HHDM / device UC / ensure_id snaps
+ *   - Cumulative create/destroy/break/share/table counters
+ *   greppable: "vmm: soft …"
+ *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
  *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
  *            "vmm: ensure_identity_rw" (… soft PASS)
+ *            "vmm: soft inventory" "vmm: soft as" "vmm: soft cow"
+ *            "vmm: soft hhdm" "vmm: soft device_uc" "vmm: soft ensure_id"
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -66,6 +73,18 @@ static u32               g_cMapDeviceUc;
 static u32               g_cMapDeviceUcPages;
 static u32               g_cEnsureIdCall;
 static u32               g_cEnsureIdFix;
+
+/*
+ * Soft product inventory (Wave 10 exclusive). Cumulative unless noted live/peak.
+ * Diagnostics only — never hard-gate product AS/COW/HHDM policy.
+ * greppable: vmm: soft
+ */
+static u32 g_cAsLivePeak;   /* high-water private AS live count */
+static u32 g_cSoftInvLogs;  /* soft_inventory_log emissions */
+static u8  g_fSoftInvOnce;  /* one-shot deep dump after product activity */
+
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
 
 static u64
 read_cr3(void)
@@ -172,6 +191,99 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
     }
 }
 
+/**
+ * Greppable soft VMM inventory (product / smoke).
+ *   vmm: soft inventory …
+ *   vmm: soft as …
+ *   vmm: soft cow …
+ *   vmm: soft hhdm …
+ *   vmm: soft device_uc …
+ *   vmm: soft ensure_id …
+ * greppable: vmm: soft
+ * Honesty: soft counters only — not product AS/COW/HHDM complete or bar3.
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 i;
+    u32 cCowSlots = 0;
+    u32 cCowRefs = 0;
+    u64 u64Anon;
+    int fHhdm;
+
+    if (g_cSoftInvLogs < 0xffffffffu) {
+        g_cSoftInvLogs++;
+    }
+
+    for (i = 0; i < GJ_COW_REF_MAX; i++) {
+        if (g_aCowRef[i].u8Used) {
+            cCowSlots++;
+            cCowRefs += g_aCowRef[i].cRef;
+        }
+    }
+    if (g_cAsLive > g_cAsLivePeak) {
+        g_cAsLivePeak = g_cAsLive;
+    }
+
+    fHhdm = g_fHhdmReady ? 1 : 0;
+    u64Anon = (g_pAnonCursor != NULL) ? *g_pAnonCursor : g_u64AnonNext;
+
+    /* Grep: vmm: soft inventory */
+    kprintf("vmm: soft inventory hhdm=%d as_live=%u as_peak=%u cow_live=%u "
+            "cow_slots=%u cow_refs=%u logs=%u "
+            "(soft; not product AS complete)\n",
+            fHhdm, g_cAsLive, g_cAsLivePeak, g_cCowLive, cCowSlots, cCowRefs,
+            g_cSoftInvLogs);
+
+    /* Grep: vmm: soft as */
+    kprintf("vmm: soft as create=%u destroy=%u live=%u peak=%u "
+            "ker_cr3=0x%lx anon_next=0x%lx band=[0x%lx,0x%lx)\n",
+            g_cAsCreate, g_cAsDestroy, g_cAsLive, g_cAsLivePeak,
+            (unsigned long)g_u64KernelCr3, (unsigned long)u64Anon,
+            (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END);
+
+    /* Grep: vmm: soft cow */
+    kprintf("vmm: soft cow break=%u share_ok=%u share_full=%u tbl_cow=%u "
+            "live=%u frees=%u slots_used=%u slots_max=%u refsum=%u\n",
+            g_cCowBreak, g_cCowShareOk, g_cCowShareFull, g_cCowTable,
+            g_cCowLive, g_cCowFrees, cCowSlots, (unsigned)GJ_COW_REF_MAX,
+            cCowRefs);
+
+    /* Grep: vmm: soft hhdm */
+    kprintf("vmm: soft hhdm ready=%d base=0x%lx mapped=0x%lx "
+            "p_mem5=1 (soft inventory)\n",
+            fHhdm, (unsigned long)GJ_HHDM_BASE,
+            (unsigned long)g_u64HhdmMapped);
+
+    /* Grep: vmm: soft device_uc */
+    kprintf("vmm: soft device_uc maps=%u pages=%u base=0x%lx span=0x%lx\n",
+            g_cMapDeviceUc, g_cMapDeviceUcPages,
+            (unsigned long)GJ_DEVICE_MMIO_BASE,
+            (unsigned long)GJ_DEVICE_MMIO_SPAN);
+
+    /* Grep: vmm: soft ensure_id */
+    kprintf("vmm: soft ensure_id calls=%u fixed=%u\n", g_cEnsureIdCall,
+            g_cEnsureIdFix);
+}
+
+/**
+ * After first product AS/COW/device/ensure activity, print soft inventory once
+ * (mirrors memobj soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_cAsCreate == 0 && g_cMapDeviceUc == 0 && g_cCowBreak == 0 &&
+        g_cEnsureIdCall == 0 && g_cAsDestroy == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
+
 void
 vmm_tlb_flush_page(gj_vaddr_t va)
 {
@@ -249,6 +361,8 @@ vmm_init(void)
             (unsigned long)g_u64KernelCr3,
             (unsigned long)GJ_VMM_ANON_BASE,
             (unsigned long)GJ_VMM_ANON_END);
+    /* Wave 10: greppable soft inventory baseline after template bind. */
+    soft_inventory_log();
 }
 
 /*
@@ -338,6 +452,8 @@ vmm_hhdm_init(u64 paMax)
     kprintf("vmm: HHDM base=0x%lx mapped=0x%lx (%lu x 2MiB)\n",
             (unsigned long)GJ_HHDM_BASE, (unsigned long)paMax,
             (unsigned long)cMapped);
+    /* Wave 10: soft inventory after HHDM ready. */
+    soft_inventory_log();
     return GJ_OK;
 }
 
@@ -510,6 +626,7 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
             "total=%u soft PASS\n",
             (unsigned long)pa, (unsigned long)*pVaOut, (unsigned long)cb, cNew,
             cHad, g_cMapDeviceUc);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -563,9 +680,13 @@ vmm_as_create(void)
 
     g_cAsCreate++;
     g_cAsLive++;
+    if (g_cAsLive > g_cAsLivePeak) {
+        g_cAsLivePeak = g_cAsLive;
+    }
     kprintf("vmm: as_create cr3=0x%lx shared_slots=%u live=%u total=%u "
             "(shared lower, COW on map) PASS\n",
             (unsigned long)paPml4, cShared, g_cAsLive, g_cAsCreate);
+    soft_inventory_maybe_once();
     return (u64)paPml4;
 }
 
@@ -760,6 +881,7 @@ vmm_as_destroy(u64 u64Cr3)
             "cr3=0x%lx PASS\n",
             cLeaf, cPrivFree, cCowDrop, cTables, cSharedSkip, g_cCowLive,
             g_cCowFrees, g_cAsLive, g_cCowTable, (unsigned long)u64Cr3);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -1149,6 +1271,7 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
             "dual=%d total_fix=%u calls=%u soft PASS\n",
             (unsigned long)va, (unsigned long)cb, cFixKer + cFixAct, cFixKer,
             cFixAct, fDual, g_cEnsureIdFix, g_cEnsureIdCall);
+    soft_inventory_maybe_once();
     return st;
 }
 
@@ -1339,6 +1462,7 @@ vmm_cow_break_page(gj_vaddr_t va)
         }
         (void)fFreeOld;
     }
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -1607,5 +1731,6 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
             "cow_live=%u share_ok=%u share_full=%u tbl_cow=%u PASS\n",
             (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3, cCopy, cCow,
             cRoCopy, g_cCowLive, g_cCowShareOk, g_cCowShareFull, g_cCowTable);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }

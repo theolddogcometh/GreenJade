@@ -2,12 +2,13 @@
 
 | Field | Value |
 |-------|--------|
-| **Document** | Security core design v1.6 |
-| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
+| **Document** | Security core design v1.7 |
+| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 10 honesty only |
 | **Priority** | Security → Performance → Portability → Readability |
 | **Heritage default** | **Solaris / Sun** for concurrency, doors, DDI, turnstiles; **Apple** for VM objects/views, task ports, QoS, session ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)) |
 | **Heritage secondary** | IBM only when Solaris has no good analogue **and** it still matches GreenJade law |
 | **Companion** | [Architecture](GREENJADE_KERNEL_SPEC.md) · [Implementation](IMPLEMENTATION.md) · [Apple channel](APPLE_CHANNEL_REMAINING.md) |
+| **Honesty (Wave 10)** | Soft confine ≠ product multi-server; **no bar3 claim** (§13) |
 
 This document **picks one direction** for the gaps that matter most. Alternatives are noted only to record why they lost.
 
@@ -603,5 +604,71 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 ---
 
-*Accepted security-first core design v1.4 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
+## 13. Honesty bounds — soft confine vs product multi-server (Wave 10 · 2026-07-23)
+
+**Additive only.** Design decisions in §§0–12 stay **Accepted**. This section is an honesty ledger: what is greppable **soft confine** (and related soft security surface) on the tree vs what remains **product multi-server** open. It does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks, and it does **not** close any product bar.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Accepted** | Security-first core design frozen — ship toward these rules |
+| **Soft confine** | Partial / greppable confine or promise gates (e.g. process bitmask on some ambient-style Linux paths); OpenBSD-shaped *intent* in §OpenBSD features — **not** product seal |
+| **Product multi-server** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal; finite per-server authority as in §8 — **open** |
+| **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+### 13.1 Soft confine (honest bound — may claim soft only)
+
+| Soft surface | What shipped / greppable means | What it does **not** mean |
+|--------------|--------------------------------|---------------------------|
+| **Confine / promises soft** | Process bitmask gates some ambient-style Linux paths (`confine soft`); userspace drop-caps *intent* (§OpenBSD features) | **Product multi-server closed**; every server/client sealed under promises |
+| **Cap soft surface** | Mint/copy/move + soft CDT/quota/trylock; DEAD/gen first hooks — see [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 | Full §1 / §1.1 product revoke, zone-like quotas everywhere, IPC cap-transfer K complete |
+| **Doors / IPC soft** | Sync Call/Recv/Reply bring-up + timeout/peer-death soft | Full §3 doors product (cap transfer, turnstile PI under load, reply-only paths everywhere) |
+| **Live server embeds** | `vfsd`, `sessiond`, `netstackd`, `storaged`, `sshd`, … freestanding spawn / door skeleton | Each server runs under sealed quota + only granted caps; full multi-server blast-radius product |
+| **Bootstrap / init soft** | Root untyped + root CNode + init path; quota-split *policy* in design | Post-bootstrap **seal** product (§1 seal rule); ambient retype gone for all untrusted |
+| **Production freezes text** | §9.10 / [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) **Accepted** decisions | Every freeze row product-hard on DUT |
+
+**Hard rule:** soft greppable `PASS` lines, soft confine bits, live embeds, and design **Accepted** are **bring-up / agent honesty**, not “security product shipped” and not “multi-server confine done.”
+
+### 13.2 Product multi-server — **open**
+
+| Item | State |
+|------|--------|
+| Soft confine / promise gates on some paths | Soft only — not product seal |
+| Soft cap / CDT / quota / doors surface | Present — soft / greppable (companion docs) |
+| Live server embeds (`vfsd`, `sessiond`, `netstackd`, …) | Skeleton / door bring-up ≠ full multi-server product |
+| Bootstrap seal (drop ambient retype / broad authority after init) | **Open** |
+| Hierarchical quotas product for every creatable object class (§2) | **Open** / incomplete product path |
+| Cap transfer on IPC (copy/move K caps, all-or-nothing) (§3) | **Open** / incomplete product path |
+| Death cleanup product: revoke MMIO/IRQ/DMA/rings for dead space (§0, §1.1) | Soft hooks ≠ full product under all pins |
+| `expose` / path policy in `vfsd` (OpenBSD-shaped) | **Open** |
+| **Full multi-server product** (caps + confine end-to-end) | **Open** — soft confine does **not** close it |
+
+Soft confine and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement with bootstrap seal and least-privilege caps only. Product multi-server stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9).
+
+### 13.3 Explicit non-claims (Wave 10)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Security core design **Accepted**” | **Yes** — this document §§0–12 |
+| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in §13.1 |
+| “Soft confine = product multi-server closed” | **No** |
+| “Bootstrap seal / full hierarchical quotas / IPC cap transfer product-complete” | **No** |
+| “All live embeds are multi-server confined product” | **No** |
+| “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
+| “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
+| Any **bar3** closed claim from security core design alone | **No** |
+
+**Bar3 remains OPEN** (client + matrix). This Wave 10 edit is honesty-only: **soft confine ≠ product multi-server; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
+
+### 13.4 Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 — soft cap surface ≠ product multi-server confine  
+- [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §19 — remaining vs soft; no bar3 claim  
+- [TODO.md](TODO.md) — multi-server confine / `confine(promises)` / drop ambient open boxes  
+- [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) — production freezes (Accepted; product path separate)  
+
+---
+
+*Accepted security-first core design v1.7 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
+*§13 Wave 10 honesty (2026-07-23): soft confine ≠ product multi-server; **no bar3 claim**.*  
 *Code: `kernel/include/gj/cap.h`, `kernel/cap/revoke.c`.*

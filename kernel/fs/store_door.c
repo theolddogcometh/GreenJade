@@ -22,6 +22,15 @@
  *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
  *   soft reclaim of the map (re-install PTEs, re-export).
  *
+ * Soft store inventory (Wave 10 exclusive deepen):
+ *   - Ownership: claim / reclaim / release / busy / claim_inval
+ *   - Meta: stats / cap / queue / flush (+ flush_nodev soft-skip)
+ *   - Sector R/W: read_ok / write_ok / io / inval / nodev (+ blk|scsi)
+ *   - Ring: export/map/kick/state ok|nodev + remap soft + map_fault
+ *   - Aggregate err buckets + backend snapshot
+ *   greppable: "store_door: soft …"
+ *   Never hard-gates; diagnostics only (wrap OK).
+ *
  * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
  * branch is for early kernel smokes that pass HHDM/static buffers.
  */
@@ -45,6 +54,173 @@ static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft path */
 static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
 static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
+
+/*
+ * Soft product inventory (Wave 10 exclusive). Cumulative path tallies.
+ * greppable: store_door: soft …
+ */
+static u32 g_u32SoftClaimInval;   /* CLAIM bad token */
+static u32 g_u32SoftClaimBusy;    /* CLAIM different owner */
+static u32 g_u32SoftRelease;      /* RELEASE success (was owned) */
+static u32 g_u32SoftReleaseFree;  /* RELEASE when already free (soft 0) */
+static u32 g_u32SoftReleaseInval; /* RELEASE token mismatch */
+static u32 g_u32SoftStats;        /* STATS ok */
+static u32 g_u32SoftCap;          /* CAP ok */
+static u32 g_u32SoftCapNodev;     /* CAP no backend / scsi fail */
+static u32 g_u32SoftQueue;        /* QUEUE_INFO ok */
+static u32 g_u32SoftFlush;        /* FLUSH soft success */
+static u32 g_u32SoftFlushNodev;   /* FLUSH no transport */
+static u32 g_u32SoftReadOk;       /* READ success */
+static u32 g_u32SoftWriteOk;      /* WRITE success */
+static u32 g_u32SoftRwIo;         /* READ/WRITE backend IO fail */
+static u32 g_u32SoftRwInval;      /* READ/WRITE arg reject */
+static u32 g_u32SoftRwNodev;      /* READ/WRITE no backend */
+static u32 g_u32SoftRwBlk;        /* R/W completed via virtio-blk */
+static u32 g_u32SoftRwScsi;       /* R/W completed via scsi_door */
+static u32 g_u32SoftExportOk;     /* EXPORT_RING ok */
+static u32 g_u32SoftExportNodev;  /* EXPORT soft-skip / export fail */
+static u32 g_u32SoftMapOk;        /* MAP_RING first map ok */
+static u32 g_u32SoftRemap;        /* MAP_RING soft re-MAP same VA */
+static u32 g_u32SoftMapNodev;     /* MAP soft-skip no blk */
+static u32 g_u32SoftMapFault;     /* MAP FAULT */
+static u32 g_u32SoftKickOk;       /* KICK ok */
+static u32 g_u32SoftKickNodev;    /* KICK soft-skip / kick fail */
+static u32 g_u32SoftRingState;    /* RING_STATE ok (always soft) */
+static u32 g_u32SoftInval;        /* aggregate INVAL terminals */
+static u32 g_u32SoftNodev;        /* aggregate NODEV terminals */
+static u32 g_u32SoftBusy;         /* aggregate BUSY terminals */
+static u32 g_u32SoftFault;        /* aggregate FAULT terminals */
+static u32 g_u32SoftIo;           /* aggregate IO terminals */
+static u32 g_u32SoftNosupport;    /* unknown opcode */
+static u32 g_u32SoftLogs;         /* soft inventory emissions */
+static u8  g_fSoftOnce;           /* one-shot after first call activity */
+
+static void store_soft_inc(u32 *pCtr);
+static void store_soft_note_err(i64 i64R);
+static void store_soft_inventory_log(void);
+static void store_soft_maybe_once(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+store_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Soft: classify a terminal status into aggregate err buckets.
+ * Success / positive byte counts are ignored.
+ */
+static void
+store_soft_note_err(i64 i64R)
+{
+    if (i64R == GJ_ERR_INVAL) {
+        store_soft_inc(&g_u32SoftInval);
+    } else if (i64R == GJ_ERR_NODEV) {
+        store_soft_inc(&g_u32SoftNodev);
+    } else if (i64R == GJ_ERR_BUSY) {
+        store_soft_inc(&g_u32SoftBusy);
+    } else if (i64R == GJ_ERR_FAULT) {
+        store_soft_inc(&g_u32SoftFault);
+    } else if (i64R == GJ_ERR_IO) {
+        store_soft_inc(&g_u32SoftIo);
+    } else if (i64R == GJ_ERR_NOSUPPORT) {
+        store_soft_inc(&g_u32SoftNosupport);
+    }
+}
+
+/**
+ * Greppable soft store inventory (product / smoke).
+ *   store_door: soft inventory calls=… rw=… claims=… reclaims=…
+ *        ring_calls=… owned=… map_va=0x…
+ *   store_door: soft own claim=… reclaim=… release=… release_free=…
+ *        claim_inval=… claim_busy=… release_inval=…
+ *   store_door: soft meta stats=… cap=… cap_nodev=… queue=… flush=…
+ *        flush_nodev=…
+ *   store_door: soft rw read_ok=… write_ok=… io=… inval=… nodev=…
+ *        blk=… scsi=…
+ *   store_door: soft ring export_ok=… export_nodev=… map_ok=… remap=…
+ *        map_nodev=… map_fault=… kick_ok=… kick_nodev=… state=…
+ *   store_door: soft err inval=… nodev=… busy=… fault=… io=…
+ *        nosupport=… logs=…
+ *   store_door: soft backend blk=… scsi=… xfer_max=…
+ * greppable: store_door: soft
+ */
+static void
+store_soft_inventory_log(void)
+{
+    u32 u32Owned;
+    u32 u32Blk;
+    u32 u32Scsi;
+
+    store_soft_inc(&g_u32SoftLogs);
+    u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
+    u32Blk = virtio_blk_ready() ? 1u : 0u;
+    u32Scsi = scsi_mid_ready() ? 1u : 0u;
+
+    /* Grep: store_door: soft inventory */
+    kprintf("store_door: soft inventory calls=%u rw=%u claims=%u "
+            "reclaims=%u ring_calls=%u owned=%u map_va=0x%lx\n",
+            g_u32Calls, g_u32DoorRw, g_u32Claims, g_u32Reclaims,
+            g_u32RingCalls, u32Owned, (unsigned long)g_u64RingMapVa);
+
+    /* Grep: store_door: soft own */
+    kprintf("store_door: soft own claim=%u reclaim=%u release=%u "
+            "release_free=%u claim_inval=%u claim_busy=%u release_inval=%u\n",
+            g_u32Claims, g_u32Reclaims, g_u32SoftRelease, g_u32SoftReleaseFree,
+            g_u32SoftClaimInval, g_u32SoftClaimBusy, g_u32SoftReleaseInval);
+
+    /* Grep: store_door: soft meta */
+    kprintf("store_door: soft meta stats=%u cap=%u cap_nodev=%u queue=%u "
+            "flush=%u flush_nodev=%u\n",
+            g_u32SoftStats, g_u32SoftCap, g_u32SoftCapNodev, g_u32SoftQueue,
+            g_u32SoftFlush, g_u32SoftFlushNodev);
+
+    /* Grep: store_door: soft rw */
+    kprintf("store_door: soft rw read_ok=%u write_ok=%u io=%u inval=%u "
+            "nodev=%u blk=%u scsi=%u\n",
+            g_u32SoftReadOk, g_u32SoftWriteOk, g_u32SoftRwIo, g_u32SoftRwInval,
+            g_u32SoftRwNodev, g_u32SoftRwBlk, g_u32SoftRwScsi);
+
+    /* Grep: store_door: soft ring */
+    kprintf("store_door: soft ring export_ok=%u export_nodev=%u map_ok=%u "
+            "remap=%u map_nodev=%u map_fault=%u kick_ok=%u kick_nodev=%u "
+            "state=%u\n",
+            g_u32SoftExportOk, g_u32SoftExportNodev, g_u32SoftMapOk,
+            g_u32SoftRemap, g_u32SoftMapNodev, g_u32SoftMapFault,
+            g_u32SoftKickOk, g_u32SoftKickNodev, g_u32SoftRingState);
+
+    /* Grep: store_door: soft err */
+    kprintf("store_door: soft err inval=%u nodev=%u busy=%u fault=%u "
+            "io=%u nosupport=%u logs=%u\n",
+            g_u32SoftInval, g_u32SoftNodev, g_u32SoftBusy, g_u32SoftFault,
+            g_u32SoftIo, g_u32SoftNosupport, g_u32SoftLogs);
+
+    /* Grep: store_door: soft backend */
+    kprintf("store_door: soft backend blk=%u scsi=%u xfer_max=%u "
+            "(soft inventory; not bar3)\n",
+            u32Blk, u32Scsi, (u32)STORE_XFER_MAX);
+}
+
+/**
+ * After first product call activity, print soft inventory once (mirrors
+ * door/futex soft-stats-once). Safe from call return paths only.
+ */
+static void
+store_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32Calls == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    store_soft_inventory_log();
+}
 
 /**
  * Copy @cb bytes to caller buffer at @u64Dst.
@@ -97,9 +273,46 @@ store_door_init(void)
     g_u32Reclaims = 0;
     g_u32RingCalls = 0;
     g_u64RingMapVa = 0;
+    g_u32SoftClaimInval = 0;
+    g_u32SoftClaimBusy = 0;
+    g_u32SoftRelease = 0;
+    g_u32SoftReleaseFree = 0;
+    g_u32SoftReleaseInval = 0;
+    g_u32SoftStats = 0;
+    g_u32SoftCap = 0;
+    g_u32SoftCapNodev = 0;
+    g_u32SoftQueue = 0;
+    g_u32SoftFlush = 0;
+    g_u32SoftFlushNodev = 0;
+    g_u32SoftReadOk = 0;
+    g_u32SoftWriteOk = 0;
+    g_u32SoftRwIo = 0;
+    g_u32SoftRwInval = 0;
+    g_u32SoftRwNodev = 0;
+    g_u32SoftRwBlk = 0;
+    g_u32SoftRwScsi = 0;
+    g_u32SoftExportOk = 0;
+    g_u32SoftExportNodev = 0;
+    g_u32SoftMapOk = 0;
+    g_u32SoftRemap = 0;
+    g_u32SoftMapNodev = 0;
+    g_u32SoftMapFault = 0;
+    g_u32SoftKickOk = 0;
+    g_u32SoftKickNodev = 0;
+    g_u32SoftRingState = 0;
+    g_u32SoftInval = 0;
+    g_u32SoftNodev = 0;
+    g_u32SoftBusy = 0;
+    g_u32SoftFault = 0;
+    g_u32SoftIo = 0;
+    g_u32SoftNosupport = 0;
+    g_u32SoftLogs = 0;
+    g_fSoftOnce = 0;
     /* Backends may probe later; report readiness snapshot for bring-up. */
     kprintf("store_door: init xfer_max=%u blk=%d scsi=%d\n", STORE_XFER_MAX,
             virtio_blk_ready() ? 1 : 0, scsi_mid_ready() ? 1 : 0);
+    /* Grep: store_door: soft (baseline inventory after init) */
+    store_soft_inventory_log();
 }
 
 int
@@ -123,6 +336,11 @@ store_door_ring_map_va(void)
 u32
 store_door_ring_calls(void)
 {
+    /*
+     * Soft diagnostics re-read: emit inventory so ring smoke greps
+     * greppable store_door: soft lines without a dedicated syscall.
+     */
+    store_soft_inventory_log();
     return g_u32RingCalls;
 }
 
@@ -130,12 +348,19 @@ u32
 store_door_claim_count(void)
 {
     /* Soft diagnostics: first claims + idempotent reclaims. */
+    /*
+     * Emit soft inventory on claim stats read so bring-up can grep
+     * store_door: soft … (Wave 10). greppable: store_door claim soft
+     */
+    store_soft_inventory_log();
     return g_u32Claims + g_u32Reclaims;
 }
 
 i64
 store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 {
+    i64 i64Ret;
+
     if (!g_fInit) {
         return GJ_ERR_NODEV;
     }
@@ -145,33 +370,45 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_STORE_OP_CLAIM:
         /* arg1 = non-zero ownership token (low 32 bits only). */
         if (u64Arg1 == 0 || (u64Arg1 >> 32) != 0) {
-            return GJ_ERR_INVAL;
+            store_soft_inc(&g_u32SoftClaimInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
-            return GJ_ERR_BUSY; /* another storaged */
+            store_soft_inc(&g_u32SoftClaimBusy);
+            i64Ret = GJ_ERR_BUSY; /* another storaged */
+            break;
         }
         /* Soft reclaim: same token re-CLAIM is idempotent. */
         if (g_u32OwnerToken == (u32)u64Arg1) {
             g_u32Reclaims++;
-            return 0;
+            i64Ret = 0;
+            break;
         }
         g_u32OwnerToken = (u32)u64Arg1;
         g_u32Claims++;
         kprintf("store_door: CLAIM token=0x%x (userspace owns storage)\n",
                 g_u32OwnerToken);
-        return 0;
+        i64Ret = 0;
+        break;
 
     case GJ_STORE_OP_RELEASE:
         /* Soft free path: already unowned → 0 (no token match required). */
         if (g_u32OwnerToken == 0) {
-            return 0;
+            store_soft_inc(&g_u32SoftReleaseFree);
+            i64Ret = 0;
+            break;
         }
         if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
-            return GJ_ERR_INVAL;
+            store_soft_inc(&g_u32SoftReleaseInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         kprintf("store_door: RELEASE token=0x%x\n", g_u32OwnerToken);
         g_u32OwnerToken = 0;
-        return 0;
+        store_soft_inc(&g_u32SoftRelease);
+        i64Ret = 0;
+        break;
 
     case GJ_STORE_OP_STATS: {
         /* aSt: [0]=virtio-blk io, [1]=scsi_door io, [2]=door call count */
@@ -179,13 +416,18 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         aSt[0] = virtio_blk_ready() ? virtio_blk_io_count() : 0u;
         aSt[1] = scsi_door_io_count();
         aSt[2] = g_u32Calls;
         st = store_copy_out(u64Arg1, aSt, sizeof(aSt));
-        return st;
+        if (st == 0) {
+            store_soft_inc(&g_u32SoftStats);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_STORE_OP_CAP: {
@@ -193,7 +435,8 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         if (virtio_blk_ready()) {
             u64Cap = virtio_blk_capacity_sectors();
@@ -207,7 +450,9 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             dreq.u32Op = GJ_SCSI_DOOR_OP_READ_CAP;
             dreq.cbData = 8;
             if (scsi_door_submit(&dreq, aCap, 8) != 0) {
-                return GJ_ERR_NODEV;
+                store_soft_inc(&g_u32SoftCapNodev);
+                i64Ret = GJ_ERR_NODEV;
+                break;
             }
             /* READ CAPACITY(10): big-endian last LBA in first 4 bytes. */
             u32Last = ((u32)aCap[0] << 24) | ((u32)aCap[1] << 16) |
@@ -215,10 +460,16 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             /* Capacity = last LBA + 1 (sectors); widen before add. */
             u64Cap = (u64)u32Last + 1ull;
         } else {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftCapNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         st = store_copy_out(u64Arg1, &u64Cap, sizeof(u64Cap));
-        return st;
+        if (st == 0) {
+            store_soft_inc(&g_u32SoftCap);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_STORE_OP_READ:
@@ -232,25 +483,32 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (!fBlk && !fScsi) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftRwNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         /* Reject wide arg3 truncation; require sector-multiple length. */
         if (u64Arg2 == 0 || cb == 0 || (u64Arg3 >> 32) != 0 ||
             cb > STORE_XFER_MAX || (cb % GJ_VIRTIO_BLK_SECTOR) != 0) {
-            return GJ_ERR_INVAL;
+            store_soft_inc(&g_u32SoftRwInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         /*
          * READ10/WRITE10 LBA field is 32-bit. Reject out-of-range LBAs on
          * the scsi fallback path (virtio-blk accepts full u64 sector).
          */
         if (fScsi && (u64Lba >> 32) != 0) {
-            return GJ_ERR_INVAL;
+            store_soft_inc(&g_u32SoftRwInval);
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
 
         if (u32Op == GJ_STORE_OP_WRITE) {
             st = store_copy_in(aTmp, u64Arg2, cb);
             if (st != 0) {
-                return st;
+                i64Ret = st;
+                break;
             }
             if (fBlk) {
                 nIo = virtio_blk_write(u64Lba, aTmp, cb);
@@ -260,7 +518,9 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
                 /* Defensive: blocks must fit u16 (xfer_max guarantees this). */
                 if (u32Blocks == 0 || u32Blocks > 0xffffu) {
-                    return GJ_ERR_INVAL;
+                    store_soft_inc(&g_u32SoftRwInval);
+                    i64Ret = GJ_ERR_INVAL;
+                    break;
                 }
                 memset(&dreq, 0, sizeof(dreq));
                 dreq.u32Op = GJ_SCSI_DOOR_OP_WRITE10;
@@ -277,7 +537,9 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
                 u32 u32Blocks = cb / GJ_VIRTIO_BLK_SECTOR;
 
                 if (u32Blocks == 0 || u32Blocks > 0xffffu) {
-                    return GJ_ERR_INVAL;
+                    store_soft_inc(&g_u32SoftRwInval);
+                    i64Ret = GJ_ERR_INVAL;
+                    break;
                 }
                 memset(&dreq, 0, sizeof(dreq));
                 dreq.u32Op = GJ_SCSI_DOOR_OP_READ10;
@@ -289,15 +551,29 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             if (nIo == 0) {
                 st = store_copy_out(u64Arg2, aTmp, cb);
                 if (st != 0) {
-                    return st;
+                    i64Ret = st;
+                    break;
                 }
             }
         }
         if (nIo != 0) {
-            return GJ_ERR_IO;
+            store_soft_inc(&g_u32SoftRwIo);
+            i64Ret = GJ_ERR_IO;
+            break;
         }
         g_u32DoorRw++;
-        return (i64)cb;
+        if (u32Op == GJ_STORE_OP_WRITE) {
+            store_soft_inc(&g_u32SoftWriteOk);
+        } else {
+            store_soft_inc(&g_u32SoftReadOk);
+        }
+        if (fBlk) {
+            store_soft_inc(&g_u32SoftRwBlk);
+        } else {
+            store_soft_inc(&g_u32SoftRwScsi);
+        }
+        i64Ret = (i64)cb;
+        break;
     }
 
     case GJ_STORE_OP_QUEUE_INFO: {
@@ -306,14 +582,19 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         i64 st;
 
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         aQ[0] = virtio_blk_ready() ? virtio_blk_io_count() : 0u;
         aQ[1] = scsi_door_io_count();
         aQ[2] = g_u32DoorRw;
         aQ[3] = g_u32OwnerToken ? 1u : 0u;
         st = store_copy_out(u64Arg1, aQ, sizeof(aQ));
-        return st;
+        if (st == 0) {
+            store_soft_inc(&g_u32SoftQueue);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_STORE_OP_FLUSH:
@@ -322,9 +603,13 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          * transport is ready. scsi_mid has no SYNCHRONIZE CACHE yet.
          */
         if (!virtio_blk_ready() && !scsi_mid_ready()) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftFlushNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
-        return 0;
+        store_soft_inc(&g_u32SoftFlush);
+        i64Ret = 0;
+        break;
 
     case GJ_STORE_OP_EXPORT_RING: {
         struct gj_virtq_export ex;
@@ -332,29 +617,44 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
         g_u32RingCalls++;
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         /* Soft-skip surface: no virtio-blk → NODEV (storaged soft-logs). */
         if (!virtio_blk_ready()) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftExportNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         if (virtio_blk_export_q(&ex) != 0) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftExportNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         st = store_copy_out(u64Arg1, &ex, sizeof(ex));
-        return st;
+        if (st == 0) {
+            store_soft_inc(&g_u32SoftExportOk);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_STORE_OP_KICK:
         g_u32RingCalls++;
         /* Soft-skip when blk absent; kick is best-effort notify. */
         if (!virtio_blk_ready()) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftKickNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         if (virtio_blk_kick_q() != 0) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftKickNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
-        return 0;
+        store_soft_inc(&g_u32SoftKickOk);
+        i64Ret = 0;
+        break;
 
     case GJ_STORE_OP_RING_STATE: {
         /* Soft: always fills {free, ready}; ready=0 without virtio-blk. */
@@ -363,12 +663,17 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
         g_u32RingCalls++;
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         aS[0] = virtio_blk_q_free();
         aS[1] = virtio_blk_ready() ? 1u : 0u;
         st = store_copy_out(u64Arg1, aS, sizeof(aS));
-        return st;
+        if (st == 0) {
+            store_soft_inc(&g_u32SoftRingState);
+        }
+        i64Ret = st;
+        break;
     }
 
     case GJ_STORE_OP_MAP_RING: {
@@ -378,15 +683,19 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
         g_u32RingCalls++;
         if (u64Arg1 == 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         /* VA base must be page-aligned for ring map into user AS. */
         if ((u64Arg1 & (GJ_PAGE_SIZE - 1ull)) != 0) {
-            return GJ_ERR_INVAL;
+            i64Ret = GJ_ERR_INVAL;
+            break;
         }
         /* Soft-skip surface: no blk → NODEV (distinct from map FAULT). */
         if (!virtio_blk_ready()) {
-            return GJ_ERR_NODEV;
+            store_soft_inc(&g_u32SoftMapNodev);
+            i64Ret = GJ_ERR_NODEV;
+            break;
         }
         /*
          * Soft re-MAP of the same VA: re-install PTEs + re-export (idempotent
@@ -394,21 +703,33 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
          */
         fRemap = (g_u64RingMapVa != 0 && g_u64RingMapVa == u64Arg1) ? 1 : 0;
         if (virtio_blk_map_q_user(u64Arg1, &ex) != 0) {
-            return GJ_ERR_FAULT;
+            store_soft_inc(&g_u32SoftMapFault);
+            i64Ret = GJ_ERR_FAULT;
+            break;
         }
         g_u64RingMapVa = u64Arg1;
-        /* fRemap: soft re-MAP of same VA (PTE re-install); ring_calls covers it. */
-        (void)fRemap;
+        if (fRemap) {
+            store_soft_inc(&g_u32SoftRemap);
+        } else {
+            store_soft_inc(&g_u32SoftMapOk);
+        }
         if (u64Arg2 != 0) {
             st = store_copy_out(u64Arg2, &ex, sizeof(ex));
             if (st != 0) {
-                return st;
+                i64Ret = st;
+                break;
             }
         }
-        return 0;
+        i64Ret = 0;
+        break;
     }
 
     default:
-        return GJ_ERR_NOSUPPORT;
+        i64Ret = GJ_ERR_NOSUPPORT;
+        break;
     }
+
+    store_soft_note_err(i64Ret);
+    store_soft_maybe_once();
+    return i64Ret;
 }

@@ -8,7 +8,7 @@
 
 GreenJade is a from-scratch, capability-based kernel and userspace personality aimed at a **general-purpose desktop / workstation**. Think: small trusted core, doors and caps for isolation, a clean-room Linux ABI path so desktop software (and eventually Steam via Proton) can run without pasting copyleft kernel code.
 
-If you just cloned the repo: you only need a normal toolchain and QEMU. **You do not need any of the binary blobs that `.gitignore` excludes** — those are local build outputs. Run `make` and the tree produces them for you.
+If you just cloned the repo: you only need a normal toolchain and QEMU.
 
 ---
 

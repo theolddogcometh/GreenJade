@@ -8,6 +8,13 @@
  * obsolete Linux module/ustat stubs, fgetln/strnstr/timingsafe_*,
  * getipnodeby*, C++ guard stubs, fortify wcrtomb. Integer/pointer only
  * (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH24_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH24_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH24_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <errno.h>
 #include <netdb.h>
@@ -45,6 +52,14 @@ int res_query(const char *szDname, int nClass, int nType, unsigned char *pAns,
 char *
 strtok(char *sz, const char *szDelim)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (sz == NULL) {
+        return NULL;
+    }
+    if (szDelim == NULL) {
+        return NULL;
+    }
+
     static char *s_pSave;
 
     return strtok_r(sz, szDelim, &s_pSave);
@@ -88,6 +103,12 @@ timespec_getres(struct timespec *pTs, int nBase)
 void
 setproctitle(const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
 
     (void)szFmt;
@@ -99,6 +120,12 @@ setproctitle(const char *szFmt, ...)
 int
 setlogin(const char *szName)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     errno = EPERM;
     return -1;
@@ -188,6 +215,20 @@ res_nmkquery(void *pState, int nOp, const char *szDname, int nClass, int nType,
              const unsigned char *pData, int nDatalen, unsigned char *pBuf,
              int nBuflen)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szDname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pData == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pState;
     return res_mkquery(nOp, szDname, nClass, nType, pData, nDatalen, NULL, pBuf,
                        nBuflen);
@@ -198,6 +239,20 @@ __res_nmkquery(void *pState, int nOp, const char *szDname, int nClass,
                int nType, const unsigned char *pData, int nDatalen,
                unsigned char *pBuf, int nBuflen)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szDname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pData == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_nmkquery(pState, nOp, szDname, nClass, nType, pData, nDatalen,
                         pBuf, nBuflen);
 }
@@ -206,6 +261,16 @@ int
 res_nsend(void *pState, const unsigned char *pMsg, int nMsglen,
           unsigned char *pAns, int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pMsg == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pState;
     return res_send(pMsg, nMsglen, pAns, nAnslen);
 }
@@ -214,6 +279,16 @@ int
 __res_nsend(void *pState, const unsigned char *pMsg, int nMsglen,
             unsigned char *pAns, int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pMsg == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_nsend(pState, pMsg, nMsglen, pAns, nAnslen);
 }
 
@@ -261,6 +336,20 @@ int
 __res_querydomain(const char *szName, const char *szDomain, int nClass,
                   int nType, unsigned char *pAns, int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szDomain == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_querydomain(szName, szDomain, nClass, nType, pAns, nAnslen);
 }
 
@@ -285,6 +374,12 @@ struct b24_xdr {
 static bool_t
 b24_xdr_fail2(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdr;
     (void)p;
     return FALSE;
@@ -293,198 +388,427 @@ b24_xdr_fail2(struct b24_xdr *pXdr, void *p)
 bool_t
 xdr_int8_t(struct b24_xdr *pXdr, int8_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_uint8_t(struct b24_xdr *pXdr, uint8_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_int16_t(struct b24_xdr *pXdr, int16_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_uint16_t(struct b24_xdr *pXdr, uint16_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_longlong_t(struct b24_xdr *pXdr, long long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_u_longlong_t(struct b24_xdr *pXdr, unsigned long long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_quad_t(struct b24_xdr *pXdr, long long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_u_quad_t(struct b24_xdr *pXdr, unsigned long long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_opaque_auth(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_des_block(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_accepted_reply(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_rejected_reply(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_replymsg(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_callhdr(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_callmsg(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_authunix_parms(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_authdes_cred(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_authdes_verf(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_pmap(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_pmaplist(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_rmtcall_args(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_rmtcallres(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_unixcred(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_netnamestr(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_keystatus(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_keybuf(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_cryptkeyarg(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_cryptkeyarg2(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_cryptkeyres(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_getcredres(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        return EOF;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_key_netstarg(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdr_key_netstres(struct b24_xdr *pXdr, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return b24_xdr_fail2(pXdr, p);
 }
 
 bool_t
 xdrrec_endofrecord(struct b24_xdr *pXdr, int fSendNow)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdr;
     (void)fSendNow;
     return FALSE;
@@ -493,6 +817,12 @@ xdrrec_endofrecord(struct b24_xdr *pXdr, int fSendNow)
 bool_t
 xdrrec_eof(struct b24_xdr *pXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdr;
     return TRUE;
 }
@@ -500,6 +830,12 @@ xdrrec_eof(struct b24_xdr *pXdr)
 bool_t
 xdrrec_skiprecord(struct b24_xdr *pXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pXdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdr;
     return FALSE;
 }
@@ -507,6 +843,16 @@ xdrrec_skiprecord(struct b24_xdr *pXdr)
 int
 xencrypt(char *szSecret, char *szPasswd)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szSecret == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szPasswd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szSecret;
     (void)szPasswd;
     errno = ENOSYS;
@@ -516,6 +862,16 @@ xencrypt(char *szSecret, char *szPasswd)
 int
 xdecrypt(char *szSecret, char *szPasswd)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szSecret == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szPasswd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szSecret;
     (void)szPasswd;
     errno = ENOSYS;
@@ -545,6 +901,11 @@ void *
 clntunix_create(void *pAddr, unsigned long uProg, unsigned long uVers,
                 int *pSockp, unsigned uSendsz, unsigned uRecvsz)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pSockp == NULL) {
+        return NULL;
+    }
+
     (void)pAddr;
     (void)uProg;
     (void)uVers;
@@ -559,6 +920,11 @@ void *
 authdes_create(const char *szServername, unsigned uWindow, void *pSyncaddr,
                void *pCkkey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szServername == NULL) {
+        return NULL;
+    }
+
     (void)szServername;
     (void)uWindow;
     (void)pSyncaddr;
@@ -571,6 +937,11 @@ void *
 authdes_pk_create(const char *szServername, void *pPkey, unsigned uWindow,
                   void *pSyncaddr, void *pCkkey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szServername == NULL) {
+        return NULL;
+    }
+
     (void)szServername;
     (void)pPkey;
     (void)uWindow;
@@ -584,6 +955,24 @@ int
 authdes_getucred(void *pAdc, uid_t *pUid, gid_t *pGid, short *pGrouplen,
                  gid_t *aGroups)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pUid == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pGid == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pGrouplen == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (aGroups == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pAdc;
     (void)pUid;
     (void)pGid;
@@ -651,6 +1040,12 @@ netname2user(const char *szName, uid_t *pUidp, gid_t *pGidp, int *pLenp,
 int
 key_encryptsession_pk(char *szRemote, void *pPkey, void *pDeskey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szRemote == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szRemote;
     (void)pPkey;
     (void)pDeskey;
@@ -661,6 +1056,12 @@ key_encryptsession_pk(char *szRemote, void *pPkey, void *pDeskey)
 int
 key_decryptsession_pk(char *szRemote, void *pPkey, void *pDeskey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szRemote == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szRemote;
     (void)pPkey;
     (void)pDeskey;
@@ -671,6 +1072,12 @@ key_decryptsession_pk(char *szRemote, void *pPkey, void *pDeskey)
 int
 key_get_conv(char *szPname, void *pDeskey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szPname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szPname;
     (void)pDeskey;
     errno = ENOSYS;
@@ -734,6 +1141,16 @@ passwd2des(char *szPw, char *pKey)
 int
 pkey_set(const char *szKey, const char *szEncryptedkey)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szKey == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szEncryptedkey == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szKey;
     (void)szEncryptedkey;
     errno = ENOSYS;
@@ -775,6 +1192,12 @@ svc_exit(void)
 void *
 svcfd_create(int nFd, unsigned uSendsize, unsigned uRecvsize)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return NULL;
+    }
+
     (void)nFd;
     (void)uSendsize;
     (void)uRecvsize;
@@ -829,6 +1252,12 @@ svcudp_enablecache(void *pXprt, unsigned long uSize)
 void *
 svcunixfd_create(int nFd, unsigned uSendsize, unsigned uRecvsize)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return NULL;
+    }
+
     (void)nFd;
     (void)uSendsize;
     (void)uRecvsize;
@@ -857,6 +1286,12 @@ bdflush(int nFunc, long nData)
 int
 create_module(const char *szName, size_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     (void)cb;
     errno = ENOSYS;
@@ -889,6 +1324,12 @@ get_kernel_syms(void *pTable)
 int
 uselib(const char *szLibrary)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szLibrary == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szLibrary;
     errno = ENOSYS;
     return -1;
@@ -960,6 +1401,20 @@ rtime(void *pAddrp, struct timeval *pTimep, struct timeval *pTimeout)
 int
 ruserpass(const char *szHost, char **ppAname, char **ppApass)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szHost == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppAname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppApass == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szHost;
     (void)ppAname;
     (void)ppApass;
@@ -977,6 +1432,11 @@ pthread_kill_other_threads_np(void)
 void *
 sgetsgent(const char *szLine)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szLine == NULL) {
+        return NULL;
+    }
+
     (void)szLine;
     return NULL;
 }
@@ -1071,6 +1531,16 @@ timingsafe_bcmp(const void *pA, const void *pB, size_t cb)
 int
 timingsafe_memcmp(const void *pA, const void *pB, size_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pA == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pB == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     const unsigned char *pX = (const unsigned char *)pA;
     const unsigned char *pY = (const unsigned char *)pB;
     int nDone = 0;
@@ -1091,6 +1561,12 @@ timingsafe_memcmp(const void *pA, const void *pB, size_t cb)
 void
 freehostent(struct hostent *pHe)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (pHe == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pHe;
     /* getipnodeby* bring-up returns static storage */
 }
@@ -1198,6 +1674,16 @@ __cxa_deleted_virtual(void)
 int
 step(const char *szString, const char *szExpbuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szString == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szExpbuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szString;
     (void)szExpbuf;
     return 0;
@@ -1206,6 +1692,16 @@ step(const char *szString, const char *szExpbuf)
 int
 advance(const char *szString, const char *szExpbuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szString == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szExpbuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szString;
     (void)szExpbuf;
     return 0;
@@ -1217,5 +1713,10 @@ char *tmpnam(char *szBuf);
 char *
 tmpnam64(char *szBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH24_SOFT_NULL */
+    if (szBuf == NULL) {
+        return NULL;
+    }
+
     return tmpnam(szBuf);
 }

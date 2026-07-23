@@ -886,3 +886,46 @@ __strunvis(char *pDst, const char *szSrc)
 {
     return strunvis(pDst, szSrc);
 }
+
+/* ---- soft deepen: ctx sizes + bcrypt_gensalt bounds (unique) ------------ */
+
+size_t
+rmd160_ctx_size(void)
+{
+    return sizeof(struct b34_rmd);
+}
+
+size_t __rmd160_ctx_size(void) __attribute__((alias("rmd160_ctx_size")));
+
+size_t
+blake2s_ctx_size(void)
+{
+    return sizeof(struct b34_b2s);
+}
+
+size_t __blake2s_ctx_size(void) __attribute__((alias("blake2s_ctx_size")));
+
+size_t
+md4_ctx_size(void)
+{
+    return sizeof(struct b34_md4);
+}
+
+size_t __md4_ctx_size(void) __attribute__((alias("md4_ctx_size")));
+
+/*
+ * bcrypt_gensalt_chk: same as bcrypt_gensalt but reject out-of-range log
+ * rounds before stub (OpenBSD accepts 4..31).
+ */
+int
+bcrypt_gensalt_chk(int nLogRounds, char *szSalt)
+{
+    if (nLogRounds < 4 || nLogRounds > 31) {
+        errno = EINVAL;
+        return -1;
+    }
+    return bcrypt_gensalt(nLogRounds, szSalt);
+}
+
+int __bcrypt_gensalt_chk(int nLogRounds, char *szSalt)
+    __attribute__((alias("bcrypt_gensalt_chk")));

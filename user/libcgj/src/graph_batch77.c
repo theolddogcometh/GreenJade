@@ -10,8 +10,9 @@
  *   gj_json_get_string(const char *json, const char *key,
  *                      char *out, size_t outcap)
  *   gj_json_get_int(const char *json, const char *key, long *out)
+ *   gj_json_has_key(const char *json, const char *key) → 1/0
  *   json_escape / json_unescape
- *   __gj_json_get_string / __gj_json_get_int
+ *   __gj_json_get_string / __gj_json_get_int / __gj_json_has_key
  *   __json_escape / __json_unescape
  *   __libcgj_batch77_marker = "libcgj-batch77"
  *
@@ -24,6 +25,9 @@
  *   json_unescape: JSON string body (no surrounding quotes) → C string.
  *     inlen is byte length of the escaped body (not requiring NUL).
  *     out == NULL → size needed including NUL; else length excl. NUL.
+ *
+ * Soft deepen: has_key probe (no value parse), flat-object reject paths
+ * already strict on nested braces.
  */
 
 #include <errno.h>
@@ -765,6 +769,27 @@ gj_json_get_int(const char *szJson, const char *szKey, long *pOut)
     return 0;
 }
 
+/*
+ * gj_json_has_key — soft deepen: 1 if key exists in flat object, else 0.
+ * Does not parse the value. NULL json/key → 0. Does not set errno on miss.
+ */
+int
+gj_json_has_key(const char *szJson, const char *szKey)
+{
+	const char *pVal;
+	int nSaved = errno;
+
+	if (szJson == NULL || szKey == NULL || szKey[0] == '\0') {
+		return 0;
+	}
+	if (b77_find_key(szJson, szKey, &pVal) != 0) {
+		errno = nSaved;
+		return 0;
+	}
+	errno = nSaved;
+	return 1;
+}
+
 /* ---- aliases ----------------------------------------------------------- */
 
 int __gj_json_get_string(const char *szJson, const char *szKey, char *szOut,
@@ -773,6 +798,9 @@ int __gj_json_get_string(const char *szJson, const char *szKey, char *szOut,
 
 int __gj_json_get_int(const char *szJson, const char *szKey, long *pOut)
     __attribute__((alias("gj_json_get_int")));
+
+int __gj_json_has_key(const char *szJson, const char *szKey)
+    __attribute__((alias("gj_json_has_key")));
 
 ssize_t __json_escape(const char *szIn, char *szOut, size_t cbOut)
     __attribute__((alias("json_escape")));

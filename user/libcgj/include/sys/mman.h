@@ -8,7 +8,7 @@
  * Scope
  * -----
  * mmap/munmap/mprotect/msync/madvise, mremap, mlock*, mincore, memfd_create,
- * shm_open/shm_unlink, pkey_*, and userfaultfd. PROT_*/MAP_* bit values match
+ * shm_open/shm_unlink, pkey_*, and userfaultfd. PROT_/MAP_ bit values match
  * Linux so kernel hybrid mmap flags need no translation on product arches.
  *
  * Design notes

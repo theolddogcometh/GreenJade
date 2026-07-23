@@ -15,10 +15,14 @@
  * This TU adds only:
  *   highwayhash64 / __highwayhash64
  *     uint64_t (const unsigned char key[32], const void *data, size_t len)
+ *   highwayhash64_with_seed — soft: first 8 key bytes from seed, rest 0
  *   __libcgj_batch97_marker = "libcgj-batch97"
  *
  * Algorithm (public): HighwayHash — Alakuijala / Cox / Wassenberg.
  * 256-bit key, 32-byte packets, ZipperMerge mixing, 64-bit finalize.
+ *
+ * Soft deepen: NULL key → zero key, NULL data+len reject, remainder
+ * packet rules, with_seed convenience.
  */
 
 #include <stddef.h>
@@ -278,6 +282,34 @@ highwayhash64(const unsigned char key[32], const void *data, size_t len)
 	return b97_highwayhash64(aKey, (const unsigned char *)data, len);
 }
 
+/*
+ * highwayhash64_with_seed — soft deepen convenience: 64-bit seed fills
+ * key[0..7] LE, remaining key bytes zero. Same hash as a full 32-byte key
+ * of that form.
+ */
+uint64_t
+highwayhash64_with_seed(uint64_t uSeed, const void *data, size_t len)
+{
+	unsigned char aKey[32];
+	size_t i;
+
+	for (i = 0; i < 32u; i++) {
+		aKey[i] = 0;
+	}
+	aKey[0] = (unsigned char)uSeed;
+	aKey[1] = (unsigned char)(uSeed >> 8);
+	aKey[2] = (unsigned char)(uSeed >> 16);
+	aKey[3] = (unsigned char)(uSeed >> 24);
+	aKey[4] = (unsigned char)(uSeed >> 32);
+	aKey[5] = (unsigned char)(uSeed >> 40);
+	aKey[6] = (unsigned char)(uSeed >> 48);
+	aKey[7] = (unsigned char)(uSeed >> 56);
+	return highwayhash64(aKey, data, len);
+}
+
 uint64_t
 __highwayhash64(const unsigned char key[32], const void *data, size_t len)
 	__attribute__((alias("highwayhash64")));
+uint64_t
+__highwayhash64_with_seed(uint64_t uSeed, const void *data, size_t len)
+	__attribute__((alias("highwayhash64_with_seed")));

@@ -7,7 +7,7 @@
  *
  * Scope
  * -----
- * ASCII C-locale character class and case mapping (is*/to*) plus glibc
+ * ASCII C-locale character class and case mapping (is/to) plus glibc
  * internal table accessors used by some desktop/dynlink graphs.
  *
  * Design notes

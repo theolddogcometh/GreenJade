@@ -13,6 +13,9 @@
  *   int gj_cpu_has_pclmul(void);  // CPUID.1 ECX bit 1 (PCLMULQDQ)
  *   __ghash_pclmul / __gj_cpu_has_pclmul
  *   __libcgj_batch85_marker = "libcgj-batch85"
+ *
+ * Soft deepen: null H/out reject, zero-length → zero tag, bit-serial
+ * fallback when PCLMUL absent, partial final block zero-pad.
  */
 
 #include <stddef.h>

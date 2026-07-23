@@ -11,6 +11,10 @@
  *   plaintext  = 01 23 45 67 89 AB CD EF FE DC BA 98 76 54 32 10
  *   ciphertext = 68 1E DF 34 D2 06 96 5E 86 B3 E9 4F 53 6E 42 46
  *   (1e6 enc)  = 59 52 98 C7 C6 FD 27 1F 04 02 F8 04 C3 3D 3F 66
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/rk/in/out NULL → set_key/crypt no-op; sm4_crypt_ecb
+ *   skips when rk or buffers invalid. 32-round SM4, big-endian block words.
  */
 #include <stddef.h>
 #include <stdint.h>

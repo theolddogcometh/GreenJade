@@ -4,12 +4,14 @@
 |-------|--------|
 | **Date** | 2026-07-23 |
 | **Bar3** | **OPEN** |
+| **Soft inventory** | **READY** (host media only — `./scripts/steam-bar3-check.sh`) |
 | **Companion** | [STEAM_HWTEST.md](STEAM_HWTEST.md) · [HCL.md](HCL.md) · [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) |
 
 **Bar3** = real-DUT path where Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`.  
 Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 
-**Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. No title PASS invented from host scripts.
+**Soft stamp (2026-07-23):** host media **READY** (`build/steam-stage/steam/STATUS`, tree/stage/rootfs hits agree).  
+**Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. No title PASS invented from host scripts. Media READY ≠ client run ≠ Top-50.
 
 ---
 

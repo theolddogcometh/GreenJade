@@ -719,3 +719,18 @@ __GI_dlclose(void *pHandle)
 {
     return dlclose(pHandle);
 }
+
+/* ---- soft deepen: pidfd helper probe (unique) --------------------------- */
+
+int
+pidfd_getfd_np_check(int nPidfd, int nTargetFd, unsigned int uFlags)
+{
+    if (nPidfd < 0 || nTargetFd < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    return pidfd_getfd(nPidfd, nTargetFd, uFlags);
+}
+
+int __pidfd_getfd_np_check(int nPidfd, int nTargetFd, unsigned int uFlags)
+    __attribute__((alias("pidfd_getfd_np_check")));

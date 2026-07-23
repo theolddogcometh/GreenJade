@@ -8,6 +8,9 @@
  *   SHA256_Init / SHA256_Update / SHA256_Final / SHA256_End / SHA256_Data
  *     → graph_batch31.c / graph_batch32.c
  *
+ * Soft deepen: CPUID cache, software transform fallback, Update_auto
+ * multi-block path, null ctx / empty data reject, underscored aliases.
+ *
  * This TU adds only unique symbols:
  *   int gj_cpu_has_sha_ni(void);
  *     — CPUID leaf 7 subleaf 0, EBX bit 29 (SHA). Cached after first call.

@@ -275,29 +275,41 @@ void gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs);
  *   u64NullGuard   — NULL pRegs early return
  *   u64Handled     — switch hit a known case (not default)
  *   u64Nosupport   — default / reserved NR → GJ_ERR_NOSUPPORT
- *   u64Ok          — i64Ret >= 0 after handler
+ *   u64Ok          — i64Ret >= 0 after handler (ret_zero + ret_pos)
  *   u64Err         — i64Ret < 0 after handler
- *   u64Inval/Fault/Nodev/Again/Io/Nomem — common GJ_ERR_* buckets
+ *   u64RetZero     — i64Ret == 0
+ *   u64RetPos      — i64Ret > 0
+ *   u64Inval/Fault/Nodev/Again/Io/Nomem/Noent/Perm/Busy — GJ_ERR_* buckets
  *
  * Subsystem buckets (sparse GJ_SYS_* blocks; only counted when handled):
  *   u64Diag        — DEBUG_LOG / YIELD / EXIT
  *   u64Ipc         — IPC_CALL / RECV / REPLY
  *   u64Cap         — CAP_MINT / MOVE / COPY / REVOKE / IDENT
- *   u64Process     — PROCESS_SPAWN (and wired PROCESS_*)
+ *   u64Process     — PROCESS_SPAWN (handled); SET_PAGER/KILL also when default
  *   u64Thread      — THREAD_SET_QOS / CPU
  *   u64Cold        — COLD_DEQUEUE / COLD_REPLY / PERSONALITY_SERVE
  *   u64Gpu         — GPU_PRESENT / GPU_DISPLAY_INFO
  *   u64Memobj      — MEMOBJ_CREATE_NAMED / MAP_NAMED
  *   u64Hda         — HDA_STREAM
- *   u64DoorFacade  — SESSION / NET / STORE / VFS
+ *   u64DoorFacade  — SESSION / NET / STORE / VFS (sum of door soft split)
+ *   u64Session/Net/Store/Vfs — per-door façade soft split
  *   u64Platform    — PLATFORM_INFO
  *   u64Notify      — NOTIFY_WAIT
  *   u64Console     — CONSOLE
  *   u64Scsi        — SCSI
  *
+ * Reserved / unwired NR soft class (default path only; never product gate):
+ *   u64Vm          — VM_MAP / UNMAP / PROTECT / MAP_OBJ
+ *   u64Futex       — FUTEX_WAIT / FUTEX_WAKE
+ *   u64Wait        — WAIT_TIMEOUT
+ *   u64Untyped     — UNTYPED_RETYPE
+ *   u64UnknownNr   — default NR outside known reserved blocks
+ *
  * Copy helpers used by the native path (soft deepen):
  *   u64CopyInOk/Fail, u64CopyOutOk/Fail, u64CopyNameOk/Fail
  *   u64BytesCopyIn / u64BytesCopyOut
+ *   u64CopyUser    — copy_{in,out} via user_range_ok path
+ *   u64CopyKsmoke  — copy via trusted HHDM/static kernel-smoke path
  *
  * Snapshot: u64LastNr / u64LastRet (bit pattern of last i64Ret).
  */
@@ -308,12 +320,17 @@ struct gj_native_dispatch_stats {
     u64 u64Nosupport;
     u64 u64Ok;
     u64 u64Err;
+    u64 u64RetZero;
+    u64 u64RetPos;
     u64 u64Inval;
     u64 u64Fault;
     u64 u64Nodev;
     u64 u64Again;
     u64 u64Io;
     u64 u64Nomem;
+    u64 u64Noent;
+    u64 u64Perm;
+    u64 u64Busy;
     u64 u64Diag;
     u64 u64Ipc;
     u64 u64Cap;
@@ -324,10 +341,19 @@ struct gj_native_dispatch_stats {
     u64 u64Memobj;
     u64 u64Hda;
     u64 u64DoorFacade;
+    u64 u64Session;
+    u64 u64Net;
+    u64 u64Store;
+    u64 u64Vfs;
     u64 u64Platform;
     u64 u64Notify;
     u64 u64Console;
     u64 u64Scsi;
+    u64 u64Vm;
+    u64 u64Futex;
+    u64 u64Wait;
+    u64 u64Untyped;
+    u64 u64UnknownNr;
     u64 u64CopyInOk;
     u64 u64CopyInFail;
     u64 u64CopyOutOk;
@@ -336,16 +362,20 @@ struct gj_native_dispatch_stats {
     u64 u64CopyNameFail;
     u64 u64BytesCopyIn;
     u64 u64BytesCopyOut;
+    u64 u64CopyUser;
+    u64 u64CopyKsmoke;
     u64 u64LastNr;
     u64 u64LastRet;
 };
 
-/** Snapshot soft counters into *pOut (NULL → no-op). */
+/** Snapshot soft counters into *pOut (NULL → no-op). Never hard-gates. */
 void gj_native_dispatch_stats_get(struct gj_native_dispatch_stats *pOut);
-/** Clear soft counters (lifetime restarts). */
+/** Clear soft counters (lifetime restarts). Safe to call anytime. */
 void gj_native_dispatch_stats_reset(void);
 /**
  * Greppable soft line: "native: soft stats ...".
+ * Diagnostics only; wrap OK; never hard-gates product paths.
+ * Snapshots counters before printing (soft race hygiene).
  * Returns u64Entries (handy for smoke assert chains).
  */
 u64 gj_native_dispatch_stats_soft(void);

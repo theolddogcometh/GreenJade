@@ -1103,3 +1103,30 @@ __GI___libc_start_main(int (*fnMain)(int, char **, char **), int nArgc,
     return __libc_start_main(fnMain, nArgc, ppArgv, fnInit, fnFini, fnRtld,
                              pStackEnd);
 }
+
+/* ---- soft deepen: thr_yield_np + crypt_r null-safe (unique) ------------- */
+
+int thr_yield(void);
+
+int
+thr_yield_np(void)
+{
+    return thr_yield();
+}
+
+int __thr_yield_np(void) __attribute__((alias("thr_yield_np")));
+
+/* crypt_r with explicit NULL-salt rejection helper name. */
+char *crypt_r(const char *szKey, const char *szSalt, void *pData);
+
+char *
+crypt_r_null(const char *szKey, const char *szSalt, void *pData)
+{
+    if (szKey == NULL || szSalt == NULL || pData == NULL) {
+        return NULL;
+    }
+    return crypt_r(szKey, szSalt, pData);
+}
+
+char *__crypt_r_null(const char *szKey, const char *szSalt, void *pData)
+    __attribute__((alias("crypt_r_null")));

@@ -9,6 +9,10 @@
  * Public symbols (+ __ aliases):
  *   DES_set_key, DES_ecb_encrypt, DES3_set_key, DES3_ecb_encrypt
  * Marker: __libcgj_batch52_marker = "libcgj-batch52"
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/sk/in/out NULL → set_key returns -1; ecb no-op.
+ *   DES/3DES single-block ECB only; schedule is flat uint32_t[32] per key.
  */
 #include <stddef.h>
 #include <stdint.h>

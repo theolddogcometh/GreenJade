@@ -14,6 +14,10 @@
  * Ed25519 (create_keypair / sign / verify) intentionally omitted here;
  * full twisted-Edwards ops are left for a later batch. X25519 alone is
  * the complete, correct ECDH primitive for this TU.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: out/scalar/point NULL → x25519 no-op (no write).
+ *   RFC 7748 Montgomery ladder; does not redefine Ed25519 (batch73).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -392,6 +396,8 @@ b64_fe_invert(b64_fe *out, const b64_fe *z)
 
 /* --------------------------------------------------------------------------
  * X25519 — RFC 7748 Montgomery ladder
+ * out = clamp(scalar) * point on Curve25519. Soft null: any of
+ * out/scalar/point NULL → no-op (no memory write).
  * -------------------------------------------------------------------------- */
 
 void
@@ -404,6 +410,11 @@ x25519(unsigned char out[32], const unsigned char scalar[32],
     int pos;
     unsigned int b;
     int i;
+
+    /* Soft null contract: refuse to read/write through NULL pointers. */
+    if (out == NULL || scalar == NULL || point == NULL) {
+        return;
+    }
 
     for (i = 0; i < 32; i++) {
         e[i] = scalar[i];

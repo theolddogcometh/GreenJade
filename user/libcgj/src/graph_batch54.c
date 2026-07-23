@@ -9,6 +9,10 @@
  * Empty-string digest (known value):
  *   RIPEMD160("") =
  *     9c1185a5c5e9fc54612808977ee8f548b2258d31
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: ctx/md/d NULL → Init/Update/Final/one-shot no-op or NULL.
+ *   Opaque ctx fits in 128-byte caller buffer (RIPEMD160_CTX under 128 B).
  */
 #include <stddef.h>
 #include <stdint.h>

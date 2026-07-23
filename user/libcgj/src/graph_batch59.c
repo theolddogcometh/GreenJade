@@ -16,6 +16,10 @@
  *   serpent_decrypt(const uint32_t *subkeys,
  *                   const unsigned char in[16], unsigned char out[16]);
  * plus __serpent_* aliases. Marker: __libcgj_batch59_marker.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/sk/in/out NULL → set_key/encrypt/decrypt no-op.
+ *   32-round Serpent; bitsliced-friendly integer path (no SSE).
  */
 #include <stddef.h>
 #include <stdint.h>

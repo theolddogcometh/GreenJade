@@ -1022,3 +1022,15 @@ _IO_vfork(void)
 {
     return vfork();
 }
+
+/* ---- soft deepen: vfork check helper (unique) --------------------------- */
+
+pid_t vfork(void);
+
+int
+_IO_vfork_check(void)
+{
+    /* Report that vfork surface is present (non-zero). Does not call vfork. */
+    (void)vfork; /* take address only — no call */
+    return 1;
+}

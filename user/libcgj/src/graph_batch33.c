@@ -355,3 +355,39 @@ __sprofil(void *pSprof, int nProfCnt, struct timeval *pTv, unsigned uFlags)
 {
     return sprofil(pSprof, nProfCnt, pTv, uFlags);
 }
+
+/* ---- soft deepen: extra time64 / thr underscored names ------------------ */
+
+int
+__clock_getres64(clockid_t clk, struct timespec *pTs)
+{
+    return clock_getres(clk, pTs);
+}
+
+int
+__pselect_time64(int nNfds, fd_set *pR, fd_set *pW, fd_set *pE,
+                 const struct timespec *pTimeout, const sigset_t *pSigmask)
+{
+    return pselect_time64(nNfds, pR, pW, pE, pTimeout, pSigmask);
+}
+
+/* __ppoll_time64 already defined above — do not redefine. */
+
+/* thr_setprio family already has __thr_* above; add get/set name variants. */
+int
+thr_setprio_np(pthread_t th, int nPrio)
+{
+    return thr_setprio(th, nPrio);
+}
+
+int
+thr_getprio_np(pthread_t th, int *pPrio)
+{
+    return thr_getprio(th, pPrio);
+}
+
+int __thr_setprio_np(pthread_t th, int nPrio)
+    __attribute__((alias("thr_setprio_np")));
+int __thr_getprio_np(pthread_t th, int *pPrio)
+    __attribute__((alias("thr_getprio_np")));
+

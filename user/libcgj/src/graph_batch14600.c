@@ -21,6 +21,11 @@
  * gj_graph_milestone / prior batch_id_* or milestone_* symbols - avoid
  * multi-def. No parent wires.
  *
+ * Soft continuum capstone only. Soft gates only (no Makefile / map /
+ * harness wires in this TU). bar3 remains open
+ * (gj_bar3_ready_14600 == 0); product score remains open
+ * (gj_product_score_14600 == 0).
+ *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
  * libc. No third-party source copied. No __int128.
@@ -42,9 +47,10 @@ b14600_id(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_batch_id_14600 - report this TU's graph batch number.
+ * gj_batch_id_14600 - soft continuum batch identity lamp for wave 14600
  *
- * Always returns 14600.
+ * Always returns 14600u. Soft pure-data batch number tag. Does not call
+ * libc. No parent wires.
  */
 uint32_t
 gj_batch_id_14600(void)
@@ -54,11 +60,11 @@ gj_batch_id_14600(void)
 }
 
 /*
- * gj_graph_milestone_14600 - report this TU's graph milestone revision.
+ * gj_graph_milestone_14600 - soft continuum milestone lamp for wave 14600
  *
- * Always returns 14600 (MILESTONE 14600). Distinct from earlier
+ * Always returns 14600u (MILESTONE 14600). Distinct from earlier
  * gj_graph_milestone / gj_graph_milestone_N so all can coexist at link
- * time. No parent wires.
+ * time. Soft pure-data revision tag. No parent wires.
  */
 uint32_t
 gj_graph_milestone_14600(void)

@@ -14,6 +14,10 @@
  *       skey[40..43] = S vector words (up to 4; unused zeroed)
  *       skey[44]     = k in {2,3,4}
  *   sizeof(Twofish_ctx) == 45 * sizeof(uint32_t) on typical ILP32/LP64.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: pCtx/pKey/aIn/aOut/pSkey NULL → set_key/crypt no-op.
+ *   Flat twofish_* API shares Twofish_ctx layout; delegates to Twofish_*.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -506,6 +510,9 @@ void
 twofish_setkey(const unsigned char *pKey, unsigned uKeyBits, uint32_t *pSkey)
 {
 	/* pSkey must provide at least TWOFISH_SKEY_WORDS uint32_t words. */
+	if (pSkey == NULL) {
+		return;
+	}
 	Twofish_set_key((void *)pSkey, pKey, uKeyBits);
 }
 
@@ -513,6 +520,9 @@ void
 twofish_encrypt(const uint32_t *pSkey, const unsigned char aIn[16],
                 unsigned char aOut[16])
 {
+	if (pSkey == NULL || aIn == NULL || aOut == NULL) {
+		return;
+	}
 	Twofish_encrypt((const void *)pSkey, aIn, aOut);
 }
 
@@ -520,6 +530,9 @@ void
 twofish_decrypt(const uint32_t *pSkey, const unsigned char aIn[16],
                 unsigned char aOut[16])
 {
+	if (pSkey == NULL || aIn == NULL || aOut == NULL) {
+		return;
+	}
 	Twofish_decrypt((const void *)pSkey, aIn, aOut);
 }
 

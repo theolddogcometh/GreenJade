@@ -21,6 +21,15 @@
  * gj_graph_milestone / prior batch_id_* or milestone_* symbols - avoid
  * multi-def. No parent wires.
  *
+ * Soft continuum capstone only. Honest parent high-water when wired:
+ * makefile_max=14900. bar3 remains open (gj_bar3_ready_14900 == 0);
+ * product_score remains open (gj_product_score_14900 == 0).
+ *
+ * CGJ soft marker band capstone (14891–14900): host soft probes
+ * (cgj_soft_milestone_14900.*) may dlsym / direct-link these lamps.
+ * Soft rule: missing symbol → skip; present but wrong value → hard fail.
+ * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
+ *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
  * libc. No third-party source copied. No __int128.
@@ -29,6 +38,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* CGJ TU marker: greppable continuum identity string for batch 14900. */
 const char __libcgj_batch14900_marker[] = "libcgj-batch14900";
 
 /* ---- freestanding helpers ---------------------------------------------- */
@@ -44,7 +54,9 @@ b14900_id(void)
 /*
  * gj_batch_id_14900 - report this TU's graph batch number.
  *
- * Always returns 14900.
+ * Always returns 14900u. Soft pure-data batch identity lamp for the
+ * milestone capstone TU. Does not call libc. No parent wires.
+ * CGJ soft KAT expectation: 14900.
  */
 uint32_t
 gj_batch_id_14900(void)
@@ -56,9 +68,10 @@ gj_batch_id_14900(void)
 /*
  * gj_graph_milestone_14900 - report this TU's graph milestone revision.
  *
- * Always returns 14900 (MILESTONE 14900). Distinct from earlier
+ * Always returns 14900u (MILESTONE 14900). Distinct from earlier
  * gj_graph_milestone / gj_graph_milestone_N so all can coexist at link
- * time. No parent wires.
+ * time. Soft pure-data only. No parent wires.
+ * CGJ soft KAT expectation: 14900.
  */
 uint32_t
 gj_graph_milestone_14900(void)
@@ -68,6 +81,7 @@ gj_graph_milestone_14900(void)
 
 /* ---- underscored aliases ----------------------------------------------- */
 
+/* CGJ aliases: underscored forms for map / weak-link compatibility. */
 uint32_t __gj_batch_id_14900(void)
     __attribute__((alias("gj_batch_id_14900")));
 

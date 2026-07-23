@@ -514,6 +514,21 @@ ld-gj: $(LD_GJ_ELF)
 # Not GNU glibc (see docs/GLIBC_COMPAT.md). Dual MIT OR Apache-2.0 only.
 # Userspace SSE allowed (-msse2). AES-NI via -maes is optional on per-TU
 # target attributes / multi-version paths; keep portable integer fallbacks.
+#
+# Graph continuum (soft honesty — CGJ_SRCS parent wire only)
+# ---------------------------------------------------------
+# CREATE-ONLY freestanding pure-C TUs: user/libcgj/src/graph_batchN.c
+# land first; parent pastes paths into CGJ_SRCS (this list). High-water
+# is the numeric max basename already listed — not hard-coded elsewhere:
+#   makefile_max=14900
+# Verify: ./scripts/gj-continuum-makefile-snippet.sh --max
+# Soft graph only — not bar3, not Deck Top-50 title runs, not product
+# score (gj_bar3_ready_14900 / gj_product_score_14900 remain 0 by design).
+# Next decade paste (after CREATE-ONLY wave exists on disk):
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only FROM TO
+#   ./scripts/gj-continuum-makefile-snippet.sh --next [N]
+# Decade M=14900 bands (docs only): identity 14851–14875, fill 14876–14890,
+# markers 14891–14900 (ends at graph_batch14900.c below).
 CGJ_CFLAGS := -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 	-mno-red-zone -msse2 \
 	-Wall -Wextra -Werror -Iuser/libcgj/include -g -O2
@@ -15490,6 +15505,8 @@ user/libcgj/src/graph_batch14700.c \
 	user/libcgj/src/ether.c \
 	user/libcgj/src/sysv_ipc.c \
 	user/libcgj/src/graph_batch3.c
+# End CGJ_SRCS. Continuum soft high-water: graph_batch14900.c ⇒ makefile_max=14900.
+# (Trailing non-batch TUs above: rand48/ether/sysv_ipc + legacy graph_batch3.c.)
 CGJ_ASMS := user/libcgj/src/setjmp.S
 CGJ_OBJS := $(patsubst user/libcgj/src/%.c,$(BUILD)/user/libcgj/src/%.o,$(CGJ_SRCS)) \
 	$(patsubst user/libcgj/src/%.S,$(BUILD)/user/libcgj/src/%.o,$(CGJ_ASMS))

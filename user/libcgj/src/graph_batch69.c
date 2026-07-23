@@ -26,6 +26,10 @@
  *
  * Camellia_set_key returns 0 on success, -1 on bad args / unsupported bits.
  * Supported key sizes: 128, 192, 256 bits (primary: Camellia-128).
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: pKey/pK/aIn/aOut NULL → set_key fails / crypt no-op.
+ *   Camellia-128/192/256 per RFC 3713; integer S-box path (no SSE).
  */
 #include <stddef.h>
 #include <stdint.h>

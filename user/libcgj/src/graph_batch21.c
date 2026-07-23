@@ -5,6 +5,13 @@
  * Desktop glibc graph batch21: underscored aliases for path/cred/sys/ipc
  * helpers, wchar fortify, obstack printf fortify, nss/resolv stubs,
  * exit_group/sigprocmask aliases. Integer/pointer only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH21_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH21_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH21_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -63,18 +70,36 @@ char *getwd(char *szBuf);
 void *
 __memrchr(const void *p, int c, size_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (p == NULL) {
+        return NULL;
+    }
+
     return memrchr(p, c, cb);
 }
 
 char *
 __strchrnul(const char *sz, int ch)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (sz == NULL) {
+        return NULL;
+    }
+
     return strchrnul(sz, ch);
 }
 
 char *
 __strsep(char **ppString, const char *szDelim)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (ppString == NULL) {
+        return NULL;
+    }
+    if (szDelim == NULL) {
+        return NULL;
+    }
+
     return strsep(ppString, szDelim);
 }
 
@@ -84,6 +109,24 @@ ssize_t
 __copy_file_range(int nFdin, off_t *pOffIn, int nFdout, off_t *pOffOut,
                   size_t cb, unsigned nFlags)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFdin < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pOffIn == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (nFdout < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pOffOut == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return copy_file_range(nFdin, pOffIn, nFdout, pOffOut, cb, nFlags);
 }
 
@@ -108,66 +151,140 @@ __getrandom(void *pBuf, size_t cb, unsigned nFlags)
 ssize_t
 __pread64(int nFd, void *pBuf, size_t cb, off_t off)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return pread64(nFd, pBuf, cb, off);
 }
 
 ssize_t
 __pwrite64(int nFd, const void *pBuf, size_t cb, off_t off)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return pwrite64(nFd, pBuf, cb, off);
 }
 
 off_t
 __lseek(int nFd, off_t off, int nWhence)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return lseek(nFd, off, nWhence);
 }
 
 off_t
 __lseek64(int nFd, off_t off, int nWhence)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return lseek64(nFd, off, nWhence);
 }
 
 int
 __euidaccess(const char *szPath, int nMode)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return euidaccess(szPath, nMode);
 }
 
 int
 __chmod(const char *szPath, mode_t mode)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return chmod(szPath, mode);
 }
 
 int
 __fchmod(int nFd, mode_t mode)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return fchmod(nFd, mode);
 }
 
 int
 __chown(const char *szPath, uid_t uid, gid_t gid)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return chown(szPath, uid, gid);
 }
 
 int
 __fchown(int nFd, uid_t uid, gid_t gid)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return fchown(nFd, uid, gid);
 }
 
 int
 __link(const char *szOld, const char *szNew)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szOld == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szNew == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return link(szOld, szNew);
 }
 
 int
 __symlink(const char *szTarget, const char *szLink)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szLink == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return symlink(szTarget, szLink);
 }
 
@@ -219,6 +336,12 @@ __munlockall(void)
 int
 __mincore(void *pAddr, size_t cb, unsigned char *pVec)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pVec == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return mincore(pAddr, cb, pVec);
 }
 
@@ -314,6 +437,24 @@ __posix_spawn(pid_t *pPid, const char *szPath,
               const posix_spawnattr_t *pAttr, char *const aArgv[],
               char *const aEnvp[])
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pPid == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pFa == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAttr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return posix_spawn(pPid, szPath, pFa, pAttr, aArgv, aEnvp);
 }
 
@@ -323,12 +464,36 @@ __posix_spawnp(pid_t *pPid, const char *szFile,
                const posix_spawnattr_t *pAttr, char *const aArgv[],
                char *const aEnvp[])
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pPid == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFile == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pFa == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAttr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return posix_spawnp(pPid, szFile, pFa, pAttr, aArgv, aEnvp);
 }
 
 int
 __execvpe(const char *szFile, char *const aArgv[], char *const aEnvp[])
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szFile == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return execvpe(szFile, aArgv, aEnvp);
 }
 
@@ -337,12 +502,24 @@ __execvpe(const char *szFile, char *const aArgv[], char *const aEnvp[])
 clock_t
 __times(struct tms *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return times(pBuf);
 }
 
 int
 __sysinfo(struct sysinfo *pInfo)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pInfo == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return sysinfo(pInfo);
 }
 
@@ -350,18 +527,44 @@ int
 __mount(const char *szSrc, const char *szTarget, const char *szType,
         unsigned long uFlags, const void *pData)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szType == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return mount(szSrc, szTarget, szType, uFlags, pData);
 }
 
 int
 __umount(const char *szTarget)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return umount(szTarget);
 }
 
 int
 __umount2(const char *szTarget, int nFlags)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return umount2(szTarget, nFlags);
 }
 
@@ -374,36 +577,72 @@ __sync(void)
 int
 __fsync(int nFd)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return fsync(nFd);
 }
 
 int
 __fdatasync(int nFd)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return fdatasync(nFd);
 }
 
 int
 __truncate(const char *szPath, off_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return truncate(szPath, cb);
 }
 
 int
 __ftruncate(int nFd, off_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return ftruncate(nFd, cb);
 }
 
 int
 __flock(int nFd, int nOp)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return flock(nFd, nOp);
 }
 
 int
 __setrlimit(int nResource, const struct rlimit *pLim)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pLim == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return setrlimit(nResource, pLim);
 }
 
@@ -428,12 +667,24 @@ __setpriority(int nWhich, id_t nWho, int nPrio)
 int
 __sched_setaffinity(pid_t pid, size_t cbSet, const cpu_set_t *pSet)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pSet == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return sched_setaffinity(pid, cbSet, pSet);
 }
 
 int
 __sched_getaffinity(pid_t pid, size_t cbSet, cpu_set_t *pSet)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pSet == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return sched_getaffinity(pid, cbSet, pSet);
 }
 
@@ -446,12 +697,24 @@ __confstr(int nName, char *szBuf, size_t cb)
 long
 __pathconf(const char *szPath, int nName)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return pathconf(szPath, nName);
 }
 
 long
 __fpathconf(int nFd, int nName)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return fpathconf(nFd, nName);
 }
 
@@ -460,18 +723,40 @@ __fpathconf(int nFd, int nName)
 int
 __setenv(const char *szName, const char *szValue, int nOverwrite)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szValue == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return setenv(szName, szValue, nOverwrite);
 }
 
 int
 __unsetenv(const char *szName)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return unsetenv(szName);
 }
 
 int
 __putenv(char *szString)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szString == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return putenv(szString);
 }
 
@@ -484,6 +769,12 @@ __clearenv(void)
 int
 __getlogin_r(char *szBuf, size_t cb)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getlogin_r(szBuf, cb);
 }
 
@@ -507,6 +798,16 @@ __wcscpy_chk(wchar_t *pDst, const wchar_t *szSrc, size_t cDst)
 wchar_t *
 __wcsncpy_chk(wchar_t *pDst, const wchar_t *szSrc, size_t c, size_t cDst)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pDst == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (cDst != (size_t)-1 && c > cDst) {
         __chk_fail();
     }
@@ -605,6 +906,16 @@ obstack_vprintf(struct obstack *pH, const char *szFmt, va_list ap)
 int
 obstack_printf(struct obstack *pH, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pH == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int r;
 
@@ -618,6 +929,16 @@ int
 __obstack_vprintf_chk(int nFlag, struct obstack *pH, const char *szFmt,
                       va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pH == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)nFlag;
     return obstack_vprintf(pH, szFmt, ap);
 }
@@ -625,6 +946,16 @@ __obstack_vprintf_chk(int nFlag, struct obstack *pH, const char *szFmt,
 int
 __obstack_printf_chk(int nFlag, struct obstack *pH, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pH == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int r;
 
@@ -642,6 +973,24 @@ __res_mkquery(int nOp, const char *szDname, int nClass, int nType,
               const unsigned char *pData, int nDatalen,
               const unsigned char *pNew, unsigned char *pBuf, int nBuflen)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szDname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pData == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pNew == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_mkquery(nOp, szDname, nClass, nType, pData, nDatalen, pNew,
                        pBuf, nBuflen);
 }
@@ -650,6 +999,16 @@ int
 __res_send(const unsigned char *pMsg, int nMsglen, unsigned char *pAns,
            int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (pMsg == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_send(pMsg, nMsglen, pAns, nAnslen);
 }
 
@@ -697,6 +1056,20 @@ int
 __res_nquerydomain(void *pState, const char *szName, const char *szDomain,
                    int nClass, int nType, unsigned char *pAns, int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szDomain == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_nquerydomain(pState, szName, szDomain, nClass, nType, pAns,
                             nAnslen);
 }
@@ -706,6 +1079,16 @@ __res_nquerydomain(void *pState, const char *szName, const char *szDomain,
 int
 __nss_configure_lookup(const char *szDb, const char *szService)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szDb == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szService == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szDb;
     (void)szService;
     errno = ENOSYS;
@@ -731,6 +1114,28 @@ __nss_hostname_digits_dots(const char *szName, void *pRes, char **ppBuf,
                            size_t *pBuflen, int *pErrnop, int *pH_errnop,
                            int nFlags, void *pAf)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuflen == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pErrnop == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pH_errnop == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     (void)pRes;
     (void)ppBuf;
@@ -746,6 +1151,16 @@ int
 __nss_next(char **ppStatus, char **ppStatus2, void **ppFct, int nStatus,
            int nAll)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (ppStatus == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppStatus2 == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)ppStatus;
     (void)ppStatus2;
     (void)ppFct;
@@ -758,6 +1173,20 @@ int
 __nss_next2(char **ppStatus, const char *szStatus2, const char *szStatus3,
             void **ppFct, int nStatus, int nAll, int nFlags)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (ppStatus == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szStatus2 == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szStatus3 == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)ppStatus;
     (void)szStatus2;
     (void)szStatus3;
@@ -771,6 +1200,11 @@ __nss_next2(char **ppStatus, const char *szStatus2, const char *szStatus3,
 void *
 __nss_lookup_function(void *pNi, const char *szFct)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szFct == NULL) {
+        return NULL;
+    }
+
     (void)pNi;
     (void)szFct;
     return NULL;
@@ -923,5 +1357,10 @@ ns_samename(const char *szA, const char *szB)
 char *
 __getwd(char *szBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH21_SOFT_NULL */
+    if (szBuf == NULL) {
+        return NULL;
+    }
+
     return getwd(szBuf);
 }

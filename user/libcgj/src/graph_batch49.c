@@ -2,7 +2,13 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Desktop glibc graph batch49: MD2 (RFC 1319) digest family.
+ * Desktop glibc graph batch49: MD2 (RFC 1319) digest family soft deepen.
+ *
+ * Core MD2Init/Update/Final/Data are STRONG in graph_batch44 — this TU
+ * emits them WEAK so both can coexist without multi-def. Unique strong
+ * surface here: MD2End, MD2_CTX_size, md2_hash, MD2Pad, md2_digest,
+ * OpenSSL-shaped MD2_Init/Update/Final.
+ *
  * Integer/pointer only (no SSE). Clean-room public ABI from the RFC.
  */
 #include <stddef.h>
@@ -81,7 +87,11 @@ b49_md2_block(struct b49_md2 *p, const unsigned char aBlk[16])
     }
 }
 
-void
+/*
+ * Weak copies of BSD MD2* — strong defs live in batch44. Linking both is
+ * safe: strong wins; this TU still compiles standalone for soft deepen.
+ */
+__attribute__((weak)) void
 MD2Init(void *pCtx)
 {
     if (pCtx != NULL) {
@@ -89,7 +99,7 @@ MD2Init(void *pCtx)
     }
 }
 
-void
+__attribute__((weak)) void
 MD2Update(void *pCtx, const void *pData, size_t cb)
 {
     struct b49_md2 *p = (struct b49_md2 *)pCtx;
@@ -115,7 +125,7 @@ MD2Update(void *pCtx, const void *pData, size_t cb)
     }
 }
 
-void
+__attribute__((weak)) void
 MD2Final(unsigned char aDig[16], void *pCtx)
 {
     struct b49_md2 *p = (struct b49_md2 *)pCtx;
@@ -158,6 +168,7 @@ b49_hex_end(const unsigned char *pDig, size_t cb, char *szBuf)
     return p;
 }
 
+/* Strong: unique to batch49 (not in batch44). */
 char *
 MD2End(void *pCtx, char *szBuf)
 {
@@ -167,7 +178,7 @@ MD2End(void *pCtx, char *szBuf)
     return b49_hex_end(aDig, 16u, szBuf);
 }
 
-char *
+__attribute__((weak)) char *
 MD2Data(const void *pData, size_t cb, char *szBuf)
 {
     unsigned char aCtx[128];
@@ -178,11 +189,140 @@ MD2Data(const void *pData, size_t cb, char *szBuf)
     return MD2End(aCtx, szBuf);
 }
 
-void __MD2Init(void *pCtx) __attribute__((alias("MD2Init")));
-void __MD2Update(void *pCtx, const void *pData, size_t cb)
-    __attribute__((alias("MD2Update")));
-void __MD2Final(unsigned char aDig[16], void *pCtx)
-    __attribute__((alias("MD2Final")));
+/* ---- unique soft-deepen surface ----------------------------------------- */
+
+size_t
+MD2_CTX_size(void)
+{
+    return sizeof(struct b49_md2);
+}
+
+size_t
+__MD2_CTX_size(void) __attribute__((alias("MD2_CTX_size")));
+
+/* Explicit pad step for graphs that split Final into Pad+Final. */
+void
+MD2Pad(void *pCtx)
+{
+    struct b49_md2 *p = (struct b49_md2 *)pCtx;
+    unsigned char aPad[16];
+    unsigned char uPad;
+    unsigned i;
+
+    if (p == NULL) {
+        return;
+    }
+    uPad = (unsigned char)(16u - p->cbBuf);
+    for (i = 0; i < 16u; i++) {
+        aPad[i] = uPad;
+    }
+    MD2Update(p, aPad, (size_t)uPad);
+}
+
+void __MD2Pad(void *pCtx) __attribute__((alias("MD2Pad")));
+
+/* Binary one-shot digest (16 bytes), not hex like MD2Data. */
+int
+md2_hash(const void *pData, size_t cb, unsigned char aDig[16])
+{
+    unsigned char aCtx[128];
+
+    if (aDig == NULL) {
+        return -1;
+    }
+    memset(aCtx, 0, sizeof(aCtx));
+    MD2Init(aCtx);
+    MD2Update(aCtx, pData, cb);
+    MD2Final(aDig, aCtx);
+    return 0;
+}
+
+int __md2_hash(const void *pData, size_t cb, unsigned char aDig[16])
+    __attribute__((alias("md2_hash")));
+
+/* Alias used by some graphs for binary digest. */
+int
+md2_digest(const void *pData, size_t cb, unsigned char aDig[16])
+{
+    return md2_hash(pData, cb, aDig);
+}
+
+int __md2_digest(const void *pData, size_t cb, unsigned char aDig[16])
+    __attribute__((alias("md2_digest")));
+
+/* OpenSSL-shaped MD2_* (underscore) — unique names vs BSD MD2Init. */
+void
+MD2_Init(void *pCtx)
+{
+    MD2Init(pCtx);
+}
+
+void
+MD2_Update(void *pCtx, const void *pData, size_t cb)
+{
+    MD2Update(pCtx, pData, cb);
+}
+
+void
+MD2_Final(unsigned char aDig[16], void *pCtx)
+{
+    MD2Final(aDig, pCtx);
+}
+
+void __MD2_Init(void *pCtx) __attribute__((alias("MD2_Init")));
+void __MD2_Update(void *pCtx, const void *pData, size_t cb)
+    __attribute__((alias("MD2_Update")));
+void __MD2_Final(unsigned char aDig[16], void *pCtx)
+    __attribute__((alias("MD2_Final")));
+
+/* Lowercase init/update/final (unique). */
+void
+md2_init(void *pCtx)
+{
+    MD2Init(pCtx);
+}
+
+void
+md2_update(void *pCtx, const void *pData, size_t cb)
+{
+    MD2Update(pCtx, pData, cb);
+}
+
+void
+md2_final(unsigned char aDig[16], void *pCtx)
+{
+    MD2Final(aDig, pCtx);
+}
+
+void __md2_init(void *pCtx) __attribute__((alias("md2_init")));
+void __md2_update(void *pCtx, const void *pData, size_t cb)
+    __attribute__((alias("md2_update")));
+void __md2_final(unsigned char aDig[16], void *pCtx)
+    __attribute__((alias("md2_final")));
+
+/* Weak underscored BSD aliases (match weak MD2*). */
+__attribute__((weak)) void
+__MD2Init(void *pCtx)
+{
+    MD2Init(pCtx);
+}
+
+__attribute__((weak)) void
+__MD2Update(void *pCtx, const void *pData, size_t cb)
+{
+    MD2Update(pCtx, pData, cb);
+}
+
+__attribute__((weak)) void
+__MD2Final(unsigned char aDig[16], void *pCtx)
+{
+    MD2Final(aDig, pCtx);
+}
+
 char *__MD2End(void *pCtx, char *szBuf) __attribute__((alias("MD2End")));
-char *__MD2Data(const void *pData, size_t cb, char *szBuf)
-    __attribute__((alias("MD2Data")));
+
+__attribute__((weak)) char *
+__MD2Data(const void *pData, size_t cb, char *szBuf)
+{
+    return MD2Data(pData, cb, szBuf);
+}

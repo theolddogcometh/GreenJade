@@ -11,9 +11,11 @@
  *   uint32_t __gj_continuum_wave_14600  (alias)
  *   __libcgj_batch14599_marker = "libcgj-batch14599"
  *
- * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique surface
- * only; no multi-def. Distinct from gj_*_14500 / gj_*_14400 / gj_*_14300 milestone
- * surfaces and sibling 14600 milestone symbols. No parent wires.
+ * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique
+ * gj_continuum_wave_14600 surface only; no multi-def. Distinct from gj_*_14500 /
+ * gj_*_14400 / gj_*_14300 milestone surfaces and sibling 14600 milestone
+ * symbols. No parent wires. Soft gates only (no Makefile / map / harness
+ * wires in this TU).
  * No __int128.
  *
  * Clean-room freestanding pure C (integer only). Compiles with
@@ -40,10 +42,10 @@ b14599_wave(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_continuum_wave_14600 - soft continuum surface
+ * gj_continuum_wave_14600 - continuum wave identity lamp for wave 14600
  *
- * Always returns 14600u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 14600u. Soft pure-data exclusive continuum wave id.
+ * Does not call libc. No parent wires.
  */
 uint32_t
 gj_continuum_wave_14600(void)

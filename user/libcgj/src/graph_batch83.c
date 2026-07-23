@@ -13,12 +13,20 @@
  *        Uses AES-NI when available, else AES_encrypt. Returns 0 / -1.
  *   void AES_encrypt_auto(in, out, key);
  *        Always-succeeds dispatch (AES-NI or software).
- *   __gj_cpu_has_aesni / __AES_encrypt_aesni / __AES_encrypt_auto  (aliases)
+ *   int  AES_decrypt_aesni(in, out, key);
+ *        AES-NI decrypt when available, else AES_decrypt. Returns 0 / -1.
+ *   void AES_decrypt_auto(in, out, key);
+ *        Always-succeeds decrypt dispatch.
+ *   __gj_cpu_has_aesni / __AES_encrypt_aesni / __AES_encrypt_auto
+ *   __AES_decrypt_aesni / __AES_decrypt_auto  (aliases)
  *   __libcgj_batch83_marker = "libcgj-batch83"
  *
  * AES block primitives from batch45 (extern only; do not redefine):
- *   AES_encrypt
+ *   AES_encrypt / AES_decrypt
  * Local AES_KEY layout matches OpenSSL aes.h / batch45.
+ *
+ * Soft deepen: decrypt NI path (AESDEC/AESDECLAST), mirror auto dispatch,
+ * null/round reject paths match encrypt.
  */
 
 #include <immintrin.h>
@@ -35,8 +43,10 @@ typedef struct aes_key_st {
 	int rounds;
 } AES_KEY;
 
-/* batch45 software encrypt (no local AES_set_* / AES_encrypt multi-def). */
+/* batch45 software block ops (no local AES_set_* multi-def). */
 void AES_encrypt(const unsigned char *in, unsigned char *out,
+                 const AES_KEY *key);
+void AES_decrypt(const unsigned char *in, unsigned char *out,
                  const AES_KEY *key);
 
 /* Cached CPUID.1 ECX.AES (bit 25): -1 unknown, 0 absent, 1 present. */
@@ -130,6 +140,31 @@ b83_aesni_encrypt_block(const unsigned char *in, unsigned char *out,
 	_mm_storeu_si128((__m128i *)(void *)out, s);
 }
 
+/*
+ * AES-NI single-block decrypt. key must be a decrypt schedule
+ * (AES_set_decrypt_key shape): rd_key[0] first AddRoundKey, then AESDEC
+ * for rounds 1..Nr-1, AESDECLAST for Nr. Soft deepen twin of encrypt.
+ */
+static __attribute__((target("aes,sse2"))) void
+b83_aesni_decrypt_block(const unsigned char *in, unsigned char *out,
+                        const AES_KEY *key)
+{
+	const unsigned int *rk = key->rd_key;
+	int nr = key->rounds;
+	__m128i s;
+	int r;
+
+	s = _mm_loadu_si128((const __m128i *)(const void *)in);
+	s = _mm_xor_si128(s, b83_load_rk(rk));
+
+	for (r = 1; r < nr; r++) {
+		s = _mm_aesdec_si128(s, b83_load_rk(rk + (unsigned)r * 4u));
+	}
+	s = _mm_aesdeclast_si128(s, b83_load_rk(rk + (unsigned)nr * 4u));
+
+	_mm_storeu_si128((__m128i *)(void *)out, s);
+}
+
 int
 AES_encrypt_aesni(const unsigned char *in, unsigned char *out,
                   const AES_KEY *key)
@@ -177,6 +212,51 @@ AES_encrypt_auto(const unsigned char *in, unsigned char *out,
 	AES_encrypt(in, out, key);
 }
 
+int
+AES_decrypt_aesni(const unsigned char *in, unsigned char *out,
+                  const AES_KEY *key)
+{
+	int nr;
+
+	if (in == NULL || out == NULL || key == NULL) {
+		return -1;
+	}
+	nr = key->rounds;
+	if (nr != 10 && nr != 12 && nr != 14) {
+		return -1;
+	}
+
+	if (gj_cpu_has_aesni() != 0) {
+		b83_aesni_decrypt_block(in, out, key);
+		return 0;
+	}
+
+	AES_decrypt(in, out, key);
+	return 0;
+}
+
+void
+AES_decrypt_auto(const unsigned char *in, unsigned char *out,
+                 const AES_KEY *key)
+{
+	int nr;
+
+	if (in == NULL || out == NULL || key == NULL) {
+		return;
+	}
+	nr = key->rounds;
+	if (nr != 10 && nr != 12 && nr != 14) {
+		AES_decrypt(in, out, key);
+		return;
+	}
+
+	if (gj_cpu_has_aesni() != 0) {
+		b83_aesni_decrypt_block(in, out, key);
+		return;
+	}
+	AES_decrypt(in, out, key);
+}
+
 int __gj_cpu_has_aesni(void)
     __attribute__((alias("gj_cpu_has_aesni")));
 int __AES_encrypt_aesni(const unsigned char *in, unsigned char *out,
@@ -185,3 +265,9 @@ int __AES_encrypt_aesni(const unsigned char *in, unsigned char *out,
 void __AES_encrypt_auto(const unsigned char *in, unsigned char *out,
                         const AES_KEY *key)
     __attribute__((alias("AES_encrypt_auto")));
+int __AES_decrypt_aesni(const unsigned char *in, unsigned char *out,
+                        const AES_KEY *key)
+    __attribute__((alias("AES_decrypt_aesni")));
+void __AES_decrypt_auto(const unsigned char *in, unsigned char *out,
+                        const AES_KEY *key)
+    __attribute__((alias("AES_decrypt_auto")));

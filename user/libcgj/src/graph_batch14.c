@@ -7,6 +7,13 @@
  * bring-up, printf custom hooks, pthread clocklocks, sigqueue, get_nprocs*,
  * getpeereid, killpg, lchmod, malloc_trim, putpwent/putgrent, ttyent, futimesat,
  * fflush_unlocked, versionsort64, sysctl. Integer/pointer only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH14_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH14_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH14_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <argp.h>
 #include <dirent.h>
@@ -96,12 +103,24 @@ b14_sys_ret(long r)
 intmax_t
 wcstoimax(const wchar_t *pwcs, wchar_t **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pwcs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (intmax_t)wcstoll(pwcs, ppEnd, nBase);
 }
 
 uintmax_t
 wcstoumax(const wchar_t *pwcs, wchar_t **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pwcs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (uintmax_t)wcstoull(pwcs, ppEnd, nBase);
 }
 
@@ -122,6 +141,12 @@ getcontext(ucontext_t *pUc)
 int
 setcontext(const ucontext_t *pUc)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pUc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pUc;
     errno = ENOSYS;
     return -1;
@@ -130,6 +155,12 @@ setcontext(const ucontext_t *pUc)
 void
 makecontext(ucontext_t *pUc, void (*pfn)(void), int nArg, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pUc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pUc;
     (void)pfn;
     (void)nArg;
@@ -139,6 +170,16 @@ makecontext(ucontext_t *pUc, void (*pfn)(void), int nArg, ...)
 int
 swapcontext(ucontext_t *pOuc, const ucontext_t *pUc)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pOuc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pUc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pOuc;
     (void)pUc;
     errno = ENOSYS;
@@ -163,6 +204,12 @@ _mcleanup(void)
 int
 profil(unsigned short *pBuf, size_t cbBuf, size_t uOffset, unsigned uScale)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pBuf;
     (void)cbBuf;
     (void)uOffset;
@@ -175,6 +222,12 @@ profil(unsigned short *pBuf, size_t cbBuf, size_t uOffset, unsigned uScale)
 nl_catd
 catopen(const char *szName, int nFlag)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     (void)nFlag;
     /* Identity catalog: non-NULL handle, catgets returns default */
@@ -305,6 +358,16 @@ strfmon_core(char *sz, size_t cbMax, const char *szFmt, va_list ap)
 ssize_t
 strfmon(char *sz, size_t cbMax, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     ssize_t n;
 
@@ -317,6 +380,16 @@ strfmon(char *sz, size_t cbMax, const char *szFmt, ...)
 ssize_t
 strfmon_l(char *sz, size_t cbMax, locale_t loc, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     ssize_t n;
 
@@ -332,6 +405,12 @@ strfmon_l(char *sz, size_t cbMax, locale_t loc, const char *szFmt, ...)
 int
 io_setup(unsigned nNr, io_context_t *pCtx)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pCtx == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (int)b14_sys_ret(b14_sys6(NR_io_setup, (long)nNr,
                                      (long)(uintptr_t)pCtx, 0, 0, 0, 0));
 }
@@ -346,6 +425,12 @@ io_destroy(io_context_t ctx)
 int
 io_submit(io_context_t ctx, long nNr, struct iocb **ppIocbs)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (ppIocbs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (int)b14_sys_ret(b14_sys6(NR_io_submit, (long)(uintptr_t)ctx, nNr,
                                      (long)(uintptr_t)ppIocbs, 0, 0, 0));
 }
@@ -353,6 +438,16 @@ io_submit(io_context_t ctx, long nNr, struct iocb **ppIocbs)
 int
 io_cancel(io_context_t ctx, struct iocb *pIocb, struct io_event *pEvent)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pIocb == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pEvent == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (int)b14_sys_ret(b14_sys6(NR_io_cancel, (long)(uintptr_t)ctx,
                                      (long)(uintptr_t)pIocb,
                                      (long)(uintptr_t)pEvent, 0, 0, 0));
@@ -362,6 +457,12 @@ int
 io_getevents(io_context_t ctx, long nMin, long nNr, struct io_event *pEvents,
              struct timespec *pTimeout)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pEvents == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (int)b14_sys_ret(b14_sys6(NR_io_getevents, (long)(uintptr_t)ctx,
                                      nMin, nNr, (long)(uintptr_t)pEvents,
                                      (long)(uintptr_t)pTimeout, 0));
@@ -372,6 +473,12 @@ io_getevents(io_context_t ctx, long nMin, long nNr, struct io_event *pEvents,
 int
 io_uring_setup(unsigned nEntries, struct io_uring_params *pParams)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pParams == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return (int)b14_sys_ret(b14_sys6(NR_io_uring_setup, (long)nEntries,
                                      (long)(uintptr_t)pParams, 0, 0, 0, 0));
 }
@@ -411,6 +518,11 @@ ob_default_free(void *p)
 static void *
 ob_call_alloc(struct obstack *pH, long n)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pH == NULL) {
+        return NULL;
+    }
+
     if (pH->use_extra_arg) {
         return pH->chunkfun(pH->extra_arg, n);
     }
@@ -420,6 +532,12 @@ ob_call_alloc(struct obstack *pH, long n)
 static void
 ob_call_free(struct obstack *pH, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pH == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (pH->use_extra_arg) {
         pH->freefun(pH->extra_arg, p);
     } else {
@@ -894,6 +1012,12 @@ register_printf_specifier(int nSpec, printf_function pfn,
 int
 register_printf_modifier(const wchar_t *pStr)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pStr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pStr;
     return -1; /* no free user slots in bring-up */
 }
@@ -1007,6 +1131,16 @@ int
 pthread_mutex_clocklock(pthread_mutex_t *pM, clockid_t clk,
                         const struct timespec *pAbs)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pM == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAbs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)clk;
     return pthread_mutex_timedlock(pM, pAbs);
 }
@@ -1015,6 +1149,20 @@ int
 pthread_cond_clockwait(pthread_cond_t *pC, pthread_mutex_t *pM, clockid_t clk,
                        const struct timespec *pAbs)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pC == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pM == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAbs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)clk;
     return pthread_cond_timedwait(pC, pM, pAbs);
 }
@@ -1023,6 +1171,16 @@ int
 pthread_rwlock_clockrdlock(pthread_rwlock_t *pRw, clockid_t clk,
                            const struct timespec *pAbs)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pRw == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAbs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)clk;
     return pthread_rwlock_timedrdlock(pRw, pAbs);
 }
@@ -1031,6 +1189,16 @@ int
 pthread_rwlock_clockwrlock(pthread_rwlock_t *pRw, clockid_t clk,
                            const struct timespec *pAbs)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pRw == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAbs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)clk;
     return pthread_rwlock_timedwrlock(pRw, pAbs);
 }
@@ -1174,6 +1342,12 @@ killpg(int nPgrp, int nSig)
 int
 lchmod(const char *szPath, mode_t mode)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     /* Linux has no lchmod syscall; fchmodat with AT_SYMLINK_NOFOLLOW when avail.
      * Bring-up: chmod (follows links) — better than ENOSYS for portable apps. */
     return chmod(szPath, mode);
@@ -1340,12 +1514,27 @@ futimesat(int nDfd, const char *szPath, const struct timeval *aTv)
 int
 fflush_unlocked(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fflush(pF);
 }
 
 int
 versionsort64(const struct dirent **ppA, const struct dirent **ppB)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (ppA == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppB == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return versionsort(ppA, ppB);
 }
 
@@ -1364,6 +1553,16 @@ int
 sysctl(int *pName, int nLen, void *pOld, size_t *pcbOld, void *pNew,
        size_t cbNew)
 {
+    /* greppable: CGJ_GRAPH_BATCH14_SOFT_NULL */
+    if (pName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pcbOld == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     struct __b14_sysctl_args args;
 
     args.name = pName;

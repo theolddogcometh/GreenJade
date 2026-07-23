@@ -6,6 +6,9 @@
  * Clean-room pure C; builds under userspace -msse2. No third-party sort
  * source was copied.
  *
+ * Soft deepen: null base/cmp reject, nMemb<2 early OK, mergesort stack
+ * cap ENOMEM (no malloc), underscored aliases for gj_qsort family.
+ *
  * Existing surface NOT redefined (avoid multi-def):
  *   qsort        → stdlib.c (insertion sort bring-up)
  *   qsort_r      → graph_stdlib.c

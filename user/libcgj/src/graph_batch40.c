@@ -1207,3 +1207,24 @@ ssize_t __base64_encode(const unsigned char *p, size_t n, char *s, size_t m)
     __attribute__((alias("base64_encode")));
 ssize_t __base64_decode(const char *s, size_t n, unsigned char *p, size_t m)
     __attribute__((alias("base64_decode")));
+
+/* ---- soft deepen: base64 length helper (unique) ------------------------- */
+
+size_t
+base64_encode_len(size_t cbIn)
+{
+    /* 4 * ceil(n/3) without including NUL */
+    return ((cbIn + 2u) / 3u) * 4u;
+}
+
+size_t __base64_encode_len(size_t cbIn)
+    __attribute__((alias("base64_encode_len")));
+
+size_t
+base64_decode_len(size_t cbB64)
+{
+    return (cbB64 / 4u) * 3u;
+}
+
+size_t __base64_decode_len(size_t cbB64)
+    __attribute__((alias("base64_decode_len")));

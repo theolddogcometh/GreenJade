@@ -607,3 +607,17 @@ __inet_addr_ntoa_r(uint32_t uAddr, char *szBuf)
     *p = '\0';
     return szBuf;
 }
+
+/* ---- soft deepen: siphash24_keyed alias + radix sort probe (unique) ----- */
+
+uint64_t siphash24(const void *pIn, size_t cb, const unsigned char aKey[16]);
+
+uint64_t
+siphash24_keyed(const void *pIn, size_t cb, const unsigned char aKey[16])
+{
+    return siphash24(pIn, cb, aKey);
+}
+
+uint64_t __siphash24_keyed(const void *pIn, size_t cb,
+                           const unsigned char aKey[16])
+    __attribute__((alias("siphash24_keyed")));

@@ -18,6 +18,10 @@
  *   ct  = ChaCha20-XOR(key, nonce, counter=1, pt)
  *   tag = Poly1305(otk, pad16(aad) || pad16(ct) || le64(aad_len)
  *                              || le64(ct_len))
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/nonce/tag/buffers validated via b70_args_ok → -1.
+ *   Uses batch42 chacha20_xor/block + poly1305_auth (extern; no multi-def).
  */
 #include <stddef.h>
 #include <stdint.h>

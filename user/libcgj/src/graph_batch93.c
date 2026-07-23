@@ -22,6 +22,9 @@
  * Decode: skips ASCII whitespace; accepts optional '=' padding and
  * unpadded tail (digit count % 4 == 2 or 3). Returns decoded byte count,
  * or -1 on error.
+ *
+ * Soft deepen: unpadded tail completion, post-pad trailing junk reject,
+ * out==NULL length probe on encode, whitespace skip on decode.
  */
 
 #include <errno.h>

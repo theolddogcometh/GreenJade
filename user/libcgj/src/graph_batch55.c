@@ -5,6 +5,10 @@
  * Desktop glibc graph batch55: Whirlpool (ISO/IEC 10118-3) 512-bit digest.
  * Integer/pointer only (no SSE). Clean-room from public specification;
  * S-box and MDS matrix are the ISO final (2003) parameters.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: pCtx/pData/aMd NULL → Init/Update/Final/one-shot safe no-op.
+ *   ISO/IEC 10118-3 final Whirlpool (10 rounds); 512-bit digest.
  */
 #include <stddef.h>
 #include <stdint.h>

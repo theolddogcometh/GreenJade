@@ -9,6 +9,10 @@
  * Known values (all-zero key and block, 32 cycles / 32 rounds):
  *   TEA:  plain 00000000 00000000 -> 41ea3a0a 94baa940
  *   XTEA: plain 00000000 00000000 -> dee9d4d8 f7131ed9
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key or v NULL → no-op return (in-place block untouched).
+ *   TEA cycles fixed at 32; XTEA rounds==0 → 32. Dual MIT/Apache freestanding.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -32,6 +36,10 @@ const char __libcgj_batch51_marker[] = "libcgj-batch51";
  * 64-bit block (v[0], v[1]), 128-bit key (key[0..3]), 32 fixed cycles.
  * ======================================================================== */
 
+/*
+ * tea_encrypt — in-place TEA encrypt of one 64-bit block.
+ * key[4] = 128-bit key words; v[2] = block (v0,v1). NULL → no-op.
+ */
 void
 tea_encrypt(const uint32_t key[4], uint32_t v[2])
 {
@@ -60,6 +68,9 @@ tea_encrypt(const uint32_t key[4], uint32_t v[2])
     v[1] = v1;
 }
 
+/*
+ * tea_decrypt — in-place TEA decrypt (inverse of tea_encrypt). NULL → no-op.
+ */
 void
 tea_decrypt(const uint32_t key[4], uint32_t v[2])
 {
@@ -98,6 +109,9 @@ void __tea_decrypt(const uint32_t key[4], uint32_t v[2])
  * Same block/key size; configurable rounds (default 32 if rounds == 0).
  * ======================================================================== */
 
+/*
+ * xtea_encrypt — in-place XTEA encrypt; rounds==0 selects 32. NULL → no-op.
+ */
 void
 xtea_encrypt(const uint32_t key[4], uint32_t v[2], unsigned rounds)
 {
@@ -126,6 +140,9 @@ xtea_encrypt(const uint32_t key[4], uint32_t v[2], unsigned rounds)
     v[1] = v1;
 }
 
+/*
+ * xtea_decrypt — in-place XTEA decrypt; rounds must match encrypt. NULL → no-op.
+ */
 void
 xtea_decrypt(const uint32_t key[4], uint32_t v[2], unsigned rounds)
 {

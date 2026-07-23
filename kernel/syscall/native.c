@@ -13,10 +13,11 @@
  *   - Door façades (session/net/store/vfs) and platform ops are the main
  *     product surface for freestanding embeds (sessiond, scsi_mid, …).
  *   - Soft stats (gj_native_dispatch_stats_*): entry/outcome + subsystem
- *     buckets + copy-helper counters. Diagnostics only; never hard-gate.
+ *     buckets + door split + reserved-NR class + copy-helper counters
+ *     (user vs ksmoke path). Diagnostics only; never hard-gate.
  *     greppable: native: soft stats
  *
- * Pure C11. Dual-licensed MIT OR Apache-2.0.
+ * Pure C11 freestanding. Dual-licensed MIT OR Apache-2.0.
  */
 #include <gj/cap.h>
 #include <gj/cold_ipc.h>
@@ -78,53 +79,79 @@ gj_native_dispatch_stats_reset(void)
 u64
 gj_native_dispatch_stats_soft(void)
 {
-    /* Grep: native: soft stats */
+    /*
+     * Snapshot first so a concurrent soft bump cannot tear mid-print.
+     * Diagnostics only; wrap OK; never hard-gates.
+     * Grep: native: soft stats
+     */
+    struct gj_native_dispatch_stats s = g_nativeStats;
+
     kprintf("native: soft stats entries=%llu null=%llu handled=%llu "
-            "nosupport=%llu ok=%llu err=%llu "
+            "nosupport=%llu ok=%llu err=%llu ret0=%llu ret_pos=%llu "
             "inval=%llu fault=%llu nodev=%llu again=%llu io=%llu nomem=%llu "
+            "noent=%llu perm=%llu busy=%llu "
             "diag=%llu ipc=%llu cap=%llu process=%llu thread=%llu cold=%llu "
-            "gpu=%llu memobj=%llu hda=%llu door=%llu platform=%llu "
-            "notify=%llu console=%llu scsi=%llu "
+            "gpu=%llu memobj=%llu hda=%llu door=%llu "
+            "sess=%llu net=%llu store=%llu vfs=%llu "
+            "platform=%llu notify=%llu console=%llu scsi=%llu "
+            "vm=%llu futex=%llu wait=%llu untyped=%llu unk_nr=%llu "
             "cin_ok=%llu cin_fail=%llu cout_ok=%llu cout_fail=%llu "
             "cname_ok=%llu cname_fail=%llu bin=%llu bout=%llu "
+            "c_user=%llu c_ksmoke=%llu "
             "last_nr=%llu last_ret=%llu\n",
-            (unsigned long long)g_nativeStats.u64Entries,
-            (unsigned long long)g_nativeStats.u64NullGuard,
-            (unsigned long long)g_nativeStats.u64Handled,
-            (unsigned long long)g_nativeStats.u64Nosupport,
-            (unsigned long long)g_nativeStats.u64Ok,
-            (unsigned long long)g_nativeStats.u64Err,
-            (unsigned long long)g_nativeStats.u64Inval,
-            (unsigned long long)g_nativeStats.u64Fault,
-            (unsigned long long)g_nativeStats.u64Nodev,
-            (unsigned long long)g_nativeStats.u64Again,
-            (unsigned long long)g_nativeStats.u64Io,
-            (unsigned long long)g_nativeStats.u64Nomem,
-            (unsigned long long)g_nativeStats.u64Diag,
-            (unsigned long long)g_nativeStats.u64Ipc,
-            (unsigned long long)g_nativeStats.u64Cap,
-            (unsigned long long)g_nativeStats.u64Process,
-            (unsigned long long)g_nativeStats.u64Thread,
-            (unsigned long long)g_nativeStats.u64Cold,
-            (unsigned long long)g_nativeStats.u64Gpu,
-            (unsigned long long)g_nativeStats.u64Memobj,
-            (unsigned long long)g_nativeStats.u64Hda,
-            (unsigned long long)g_nativeStats.u64DoorFacade,
-            (unsigned long long)g_nativeStats.u64Platform,
-            (unsigned long long)g_nativeStats.u64Notify,
-            (unsigned long long)g_nativeStats.u64Console,
-            (unsigned long long)g_nativeStats.u64Scsi,
-            (unsigned long long)g_nativeStats.u64CopyInOk,
-            (unsigned long long)g_nativeStats.u64CopyInFail,
-            (unsigned long long)g_nativeStats.u64CopyOutOk,
-            (unsigned long long)g_nativeStats.u64CopyOutFail,
-            (unsigned long long)g_nativeStats.u64CopyNameOk,
-            (unsigned long long)g_nativeStats.u64CopyNameFail,
-            (unsigned long long)g_nativeStats.u64BytesCopyIn,
-            (unsigned long long)g_nativeStats.u64BytesCopyOut,
-            (unsigned long long)g_nativeStats.u64LastNr,
-            (unsigned long long)g_nativeStats.u64LastRet);
-    return g_nativeStats.u64Entries;
+            (unsigned long long)s.u64Entries,
+            (unsigned long long)s.u64NullGuard,
+            (unsigned long long)s.u64Handled,
+            (unsigned long long)s.u64Nosupport,
+            (unsigned long long)s.u64Ok,
+            (unsigned long long)s.u64Err,
+            (unsigned long long)s.u64RetZero,
+            (unsigned long long)s.u64RetPos,
+            (unsigned long long)s.u64Inval,
+            (unsigned long long)s.u64Fault,
+            (unsigned long long)s.u64Nodev,
+            (unsigned long long)s.u64Again,
+            (unsigned long long)s.u64Io,
+            (unsigned long long)s.u64Nomem,
+            (unsigned long long)s.u64Noent,
+            (unsigned long long)s.u64Perm,
+            (unsigned long long)s.u64Busy,
+            (unsigned long long)s.u64Diag,
+            (unsigned long long)s.u64Ipc,
+            (unsigned long long)s.u64Cap,
+            (unsigned long long)s.u64Process,
+            (unsigned long long)s.u64Thread,
+            (unsigned long long)s.u64Cold,
+            (unsigned long long)s.u64Gpu,
+            (unsigned long long)s.u64Memobj,
+            (unsigned long long)s.u64Hda,
+            (unsigned long long)s.u64DoorFacade,
+            (unsigned long long)s.u64Session,
+            (unsigned long long)s.u64Net,
+            (unsigned long long)s.u64Store,
+            (unsigned long long)s.u64Vfs,
+            (unsigned long long)s.u64Platform,
+            (unsigned long long)s.u64Notify,
+            (unsigned long long)s.u64Console,
+            (unsigned long long)s.u64Scsi,
+            (unsigned long long)s.u64Vm,
+            (unsigned long long)s.u64Futex,
+            (unsigned long long)s.u64Wait,
+            (unsigned long long)s.u64Untyped,
+            (unsigned long long)s.u64UnknownNr,
+            (unsigned long long)s.u64CopyInOk,
+            (unsigned long long)s.u64CopyInFail,
+            (unsigned long long)s.u64CopyOutOk,
+            (unsigned long long)s.u64CopyOutFail,
+            (unsigned long long)s.u64CopyNameOk,
+            (unsigned long long)s.u64CopyNameFail,
+            (unsigned long long)s.u64BytesCopyIn,
+            (unsigned long long)s.u64BytesCopyOut,
+            (unsigned long long)s.u64CopyUser,
+            (unsigned long long)s.u64CopyKsmoke,
+            (unsigned long long)s.u64LastNr,
+            (unsigned long long)s.u64LastRet);
+    return s.u64Entries;
 }
 
 /**
@@ -178,10 +205,20 @@ native_stats_class_bump(u64 u64Nr)
         g_nativeStats.u64Hda++;
         break;
     case GJ_SYS_SESSION:
+        g_nativeStats.u64DoorFacade++;
+        g_nativeStats.u64Session++;
+        break;
     case GJ_SYS_NET:
+        g_nativeStats.u64DoorFacade++;
+        g_nativeStats.u64Net++;
+        break;
     case GJ_SYS_STORE:
+        g_nativeStats.u64DoorFacade++;
+        g_nativeStats.u64Store++;
+        break;
     case GJ_SYS_VFS:
         g_nativeStats.u64DoorFacade++;
+        g_nativeStats.u64Vfs++;
         break;
     case GJ_SYS_PLATFORM_INFO:
         g_nativeStats.u64Platform++;
@@ -202,6 +239,41 @@ native_stats_class_bump(u64 u64Nr)
 }
 
 /**
+ * Soft-classify a default-path (NOSUPPORT) NR into reserved blocks.
+ * Helps smoke see which frozen stubs were hit without product wiring.
+ */
+static void
+native_stats_nosupport_class(u64 u64Nr)
+{
+    switch (u64Nr) {
+    case GJ_SYS_UNTYPED_RETYPE:
+        g_nativeStats.u64Untyped++;
+        break;
+    case GJ_SYS_VM_MAP:
+    case GJ_SYS_VM_UNMAP:
+    case GJ_SYS_VM_PROTECT:
+    case GJ_SYS_VM_MAP_OBJ:
+        g_nativeStats.u64Vm++;
+        break;
+    case GJ_SYS_WAIT_TIMEOUT:
+        g_nativeStats.u64Wait++;
+        break;
+    case GJ_SYS_FUTEX_WAIT:
+    case GJ_SYS_FUTEX_WAKE:
+        g_nativeStats.u64Futex++;
+        break;
+    case GJ_SYS_PROCESS_SET_PAGER:
+    case GJ_SYS_PROCESS_KILL:
+        /* Frozen numbers; product cases not yet wired on native path. */
+        g_nativeStats.u64Process++;
+        break;
+    default:
+        g_nativeStats.u64UnknownNr++;
+        break;
+    }
+}
+
+/**
  * Classify outcome from i64Ret after a dispatch completes.
  */
 static void
@@ -209,6 +281,11 @@ native_stats_outcome(i64 i64Ret)
 {
     if (i64Ret >= 0) {
         g_nativeStats.u64Ok++;
+        if (i64Ret == 0) {
+            g_nativeStats.u64RetZero++;
+        } else {
+            g_nativeStats.u64RetPos++;
+        }
         return;
     }
     g_nativeStats.u64Err++;
@@ -224,6 +301,12 @@ native_stats_outcome(i64 i64Ret)
         g_nativeStats.u64Io++;
     } else if (i64Ret == GJ_ERR_NOMEM) {
         g_nativeStats.u64Nomem++;
+    } else if (i64Ret == GJ_ERR_NOENT) {
+        g_nativeStats.u64Noent++;
+    } else if (i64Ret == GJ_ERR_PERM) {
+        g_nativeStats.u64Perm++;
+    } else if (i64Ret == GJ_ERR_BUSY) {
+        g_nativeStats.u64Busy++;
     }
     /* NOSUPPORT and other GJ_ERR_* remain under u64Err (+ u64Nosupport). */
 }
@@ -236,6 +319,7 @@ native_stats_finish(u64 u64Nr, i64 i64Ret, int fHitDefault)
 {
     if (fHitDefault) {
         g_nativeStats.u64Nosupport++;
+        native_stats_nosupport_class(u64Nr);
     } else {
         g_nativeStats.u64Handled++;
         native_stats_class_bump(u64Nr);
@@ -261,9 +345,11 @@ native_copy_out(u64 u64Dst, const void *pSrc, u32 cb)
             g_nativeStats.u64CopyOutFail++;
             return GJ_ERR_FAULT;
         }
+        g_nativeStats.u64CopyUser++;
     } else {
         /* Kernel-smoke path: destination is a trusted HHDM/static buffer. */
         memcpy((void *)(gj_vaddr_t)u64Dst, pSrc, cb);
+        g_nativeStats.u64CopyKsmoke++;
     }
     g_nativeStats.u64CopyOutOk++;
     g_nativeStats.u64BytesCopyOut += (u64)cb;
@@ -285,8 +371,10 @@ native_copy_in(void *pDst, u64 u64Src, u32 cb)
             g_nativeStats.u64CopyInFail++;
             return GJ_ERR_FAULT;
         }
+        g_nativeStats.u64CopyUser++;
     } else {
         memcpy(pDst, (const void *)(gj_vaddr_t)u64Src, cb);
+        g_nativeStats.u64CopyKsmoke++;
     }
     g_nativeStats.u64CopyInOk++;
     g_nativeStats.u64BytesCopyIn += (u64)cb;

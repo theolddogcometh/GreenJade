@@ -22,6 +22,10 @@
  *
  * Freestanding pure C, integer/pointer only (no SSE). Clean-room public
  * algorithms (ISO CRC / xz CRC-64 catalog parameters).
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: pData NULL with cb!=0 → return prior CRC unchanged.
+ *   One-shot crc64/crc64_ecma remain batch41 (not redefined here).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -104,6 +108,10 @@ crc64_xz_update(uint64_t uCrc, const void *pData, size_t cb)
 	return ~uCrc;
 }
 
+/*
+ * crc64_xz — one-shot CRC-64/XZ (init/xorout all-ones, reflected).
+ * Equivalent to crc64_xz_update(0, pData, cb). NULL+cb!=0 soft-stays at 0.
+ */
 uint64_t
 crc64_xz(const void *pData, size_t cb)
 {

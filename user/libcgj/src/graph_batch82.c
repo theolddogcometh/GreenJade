@@ -6,6 +6,9 @@
  * Clean-room freestanding pure C — integer/pointer only (no SSE).
  * No third-party dotenv source was copied.
  *
+ * Soft deepen: last-wins scan, tolerant skip of malformed lines, empty
+ * key reject, CR-before-LF strip, underscored aliases.
+ *
  * Surface:
  *   gj_env_parse_line(const char *line,
  *                     char *key, size_t keycap,

@@ -12,15 +12,20 @@
  *   int gj_cpu_has_avx2(void);  // CPUID.7:0 EBX bit 5
  *   void *gj_memcpy_avx2(void *dst, const void *src, size_t n);
  *   void *gj_memset_avx2(void *dst, int c, size_t n);
- *   __gj_cpu_has_avx2 / __gj_memcpy_avx2 / __gj_memset_avx2  (aliases)
+ *   void *gj_memmove_avx2(void *dst, const void *src, size_t n);
+ *   __gj_cpu_has_avx2 / __gj_memcpy_avx2 / __gj_memset_avx2 /
+ *   __gj_memmove_avx2  (aliases)
  *   __libcgj_batch95_marker = "libcgj-batch95"
  *
  * Strategy:
  *   - Runtime CPUID leaf 7 EBX[5] (AVX2); result cached.
  *   - AVX2 path: 32-byte unaligned loads/stores (_mm256_loadu_si256 /
  *     _mm256_storeu_si256); scalar head/tail for residual bytes.
- *   - No AVX2: fall back to batch84 gj_memcpy_sse2 / gj_memset_sse2.
+ *   - No AVX2: fall back to batch84 gj_memcpy_sse2 / gj_memset_sse2 /
+ *     gj_memmove_sse2.
  *   - Kernel builds must not compile this TU (no-SSE kernel policy).
+ *
+ * Soft deepen: overlapping memmove (forward/backward AVX2), SSE2 fallback.
  */
 
 #include <immintrin.h>
@@ -32,6 +37,7 @@ const char __libcgj_batch95_marker[] = "libcgj-batch95";
 /* batch84 SSE2 helpers — used when AVX2 is unavailable. */
 void *gj_memcpy_sse2(void *dst, const void *src, size_t n);
 void *gj_memset_sse2(void *dst, int c, size_t n);
+void *gj_memmove_sse2(void *dst, const void *src, size_t n);
 
 /* ---- CPUID / AVX2 detect ----------------------------------------------- */
 
@@ -122,6 +128,15 @@ b95_set_bytes(unsigned char *d, unsigned char v, size_t n)
 	}
 }
 
+static void
+b95_copy_bwd_bytes(unsigned char *d, const unsigned char *s, size_t n)
+{
+	while (n > 0u) {
+		n--;
+		d[n] = s[n];
+	}
+}
+
 /* ---- AVX2 hot paths (legal only under target("avx2")) ------------------ */
 
 /*
@@ -189,6 +204,30 @@ b95_set_avx2(unsigned char *d, unsigned char v, size_t n)
 	_mm256_zeroupper();
 }
 
+/* Backward AVX2 bulk for overlapping memmove (dst > src). */
+static __attribute__((target("avx2"))) void
+b95_copy_bwd_avx2(unsigned char *d, const unsigned char *s, size_t n)
+{
+	while (n >= 32u) {
+		n -= 32u;
+		{
+			__m256i v = _mm256_loadu_si256(
+			    (const __m256i *)(const void *)(s + n));
+			_mm256_storeu_si256((__m256i *)(void *)(d + n), v);
+		}
+	}
+	if (n >= 16u) {
+		n -= 16u;
+		{
+			__m128i v16 = _mm_loadu_si128(
+			    (const __m128i *)(const void *)(s + n));
+			_mm_storeu_si128((__m128i *)(void *)(d + n), v16);
+		}
+	}
+	b95_copy_bwd_bytes(d, s, n);
+	_mm256_zeroupper();
+}
+
 /* ---- public API -------------------------------------------------------- */
 
 void *
@@ -249,6 +288,54 @@ gj_memset_avx2(void *dst, int c, size_t n)
 	return gj_memset_sse2(dst, c, n);
 }
 
+/*
+ * gj_memmove_avx2 — soft deepen overlapping-safe bulk move.
+ * Forward when dst <= src or no overlap; backward when dst > src overlap.
+ */
+void *
+gj_memmove_avx2(void *dst, const void *src, size_t n)
+{
+	unsigned char *d;
+	const unsigned char *s;
+	uintptr_t ud;
+	uintptr_t us;
+
+	if (dst == NULL || src == NULL) {
+		return dst;
+	}
+	if (n == 0u) {
+		return dst;
+	}
+
+	d = (unsigned char *)dst;
+	s = (const unsigned char *)src;
+	ud = (uintptr_t)d;
+	us = (uintptr_t)s;
+
+	if (ud == us) {
+		return dst;
+	}
+
+	if (gj_cpu_has_avx2() == 0) {
+		return gj_memmove_sse2(dst, src, n);
+	}
+
+	if (ud < us || ud >= us + n) {
+		if (n < 32u) {
+			b95_copy_fwd_bytes(d, s, n);
+		} else {
+			b95_copy_fwd_avx2(d, s, n);
+		}
+	} else {
+		if (n < 32u) {
+			b95_copy_bwd_bytes(d, s, n);
+		} else {
+			b95_copy_bwd_avx2(d, s, n);
+		}
+	}
+	return dst;
+}
+
 /* ---- aliases ----------------------------------------------------------- */
 
 int __gj_cpu_has_avx2(void)
@@ -259,3 +346,6 @@ void *__gj_memcpy_avx2(void *dst, const void *src, size_t n)
 
 void *__gj_memset_avx2(void *dst, int c, size_t n)
     __attribute__((alias("gj_memset_avx2")));
+
+void *__gj_memmove_avx2(void *dst, const void *src, size_t n)
+    __attribute__((alias("gj_memmove_avx2")));

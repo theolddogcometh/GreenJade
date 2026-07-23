@@ -1079,3 +1079,41 @@ uint32_t __djb2_hash(const void *p, size_t n)
     __attribute__((alias("djb2_hash")));
 uint32_t __sdbm_hash(const void *p, size_t n)
     __attribute__((alias("sdbm_hash")));
+
+/* ---- soft deepen: poly1305_onetimeauth + SM3 hex end (unique names) ----- */
+
+/*
+ * poly1305_onetimeauth: libsodium/NaCl-shaped name for one-shot Poly1305.
+ * aOut is 16-byte tag; aKey is 32 bytes (r||s).
+ */
+void
+poly1305_onetimeauth(unsigned char aOut[16], const unsigned char *pMsg,
+                     size_t cbMsg, const unsigned char aKey[32])
+{
+    poly1305_auth(aKey, pMsg, cbMsg, aOut);
+}
+
+void __poly1305_onetimeauth(unsigned char aOut[16], const unsigned char *pMsg,
+                            size_t cbMsg, const unsigned char aKey[32])
+    __attribute__((alias("poly1305_onetimeauth")));
+
+/* FNV-1a 32 already may exist elsewhere — provide fnv1_32 classic (unique). */
+uint32_t
+fnv1_32(const void *pData, size_t cb)
+{
+    const unsigned char *p = (const unsigned char *)pData;
+    uint32_t uHash = 2166136261u;
+    size_t i;
+
+    if (p == NULL && cb != 0u) {
+        return 0u;
+    }
+    for (i = 0; i < cb; i++) {
+        uHash *= 16777619u;
+        uHash ^= (uint32_t)p[i];
+    }
+    return uHash;
+}
+
+uint32_t __fnv1_32(const void *p, size_t n) __attribute__((alias("fnv1_32")));
+

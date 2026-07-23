@@ -12,9 +12,11 @@
  *   uint32_t __gj_shell_green_14600  (alias)
  *   __libcgj_batch14591_marker = "libcgj-batch14591"
  *
- * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique surface
- * only; no multi-def. Distinct from gj_*_14500 / gj_*_14400 / gj_*_14300 milestone
- * surfaces and sibling 14600 milestone symbols. No parent wires.
+ * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique
+ * gj_shell_green_14600 surface only; no multi-def. Distinct from gj_*_14500 /
+ * gj_*_14400 / gj_*_14300 milestone surfaces and sibling 14600 milestone
+ * symbols. No parent wires. Soft gates only (no Makefile / map / harness
+ * wires in this TU).
  * No __int128.
  *
  * Clean-room freestanding pure C (integer only). Compiles with
@@ -41,10 +43,10 @@ b14591_green(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_shell_green_14600 - soft continuum surface
+ * gj_shell_green_14600 - product shell green lamp for wave 14600
  *
  * Always returns 1u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * libc. No parent wires. Does not probe greenjade-shell at runtime.
  */
 uint32_t
 gj_shell_green_14600(void)

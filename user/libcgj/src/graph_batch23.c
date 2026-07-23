@@ -6,6 +6,13 @@
  * gtty/stty/revoke, idna stubs, __libc_sa_len/msgrcv/msgsnd, dynarray/scratch
  * buffer helpers, NSS files/dns host stubs, classic ONC RPC/XDR surface stubs.
  * Integer/pointer only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH23_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH23_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH23_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <errno.h>
 #include <grp.h>
@@ -92,6 +99,12 @@ inet6_option_init(void *pBuf, void **ppOpt, int nType)
 int
 inet6_option_append(void *pSp, const uint8_t *pTypep, int nMultx, int nPlusy)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pTypep == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pSp;
     (void)pTypep;
     (void)nMultx;
@@ -137,6 +150,12 @@ inet6_option_find(const void *pCmsg, uint8_t **ppTptr, int nType)
 int
 gtty(int nFd, void *pArg)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     (void)nFd;
     (void)pArg;
     errno = ENOSYS;
@@ -146,6 +165,12 @@ gtty(int nFd, void *pArg)
 int
 stty(int nFd, const void *pArg)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     (void)nFd;
     (void)pArg;
     errno = ENOSYS;
@@ -155,6 +180,12 @@ stty(int nFd, const void *pArg)
 int
 revoke(const char *szPath)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szPath;
     errno = ENOSYS;
     return -1;
@@ -183,6 +214,16 @@ __idna_to_dns_encoding(const char *szName, char **ppResult)
 int
 __idna_from_dns_encoding(const char *szName, char **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return __idna_to_dns_encoding(szName, ppResult);
 }
 
@@ -352,6 +393,12 @@ __libc_scratch_buffer_grow(struct b23_scratch *pBuf)
 int
 __libc_scratch_buffer_grow_preserve(struct b23_scratch *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return __libc_scratch_buffer_grow(pBuf);
 }
 
@@ -451,6 +498,24 @@ int
 _nss_files_getpwnam_r(const char *szName, struct passwd *pPwd, char *szBuf,
                       size_t cb, struct passwd **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pPwd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getpwnam_r(szName, pPwd, szBuf, cb, ppResult);
 }
 
@@ -458,6 +523,20 @@ int
 _nss_files_getpwuid_r(uid_t uid, struct passwd *pPwd, char *szBuf, size_t cb,
                       struct passwd **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pPwd == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getpwuid_r(uid, pPwd, szBuf, cb, ppResult);
 }
 
@@ -465,6 +544,24 @@ int
 _nss_files_getgrnam_r(const char *szName, struct group *pGrp, char *szBuf,
                       size_t cb, struct group **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pGrp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getgrnam_r(szName, pGrp, szBuf, cb, ppResult);
 }
 
@@ -472,6 +569,20 @@ int
 _nss_files_getgrgid_r(gid_t gid, struct group *pGrp, char *szBuf, size_t cb,
                       struct group **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pGrp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getgrgid_r(gid, pGrp, szBuf, cb, ppResult);
 }
 
@@ -480,6 +591,28 @@ _nss_files_gethostbyname_r(const char *szName, struct hostent *pResult,
                            char *szBuf, size_t cb, struct hostent **ppResult,
                            int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return gethostbyname_r(szName, pResult, szBuf, cb, ppResult, pHErr);
 }
 
@@ -488,6 +621,28 @@ _nss_files_gethostbyname2_r(const char *szName, int nAf, struct hostent *pResult
                             char *szBuf, size_t cb, struct hostent **ppResult,
                             int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return gethostbyname2_r(szName, nAf, pResult, szBuf, cb, ppResult, pHErr);
 }
 
@@ -496,6 +651,24 @@ _nss_files_gethostbyaddr_r(const void *pAddr, socklen_t nLen, int nType,
                            struct hostent *pResult, char *szBuf, size_t cb,
                            struct hostent **ppResult, int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return gethostbyaddr_r(pAddr, nLen, nType, pResult, szBuf, cb, ppResult,
                            pHErr);
 }
@@ -519,6 +692,28 @@ _nss_dns_gethostbyname_r(const char *szName, struct hostent *pResult,
                          char *szBuf, size_t cb, struct hostent **ppResult,
                          int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     (void)pResult;
     (void)szBuf;
@@ -531,6 +726,28 @@ _nss_dns_gethostbyname2_r(const char *szName, int nAf, struct hostent *pResult,
                           char *szBuf, size_t cb, struct hostent **ppResult,
                           int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     (void)nAf;
     (void)pResult;
@@ -544,6 +761,36 @@ _nss_dns_gethostbyname3_r(const char *szName, int nAf, struct hostent *pResult,
                           char *szBuf, size_t cb, struct hostent **ppResult,
                           int *pHErr, int32_t *pTtl, char **pCanon)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pTtl == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pCanon == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pTtl;
     (void)pCanon;
     return _nss_dns_gethostbyname2_r(szName, nAf, pResult, szBuf, cb, ppResult,
@@ -573,6 +820,24 @@ _nss_dns_gethostbyaddr_r(const void *pAddr, socklen_t nLen, int nType,
                          struct hostent *pResult, char *szBuf, size_t cb,
                          struct hostent **ppResult, int *pHErr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pAddr;
     (void)nLen;
     (void)nType;
@@ -587,6 +852,28 @@ _nss_dns_gethostbyaddr2_r(const void *pAddr, socklen_t nLen, int nType,
                           struct hostent *pResult, char *szBuf, size_t cb,
                           struct hostent **ppResult, int *pHErr, int32_t *pTtl)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pHErr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pTtl == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pTtl;
     return _nss_dns_gethostbyaddr_r(pAddr, nLen, nType, pResult, szBuf, cb,
                                     ppResult, pHErr);
@@ -612,6 +899,12 @@ getrpcent(void)
 struct rpcent *
 getrpcbyname(const char *szName)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szName;
     errno = ENOENT;
     return NULL;
@@ -640,6 +933,12 @@ int
 getrpcport(const char *szHost, unsigned long nProg, unsigned long nVers,
            unsigned nProto)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szHost == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szHost;
     (void)nProg;
     (void)nVers;
@@ -771,6 +1070,16 @@ xdr_void(void)
 bool_t
 xdr_int(XDR *pXdrs, int *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -779,6 +1088,16 @@ xdr_int(XDR *pXdrs, int *p)
 bool_t
 xdr_u_int(XDR *pXdrs, unsigned *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -787,6 +1106,16 @@ xdr_u_int(XDR *pXdrs, unsigned *p)
 bool_t
 xdr_long(XDR *pXdrs, long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -795,6 +1124,16 @@ xdr_long(XDR *pXdrs, long *p)
 bool_t
 xdr_u_long(XDR *pXdrs, unsigned long *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -803,6 +1142,16 @@ xdr_u_long(XDR *pXdrs, unsigned long *p)
 bool_t
 xdr_short(XDR *pXdrs, short *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -811,6 +1160,16 @@ xdr_short(XDR *pXdrs, short *p)
 bool_t
 xdr_u_short(XDR *pXdrs, unsigned short *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -819,6 +1178,16 @@ xdr_u_short(XDR *pXdrs, unsigned short *p)
 bool_t
 xdr_char(XDR *pXdrs, char *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -827,6 +1196,16 @@ xdr_char(XDR *pXdrs, char *p)
 bool_t
 xdr_u_char(XDR *pXdrs, unsigned char *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -835,6 +1214,16 @@ xdr_u_char(XDR *pXdrs, unsigned char *p)
 bool_t
 xdr_bool(XDR *pXdrs, bool_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -843,12 +1232,32 @@ xdr_bool(XDR *pXdrs, bool_t *p)
 bool_t
 xdr_enum(XDR *pXdrs, int *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return xdr_int(pXdrs, p);
 }
 
 bool_t
 xdr_hyper(XDR *pXdrs, int64_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -857,6 +1266,16 @@ xdr_hyper(XDR *pXdrs, int64_t *p)
 bool_t
 xdr_u_hyper(XDR *pXdrs, uint64_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -865,6 +1284,16 @@ xdr_u_hyper(XDR *pXdrs, uint64_t *p)
 bool_t
 xdr_int32_t(XDR *pXdrs, int32_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -873,6 +1302,16 @@ xdr_int32_t(XDR *pXdrs, int32_t *p)
 bool_t
 xdr_uint32_t(XDR *pXdrs, uint32_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -881,18 +1320,48 @@ xdr_uint32_t(XDR *pXdrs, uint32_t *p)
 bool_t
 xdr_int64_t(XDR *pXdrs, int64_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return xdr_hyper(pXdrs, p);
 }
 
 bool_t
 xdr_uint64_t(XDR *pXdrs, uint64_t *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return xdr_u_hyper(pXdrs, p);
 }
 
 bool_t
 xdr_opaque(XDR *pXdrs, char *pCp, unsigned nCnt)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pCp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pCp;
     (void)nCnt;
@@ -902,6 +1371,20 @@ xdr_opaque(XDR *pXdrs, char *pCp, unsigned nCnt)
 bool_t
 xdr_bytes(XDR *pXdrs, char **ppCpp, unsigned *pSize, unsigned nMaxSize)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppCpp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pSize == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)ppCpp;
     (void)pSize;
@@ -912,6 +1395,16 @@ xdr_bytes(XDR *pXdrs, char **ppCpp, unsigned *pSize, unsigned nMaxSize)
 bool_t
 xdr_string(XDR *pXdrs, char **ppCpp, unsigned nMaxSize)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppCpp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)ppCpp;
     (void)nMaxSize;
@@ -921,6 +1414,16 @@ xdr_string(XDR *pXdrs, char **ppCpp, unsigned nMaxSize)
 bool_t
 xdr_wrapstring(XDR *pXdrs, char **ppCpp)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppCpp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return xdr_string(pXdrs, ppCpp, (unsigned)-1);
 }
 
@@ -928,6 +1431,16 @@ bool_t
 xdr_array(XDR *pXdrs, void *pAddr, unsigned *pSize, unsigned nMaxSize,
           unsigned nEltSize, void *pfnXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pSize == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pAddr;
     (void)pSize;
@@ -941,6 +1454,16 @@ bool_t
 xdr_vector(XDR *pXdrs, char *pBase, unsigned nElem, unsigned nSize,
            void *pfnXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBase == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pBase;
     (void)nElem;
@@ -952,6 +1475,12 @@ xdr_vector(XDR *pXdrs, char *pBase, unsigned nElem, unsigned nSize,
 bool_t
 xdr_reference(XDR *pXdrs, void *pp, unsigned nSize, void *pfnXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pp;
     (void)nSize;
@@ -962,6 +1491,16 @@ xdr_reference(XDR *pXdrs, void *pp, unsigned nSize, void *pfnXdr)
 bool_t
 xdr_pointer(XDR *pXdrs, char **ppObj, unsigned nSize, void *pfnXdr)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppObj == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)ppObj;
     (void)nSize;
@@ -972,6 +1511,20 @@ xdr_pointer(XDR *pXdrs, char **ppObj, unsigned nSize, void *pfnXdr)
 bool_t
 xdr_union(XDR *pXdrs, int *pDsc, char *pUn, void *pChoices, void *pfnDefault)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pDsc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pUn == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pDsc;
     (void)pUn;
@@ -983,6 +1536,12 @@ xdr_union(XDR *pXdrs, int *pDsc, char *pUn, void *pChoices, void *pfnDefault)
 bool_t
 xdr_netobj(XDR *pXdrs, void *pNo)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)pNo;
     return FALSE;
@@ -993,6 +1552,12 @@ xdr_netobj(XDR *pXdrs, void *pNo)
 bool_t
 xdr_float(XDR *pXdrs, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -1001,6 +1566,12 @@ xdr_float(XDR *pXdrs, void *p)
 bool_t
 xdr_double(XDR *pXdrs, void *p)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pXdrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pXdrs;
     (void)p;
     return FALSE;
@@ -1010,6 +1581,14 @@ void *
 clnt_create(const char *szHost, unsigned long nProg, unsigned long nVers,
             const char *szProto)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szHost == NULL) {
+        return NULL;
+    }
+    if (szProto == NULL) {
+        return NULL;
+    }
+
     (void)szHost;
     (void)nProg;
     (void)nVers;
@@ -1022,6 +1601,11 @@ void *
 clnttcp_create(void *pAddr, unsigned long nProg, unsigned long nVers,
                int *pSockp, unsigned nSendsz, unsigned nRecvsz)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pSockp == NULL) {
+        return NULL;
+    }
+
     (void)pAddr;
     (void)nProg;
     (void)nVers;
@@ -1036,6 +1620,11 @@ void *
 clntudp_create(void *pAddr, unsigned long nProg, unsigned long nVers,
                struct timeval tv, int *pSockp)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pSockp == NULL) {
+        return NULL;
+    }
+
     (void)pAddr;
     (void)nProg;
     (void)nVers;
@@ -1050,6 +1639,11 @@ clntudp_bufcreate(void *pAddr, unsigned long nProg, unsigned long nVers,
                   struct timeval tv, int *pSockp, unsigned nSendsz,
                   unsigned nRecvsz)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pSockp == NULL) {
+        return NULL;
+    }
+
     (void)nSendsz;
     (void)nRecvsz;
     return clntudp_create(pAddr, nProg, nVers, tv, pSockp);
@@ -1086,6 +1680,11 @@ clnt_perror(void *pClnt, const char *szMsg)
 char *
 clnt_sperror(void *pClnt, const char *szMsg)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szMsg == NULL) {
+        return NULL;
+    }
+
     (void)pClnt;
     (void)szMsg;
     return (char *)"rpc: unavailable";
@@ -1101,6 +1700,11 @@ clnt_sperrno(int nStat)
 char *
 clnt_spcreateerror(const char *szMsg)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szMsg == NULL) {
+        return NULL;
+    }
+
     (void)szMsg;
     return (char *)"rpc: create failed";
 }
@@ -1121,6 +1725,14 @@ authunix_create_default(void)
 void *
 authunix_create(char *szMachname, uid_t uid, gid_t gid, int nLen, gid_t *pAup)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szMachname == NULL) {
+        return NULL;
+    }
+    if (pAup == NULL) {
+        return NULL;
+    }
+
     (void)szMachname;
     (void)uid;
     (void)gid;
@@ -1191,6 +1803,11 @@ svctcp_create(int nSock, unsigned nSend, unsigned nRecv)
 void *
 svcunix_create(int nSock, unsigned nSend, unsigned nRecv, char *szPath)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szPath == NULL) {
+        return NULL;
+    }
+
     (void)nSock;
     (void)nSend;
     (void)nRecv;
@@ -1279,6 +1896,12 @@ int
 callrpc(const char *szHost, unsigned long nProg, unsigned long nVers,
         unsigned long nProc, void *pfnIn, void *pIn, void *pfnOut, void *pOut)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szHost == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szHost;
     (void)nProg;
     (void)nVers;
@@ -1345,6 +1968,12 @@ user2netname(char *szName, uid_t uid, const char *szDomain)
 int
 key_encryptsession(char *szRemote, void *pDeskey)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szRemote == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szRemote;
     (void)pDeskey;
     errno = ENOSYS;
@@ -1354,6 +1983,12 @@ key_encryptsession(char *szRemote, void *pDeskey)
 int
 key_decryptsession(char *szRemote, void *pDeskey)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szRemote == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szRemote;
     (void)pDeskey;
     errno = ENOSYS;
@@ -1371,6 +2006,12 @@ key_gendes(void *pDeskey)
 int
 key_setsecret(char *szKey)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (szKey == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)szKey;
     errno = ENOSYS;
     return -1;
@@ -1385,6 +2026,20 @@ des_setparity(char *pKey)
 int
 cbc_crypt(char *pKey, char *pBuf, unsigned nLen, unsigned nMode, char *pIvec)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pKey == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pIvec == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pKey;
     (void)pBuf;
     (void)nLen;
@@ -1397,6 +2052,16 @@ cbc_crypt(char *pKey, char *pBuf, unsigned nLen, unsigned nMode, char *pIvec)
 int
 ecb_crypt(char *pKey, char *pBuf, unsigned nLen, unsigned nMode)
 {
+    /* greppable: CGJ_GRAPH_BATCH23_SOFT_NULL */
+    if (pKey == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)pKey;
     (void)pBuf;
     (void)nLen;

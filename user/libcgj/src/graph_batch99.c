@@ -9,6 +9,9 @@
  * builds under userspace -msse2). No third-party deflate/zlib source
  * was copied; tables and bit-packing follow the RFCs.
  *
+ * Soft deepen: stored (level 0) vs fixed Huffman paths, zlib CMF/FLG +
+ * Adler-32 trailer, capacity ENOSPC reject, level clamp.
+ *
  * Surface:
  *   gj_deflate(const unsigned char *in, size_t inlen,
  *              unsigned char *out, size_t *outlen, int level);

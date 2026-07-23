@@ -36,6 +36,10 @@
 #   pmm: soak_tib PASS            large-RAM hierarchical freelist (GJ_MEM=768G)
 #   aarch64: * PASS               aarch64 scaffold path (optional)
 #   TRAP #UD                      count only (volume signal for agents)
+# Soft verify deepen (info only — never hard-fail; always soft-exit 0):
+#   serial: soft verify PASS|FAIL|idle   x86 COM1 (serial.c)
+#   aarch64: kmain soft PASS             kmain phase summary
+#   linux: nr class soft PASS|PARTIAL|NONE  NR hot/cold table
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -142,6 +146,8 @@ report "aarch64 mmu"        'aarch64: mmu PASS'
 report "aarch64 svc"        'aarch64: svc PASS'
 report "aarch64 virtio"     'aarch64: virtio-mmio PASS'
 report "aarch64 mem probe"  'aarch64: mem probe PASS'
+# Soft deepen phase summary (never hard-fail; miss soft on x86 logs).
+report "kmain soft"         'aarch64: kmain soft PASS|kmain soft PASS'
 
 # TRAP #UD — count only (not a miss; agents care about volume)
 ud_n=$(gqa 'TRAP[[:space:]]+#UD' | wc -l | tr -d ' ' || true)
@@ -149,6 +155,29 @@ case "$ud_n" in
 '' | *[!0-9]*) ud_n=0 ;;
 esac
 echo "  info: TRAP #UD count: $ud_n"
+
+echo "  --- soft verify deepen (info only) ---"
+# serial soft / nr class soft: presence + first-line verdict; never hit/miss.
+# Grep: serial: soft verify · linux: nr class soft
+if gqa_q 'serial: soft verify'; then
+	_sv=$(first_line 'serial: soft verify')
+	echo "  info: serial soft verify  (present) — ${_sv:-present}"
+else
+	echo "  info: serial soft verify  (absent)"
+fi
+if gqa_q 'linux: nr class soft'; then
+	_nr=$(first_line 'linux: nr class soft')
+	echo "  info: nr class soft  (present) — ${_nr:-present}"
+else
+	echo "  info: nr class soft  (absent)"
+fi
+# kmain soft also reported under aarch64 scaffold; echo first line when hit.
+if gqa_q 'aarch64: kmain soft PASS|kmain soft PASS'; then
+	_km=$(first_line 'aarch64: kmain soft PASS|kmain soft PASS')
+	echo "  info: kmain soft  (present) — ${_km:-present}"
+else
+	echo "  info: kmain soft  (absent)"
+fi
 
 echo "  --- soft status lines (info only) ---"
 # soak_tib SKIP is expected on modest QEMU; do not count as miss above.

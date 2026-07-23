@@ -17,8 +17,12 @@
  *     Whole-string match (as if ^pat$ without requiring the carets).
  *   gj_re_search(const char *pat, const char *str, size_t *pSo, size_t *pEo)
  *     Like match, but reports byte span [so, eo) on success.
- *   __gj_re_match / __gj_re_fullmatch / __gj_re_search aliases
+ *   gj_re_match_flags — BRE/ERE/ICASE/NEWLINE bitmask soft deepen
+ *   __gj_re_match / __gj_re_fullmatch / __gj_re_search / __gj_re_match_flags
  *   __libcgj_batch80_marker = "libcgj-batch80"
+ *
+ * Soft deepen: ICASE / NEWLINE / BRE flag paths, shorthands \\d\\s\\w,
+ * null-arg reject in search entry.
  *
  * Supported ERE subset:
  *   . * + ? | ( ) [ ] [^ ] a-z ranges  ^ $  \-escapes for meta

@@ -174,3 +174,93 @@ int __xchacha20_xor(const unsigned char aKey[32],
                     const unsigned char aNonce[24], uint32_t uCounter,
                     const unsigned char *pIn, unsigned char *pOut, size_t cb)
     __attribute__((alias("xchacha20_xor")));
+
+/* ---- soft deepen: decrypt / IETF names / derive (unique) ---------------- */
+
+/*
+ * Stream cipher decrypt == XOR keystream (encrypt is involution).
+ * Distinct public name for graphs that probe decrypt.
+ */
+int
+chacha20_decrypt(const unsigned char aKey[32], const unsigned char aNonce[12],
+                 uint32_t uCounter, const unsigned char *pIn,
+                 unsigned char *pOut, size_t cb)
+{
+    return chacha20_xor(aKey, aNonce, uCounter, pIn, pOut, cb);
+}
+
+int __chacha20_decrypt(const unsigned char aKey[32],
+                       const unsigned char aNonce[12], uint32_t uCounter,
+                       const unsigned char *pIn, unsigned char *pOut, size_t cb)
+    __attribute__((alias("chacha20_decrypt")));
+
+/* IETF draft alias: same as chacha20_xor (12-byte nonce). */
+int
+chacha20_ietf_xor(const unsigned char aKey[32], const unsigned char aNonce[12],
+                  uint32_t uCounter, const unsigned char *pIn,
+                  unsigned char *pOut, size_t cb)
+{
+    return chacha20_xor(aKey, aNonce, uCounter, pIn, pOut, cb);
+}
+
+int __chacha20_ietf_xor(const unsigned char aKey[32],
+                        const unsigned char aNonce[12], uint32_t uCounter,
+                        const unsigned char *pIn, unsigned char *pOut, size_t cb)
+    __attribute__((alias("chacha20_ietf_xor")));
+
+int
+xchacha20_encrypt(const unsigned char aKey[32], const unsigned char aNonce[24],
+                  uint32_t uCounter, const unsigned char *pIn,
+                  unsigned char *pOut, size_t cb)
+{
+    return xchacha20_xor(aKey, aNonce, uCounter, pIn, pOut, cb);
+}
+
+int __xchacha20_encrypt(const unsigned char aKey[32],
+                        const unsigned char aNonce[24], uint32_t uCounter,
+                        const unsigned char *pIn, unsigned char *pOut, size_t cb)
+    __attribute__((alias("xchacha20_encrypt")));
+
+int
+xchacha20_decrypt(const unsigned char aKey[32], const unsigned char aNonce[24],
+                  uint32_t uCounter, const unsigned char *pIn,
+                  unsigned char *pOut, size_t cb)
+{
+    return xchacha20_xor(aKey, aNonce, uCounter, pIn, pOut, cb);
+}
+
+int __xchacha20_decrypt(const unsigned char aKey[32],
+                        const unsigned char aNonce[24], uint32_t uCounter,
+                        const unsigned char *pIn, unsigned char *pOut, size_t cb)
+    __attribute__((alias("xchacha20_decrypt")));
+
+/* IETF XChaCha encrypt alias (24-byte nonce). */
+int
+xchacha20_ietf_encrypt(const unsigned char aKey[32],
+                       const unsigned char aNonce[24], uint32_t uCounter,
+                       const unsigned char *pIn, unsigned char *pOut, size_t cb)
+{
+    return xchacha20_xor(aKey, aNonce, uCounter, pIn, pOut, cb);
+}
+
+int __xchacha20_ietf_encrypt(const unsigned char aKey[32],
+                             const unsigned char aNonce[24], uint32_t uCounter,
+                             const unsigned char *pIn, unsigned char *pOut,
+                             size_t cb)
+    __attribute__((alias("xchacha20_ietf_encrypt")));
+
+/*
+ * hchacha20_derive: same as hchacha20 — name used by some libsodium-shaped
+ * graphs for subkey derivation.
+ */
+int
+hchacha20_derive(const unsigned char aKey[32], const unsigned char aNonce[16],
+                 unsigned char aOut[32])
+{
+    return hchacha20(aKey, aNonce, aOut);
+}
+
+int __hchacha20_derive(const unsigned char aKey[32],
+                       const unsigned char aNonce[16], unsigned char aOut[32])
+    __attribute__((alias("hchacha20_derive")));
+

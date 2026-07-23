@@ -852,3 +852,95 @@ void __Blowfish_encipher(blf_ctx *c, uint32_t *l, uint32_t *r)
     __attribute__((alias("Blowfish_encipher")));
 void __Blowfish_encrypt(blf_ctx *c, uint32_t *d, uint16_t n)
     __attribute__((alias("Blowfish_encrypt")));
+
+/* ---- soft deepen: Blowfish decrypt + AES_options (unique) --------------- */
+
+void
+Blowfish_decipher(blf_ctx *c, uint32_t *xl, uint32_t *xr)
+{
+    uint32_t Xl, Xr;
+    int i;
+
+    if (c == NULL || xl == NULL || xr == NULL) {
+        return;
+    }
+    Xl = *xl;
+    Xr = *xr;
+    /* Inverse of Blowfish_encipher: P[17]..P[0], F on alternating halves. */
+    for (i = 17; i > 1; i -= 2) {
+        Xl ^= c->P[i];
+        Xr ^= b45_blf_f(c, Xl);
+        Xr ^= c->P[i - 1];
+        Xl ^= b45_blf_f(c, Xr);
+    }
+    Xl ^= c->P[1];
+    Xr ^= c->P[0];
+    *xl = Xr;
+    *xr = Xl;
+}
+
+void
+Blowfish_decrypt(blf_ctx *c, uint32_t *data, uint16_t blocks)
+{
+    uint32_t *d;
+    uint16_t i;
+
+    if (c == NULL || data == NULL) {
+        return;
+    }
+    d = data;
+    for (i = 0; i < blocks; i++) {
+        Blowfish_decipher(c, d, d + 1);
+        d += 2;
+    }
+}
+
+void __Blowfish_decipher(blf_ctx *c, uint32_t *l, uint32_t *r)
+    __attribute__((alias("Blowfish_decipher")));
+void __Blowfish_decrypt(blf_ctx *c, uint32_t *d, uint16_t n)
+    __attribute__((alias("Blowfish_decrypt")));
+
+/*
+ * Blowfish_stream2word: OpenBSD-shaped helper — fold key bytes into a
+ * big-endian uint32, cycling the key (used by expandstate variants).
+ */
+uint32_t
+Blowfish_stream2word(const uint8_t *pData, uint16_t cbData, uint16_t *pOff)
+{
+    uint32_t u;
+    uint16_t i;
+    uint16_t o;
+
+    u = 0;
+    if (pData == NULL || cbData == 0u) {
+        if (pOff != NULL) {
+            *pOff = 0;
+        }
+        return 0u;
+    }
+    o = (pOff != NULL) ? *pOff : 0u;
+    for (i = 0; i < 4u; i++) {
+        if (o >= cbData) {
+            o = 0;
+        }
+        u = (u << 8) | (uint32_t)pData[o];
+        o++;
+    }
+    if (pOff != NULL) {
+        *pOff = o;
+    }
+    return u;
+}
+
+uint32_t __Blowfish_stream2word(const uint8_t *p, uint16_t n, uint16_t *po)
+    __attribute__((alias("Blowfish_stream2word")));
+
+/* OpenSSL AES_options: report implementation flavor (table/integer). */
+const char *
+AES_options(void)
+{
+    return "aes(table)";
+}
+
+const char *__AES_options(void) __attribute__((alias("AES_options")));
+

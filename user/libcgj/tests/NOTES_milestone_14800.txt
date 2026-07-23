@@ -1,7 +1,15 @@
 Notes — continuum milestone 14800 soft host gates
 =================================================
 
-Scope: user/libcgj/tests/** only (CREATE-ONLY; Makefile not edited).
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_14800.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_14800.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch14791.c … graph_batch14800.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them.
 
 Harness
 -------
@@ -10,6 +18,8 @@ Existing host harness:
   - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
   - cgj_soft_milestone_14500.c  prior decade soft probe
   - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14700.c  prior decade soft probe
+  - cgj_soft_milestone_14900.c  later decade soft probe
 
 New CREATE-ONLY soft host probe:
   - cgj_soft_milestone_14800.c
@@ -42,20 +52,22 @@ file remains decade markers 14791–14800 only.
 
 Soft rule: missing → skip; present but wrong → hard fail.
 
-Parent wiring (outside tests/ exclusive scope)
-----------------------------------------------
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
 1. Wire graph_batch14776.c … graph_batch14800.c into CGJ_SRCS when
    advancing makefile_max to 14800 (CREATE-ONLY wave lands first).
 2. libc.map may lag milestone 14800 globals; add 14800 symbols under
-   GLIBC_2.2.5 global so dyn dlsym can resolve them.
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
 3. Rebuild: make libcgj  (or product SO + archive).
 4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
-   blocks once map exports are present.
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
 5. Soft gates only; bar3 remains open (gj_bar3_ready_14800 == 0).
 
 Manual run
 ----------
-# Dyn soft (product SO; soft-skip if symbols not exported yet):
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
 cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_14800 \
   user/libcgj/tests/cgj_soft_milestone_14800.c -ldl
 ./build/cgj_soft_milestone_14800

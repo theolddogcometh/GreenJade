@@ -7,6 +7,13 @@
  * isctype, __nl_langinfo_l, mcheck/mtrace, mq_getsetattr, __ns_name_*,
  * __libc_init_first/fcntl64/pthread_init.
  * Integer/pointer only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH20_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH20_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH20_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <ctype.h>
 #include <dlfcn.h>
@@ -124,6 +131,12 @@ __madvise(void *pAddr, size_t cb, int nAdvice)
 int
 lockf64(int nFd, int nCmd, off_t cbLen)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return lockf(nFd, nCmd, cbLen);
 }
 
@@ -132,6 +145,14 @@ lockf64(int nFd, int nCmd, off_t cbLen)
 void *
 __memmem(const void *pHay, size_t cbHay, const void *pNeedle, size_t cbNeedle)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pHay == NULL) {
+        return NULL;
+    }
+    if (pNeedle == NULL) {
+        return NULL;
+    }
+
     return memmem(pHay, cbHay, pNeedle, cbNeedle);
 }
 
@@ -160,12 +181,22 @@ __monstartup(unsigned long uLow, unsigned long uHigh)
 void *
 __libc_dlopen_mode(const char *szName, int nMode)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szName == NULL) {
+        return NULL;
+    }
+
     return dlopen(szName, nMode);
 }
 
 void *
 __libc_dlsym(void *pHandle, const char *szSymbol)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szSymbol == NULL) {
+        return NULL;
+    }
+
     return dlsym(pHandle, szSymbol);
 }
 
@@ -286,6 +317,12 @@ getaliasbyname_r(const char *szName, struct aliasent *pAl, char *szBuf,
 int
 __wprintf_chk(int nFlag, const wchar_t *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int r;
 
@@ -299,6 +336,12 @@ __wprintf_chk(int nFlag, const wchar_t *szFmt, ...)
 int
 __vwprintf_chk(int nFlag, const wchar_t *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)nFlag;
     return vwprintf(szFmt, ap);
 }
@@ -306,6 +349,16 @@ __vwprintf_chk(int nFlag, const wchar_t *szFmt, va_list ap)
 int
 __vfwprintf_chk(FILE *pF, int nFlag, const wchar_t *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)nFlag;
     return vfwprintf(pF, szFmt, ap);
 }
@@ -314,6 +367,16 @@ int
 __swprintf_chk(wchar_t *pBuf, size_t cBos, int nFlag, size_t cLen,
                const wchar_t *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int r;
 
@@ -331,6 +394,16 @@ int
 __vswprintf_chk(wchar_t *pBuf, size_t cBos, int nFlag, size_t cLen,
                 const wchar_t *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     (void)nFlag;
     if (cBos != (size_t)-1 && cLen > cBos) {
         __chk_fail();
@@ -341,6 +414,16 @@ __vswprintf_chk(wchar_t *pBuf, size_t cBos, int nFlag, size_t cLen,
 wchar_t *
 __fgetws_chk(wchar_t *sz, size_t cBos, int n, FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (n > 0 && cBos != (size_t)-1 && (size_t)n > cBos) {
         __chk_fail();
     }
@@ -350,6 +433,16 @@ __fgetws_chk(wchar_t *sz, size_t cBos, int n, FILE *pF)
 wchar_t *
 __fgetws_unlocked_chk(wchar_t *sz, size_t cBos, int n, FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (n > 0 && cBos != (size_t)-1 && (size_t)n > cBos) {
         __chk_fail();
     }
@@ -447,6 +540,12 @@ mq_getsetattr(mqd_t mq, const struct mq_attr *pNew, struct mq_attr *pOld)
 mqd_t
 __mq_open_2(const char *szName, int nOflag)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     /* Fortify: O_CREAT without mode is invalid for open-like APIs */
     if ((nOflag & O_CREAT) != 0) {
         errno = EINVAL;
@@ -506,6 +605,12 @@ __libc_init_first(int nArgc, char **ppArgv, char **ppEnv)
 int
 __libc_fcntl64(int nFd, int nCmd, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     va_list ap;
     void *pArg;
     int r;
@@ -530,18 +635,56 @@ __ns_name_compress(const char *szSrc, unsigned char *pDst, size_t cbDst,
                    const unsigned char **ppDnptrs,
                    const unsigned char **ppLastdnptr)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pDst == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppDnptrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppLastdnptr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return ns_name_compress(szSrc, pDst, cbDst, ppDnptrs, ppLastdnptr);
 }
 
 int
 __ns_name_ntop(const unsigned char *pSrc, char *szDst, size_t cbDst)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szDst == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return ns_name_ntop(pSrc, szDst, cbDst);
 }
 
 int
 __ns_name_pton(const char *szSrc, unsigned char *pDst, size_t cbDst)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pDst == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return ns_name_pton(szSrc, pDst, cbDst);
 }
 
@@ -549,6 +692,24 @@ int
 __ns_name_uncompress(const unsigned char *pMsg, const unsigned char *pEom,
                      const unsigned char *pSrc, char *szDst, size_t cbDst)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (pMsg == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pEom == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pSrc == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szDst == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return ns_name_uncompress(pMsg, pEom, pSrc, szDst, cbDst);
 }
 
@@ -557,12 +718,28 @@ __ns_name_uncompress(const unsigned char *pMsg, const unsigned char *pEom,
 int
 __utime(const char *szPath, const struct utimbuf *pTimes)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pTimes == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return utime(szPath, pTimes);
 }
 
 int
 __lockf64(int nFd, int nCmd, off_t cbLen)
 {
+    /* greppable: CGJ_GRAPH_BATCH20_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return lockf64(nFd, nCmd, cbLen);
 }
 

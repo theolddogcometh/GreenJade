@@ -12,9 +12,11 @@
  *   uint32_t __gj_libcgj_green_14600  (alias)
  *   __libcgj_batch14592_marker = "libcgj-batch14592"
  *
- * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique surface
- * only; no multi-def. Distinct from gj_*_14500 / gj_*_14400 / gj_*_14300 milestone
- * surfaces and sibling 14600 milestone symbols. No parent wires.
+ * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique
+ * gj_libcgj_green_14600 surface only; no multi-def. Distinct from gj_*_14500 /
+ * gj_*_14400 / gj_*_14300 milestone surfaces and sibling 14600 milestone
+ * symbols. No parent wires. Soft gates only (no Makefile / map / harness
+ * wires in this TU).
  * No __int128.
  *
  * Clean-room freestanding pure C (integer only). Compiles with
@@ -41,10 +43,10 @@ b14592_green(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_libcgj_green_14600 - soft continuum surface
+ * gj_libcgj_green_14600 - product libcgj green lamp for wave 14600
  *
  * Always returns 1u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * libc. No parent wires. Does not load or probe the product SO at runtime.
  */
 uint32_t
 gj_libcgj_green_14600(void)

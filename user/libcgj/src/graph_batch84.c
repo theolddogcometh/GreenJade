@@ -17,6 +17,8 @@
  *   - Scalar head/tail for sub-16-byte work and residual bytes.
  *   - Bulk path uses SSE2 16-byte unaligned loads/stores
  *     (_mm_loadu_si128 / _mm_storeu_si128) so all alignments are correct.
+ *   - Soft deepen: 32-byte (2×16) unroll on forward/backward bulk when
+ *     length permits; residual 16 then scalar.
  *   - memmove: forward when dst <= src (or no overlap); backward when
  *     regions overlap with dst > src.
  *   - Kernel builds must not compile this TU (no-SSE kernel policy).
@@ -86,7 +88,17 @@ b84_set_bytes(unsigned char *d, unsigned char v, size_t n)
 static void
 b84_copy_fwd_sse2(unsigned char *d, const unsigned char *s, size_t n)
 {
-	/* Process 16-byte chunks with unaligned SSE2 loads/stores. */
+	/* Soft deepen: 32-byte (2×16) unroll then 16-byte residual. */
+	while (n >= 32u) {
+		__m128i v0 = _mm_loadu_si128((const __m128i *)(const void *)s);
+		__m128i v1 =
+		    _mm_loadu_si128((const __m128i *)(const void *)(s + 16));
+		_mm_storeu_si128((__m128i *)(void *)d, v0);
+		_mm_storeu_si128((__m128i *)(void *)(d + 16), v1);
+		d += 32;
+		s += 32;
+		n -= 32u;
+	}
 	while (n >= 16u) {
 		__m128i v = _mm_loadu_si128((const __m128i *)(const void *)s);
 		_mm_storeu_si128((__m128i *)(void *)d, v);
@@ -104,8 +116,19 @@ b84_copy_bwd_sse2(unsigned char *d, const unsigned char *s, size_t n)
 {
 	/*
 	 * Walk from the high end so overlapping regions stay correct.
-	 * Unaligned 16-byte load/store of the trailing window each step.
+	 * Soft deepen: 32-byte trailing windows then 16-byte residual.
 	 */
+	while (n >= 32u) {
+		n -= 32u;
+		{
+			__m128i v0 = _mm_loadu_si128(
+			    (const __m128i *)(const void *)(s + n));
+			__m128i v1 = _mm_loadu_si128(
+			    (const __m128i *)(const void *)(s + n + 16));
+			_mm_storeu_si128((__m128i *)(void *)(d + n), v0);
+			_mm_storeu_si128((__m128i *)(void *)(d + n + 16), v1);
+		}
+	}
 	while (n >= 16u) {
 		n -= 16u;
 		{

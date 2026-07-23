@@ -10,6 +10,10 @@
  * Surface:
  *   pbkdf2_hmac_sm3 / __pbkdf2_hmac_sm3
  *   __libcgj_batch72_marker = "libcgj-batch72"
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: out NULL / iterations==0 → -1/EINVAL; pwd/salt NULL →
+ *   empty. SM3 from batch42 (extern). Does not define scrypt (batch46).
  */
 #include <errno.h>
 #include <stddef.h>
@@ -89,6 +93,12 @@ b72_hmac_sm3(const void *pKey, size_t cbKey, const void *pData, size_t cbData,
 
 /* ---- PBKDF2-HMAC-SM3 (RFC 8018) ---------------------------------------- */
 
+/*
+ * pbkdf2_hmac_sm3 — derive outlen bytes with HMAC-SM3 PRF.
+ * Returns 0 on success, -1 with errno (EINVAL/ENOMEM).
+ * out NULL, outlen==0, or iterations==0 → EINVAL.
+ * pwd/salt NULL treated as empty (length forced to 0).
+ */
 int
 pbkdf2_hmac_sm3(const unsigned char *pwd, size_t plen,
                 const unsigned char *salt, size_t slen, unsigned iterations,

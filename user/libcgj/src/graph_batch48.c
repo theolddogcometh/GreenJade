@@ -157,3 +157,115 @@ __res_iclose(void *pState, int nFree)
     (void)pState;
     (void)nFree;
 }
+
+/* ---- glibc idna lz helpers (ASCII-only freestanding) -------------------- */
+
+/*
+ * __idna_to_ascii_lz: convert domain to ACE/ASCII. Freestanding: pure-ASCII
+ * labels pass through into caller buffer; non-ASCII → EILSEQ.
+ * nFlags reserved (glibc IDNA_* bits ignored here).
+ */
+int
+__idna_to_ascii_lz(const char *szInput, char *szOut, size_t cbOut, int nFlags)
+{
+    size_t n;
+    size_t i;
+
+    (void)nFlags;
+    if (szInput == NULL || szOut == NULL || cbOut == 0u) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (!b48_ascii_label_ok(szInput)) {
+        errno = EILSEQ;
+        return -1;
+    }
+    n = strlen(szInput);
+    if (n + 1u > cbOut) {
+        errno = ENOSPC;
+        return -1;
+    }
+    for (i = 0; i <= n; i++) {
+        szOut[i] = szInput[i];
+    }
+    return 0;
+}
+
+int
+__idna_to_unicode_lzlz(const char *szInput, char **ppResult, int nFlags)
+{
+    (void)nFlags;
+    /* Round-trip: ACE/ASCII in → malloc'd Unicode-ish (ASCII) out. */
+    return b48_idna_ascii_passthrough(szInput, ppResult);
+}
+
+/* ---- nscd socket / map ref stubs (no nscd daemon) ----------------------- */
+
+/*
+ * __nscd_open_socket: glibc opens AF_UNIX to /var/run/nscd/socket.
+ * No nscd here — always fail with ENOENT so callers fall back to files/dns.
+ */
+int
+__nscd_open_socket(void)
+{
+    errno = ENOENT;
+    return -1;
+}
+
+/*
+ * __nscd_get_map_ref: map database ref for nscd shared mem. Stub: set
+ * *ppMap to NULL and return -1 so clients treat cache as unavailable.
+ */
+int
+__nscd_get_map_ref(int nDb, const char *szName, void **ppMap, void *pTimeout)
+{
+    (void)nDb;
+    (void)szName;
+    (void)pTimeout;
+    if (ppMap != NULL) {
+        *ppMap = NULL;
+    }
+    errno = ENOENT;
+    return -1;
+}
+
+/* Drop a held map ref (no-op when maps are never opened). */
+void
+__nscd_unmap(void *pMap)
+{
+    (void)pMap;
+}
+
+/* ---- extra NSS lookup2 thin wrappers (missing from earlier batches) ---- */
+
+/* Services/protocols already exist elsewhere — skip. Shadow may exist;
+ * provide weak netgroup/rpc only when not strong-defined (weak). */
+
+__attribute__((weak)) int
+__nss_initgroups_lookup2(void **ppNi, void **ppFct, void *pA, void *pB)
+{
+    (void)pA;
+    (void)pB;
+    if (ppNi != NULL) {
+        *ppNi = NULL;
+    }
+    if (ppFct != NULL) {
+        *ppFct = NULL;
+    }
+    errno = ENOSYS;
+    return -1;
+}
+
+/* ---- resolv soft deepen (file-less ninit helper) ------------------------ */
+
+/*
+ * __res_ninit_from_file: load resolver state from a path. Freestanding stub
+ * ignores path and delegates to res_init / global state.
+ */
+__attribute__((weak)) int
+__res_ninit_from_file(void *pState, const char *szPath)
+{
+    (void)szPath;
+    return __res_ninit(pState);
+}
+

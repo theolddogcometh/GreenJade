@@ -600,3 +600,31 @@ int __memcasecmp(const void *pA, const void *pB, size_t cb)
     __attribute__((alias("memcasecmp")));
 hrtime_t __gethrtime(void) __attribute__((alias("gethrtime")));
 hrtime_t __gethrvtime(void) __attribute__((alias("gethrvtime")));
+
+/* ---- soft deepen: gethrvtime_delta + uuid nil probe (unique) ------------ */
+
+hrtime_t
+gethrvtime_delta(hrtime_t t0)
+{
+    hrtime_t t1 = gethrvtime();
+
+    if (t1 < t0) {
+        return 0;
+    }
+    return t1 - t0;
+}
+
+hrtime_t __gethrvtime_delta(hrtime_t t0)
+    __attribute__((alias("gethrvtime_delta")));
+
+/* uuid_create_nil already exists; add boolean-shaped is-nil without status. */
+int
+uuid_is_nil_np(const void *pUuid)
+{
+    uint32_t uSt = 0;
+
+    return uuid_is_nil(pUuid, &uSt);
+}
+
+int __uuid_is_nil_np(const void *pUuid)
+    __attribute__((alias("uuid_is_nil_np")));

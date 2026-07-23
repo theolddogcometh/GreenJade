@@ -23,6 +23,10 @@
  * Extract: PRK = HMAC-Hash(salt, IKM); null/empty salt → HashLen zeros.
  * Expand:  OKM = first L octets of T(1)|T(2)|… with
  *          T(i) = HMAC-Hash(PRK, T(i-1)|info|i), T(0)=empty.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: prk/okm NULL or bad lengths → -1; salt/ikm/info NULL
+ *   allowed when corresponding length is 0. One-shot hkdf_sha* stay batch40.
  */
 #include <errno.h>
 #include <stddef.h>

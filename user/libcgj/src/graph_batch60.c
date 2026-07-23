@@ -6,6 +6,10 @@
  * Uses AES_set_encrypt_key / AES_encrypt from batch45 (no multi-def AES).
  * Integer/pointer only (no SSE). Clean-room from public NIST docs.
  * Does NOT define poly1305_* (batch42 owns those names).
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/iv/aad/pt/ct/tag NULL → encrypt/decrypt fail soft.
+ *   GHASH + AES-CTR GCM lite; AES primitives from batch45 (extern).
  */
 #include <stddef.h>
 #include <stdint.h>

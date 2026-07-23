@@ -454,3 +454,120 @@ __dl_deallocate_tls(void *pMem, int nDealloc)
 {
     _dl_deallocate_tls(pMem, nDealloc);
 }
+
+/* ---- soft deepen: missing underscored thr / cap / cookie aliases -------- */
+
+int
+__thr_continue(pthread_t th)
+{
+    return thr_continue(th);
+}
+
+int
+__thr_suspend(pthread_t th)
+{
+    return thr_suspend(th);
+}
+
+size_t
+__thr_min_stack(void)
+{
+    return thr_min_stack();
+}
+
+int
+__thr_main(void)
+{
+    return thr_main();
+}
+
+int
+__thr_kill(pthread_t th, int nSig)
+{
+    return thr_kill(th, nSig);
+}
+
+void
+__thr_exit(void *pStatus)
+{
+    thr_exit(pStatus);
+}
+
+int
+__thr_setconcurrency(int nLevel)
+{
+    return thr_setconcurrency(nLevel);
+}
+
+int
+__thr_getconcurrency(void)
+{
+    return thr_getconcurrency();
+}
+
+int
+__thr_sigsetmask(int nHow, const sigset_t *pSet, sigset_t *pOld)
+{
+    return thr_sigsetmask(nHow, pSet, pOld);
+}
+
+int
+__thr_keycreate(pthread_key_t *pKey, void (*pfn)(void *))
+{
+    return thr_keycreate(pKey, pfn);
+}
+
+int
+__thr_keydelete(pthread_key_t key)
+{
+    return thr_keydelete(key);
+}
+
+void *
+__thr_getspecific(pthread_key_t key)
+{
+    return thr_getspecific(key);
+}
+
+int
+__thr_setspecific(pthread_key_t key, void *pVal)
+{
+    return thr_setspecific(key, pVal);
+}
+
+cap_t
+__cap_get_proc(void)
+{
+    return cap_get_proc();
+}
+
+int
+__cap_set_proc(cap_t pCap)
+{
+    return cap_set_proc(pCap);
+}
+
+cap_t
+__cap_dup(cap_t pCap)
+{
+    return cap_dup(pCap);
+}
+
+ssize_t
+__cookie_read(void *pCookie, char *pBuf, size_t cb)
+{
+    return cookie_read(pCookie, pBuf, cb);
+}
+
+ssize_t
+__cookie_write(void *pCookie, const char *pBuf, size_t cb)
+{
+    return cookie_write(pCookie, pBuf, cb);
+}
+
+int
+__cookie_close(void *pCookie)
+{
+    return cookie_close(pCookie);
+}
+

@@ -11,7 +11,9 @@
  * Surface:
  *   gj_inflate(const unsigned char *in, size_t inlen,
  *              unsigned char *out, size_t *outlen);
- *   __gj_inflate  (alias)
+ *   int gj_inflate_kind(const unsigned char *in, size_t inlen);
+ *     Soft probe: 2=gzip, 1=zlib, 0=raw/unknown, -1=bad args.
+ *   __gj_inflate / __gj_inflate_kind  (aliases)
  *   __libcgj_batch76_marker = "libcgj-batch76"
  *
  * Semantics (zlib uncompress shape):
@@ -22,6 +24,9 @@
  *
  * Trailer checks use batch39 crc32_z / adler32_z (extern only).
  * Does NOT define inflate / uncompress / deflate / compress (avoid multi-def).
+ *
+ * Soft deepen: wrapper-kind probe without decompress, null *outlen reject,
+ * gzip/zlib trailer verify, FDICT reject path.
  */
 
 #include <errno.h>
@@ -774,6 +779,29 @@ gj_inflate(const unsigned char *pIn, size_t cbIn, unsigned char *pOut,
 	return 0;
 }
 
+/*
+ * gj_inflate_kind — soft deepen wrapper probe (no decompress, no trailer).
+ * Returns 2 gzip, 1 zlib, 0 raw/unknown DEFLATE candidate, -1 bad args.
+ * zlib detection matches gj_inflate (CMF/FLG + 31-check); does not reject
+ * FDICT here (caller may still fail on inflate).
+ */
+int
+gj_inflate_kind(const unsigned char *pIn, size_t cbIn)
+{
+	if (pIn == NULL || cbIn == 0u) {
+		return -1;
+	}
+	if (b76_is_gzip(pIn, cbIn)) {
+		return 2;
+	}
+	if (b76_is_zlib(pIn, cbIn)) {
+		return 1;
+	}
+	return 0;
+}
+
 int __gj_inflate(const unsigned char *pIn, size_t cbIn, unsigned char *pOut,
                  size_t *pcbOut)
     __attribute__((alias("gj_inflate")));
+int __gj_inflate_kind(const unsigned char *pIn, size_t cbIn)
+    __attribute__((alias("gj_inflate_kind")));

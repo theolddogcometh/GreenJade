@@ -39,7 +39,7 @@ static char g_szCwd[96] = "/";
 #define GJ_LINUX_O_CREAT   0x40u
 
 /**
- * Soft path promise gate for open/openat/creat.
+ * Soft path promise gate for open/openat/creat/openat2.
  * RDONLY → RPATH; WRONLY → WPATH; RDWR → RPATH|WPATH; O_CREAT → +CPATH.
  * Returns 0 or -LINUX_EACCES.
  */
@@ -69,6 +69,25 @@ promise_gate_open_flags(u32 u32Flags, int fCreatForce)
         return i64R;
     }
     return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+}
+
+/* Soft path promise helpers (ambient / NULL proc ⇒ 0). */
+static i64
+promise_gate_rpath(void)
+{
+    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+}
+
+static i64
+promise_gate_wpath(void)
+{
+    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+}
+
+static i64
+promise_gate_cpath(void)
+{
+    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_CPATH);
 }
 
 static void
@@ -170,6 +189,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (cb > sizeof(aBuf)) {
             cb = sizeof(aBuf);
         }
+        if (cb > 0 && pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
         i64R = vfs_ram_read((i64)pRegs->u64Arg0, aBuf, cb);
         if (i64R <= 0) {
             return i64R;
@@ -191,6 +213,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         cb = (size_t)pRegs->u64Arg2;
         if (cb > sizeof(aBuf)) {
             cb = sizeof(aBuf);
+        }
+        if (cb > 0 && pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
         }
         if (user_range_ok(pRegs->u64Arg1, cb)) {
             st = copy_from_user(aBuf, pRegs->u64Arg1, cb);
@@ -686,6 +711,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             if (cb > sizeof(aBuf)) {
                 cb = sizeof(aBuf);
             }
+            if (cb > 0 && pRegs->u64Arg1 == 0) {
+                return -LINUX_EFAULT;
+            }
             if (user_range_ok(pRegs->u64Arg1, cb)) {
                 if (copy_from_user(aBuf, pRegs->u64Arg1, cb) != GJ_OK) {
                     return -LINUX_EFAULT;
@@ -766,6 +794,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             if (cb > sizeof(aBuf)) {
                 cb = sizeof(aBuf);
             }
+            if (cb > 0 && pRegs->u64Arg1 == 0) {
+                return -LINUX_EFAULT;
+            }
             i64N = net_lo_recv((i64)pRegs->u64Arg0, aBuf, cb);
             if (i64N <= 0) {
                 return i64N;
@@ -791,8 +822,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 base = 0;
         u64 len = 0;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0) || u64Msg == 0) {
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
             return -LINUX_EBADF;
+        }
+        if (u64Msg == 0) {
+            return -LINUX_EFAULT;
         }
         if (user_range_ok(u64Msg + 16, 16)) {
             (void)copy_from_user(&u64Iov, u64Msg + 16, 8);
@@ -1005,6 +1039,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64St;
         int nFlags = (pRegs->u64Nr == LINUX_NR_pipe2) ? (int)pRegs->u64Arg1 : 0;
 
+        if (pRegs->u64Arg0 == 0) {
+            return -LINUX_EFAULT;
+        }
         i64St = vfs_ram_pipe2(aFds, nFlags);
         if (i64St != 0) {
             return i64St;
@@ -1025,6 +1062,9 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i32 aFds[2];
         i64 i64St;
 
+        if (pRegs->u64Arg3 == 0) {
+            return -LINUX_EFAULT;
+        }
         i64St = vfs_ram_socketpair((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
                                    (int)pRegs->u64Arg2, aFds);
         if (i64St != 0) {
@@ -1177,6 +1217,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return vfs_ram_inotify_init1((int)pRegs->u64Arg0);
 
     case LINUX_NR_inotify_add_watch: {
+        i64 i64Gate;
+
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1195,7 +1241,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         char szNew[96];
         u64 u64Old = pRegs->u64Arg1;
         u64 u64New = pRegs->u64Arg3;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Old);
         copy_path_from_arg(szNew, sizeof(szNew), u64New);
         if (szPath[0] == '\0' || szNew[0] == '\0') {
@@ -1207,7 +1258,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_linkat: {
         /* linkat(olddirfd, old, newdirfd, new, flags) */
         char szNew[96];
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg3);
         if (szPath[0] == '\0' || szNew[0] == '\0') {
@@ -1219,7 +1275,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_symlinkat: {
         /* symlinkat(target, newdirfd, linkpath) */
         char szNew[96];
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg2);
         if (szPath[0] == '\0' || szNew[0] == '\0') {
@@ -1447,7 +1508,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         char aLink[64];
         i64 n;
         size_t cb = (size_t)pRegs->u64Arg3;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1476,7 +1542,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_fchmodat2: {
         i64 i64Fd;
         i64 st;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_wpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1551,7 +1622,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_readlink: {
         char aLink[64];
         i64 n;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1636,7 +1712,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                                                            : pRegs->u64Arg0;
         int nMode = (pRegs->u64Nr == LINUX_NR_faccessat) ? (int)pRegs->u64Arg2
                                                          : (int)pRegs->u64Arg1;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1675,7 +1756,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Buf = (pRegs->u64Nr == LINUX_NR_newfstatat) ? pRegs->u64Arg2
                                                            : pRegs->u64Arg1;
         i64 st;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1703,13 +1789,24 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         /* Namespace ops: no-op success for bring-up */
         return 0;
 
-    case LINUX_NR_chroot:
+    case LINUX_NR_chroot: {
+        i64 i64Gate;
+
+        /* Soft: confined processes have no chroot privilege (no promise bit). */
+        if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
+            return -LINUX_EACCES;
+        }
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         /* Accept only if path exists */
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
         }
         return vfs_ram_access(szPath, 0);
+    }
 
     case LINUX_NR_mount:
     case LINUX_NR_umount2:
@@ -1828,7 +1925,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_chdir: {
         size_t n;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1872,7 +1974,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_symlink: {
         char szTarget[96];
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szTarget, sizeof(szTarget), pRegs->u64Arg0);
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szTarget[0] == '\0' || szPath[0] == '\0') {
@@ -1885,7 +1992,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_utimensat: {
         u64 u64Path = (pRegs->u64Nr == LINUX_NR_utimensat) ? pRegs->u64Arg1
                                                            : pRegs->u64Arg0;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_wpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1928,7 +2040,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_unlinkat: {
         u64 u64Path = (pRegs->u64Nr == LINUX_NR_unlinkat) ? pRegs->u64Arg1
                                                           : pRegs->u64Arg0;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1938,7 +2055,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_link: {
         char szNew[96];
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg1);
         if (szPath[0] == '\0' || szNew[0] == '\0') {
@@ -1948,6 +2070,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_rmdir: {
+        i64 i64Gate;
+
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -1988,6 +2116,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     case LINUX_NR_chmod: {
+        i64 i64Gate;
+
+        i64Gate = promise_gate_wpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -2000,7 +2134,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
 
     case LINUX_NR_rename: {
         char szNew[96];
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg1);
         if (szPath[0] == '\0' || szNew[0] == '\0') {
@@ -2018,7 +2157,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Path = (pRegs->u64Nr == LINUX_NR_mkdirat) ? pRegs->u64Arg1
                                                          : pRegs->u64Arg0;
         i64 i64Fd;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_cpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), u64Path);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -2054,6 +2198,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             u64Buf = pRegs->u64Arg1;
         } else {
+            i64 i64Gate;
+
+            i64Gate = promise_gate_rpath();
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
             copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
             if (szPath[0] == '\0') {
                 return -LINUX_EFAULT;
@@ -2088,6 +2238,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64How = pRegs->u64Arg2;
         u64 u64Flags = 0;
         u64 u64Mode = 0;
+        i64 i64Gate;
 
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
@@ -2103,12 +2254,21 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
         }
         (void)u64Mode;
-        return vfs_ram_open(szPath, (u64Flags & 0x40) ? 1 : 0);
+        i64Gate = promise_gate_open_flags((u32)u64Flags, 0);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        return vfs_ram_open(szPath, (u64Flags & GJ_LINUX_O_CREAT) ? 1 : 0);
     }
 
     case LINUX_NR_faccessat2: {
         int nMode = (int)pRegs->u64Arg2;
+        i64 i64Gate;
 
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
@@ -2131,10 +2291,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u32 u32Mode = 0;
         i64 i64Size = 0;
         u64 u64Ino = 1;
+        i64 i64Gate;
 
         (void)u32Mask;
         if (u64Buf == 0) {
             return -LINUX_EFAULT;
+        }
+        i64Gate = promise_gate_rpath();
+        if (i64Gate != 0) {
+            return i64Gate;
         }
         memset(aStat, 0, sizeof(aStat));
         memset(aSx, 0, sizeof(aSx));
@@ -2418,7 +2583,15 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         i64 i64Fd = (i64)pRegs->u64Arg0;
         u32 u32Sig = (u32)pRegs->u64Arg1;
         u32 u32Pid;
+        i64 i64Gate;
 
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        if (i64Fd < 0) {
+            return -LINUX_EBADF;
+        }
         u32Pid = vfs_ram_pidfd_pid(i64Fd);
         if (u32Pid == 0) {
             return -LINUX_EBADF;

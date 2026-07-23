@@ -405,3 +405,52 @@ void __sm3_final(unsigned char a[32], void *p)
     __attribute__((alias("sm3_final")));
 void __sm3_hash(const void *d, size_t n, unsigned char a[32])
     __attribute__((alias("sm3_hash")));
+
+/* ---- soft deepen: SM3_End hex + ctx size (unique; SM3_Data in batch42) -- */
+
+char *
+SM3_End(void *pCtx, char *szBuf)
+{
+    unsigned char aDig[32];
+
+    sm3_final(aDig, pCtx);
+    return b44_hex_end(aDig, 32u, szBuf);
+}
+
+char *__SM3_End(void *pCtx, char *szBuf) __attribute__((alias("SM3_End")));
+
+size_t
+sm3_ctx_size(void)
+{
+    return sizeof(struct b44_sm3);
+}
+
+size_t __sm3_ctx_size(void) __attribute__((alias("sm3_ctx_size")));
+
+size_t
+MD2_size(void)
+{
+    return sizeof(struct b44_md2);
+}
+
+size_t __MD2_size(void) __attribute__((alias("MD2_size")));
+
+/* Hex one-shot already as MD2Data; binary one-shot unique name. */
+int
+MD2_digest(const void *pData, size_t cb, unsigned char aDig[16])
+{
+    unsigned char aCtx[sizeof(struct b44_md2) + 8u];
+
+    if (aDig == NULL) {
+        return -1;
+    }
+    memset(aCtx, 0, sizeof(aCtx));
+    MD2Init(aCtx);
+    MD2Update(aCtx, pData, cb);
+    MD2Final(aDig, aCtx);
+    return 0;
+}
+
+int __MD2_digest(const void *pData, size_t cb, unsigned char aDig[16])
+    __attribute__((alias("MD2_digest")));
+

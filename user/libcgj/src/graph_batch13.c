@@ -6,6 +6,13 @@
  * stdio_ext (__fbufsize/__freading/...), reentrant netdb/pwd/grp, dn_*,
  * dladdr1/dlinfo/dlmopen stubs, ftok/ftime/dysize, quick_exit/at_quick,
  * netent, fmtmsg. Integer/pointer only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH13_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH13_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH13_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <assert.h>
 #include <dlfcn.h>
@@ -49,12 +56,24 @@ int  __cxa_atexit(void (*pfn)(void *), void *pArg, void *pDso);
 int
 __close(int nFd)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return close(nFd);
 }
 
 int
 __close_nocancel(int nFd)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
     return close(nFd);
 }
 
@@ -98,6 +117,12 @@ __bsd_getpgrp(void)
 int
 __getrlimit(int nResource, struct rlimit *pRlim)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pRlim == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getrlimit(nResource, pRlim);
 }
 
@@ -116,6 +141,16 @@ __getauxval(unsigned long uType)
 struct tm *
 __gmtime_r(const time_t *pT, struct tm *pTm)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pT == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pTm == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return gmtime_r(pT, pTm);
 }
 
@@ -140,18 +175,44 @@ __freelocale(locale_t loc)
 int
 __endmntent(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     return endmntent(pF);
 }
 
 struct mntent *
 __getmntent_r(FILE *pF, struct mntent *pMnt, char *szBuf, int nBufSize)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (pMnt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return getmntent_r(pF, pMnt, szBuf, nBufSize);
 }
 
 void
 __explicit_bzero_chk(void *p, size_t cb, size_t cbObj)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (p == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (cb > cbObj) {
         __fortify_fail("explicit_bzero");
     }
@@ -163,6 +224,16 @@ __explicit_bzero_chk(void *p, size_t cb, size_t cbObj)
 void
 __assert(const char *szExpr, const char *szFile, int nLine)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szExpr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFile == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     __assert_fail(szExpr, szFile, (unsigned)nLine, "");
 }
 
@@ -274,6 +345,12 @@ __fwriting(FILE *pF)
 int
 __fsetlocking(FILE *pF, int nType)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     /* Bring-up: locking is process-global / none; accept any type. */
     (void)pF;
     (void)nType;
@@ -283,6 +360,17 @@ __fsetlocking(FILE *pF, int nType)
 FILE *
 freopen64(const char *szPath, const char *szMode, FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szPath == NULL) {
+        return NULL;
+    }
+    if (szMode == NULL) {
+        return NULL;
+    }
+    if (pF == NULL) {
+        return NULL;
+    }
+
     return freopen(szPath, szMode, pF);
 }
 
@@ -598,6 +686,12 @@ gethostbyname_r(const char *szName, struct hostent *pResult, char *szBuf,
 struct hostent *
 gethostbyname2(const char *szName, int nAf)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (nAf != AF_INET) {
         h_errno = NO_RECOVERY;
         errno = EAFNOSUPPORT;
@@ -693,6 +787,28 @@ int
 getservbyname_r(const char *szName, const char *szProto, struct servent *pResult,
                 char *szBuf, size_t cb, struct servent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szProto == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return servent_copy(getservbyname(szName, szProto), pResult, szBuf, cb,
                         ppResult);
 }
@@ -701,6 +817,24 @@ int
 getservbyport_r(int nPort, const char *szProto, struct servent *pResult,
                 char *szBuf, size_t cb, struct servent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szProto == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return servent_copy(getservbyport(nPort, szProto), pResult, szBuf, cb,
                         ppResult);
 }
@@ -709,6 +843,20 @@ int
 getservent_r(struct servent *pResult, char *szBuf, size_t cb,
              struct servent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return servent_copy(getservent(), pResult, szBuf, cb, ppResult);
 }
 
@@ -747,6 +895,24 @@ int
 getprotobyname_r(const char *szName, struct protoent *pResult, char *szBuf,
                  size_t cb, struct protoent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szName == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return protoent_copy(getprotobyname(szName), pResult, szBuf, cb, ppResult);
 }
 
@@ -754,6 +920,20 @@ int
 getprotobynumber_r(int nProto, struct protoent *pResult, char *szBuf, size_t cb,
                    struct protoent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return protoent_copy(getprotobynumber(nProto), pResult, szBuf, cb,
                          ppResult);
 }
@@ -762,6 +942,20 @@ int
 getprotoent_r(struct protoent *pResult, char *szBuf, size_t cb,
               struct protoent **ppResult)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppResult == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return protoent_copy(getprotoent(), pResult, szBuf, cb, ppResult);
 }
 
@@ -991,6 +1185,16 @@ dn_skipname(const unsigned char *pComp, const unsigned char *pEom)
 int
 __dn_skipname(const unsigned char *pComp, const unsigned char *pEom)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pComp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pEom == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return dn_skipname(pComp, pEom);
 }
 
@@ -1080,6 +1284,24 @@ int
 __dn_expand(const unsigned char *pMsg, const unsigned char *pEomOrig,
             const unsigned char *pComp, char *szExp, int nExp)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (pMsg == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pEomOrig == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pComp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szExp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return dn_expand(pMsg, pEomOrig, pComp, szExp, nExp);
 }
 
@@ -1139,6 +1361,24 @@ int
 __dn_comp(const char *szExp, unsigned char *pComp, int nComp,
           unsigned char **ppDnptrs, unsigned char **ppLastdnptr)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szExp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pComp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppDnptrs == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (ppLastdnptr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return dn_comp(szExp, pComp, nComp, ppDnptrs, ppLastdnptr);
 }
 
@@ -1165,6 +1405,11 @@ dlinfo(void *pHandle, int nRequest, void *pArg)
 void *
 dlmopen(long nNs, const char *szFile, int nMode)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szFile == NULL) {
+        return NULL;
+    }
+
     (void)nNs;
     return dlopen(szFile, nMode);
 }
@@ -1249,6 +1494,24 @@ int
 fmtmsg(long nClass, const char *szLabel, int nSev, const char *szText,
        const char *szAction, const char *szTag)
 {
+    /* greppable: CGJ_GRAPH_BATCH13_SOFT_NULL */
+    if (szLabel == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szText == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szAction == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szTag == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     const char *szSev = "";
 
     (void)nClass;

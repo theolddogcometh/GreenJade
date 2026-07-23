@@ -18,6 +18,10 @@
  * Field: GF(2^255-19) as five 51-bit limbs (same layout as batch64).
  * Group: extended twisted Edwards (X:Y:Z:T) with XY = ZT, a = -1.
  * Curve: -x^2 + y^2 = 1 + d x^2 y^2, d = -121665/121666.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: sk/pk/msg/sig NULL → public_key/sign no-op; verify -1.
+ *   Does not redefine x25519 (batch64). SHA-512 from batch31 (extern).
  */
 #include <stddef.h>
 #include <stdint.h>

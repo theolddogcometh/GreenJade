@@ -1,6 +1,7 @@
 # Steam on hardware-test media (options 2 + 3)
 
 **Bar3 status (product ceiling):** **OPEN.** Media path + host prep are **wired**.  
+**Soft stamp (2026-07-23):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Bar3 client + matrix still **OPEN** / **NOT-TRIED**.  
 **Kernel/surface done does not equal bar3 client run.** Continuum **makefile_max=14900** is soft graph growth only.  
 Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  

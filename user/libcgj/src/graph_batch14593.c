@@ -12,9 +12,11 @@
  *   uint32_t __gj_bar3_ready_14600  (alias)
  *   __libcgj_batch14593_marker = "libcgj-batch14593"
  *
- * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique surface
- * only; no multi-def. Distinct from gj_*_14500 / gj_*_14400 / gj_*_14300 milestone
- * surfaces and sibling 14600 milestone symbols. No parent wires.
+ * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique
+ * gj_bar3_ready_14600 surface only; no multi-def. Distinct from gj_*_14500 /
+ * gj_*_14400 / gj_*_14300 milestone surfaces and sibling 14600 milestone
+ * symbols. No parent wires. Soft gates only (no Makefile / map / harness
+ * wires in this TU). bar3 remains open (Steam client / Deck Top-50).
  * No __int128.
  *
  * Clean-room freestanding pure C (integer only). Compiles with
@@ -41,10 +43,10 @@ b14593_ready(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_bar3_ready_14600 - soft continuum surface
+ * gj_bar3_ready_14600 - bar3 readiness lamp for wave 14600
  *
- * Always returns 0u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 0u (still open). Soft pure-data readiness lamp for
+ * Steam/Deck/Top50. Does not call libc. No parent wires.
  */
 uint32_t
 gj_bar3_ready_14600(void)

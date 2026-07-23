@@ -10,6 +10,9 @@
  *   uint64_t gj_xxh3_64(const void *data, size_t len);
  *   void     gj_xxh3_128(const void *data, size_t len, uint64_t out[2]);
  *   __gj_xxh3_64 / __gj_xxh3_128  (aliases)
+ *
+ * Soft deepen: short/mid/long length bands, SSE2 long accumulate, null
+ * data+len reject, 128-bit out[0]=lo out[1]=hi.
  *   __libcgj_batch98_marker = "libcgj-batch98"
  *
  * Design:

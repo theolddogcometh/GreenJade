@@ -642,3 +642,23 @@ void __SHA3_256_Update(void *p, const void *d, size_t n)
     __attribute__((alias("SHA3_256_Update")));
 void __SHA3_256_Final(unsigned char a[32], void *p)
     __attribute__((alias("SHA3_256_Final")));
+
+/* ---- soft deepen: HMAC-SHA256 oneshot name (unique) --------------------- */
+
+void hmac_sha256(const void *pKey, size_t cbKey, const void *pData, size_t cbData,
+                 unsigned char aOut[32]);
+
+int
+hmac_sha256_oneshot(const void *pKey, size_t cbKey, const void *pData,
+                    size_t cbData, unsigned char aOut[32])
+{
+    if (aOut == NULL) {
+        return -1;
+    }
+    hmac_sha256(pKey, cbKey, pData, cbData, aOut);
+    return 0;
+}
+
+int __hmac_sha256_oneshot(const void *pKey, size_t cbKey, const void *pData,
+                          size_t cbData, unsigned char aOut[32])
+    __attribute__((alias("hmac_sha256_oneshot")));

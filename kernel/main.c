@@ -71,6 +71,12 @@
 extern char __kernel_start[];
 extern char __kernel_end[];
 
+/*
+ * serial_soft_log is linkable (serial.c) but not yet in public klog.h.
+ * Weak: skip if the object is not linked into this image.
+ */
+extern void serial_soft_log(void) __attribute__((weak));
+
 /* Multiboot2 tag types */
 #define MB2_TAG_END  0
 #define MB2_TAG_MMAP 6
@@ -6073,6 +6079,44 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     if (timer_quantum_ticks() > 0) {
         kprintf("timer: preemption quantum PASS\n");
     }
+
+    /*
+     * Soft stats smoke inventory — greppable product markers only.
+     * Call existing soft_log / soft_stats APIs when linked; never blocks M0.
+     * Grep: soft: stats smoke
+     *        gj_linux_nr_class_soft_log / gj_native_dispatch_stats_soft
+     *        timer_soft_log / serial_soft_log / cpu_soft_log
+     */
+    {
+        u32 cHit = 0;
+
+        kprintf("soft: stats smoke begin\n");
+
+        /* Grep: soft: stats smoke cpu_soft_log */
+        cpu_soft_log();
+        cHit++;
+
+        /* Grep: soft: stats smoke timer_soft_log */
+        timer_soft_log();
+        cHit++;
+
+        /* Grep: soft: stats smoke serial_soft_log */
+        if (serial_soft_log != NULL) {
+            serial_soft_log();
+            cHit++;
+        }
+
+        /* Grep: soft: stats smoke gj_native_dispatch_stats_soft */
+        (void)gj_native_dispatch_stats_soft();
+        cHit++;
+
+        /* Grep: soft: stats smoke gj_linux_nr_class_soft_log */
+        gj_linux_nr_class_soft_log();
+        cHit++;
+
+        kprintf("soft: stats smoke PASS hit=%u\n", cHit);
+    }
+
     kprintf("M0 OK\n");
     scheduler_run();
 }

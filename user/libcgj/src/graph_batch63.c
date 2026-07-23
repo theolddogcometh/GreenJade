@@ -17,6 +17,10 @@
  *   blake3_hasher_init / blake3_hasher_update / blake3_hasher_finalize
  *   blake3_hash (one-shot)
  * Marker: __libcgj_batch63_marker = "libcgj-batch63"
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: hasher/data/out NULL → init/update/finalize/hash no-op.
+ *   BLAKE3 chunk/parent tree; does not redefine BLAKE2b (batch38).
  */
 #include <stddef.h>
 #include <stdint.h>

@@ -12,13 +12,21 @@
  *   double fabs(double x);
  *   float  fabsf(float x);
  *   double floor(double x);
+ *   float  floorf(float x);
  *   double ceil(double x);
+ *   float  ceilf(float x);
+ *   double trunc(double x);
+ *   float  truncf(float x);
+ *   __sqrt / __sqrtf / __fabs / __fabsf / __floor / __floorf /
+ *   __ceil / __ceilf / __trunc / __truncf  (aliases)
  *   __libcgj_batch92_marker = "libcgj-batch92"
  *
  * Notes:
  *   - Userspace builds already pass -msse2; soft float via SSE is OK.
- *   - floor/ceil use IEEE bit paths (no x87, no libm, careful vs cast).
+ *   - floor/ceil/trunc use IEEE bit paths (no x87, no libm, careful vs cast).
  *   - No multi-def: grep showed no existing sqrt/fabs/floor/ceil bodies.
+ *
+ * Soft deepen: float twins, trunc toward-zero, underscored aliases.
  */
 
 #include <stdint.h>
@@ -183,3 +191,86 @@ ceil(double dX)
 	ub.u64 = uBits;
 	return ub.d;
 }
+
+/* ---- trunc: toward zero (strip fraction, keep sign) -------------------- */
+
+double
+trunc(double dX)
+{
+	b92_dbits ub;
+	uint64_t uBits;
+	int nExp;
+	uint64_t uMask;
+
+	ub.d = dX;
+	uBits = ub.u64;
+	nExp = (int)((uBits >> 52) & 0x7ffULL) - 1023;
+
+	if (nExp >= 52) {
+		return dX; /* NaN / Inf / integral */
+	}
+	if (nExp < 0) {
+		/* |x| < 1 → signed zero */
+		ub.u64 = uBits & 0x8000000000000000ULL;
+		return ub.d;
+	}
+
+	uMask = (1ULL << (52 - nExp)) - 1ULL;
+	uBits &= ~uMask;
+	ub.u64 = uBits;
+	return ub.d;
+}
+
+/* ---- float twins (soft deepen) ---------------------------------------- */
+
+float
+floorf(float fltX)
+{
+	return (float)floor((double)fltX);
+}
+
+float
+ceilf(float fltX)
+{
+	return (float)ceil((double)fltX);
+}
+
+float
+truncf(float fltX)
+{
+	b92_fbits ub;
+	uint32_t uBits;
+	int nExp;
+	uint32_t uMask;
+
+	ub.flt = fltX;
+	uBits = ub.u32;
+	nExp = (int)((uBits >> 23) & 0xffu) - 127;
+
+	if (nExp >= 23) {
+		return fltX;
+	}
+	if (nExp < 0) {
+		ub.u32 = uBits & 0x80000000u;
+		return ub.flt;
+	}
+
+	uMask = (1u << (23 - nExp)) - 1u;
+	uBits &= ~uMask;
+	ub.u32 = uBits;
+	return ub.flt;
+}
+
+/* ---- aliases ----------------------------------------------------------- */
+
+double __sqrt(double dX) __attribute__((alias("sqrt")));
+float __sqrtf(float fltX) __attribute__((alias("sqrtf")));
+double __fabs(double dX) __attribute__((alias("fabs")));
+float __fabsf(float fltX) __attribute__((alias("fabsf")));
+double __floor(double dX) __attribute__((alias("floor")));
+float __floorf(float fltX) __attribute__((alias("floorf")));
+double __ceil(double dX) __attribute__((alias("ceil")));
+float __ceilf(float fltX) __attribute__((alias("ceilf")));
+double __trunc(double dX) __attribute__((alias("trunc")));
+float __truncf(float fltX) __attribute__((alias("truncf")));
+

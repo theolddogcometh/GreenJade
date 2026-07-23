@@ -13,6 +13,8 @@
  * This TU adds only the missing double-return APIs:
  *   double drand48(void);
  *   double erand48(unsigned short xsubi[3]);
+ *   double gj_drand48_unit(const unsigned short x[3]); // soft: bits→[0,1)
+ *   __drand48 / __erand48 / __gj_drand48_unit  (aliases)
  *   __libcgj_batch88_marker = "libcgj-batch88"
  *
  * State: rand48.c keeps g_x / g_a / g_c static (not exported). This TU
@@ -22,6 +24,9 @@
  * Conversion: after the 48-bit LCG step, return u * 2^-48 ∈ [0.0, 1.0).
  * Double return requires SSE under the SysV AMD64 ABI.
  * No third-party rand48 source was copied.
+ *
+ * Soft deepen: pure unit conversion helper, NULL erand48 → 0.0, underscored
+ * aliases, fallback local LCG if seed48 snapshot fails.
  */
 
 #include <stddef.h>
@@ -119,3 +124,24 @@ drand48(void)
 	g_b88_x[2] = aX[2];
 	return b88_x48_to_unit(aX);
 }
+
+/*
+ * gj_drand48_unit — soft deepen pure conversion: 48-bit state → [0.0, 1.0)
+ * without stepping the LCG. NULL → 0.0. Useful for tests and non-mutating
+ * inspection of a seed48 snapshot.
+ */
+double
+gj_drand48_unit(const unsigned short x[3])
+{
+	if (x == NULL) {
+		return 0.0;
+	}
+	return b88_x48_to_unit(x);
+}
+
+double __drand48(void) __attribute__((alias("drand48")));
+double __erand48(unsigned short xsubi[3])
+    __attribute__((alias("erand48")));
+double __gj_drand48_unit(const unsigned short x[3])
+    __attribute__((alias("gj_drand48_unit")));
+

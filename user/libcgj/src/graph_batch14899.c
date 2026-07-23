@@ -11,10 +11,18 @@
  *   uint32_t __gj_continuum_wave_14900  (alias)
  *   __libcgj_batch14899_marker = "libcgj-batch14899"
  *
- * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique surface
- * only; no multi-def. Distinct from gj_*_14800 / gj_*_14700 / gj_*_14600 milestone
- * surfaces and sibling 14900 milestone symbols. No parent wires.
- * No __int128.
+ * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique
+ * gj_continuum_wave_14900 surface only; no multi-def. Distinct from
+ * gj_continuum_wave_14800 / gj_continuum_wave_14700 /
+ * gj_continuum_wave_14600, gj_milestone_tag_14900 (batch14898), and
+ * gj_batch_id_14900 / gj_graph_milestone_14900 (batch14900).
+ * No parent wires. No __int128.
+ *
+ * CGJ soft marker band (14891–14900): host soft probes
+ * (cgj_soft_milestone_14900.*) may dlsym / direct-link this lamp.
+ * Soft rule: missing symbol → skip; present but wrong value → hard fail.
+ * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
+ * makefile_max honesty is parent-side (scan → makefile_max=14900 when wired).
  *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
@@ -24,6 +32,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* CGJ TU marker: greppable continuum identity string for batch 14899. */
 const char __libcgj_batch14899_marker[] = "libcgj-batch14899";
 
 /* Exclusive continuum-wave id for milestone 14900. */
@@ -40,10 +49,11 @@ b14899_wave(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_continuum_wave_14900 - soft continuum surface
+ * gj_continuum_wave_14900 - report exclusive continuum wave id for 14900.
  *
- * Always returns 14900u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 14900u. Soft pure-data wave identity tag. Does not
+ * call libc. No parent wires.
+ * CGJ soft KAT expectation: 14900.
  */
 uint32_t
 gj_continuum_wave_14900(void)
@@ -54,5 +64,6 @@ gj_continuum_wave_14900(void)
 
 /* ---- underscored alias ------------------------------------------------- */
 
+/* CGJ alias: underscored form for map / weak-link compatibility. */
 uint32_t __gj_continuum_wave_14900(void)
     __attribute__((alias("gj_continuum_wave_14900")));

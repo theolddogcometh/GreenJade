@@ -484,3 +484,85 @@ int __argon2i_hash_raw(uint32_t uTCost, uint32_t uMCost, uint32_t uParallelism,
                        const void *pPwd, size_t cbPwd, const void *pSalt,
                        size_t cbSalt, void *pHash, size_t cbHash)
     __attribute__((alias("argon2i_hash_raw")));
+
+/* ---- soft deepen: param checks + argon2d ENOSYS surface (unique) -------- */
+
+/*
+ * scrypt_check: validate N/r/p against bring-up soft caps without allocating.
+ * Returns 0 if parameters are acceptable for scrypt(); -1 + errno otherwise.
+ */
+int
+scrypt_check(uint64_t uN, uint32_t uR, uint32_t uP)
+{
+    uint64_t uMem;
+
+    if (uN < 2u || (uN & (uN - 1u)) != 0u) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (uR == 0u || uP == 0u) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* V is N * 128 * r bytes; reject if over soft cap (same as scrypt). */
+    if (uR > (B46_SCRYPT_MAX_MEM / 128u)) {
+        errno = ENOMEM;
+        return -1;
+    }
+    uMem = uN * 128ull * (uint64_t)uR;
+    if (uMem > (uint64_t)B46_SCRYPT_MAX_MEM) {
+        errno = ENOMEM;
+        return -1;
+    }
+    return 0;
+}
+
+int __scrypt_check(uint64_t uN, uint32_t uR, uint32_t uP)
+    __attribute__((alias("scrypt_check")));
+
+/*
+ * pbkdf2_hmac_sha512_ex: same as pbkdf2_hmac_sha512 with explicit PRF id
+ * reserved for future (0 = HMAC-SHA512). Rejects unknown PRF.
+ */
+int
+pbkdf2_hmac_sha512_ex(const void *pPass, size_t cbPass,
+                      const unsigned char *pSalt, size_t cbSalt,
+                      unsigned long uIter, unsigned char *pOut, size_t cbOut,
+                      int nPrf)
+{
+    if (nPrf != 0) {
+        errno = ENOTSUP;
+        return -1;
+    }
+    return pbkdf2_hmac_sha512(pPass, cbPass, pSalt, cbSalt, uIter, pOut, cbOut);
+}
+
+int __pbkdf2_hmac_sha512_ex(const void *pPass, size_t cbPass,
+                            const unsigned char *pSalt, size_t cbSalt,
+                            unsigned long uIter, unsigned char *pOut,
+                            size_t cbOut, int nPrf)
+    __attribute__((alias("pbkdf2_hmac_sha512_ex")));
+
+int
+argon2d_hash_raw(uint32_t uTCost, uint32_t uMCost, uint32_t uParallelism,
+                 const void *pPwd, size_t cbPwd, const void *pSalt,
+                 size_t cbSalt, void *pHash, size_t cbHash)
+{
+    (void)uTCost;
+    (void)uMCost;
+    (void)uParallelism;
+    (void)pPwd;
+    (void)cbPwd;
+    (void)pSalt;
+    (void)cbSalt;
+    (void)pHash;
+    (void)cbHash;
+    errno = ENOSYS;
+    return -1;
+}
+
+int __argon2d_hash_raw(uint32_t uTCost, uint32_t uMCost, uint32_t uParallelism,
+                       const void *pPwd, size_t cbPwd, const void *pSalt,
+                       size_t cbSalt, void *pHash, size_t cbHash)
+    __attribute__((alias("argon2d_hash_raw")));
+

@@ -19,6 +19,10 @@
  *   SHA256_Init / SHA256_Update / SHA256_Final
  * HMAC-SHA256 is implemented locally (streaming) over those primitives;
  * does not re-export hmac_sha256 (batch38 owns that name).
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: ctx/seed/addin/out NULL → init/reseed/generate fail soft.
+ *   HMAC-DRBG SHA-256 (NIST SP 800-90A); SHA-256 from batch31/32.
  */
 #include <stddef.h>
 #include <stdint.h>

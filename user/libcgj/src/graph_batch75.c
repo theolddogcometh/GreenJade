@@ -21,6 +21,10 @@
  * Algorithms (public):
  *   SipHash-c-d  — Aumasson / Bernstein (c compression, d finalization rounds)
  *   HalfSipHash-2-4 — 32-bit word variant, 64-bit key, 32-bit tag
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key NULL → zero key; data NULL with len!=0 → tag 0.
+ *   Does not redefine siphash24 (batch36). Key-first + HalfSipHash only.
  */
 #include <stddef.h>
 #include <stdint.h>

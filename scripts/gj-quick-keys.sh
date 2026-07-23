@@ -12,6 +12,10 @@
 #   M0 OK, sshd live, scsi_mid live, multi-stream, multi-seg, shell live
 # Soft info only (never fail the gate):
 #   TRAP #UD count, soak_tib / pmm soak, sessiond/netstackd live, UEFI tags
+# Soft deepen / soft verify (info only — never hard-fail):
+#   serial: soft verify PASS|FAIL|idle   (x86 COM1; serial.c)
+#   aarch64: kmain soft PASS             (kmain phase summary)
+#   linux: nr class soft PASS|PARTIAL|NONE  (linux_dispatch NR table)
 #
 # Exit 0 if all presence keys hit; 1 if any missing (soft info reported only).
 # Exit-friendly: missing log / bad greps never leave the shell in a partial
@@ -96,6 +100,13 @@ info_check "sshd-gj path OK" 'sshd-gj: live path PASS'
 if gqa_q 'sshd-gj: live path FAIL'; then
   echo "  info: sshd-gj path FAIL  (present; soft — not a hard key)"
 fi
+
+# Soft deepen / soft verify markers (info only — never hard-fail the gate).
+# Grep: serial: soft verify · aarch64: kmain soft · linux: nr class soft
+echo "  --- soft verify deepen ---"
+info_check "serial soft verify" 'serial: soft verify'
+info_check "kmain soft"         'aarch64: kmain soft PASS|kmain soft PASS'
+info_check "nr class soft"      'linux: nr class soft'
 
 if [[ "$miss" -eq 0 ]]; then
   echo "gj-quick-keys: PASS miss=0 ud=$ud_n"

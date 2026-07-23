@@ -27,6 +27,7 @@
  *   greppable: "linux: nr class soft"
  *   greppable: GJ_LINUX_NR_TABLE
  *   gj_linux_nr_class_stats — table inventory + runtime deepen
+ *   gj_linux_nr_class_soft_log — safe pre-init (idle NONE); PASS needs integrity
  *   Coarse hits also mirrored on gj_linux_dispatch_stats (syscall.h)
  *
  * Registration contract
@@ -104,9 +105,14 @@ void gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs);
  * Slot fields (u32HotSlots/Cold/None/…) are filled by a post-init scan of
  * the path table (authoritative). set_* Ok/Reject count registration
  * attempts. Runtime u64* deepen hybrid accounting beyond hit totals
- * (hot-defer→cold, OOR, PATH_NONE).
+ * (hot-defer→cold, OOR, PATH_NONE, null guard, cold route split).
+ *
+ * Safety: GJ_LINUX_PATH_HOT == 0, so BSS path[] looks fully HOT before
+ * gj_linux_dispatch_init. soft_log / stats_get must not treat pre-init
+ * tables as product coverage (g_fNrClassLive / idle NONE path).
  *
  * Soft log: gj_linux_nr_class_soft_log (greppable PASS|PARTIAL|NONE).
+ * Never hard-gates product paths; wrap-OK diagnostics only.
  */
 struct gj_linux_nr_class_stats {
     u32 u32TableSize;    /* GJ_LINUX_NR_TABLE */
@@ -121,23 +127,44 @@ struct gj_linux_nr_class_stats {
     u32 u32SetColdOk;    /* successful set_cold */
     u32 u32SetHotReject; /* OOR or NULL pfn */
     u32 u32SetColdReject;/* OOR */
+    /* Scan integrity (soft deepen; post-init authoritative). */
+    u32 u32HotArmed;     /* PATH_HOT with non-NULL pfn */
+    u32 u32HotNullSlots; /* PATH_HOT with NULL pfn (table inconsistency) */
+    u32 u32PathBad;      /* path byte not HOT/COLD/NONE */
+    u32 u32Live;         /* 1 after successful dispatch_init scan */
     /* Runtime path accounting (deepen; mirrors + extends hit stats). */
     u64 u64HotHits;
     u64 u64ColdHits;
     u64 u64Enosys;
     u64 u64HotDeferCold; /* HOT handler returned -ENOSYS → cold/ENOSYS */
+    u64 u64HotNull;      /* PATH_HOT runtime with NULL pfn → cold/ENOSYS */
     u64 u64Oor;          /* NR >= table */
     u64 u64NonePath;     /* in-table PATH_NONE → ENOSYS */
+    u64 u64Entries;      /* non-NULL dispatch calls */
+    u64 u64NullGuard;    /* NULL pRegs early return */
+    u64 u64ColdIpc;      /* cold_ipc_submit hits */
+    u64 u64ColdLegacy;   /* g_pfnCold legacy hook hits */
+    u64 u64ColdBare;     /* cold/hot-defer with no personality → ENOSYS */
+    u64 u64LastNr;       /* last NR observed (soft snapshot) */
+    u64 u64LastRet;      /* last i64Ret bit pattern */
 };
 
-/** Snapshot classification + coverage + runtime counters. */
+/**
+ * Snapshot classification + coverage + runtime counters.
+ * NULL pOut → no-op. Pre-init: returns zeroed inventory (no HOT=0 BSS trap).
+ */
 void gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut);
 
 /**
- * Soft inventory log (greppable):
+ * Soft inventory log (greppable; safe pre-init → idle NONE):
  *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… none=… class=…
  *          max=… table=… set_hot=… set_cold=… rej_h=… rej_c=…
- *          hits_h=… hits_c=… enosys=… defer=… oor=… none_path=…
+ *   linux: nr class soft hits_h=… hits_c=… enosys=… defer=… hot_null=…
+ *          oor=… none_path=… max_h=… max_c=…
+ *   linux: nr class soft armed=… null_slots=… path_bad=… live=…
+ *          entries=… null=… cold_ipc=… cold_leg=… cold_bare=…
+ *          last_nr=… last_ret=…
+ *   linux: nr class soft idle (dispatch not init)   — pre-init only
  */
 void gj_linux_nr_class_soft_log(void);
 

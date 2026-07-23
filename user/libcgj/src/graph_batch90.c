@@ -16,6 +16,9 @@
  *                          const unsigned char nonce[12], uint32_t counter);
  *   __chacha20_xor_sse2 (alias)
  *   __libcgj_batch90_marker = "libcgj-batch90"
+ *
+ * Soft deepen: SSE2 XOR of 256-byte keystream chunks (16B lanes), null
+ * reject, remainder via batch42 chacha20_xor for shared correctness.
  */
 
 #include <emmintrin.h>
@@ -211,7 +214,18 @@ chacha20_xor_sse2(unsigned char *out, const unsigned char *in, size_t len,
         size_t i;
 
         b90_chacha20_blocks4(aKs, key, nonce, counter);
-        for (i = 0u; i < 256u; i++) {
+        /* Soft deepen: XOR 16-byte lanes with SSE2, then scalar residual. */
+        i = 0u;
+        while (i + 16u <= 256u) {
+            __m128i vIn =
+                _mm_loadu_si128((const __m128i *)(const void *)(in + i));
+            __m128i vKs =
+                _mm_loadu_si128((const __m128i *)(const void *)(aKs + i));
+            _mm_storeu_si128((__m128i *)(void *)(out + i),
+                             _mm_xor_si128(vIn, vKs));
+            i += 16u;
+        }
+        for (; i < 256u; i++) {
             out[i] = in[i] ^ aKs[i];
         }
         out += 256u;

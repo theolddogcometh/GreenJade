@@ -6,6 +6,10 @@
  * Clean-room from the public Google CityHash algorithm description
  * (Pike / Alakuijala). Integer/pointer only (no SSE). No multi-def with
  * batch36 siphash24 — this file exports cityhash* only.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: data NULL with len!=0 → defined soft zero result path.
+ *   CityHash64/128 pure integer port; does not redefine siphash/xxhash.
  */
 #include <stddef.h>
 #include <stdint.h>

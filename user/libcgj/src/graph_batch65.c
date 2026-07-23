@@ -24,6 +24,11 @@
  * BLAKE2b: batch38 exports fixed-64 BLAKE2b_Init/Update/Final. Argon2's
  * H^x requires variable digest length nn (RFC 7693 param block). This TU
  * carries a private variable-nn BLAKE2b used only as Argon2 H / H'.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: out NULL or bad costs → -1/EINVAL; pwd/salt NULL only
+ *   when length is 0. Soft mem cap B65_MAX_MEM_BYTES. Distinct from batch46
+ *   argon2*_hash_raw ENOSYS stubs (no multi-def).
  */
 #include <errno.h>
 #include <stddef.h>

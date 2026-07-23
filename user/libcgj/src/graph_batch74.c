@@ -15,6 +15,10 @@
  *   aes_cbc_decrypt / __aes_cbc_decrypt
  *   aes_ctr_xor / __aes_ctr_xor
  *   __libcgj_batch74_marker = "libcgj-batch74"
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: in/out/key/ivec/ecount NULL → cbc/ctr no-op.
+ *   AES primitives from batch45 (extern). NIST SP 800-38A CBC + CTR.
  */
 #include <stddef.h>
 #include <stdint.h>

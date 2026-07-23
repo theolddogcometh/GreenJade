@@ -9,7 +9,7 @@
  * -----
  * socket/socketpair/bind/listen/accept/connect/send/recv family, sockaddr
  * shapes, SOL_SOCKET options, MSG_* flags, and CMSG_* macros for SCM_RIGHTS
- * control messages. AF_*/SOCK_* numbers are Linux-shaped.
+ * control messages. AF_/SOCK_ numbers are Linux-shaped.
  *
  * Design notes
  * ------------

@@ -6,6 +6,10 @@
  * Uses AES_set_encrypt_key / AES_encrypt from batch45 (declared extern;
  * not reimplemented here). Integer/pointer only (no SSE). Clean-room
  * freestanding pure C public ABI.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/msg/mac NULL or key_len!=16 → aes_cmac no-op.
+ *   AES-128 CMAC only (Rb=0x87); AES_encrypt from batch45 (extern).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -78,6 +82,11 @@ b57_dbl(unsigned char aOut[16], const unsigned char aIn[16])
  * AES-CMAC-128 — NIST SP 800-38B / RFC 4493
  * ======================================================================== */
 
+/*
+ * aes_cmac — AES-CMAC-128 tag into mac[16].
+ * key_len must be 16; key/mac NULL or bad key_len → no-op.
+ * msg NULL allowed only when msg_len==0 (empty message still tagged).
+ */
 void
 aes_cmac(const unsigned char *key, size_t key_len, const unsigned char *msg,
          size_t msg_len, unsigned char mac[16])
@@ -154,11 +163,14 @@ aes_cmac(const unsigned char *key, size_t key_len, const unsigned char *msg,
     AES_encrypt(aY, mac, &stKey);
 }
 
-/* Fixed 16-byte key convenience wrapper. */
+/* Fixed 16-byte key convenience wrapper; mirrors aes_cmac null contract. */
 void
 AES_CMAC(const unsigned char *key, const unsigned char *msg, size_t msg_len,
          unsigned char mac[16])
 {
+    if (key == NULL || mac == NULL) {
+        return;
+    }
     aes_cmac(key, 16u, msg, msg_len, mac);
 }
 

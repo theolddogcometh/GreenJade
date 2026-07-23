@@ -13,12 +13,18 @@
  * This TU adds only symbols that were missing:
  *   utf8_validate(const char *s, size_t n) → 0 ok / -1 bad
  *   utf8_strlen(const char *s) → code-point count (NUL-terminated)
+ *   utf8_nlen(const char *s, size_t n) → code-point count in s[0..n)
  *   utf8_decode — one code point from a byte window
- *   utf8_encode — one code point into a byte buffer
+ *   utf8_encode — one code point into a byte buffer (or length probe)
+ *   utf8_is_ascii(const char *s, size_t n) → 1 if all bytes < 0x80
+ *   __utf8_* aliases for the public surface
  *   __libcgj_batch78_marker = "libcgj-batch78"
  *
  * Strict UTF-8: reject overlongs, surrogates U+D800..U+DFFF, and
  * scalars above U+10FFFF. Does not call mbrtowc (standalone freestanding).
+ *
+ * Soft deepen: bounded nlen, ASCII fast probe, encode length probe when
+ * out == NULL, underscored aliases, F5..FF lead reject via need path.
  */
 
 #include <stddef.h>
@@ -195,15 +201,76 @@ utf8_decode(const char *s, size_t n, unsigned int *pCp)
 }
 
 /*
+ * utf8_nlen — count Unicode scalars in a bounded byte window s[0..n).
+ * Unlike utf8_strlen, does not require a trailing NUL; the whole window
+ * must be well-formed. Returns (size_t)-1 on invalid UTF-8. NULL with
+ * n > 0 is invalid; n == 0 yields 0.
+ */
+size_t
+utf8_nlen(const char *s, size_t n)
+{
+	const unsigned char *p;
+	size_t i = 0u;
+	size_t nCp = 0u;
+
+	if (n == 0u) {
+		return 0u;
+	}
+	if (s == NULL) {
+		return (size_t)-1;
+	}
+
+	p = (const unsigned char *)s;
+	while (i < n) {
+		int nb = b78_decode1(p + i, n - i, NULL);
+
+		if (nb < 0) {
+			return (size_t)-1;
+		}
+		i += (size_t)nb;
+		nCp++;
+	}
+	return nCp;
+}
+
+/*
+ * utf8_is_ascii — 1 if every byte in s[0..n) is < 0x80; 0 otherwise.
+ * Empty window is ASCII. NULL with n > 0 is not.
+ */
+int
+utf8_is_ascii(const char *s, size_t n)
+{
+	const unsigned char *p;
+	size_t i;
+
+	if (n == 0u) {
+		return 1;
+	}
+	if (s == NULL) {
+		return 0;
+	}
+	p = (const unsigned char *)s;
+	for (i = 0u; i < n; i++) {
+		if (p[i] >= 0x80u) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+/*
  * utf8_encode — encode one Unicode scalar into out[0..nOut).
  * Returns byte length written (1..4) on success; -1 on bad scalar or
- * insufficient buffer. out may be NULL only when nOut == 0 (length probe
- * is not supported — nOut must be large enough).
+ * insufficient buffer.
+ *
+ * Soft deepen: out == NULL is a length probe — returns the byte count
+ * that would be written (1..4) without storing (nOut is ignored).
  */
 int
 utf8_encode(char *out, size_t nOut, unsigned int uCp)
 {
 	unsigned char *p;
+	int nNeed;
 
 	if (uCp >= 0xD800u && uCp <= 0xDFFFu) {
 		return -1;
@@ -211,42 +278,58 @@ utf8_encode(char *out, size_t nOut, unsigned int uCp)
 	if (uCp > 0x10FFFFu) {
 		return -1;
 	}
+
+	if (uCp <= 0x7Fu) {
+		nNeed = 1;
+	} else if (uCp <= 0x7FFu) {
+		nNeed = 2;
+	} else if (uCp <= 0xFFFFu) {
+		nNeed = 3;
+	} else {
+		nNeed = 4;
+	}
+
 	if (out == NULL) {
+		return nNeed;
+	}
+	if (nOut < (size_t)nNeed) {
 		return -1;
 	}
 	p = (unsigned char *)out;
 
-	if (uCp <= 0x7Fu) {
-		if (nOut < 1u) {
-			return -1;
-		}
+	if (nNeed == 1) {
 		p[0] = (unsigned char)uCp;
 		return 1;
 	}
-	if (uCp <= 0x7FFu) {
-		if (nOut < 2u) {
-			return -1;
-		}
+	if (nNeed == 2) {
 		p[0] = (unsigned char)(0xC0u | (uCp >> 6));
 		p[1] = (unsigned char)(0x80u | (uCp & 0x3Fu));
 		return 2;
 	}
-	if (uCp <= 0xFFFFu) {
-		if (nOut < 3u) {
-			return -1;
-		}
+	if (nNeed == 3) {
 		p[0] = (unsigned char)(0xE0u | (uCp >> 12));
 		p[1] = (unsigned char)(0x80u | ((uCp >> 6) & 0x3Fu));
 		p[2] = (unsigned char)(0x80u | (uCp & 0x3Fu));
 		return 3;
 	}
-	/* uCp <= 0x10FFFF */
-	if (nOut < 4u) {
-		return -1;
-	}
+	/* nNeed == 4 */
 	p[0] = (unsigned char)(0xF0u | (uCp >> 18));
 	p[1] = (unsigned char)(0x80u | ((uCp >> 12) & 0x3Fu));
 	p[2] = (unsigned char)(0x80u | ((uCp >> 6) & 0x3Fu));
 	p[3] = (unsigned char)(0x80u | (uCp & 0x3Fu));
 	return 4;
 }
+
+/* ---- aliases ----------------------------------------------------------- */
+
+int __utf8_validate(const char *s, size_t n)
+    __attribute__((alias("utf8_validate")));
+size_t __utf8_strlen(const char *s) __attribute__((alias("utf8_strlen")));
+size_t __utf8_nlen(const char *s, size_t n)
+    __attribute__((alias("utf8_nlen")));
+int __utf8_decode(const char *s, size_t n, unsigned int *pCp)
+    __attribute__((alias("utf8_decode")));
+int __utf8_encode(char *out, size_t nOut, unsigned int uCp)
+    __attribute__((alias("utf8_encode")));
+int __utf8_is_ascii(const char *s, size_t n)
+    __attribute__((alias("utf8_is_ascii")));

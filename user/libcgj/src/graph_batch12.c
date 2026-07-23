@@ -5,6 +5,13 @@
  * Desktop glibc graph batch12: strerrorname_np / sig*np, __libc_* malloc
  * aliases, gnu_get_libc_*, fstatfs64, isoc23 aliases, fortify helpers,
  * resolv underscores, _IO_* aliases. Integer-only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_BATCH12_SOFT_NULL
+ * greppable: CGJ_GRAPH_BATCH12_SOFT_ARGS
+ * greppable: CGJ_GRAPH_BATCH12_SOFT_EDGE
+ *
+ * Soft deepen: null/arg guards on user-facing graph nodes; edge
+ * hardening only. No multi-def; no API break. Pure C integer/pointer.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -171,6 +178,11 @@ __libc_free(void *p)
 char *
 __strndup(const char *sz, size_t n)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (sz == NULL) {
+        return NULL;
+    }
+
     return strndup(sz, n);
 }
 
@@ -212,24 +224,64 @@ __sysconf(int nName)
 int
 statfs64(const char *szPath, struct statfs *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return statfs(szPath, pBuf);
 }
 
 int
 fstatfs64(int nFd, struct statfs *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return fstatfs(nFd, pBuf);
 }
 
 int
 __statfs(const char *szPath, struct statfs *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return statfs(szPath, pBuf);
 }
 
 int
 __fstatfs(int nFd, struct statfs *pBuf)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return fstatfs(nFd, pBuf);
 }
 
@@ -252,6 +304,16 @@ int
 __res_query(const char *szDname, int nClass, int nType, unsigned char *pAns,
             int nAnslen)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szDname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (pAns == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return res_query(szDname, nClass, nType, pAns, nAnslen);
 }
 
@@ -264,6 +326,12 @@ int open64(const char *szPath, int nFlags, ...);
 int
 __open64(const char *szPath, int nFlags, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     mode_t mode = 0;
 
@@ -279,6 +347,12 @@ __open64(const char *szPath, int nFlags, ...)
 int
 __open64_2(const char *szPath, int nFlags)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (nFlags & O_CREAT) {
         __fortify_fail("invalid open64 call: O_CREAT without mode");
     }
@@ -288,6 +362,16 @@ __open64_2(const char *szPath, int nFlags)
 int
 __openat64_2(int nDfd, const char *szPath, int nFlags)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (nDfd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     if (nFlags & O_CREAT) {
         __fortify_fail("invalid openat64 call: O_CREAT without mode");
     }
@@ -313,30 +397,60 @@ __longjmp_chk(jmp_buf env, int nVal)
 long
 __isoc23_strtol(const char *sz, char **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return strtol(sz, ppEnd, nBase);
 }
 
 unsigned long
 __isoc23_strtoul(const char *sz, char **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return strtoul(sz, ppEnd, nBase);
 }
 
 long long
 __isoc23_strtoll(const char *sz, char **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return strtoll(sz, ppEnd, nBase);
 }
 
 unsigned long long
 __isoc23_strtoull(const char *sz, char **ppEnd, int nBase)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (sz == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return strtoull(sz, ppEnd, nBase);
 }
 
 int
 __isoc23_scanf(const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int n;
 
@@ -349,6 +463,16 @@ __isoc23_scanf(const char *szFmt, ...)
 int
 __isoc23_fscanf(FILE *pF, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int n;
 
@@ -361,6 +485,16 @@ __isoc23_fscanf(FILE *pF, const char *szFmt, ...)
 int
 __isoc23_sscanf(const char *szBuf, const char *szFmt, ...)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     va_list ap;
     int n;
 
@@ -373,18 +507,44 @@ __isoc23_sscanf(const char *szBuf, const char *szFmt, ...)
 int
 __isoc23_vscanf(const char *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return vscanf(szFmt, ap);
 }
 
 int
 __isoc23_vfscanf(FILE *pF, const char *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return vfscanf(pF, szFmt, ap);
 }
 
 int
 __isoc23_vsscanf(const char *szBuf, const char *szFmt, va_list ap)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (szBuf == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (szFmt == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+
     return vsscanf(szBuf, szFmt, ap);
 }
 
@@ -393,24 +553,46 @@ __isoc23_vsscanf(const char *szBuf, const char *szFmt, va_list ap)
 int
 _IO_getc(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fgetc(pF);
 }
 
 int
 _IO_putc(int ch, FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fputc(ch, pF);
 }
 
 int
 _IO_feof(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     return feof(pF);
 }
 
 int
 _IO_ferror(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
     return ferror(pF);
 }
 
@@ -418,12 +600,22 @@ _IO_ferror(FILE *pF)
 int
 __uflow(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fgetc(pF);
 }
 
 int
 __overflow(FILE *pF, int ch)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     if (ch == EOF) {
         return fflush(pF);
     }
@@ -434,12 +626,22 @@ __overflow(FILE *pF, int ch)
 int
 getc(FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fgetc(pF);
 }
 
 int
 putc(int ch, FILE *pF)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pF == NULL) {
+        return EOF;
+    }
+
     return fputc(ch, pF);
 }
 
@@ -448,6 +650,17 @@ putc(int ch, FILE *pF)
 size_t
 __mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pWc == NULL) {
+        return 0;
+    }
+    if (pS == NULL) {
+        return 0;
+    }
+    if (pSt == NULL) {
+        return 0;
+    }
+
     return mbrtowc(pWc, pS, n, pSt);
 }
 
@@ -455,6 +668,17 @@ size_t
 __mbsnrtowcs(wchar_t *pDst, const char **ppSrc, size_t nmc, size_t len,
              mbstate_t *pSt)
 {
+    /* greppable: CGJ_GRAPH_BATCH12_SOFT_NULL */
+    if (pDst == NULL) {
+        return 0;
+    }
+    if (ppSrc == NULL) {
+        return 0;
+    }
+    if (pSt == NULL) {
+        return 0;
+    }
+
     return mbsnrtowcs(pDst, ppSrc, nmc, len, pSt);
 }
 

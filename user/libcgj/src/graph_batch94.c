@@ -6,6 +6,9 @@
  * Clean-room freestanding pure C — integer/pointer only (no SSE, no libc
  * string/time). No third-party HTTP-date source was copied.
  *
+ * Soft deepen: IMF-fixdate format length gate, weekday/month tables,
+ * range reject for civil fields, underscored aliases.
+ *
  * Surface:
  *   gj_http_date_parse(const char *sz, int64_t *pOut)
  *     Parse one IMF-fixdate into UTC Unix seconds since 1970-01-01.

@@ -1030,3 +1030,50 @@ strnunvisx(char *pDst, size_t cbDst, const char *szSrc, size_t cbSrc)
     pDst[nLen] = '\0';
     return nLen;
 }
+
+/* ---- soft deepen: FileChunk digesters (unique; full File above) --------- */
+
+char *
+MD5FileChunk(const char *szPath, char *szBuf, off_t off, off_t cb)
+{
+    int nFd;
+    struct b31_md5 ctx;
+    unsigned char aBuf[512];
+    ssize_t n;
+    off_t cbLeft;
+
+    if (szPath == NULL || cb < 0) {
+        errno = EINVAL;
+        return NULL;
+    }
+    nFd = open(szPath, O_RDONLY);
+    if (nFd < 0) {
+        return NULL;
+    }
+    if (off > 0 && lseek(nFd, off, SEEK_SET) != off) {
+        (void)close(nFd);
+        return NULL;
+    }
+    memset(&ctx, 0, sizeof(ctx));
+    MD5Init(&ctx);
+    cbLeft = cb;
+    while (cbLeft > 0) {
+        size_t cbWant = (size_t)((cbLeft > (off_t)sizeof(aBuf))
+                                     ? (off_t)sizeof(aBuf)
+                                     : cbLeft);
+        n = read(nFd, aBuf, cbWant);
+        if (n <= 0) {
+            break;
+        }
+        MD5Update(&ctx, aBuf, (size_t)n);
+        cbLeft -= (off_t)n;
+    }
+    (void)close(nFd);
+    if (n < 0) {
+        return NULL;
+    }
+    return MD5End(&ctx, szBuf);
+}
+
+char *__MD5FileChunk(const char *szPath, char *szBuf, off_t off, off_t cb)
+    __attribute__((alias("MD5FileChunk")));

@@ -695,3 +695,34 @@ b26_ctor(void)
 {
     _environ = environ;
 }
+
+/* ---- soft deepen: file-change for fd + environ sync helper -------------- */
+
+void
+__file_change_detection_for_fd(struct b26_file_change *pFc, int nFd)
+{
+    struct stat st;
+
+    if (pFc == NULL) {
+        return;
+    }
+    if (nFd < 0 || fstat(nFd, &st) != 0) {
+        pFc->fValid = 0;
+        return;
+    }
+    __file_change_detection_for_stat(pFc, &st);
+}
+
+/* Re-sync _environ after putenv/setenv-style mutation of environ. */
+void
+__environ_sync(void)
+{
+    _environ = environ;
+}
+
+int
+__environ_is_synced(void)
+{
+    return (_environ == environ) ? 1 : 0;
+}
+

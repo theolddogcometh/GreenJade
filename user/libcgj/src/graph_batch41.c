@@ -1212,3 +1212,25 @@ uint64_t __XXH3_64bits(const void *p, size_t n)
     __attribute__((alias("XXH3_64bits")));
 uint64_t __XXH3_64bits_withSeed(const void *p, size_t n, uint64_t s)
     __attribute__((alias("XXH3_64bits_withSeed")));
+
+/* ---- soft deepen: SHAKE Squeeze alias (Final is already XOF output) ----- */
+
+void SHAKE128_Final(unsigned char *pOut, size_t cbOut, void *pCtx);
+void SHAKE256_Final(unsigned char *pOut, size_t cbOut, void *pCtx);
+
+void
+SHAKE128_Squeeze(void *pCtx, unsigned char *pOut, size_t cbOut)
+{
+    SHAKE128_Final(pOut, cbOut, pCtx);
+}
+
+void
+SHAKE256_Squeeze(void *pCtx, unsigned char *pOut, size_t cbOut)
+{
+    SHAKE256_Final(pOut, cbOut, pCtx);
+}
+
+void __SHAKE128_Squeeze(void *pCtx, unsigned char *pOut, size_t cbOut)
+    __attribute__((alias("SHAKE128_Squeeze")));
+void __SHAKE256_Squeeze(void *pCtx, unsigned char *pOut, size_t cbOut)
+    __attribute__((alias("SHAKE256_Squeeze")));

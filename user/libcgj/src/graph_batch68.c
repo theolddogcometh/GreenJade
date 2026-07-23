@@ -21,6 +21,10 @@
  *
  * Decode: skips ASCII whitespace; returns decoded byte count, or -1.
  * No <~/~> stream delimiters (raw payload codec, like base64).
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: in NULL with inlen!=0 → -1/EINVAL; out NULL on encode
+ *   returns size needed (including NUL). Decode may size-probe with out NULL.
  */
 #include <errno.h>
 #include <stddef.h>

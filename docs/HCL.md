@@ -97,18 +97,27 @@ make live-iso
 
 ## Status — 2026-07-23
 
-Parallel waves **soft shipped** (kernel/media/graph only). **bar3 still open.**
+Parallel waves **soft shipped** (kernel / media / continuum graph only). **Open bars stay open.**
+
+**Soft stamp:** continuum **makefile_max=14900** on tree (`graph_batch14900.c` wired; CREATE-ONLY decades). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**.
+
+### Soft shipped (not product bars)
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid` / `hda_client`
 - Residual **#UD** closed
-- Continuum **makefile_max=14900** (soft graph only — not Steam; parallel-wave CREATE-ONLY decades)
+- Continuum **makefile_max=14900** (soft graph only — not Steam client; parallel-wave CREATE-ONLY decades)
 - **io_uring** soft surface shipped (`io_uring_min.c`; `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`) — vfs_ram/kernel smoke, **not** game I/O
 - **GJ_MEM=768G** hierarchical `soak_tib` **PASS** on host class **≥1TiB** — product bar still **≥ 1 TiB** full path when host allows
 - **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`; shared C + PSCI smokes) — separate arch tree; not Deck/x86 product kernel
 - **HDA multi-stream** kernel **PASS** — not Steam/game audio
-- **bar3** open (Steam client / Deck Top 50 title runs)
-- Media `STATUS=READY` = bootstrap tree on media only — **not** client run
-- Deck Top 50 rows: all **NOT-TRIED** (no titles tried; claim **targeting only**)
+- Media `STATUS=READY` / host soft check READY = bootstrap tree on media only — **not** client run
+
+### Open bars (do not claim done)
+
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**)
+- Deck Top 50 title runs — all **NOT-TRIED** (no titles tried; claim **targeting only**)
+- Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
+- Steam/game audio / title matrix fill — **open** (blocked on bar3 client run)
 
 ## Related docs
 

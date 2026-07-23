@@ -7,6 +7,10 @@
  * AES block cipher primitives come from batch45:
  *   AES_set_encrypt_key / AES_encrypt (extern — do not reimplement).
  * AES_CMAC is owned by batch57 — not defined here.
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: key/out NULL → no-op; msg NULL only OK when len==0.
+ *   AES-XCBC-MAC-96 truncates to 12 octets; AES from batch45 (extern).
  */
 
 #include <stddef.h>

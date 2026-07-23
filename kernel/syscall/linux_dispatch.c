@@ -24,6 +24,16 @@ static struct gj_linux_dispatch_stats g_stats;
 /* Deep NR-table classification + set_hot/set_cold coverage (soft). */
 static struct gj_linux_nr_class_stats g_class;
 
+/*
+ * Init published: PATH_HOT is 0, so BSS g_aPath looks fully HOT. soft_log /
+ * stats_get must not invent product coverage before dispatch_init finishes.
+ */
+static int g_fNrClassLive;
+
+/**
+ * Authoritative path-table scan (slot inventory + integrity soft deepen).
+ * Caller must only publish results when g_fNrClassLive (or during init end).
+ */
 static void
 nr_class_scan_slots(void)
 {
@@ -31,16 +41,27 @@ nr_class_scan_slots(void)
     u32 u32Hot = 0;
     u32 u32Cold = 0;
     u32 u32None = 0;
+    u32 u32HotArmed = 0;
+    u32 u32HotNull = 0;
+    u32 u32PathBad = 0;
 
     for (iNr = 0; iNr < GJ_LINUX_NR_TABLE; iNr++) {
         u8 u8Path = g_aPath[iNr];
 
         if (u8Path == (u8)GJ_LINUX_PATH_HOT) {
             u32Hot++;
+            if (g_apfnHot[iNr] != NULL) {
+                u32HotArmed++;
+            } else {
+                u32HotNull++;
+            }
         } else if (u8Path == (u8)GJ_LINUX_PATH_COLD) {
             u32Cold++;
-        } else {
+        } else if (u8Path == (u8)GJ_LINUX_PATH_NONE) {
             u32None++;
+        } else {
+            /* Corrupt / unknown path byte — soft integrity, not product. */
+            u32PathBad++;
         }
     }
     g_class.u32TableSize = GJ_LINUX_NR_TABLE;
@@ -48,6 +69,9 @@ nr_class_scan_slots(void)
     g_class.u32ColdSlots = u32Cold;
     g_class.u32NoneSlots = u32None;
     g_class.u32Classified = u32Hot + u32Cold;
+    g_class.u32HotArmed = u32HotArmed;
+    g_class.u32HotNullSlots = u32HotNull;
+    g_class.u32PathBad = u32PathBad;
     if (g_class.u32MaxHotNr > g_class.u32MaxColdNr) {
         g_class.u32MaxClassNr = g_class.u32MaxHotNr;
     } else {
@@ -90,6 +114,10 @@ gj_linux_dispatch_init(void)
 {
     u32 iNr;
 
+    /* Unpublished until registration + scan complete (PATH_HOT=0 BSS trap). */
+    g_fNrClassLive = 0;
+    g_class.u32Live = 0;
+
     for (iNr = 0; iNr < GJ_LINUX_NR_TABLE; iNr++) {
         g_apfnHot[iNr] = NULL;
         g_aPath[iNr] = (u8)GJ_LINUX_PATH_NONE;
@@ -113,12 +141,23 @@ gj_linux_dispatch_init(void)
     g_class.u32SetColdOk = 0;
     g_class.u32SetHotReject = 0;
     g_class.u32SetColdReject = 0;
+    g_class.u32HotArmed = 0;
+    g_class.u32HotNullSlots = 0;
+    g_class.u32PathBad = 0;
     g_class.u64HotHits = 0;
     g_class.u64ColdHits = 0;
     g_class.u64Enosys = 0;
     g_class.u64HotDeferCold = 0;
+    g_class.u64HotNull = 0;
     g_class.u64Oor = 0;
     g_class.u64NonePath = 0;
+    g_class.u64Entries = 0;
+    g_class.u64NullGuard = 0;
+    g_class.u64ColdIpc = 0;
+    g_class.u64ColdLegacy = 0;
+    g_class.u64ColdBare = 0;
+    g_class.u64LastNr = 0;
+    g_class.u64LastRet = 0;
 
     /* ---- Hot paths (kernel) ------------------------------------------- */
     set_hot(LINUX_NR_write, gj_linux_hot_write);
@@ -439,8 +478,10 @@ gj_linux_dispatch_init(void)
     set_cold(LINUX_NR_kill);
     set_cold(LINUX_NR_lstat);
 
-    /* Authoritative slot scan + greppable set_hot/set_cold coverage soft log. */
+    /* Authoritative slot scan + publish live + greppable soft coverage. */
     nr_class_scan_slots();
+    g_fNrClassLive = 1;
+    g_class.u32Live = 1;
     gj_linux_nr_class_soft_log();
 }
 
@@ -468,8 +509,11 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
     u32 u32Nr;
 
     if (pRegs == NULL) {
+        g_class.u64NullGuard++;
         return;
     }
+    g_class.u64Entries++;
+    g_class.u64LastNr = pRegs->u64Nr;
     pRegs->i64Ret = -LINUX_ENOSYS;
 
     /* WoW64: map i386 NR → x86_64 NR; zero-extend lower 32 of args */
@@ -478,6 +522,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
 
         if (wow64_translate_nr((u32)pRegs->u64Nr, &u32Nr64) == 0) {
             pRegs->u64Nr = u32Nr64;
+            g_class.u64LastNr = pRegs->u64Nr;
         }
         pRegs->u64Arg0 &= 0xffffffffull;
         pRegs->u64Arg1 &= 0xffffffffull;
@@ -491,6 +536,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         g_stats.u64Enosys++;
         g_class.u64Enosys++;
         g_class.u64Oor++;
+        g_class.u64LastRet = (u64)pRegs->i64Ret;
         return;
     }
     u32Nr = (u32)pRegs->u64Nr;
@@ -504,12 +550,13 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             if (pRegs->i64Ret != -LINUX_ENOSYS) {
                 g_stats.u64HotHits++;
                 g_class.u64HotHits++;
+                g_class.u64LastRet = (u64)pRegs->i64Ret;
                 return;
             }
             g_class.u64HotDeferCold++;
         } else {
             /* HOT slot without fn → defer (table inconsistency). */
-            g_class.u64HotDeferCold++;
+            g_class.u64HotNull++;
         }
         /* Fall through to cold personality. */
     }
@@ -520,6 +567,8 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             pRegs->i64Ret = cold_ipc_submit(pRegs, 0);
             g_stats.u64ColdHits++;
             g_class.u64ColdHits++;
+            g_class.u64ColdIpc++;
+            g_class.u64LastRet = (u64)pRegs->i64Ret;
             return;
         }
         /* Legacy direct cold hook (tests / early bring-up). */
@@ -527,11 +576,15 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             pRegs->i64Ret = g_pfnCold(pRegs, g_pColdCtx);
             g_stats.u64ColdHits++;
             g_class.u64ColdHits++;
+            g_class.u64ColdLegacy++;
+            g_class.u64LastRet = (u64)pRegs->i64Ret;
             return;
         }
         g_stats.u64Enosys++;
         g_class.u64Enosys++;
+        g_class.u64ColdBare++;
         pRegs->i64Ret = -LINUX_ENOSYS;
+        g_class.u64LastRet = (u64)pRegs->i64Ret;
         return;
     }
 
@@ -539,6 +592,7 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
     g_class.u64Enosys++;
     g_class.u64NonePath++;
     pRegs->i64Ret = -LINUX_ENOSYS;
+    g_class.u64LastRet = (u64)pRegs->i64Ret;
 }
 
 void
@@ -561,8 +615,16 @@ gj_linux_dispatch_stats_reset(void)
     g_class.u64ColdHits = 0;
     g_class.u64Enosys = 0;
     g_class.u64HotDeferCold = 0;
+    g_class.u64HotNull = 0;
     g_class.u64Oor = 0;
     g_class.u64NonePath = 0;
+    g_class.u64Entries = 0;
+    g_class.u64NullGuard = 0;
+    g_class.u64ColdIpc = 0;
+    g_class.u64ColdLegacy = 0;
+    g_class.u64ColdBare = 0;
+    g_class.u64LastNr = 0;
+    g_class.u64LastRet = 0;
 }
 
 void
@@ -571,8 +633,26 @@ gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut)
     if (pOut == NULL) {
         return;
     }
+    /*
+     * Pre-init: fail closed. Do not scan BSS (PATH_HOT==0 looks fully hot).
+     * Publish zeros + table size only.
+     */
+    if (!g_fNrClassLive) {
+        *pOut = g_class;
+        pOut->u32TableSize = GJ_LINUX_NR_TABLE;
+        pOut->u32Live = 0;
+        pOut->u32HotSlots = 0;
+        pOut->u32ColdSlots = 0;
+        pOut->u32NoneSlots = 0;
+        pOut->u32Classified = 0;
+        pOut->u32HotArmed = 0;
+        pOut->u32HotNullSlots = 0;
+        pOut->u32PathBad = 0;
+        return;
+    }
     /* Refresh slot scan so callers see live table state. */
     nr_class_scan_slots();
+    g_class.u32Live = 1;
     *pOut = g_class;
 }
 
@@ -581,21 +661,45 @@ gj_linux_nr_class_soft_log(void)
 {
     const char *szVerdict;
     u32 u32Rej;
+    u32 u32Sum;
+
+    /*
+     * Safe pre-init path: PATH_HOT==0 would make a raw scan report hot=512.
+     * Emit greppable idle NONE; never claim product PASS before live.
+     */
+    if (!g_fNrClassLive) {
+        kprintf("linux: nr class soft NONE hot=0 cold=0 none=0 class=0 "
+                "max=0 table=%u set_hot=0 set_cold=0 rej_h=0 rej_c=0\n",
+                (unsigned)GJ_LINUX_NR_TABLE);
+        kprintf("linux: nr class soft idle (dispatch not init)\n");
+        return;
+    }
 
     nr_class_scan_slots();
+    g_class.u32Live = 1;
     u32Rej = g_class.u32SetHotReject + g_class.u32SetColdReject;
+    u32Sum = g_class.u32HotSlots + g_class.u32ColdSlots + g_class.u32NoneSlots +
+             g_class.u32PathBad;
 
+    /*
+     * Verdict (soft product inventory; never hard-gates):
+     *   NONE    — no classified slots
+     *   PASS    — hybrid hot+cold, no rejects, armed==hot, no integrity noise
+     *   PARTIAL — classified but rejects / one-sided / integrity soft fail
+     */
     if (g_class.u32Classified == 0) {
         szVerdict = "NONE";
     } else if (u32Rej == 0 && g_class.u32HotSlots > 0 &&
-               g_class.u32ColdSlots > 0) {
+               g_class.u32ColdSlots > 0 && g_class.u32HotNullSlots == 0 &&
+               g_class.u32PathBad == 0 && u32Sum == g_class.u32TableSize &&
+               g_class.u32HotArmed == g_class.u32HotSlots) {
         szVerdict = "PASS";
     } else {
         szVerdict = "PARTIAL";
     }
 
     /*
-     * Greppable soft coverage line (product / smoke inventory):
+     * Greppable soft coverage lines (product / smoke inventory):
      *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… …
      */
     kprintf("linux: nr class soft %s hot=%u cold=%u none=%u class=%u "
@@ -604,13 +708,26 @@ gj_linux_nr_class_soft_log(void)
             g_class.u32NoneSlots, g_class.u32Classified, g_class.u32MaxClassNr,
             g_class.u32TableSize, g_class.u32SetHotOk, g_class.u32SetColdOk,
             g_class.u32SetHotReject, g_class.u32SetColdReject);
-    kprintf("linux: nr class soft hits_h=%lu hits_c=%lu enosys=%lu "
-            "defer=%lu oor=%lu none_path=%lu max_h=%u max_c=%u\n",
-            (unsigned long)g_class.u64HotHits,
-            (unsigned long)g_class.u64ColdHits,
-            (unsigned long)g_class.u64Enosys,
-            (unsigned long)g_class.u64HotDeferCold,
-            (unsigned long)g_class.u64Oor,
-            (unsigned long)g_class.u64NonePath, g_class.u32MaxHotNr,
+    kprintf("linux: nr class soft hits_h=%llu hits_c=%llu enosys=%llu "
+            "defer=%llu hot_null=%llu oor=%llu none_path=%llu "
+            "max_h=%u max_c=%u\n",
+            (unsigned long long)g_class.u64HotHits,
+            (unsigned long long)g_class.u64ColdHits,
+            (unsigned long long)g_class.u64Enosys,
+            (unsigned long long)g_class.u64HotDeferCold,
+            (unsigned long long)g_class.u64HotNull,
+            (unsigned long long)g_class.u64Oor,
+            (unsigned long long)g_class.u64NonePath, g_class.u32MaxHotNr,
             g_class.u32MaxColdNr);
+    kprintf("linux: nr class soft armed=%u null_slots=%u path_bad=%u "
+            "live=%u entries=%llu null=%llu cold_ipc=%llu cold_leg=%llu "
+            "cold_bare=%llu last_nr=%llu last_ret=%llu\n",
+            g_class.u32HotArmed, g_class.u32HotNullSlots, g_class.u32PathBad,
+            g_class.u32Live, (unsigned long long)g_class.u64Entries,
+            (unsigned long long)g_class.u64NullGuard,
+            (unsigned long long)g_class.u64ColdIpc,
+            (unsigned long long)g_class.u64ColdLegacy,
+            (unsigned long long)g_class.u64ColdBare,
+            (unsigned long long)g_class.u64LastNr,
+            (unsigned long long)g_class.u64LastRet);
 }

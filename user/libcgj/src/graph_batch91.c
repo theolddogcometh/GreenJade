@@ -26,6 +26,9 @@
  *       msg  = "Cryptographic Forum Research Group" (34 bytes)
  *       tag  = a8061dc1305136c6c22b8baf0c0127a9
  *     Empty message (mlen=0) is valid: process no blocks, finish with s only.
+ *
+ * Soft deepen: null mac/key reject, mlen=0 tag path, partial final block
+ * pad 0x01, SSE2 16B load for full blocks, clamp r bits per RFC 8439.
  */
 
 #include <emmintrin.h>

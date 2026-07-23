@@ -420,3 +420,31 @@ iconvctl(iconv_t cd, int nRequest, void *pArg)
 
 int __iconvctl(iconv_t cd, int nRequest, void *pArg)
     __attribute__((alias("iconvctl")));
+
+/* ---- soft deepen: iconvlist stub + adler32 combine (unique) ------------- */
+
+/*
+ * iconvlist: glibc enumerates converters via callback. Stub: call once with
+ * "ASCII" / "UTF-8" names then stop (no full catalog).
+ */
+int
+iconvlist(int (*pfn)(unsigned int nCount, const char *const *ppNames,
+                     void *pData),
+          void *pData)
+{
+    static const char *const aNames[] = { "ASCII", "UTF-8", "UTF8" };
+
+    if (pfn == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* nCount = 3 names in one group. Return non-zero from callback stops. */
+    if (pfn(3u, aNames, pData) != 0) {
+        return 0;
+    }
+    return 0;
+}
+
+int __iconvlist(int (*pfn)(unsigned int nCount, const char *const *ppNames,
+                           void *pData),
+                void *pData) __attribute__((alias("iconvlist")));

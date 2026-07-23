@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Desktop glibc graph batch14596: smoke soft lamp (wave 14600).
+ * Desktop glibc graph batch14596: smoke soft PASS lamp (wave 14600).
  *
  * Surface (unique symbols):
  *   uint32_t gj_smoke_soft_14600(void);
@@ -11,9 +11,11 @@
  *   uint32_t __gj_smoke_soft_14600  (alias)
  *   __libcgj_batch14596_marker = "libcgj-batch14596"
  *
- * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique surface
- * only; no multi-def. Distinct from gj_*_14500 / gj_*_14400 / gj_*_14300 milestone
- * surfaces and sibling 14600 milestone symbols. No parent wires.
+ * Milestone 14600 exclusive continuum CREATE-ONLY (14591-14600). Unique
+ * gj_smoke_soft_14600 surface only; no multi-def. Distinct from gj_*_14500 /
+ * gj_*_14400 / gj_*_14300 milestone surfaces and sibling 14600 milestone
+ * symbols. No parent wires. Soft gates only (no Makefile / map / harness
+ * wires in this TU).
  * No __int128.
  *
  * Clean-room freestanding pure C (integer only). Compiles with
@@ -40,10 +42,10 @@ b14596_soft(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_smoke_soft_14600 - soft continuum surface
+ * gj_smoke_soft_14600 - smoke soft PASS lamp for wave 14600
  *
- * Always returns 1u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 1u. Soft pure-data smoke-ready tag. Does not call
+ * libc. Not a live host smoke execution. No parent wires.
  */
 uint32_t
 gj_smoke_soft_14600(void)

@@ -16,10 +16,16 @@
  *       Chaining matches crc32c: crc_out = crc32c_hw(crc_in, buf, len).
  *   uint32_t crc32c_auto(const void *buf, size_t len);
  *     — one-shot: crc32c_hw(0, buf, len).
+ *   uint32_t crc32c_update(uint32_t crc, const void *buf, size_t len);
+ *     — soft deepen alias of incremental path (named for chaining clarity).
+ *   __gj_cpu_has_sse4_2 / __crc32c_hw / __crc32c_auto / __crc32c_update
  *   __libcgj_batch87_marker = "libcgj-batch87"
  *
  * Compiles freestanding with -msse2 only (CRC32 via inline asm, not
  * -msse4.2 intrinsics). Clean-room Castagnoli / Intel CRC32 usage.
+ *
+ * Soft deepen: null-buf short-circuit preserves prior crc (chaining),
+ * zero-length leaves crc unchanged, underscored aliases.
  */
 
 #include <stddef.h>
@@ -229,13 +235,20 @@ b87_crc32c_hw_path(uint32_t uCrc, const unsigned char *pBuf, size_t cb)
 /*
  * Incremental Castagnoli CRC-32C. Uses SSE4.2 when gj_cpu_has_sse4_2()
  * is true; otherwise the reflected table path (identical to batch39
- * crc32c chaining). NULL buf → 0 (same as crc32c).
+ * crc32c chaining).
+ *
+ * Soft deepen: NULL buf with cb == 0 leaves uCrc unchanged (chain end);
+ * NULL buf with cb != 0 returns 0 (reject). cb == 0 with non-NULL is
+ * identity on uCrc.
  */
 uint32_t
 crc32c_hw(uint32_t uCrc, const void *pBuf, size_t cb)
 {
 	const unsigned char *p = (const unsigned char *)pBuf;
 
+	if (cb == 0u) {
+		return uCrc;
+	}
 	if (p == NULL) {
 		return 0u;
 	}
@@ -254,3 +267,22 @@ crc32c_auto(const void *pBuf, size_t cb)
 {
 	return crc32c_hw(0u, pBuf, cb);
 }
+
+/*
+ * crc32c_update — soft deepen incremental name (identical to crc32c_hw).
+ * Prefer this at call sites that read as "running = update(running, …)".
+ */
+uint32_t
+crc32c_update(uint32_t uCrc, const void *pBuf, size_t cb)
+{
+	return crc32c_hw(uCrc, pBuf, cb);
+}
+
+int __gj_cpu_has_sse4_2(void) __attribute__((alias("gj_cpu_has_sse4_2")));
+uint32_t __crc32c_hw(uint32_t uCrc, const void *pBuf, size_t cb)
+    __attribute__((alias("crc32c_hw")));
+uint32_t __crc32c_auto(const void *pBuf, size_t cb)
+    __attribute__((alias("crc32c_auto")));
+uint32_t __crc32c_update(uint32_t uCrc, const void *pBuf, size_t cb)
+    __attribute__((alias("crc32c_update")));
+

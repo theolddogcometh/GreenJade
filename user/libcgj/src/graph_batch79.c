@@ -25,10 +25,16 @@
  *   uuid_v3 / __uuid_v3
  *     void uuid_v3(const uuid_t ns, const char *name, uuid_t out)
  *     RFC 4122 version-3 (MD5) twin of uuid_v5; same arg order.
+ *   uuid_ns_dns / uuid_ns_url / uuid_ns_oid / uuid_ns_x500
+ *     void uuid_ns_*(uuid_t out) — copy RFC 4122 Appendix C namespace.
+ *   uuid_v5_dns / uuid_v5_url — convenience over DNS/URL namespaces.
  *   __libcgj_batch79_marker = "libcgj-batch79"
  *
  * Implements digests via batch38 uuid_generate_md5 / uuid_generate_sha1
  * (extern only). Freestanding-safe local helpers; no string.h.
+ *
+ * Soft deepen: well-known namespace lamps, empty-name path, copy helpers,
+ * underscored aliases for the convenience surface.
  */
 
 #include <stddef.h>
@@ -58,6 +64,75 @@ b79_bzero(void *pDst, size_t cb)
 	for (i = 0; i < cb; i++) {
 		p[i] = 0;
 	}
+}
+
+static void
+b79_bcopy(void *pDst, const void *pSrc, size_t cb)
+{
+	unsigned char *pD = (unsigned char *)pDst;
+	const unsigned char *pS = (const unsigned char *)pSrc;
+	size_t i;
+
+	for (i = 0; i < cb; i++) {
+		pD[i] = pS[i];
+	}
+}
+
+/*
+ * RFC 4122 Appendix C well-known name-space IDs (network byte order octets).
+ * Soft deepen: exported as copy helpers so callers need no local constants.
+ */
+static const unsigned char s_b79_ns_dns[16] = {
+    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+};
+static const unsigned char s_b79_ns_url[16] = {
+    0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+};
+static const unsigned char s_b79_ns_oid[16] = {
+    0x6b, 0xa7, 0xb8, 0x12, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+};
+static const unsigned char s_b79_ns_x500[16] = {
+    0x6b, 0xa7, 0xb8, 0x14, 0x9d, 0xad, 0x11, 0xd1,
+    0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
+};
+
+void
+uuid_ns_dns(uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	b79_bcopy(out, s_b79_ns_dns, 16u);
+}
+
+void
+uuid_ns_url(uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	b79_bcopy(out, s_b79_ns_url, 16u);
+}
+
+void
+uuid_ns_oid(uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	b79_bcopy(out, s_b79_ns_oid, 16u);
+}
+
+void
+uuid_ns_x500(uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	b79_bcopy(out, s_b79_ns_x500, 16u);
 }
 
 /*
@@ -100,7 +175,37 @@ uuid_v3(const uuid_t ns, const char *name, uuid_t out)
 	uuid_generate_md5(out, (const unsigned char *)ns, name);
 }
 
+/*
+ * uuid_v5_dns / uuid_v5_url — soft deepen convenience over Appendix C NS.
+ * name may be NULL (empty). out NULL is a no-op.
+ */
+void
+uuid_v5_dns(const char *name, uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	uuid_generate_sha1(out, s_b79_ns_dns, name);
+}
+
+void
+uuid_v5_url(const char *name, uuid_t out)
+{
+	if (out == NULL) {
+		return;
+	}
+	uuid_generate_sha1(out, s_b79_ns_url, name);
+}
+
 void __uuid_v5(const uuid_t ns, const char *name, uuid_t out)
     __attribute__((alias("uuid_v5")));
 void __uuid_v3(const uuid_t ns, const char *name, uuid_t out)
     __attribute__((alias("uuid_v3")));
+void __uuid_ns_dns(uuid_t out) __attribute__((alias("uuid_ns_dns")));
+void __uuid_ns_url(uuid_t out) __attribute__((alias("uuid_ns_url")));
+void __uuid_ns_oid(uuid_t out) __attribute__((alias("uuid_ns_oid")));
+void __uuid_ns_x500(uuid_t out) __attribute__((alias("uuid_ns_x500")));
+void __uuid_v5_dns(const char *name, uuid_t out)
+    __attribute__((alias("uuid_v5_dns")));
+void __uuid_v5_url(const char *name, uuid_t out)
+    __attribute__((alias("uuid_v5_url")));

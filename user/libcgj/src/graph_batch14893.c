@@ -12,10 +12,20 @@
  *   uint32_t __gj_bar3_ready_14900  (alias)
  *   __libcgj_batch14893_marker = "libcgj-batch14893"
  *
- * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique surface
- * only; no multi-def. Distinct from gj_*_14800 / gj_*_14700 / gj_*_14600 milestone
- * surfaces and sibling 14900 milestone symbols. No parent wires.
- * No __int128.
+ * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique
+ * gj_bar3_ready_14900 surface only; no multi-def. Distinct from
+ * gj_bar3_ready_14800 / gj_bar3_ready_14700 / gj_bar3_ready_14600 and
+ * sibling 14900 milestone symbols. No parent wires. No __int128.
+ *
+ * HONESTY: bar3 remains intentionally open (return 0). Soft continuum
+ * growth does not claim Steam client bar3, Deck Top-50 title matrix, or
+ * live hwtest pass. NOT-TRIED × 50 until a real bar3 track lands.
+ *
+ * CGJ soft marker band (14891–14900): host soft probes
+ * (cgj_soft_milestone_14900.*) may dlsym / direct-link this lamp.
+ * Soft rule: missing symbol → skip; present but wrong value → hard fail.
+ * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
+ * makefile_max honesty is parent-side (scan → makefile_max=14900 when wired).
  *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
@@ -25,9 +35,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* CGJ TU marker: greppable continuum identity string for batch 14893. */
 const char __libcgj_batch14893_marker[] = "libcgj-batch14893";
 
-/* Bar3 readiness lamp for wave 14900 (still open). */
+/* Bar3 readiness lamp for wave 14900 (still open / not complete). */
 #define B14893_BAR3_READY  0u
 
 /* ---- freestanding helpers ---------------------------------------------- */
@@ -41,10 +52,11 @@ b14893_ready(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_bar3_ready_14900 - soft continuum surface
+ * gj_bar3_ready_14900 - report bar3 readiness lamp for wave 14900.
  *
- * Always returns 0u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 0u (bar3 still open / not complete). Soft pure-data
+ * only; does not probe Steam/Deck. Does not call libc. No parent wires.
+ * CGJ soft KAT expectation: 0 (preserve open gate).
  */
 uint32_t
 gj_bar3_ready_14900(void)
@@ -55,5 +67,6 @@ gj_bar3_ready_14900(void)
 
 /* ---- underscored alias ------------------------------------------------- */
 
+/* CGJ alias: underscored form for map / weak-link compatibility. */
 uint32_t __gj_bar3_ready_14900(void)
     __attribute__((alias("gj_bar3_ready_14900")));

@@ -4,11 +4,16 @@
  *
  * Soft host gates for continuum MILESTONE 14900 markers (CREATE-ONLY).
  *
+ * Coherent soft package (see NOTES_milestone_14900.txt):
+ *   - this TU (libcgj continuum dyn/direct soft KATs)
+ *   - NOTES_milestone_14900.txt
+ *
  * Test harness note:
  *   - Sibling harnesses: cgj_smoke.c (static freestanding weak),
  *     cgj_dyn_smoke.c (host dlopen product libc.so.6),
- *     cgj_soft_milestone_14800.c / cgj_soft_milestone_14600.c /
- *     cgj_soft_milestone_14500.c (prior decade soft probes).
+ *     cgj_soft_milestone_14500.c / cgj_soft_milestone_14600.c /
+ *     cgj_soft_milestone_14700.c / cgj_soft_milestone_14800.c
+ *     (sibling decade soft probes).
  *   - This TU follows the dyn-smoke soft pattern: skip if missing,
  *     hard-fail if present but wrong. Not wired in Makefile (tests are
  *     not auto-globbed); build and run manually when product SO is ready.
@@ -49,7 +54,7 @@
  *   __libcgj_batch14891_marker … __libcgj_batch14900_marker
  *     → "libcgj-batchNNNNN" string match when present
  *
- * Notes for parent wiring (outside this exclusive tests/ scope):
+ * Notes for parent wiring (outside this soft exclusive scope):
  *   - Sources graph_batch14891.c … graph_batch14900.c (and fill
  *     14876–14890 / identity 14851–14875) are CREATE-ONLY; wire into
  *     CGJ_SRCS when parent advances makefile_max to 14900.

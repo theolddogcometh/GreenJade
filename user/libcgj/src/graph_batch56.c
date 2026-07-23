@@ -18,6 +18,10 @@
  *   x[10]=c2, x[11..14]=k1, x[15]=c3
  * 32-byte key: c = "expand 32-byte k" (σ)
  * 16-byte key: c = "expand 16-byte k" (τ); k repeated as k0 and k1
+ *
+ * Soft deepen (no API break / no multi-def):
+ *   Null contract: x/key/nonce/out/in NULL → keysetup/block/xor no-op.
+ *   Does not define ChaCha/XChaCha (batch42/43). 20-round core default.
  */
 #include <stddef.h>
 #include <stdint.h>

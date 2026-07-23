@@ -11,12 +11,17 @@
  * This TU adds only unique gj_*_sse2 symbols:
  *   size_t gj_strlen_sse2(const char *s);
  *   char  *gj_strchr_sse2(const char *s, int c);
+ *   void  *gj_memchr_sse2(const void *s, int c, size_t n);
  *   int    gj_memcmp_sse2(const void *a, const void *b, size_t n);
+ *   __gj_strlen_sse2 / __gj_strchr_sse2 / __gj_memchr_sse2 / __gj_memcmp_sse2
  *   __libcgj_batch89_marker = "libcgj-batch89"
  *
  * Correct for all inputs; handles unaligned pointers. Main loops use
  * 16-byte-aligned loads so page-boundary overreads are avoided.
  * No third-party SIMD string source was copied.
+ *
+ * Soft deepen: bounded memchr (no page overread past n), underscored
+ * aliases, NULL short-circuits.
  */
 
 #include <emmintrin.h>
@@ -152,6 +157,75 @@ gj_strchr_sse2(const char *s, int c)
 }
 
 /* --------------------------------------------------------------------------
+ * gj_memchr_sse2 — first byte == c within s[0..n); soft deepen bounded scan
+ * -------------------------------------------------------------------------- */
+
+void *
+gj_memchr_sse2(const void *s, int c, size_t n)
+{
+	const unsigned char *p;
+	const unsigned char *pEnd;
+	const unsigned char *pAligned;
+	unsigned char chNeedle;
+	__m128i vNeedle;
+	__m128i vChunk;
+	unsigned int uMask;
+	uintptr_t uAddr;
+	size_t cbHead;
+	size_t cbLeft;
+
+	if (s == NULL || n == 0u) {
+		return NULL;
+	}
+
+	p = (const unsigned char *)s;
+	pEnd = p + n;
+	chNeedle = (unsigned char)c;
+	uAddr = (uintptr_t)(const void *)p;
+
+	/* Head to 16-byte alignment without reading past n. */
+	cbHead = uAddr & 15u;
+	if (cbHead != 0u) {
+		size_t cbToAlign = 16u - cbHead;
+		size_t i;
+
+		if (cbToAlign > n) {
+			cbToAlign = n;
+		}
+		for (i = 0; i < cbToAlign; i++) {
+			if (p[i] == chNeedle) {
+				return (void *)(uintptr_t)(p + i);
+			}
+		}
+		p += cbToAlign;
+	}
+
+	vNeedle = _mm_set1_epi8((char)chNeedle);
+	pAligned = p;
+	cbLeft = (size_t)(pEnd - pAligned);
+
+	while (cbLeft >= 16u) {
+		vChunk = _mm_load_si128((const __m128i *)(const void *)pAligned);
+		uMask = (unsigned int)_mm_movemask_epi8(
+		    _mm_cmpeq_epi8(vChunk, vNeedle));
+		if (uMask != 0u) {
+			return (void *)(uintptr_t)(pAligned +
+			                           (size_t)__builtin_ctz(uMask));
+		}
+		pAligned += 16;
+		cbLeft -= 16u;
+	}
+
+	while (pAligned < pEnd) {
+		if (*pAligned == chNeedle) {
+			return (void *)(uintptr_t)pAligned;
+		}
+		pAligned++;
+	}
+	return NULL;
+}
+
+/* --------------------------------------------------------------------------
  * gj_memcmp_sse2 — lexicographic byte compare, SSE2 bulk path
  * -------------------------------------------------------------------------- */
 
@@ -206,3 +280,15 @@ gj_memcmp_sse2(const void *a, const void *b, size_t n)
 	}
 	return 0;
 }
+
+/* ---- aliases ----------------------------------------------------------- */
+
+size_t __gj_strlen_sse2(const char *s)
+    __attribute__((alias("gj_strlen_sse2")));
+char *__gj_strchr_sse2(const char *s, int c)
+    __attribute__((alias("gj_strchr_sse2")));
+void *__gj_memchr_sse2(const void *s, int c, size_t n)
+    __attribute__((alias("gj_memchr_sse2")));
+int __gj_memcmp_sse2(const void *a, const void *b, size_t n)
+    __attribute__((alias("gj_memcmp_sse2")));
+

@@ -12,10 +12,17 @@
  *   uint32_t __gj_libcgj_green_14900  (alias)
  *   __libcgj_batch14892_marker = "libcgj-batch14892"
  *
- * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique surface
- * only; no multi-def. Distinct from gj_*_14800 / gj_*_14700 / gj_*_14600 milestone
- * surfaces and sibling 14900 milestone symbols. No parent wires.
- * No __int128.
+ * Milestone 14900 exclusive continuum CREATE-ONLY (14891-14900). Unique
+ * gj_libcgj_green_14900 surface only; no multi-def. Distinct from
+ * gj_libcgj_green_14800 / gj_libcgj_green_14700 / gj_libcgj_green_14600 and
+ * sibling 14900 milestone symbols (shell_green / bar3_ready / …).
+ * No parent wires. No __int128.
+ *
+ * CGJ soft marker band (14891–14900): host soft probes
+ * (cgj_soft_milestone_14900.*) may dlsym / direct-link this lamp.
+ * Soft rule: missing symbol → skip; present but wrong value → hard fail.
+ * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
+ * makefile_max honesty is parent-side (scan → makefile_max=14900 when wired).
  *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
@@ -25,9 +32,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* CGJ TU marker: greppable continuum identity string for batch 14892. */
 const char __libcgj_batch14892_marker[] = "libcgj-batch14892";
 
-/* Libcgj green lamp for wave 14900. */
+/* Libcgj green lamp for wave 14900 (soft product status: ready). */
 #define B14892_LIBCGJ_GREEN  1u
 
 /* ---- freestanding helpers ---------------------------------------------- */
@@ -41,10 +49,11 @@ b14892_green(void)
 /* ---- public surface ---------------------------------------------------- */
 
 /*
- * gj_libcgj_green_14900 - soft continuum surface
+ * gj_libcgj_green_14900 - report product libcgj green lamp for wave 14900.
  *
- * Always returns 1u. Soft pure-data product tag. Does not call
- * libc. No parent wires.
+ * Always returns 1u (libcgj green/ready). Soft pure-data product tag;
+ * does not call libc or load a library. No parent wires.
+ * CGJ soft KAT expectation: 1.
  */
 uint32_t
 gj_libcgj_green_14900(void)
@@ -55,5 +64,6 @@ gj_libcgj_green_14900(void)
 
 /* ---- underscored alias ------------------------------------------------- */
 
+/* CGJ alias: underscored form for map / weak-link compatibility. */
 uint32_t __gj_libcgj_green_14900(void)
     __attribute__((alias("gj_libcgj_green_14900")));

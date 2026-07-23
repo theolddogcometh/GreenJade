@@ -11,6 +11,9 @@
  * Does NOT redefine: aes_gcm_encrypt/decrypt, AES_encrypt, ghash,
  * ghash_pclmul, gj_cpu_has_aesni, gj_cpu_has_pclmul.
  *
+ * Soft deepen: AES-NI+PCLMUL fast path with software GCM fallback shape,
+ * constant-time tag compare on decrypt, key/IV zeroize on exit paths.
+ *
  * Surface:
  *   int aes_gcm_encrypt_fast(...);  // same args as aes_gcm_encrypt
  *   int aes_gcm_decrypt_fast(...);  // same args as aes_gcm_decrypt

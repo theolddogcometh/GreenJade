@@ -10,7 +10,8 @@
  *   gj_toml_get_string(const char *toml, const char *key,
  *                      char *out, size_t outcap)
  *   gj_toml_get_int(const char *toml, const char *key, long *out)
- *   __gj_toml_get_string / __gj_toml_get_int
+ *   gj_toml_has_key(const char *toml, const char *key) → 1/0
+ *   __gj_toml_get_string / __gj_toml_get_int / __gj_toml_has_key
  *   __libcgj_batch81_marker = "libcgj-batch81"
  *
  * Semantics:
@@ -24,6 +25,9 @@
  *   Nested tables / arrays / multi-line strings are not supported.
  *   errno: EINVAL bad input/syntax, ENOENT missing key, ENOSPC buffer,
  *          ERANGE integer overflow.
+ *
+ * Soft deepen: has_key probe without value decode; last-key-wins is
+ * inherited from find_key scan order.
  */
 
 #include <errno.h>
@@ -424,6 +428,27 @@ gj_toml_get_int(const char *szToml, const char *szKey, long *pOut)
 	return 0;
 }
 
+/*
+ * gj_toml_has_key — soft deepen: 1 if bare key is assigned, else 0.
+ * Does not decode the value. NULL args → 0; restores errno on miss.
+ */
+int
+gj_toml_has_key(const char *szToml, const char *szKey)
+{
+	const char *pVal;
+	int nSaved = errno;
+
+	if (szToml == NULL || szKey == NULL || szKey[0] == '\0') {
+		return 0;
+	}
+	if (b81_find_key(szToml, szKey, &pVal) != 0) {
+		errno = nSaved;
+		return 0;
+	}
+	errno = nSaved;
+	return 1;
+}
+
 /* ---- aliases ----------------------------------------------------------- */
 
 int __gj_toml_get_string(const char *szToml, const char *szKey, char *szOut,
@@ -432,3 +457,6 @@ int __gj_toml_get_string(const char *szToml, const char *szKey, char *szOut,
 
 int __gj_toml_get_int(const char *szToml, const char *szKey, long *pOut)
     __attribute__((alias("gj_toml_get_int")));
+
+int __gj_toml_has_key(const char *szToml, const char *szKey)
+    __attribute__((alias("gj_toml_has_key")));

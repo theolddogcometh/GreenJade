@@ -1426,3 +1426,12 @@ b27_ctor(void)
         __nptl_nthreads = 1;
     }
 }
+
+/* ---- soft deepen: nptl thread-count probe (unique) ---------------------- */
+
+int
+__nptl_nthreads_get(void)
+{
+    return __nptl_nthreads;
+}
+

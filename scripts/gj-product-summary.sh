@@ -3,8 +3,9 @@
 #
 # Soft product PASS summary for a boot/smoke serial log.
 # Greps greppable product markers (sshd, scsi_mid, multi-seg, HDA multi, M0,
-# soak_tib, aarch64 bring-up, TRAP #UD count). Always exits 0 so it can run
-# in agent / smoke / preflight paths without failing the caller.
+# live daemons, PE32 surface, soak / soak_tib, aarch64 bring-up, TRAP #UD).
+# Always exits 0 so it can run in agent / smoke / preflight paths without
+# failing the caller.
 #
 # Usage:
 #   ./scripts/gj-product-summary.sh <logfile>
@@ -21,13 +22,17 @@
 # aarch64 via podman: scripts/gj-aarch64-podman-smoke.sh
 # continuum wire lines: scripts/gj-continuum-makefile-snippet.sh --max
 # Steam bar3 media: scripts/steam-bar3-check.sh
+# Full hard smoke (do not soften): scripts/smoke-all.sh
 #
 # Markers (kernel / freestanding embeds / aarch64 scaffold):
 #   M0 OK                         kernel/main.c or aarch64 kmain bring-up
 #   sshd: live spawn PASS         product sshd.elf default-on :22
 #   scsi_mid: live spawn PASS     product scsi_mid.elf
+#   sessiond/netstackd/storaged/vfsd/shell/hda_client: live spawn PASS
 #   TCP multi-segment PASS        netstackd multi-seg (sshd / Top50 path)
 #   hda: multi-stream mixer PASS  HDA multi-stream mixer
+#   pe32: int80 … PASS            Wine int80 surface (soft inventory)
+#   pmm: soak PASS                small hierarchical soak (smoke-all hard)
 #   pmm: soak_tib PASS            large-RAM hierarchical freelist (GJ_MEM=768G)
 #   aarch64: * PASS               aarch64 scaffold path (optional)
 #   TRAP #UD                      count only (volume signal for agents)
@@ -37,6 +42,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 1 ]]; then
 	echo "usage: $0 <logfile>" >&2
+	echo "  Soft inventory of product PASSes; always exit 0." >&2
+	echo "  Hard gate: scripts/gj-quick-keys.sh <logfile>" >&2
 	# soft: help is not a hard failure for agents piping logs
 	exit 0
 fi
@@ -75,16 +82,54 @@ report() {
 	fi
 }
 
-echo "  --- x86 / product embeds ---"
+# info_match <label> <regex>
+# Soft presence line only — never increments hit/miss.
+info_match() {
+	local _label=$1
+	local _pat=$2
+	if gqa_q "$_pat"; then
+		echo "  info: $_label  (present)"
+	else
+		echo "  info: $_label  (absent)"
+	fi
+}
+
+# first_line <regex> — first matching line, truncated, or empty
+first_line() {
+	gqa "$1" | head -n1 | tr -cd '\11\12\15\40-\176' | head -c 160 || true
+}
+
+echo "  --- core product (x86 embeds) ---"
 # Product PASSes (presence only — soft inventory)
 report "M0 OK"              'M0 OK'
 report "sshd live PASS"     'sshd: live spawn PASS|sshd: live'
 report "scsi_mid live PASS" 'scsi_mid: live spawn PASS|scsi_mid: live'
-report "multi-seg PASS"     'TCP multi-segment PASS|multi-segment PASS|multi-seg'
+report "multi-seg PASS"     'TCP multi-segment PASS|multi-segment PASS'
 report "HDA multi PASS"     'hda: multi-stream mixer PASS|multi-stream mixer PASS|hda: multi-stream'
+
+echo "  --- live daemons (soft) ---"
+report "sessiond live"      'sessiond: live spawn PASS|sessiond: live'
+report "netstackd live"     'netstackd: live spawn PASS|netstackd: live'
+report "storaged live"      'storaged: live spawn PASS|storaged: live'
+report "vfsd live"          'vfsd: live spawn PASS|vfsd: live'
+report "shell live"         'shell: live spawn PASS|shell: live'
+report "hda_client live"    'hda_client: live spawn PASS|hda_client: live'
+
+echo "  --- freestanding path (soft) ---"
+# Aggregate freestanding PASS only (FAIL is reported under soft status lines).
+report "sshd-gj live path"       'sshd-gj: live path PASS'
+report "netstackd-gj live path"  'netstackd-gj: live path PASS'
+report "storaged-gj live path"   'storaged-gj: live path PASS'
+report "vfsd-gj live path"       'vfsd-gj: live path PASS'
+report "scsi_mid-gj READY"       'scsi_mid-gj: READY PASS'
+
+echo "  --- surface / memory (soft) ---"
+report "pe32 int80 multi"   'pe32: int80 multi PASS|pe32: int80'
+report "pmm soak PASS"      'pmm: soak PASS'
 # Large-RAM hierarchical soak (kernel/mm/pmm.c); typical only with GJ_MEM=768G.
 # Miss is soft — small QEMU decks soft-SKIP soak_tib and never print PASS.
 report "soak_tib PASS"      'pmm: soak_tib PASS|soak_tib PASS'
+report "hierarchical free"  'hierarchical free ready|hierarchical free'
 
 echo "  --- aarch64 scaffold (optional) ---"
 # Only meaningful on aarch64 serial; miss is soft on x86 logs.
@@ -100,11 +145,35 @@ report "aarch64 mem probe"  'aarch64: mem probe PASS'
 
 # TRAP #UD — count only (not a miss; agents care about volume)
 ud_n=$(gqa 'TRAP[[:space:]]+#UD' | wc -l | tr -d ' ' || true)
-# Guard empty / non-numeric
 case "$ud_n" in
 '' | *[!0-9]*) ud_n=0 ;;
 esac
 echo "  info: TRAP #UD count: $ud_n"
+
+echo "  --- soft status lines (info only) ---"
+# soak_tib SKIP is expected on modest QEMU; do not count as miss above.
+if gqa_q 'pmm: soak_tib SKIP|soak_tib SKIP'; then
+	_sk=$(first_line 'pmm: soak_tib SKIP|soak_tib SKIP')
+	echo "  info: soak_tib SKIP soft — ${_sk:-present}"
+elif gqa_q 'pmm: soak_tib FAIL|TiB soak FAIL'; then
+	_fl=$(first_line 'pmm: soak_tib FAIL|TiB soak FAIL')
+	echo "  info: soak_tib FAIL (soft inventory) — ${_fl:-present}"
+else
+	echo "  info: soak_tib SKIP/FAIL  (absent)"
+fi
+
+# Freestanding FAIL banners (agent honesty; not hit/miss)
+if gqa_q 'sshd-gj: live path FAIL'; then
+	echo "  info: sshd-gj live path FAIL (soft — crypto/session incomplete on some decks)"
+fi
+if gqa_q 'TCP multi-segment FAIL|multi-segment FAIL'; then
+	echo "  info: multi-seg FAIL present (soft)"
+fi
+
+# UEFI / EFI path markers when present (OVMF / real-hw serial)
+info_match "GJ-EFI"            'GJ-EFI'
+info_match "KERNEL.ELF loaded" 'KERNEL\.ELF loaded'
+info_match "source=UEFI"       'source=UEFI'
 
 # Optional host media / continuum side panels (never fail)
 echo "  --- host side panels (soft) ---"
@@ -121,6 +190,22 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 else
 	echo "  info: continuum makefile_max=(helper missing)"
 fi
+
+# Artifact presence (host tree; soft — no build, no fail)
+echo "  --- host artifacts (soft) ---"
+for art in \
+	"build/greenjade.elf" \
+	"build/GreenJade.efi" \
+	"build/user/sshd.elf" \
+	"build/user/scsi_mid.elf" \
+	"build/user/libc.so.6"
+do
+	if [[ -f "$ROOT/$art" ]]; then
+		echo "  info: artifact $art  (present)"
+	else
+		echo "  info: artifact $art  (absent)"
+	fi
+done
 
 echo "gj-product-summary: hit=$hit miss=$miss ud=$ud_n soft-exit 0"
 exit 0

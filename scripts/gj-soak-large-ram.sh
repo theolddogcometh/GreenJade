@@ -32,9 +32,13 @@
 #   pmm: soak_tib FAIL   alloc path failed (still soft-exit 0 here)
 #
 # Contrast:
-#   scripts/smoke-all.sh     hard-requires small `pmm: soak PASS`
+#   scripts/smoke-all.sh     hard-requires small `pmm: soak PASS` (not this script)
 #   scripts/gj-product-summary.sh  soft inventory including soak_tib PASS
 #   scripts/gj-quick-keys.sh hard presence gate (does not require soak_tib)
+#
+# After run, soft-scan the same log with:
+#   ./scripts/gj-product-summary.sh "$log"
+#   ./scripts/gj-quick-keys.sh "$log"   # hard keys; soak_tib is soft info only
 #
 # See also: docs/HCL.md, docs/STEAM_HWTEST.md (768G soak scope / honesty bounds)
 set -u
@@ -150,6 +154,29 @@ fi
 gqa_q() {
 	grep -a -q -E "$1" "$log" 2>/dev/null
 }
+
+# Soft companion: print small-pmm soak presence (smoke-all hard key; not required here).
+if gqa_q 'pmm: soak PASS'; then
+	echo "gj-soak-large-ram: info pmm: soak PASS present (smoke-all class)"
+else
+	echo "gj-soak-large-ram: info pmm: soak PASS absent (soft)"
+fi
+
+# Soft companion: M0 / hierarchical free readiness (agent honesty on partial boots).
+if gqa_q 'M0 OK'; then
+	echo "gj-soak-large-ram: info M0 OK present"
+else
+	echo "gj-soak-large-ram: info M0 OK absent (soft)"
+fi
+if gqa_q 'hierarchical free ready|hierarchical free'; then
+	echo "gj-soak-large-ram: info hierarchical free markers present"
+fi
+
+# Optional soft product inventory (never fails this script; ignore helper exit).
+if [ -f "$root/scripts/gj-product-summary.sh" ]; then
+	echo "gj-soak-large-ram: --- soft product-summary ---"
+	bash "$root/scripts/gj-product-summary.sh" "$log" 2>/dev/null || true
+fi
 
 if gqa_q 'pmm: soak_tib PASS|soak_tib PASS'; then
 	line=$(grep -a -E 'pmm: soak_tib PASS|soak_tib PASS' "$log" 2>/dev/null | head -n1 || true)

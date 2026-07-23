@@ -18,13 +18,16 @@
 #include <stdint.h>
 
 #define PROTON_RT_VERSION_MAJOR 1
-#define PROTON_RT_VERSION_MINOR 9
+#define PROTON_RT_VERSION_MINOR 10
 
-/* Feature bits advertised by proton_rt_query (libprotonrt 1.9). */
+/* Feature bits advertised by proton_rt_query (libprotonrt 1.10). */
 #define PROTON_FEAT_FUTEX         (1u << 0)
 #define PROTON_FEAT_NAMED_SHM     (1u << 1)
 #define PROTON_FEAT_SOCKETPAIR    (1u << 2)
 #define PROTON_FEAT_EVENTFD       (1u << 3)
+#define PROTON_FEAT_EPOLL         (1u << 4)
+#define PROTON_FEAT_PIPE          (1u << 5)
+#define PROTON_FEAT_MEMFD         (1u << 6)
 #define PROTON_FEAT_LINUX_COMPAT  (1u << 10)
 
 struct proton_rt_info {
@@ -46,12 +49,11 @@ int proton_rt_query(struct proton_rt_info *pOut);
  *
  * Unimplemented NRs in this library return -ENOSYS (38).
  *
- * Split of ownership (product path):
- *   - Kernel cold bridge (protonrt_cold_link / io_uring_min) owns
- *     io_uring_setup / enter / register as min rings — not ENOSYS
- *     for setup on the kernel path.
- *   - This entry is a fall-through for host builds and NRs the kernel
- *     does not claim; it does not implement io_uring.
+ * Soft depth (1.10): freestanding host/smoke soft path for A0-shaped
+ * surfaces — FD table with pipe/eventfd/socketpair/epoll/memfd kinds,
+ * write/dup/poll/ioctl/fsync/madvise soft success, identity/time/rlimit
+ * probes. Kernel product path (protonrt_cold_link / vfs_ram / net_lo /
+ * io_uring_min) owns real vfs and min rings before fall-through.
  *
  * Linked into kernel smoke via the tree build (cold_linux.c) or host.
  */

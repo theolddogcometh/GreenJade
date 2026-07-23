@@ -6,7 +6,7 @@ against this library; capabilities, IOMMU, and hard IRQ stay hidden.
 
 | Field | Value |
 |-------|--------|
-| **Product** | `GREENJADE_UDX` · `UDX_PRODUCT` · v1.2 |
+| **Product** | `GREENJADE_UDX` · `UDX_PRODUCT` · v1.3 |
 | **License** | MIT OR Apache-2.0 — **no Linux source** |
 | **Guide** | [docs/UDX_LINUX_PORTER.md](../../docs/UDX_LINUX_PORTER.md) |
 | **Library** | `make udx` → `build/libudx.a` |
@@ -39,12 +39,12 @@ user/udx/
     udx.h       umbrella + init/run/exit/printk
     types.h     status, product markers, basic types
     device.h    device / drvdata / dev_name
-    pci.h       pci_driver, id table, enable/master/regions
-    irq.h       request_irq / free_irq / soft mask (threaded)
+    pci.h       pci_driver, id table, soft cfg, enable/master/regions
+    irq.h       request_irq / free_irq / nested soft mask + pending
     dma.h       coherent + map/unmap + sync + iommu grant
-    mmio.h      ioremap / readl / writel / flush
+    mmio.h      ioremap / read[bwlq] / memcpy_io / flush
     work.h      init_work / schedule_work / cancel / pending
-    host.h      inject PCI + fire_irq + bar poke (host bring-up)
+    host.h      inject/remove PCI + multi-width BAR poke + fire_irq
     virtq.h     virtio queue attach / avail / used_reap (header)
   src/          runtime (host-libc objects with -DUDX_HOST_LIBC=1)
   examples/
@@ -81,9 +81,9 @@ register stub.
 |-------|--------|
 | API names | Linux-shaped (`probe`/`remove`, `ioremap`, `request_irq`, `dma_*`, work) |
 | Teardown | DDI-style **`quiesce`** + `remove` |
-| IRQ | Threaded only + soft `disable_irq` (host fire / GJ Notification → handler) |
+| IRQ | Threaded only + nested soft `disable_irq` + pending latch on fire |
 | Authority | Caps hidden — never mint/revoke from driver `.c` |
-| Develop | `udx_host_inject_pci` / `udx_host_bar_writel` / `udx_host_fire_irq` |
+| Develop | `udx_host_inject_pci[_ex]` / `udx_host_bar_*` / `udx_host_fire_irq` |
 | License | Clean-room MIT/Apache C only |
 
 ## Example path (`udx-example`) — probe / irq soft path
@@ -109,7 +109,7 @@ hardware docs only. Do not paste Linux kernel source.
 Expected host demo log (greppable):
 
 ```text
-udx: init GREENJADE_UDX UDX_PRODUCT v1.2 (Linux-porter surface)
+udx: init GREENJADE_UDX UDX_PRODUCT v1.3 (Linux-porter surface)
 udx: pci register my_drv
 udx: inject pci 1af4:1001 bus 0 devfn 0 irq 11
 my_drv: probe ok bar0=… dma=… dev=my_drv
@@ -124,9 +124,9 @@ udx: skeleton PASS
 
 | Piece | Host (`UDX_HOST_LIBC`) | Full GJ |
 |-------|------------------------|---------|
-| PCI match/probe | inject + id table | devmgr grants |
-| MMIO | host window table + malloc iomem | window table + freestanding iomem pool |
-| IRQ | `udx_host_fire_irq` + soft mask | Notification cap + soft mask |
+| PCI match/probe | inject_ex + id/subsys/class + soft cfg | devmgr grants |
+| MMIO | host window table + multi-width BAR poke | window table + freestanding iomem pool |
+| IRQ | `udx_host_fire_irq` + nested soft mask/pending | Notification cap + soft mask |
 | DMA | malloc cookie | freestanding slab + IOMMU grant |
 | Work | queue + `udx_run` flush / cancel | same shape |
 | Virtq | header attach/avail/used_reap | MAP_RING + door ops |

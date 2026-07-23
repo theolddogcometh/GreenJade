@@ -573,7 +573,9 @@ See [TODO.md](TODO.md), [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md), [LINUX_A
 
 ## Progress note — 2026-07-23
 
-Residual **#UD** closed; **scsi_mid** live; **HDA multi-stream**; continuum **14500**; **bar3** open.
+Parallel waves **soft shipped**; **bar3 still open**.
+
+Residual **#UD** closed; **scsi_mid** live; **HDA multi-stream** kernel PASS; continuum **makefile_max=14900** (soft only); **bar3** open.
 
 Hierarchical **free_range** + **768G soak_tib** **PASS**; **bar3** open.
 
@@ -581,9 +583,11 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; **bar3** open.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **io_uring min rings** | **PASS** | `kernel/syscall/io_uring_min.c`; smoke `linux: io_uring min rings PASS`; setup/enter/register soft surface — full SQE path deferred |
+| Continuum **makefile_max=14900** | **soft shipped** | CREATE-ONLY graph batches through `graph_batch14900.c`; **not** Steam client / Top-50 |
+| **io_uring** min rings + mmap/SQE soft | **PASS** | `kernel/syscall/io_uring_min.c`; smokes `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS` — vfs_ram/kernel soft surface; **not** game I/O |
 | **768GiB hierarchical soak** | **PASS** | `GJ_MEM=768G` / `pmm_soak_tib`; product bar still **≥ 1 TiB** when host allows |
-| **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke`; exceptions→cpu→GIC→timer→pmm→mmu→svc→virtio-mmio; shared product kernel **not** ported |
+| **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke`; exceptions→cpu→GIC→timer→pmm→mmu→svc→virtio-mmio; shared C + PSCI smokes; shared product kernel **not** ported to Deck/x86 path |
+| **HDA multi-stream** | **kernel PASS** | mixer/SD0 path; **not** Steam/game audio |
 | Steam media `STATUS=READY` | **media only** | bootstrap tree staged/packed — **not** client launch |
 | Deck Top 50 title runs | **NOT-TRIED** × 50 | claim **targeting only**; **no titles tried**; bar3 client open |
-| Bar3 (Steam client on DUT) | **open** | kernel/media gates ≠ title matrix |
+| Bar3 (Steam client on DUT) | **open** | parallel soft waves / kernel/media gates ≠ title matrix |

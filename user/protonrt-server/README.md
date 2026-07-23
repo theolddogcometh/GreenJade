@@ -14,7 +14,7 @@ License: **MIT OR Apache-2.0**. Clean-room; no GPL source.
 
 | Path | Role |
 |------|------|
-| `server.S` | Freestanding door loop + boot DEBUG_LOG marker |
+| `server.S` | Freestanding door loop + hard/soft DEBUG_LOG markers |
 | `README.md` | This file — markers, ABI, build |
 
 Symbols exported for the kernel map path:
@@ -22,7 +22,7 @@ Symbols exported for the kernel map path:
 | Symbol | Meaning |
 |--------|---------|
 | `gj_protonrt_user_blob` | Start of RX code blob |
-| `gj_protonrt_user_blob_end` | One past end (size = end − start, ≤ page) |
+| `gj_protonrt_user_blob_end` | One past end (size = end − start, ≤ 4 pages) |
 
 Map window (kernel `user_task.c`, outside this tree): code `@ 0x1200000`,
 stack top `@ 0x1300000`.
@@ -30,32 +30,64 @@ stack top `@ 0x1300000`.
 ## Door loop
 
 ```text
-DEBUG_LOG "protonrt-server: door server up"
+DEBUG_LOG "protonrt-user: door server up"
+fixed 128-byte regs frame once
 loop:
-  IPC_RECV     → 128-byte gj_linux_regs buffer on stack
-  PERSONALITY_SERVE(regs)   # interim cold policy in kernel
-  IPC_REPLY(i64Ret from regs+56)
+  zero wire-size (64) regs frame          # soft hygiene
+  IPC_RECV     → frame
+  on soft fail → one-shot soft recv-miss, YIELD, retry
+  PERSONALITY_SERVE(frame)                # interim cold policy in kernel
+  on copy/arg soft fault (frame i64Ret==0, rax<0):
+                 one-shot soft serve-miss (still reply)
+  IPC_REPLY(rax from serve)               # match cold_personality_server
+  on soft fail → one-shot soft reply-miss, YIELD, retry
+  first full flight → one-shot soft serve ready
 ```
 
 | Syscall | nr | Notes |
 |---------|----|--------|
-| `GJ_SYS_DEBUG_LOG` | 0 | Boot banner only |
+| `GJ_SYS_DEBUG_LOG` | 0 | Banner + soft one-shot markers |
+| `GJ_SYS_YIELD` | 1 | Soft miss path (matches kernel yield) |
 | `GJ_SYS_IPC_RECV` | 11 | Block for next cold call |
 | `GJ_SYS_PERSONALITY_SERVE` | 82 | Cold service (vfs_ram / net_lo / stubs) |
-| `GJ_SYS_IPC_REPLY` | 12 | Return `i64Ret` to caller |
+| `GJ_SYS_IPC_REPLY` | 12 | Return serve `rax` to caller |
 
-`gj_linux_regs.i64Ret` is at **offset 56**. On `IPC_RECV` failure the loop
-`pause`s and retries (no tear-down).
+`gj_linux_regs` wire size is **64** bytes (`i64Ret` at **offset 56**). The
+loop keeps a **128-byte** fixed frame for alignment/headroom. Soft state
+(flags) lives in `r15`; the fixed frame pointer is `r14`; serve return is
+`rbx` across the reply path (SYSCALL preserves those GPRs).
+
+On soft `IPC_RECV` / `IPC_REPLY` failure the loop **never** exits: one-shot
+marker (if any), `pause` + `YIELD`, then retry (no tear-down).
 
 ## Smoke markers
 
-### From this tree (`server.S`)
+### Hard (from this tree — prefix-stable)
 
 Emitted once on entry via `GJ_SYS_DEBUG_LOG`:
 
 ```
-protonrt-server: door server up
+protonrt-user: door server up
 ```
+
+### Soft (from this tree — optional; never hard-fail)
+
+One-shot only; safe to ignore in `smoke-all.sh`:
+
+| Marker | Meaning |
+|--------|---------|
+| `protonrt-user: soft serve ready` | First full `recv → serve → reply` completed |
+| `protonrt-user: soft recv-miss` | First soft `IPC_RECV` failure (door not ready / peer / …) |
+| `protonrt-user: soft reply-miss` | First soft `IPC_REPLY` failure (rare after live recv) |
+| `protonrt-user: soft serve-miss` | First `PERSONALITY_SERVE` copy/arg soft fault (frame still 0, `rax < 0`); reply still sent |
+
+Soft deepenings stay product-safe:
+
+- Fixed frame (no per-iter `sub`/`add` thrash)
+- Zero before each recv (no stale `i64Ret` / NR)
+- Reply uses serve `rax` (same value as kernel `cold_personality_server`)
+- Soft miss → `YIELD` (not busy-spin alone)
+- Never `EXIT` on soft error
 
 Kernel map/schedule companions (not from this directory):
 
@@ -112,8 +144,9 @@ winesrv: A0 demo PASS
 except: port smoke PASS
 ```
 
-The door-server banner and `pers:` / `user: personality` lines are bring-up
-context; they are not currently hard-required by `smoke-all.sh`.
+The door-server hard banner, soft one-shots, and `pers:` / `user: personality`
+lines are bring-up context; they are not currently hard-required by
+`smoke-all.sh`.
 
 ## Build
 
@@ -136,6 +169,7 @@ part of this directory.
 | Topic | Status |
 |-------|--------|
 | G-PERS door loop in ring-3 | **Landed** (`server.S`) |
+| Door loop soft deepen | **Landed** (fixed frame, yield miss, one-shot soft markers) |
 | Cold policy in userspace | **Interim** — `PERSONALITY_SERVE` still kernel policy |
 | Wine-server A0 shape | **Kernel smoke** (`winesrv:` markers above) |
 | Deck Top 50 / libprotonrt growth | See `docs/PROTON_PERSONALITY.md` |

@@ -23,6 +23,7 @@
 #   3. Lab SSH (serial bridge): sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh
 #      or: sudo ./scripts/hwtest-ssh-setup.sh
 #   4. Soft-scan serial: ./scripts/gj-product-summary.sh /mnt/gj-persist/logs/….txt
+#      Hard keys only:   ./scripts/gj-quick-keys.sh <serial-log>   # exit 1 on miss
 #   5. Steam bar3 media: ./scripts/steam-bar3-check.sh   # soft exit 0
 #   6. If steam/STATUS=SKELETON: sudo make steam-to-persist  (option 3 host prep)
 #
@@ -73,6 +74,7 @@ echo "  Boot:  UEFI → GreenJade BOOTX64.EFI (serial: GJ-EFI / M0 OK)"
 echo "  Logs:  mount -L GJ-PERSIST  →  logs/"
 echo "  SSH:   on lab host: sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh"
 echo "  Soft:  ./scripts/gj-product-summary.sh <serial-log>   # exit 0 always"
+echo "  Keys:  ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1"
 echo "  Steam: if STATUS=SKELETON, host prep (option 3):"
 echo "         sudo make steam-to-persist   # or steam-host-prep --to-label"
 echo "         docs/STEAM_HWTEST.md"

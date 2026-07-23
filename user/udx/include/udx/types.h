@@ -16,7 +16,7 @@
 /* Product identity — greppable in binaries and docs. */
 #define UDX_PRODUCT_NAME    "GREENJADE_UDX"
 #define UDX_PRODUCT_TAG     "UDX_PRODUCT"
-#define UDX_PRODUCT_VERSION "1.2"
+#define UDX_PRODUCT_VERSION "1.3"
 
 typedef uint8_t  u8;
 typedef uint16_t u16;

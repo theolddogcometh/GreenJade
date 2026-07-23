@@ -16,6 +16,7 @@
 #
 # Operator after boot (serial / GJ-PERSIST logs):
 #   ./scripts/gj-product-summary.sh <serial-log>   # soft product PASSes, exit 0
+#   ./scripts/gj-quick-keys.sh <serial-log>        # hard product keys, exit 1 on miss
 #   ./scripts/steam-bar3-check.sh                  # media READY/SKELETON, exit 0
 #   ./scripts/hwtest-ssh-setup.sh                  # lab-host OpenSSH + hwtest key
 #

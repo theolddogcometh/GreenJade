@@ -205,7 +205,7 @@ udx_virtq_kick_avail(struct udx_virtq *pQ, uint16_t head)
 
 /**
  * Reap one used element if available.
- * Returns 1 and fills *pu32Id/*pu32Len; 0 if ring empty vs last_used.
+ * Returns 1 and fills *pu32Id and *pu32Len; 0 if ring empty vs last_used.
  */
 static inline int
 udx_virtq_used_reap_one(struct udx_virtq *pQ, uint32_t *pu32Id,

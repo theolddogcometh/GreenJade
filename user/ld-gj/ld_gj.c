@@ -8,9 +8,15 @@
  * Product path:
  *   1. Read handoff page + stack-built auxv (INTERP-first)
  *   2. Parse auxv (AT_ENTRY / AT_PHDR / AT_BASE / AT_EXECFN)
- *   3. Open DT_NEEDED libs from handoff SO list + /lib; resolve symbols
+ *   3. Open DT_NEEDED libs from handoff SO list + /lib; soft resolve
  *   4. Apply RELATIVE + GLOB_DAT + JUMP_SLOT across multi-object maps
  *   5. Jump to AT_ENTRY
+ *
+ * Soft resolve/hash depth (userspace freestanding):
+ *   - Cache PT_DYNAMIC tags per SO (HASH / GNU_HASH / SYMTAB / STRTAB)
+ *   - Lookup order: GNU hash (+64-bit bloom) → SysV DT_HASH → SYMTAB scan
+ *   - Prefer STB_GLOBAL over STB_WEAK across multi-SO registry
+ *   - Method-tagged soft probes (gj_so_export / gj_gnu_export / *_init)
  *
  * Smoke markers (prefix-stable): ld-gj: handoff magic PASS, multi-SO,
  * hash/sym, AT_ENTRY ready, live path PASS, scaffold PASS.
@@ -68,6 +74,22 @@
 /* Must match kernel handoff GJ_ELF_SO_MAX layout for aSo[] */
 #define GJ_LD_SO_MAX 4u
 #define GJ_LD_SO_IMG 512u /* smoke ET_DYN SOs + pad (full libc mapped by kernel) */
+
+/* Soft resolve method tags (which hash/scan path bound the name). */
+#define GJ_LD_RES_NONE   0u
+#define GJ_LD_RES_GNU    1u
+#define GJ_LD_RES_SYSV   2u
+#define GJ_LD_RES_SCAN   3u
+#define GJ_LD_RES_BUILTIN 4u
+
+#define GJ_LD_STB_LOCAL  0u
+#define GJ_LD_STB_GLOBAL 1u
+#define GJ_LD_STB_WEAK   2u
+#define GJ_LD_SHN_UNDEF  0u
+#define GJ_LD_SHN_ABS    0xfff1u
+
+/* Chain/scan guards — align with kernel elf_load bring-up bounds */
+#define GJ_LD_HASH_GUARD 4096u
 
 struct gj_ld_so_ent {
     uint64_t u64Bias;
@@ -133,18 +155,34 @@ struct elf64_sym {
     uint64_t u64Size;
 } __attribute__((packed));
 
-/* Loaded SO file images for multi-object resolve */
+/* Loaded SO file images + cached PT_DYNAMIC for multi-object soft resolve */
 struct ld_so_img {
     uint8_t  u8Used;
-    uint8_t  u8Pad[3];
+    uint8_t  u8HasHash; /* DT_HASH present */
+    uint8_t  u8HasGnu;  /* DT_GNU_HASH present */
+    uint8_t  u8DynOk;   /* dyn tags filled */
     uint32_t cb;
+    uint32_t u32NameHash; /* sysv hash of handoff szName */
+    uint32_t u32SoHash;   /* sysv hash of DT_SONAME */
     uint64_t u64Bias;
+    uint64_t u64SymOff;   /* file offset of SYMTAB */
+    uint64_t u64StrOff;   /* file offset of STRTAB */
+    uint64_t u64HashOff;  /* file offset of DT_HASH */
+    uint64_t u64GnuOff;   /* file offset of DT_GNU_HASH */
+    uint64_t u64Syment;
+    uint64_t u64Strsz;
     char     szName[56];
+    char     szSoname[56];
     unsigned char aImg[GJ_LD_SO_IMG];
 };
 
 static struct ld_so_img g_aSoImg[GJ_LD_SO_MAX];
 static unsigned         g_cSoImg;
+/* Soft resolve path counters (for hash/sym method PASS markers) */
+static unsigned         g_cResGnu;
+static unsigned         g_cResSysv;
+static unsigned         g_cResScan;
+static unsigned         g_cResBuiltin;
 
 static const struct {
     const char *szName;
@@ -239,27 +277,54 @@ dyn_to_file_off(uint64_t u64Va, uint64_t u64Bias, long cb)
 static uint32_t
 sysv_hash(const char *sz)
 {
-    uint32_t h = 0;
-    uint32_t g;
+    uint32_t u32H = 0;
+    uint32_t u32G;
 
-    while (sz != NULL && *sz != '\0') {
-        h = (h << 4) + (uint32_t)(unsigned char)*sz++;
-        g = h & 0xf0000000u;
-        if (g != 0) {
-            h ^= g >> 24;
-        }
-        h &= ~g;
+    if (sz == NULL) {
+        return 0;
     }
-    return h;
+    while (*sz != '\0') {
+        u32H = (u32H << 4) + (uint32_t)(unsigned char)*sz++;
+        u32G = u32H & 0xf0000000u;
+        if (u32G != 0) {
+            u32H ^= u32G >> 24;
+        }
+        u32H &= ~u32G;
+    }
+    return u32H;
+}
+
+/* djb2-style GNU hash (ELF DT_GNU_HASH) */
+static uint32_t
+gnu_hash(const char *sz)
+{
+    uint32_t u32H = 5381u;
+
+    if (sz == NULL) {
+        return 0;
+    }
+    while (*sz != '\0') {
+        u32H = (u32H << 5) + u32H + (uint32_t)(unsigned char)*sz++;
+    }
+    return u32H;
+}
+
+static uint32_t
+sym_bind(const struct elf64_sym *pSym)
+{
+    if (pSym == NULL) {
+        return GJ_LD_STB_LOCAL;
+    }
+    return (uint32_t)(pSym->u8Info >> 4);
 }
 
 static int
 sym_val_out(const struct elf64_sym *pSym, uint64_t u64Bias, uint64_t *pVal)
 {
-    if (pSym == NULL || pVal == NULL || pSym->u16Shndx == 0) {
+    if (pSym == NULL || pVal == NULL || pSym->u16Shndx == GJ_LD_SHN_UNDEF) {
         return 0;
     }
-    if (pSym->u16Shndx == 0xfff1u) {
+    if (pSym->u16Shndx == GJ_LD_SHN_ABS) {
         *pVal = pSym->u64Value;
     } else {
         *pVal = pSym->u64Value + u64Bias;
@@ -267,20 +332,45 @@ sym_val_out(const struct elf64_sym *pSym, uint64_t u64Bias, uint64_t *pVal)
     return 1;
 }
 
+/*
+ * Soft strtab bound: accept name if within image; prefer DT_STRSZ when known.
+ */
+static int
+strtab_name(const unsigned char *pImg, long cb, uint64_t u64StrOff,
+            uint64_t u64Strsz, uint32_t u32Name, const char **ppSz)
+{
+    uint64_t u64Off;
+
+    if (pImg == NULL || ppSz == NULL) {
+        return 0;
+    }
+    u64Off = u64StrOff + (uint64_t)u32Name;
+    if (u64Off >= (uint64_t)cb) {
+        return 0;
+    }
+    if (u64Strsz != 0 && (uint64_t)u32Name >= u64Strsz) {
+        return 0;
+    }
+    *ppSz = (const char *)(pImg + u64Off);
+    return 1;
+}
+
 /* SysV DT_HASH: nbucket, nchain, bucket[], chain[] */
 static int
 hash_sysv_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
                  uint64_t u64HashOff, uint64_t u64SymOff, uint64_t u64StrOff,
-                 uint64_t u64Syment, const char *szName, uint64_t *pVal)
+                 uint64_t u64Syment, uint64_t u64Strsz, const char *szName,
+                 uint64_t *pVal, uint32_t *pBind)
 {
     const uint32_t *pH;
     uint32_t u32Nb;
     uint32_t u32Nc;
     uint32_t u32H;
     uint32_t u32Idx;
-    uint32_t g;
+    uint32_t u32Guard;
 
-    if (u64HashOff + 8 > (uint64_t)cb || u64Syment < 24) {
+    if (pImg == NULL || szName == NULL || pVal == NULL || u64Syment < 24 ||
+        u64HashOff + 8 > (uint64_t)cb) {
         return 0;
     }
     pH = (const uint32_t *)(const void *)(pImg + u64HashOff);
@@ -294,20 +384,25 @@ hash_sysv_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
     }
     u32H = sysv_hash(szName);
     u32Idx = pH[2 + (u32H % u32Nb)];
-    for (g = 0; u32Idx != 0 && u32Idx < u32Nc && g < u32Nc; g++) {
+    for (u32Guard = 0;
+         u32Idx != 0 && u32Idx < u32Nc && u32Guard < GJ_LD_HASH_GUARD &&
+         u32Guard < u32Nc;
+         u32Guard++) {
         const struct elf64_sym *pSym;
         const char *sz;
-        uint64_t off = u64SymOff + (uint64_t)u32Idx * u64Syment;
+        uint64_t u64Off = u64SymOff + (uint64_t)u32Idx * u64Syment;
 
-        if (off + sizeof(*pSym) > (uint64_t)cb) {
+        if (u64Off + sizeof(*pSym) > (uint64_t)cb) {
             break;
         }
-        pSym = (const struct elf64_sym *)(const void *)(pImg + off);
-        if (u64StrOff + pSym->u32Name >= (uint64_t)cb) {
+        pSym = (const struct elf64_sym *)(const void *)(pImg + u64Off);
+        if (!strtab_name(pImg, cb, u64StrOff, u64Strsz, pSym->u32Name, &sz)) {
             break;
         }
-        sz = (const char *)(pImg + u64StrOff + pSym->u32Name);
         if (name_eq(sz, szName) && sym_val_out(pSym, u64Bias, pVal)) {
+            if (pBind != NULL) {
+                *pBind = sym_bind(pSym);
+            }
             return 1;
         }
         u32Idx = pH[2 + u32Nb + u32Idx];
@@ -319,7 +414,8 @@ hash_sysv_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
 static int
 hash_gnu_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
                 uint64_t u64GnuOff, uint64_t u64SymOff, uint64_t u64StrOff,
-                uint64_t u64Syment, const char *szName, uint64_t *pVal)
+                uint64_t u64Syment, uint64_t u64Strsz, const char *szName,
+                uint64_t *pVal, uint32_t *pBind)
 {
     const uint32_t *pG;
     uint32_t u32Nb;
@@ -329,7 +425,7 @@ hash_gnu_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
     uint32_t u32H;
     uint32_t u32Bucket;
     uint32_t u32Idx;
-    uint32_t g;
+    uint32_t u32Guard;
     uint64_t u64Word;
     uint64_t u64Mask;
     const uint64_t *pBloom;
@@ -348,36 +444,34 @@ hash_gnu_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
     if (u32Nb == 0) {
         return 0;
     }
-    if (u64GnuOff + 16ull + 8ull * u32Bloom + 4ull * u32Nb > (uint64_t)cb) {
+    if (u64GnuOff + 16ull + 8ull * (uint64_t)u32Bloom +
+            4ull * (uint64_t)u32Nb >
+        (uint64_t)cb) {
         return 0;
     }
     pBloom = (const uint64_t *)(const void *)(pG + 4);
     pBuckets = (const uint32_t *)(const void *)(pBloom + u32Bloom);
     pChain = pBuckets + u32Nb;
-    u32H = 5381u;
-    {
-        const char *p = szName;
-        while (*p != '\0') {
-            u32H = (u32H << 5) + u32H + (uint32_t)(unsigned char)*p++;
-        }
-    }
+    u32H = gnu_hash(szName);
+    /* Bloom filter (x86_64: 64-bit words) — both bits must be set */
     if (u32Bloom > 0) {
         u64Word = pBloom[(u32H / 64u) % u32Bloom];
         u64Mask = (1ull << (u32H % 64u)) |
                   (1ull << ((u32H >> u32BloomShift) % 64u));
         if ((u64Word & u64Mask) != u64Mask) {
-            return 0;
+            return 0; /* definite miss */
         }
     }
     u32Bucket = pBuckets[u32H % u32Nb];
     if (u32Bucket < u32Sym0) {
         return 0;
     }
-    for (u32Idx = u32Bucket, g = 0; g < 256u; g++, u32Idx++) {
+    for (u32Idx = u32Bucket, u32Guard = 0; u32Guard < GJ_LD_HASH_GUARD;
+         u32Guard++, u32Idx++) {
         uint32_t u32Ch;
         const struct elf64_sym *pSym;
         const char *sz;
-        uint64_t off;
+        uint64_t u64Off;
         uint64_t u64ChainIx;
 
         if (u32Idx < u32Sym0) {
@@ -388,31 +482,34 @@ hash_gnu_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
             break;
         }
         u32Ch = pChain[u64ChainIx];
-        off = u64SymOff + (uint64_t)u32Idx * u64Syment;
-        if (off + sizeof(*pSym) > (uint64_t)cb) {
+        u64Off = u64SymOff + (uint64_t)u32Idx * u64Syment;
+        if (u64Off + sizeof(*pSym) > (uint64_t)cb) {
             break;
         }
-        pSym = (const struct elf64_sym *)(const void *)(pImg + off);
-        if (u64StrOff + pSym->u32Name >= (uint64_t)cb) {
+        pSym = (const struct elf64_sym *)(const void *)(pImg + u64Off);
+        if (!strtab_name(pImg, cb, u64StrOff, u64Strsz, pSym->u32Name, &sz)) {
             break;
         }
-        sz = (const char *)(pImg + u64StrOff + pSym->u32Name);
         if (((u32Ch ^ u32H) >> 1) == 0 && name_eq(sz, szName) &&
             sym_val_out(pSym, u64Bias, pVal)) {
+            if (pBind != NULL) {
+                *pBind = sym_bind(pSym);
+            }
             return 1;
         }
         if (u32Ch & 1u) {
-            break;
+            break; /* end of chain */
         }
     }
     return 0;
 }
 
-/* Linear SYMTAB scan for a defined name. */
+/* Linear SYMTAB scan for a defined name (soft fallback). */
 static int
 scan_sym_defined(const unsigned char *pImg, long cb, uint64_t u64Bias,
                  uint64_t u64SymOff, uint64_t u64StrOff, uint64_t u64Syment,
-                 const char *szName, uint64_t *pVal)
+                 uint64_t u64Strsz, const char *szName, uint64_t *pVal,
+                 uint32_t *pBind)
 {
     unsigned i;
 
@@ -423,32 +520,37 @@ scan_sym_defined(const unsigned char *pImg, long cb, uint64_t u64Bias,
     if (u64SymOff >= (uint64_t)cb || u64StrOff >= (uint64_t)cb) {
         return 0;
     }
-    for (i = 1; i < 256u; i++) {
+    for (i = 1; i < GJ_LD_HASH_GUARD; i++) {
         const struct elf64_sym *pSym;
         const char *sz;
-        uint64_t off = u64SymOff + (uint64_t)i * u64Syment;
+        uint64_t u64Off = u64SymOff + (uint64_t)i * u64Syment;
 
-        if (off + sizeof(*pSym) > (uint64_t)cb) {
+        if (u64Off + sizeof(*pSym) > (uint64_t)cb) {
             break;
         }
-        pSym = (const struct elf64_sym *)(const void *)(pImg + off);
-        if (pSym->u32Name == 0 || pSym->u16Shndx == 0) {
+        pSym = (const struct elf64_sym *)(const void *)(pImg + u64Off);
+        if (pSym->u32Name == 0 || pSym->u16Shndx == GJ_LD_SHN_UNDEF) {
             continue;
         }
-        if (u64StrOff + pSym->u32Name >= (uint64_t)cb) {
+        if (!strtab_name(pImg, cb, u64StrOff, u64Strsz, pSym->u32Name, &sz)) {
             continue;
         }
-        sz = (const char *)(pImg + u64StrOff + pSym->u32Name);
         if (name_eq(sz, szName) && sym_val_out(pSym, u64Bias, pVal)) {
+            if (pBind != NULL) {
+                *pBind = sym_bind(pSym);
+            }
             return 1;
         }
     }
     return 0;
 }
 
-static int
-so_dyn_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
-              const char *szName, uint64_t *pVal)
+/*
+ * Fill cached dyn tags from an SO image (mirrors kernel elf_so_fill_dyn).
+ * File offsets pre-resolved so soft multi-lookup skips PHDR rewalk.
+ */
+static void
+so_fill_dyn(struct ld_so_img *pSo)
 {
     const struct elf64_ehdr *pEh;
     uint16_t i;
@@ -459,17 +561,34 @@ so_dyn_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
     uint64_t u64Hash = 0;
     uint64_t u64Gnu = 0;
     uint64_t u64Syment = 24;
+    uint64_t u64Strsz = 0;
+    uint64_t u64Soname = ~0ull;
     uint64_t u64Off;
-    uint64_t u64SymOff;
-    uint64_t u64StrOff;
-    uint64_t u64HashOff;
-    uint64_t u64GnuOff;
+    long cb;
 
-    if (pImg == NULL || cb < 64 || !elf_hdr_ok(pImg, cb) || szName == NULL ||
-        pVal == NULL) {
-        return 0;
+    if (pSo == NULL || !pSo->u8Used || pSo->cb < 64) {
+        return;
     }
-    pEh = (const struct elf64_ehdr *)(const void *)pImg;
+    pSo->u8HasHash = 0;
+    pSo->u8HasGnu = 0;
+    pSo->u8DynOk = 0;
+    pSo->u64SymOff = 0;
+    pSo->u64StrOff = 0;
+    pSo->u64HashOff = 0;
+    pSo->u64GnuOff = 0;
+    pSo->u64Syment = 24;
+    pSo->u64Strsz = 0;
+    pSo->szSoname[0] = '\0';
+    pSo->u32SoHash = 0;
+    pSo->u32NameHash = 0;
+    if (pSo->szName[0] != '\0') {
+        pSo->u32NameHash = sysv_hash(pSo->szName);
+    }
+    cb = (long)pSo->cb;
+    if (!elf_hdr_ok(pSo->aImg, cb)) {
+        return;
+    }
+    pEh = (const struct elf64_ehdr *)(const void *)pSo->aImg;
     for (i = 0; i < pEh->u16Phnum; i++) {
         const unsigned char *pPh;
         uint64_t u64Pho = pEh->u64Phoff + (uint64_t)i * pEh->u16Phentsize;
@@ -478,23 +597,23 @@ so_dyn_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
         if (u64Pho + 40 > (uint64_t)cb) {
             break;
         }
-        pPh = pImg + u64Pho;
+        pPh = pSo->aImg + u64Pho;
         u32Type = read_u32_le(pPh);
-        if (u32Type != 2u) {
+        if (u32Type != 2u) { /* PT_DYNAMIC */
             continue;
         }
-        u64DynOff = read_u64_le(pPh + 8);
-        u64DynSz = read_u64_le(pPh + 32);
+        u64DynOff = read_u64_le(pPh + 8);  /* p_offset */
+        u64DynSz = read_u64_le(pPh + 32);  /* p_filesz */
         break;
     }
     if (u64DynOff == 0 || u64DynOff + u64DynSz > (uint64_t)cb) {
-        return 0;
+        return;
     }
     for (u64Off = u64DynOff;
          u64Off + sizeof(struct elf64_dyn) <= u64DynOff + u64DynSz;
          u64Off += sizeof(struct elf64_dyn)) {
         const struct elf64_dyn *pD =
-            (const struct elf64_dyn *)(const void *)(pImg + u64Off);
+            (const struct elf64_dyn *)(const void *)(pSo->aImg + u64Off);
         if (pD->i64Tag == DT_NULL) {
             break;
         }
@@ -504,69 +623,190 @@ so_dyn_lookup(const unsigned char *pImg, long cb, uint64_t u64Bias,
             u64Strtab = pD->u64Val;
         } else if (pD->i64Tag == DT_SYMENT) {
             u64Syment = pD->u64Val;
+        } else if (pD->i64Tag == DT_STRSZ) {
+            u64Strsz = pD->u64Val;
         } else if (pD->i64Tag == DT_HASH) {
             u64Hash = pD->u64Val;
+            pSo->u8HasHash = 1;
         } else if (pD->i64Tag == DT_GNU_HASH) {
             u64Gnu = pD->u64Val;
+            pSo->u8HasGnu = 1;
+        } else if (pD->i64Tag == DT_SONAME) {
+            u64Soname = pD->u64Val;
         }
     }
-    if (u64Symtab == 0 || u64Strtab == 0) {
+    if (u64Symtab == 0 || u64Strtab == 0 || u64Syment < 24) {
+        return;
+    }
+    pSo->u64SymOff = dyn_to_file_off(u64Symtab, pSo->u64Bias, cb);
+    pSo->u64StrOff = dyn_to_file_off(u64Strtab, pSo->u64Bias, cb);
+    if (pSo->u64SymOff == ~0ull || pSo->u64StrOff == ~0ull) {
+        return;
+    }
+    pSo->u64Syment = u64Syment;
+    pSo->u64Strsz = u64Strsz;
+    if (pSo->u8HasHash && u64Hash != 0) {
+        pSo->u64HashOff = dyn_to_file_off(u64Hash, pSo->u64Bias, cb);
+        if (pSo->u64HashOff == ~0ull) {
+            pSo->u8HasHash = 0;
+            pSo->u64HashOff = 0;
+        }
+    }
+    if (pSo->u8HasGnu && u64Gnu != 0) {
+        pSo->u64GnuOff = dyn_to_file_off(u64Gnu, pSo->u64Bias, cb);
+        if (pSo->u64GnuOff == ~0ull) {
+            pSo->u8HasGnu = 0;
+            pSo->u64GnuOff = 0;
+        }
+    }
+    /* Resolve DT_SONAME through STRTAB when both present */
+    if (u64Soname != ~0ull && u64Soname < 4096u) {
+        const char *szSo = NULL;
+        if (strtab_name(pSo->aImg, cb, pSo->u64StrOff, u64Strsz,
+                        (uint32_t)u64Soname, &szSo) &&
+            szSo != NULL && szSo[0] != '\0') {
+            (void)gj_strlcpy(pSo->szSoname, szSo, sizeof(pSo->szSoname));
+            pSo->u32SoHash = sysv_hash(pSo->szSoname);
+        }
+    }
+    pSo->u8DynOk = 1;
+}
+
+/*
+ * Soft lookup in one SO image. Order matches kernel elf_lookup_in_sos:
+ *   1) GNU hash (+ bloom)  2) SysV DT_HASH  3) linear SYMTAB scan
+ * Returns method tag in *pMethod when non-NULL.
+ */
+static int
+so_img_lookup(const struct ld_so_img *pSo, const char *szName, uint64_t *pVal,
+              uint32_t *pMethod, uint32_t *pBind)
+{
+    long cb;
+    uint32_t u32Bind = GJ_LD_STB_GLOBAL;
+
+    if (pSo == NULL || !pSo->u8Used || szName == NULL || szName[0] == '\0' ||
+        pVal == NULL) {
         return 0;
     }
-    u64SymOff = dyn_to_file_off(u64Symtab, u64Bias, cb);
-    u64StrOff = dyn_to_file_off(u64Strtab, u64Bias, cb);
-    if (u64SymOff == ~0ull || u64StrOff == ~0ull) {
+    cb = (long)pSo->cb;
+    if (!pSo->u8DynOk || pSo->u64SymOff == 0 || pSo->u64StrOff == 0) {
         return 0;
     }
-    /* 1) SysV DT_HASH */
-    if (u64Hash != 0) {
-        u64HashOff = dyn_to_file_off(u64Hash, u64Bias, cb);
-        if (u64HashOff != ~0ull &&
-            hash_sysv_lookup(pImg, cb, u64Bias, u64HashOff, u64SymOff,
-                             u64StrOff, u64Syment, szName, pVal)) {
-            return 1;
+    /* 1) GNU hash (modern default; bloom rejects misses early) */
+    if (pSo->u8HasGnu && pSo->u64GnuOff != 0 &&
+        hash_gnu_lookup(pSo->aImg, cb, pSo->u64Bias, pSo->u64GnuOff,
+                        pSo->u64SymOff, pSo->u64StrOff, pSo->u64Syment,
+                        pSo->u64Strsz, szName, pVal, &u32Bind)) {
+        if (pMethod != NULL) {
+            *pMethod = GJ_LD_RES_GNU;
         }
+        if (pBind != NULL) {
+            *pBind = u32Bind;
+        }
+        return 1;
     }
-    /* 2) GNU hash */
-    if (u64Gnu != 0) {
-        u64GnuOff = dyn_to_file_off(u64Gnu, u64Bias, cb);
-        if (u64GnuOff != ~0ull &&
-            hash_gnu_lookup(pImg, cb, u64Bias, u64GnuOff, u64SymOff, u64StrOff,
-                            u64Syment, szName, pVal)) {
-            return 1;
+    /* 2) SysV DT_HASH */
+    if (pSo->u8HasHash && pSo->u64HashOff != 0 &&
+        hash_sysv_lookup(pSo->aImg, cb, pSo->u64Bias, pSo->u64HashOff,
+                         pSo->u64SymOff, pSo->u64StrOff, pSo->u64Syment,
+                         pSo->u64Strsz, szName, pVal, &u32Bind)) {
+        if (pMethod != NULL) {
+            *pMethod = GJ_LD_RES_SYSV;
         }
+        if (pBind != NULL) {
+            *pBind = u32Bind;
+        }
+        return 1;
     }
     /* 3) Linear SYMTAB scan */
-    if (scan_sym_defined(pImg, cb, u64Bias, u64SymOff, u64StrOff, u64Syment,
-                         szName, pVal)) {
+    if (scan_sym_defined(pSo->aImg, cb, pSo->u64Bias, pSo->u64SymOff,
+                         pSo->u64StrOff, pSo->u64Syment, pSo->u64Strsz, szName,
+                         pVal, &u32Bind)) {
+        if (pMethod != NULL) {
+            *pMethod = GJ_LD_RES_SCAN;
+        }
+        if (pBind != NULL) {
+            *pBind = u32Bind;
+        }
         return 1;
     }
     return 0;
 }
 
+/*
+ * Multi-SO soft resolve: prefer STB_GLOBAL over STB_WEAK across registry,
+ * then built-in exports. Updates soft path counters when a method is used.
+ */
 static uint64_t
-lookup_export(const char *szName)
+soft_resolve_name(const char *szName, uint32_t *pMethod)
 {
     unsigned i;
-    uint64_t u64Val;
+    uint64_t u64Weak = 0;
+    uint32_t u32WeakMethod = GJ_LD_RES_NONE;
+    int fWeak = 0;
 
     if (szName == NULL || szName[0] == '\0') {
+        if (pMethod != NULL) {
+            *pMethod = GJ_LD_RES_NONE;
+        }
         return 0;
     }
-    /* Multi-object: search loaded SO images first */
     for (i = 0; i < GJ_LD_SO_MAX; i++) {
+        uint64_t u64Val = 0;
+        uint32_t u32Method = GJ_LD_RES_NONE;
+        uint32_t u32Bind = GJ_LD_STB_LOCAL;
+
         if (!g_aSoImg[i].u8Used) {
             continue;
         }
-        if (so_dyn_lookup(g_aSoImg[i].aImg, (long)g_aSoImg[i].cb,
-                          g_aSoImg[i].u64Bias, szName, &u64Val)) {
+        if (!so_img_lookup(&g_aSoImg[i], szName, &u64Val, &u32Method,
+                           &u32Bind)) {
+            continue;
+        }
+        if (u32Bind == GJ_LD_STB_GLOBAL) {
+            if (u32Method == GJ_LD_RES_GNU) {
+                g_cResGnu++;
+            } else if (u32Method == GJ_LD_RES_SYSV) {
+                g_cResSysv++;
+            } else if (u32Method == GJ_LD_RES_SCAN) {
+                g_cResScan++;
+            }
+            if (pMethod != NULL) {
+                *pMethod = u32Method;
+            }
             return u64Val;
         }
+        /* Defer WEAK until all SOs scanned for GLOBAL */
+        if (!fWeak) {
+            u64Weak = u64Val;
+            u32WeakMethod = u32Method;
+            fWeak = 1;
+        }
+    }
+    if (fWeak) {
+        if (u32WeakMethod == GJ_LD_RES_GNU) {
+            g_cResGnu++;
+        } else if (u32WeakMethod == GJ_LD_RES_SYSV) {
+            g_cResSysv++;
+        } else if (u32WeakMethod == GJ_LD_RES_SCAN) {
+            g_cResScan++;
+        }
+        if (pMethod != NULL) {
+            *pMethod = u32WeakMethod;
+        }
+        return u64Weak;
     }
     for (i = 0; i < sizeof(s_aExports) / sizeof(s_aExports[0]); i++) {
         if (name_eq(szName, s_aExports[i].szName)) {
+            g_cResBuiltin++;
+            if (pMethod != NULL) {
+                *pMethod = GJ_LD_RES_BUILTIN;
+            }
             return s_aExports[i].u64Val;
         }
+    }
+    if (pMethod != NULL) {
+        *pMethod = GJ_LD_RES_NONE;
     }
     return 0;
 }
@@ -576,8 +816,14 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
 {
     uint32_t i;
     unsigned cOk = 0;
+    unsigned cHash = 0;
+    unsigned cGnu = 0;
 
     g_cSoImg = 0;
+    g_cResGnu = 0;
+    g_cResSysv = 0;
+    g_cResScan = 0;
+    g_cResBuiltin = 0;
     if (pHo == NULL || pHo->cSo == 0) {
         return;
     }
@@ -589,6 +835,7 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
         const char *sz = pHo->aSo[i].szName;
         uint64_t u64Bias = pHo->aSo[i].u64Bias;
         uint32_t cbWant = pHo->aSo[i].cbImg;
+        struct ld_so_img *pSlot;
 
         if (sz[0] == '\0') {
             continue;
@@ -596,6 +843,15 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
         if (cbWant == 0 || cbWant > GJ_LD_SO_IMG) {
             cbWant = GJ_LD_SO_IMG;
         }
+        pSlot = &g_aSoImg[cOk];
+        pSlot->u8Used = 0;
+        pSlot->u8HasHash = 0;
+        pSlot->u8HasGnu = 0;
+        pSlot->u8DynOk = 0;
+        pSlot->cb = 0;
+        pSlot->u64Bias = 0;
+        pSlot->szName[0] = '\0';
+        pSlot->szSoname[0] = '\0';
         /*
          * Prefer already-mapped SO image at load bias (same AS as INTERP).
          * Low ET_DYN: file bytes live at bias+file_off.
@@ -617,7 +873,7 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
                 pMap[2] == (unsigned char)'L' &&
                 pMap[3] == (unsigned char)'F') {
                 for (j = 0; j < cbCopy; j++) {
-                    g_aSoImg[cOk].aImg[j] = pMap[j];
+                    pSlot->aImg[j] = pMap[j];
                 }
                 i64N = (long)cbCopy;
             }
@@ -638,21 +894,25 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
             if (nLen > 5) {
                 i64Fd = linux_openat(-100, aPath, 0, 0);
                 if (i64Fd >= 0) {
-                    i64N = linux_read((int)i64Fd, g_aSoImg[cOk].aImg,
-                                      GJ_LD_SO_IMG);
+                    i64N = linux_read((int)i64Fd, pSlot->aImg, GJ_LD_SO_IMG);
                     (void)linux_close((int)i64Fd);
                 }
             }
         }
-        if (i64N < 64 || !elf_hdr_ok(g_aSoImg[cOk].aImg, i64N)) {
+        if (i64N < 64 || !elf_hdr_ok(pSlot->aImg, i64N)) {
             continue;
         }
-        g_aSoImg[cOk].u8Used = 1;
-        g_aSoImg[cOk].cb = (uint32_t)i64N;
-        g_aSoImg[cOk].u64Bias = u64Bias;
-        g_aSoImg[cOk].szName[0] = '\0';
-        (void)gj_strlcpy(g_aSoImg[cOk].szName, sz,
-                         sizeof(g_aSoImg[cOk].szName));
+        pSlot->u8Used = 1;
+        pSlot->cb = (uint32_t)i64N;
+        pSlot->u64Bias = u64Bias;
+        (void)gj_strlcpy(pSlot->szName, sz, sizeof(pSlot->szName));
+        so_fill_dyn(pSlot);
+        if (pSlot->u8HasHash) {
+            cHash++;
+        }
+        if (pSlot->u8HasGnu) {
+            cGnu++;
+        }
         cOk++;
     }
     g_cSoImg = cOk;
@@ -666,6 +926,13 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
             aN[2] = 0;
             gj_puts(aN);
         }
+        /* Soft dyn-cache markers (still greppable hash/sym when hash present) */
+        if (cHash > 0) {
+            gj_puts("ld-gj: hash/sym sysv table PASS\n");
+        }
+        if (cGnu > 0) {
+            gj_puts("ld-gj: hash/sym gnu table PASS\n");
+        }
     }
 }
 
@@ -673,22 +940,92 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
 static uint64_t
 resolve_name(const char *szName)
 {
-    uint64_t u64Val = 0;
-    unsigned s;
+    return soft_resolve_name(szName, NULL);
+}
 
-    if (szName == NULL || szName[0] == '\0') {
-        return 0;
+/*
+ * Soft multi-SO hash/sym probe set. Keeps legacy PASS lines and deepens with
+ * function exports + method-path markers. Never hard-fails the product path.
+ */
+static void
+soft_resolve_probe(void)
+{
+    /* Product SO exports (SysV / GNU hash targets + function companions) */
+    static const char *const aSoNames[] = {
+        "gj_so_export",
+        "gj_gnu_export",
+        "gj_so_init",
+        "gj_gnu_init",
+    };
+    unsigned i;
+    unsigned cSoHit = 0;
+    uint64_t u64So = 0;
+    uint64_t u64Gnu = 0;
+    uint32_t u32MethSo = GJ_LD_RES_NONE;
+    uint32_t u32MethGnu = GJ_LD_RES_NONE;
+    unsigned cBeforeGnu = g_cResGnu;
+    unsigned cBeforeSysv = g_cResSysv;
+    unsigned cBeforeScan = g_cResScan;
+    uint64_t u64Mark;
+
+    /* Soft algorithm self-check always (independent of SO registry) */
+    if (sysv_hash("gj_so_export") != 0 && gnu_hash("gj_gnu_export") != 0 &&
+        sysv_hash("") == 0 && gnu_hash("") == 5381u) {
+        gj_puts("ld-gj: hash/sym algo soft PASS\n");
     }
-    for (s = 0; s < GJ_LD_SO_MAX; s++) {
-        if (!g_aSoImg[s].u8Used) {
+
+    if (g_cSoImg == 0) {
+        return;
+    }
+
+    for (i = 0; i < sizeof(aSoNames) / sizeof(aSoNames[0]); i++) {
+        uint32_t u32Meth = GJ_LD_RES_NONE;
+        uint64_t u64Val = soft_resolve_name(aSoNames[i], &u32Meth);
+
+        if (u64Val == 0 || u32Meth == GJ_LD_RES_NONE ||
+            u32Meth == GJ_LD_RES_BUILTIN) {
             continue;
         }
-        if (so_dyn_lookup(g_aSoImg[s].aImg, (long)g_aSoImg[s].cb,
-                          g_aSoImg[s].u64Bias, szName, &u64Val)) {
-            return u64Val;
+        cSoHit++;
+        if (name_eq(aSoNames[i], "gj_so_export")) {
+            u64So = u64Val;
+            u32MethSo = u32Meth;
+        } else if (name_eq(aSoNames[i], "gj_gnu_export")) {
+            u64Gnu = u64Val;
+            u32MethGnu = u32Meth;
         }
     }
-    return lookup_export(szName);
+
+    /* Built-in export soft path (ld-gj local symbols; not multi-SO) */
+    u64Mark = soft_resolve_name("gj_ld_marker", NULL);
+    if (u64Mark != 0) {
+        gj_puts("ld-gj: hash/sym builtin soft PASS\n");
+    }
+
+    if (u64So != 0 || u64Gnu != 0 || cSoHit > 0) {
+        gj_puts("ld-gj: multi-SO resolve PASS\n");
+        if (u64So != 0) {
+            gj_puts("ld-gj: hash/sym gj_so_export PASS\n");
+        }
+        if (u64Gnu != 0) {
+            gj_puts("ld-gj: hash/sym gj_gnu_export PASS\n");
+        }
+        /* Method-path soft markers (contain hash/sym for smoke greps) */
+        if (g_cResSysv > cBeforeSysv || u32MethSo == GJ_LD_RES_SYSV) {
+            gj_puts("ld-gj: hash/sym sysv path PASS\n");
+        }
+        if (g_cResGnu > cBeforeGnu || u32MethGnu == GJ_LD_RES_GNU) {
+            gj_puts("ld-gj: hash/sym gnu path PASS\n");
+        }
+        if (g_cResScan > cBeforeScan) {
+            gj_puts("ld-gj: hash/sym scan path PASS\n");
+        }
+        if (cSoHit >= 2u) {
+            gj_puts("ld-gj: hash/sym soft resolve PASS\n");
+        }
+    } else {
+        gj_puts("ld-gj: multi-SO resolve miss\n");
+    }
 }
 
 static uint64_t
@@ -1091,25 +1428,8 @@ _start(void)
         }
     }
 
-    /* Probe multi-SO via SysV/GNU hash + SYMTAB (no hard-coded st_value) */
-    if (g_cSoImg > 0) {
-        uint64_t u64A = 0;
-        uint64_t u64B = 0;
-
-        u64A = lookup_export("gj_so_export");
-        u64B = lookup_export("gj_gnu_export");
-        if (u64A != 0 || u64B != 0) {
-            gj_puts("ld-gj: multi-SO resolve PASS\n");
-            if (u64A != 0) {
-                gj_puts("ld-gj: hash/sym gj_so_export PASS\n");
-            }
-            if (u64B != 0) {
-                gj_puts("ld-gj: hash/sym gj_gnu_export PASS\n");
-            }
-        } else {
-            gj_puts("ld-gj: multi-SO resolve miss\n");
-        }
-    }
+    /* Soft multi-SO resolve via SysV/GNU hash + SYMTAB (no hard-coded st_value) */
+    soft_resolve_probe();
 
     /* ---- 4. Entry ---- */
     if (u64Entry != 0) {

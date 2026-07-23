@@ -4,6 +4,12 @@
  *
  * __ctype_b_loc / __ctype_tolower_loc / __ctype_toupper_loc (glibc graph).
  * ASCII C locale tables for apps that dig into ctype internals.
+ *
+ * greppable: CGJ_CTYPE_LOC_SOFT
+ * greppable: CGJ_CTYPE_LOC_SOFT_ONCE
+ *
+ * Soft deepen: one-shot init of 384-slot tables (EOF-safe index via +128)
+ * and consistent _ISbit layout for C locale diggers.
  */
 #include <ctype.h>
 #include <stddef.h>
@@ -24,61 +30,71 @@
 #define _ISpunct  0x0400
 #define _ISalnum  0x0800
 
-static unsigned short g_aCtypeB[384];
-static int g_aTolower[384];
-static int g_aToupper[384];
-static int g_fInit;
+#define CGJ_CTYPE_LOC_SLOTS 384
+#define CGJ_CTYPE_LOC_BASE  128
+
+static unsigned short g_aCtypeB[CGJ_CTYPE_LOC_SLOTS];
+static int           g_aTolower[CGJ_CTYPE_LOC_SLOTS];
+static int           g_aToupper[CGJ_CTYPE_LOC_SLOTS];
+static int           g_fInit;
 
 static void
 ctype_loc_init(void)
 {
-    int i;
+    int iSlot;
 
+    /* greppable: CGJ_CTYPE_LOC_SOFT_ONCE */
     if (g_fInit) {
         return;
     }
-    for (i = 0; i < 384; i++) {
-        int c = i - 128;
-        unsigned short b = 0;
+    for (iSlot = 0; iSlot < CGJ_CTYPE_LOC_SLOTS; iSlot++) {
+        int            nC = iSlot - CGJ_CTYPE_LOC_BASE;
+        unsigned short uBits = 0;
 
-        g_aTolower[i] = c;
-        g_aToupper[i] = c;
-        if (c >= 0 && c < 256) {
-            if (c >= 'A' && c <= 'Z') {
-                b |= _ISupper | _ISalpha | _ISalnum | _ISgraph | _ISprint;
-                g_aTolower[i] = c + ('a' - 'A');
+        g_aTolower[iSlot] = nC;
+        g_aToupper[iSlot] = nC;
+        if (nC >= 0 && nC < 256) {
+            if (nC >= 'A' && nC <= 'Z') {
+                uBits |= (unsigned short)(_ISupper | _ISalpha | _ISalnum |
+                                          _ISgraph | _ISprint);
+                g_aTolower[iSlot] = nC + ('a' - 'A');
             }
-            if (c >= 'a' && c <= 'z') {
-                b |= _ISlower | _ISalpha | _ISalnum | _ISgraph | _ISprint;
-                g_aToupper[i] = c - ('a' - 'A');
+            if (nC >= 'a' && nC <= 'z') {
+                uBits |= (unsigned short)(_ISlower | _ISalpha | _ISalnum |
+                                          _ISgraph | _ISprint);
+                g_aToupper[iSlot] = nC - ('a' - 'A');
             }
-            if (c >= '0' && c <= '9') {
-                b |= _ISdigit | _ISxdigit | _ISalnum | _ISgraph | _ISprint;
+            if (nC >= '0' && nC <= '9') {
+                uBits |= (unsigned short)(_ISdigit | _ISxdigit | _ISalnum |
+                                          _ISgraph | _ISprint);
             }
-            if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-                b |= _ISxdigit;
+            if ((nC >= 'a' && nC <= 'f') || (nC >= 'A' && nC <= 'F')) {
+                uBits |= (unsigned short)_ISxdigit;
             }
-            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' ||
-                c == '\v') {
-                b |= _ISspace;
+            if (nC == ' ' || nC == '\t' || nC == '\n' || nC == '\r' ||
+                nC == '\f' || nC == '\v') {
+                uBits |= (unsigned short)_ISspace;
             }
-            if (c == ' ' || c == '\t') {
-                b |= _ISblank;
+            if (nC == ' ' || nC == '\t') {
+                uBits |= (unsigned short)_ISblank;
             }
-            if (c >= 0x20 && c <= 0x7e) {
-                b |= _ISprint;
+            if (nC >= 0x20 && nC <= 0x7e) {
+                uBits |= (unsigned short)_ISprint;
             }
-            if ((c >= 0 && c < 0x20) || c == 0x7f) {
-                b |= _IScntrl;
+            if ((nC >= 0 && nC < 0x20) || nC == 0x7f) {
+                uBits |= (unsigned short)_IScntrl;
             }
-            if ((b & _ISprint) && !(b & _ISspace) && !(b & _ISalnum)) {
-                b |= _ISpunct | _ISgraph;
+            /* punct: printable, not space, not alnum */
+            if ((uBits & _ISprint) && !(uBits & _ISspace) &&
+                !(uBits & _ISalnum)) {
+                uBits |= (unsigned short)(_ISpunct | _ISgraph);
             }
-            if ((b & _ISprint) && !(b & _ISspace)) {
-                b |= _ISgraph;
+            /* graph: printable non-space */
+            if ((uBits & _ISprint) && !(uBits & _ISspace)) {
+                uBits |= (unsigned short)_ISgraph;
             }
         }
-        g_aCtypeB[i] = b;
+        g_aCtypeB[iSlot] = uBits;
     }
     g_fInit = 1;
 }
@@ -86,36 +102,36 @@ ctype_loc_init(void)
 const unsigned short **
 __ctype_b_loc(void)
 {
-    static const unsigned short *p;
+    static const unsigned short *pTab;
 
     ctype_loc_init();
-    p = &g_aCtypeB[128];
-    return &p;
+    pTab = &g_aCtypeB[CGJ_CTYPE_LOC_BASE];
+    return &pTab;
 }
 
 const int **
 __ctype_tolower_loc(void)
 {
-    static const int *p;
+    static const int *pTab;
 
     ctype_loc_init();
-    p = &g_aTolower[128];
-    return &p;
+    pTab = &g_aTolower[CGJ_CTYPE_LOC_BASE];
+    return &pTab;
 }
 
 const int **
 __ctype_toupper_loc(void)
 {
-    static const int *p;
+    static const int *pTab;
 
     ctype_loc_init();
-    p = &g_aToupper[128];
-    return &p;
+    pTab = &g_aToupper[CGJ_CTYPE_LOC_BASE];
+    return &pTab;
 }
 
 /* glibc also exports __ctype_get_mb_cur_max for locale. */
 size_t
 __ctype_get_mb_cur_max(void)
 {
-    return 1; /* C locale */
+    return 1; /* C locale soft: single-byte */
 }

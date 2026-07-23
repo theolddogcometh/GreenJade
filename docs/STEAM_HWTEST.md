@@ -1,7 +1,8 @@
 # Steam on hardware-test media (options 2 + 3)
 
 **Bar3 status (product ceiling):** media path + host prep are **wired**.  
-**Kernel/surface done does not equal bar3 client run.** Continuum **14600** is soft graph growth only.  
+**Kernel/surface done does not equal bar3 client run.** Continuum **makefile_max=14900** is soft graph growth only.  
+Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  
 **Open:** real-DUT UEFI install → launch Steam client → Deck Top 50 matrix  
 rows leave `NOT-TRIED` (see `matrix/deck-top50-2026-07-19.md`).
@@ -42,21 +43,23 @@ Host soft check (no download, always exit 0):
 | Product **sshd** live at boot | **done** | `sshd.elf` embed; TCP **:22**; `sshd: live spawn PASS` |
 | **scsi_mid** live embed | **done** | `scsi_mid.elf` boot spawn; `GJ_SYS_SCSI` + virtio-scsi path |
 | **HDA multi-stream (kernel)** | **PASS** | SD0 DMA + multi-stream mixer; `hda: multi-stream mixer PASS` — **kernel only** |
-| Graph continuum **14600** | **soft** | `makefile_max=14600` CREATE-ONLY soft gates shipped; **not** bar3 client run |
+| Graph continuum **14900** | **soft** | `makefile_max=14900` CREATE-ONLY soft gates shipped; **not** bar3 client run |
+| **io_uring** min rings + mmap/SQE soft | **PASS** | Kernel smokes (`linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`); vfs_ram / soft surface — **not** game I/O |
 | Kernel large-RAM **768G soak** | **PASS** | Hierarchical freelist + `soak_tib` at 768G; **not** full 1 TiB host path; **not** Steam |
+| **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke`; shared C + PSCI smokes; separate arch tree — **not** Deck/x86 path |
 | GPU/session A1 (virtio-gpu 2D + ICD) | **partial** | Compositor/ICD smokes green on QEMU; not SteamUI |
 | libcgj / ld-gj growth | **in progress** | Clean-room glibc-shaped surface expanding; not full Steam Runtime |
 
-### Continuum 14600 (soft — honest scope)
+### Continuum 14900 (soft — honest scope)
 
 | Claim | Status | Honesty bound |
 |-------|--------|---------------|
-| Decade 14401–14600 parent wire / soft gates | **shipped soft** | Graph/product soft stubs + milestone gates only |
-| `makefile_max=14600` on tree | **yes** | See `docs/GLIBC_COMPAT.md` continuum notes |
+| Decades through **14900** parent wire / soft gates | **shipped soft** | Graph/product soft stubs + milestone gates only (parallel-wave growth) |
+| `makefile_max=14900` on tree | **yes** | CREATE-ONLY continuum batches through `graph_batch14900.c` |
 | Implies Steam client / Top-50 | **no** | Soft continuum ≠ runtime ABI ≠ DUT launch |
 | Closes bar3 | **no** | Bar3 remains client-run + matrix open |
 
-Continuum growth is **clean-room surface expansion**. Treat 14600 as a graph milestone, not a Steam readiness claim.
+Continuum growth is **clean-room surface expansion**. Treat 14900 as a graph milestone, not a Steam readiness claim.
 
 ### Kernel large-RAM 768G soak (shipped — honest scope)
 
@@ -89,13 +92,14 @@ Continuum growth is **clean-room surface expansion**. Treat 14600 as a graph mil
 | Steam Runtime first-run download | **open** | Needs working net + ABI + FS write |
 | GPU present path for SteamUI / games | **open** | Beyond virtio-gpu 2D ICD smoke |
 | Audio (HDA) to Steam / games | **open** | Kernel multi-stream **PASS**; userspace → Steam still open |
-| Continuum 14600 → product Steam path | **open** | Soft gates only; does not unblock client |
+| Continuum 14900 → product Steam path | **open** | Soft gates only; does not unblock client |
+| io_uring soft PASS → game/client I/O | **open** | Kernel vfs_ram SQE smoke ≠ Steam Runtime / title I/O |
 | Kernel 768G soak → Steam path | **open** | Memory soak PASS ≠ ABI / GPU / client |
 | Full 1 TiB host soak | **open** | Product RAM bar; separate from bar3 client |
 | Input (gamepad / desktop) for client | **open** | virtio-input hub exists; Steam mapping not validated |
 | **Deck Top 50** title rows | **NOT-TRIED** | Matrix claim level: **targeting only** — zero PASS titles |
 
-**Hard rule:** never mark Top-50 rows `PASS` from host stage/`STATUS=READY`, continuum soft gates, kernel HDA PASS, or 768G PMM soak alone.  
+**Hard rule:** never mark Top-50 rows `PASS` from host stage/`STATUS=READY`, continuum soft gates, kernel HDA PASS, io_uring soft PASS, or 768G PMM soak alone.  
 `READY` means the **bootstrap tree is on media**, not that a game ran.
 
 ### Operator path when bar3 unblocks

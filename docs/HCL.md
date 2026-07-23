@@ -97,12 +97,15 @@ make live-iso
 
 ## Status — 2026-07-23
 
+Parallel waves **soft shipped** (kernel/media/graph only). **bar3 still open.**
+
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid` / `hda_client`
 - Residual **#UD** closed
-- Continuum **makefile_max=14500+** (soft graph only — not Steam)
-- **io_uring min rings** shipped (`io_uring_min.c`; smoke `linux: io_uring min rings PASS`) — soft surface, not full SQE/game I/O
+- Continuum **makefile_max=14900** (soft graph only — not Steam; parallel-wave CREATE-ONLY decades)
+- **io_uring** soft surface shipped (`io_uring_min.c`; `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`) — vfs_ram/kernel smoke, **not** game I/O
 - **GJ_MEM=768G** hierarchical `soak_tib` **PASS** on host class **≥1TiB** — product bar still **≥ 1 TiB** full path when host allows
-- **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`) — separate arch tree; not shared x86 product kernel
+- **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`; shared C + PSCI smokes) — separate arch tree; not Deck/x86 product kernel
+- **HDA multi-stream** kernel **PASS** — not Steam/game audio
 - **bar3** open (Steam client / Deck Top 50 title runs)
 - Media `STATUS=READY` = bootstrap tree on media only — **not** client run
 - Deck Top 50 rows: all **NOT-TRIED** (no titles tried; claim **targeting only**)

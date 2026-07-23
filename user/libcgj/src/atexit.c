@@ -3,12 +3,19 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * atexit / __cxa_atexit / on_exit handlers for exit().
+ *
+ * greppable: CGJ_ATEXIT_SOFT_SLOT_REUSE
+ * greppable: CGJ_ATEXIT_SOFT_LIFO
+ * greppable: CGJ_CXA_FINALIZE_SOFT_DSO
+ *
+ * Soft deepen: reclaim empty slots after __cxa_finalize, LIFO run on exit,
+ * slightly larger soft table. __cxa_thread_atexit* live in graph batches.
  */
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-#define CGJ_ATEXIT_MAX 32
+#define CGJ_ATEXIT_MAX 64
 
 typedef void (*cxa_fn)(void *);
 
@@ -22,27 +29,75 @@ struct atexit_slot {
 };
 
 static struct atexit_slot g_aSlots[CGJ_ATEXIT_MAX];
-static int g_nSlots;
+static int g_nSlots; /* high-water: first free index past last used */
 static int g_fRunning;
+
+static int
+atexit_soft_alloc_slot(void)
+{
+    int iSlot;
+
+    /* greppable: CGJ_ATEXIT_SOFT_SLOT_REUSE */
+    for (iSlot = 0; iSlot < g_nSlots; iSlot++) {
+        if (g_aSlots[iSlot].nKind == 0) {
+            return iSlot;
+        }
+    }
+    if (g_nSlots >= CGJ_ATEXIT_MAX) {
+        return -1;
+    }
+    iSlot = g_nSlots;
+    g_nSlots++;
+    return iSlot;
+}
+
+static void
+atexit_soft_clear_slot(int iSlot)
+{
+    if (iSlot < 0 || iSlot >= CGJ_ATEXIT_MAX) {
+        return;
+    }
+    g_aSlots[iSlot].nKind = 0;
+    g_aSlots[iSlot].pfn = NULL;
+    g_aSlots[iSlot].pfnCxa = NULL;
+    g_aSlots[iSlot].pfnOn = NULL;
+    g_aSlots[iSlot].pArg = NULL;
+    g_aSlots[iSlot].pDso = NULL;
+}
 
 void
 _libcgj_run_atexit(int nCode)
 {
-    int i;
+    int iSlot;
 
     if (g_fRunning) {
         return;
     }
     g_fRunning = 1;
-    for (i = g_nSlots - 1; i >= 0; i--) {
-        if (g_aSlots[i].nKind == 1 && g_aSlots[i].pfn != NULL) {
-            g_aSlots[i].pfn();
-        } else if (g_aSlots[i].nKind == 2 && g_aSlots[i].pfnCxa != NULL) {
-            g_aSlots[i].pfnCxa(g_aSlots[i].pArg);
-        } else if (g_aSlots[i].nKind == 3 && g_aSlots[i].pfnOn != NULL) {
-            g_aSlots[i].pfnOn(nCode, g_aSlots[i].pArg);
+    /* greppable: CGJ_ATEXIT_SOFT_LIFO */
+    for (iSlot = g_nSlots - 1; iSlot >= 0; iSlot--) {
+        int nKind = g_aSlots[iSlot].nKind;
+
+        if (nKind == 1 && g_aSlots[iSlot].pfn != NULL) {
+            void (*pfn)(void) = g_aSlots[iSlot].pfn;
+
+            atexit_soft_clear_slot(iSlot);
+            pfn();
+        } else if (nKind == 2 && g_aSlots[iSlot].pfnCxa != NULL) {
+            cxa_fn pfnCxa = g_aSlots[iSlot].pfnCxa;
+            void  *pArg = g_aSlots[iSlot].pArg;
+
+            atexit_soft_clear_slot(iSlot);
+            pfnCxa(pArg);
+        } else if (nKind == 3 && g_aSlots[iSlot].pfnOn != NULL) {
+            void (*pfnOn)(int, void *) = g_aSlots[iSlot].pfnOn;
+            void *pArg = g_aSlots[iSlot].pArg;
+
+            atexit_soft_clear_slot(iSlot);
+            pfnOn(nCode, pArg);
+        } else {
+            atexit_soft_clear_slot(iSlot);
         }
-        g_aSlots[i].nKind = 0;
     }
     g_nSlots = 0;
     g_fRunning = 0;
@@ -51,66 +106,86 @@ _libcgj_run_atexit(int nCode)
 int
 atexit(void (*pfn)(void))
 {
-    if (pfn == NULL || g_nSlots >= CGJ_ATEXIT_MAX) {
+    int iSlot;
+
+    if (pfn == NULL) {
         return -1;
     }
-    g_aSlots[g_nSlots].nKind = 1;
-    g_aSlots[g_nSlots].pfn = pfn;
-    g_aSlots[g_nSlots].pfnCxa = NULL;
-    g_aSlots[g_nSlots].pfnOn = NULL;
-    g_aSlots[g_nSlots].pArg = NULL;
-    g_aSlots[g_nSlots].pDso = NULL;
-    g_nSlots++;
+    iSlot = atexit_soft_alloc_slot();
+    if (iSlot < 0) {
+        return -1;
+    }
+    g_aSlots[iSlot].nKind = 1;
+    g_aSlots[iSlot].pfn = pfn;
+    g_aSlots[iSlot].pfnCxa = NULL;
+    g_aSlots[iSlot].pfnOn = NULL;
+    g_aSlots[iSlot].pArg = NULL;
+    g_aSlots[iSlot].pDso = NULL;
     return 0;
 }
 
 int
 on_exit(void (*pfn)(int, void *), void *pArg)
 {
-    if (pfn == NULL || g_nSlots >= CGJ_ATEXIT_MAX) {
+    int iSlot;
+
+    if (pfn == NULL) {
         return -1;
     }
-    g_aSlots[g_nSlots].nKind = 3;
-    g_aSlots[g_nSlots].pfn = NULL;
-    g_aSlots[g_nSlots].pfnCxa = NULL;
-    g_aSlots[g_nSlots].pfnOn = pfn;
-    g_aSlots[g_nSlots].pArg = pArg;
-    g_aSlots[g_nSlots].pDso = NULL;
-    g_nSlots++;
+    iSlot = atexit_soft_alloc_slot();
+    if (iSlot < 0) {
+        return -1;
+    }
+    g_aSlots[iSlot].nKind = 3;
+    g_aSlots[iSlot].pfn = NULL;
+    g_aSlots[iSlot].pfnCxa = NULL;
+    g_aSlots[iSlot].pfnOn = pfn;
+    g_aSlots[iSlot].pArg = pArg;
+    g_aSlots[iSlot].pDso = NULL;
     return 0;
 }
 
 int
 __cxa_atexit(void (*pfn)(void *), void *pArg, void *pDso)
 {
-    if (pfn == NULL || g_nSlots >= CGJ_ATEXIT_MAX) {
+    int iSlot;
+
+    if (pfn == NULL) {
         return -1;
     }
-    g_aSlots[g_nSlots].nKind = 2;
-    g_aSlots[g_nSlots].pfn = NULL;
-    g_aSlots[g_nSlots].pfnCxa = (cxa_fn)(uintptr_t)pfn;
-    g_aSlots[g_nSlots].pfnOn = NULL;
-    g_aSlots[g_nSlots].pArg = pArg;
-    g_aSlots[g_nSlots].pDso = pDso;
-    g_nSlots++;
+    iSlot = atexit_soft_alloc_slot();
+    if (iSlot < 0) {
+        return -1;
+    }
+    g_aSlots[iSlot].nKind = 2;
+    g_aSlots[iSlot].pfn = NULL;
+    g_aSlots[iSlot].pfnCxa = (cxa_fn)(uintptr_t)pfn;
+    g_aSlots[iSlot].pfnOn = NULL;
+    g_aSlots[iSlot].pArg = pArg;
+    g_aSlots[iSlot].pDso = pDso;
     return 0;
 }
 
 void
 __cxa_finalize(void *pDso)
 {
-    int i;
+    int iSlot;
 
+    /* greppable: CGJ_CXA_FINALIZE_SOFT_DSO */
     if (pDso == NULL) {
         _libcgj_run_atexit(0);
         return;
     }
-    for (i = g_nSlots - 1; i >= 0; i--) {
-        if (g_aSlots[i].nKind == 2 && g_aSlots[i].pDso == pDso) {
-            if (g_aSlots[i].pfnCxa != NULL) {
-                g_aSlots[i].pfnCxa(g_aSlots[i].pArg);
+    /* LIFO: only matching DSO cxa handlers; leave others for exit. */
+    for (iSlot = g_nSlots - 1; iSlot >= 0; iSlot--) {
+        if (g_aSlots[iSlot].nKind == 2 && g_aSlots[iSlot].pDso == pDso) {
+            cxa_fn pfnCxa = g_aSlots[iSlot].pfnCxa;
+            void  *pArg = g_aSlots[iSlot].pArg;
+
+            atexit_soft_clear_slot(iSlot);
+            if (pfnCxa != NULL) {
+                pfnCxa(pArg);
             }
-            g_aSlots[i].nKind = 0;
         }
     }
 }

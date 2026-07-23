@@ -8,8 +8,13 @@
 # Soft helpers (optional paths — never hard-fail the boot):
 #   soft_dd_zero   create sparse/raw disk images with fallback bs=
 #   soft_have_dev  probe whether QEMU knows a -device model (nvme, …)
+#   soft_pick_qemu first usable emulator from a short candidate list
 #   NVME_ARGS      only attached when the emulator ships the model
 #   IOMMU_ARGS     only when GJ_INTEL_IOMMU=1
+#
+# These helpers keep Multiboot smoke (scripts/smoke-all.sh) green on hosts
+# that split QEMU packages (e.g. RHEL qemu-kvm without -device nvme). Do not
+# turn optional devices into hard requirements here.
 #
 # Env:
 #   QEMU_BIN            override emulator path
@@ -18,8 +23,12 @@
 #   GJ_INTEL_IOMMU=1    attach -device intel-iommu,intremap=on
 #
 # After a run, soft-scan serial with:
-#   ./scripts/gj-product-summary.sh /tmp/gj.log   # soft exit 0
-#   ./scripts/gj-quick-keys.sh /tmp/gj.log        # hard miss exit 1
+#   ./scripts/gj-product-summary.sh /tmp/gj.log   # soft exit 0 (deep inventory)
+#   ./scripts/gj-quick-keys.sh /tmp/gj.log        # hard miss exit 1 (key product)
+# Large-RAM hierarchical soak (soft, separate path):
+#   ./scripts/gj-soak-large-ram.sh
+# Steam media soft panel (never claims Top50):
+#   ./scripts/steam-bar3-check.sh
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 elf="${1:-$root/build/greenjade.elf}"
@@ -40,7 +49,11 @@ soft_dd_zero() {
     if dd if=/dev/zero of="$_f" bs=1M count="$_mb" status=none 2>/dev/null; then
         return 0
     fi
-    dd if=/dev/zero of="$_f" bs=1048576 count="$_mb" 2>/dev/null
+    # Fallbacks: 1M without status=, then 1k count scale (odd dd builds).
+    if dd if=/dev/zero of="$_f" bs=1048576 count="$_mb" 2>/dev/null; then
+        return 0
+    fi
+    dd if=/dev/zero of="$_f" bs=1024 count=$((_mb * 1024)) 2>/dev/null
 }
 
 # soft_have_dev <model>

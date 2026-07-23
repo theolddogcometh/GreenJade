@@ -3,6 +3,13 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * err/warn family — print to stderr and optionally exit.
+ *
+ * greppable: CGJ_ERR_SOFT_PROGNAME
+ * greppable: CGJ_ERR_SOFT_FFLUSH
+ *
+ * Soft deepen: BSD-shaped program_invocation_short_name prefix, capture
+ * errno before formatting, fflush stderr after each message. errc/warnc
+ * live in graph batch surface — not redefined here.
  */
 #include <err.h>
 #include <errno.h>
@@ -12,26 +19,50 @@
 #include <string.h>
 #include <unistd.h>
 
+extern char *program_invocation_short_name;
+
+static void
+err_soft_print_prog(void)
+{
+    /* greppable: CGJ_ERR_SOFT_PROGNAME */
+    if (program_invocation_short_name != NULL &&
+        program_invocation_short_name[0] != '\0') {
+        (void)fputs(program_invocation_short_name, stderr);
+        (void)fputs(": ", stderr);
+    }
+}
+
+static void
+err_soft_flush(void)
+{
+    /* greppable: CGJ_ERR_SOFT_FFLUSH */
+    (void)fflush(stderr);
+}
+
 void
 vwarnx(const char *szFmt, va_list ap)
 {
+    err_soft_print_prog();
     if (szFmt != NULL) {
         (void)vfprintf(stderr, szFmt, ap);
-        (void)fputc('\n', stderr);
     }
+    (void)fputc('\n', stderr);
+    err_soft_flush();
 }
 
 void
 vwarn(const char *szFmt, va_list ap)
 {
-    int e = errno;
+    int nSaved = errno;
 
+    err_soft_print_prog();
     if (szFmt != NULL) {
         (void)vfprintf(stderr, szFmt, ap);
         (void)fputs(": ", stderr);
     }
-    (void)fputs(strerror(e), stderr);
+    (void)fputs(strerror(nSaved), stderr);
     (void)fputc('\n', stderr);
+    err_soft_flush();
 }
 
 void

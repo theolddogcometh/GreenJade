@@ -152,6 +152,8 @@ struct gj_sc_img {
     uint32_t u32Stride;
     uint8_t u8Acquired;
     uint8_t u8Alive;
+    uint8_t u8Presented; /* soft: last present completed for this image */
+    uint8_t u8Pad;
 };
 
 struct gj_swapchain {
@@ -162,7 +164,13 @@ struct gj_swapchain {
     uint32_t u32H;
     uint32_t u32Count;
     uint32_t u32Cursor;
+    uint32_t u32AcquiredN; /* soft: live acquire count */
+    uint32_t u32PresentN;  /* soft: successful presents on this SC */
     VkFormat format;
+    VkPresentModeKHR presentMode;
+    VkImageUsageFlags usage;
+    uint8_t u8Clipped;
+    uint8_t u8Pad[3];
     struct gj_sc_img aImg[GJ_VK_SC_IMAGES];
 };
 
@@ -893,7 +901,110 @@ fb_alloc(uint32_t w, uint32_t h, uint32_t *pStride)
     return p;
 }
 
+/* Host free; kernel T0 does not reclaim PMM pages (soft destroy). */
+static void
+fb_free(void *p)
+{
+    if (p == NULL) {
+        return;
+    }
+#ifndef GJ_VK_KERNEL_SMOKE
+    free(p);
+#else
+    (void)p;
+#endif
+}
+
+static void
+sc_teardown_images(struct gj_swapchain *pSc)
+{
+    uint32_t j;
+
+    if (pSc == NULL) {
+        return;
+    }
+    for (j = 0; j < GJ_VK_SC_IMAGES; j++) {
+        fb_free(pSc->aImg[j].pPixels);
+        pSc->aImg[j].pPixels = NULL;
+        pSc->aImg[j].u32Stride = 0;
+        pSc->aImg[j].u8Alive = 0;
+        pSc->aImg[j].u8Acquired = 0;
+        pSc->aImg[j].u8Presented = 0;
+        pSc->aImg[j].hImage = 0;
+    }
+    pSc->u32Count = 0;
+    pSc->u32Cursor = 0;
+    pSc->u32AcquiredN = 0;
+    pSc->u32PresentN = 0;
+}
+
+static void
+sem_soft_signal(VkSemaphore semaphore, uint8_t u8On)
+{
+    struct gj_sem *pS = (struct gj_sem *)(uintptr_t)semaphore;
+
+    if (pS != NULL && pS->u32Magic == MAGIC_SEM) {
+        pS->u8Signaled = u8On ? 1u : 0u;
+    }
+}
+
+static void
+present_wait_sems(const VkPresentInfoKHR *pPresentInfo)
+{
+    uint32_t i;
+
+    if (pPresentInfo == NULL || pPresentInfo->pWaitSemaphores == NULL) {
+        return;
+    }
+    for (i = 0; i < pPresentInfo->waitSemaphoreCount; i++) {
+        /* Soft binary wait: unsignal; do not fail if already clear. */
+        sem_soft_signal(pPresentInfo->pWaitSemaphores[i], 0);
+    }
+}
+
+/* Soft CRC of four corner pixels (host software-present fingerprint). */
+#ifndef GJ_VK_KERNEL_SMOKE
+static uint32_t
+soft_fb_crc(const void *pPix, uint32_t w, uint32_t h, uint32_t stride)
+{
+    const u8 *p = (const u8 *)pPix;
+    uint32_t crc = 2166136261u;
+    uint32_t ax[4];
+    uint32_t ay[4];
+    uint32_t k;
+
+    if (p == NULL || w == 0 || h == 0 || stride < 4u) {
+        return 0;
+    }
+    ax[0] = 0;
+    ay[0] = 0;
+    ax[1] = w - 1u;
+    ay[1] = 0;
+    ax[2] = 0;
+    ay[2] = h - 1u;
+    ax[3] = w - 1u;
+    ay[3] = h - 1u;
+    for (k = 0; k < 4u; k++) {
+        const u8 *px = p + ay[k] * stride + ax[k] * 4u;
+        uint32_t c;
+
+        c = (uint32_t)px[0] | ((uint32_t)px[1] << 8) | ((uint32_t)px[2] << 16) |
+            ((uint32_t)px[3] << 24);
+        crc ^= c;
+        crc *= 16777619u;
+        crc ^= (ax[k] << 16) | ay[k];
+        crc *= 16777619u;
+    }
+    crc ^= w;
+    crc *= 16777619u;
+    crc ^= h;
+    crc *= 16777619u;
+    return crc ? crc : 1u;
+}
+#endif /* !GJ_VK_KERNEL_SMOKE */
+
 static uint32_t g_u32HostPresents;
+static uint32_t g_u32HostPresentCrc;
 
 static VkResult
 present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
@@ -913,20 +1024,31 @@ present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
     }
     return VK_SUCCESS;
 #else
-    /* Host ICD: software present — touch first/last pixel and count frames. */
+    /* Host ICD: software present — touch corners, CRC, count frames. */
     {
         volatile u8 *p = (volatile u8 *)pPix;
         volatile u8 sink;
+        uint32_t crc;
 
         sink = p[0];
         p[0] = sink;
-        if (h > 0 && stride >= 4) {
+        if (h > 0 && stride >= 4u) {
             sink = p[(h - 1u) * stride];
             (void)sink;
+            if (w > 1u) {
+                sink = p[(w - 1u) * 4u];
+                (void)sink;
+                sink = p[(h - 1u) * stride + (w - 1u) * 4u];
+                (void)sink;
+            }
+        }
+        crc = soft_fb_crc(pPix, w, h, stride);
+        g_u32HostPresentCrc = (g_u32HostPresentCrc * 33u) ^ crc;
+        if (g_u32HostPresentCrc == 0) {
+            g_u32HostPresentCrc = 1u;
         }
         g_u32HostPresents++;
     }
-    (void)w;
     return VK_SUCCESS;
 #endif
 }
@@ -936,6 +1058,13 @@ uint32_t
 gj_vk_host_present_count(void)
 {
     return g_u32HostPresents;
+}
+
+/* Host query for software-present soft CRC (tests / smoke). */
+uint32_t
+gj_vk_host_present_crc(void)
+{
+    return g_u32HostPresentCrc;
 }
 
 /* ---- Extension names advertised by this ICD ---- */
@@ -1393,8 +1522,11 @@ vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice,
     pCaps->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     pCaps->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     pCaps->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    /* Soft present path: color attach + transfer in/out (CPU map / blit). */
     pCaps->supportedUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                 VK_IMAGE_USAGE_SAMPLED_BIT;
     return VK_SUCCESS;
 }
 
@@ -1455,11 +1587,52 @@ vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pCreateInf
     uint32_t j;
     uint32_t n;
     uint32_t stride;
+    uint32_t w;
+    uint32_t h;
+    VkFormat fmt;
     struct gj_swapchain *pSc;
+    struct gj_surface *pSurf;
+    VkPresentModeKHR mode;
 
     (void)pAllocator;
     if (device == NULL || device->u32Magic != MAGIC_DEV || pCreateInfo == NULL ||
         pSwapchain == NULL) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    pSurf = (struct gj_surface *)(uintptr_t)pCreateInfo->surface;
+    if (pSurf != NULL && pSurf->u32Magic != MAGIC_SURF) {
+        return VK_ERROR_SURFACE_LOST_KHR;
+    }
+    fmt = pCreateInfo->imageFormat;
+    if (fmt == 0) {
+        fmt = VK_FORMAT_B8G8R8A8_UNORM;
+    }
+    if (fmt != VK_FORMAT_B8G8R8A8_UNORM && fmt != VK_FORMAT_B8G8R8A8_SRGB) {
+        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+    }
+    mode = pCreateInfo->presentMode;
+    if (mode != VK_PRESENT_MODE_FIFO_KHR && mode != VK_PRESENT_MODE_IMMEDIATE_KHR &&
+        mode != VK_PRESENT_MODE_MAILBOX_KHR &&
+        mode != VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
+        mode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    /* Soft: MAILBOX/RELAXED accepted but behave as FIFO (single soft queue). */
+    if (mode == VK_PRESENT_MODE_MAILBOX_KHR ||
+        mode == VK_PRESENT_MODE_FIFO_RELAXED_KHR) {
+        mode = VK_PRESENT_MODE_FIFO_KHR;
+    }
+    w = pCreateInfo->imageExtent.width;
+    h = pCreateInfo->imageExtent.height;
+    if (w == 0 || h == 0) {
+        if (pSurf != NULL && pSurf->u32Magic == MAGIC_SURF) {
+            w = pSurf->u32W;
+            h = pSurf->u32H;
+        } else {
+            w = device->u32W ? device->u32W : 64u;
+            h = device->u32H ? device->u32H : 64u;
+        }
+    }
+    if (w == 0 || h == 0) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     n = pCreateInfo->minImageCount;
@@ -1477,29 +1650,36 @@ vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pCreateInf
             pSc->u32Magic = MAGIC_SC;
             pSc->pDev = device;
             pSc->surface = pCreateInfo->surface;
-            pSc->u32W = pCreateInfo->imageExtent.width
-                            ? pCreateInfo->imageExtent.width
-                            : device->u32W;
-            pSc->u32H = pCreateInfo->imageExtent.height
-                            ? pCreateInfo->imageExtent.height
-                            : device->u32H;
+            pSc->u32W = w;
+            pSc->u32H = h;
             pSc->u32Count = n;
-            pSc->format = pCreateInfo->imageFormat
-                              ? pCreateInfo->imageFormat
-                              : VK_FORMAT_B8G8R8A8_UNORM;
+            pSc->format = fmt;
+            pSc->presentMode = mode;
+            pSc->usage = pCreateInfo->imageUsage
+                             ? pCreateInfo->imageUsage
+                             : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            pSc->u8Clipped = pCreateInfo->clipped ? 1u : 0u;
             for (j = 0; j < n; j++) {
                 pSc->aImg[j].pPixels = fb_alloc(pSc->u32W, pSc->u32H, &stride);
                 pSc->aImg[j].u32Stride = stride;
                 pSc->aImg[j].u8Alive = pSc->aImg[j].pPixels != NULL;
                 pSc->aImg[j].u8Acquired = 0;
+                pSc->aImg[j].u8Presented = 0;
                 /* Non-dispatchable image handle (opaque u64 counter). */
                 pSc->aImg[j].hImage = (VkImage)(++g_u64NextNd);
                 if (!pSc->aImg[j].u8Alive) {
+                    sc_teardown_images(pSc);
                     g_aScUsed[i] = 0;
+                    pSc->u32Magic = 0;
                     return VK_ERROR_OUT_OF_DEVICE_MEMORY;
                 }
             }
             *pSwapchain = (VkSwapchainKHR)(uintptr_t)(void *)pSc;
+            /* Soft recreate: retire oldSwapchain after new images are live. */
+            if (pCreateInfo->oldSwapchain != 0 &&
+                pCreateInfo->oldSwapchain != *pSwapchain) {
+                vkDestroySwapchainKHR(device, pCreateInfo->oldSwapchain, pAllocator);
+            }
 #ifdef GJ_VK_KERNEL_SMOKE
             kprintf("vk: CreateSwapchainKHR %ux%u images=%u\n", pSc->u32W,
                     pSc->u32H, n);
@@ -1519,13 +1699,16 @@ vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     (void)device;
     (void)pAllocator;
-    if (pSc == NULL) {
+    if (pSc == NULL || swapchain == 0) {
         return;
     }
     for (i = 0; i < GJ_VK_MAX_SC; i++) {
-        if (&g_aSc[i] == pSc) {
+        if (&g_aSc[i] == pSc && g_aScUsed[i]) {
+            sc_teardown_images(pSc);
             g_aScUsed[i] = 0;
             pSc->u32Magic = 0;
+            pSc->pDev = NULL;
+            pSc->surface = 0;
             return;
         }
     }
@@ -1540,6 +1723,9 @@ vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
 
     (void)device;
     if (pSc == NULL || pSc->u32Magic != MAGIC_SC || pCount == NULL) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (device != NULL && device->u32Magic == MAGIC_DEV && pSc->pDev != device) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
     if (pImages == NULL) {
@@ -1562,19 +1748,38 @@ vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeou
                       VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex)
 {
     struct gj_swapchain *pSc = (struct gj_swapchain *)(uintptr_t)swapchain;
-    uint32_t idx;
+    uint32_t idx = 0;
+    uint32_t tries;
+    int found = 0;
 
-    (void)device;
-    (void)timeout;
-    (void)semaphore;
-    (void)fence;
-    if (pSc == NULL || pSc->u32Magic != MAGIC_SC || pImageIndex == NULL) {
+    if (pSc == NULL || pSc->u32Magic != MAGIC_SC || pImageIndex == NULL ||
+        pSc->u32Count == 0) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
-    idx = pSc->u32Cursor % pSc->u32Count;
+    if (device != NULL && device->u32Magic == MAGIC_DEV && pSc->pDev != NULL &&
+        pSc->pDev != device) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    /* Soft present pool: only hand out unacquired live images. */
+    for (tries = 0; tries < pSc->u32Count; tries++) {
+        idx = (pSc->u32Cursor + tries) % pSc->u32Count;
+        if (pSc->aImg[idx].u8Alive && !pSc->aImg[idx].u8Acquired) {
+            found = 1;
+            break;
+        }
+    }
+    if (!found) {
+        /* Spec soft: timeout 0 → NOT_READY; else TIMEOUT (no real wait). */
+        return (timeout == 0) ? VK_NOT_READY : VK_TIMEOUT;
+    }
     pSc->u32Cursor = (idx + 1u) % pSc->u32Count;
     pSc->aImg[idx].u8Acquired = 1;
+    pSc->u32AcquiredN++;
     *pImageIndex = idx;
+    /* Soft binary semaphore signal on acquire complete. */
+    if (semaphore != 0) {
+        sem_soft_signal(semaphore, 1);
+    }
     if (fence != 0) {
         struct gj_fence *pF = (struct gj_fence *)(uintptr_t)fence;
 
@@ -1589,44 +1794,86 @@ VKAPI_ATTR VkResult VKAPI_CALL
 vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
     uint32_t i;
+    VkResult overall = VK_SUCCESS;
 
     if (queue == NULL || queue->u32Magic != MAGIC_QUE || pPresentInfo == NULL) {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    if (pPresentInfo->swapchainCount > 0 &&
+        (pPresentInfo->pSwapchains == NULL || pPresentInfo->pImageIndices == NULL)) {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    /* Soft present: consume wait semaphores before flipping images. */
+    present_wait_sems(pPresentInfo);
     for (i = 0; i < pPresentInfo->swapchainCount; i++) {
         struct gj_swapchain *pSc =
             (struct gj_swapchain *)(uintptr_t)pPresentInfo->pSwapchains[i];
         uint32_t idx;
         VkResult st;
 
-        if (pSc == NULL || pSc->u32Magic != MAGIC_SC ||
-            pPresentInfo->pImageIndices == NULL) {
+        if (pSc == NULL || pSc->u32Magic != MAGIC_SC) {
+            st = VK_ERROR_OUT_OF_DATE_KHR;
             if (pPresentInfo->pResults) {
-                pPresentInfo->pResults[i] = VK_ERROR_OUT_OF_DATE_KHR;
+                pPresentInfo->pResults[i] = st;
+            }
+            if (overall == VK_SUCCESS) {
+                overall = st;
+            }
+            continue;
+        }
+        if (queue->pDev != NULL && pSc->pDev != NULL && queue->pDev != pSc->pDev) {
+            st = VK_ERROR_INITIALIZATION_FAILED;
+            if (pPresentInfo->pResults) {
+                pPresentInfo->pResults[i] = st;
+            }
+            if (overall == VK_SUCCESS) {
+                overall = st;
             }
             continue;
         }
         idx = pPresentInfo->pImageIndices[i];
-        if (idx >= pSc->u32Count || !pSc->aImg[idx].u8Acquired) {
+        if (idx >= pSc->u32Count || !pSc->aImg[idx].u8Alive ||
+            !pSc->aImg[idx].u8Acquired) {
+            st = VK_ERROR_OUT_OF_DATE_KHR;
             if (pPresentInfo->pResults) {
-                pPresentInfo->pResults[i] = VK_ERROR_OUT_OF_DATE_KHR;
+                pPresentInfo->pResults[i] = st;
+            }
+            if (overall == VK_SUCCESS) {
+                overall = st;
             }
             continue;
         }
         st = present_pixels(pSc->aImg[idx].pPixels, pSc->u32W, pSc->u32H,
                             pSc->aImg[idx].u32Stride);
-        pSc->aImg[idx].u8Acquired = 0;
+        if (st == VK_SUCCESS) {
+            pSc->aImg[idx].u8Acquired = 0;
+            pSc->aImg[idx].u8Presented = 1;
+            if (pSc->u32AcquiredN > 0) {
+                pSc->u32AcquiredN--;
+            }
+            pSc->u32PresentN++;
+        }
         if (pPresentInfo->pResults) {
             pPresentInfo->pResults[i] = st;
         }
-        if (st != VK_SUCCESS) {
+        if (st != VK_SUCCESS && overall == VK_SUCCESS) {
+            overall = st;
+        }
+        /* Hard present failure: stop early (device lost / init). */
+        if (st == VK_ERROR_DEVICE_LOST || st == VK_ERROR_INITIALIZATION_FAILED) {
+#ifdef GJ_VK_KERNEL_SMOKE
+            kprintf("vk: QueuePresentKHR fail sc=%u st=%d\n",
+                    pPresentInfo->swapchainCount, (int)st);
+#endif
             return st;
         }
     }
 #ifdef GJ_VK_KERNEL_SMOKE
-    kprintf("vk: QueuePresentKHR ok sc=%u\n", pPresentInfo->swapchainCount);
+    if (overall == VK_SUCCESS) {
+        kprintf("vk: QueuePresentKHR ok sc=%u\n", pPresentInfo->swapchainCount);
+    }
 #endif
-    return VK_SUCCESS;
+    return overall;
 }
 
 /* ---- Command buffers / fence (minimal path for present apps) ---- */
@@ -3147,11 +3394,15 @@ vkMapSwapchainImageGJ(VkDevice device, VkSwapchainKHR swapchain,
 {
     struct gj_swapchain *pSc = (struct gj_swapchain *)(uintptr_t)swapchain;
 
-    (void)device;
     if (pSc == NULL || pSc->u32Magic != MAGIC_SC ||
-        imageIndex >= pSc->u32Count) {
+        imageIndex >= pSc->u32Count || !pSc->aImg[imageIndex].u8Alive) {
         return NULL;
     }
+    if (device != NULL && device->u32Magic == MAGIC_DEV && pSc->pDev != NULL &&
+        pSc->pDev != device) {
+        return NULL;
+    }
+    /* Soft: map allowed without acquire for CPU blit smoke; prefer acquired. */
     if (pStride) {
         *pStride = pSc->aImg[imageIndex].u32Stride;
     }

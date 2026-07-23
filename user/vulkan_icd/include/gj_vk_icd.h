@@ -96,6 +96,8 @@ uint32_t gj_vk_icd_features(void);
 
 /** Host software-present frame counter (ICD without virtio-gpu). */
 uint32_t gj_vk_host_present_count(void);
+/** Host software-present soft CRC of corner pixels (0 if none presented). */
+uint32_t gj_vk_host_present_crc(void);
 
 #ifdef __cplusplus
 }

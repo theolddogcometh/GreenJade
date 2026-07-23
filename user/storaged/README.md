@@ -37,16 +37,20 @@ Source of truth under this tree: `src/storaged_gj.c` + `src/storaged_stub.c`.
 Live smoke via `gj_store` / `GJ_SYS_STORE`:
 
 1. **CLAIM** store door (token `0x510e0002`)
-2. **WRITE** / **READ** sector smoke at LBA 2 (512 B), full-sector verify
-3. **UDX ring** — `EXPORT_RING` → `MAP_RING` (VA `0x32000000`, page-aligned) →
+2. **Soft door surface** (never hard-fails) — reclaim, CAP, STATS, QUEUE_INFO,
+   multi-sector R/W at LBA 3 (2 × 512 B), FLUSH, RING_STATE peek
+3. **WRITE** / **READ** sector smoke at LBA 2 (512 B), full-sector verify
+4. **UDX ring** — `EXPORT_RING` → `MAP_RING` (VA `0x32000000`, page-aligned) →
    `RING_STATE` → `KICK`
-4. **RELEASE** + `live path PASS`
+5. **RELEASE** + soft free path (unowned RELEASE + QUEUE owned=0) +
+   `live path PASS`
 
 ### Soft vs hard outcomes
 
 | Condition | Result |
 |-----------|--------|
 | CLAIM / WRITE / READ-verify / RELEASE fail | Hard fail — exit 1 (best-effort RELEASE) |
+| Soft door sub-step fails (CAP/STATS/QUEUE/multi/FLUSH/RING_STATE) | Soft-skip line; still `live path PASS` |
 | EXPORT fails, export not ready, or MAP_RING fails | Soft — log soft line; still `live path PASS` |
 | virtio-blk absent | Soft-skip ring; still green on non-hard markers |
 
@@ -62,9 +66,10 @@ Keep these stable unless coordinated with the kernel door and smoke scripts:
 
 | Contract | Value / rule |
 |----------|----------------|
-| Store ops | READ=3 WRITE=4 CLAIM=5 RELEASE=6 EXPORT_RING=9 KICK=10 RING_STATE=11 MAP_RING=12 |
+| Store ops | STATS=1 CAP=2 READ=3 WRITE=4 CLAIM=5 RELEASE=6 QUEUE_INFO=7 FLUSH=8 EXPORT_RING=9 KICK=10 RING_STATE=11 MAP_RING=12 |
 | `STORE_TOKEN` | `0x510e0002` (non-zero claim token) |
 | Smoke LBA | LBA **2**, 512 B (avoids LBA0 super/mirror) |
+| Soft multi LBA | LBA **3**, 2 × 512 B (≤ `GJ_STORE_XFER_MAX`) |
 | `RING_VA` | `0x32000000` (page-aligned user map base) |
 | `struct vq_export` | Field layout mirrors `gj_virtq_export` / UDX |
 | Marker prefixes | `storaged-gj: …` freestanding; `storaged: …` host + kernel spawn |
@@ -89,15 +94,26 @@ storaged: PASS
 
 ### Userspace freestanding lines (`storaged_gj.c`)
 
-Typical product path (order fixed; ring lines depend on virtio-blk readiness):
+Typical product path (order fixed for hard markers; soft lines interleave):
 
 ```
 storaged-gj: start
 storaged-gj: CLAIM PASS
+storaged-gj: reclaim soft PASS
+storaged-gj: CAP soft sectors=…
+storaged-gj: STATS soft blk=… scsi=… calls=…
+storaged-gj: QUEUE soft blk=… scsi=… rw=… own=…
+storaged-gj: multi-sector soft PASS
+storaged-gj: FLUSH soft PASS
+storaged-gj: RING_STATE soft free=… ready=…
+storaged-gj: soft door PASS
 storaged-gj: WRITE PASS
 storaged-gj: READ PASS
 storaged-gj: ring map PASS
 storaged-gj: RELEASE PASS
+storaged-gj: free RELEASE soft PASS
+storaged-gj: free own soft PASS
+storaged-gj: free soft PASS
 storaged-gj: live path PASS
 ```
 
@@ -114,9 +130,20 @@ storaged-gj: live path PASS
 Soft / non-hard lines (not required by `smoke-all` alone):
 
 ```
+storaged-gj: reclaim soft PASS | reclaim soft-skip
+storaged-gj: CAP soft sectors=… | CAP soft-skip
+storaged-gj: STATS soft blk=… scsi=… calls=… | STATS soft-skip
+storaged-gj: QUEUE soft blk=… scsi=… rw=… own=… | QUEUE soft-skip
+storaged-gj: multi-sector soft PASS | multi-sector soft-skip
+storaged-gj: FLUSH soft PASS | FLUSH soft-skip
+storaged-gj: RING_STATE soft free=… ready=… | RING_STATE soft-skip
+storaged-gj: soft door PASS | soft door soft-skip
 storaged-gj: ring EXPORT soft-skip
 storaged-gj: ring MAP fail (soft)
 storaged-gj: ring soft-skip (no virtio-blk)
+storaged-gj: free RELEASE soft PASS | free RELEASE soft-skip
+storaged-gj: free own soft PASS | free own soft-skip
+storaged-gj: free soft PASS | free soft-skip
 ```
 
 Kernel companion (not from this directory): `storaged: live spawn PASS` after
@@ -126,14 +153,22 @@ embedded spawn of `build/user/storaged.elf`.
 
 ```
 storaged: start (software image until scsi door)
+storaged: reclaim soft ok token=0x510e0002
+storaged: CAP soft sectors=64
 storaged: sector0 ok io=… magic="GreenJade…"
+storaged: multi-sector soft ok lba=3 bytes=1024
+storaged: FLUSH soft ok
+storaged: STATS soft blk=… scsi=0 calls=…
+storaged: QUEUE soft blk=… scsi=0 rw=… own=1
+storaged: free soft ok soft_steps=…
 storaged: door-shaped multi-lba ok sectors=64 io=…
 storaged: PASS
 ```
 
 Host path also exercises defensive rejects (null, zero length, non-sector
-multiple, LBA past end, range overflow) before successful I/O. Ring-map is
-freestanding-only (no host virtq).
+multiple, LBA past end, range overflow, over XFER_MAX, null CAP/STATS/QUEUE,
+zero-token CLAIM) before successful I/O. Ring-map is freestanding-only (no
+host virtq).
 
 ## Build
 
@@ -164,10 +199,14 @@ cc -std=c11 -Wall -Wextra -O2 -o build/storaged user/storaged/src/storaged_stub.
 
 | op | name | args |
 |----|------|------|
+| 1  | STATS | `u32[3]` → blk_io, scsi_io, door_calls |
+| 2  | CAP | `u64*` capacity sectors |
 | 3  | READ | lba, buf, bytes (sector multiple) |
 | 4  | WRITE | lba, buf, bytes (sector multiple) |
-| 5  | CLAIM | token (non-zero) |
-| 6  | RELEASE | token |
+| 5  | CLAIM | token (non-zero; same-token reclaim soft) |
+| 6  | RELEASE | token (unowned → soft free 0) |
+| 7  | QUEUE_INFO | `u32[4]` → blk_io, scsi_io, door_rw, owned |
+| 8  | FLUSH | fsync-shaped when transport ready |
 | 9  | EXPORT_RING | `vq_export *` |
 | 10 | KICK | — |
 | 11 | RING_STATE | `u32[2]` → free, ready |

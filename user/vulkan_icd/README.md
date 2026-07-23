@@ -35,6 +35,9 @@ Coverage:
 - **Loader:** `vk_icdNegotiateLoaderICDInterfaceVersion`, `vk_icdGetInstanceProcAddr`
 - **Core:** instance, physical device enum/properties/format props, device, queue
 - **KHR:** surface caps/formats/modes, swapchain create/images/acquire/present
+- **Soft present/swapchain:** free-on-destroy, oldSwapchain retire, acquire pool
+  (skip live acquires → `VK_NOT_READY`/`VK_TIMEOUT`), acquire/present semaphores,
+  present `pResults` aggregation, host present CRC fingerprint
 - **GJ ext:** headless surface, map swapchain, texture bind
 - **Cmd pool / buffers:** clear, draw, indexed draw, submit, reset
 - **Render pass / framebuffer / graphics pipelines** (stages bind modules)
@@ -80,11 +83,12 @@ Kernel smoke links the same sources with `GJ_VK_KERNEL_SMOKE` (virtio-gpu + PMM)
 ## Host smoke checks
 
 1. Loader negotiate + instance version/extensions
-2. Multi-frame present (`gj_vk_host_present_count`)
-3. SPIR-V module parse + solid triangle draw
-4. UV textured triangle
-5. Soft path: fence status, flush, reset cmd, buffer copy/fill, GIPA/GDPA
-6. Feature-not-present: compute pipelines, sparse bind, query pool
+2. Multi-frame present (`gj_vk_host_present_count` / `gj_vk_host_present_crc`)
+3. Soft swapchain: acquire pool exhaust, acquire/present semaphore, oldSwapchain
+4. SPIR-V module parse + solid triangle draw
+5. UV textured triangle
+6. Soft path: fence status, flush, reset cmd, buffer copy/fill, GIPA/GDPA
+7. Feature-not-present: compute pipelines, sparse bind, query pool
 
 ## Not yet
 

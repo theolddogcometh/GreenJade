@@ -7,6 +7,7 @@
  */
 #include <gj/string.h>
 #include <gj/syscalls.h>
+#include <stdarg.h>
 #include <stdint.h>
 
 size_t
@@ -284,6 +285,162 @@ gj_memchr(const void *p, int ch, size_t cb)
     return NULL;
 }
 
+size_t
+gj_strspn(const char *sz, const char *szAccept)
+{
+    size_t n = 0;
+    size_t i;
+    size_t cAccept;
+
+    if (sz == NULL || szAccept == NULL) {
+        return 0;
+    }
+    cAccept = gj_strlen(szAccept);
+    while (sz[n] != '\0') {
+        int fOk = 0;
+
+        for (i = 0; i < cAccept; i++) {
+            if ((unsigned char)sz[n] == (unsigned char)szAccept[i]) {
+                fOk = 1;
+                break;
+            }
+        }
+        if (fOk == 0) {
+            break;
+        }
+        n++;
+    }
+    return n;
+}
+
+size_t
+gj_strcspn(const char *sz, const char *szReject)
+{
+    size_t n = 0;
+    size_t i;
+    size_t cReject;
+
+    if (sz == NULL) {
+        return 0;
+    }
+    if (szReject == NULL || szReject[0] == '\0') {
+        return gj_strlen(sz);
+    }
+    cReject = gj_strlen(szReject);
+    while (sz[n] != '\0') {
+        for (i = 0; i < cReject; i++) {
+            if ((unsigned char)sz[n] == (unsigned char)szReject[i]) {
+                return n;
+            }
+        }
+        n++;
+    }
+    return n;
+}
+
+int
+gj_tolower(int ch)
+{
+    if (ch >= 'A' && ch <= 'Z') {
+        return ch - 'A' + 'a';
+    }
+    return ch;
+}
+
+int
+gj_toupper(int ch)
+{
+    if (ch >= 'a' && ch <= 'z') {
+        return ch - 'a' + 'A';
+    }
+    return ch;
+}
+
+int
+gj_strcasecmp(const char *szA, const char *szB)
+{
+    size_t i = 0;
+    int ca;
+    int cb2;
+
+    if (szA == NULL || szB == NULL) {
+        return (szA == szB) ? 0 : (szA == NULL ? -1 : 1);
+    }
+    for (;;) {
+        ca = gj_tolower((unsigned char)szA[i]);
+        cb2 = gj_tolower((unsigned char)szB[i]);
+        if (ca != cb2 || ca == 0) {
+            return ca - cb2;
+        }
+        i++;
+    }
+}
+
+int
+gj_strncasecmp(const char *szA, const char *szB, size_t cb)
+{
+    size_t i;
+    int ca;
+    int cb2;
+
+    if (cb == 0) {
+        return 0;
+    }
+    if (szA == NULL || szB == NULL) {
+        return (szA == szB) ? 0 : (szA == NULL ? -1 : 1);
+    }
+    for (i = 0; i < cb; i++) {
+        ca = gj_tolower((unsigned char)szA[i]);
+        cb2 = gj_tolower((unsigned char)szB[i]);
+        if (ca != cb2 || ca == 0) {
+            return ca - cb2;
+        }
+    }
+    return 0;
+}
+
+int
+gj_isdigit(int ch)
+{
+    return (ch >= '0' && ch <= '9') ? 1 : 0;
+}
+
+int
+gj_isalpha(int ch)
+{
+    return ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) ? 1 : 0;
+}
+
+int
+gj_isalnum(int ch)
+{
+    return (gj_isdigit(ch) || gj_isalpha(ch)) ? 1 : 0;
+}
+
+int
+gj_isspace(int ch)
+{
+    return (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
+            ch == '\f' || ch == '\v')
+               ? 1
+               : 0;
+}
+
+int
+gj_isxdigit(int ch)
+{
+    return (gj_isdigit(ch) || (ch >= 'a' && ch <= 'f') ||
+            (ch >= 'A' && ch <= 'F'))
+               ? 1
+               : 0;
+}
+
+int
+gj_isprint(int ch)
+{
+    return (ch >= 0x20 && ch <= 0x7e) ? 1 : 0;
+}
+
 void *
 gj_memcpy(void *pDst, const void *pSrc, size_t cb)
 {
@@ -346,6 +503,150 @@ gj_memcmp(const void *pA, const void *pB, size_t cb)
     return 0;
 }
 
+void *
+gj_memccpy(void *pDst, const void *pSrc, int ch, size_t cb)
+{
+    unsigned char *d = (unsigned char *)pDst;
+    const unsigned char *s = (const unsigned char *)pSrc;
+    unsigned char chWant = (unsigned char)ch;
+    size_t i;
+
+    if (d == NULL || s == NULL) {
+        return NULL;
+    }
+    for (i = 0; i < cb; i++) {
+        d[i] = s[i];
+        if (s[i] == chWant) {
+            return (void *)(d + i + 1);
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Digit value for base 2..36. Returns -1 if not a valid digit for nBase.
+ */
+static int
+s_digit_val(int ch, int nBase)
+{
+    int n;
+
+    if (ch >= '0' && ch <= '9') {
+        n = ch - '0';
+    } else if (ch >= 'a' && ch <= 'z') {
+        n = ch - 'a' + 10;
+    } else if (ch >= 'A' && ch <= 'Z') {
+        n = ch - 'A' + 10;
+    } else {
+        return -1;
+    }
+    if (n >= nBase) {
+        return -1;
+    }
+    return n;
+}
+
+unsigned long
+gj_strtoul(const char *sz, char **ppEnd, int nBase)
+{
+    const char *p;
+    unsigned long u = 0;
+    int nBaseUse;
+    int nDig;
+    int fAny = 0;
+
+    if (ppEnd != NULL) {
+        *ppEnd = (char *)(uintptr_t)sz;
+    }
+    if (sz == NULL) {
+        return 0;
+    }
+    p = sz;
+    while (gj_isspace((unsigned char)*p) != 0) {
+        p++;
+    }
+    if (*p == '+') {
+        p++;
+    }
+    nBaseUse = nBase;
+    if (nBaseUse == 0) {
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+            nBaseUse = 16;
+            p += 2;
+        } else if (p[0] == '0') {
+            nBaseUse = 8;
+            p++;
+            fAny = 1; /* lone "0" is a valid convert */
+        } else {
+            nBaseUse = 10;
+        }
+    } else if (nBaseUse == 16 && p[0] == '0' &&
+               (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+    }
+    if (nBaseUse < 2 || nBaseUse > 36) {
+        return 0;
+    }
+    for (;;) {
+        nDig = s_digit_val((unsigned char)*p, nBaseUse);
+        if (nDig < 0) {
+            break;
+        }
+        /* Soft: wrap on overflow rather than set errno (no errno). */
+        u = u * (unsigned long)nBaseUse + (unsigned long)nDig;
+        fAny = 1;
+        p++;
+    }
+    if (ppEnd != NULL) {
+        *ppEnd = (char *)(uintptr_t)(fAny != 0 ? p : sz);
+    }
+    return u;
+}
+
+long
+gj_strtol(const char *sz, char **ppEnd, int nBase)
+{
+    const char *p;
+    int fNeg = 0;
+    unsigned long u;
+    char *pEndLocal = NULL;
+
+    if (ppEnd != NULL) {
+        *ppEnd = (char *)(uintptr_t)sz;
+    }
+    if (sz == NULL) {
+        return 0;
+    }
+    p = sz;
+    while (gj_isspace((unsigned char)*p) != 0) {
+        p++;
+    }
+    if (*p == '-') {
+        fNeg = 1;
+        p++;
+    } else if (*p == '+') {
+        p++;
+    }
+    u = gj_strtoul(p, &pEndLocal, nBase);
+    if (ppEnd != NULL) {
+        if (pEndLocal == p && u == 0) {
+            *ppEnd = (char *)(uintptr_t)sz;
+        } else {
+            *ppEnd = pEndLocal;
+        }
+    }
+    if (fNeg != 0) {
+        return -(long)u;
+    }
+    return (long)u;
+}
+
+long
+gj_atol(const char *sz)
+{
+    return gj_strtol(sz, NULL, 10);
+}
+
 void
 gj_puts(const char *sz)
 {
@@ -364,6 +665,12 @@ long
 gj_write(int nFd, const void *p, size_t cb)
 {
     return linux_write(nFd, p, cb);
+}
+
+long
+gj_read(int nFd, void *p, size_t cb)
+{
+    return linux_read(nFd, p, cb);
 }
 
 long
@@ -476,4 +783,103 @@ gj_xtoa(unsigned long uVal, char *szBuf, size_t cbBuf,
     }
     szBuf[i] = '\0';
     return i;
+}
+
+/*
+ * Soft snprintf-lite: append one char / string into bounded buffer.
+ * *pOut advances; *pNeed counts full logical length; cbCap includes room for NUL.
+ */
+static void
+s_sn_putc(char *szBuf, size_t cbCap, size_t *pOut, size_t *pNeed, char ch)
+{
+    if (*pOut + 1u < cbCap) {
+        szBuf[*pOut] = ch;
+    }
+    (*pOut)++;
+    (*pNeed)++;
+}
+
+static void
+s_sn_puts(char *szBuf, size_t cbCap, size_t *pOut, size_t *pNeed,
+          const char *sz)
+{
+    size_t i;
+
+    if (sz == NULL) {
+        sz = "(null)";
+    }
+    for (i = 0; sz[i] != '\0'; i++) {
+        s_sn_putc(szBuf, cbCap, pOut, pNeed, sz[i]);
+    }
+}
+
+size_t
+gj_snprintf(char *szBuf, size_t cbBuf, const char *szFmt, ...)
+{
+    va_list ap;
+    size_t iOut = 0;
+    size_t iNeed = 0;
+    size_t i;
+    char aNum[32];
+    size_t nNum;
+
+    if (szFmt == NULL) {
+        if (szBuf != NULL && cbBuf > 0) {
+            szBuf[0] = '\0';
+        }
+        return 0;
+    }
+    va_start(ap, szFmt);
+    for (i = 0; szFmt[i] != '\0'; i++) {
+        if (szFmt[i] != '%') {
+            s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, szFmt[i]);
+            continue;
+        }
+        i++;
+        if (szFmt[i] == '\0') {
+            break;
+        }
+        if (szFmt[i] == '%') {
+            s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, '%');
+        } else if (szFmt[i] == 's') {
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, va_arg(ap, const char *));
+        } else if (szFmt[i] == 'c') {
+            s_sn_putc(szBuf, cbBuf, &iOut, &iNeed,
+                      (char)va_arg(ap, int));
+        } else if (szFmt[i] == 'd' || szFmt[i] == 'i') {
+            nNum = gj_itoa(va_arg(ap, long), aNum, sizeof(aNum));
+            (void)nNum;
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
+        } else if (szFmt[i] == 'u') {
+            nNum = gj_utoa(va_arg(ap, unsigned long), aNum, sizeof(aNum));
+            (void)nNum;
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
+        } else if (szFmt[i] == 'x' || szFmt[i] == 'X') {
+            nNum = gj_xtoa(va_arg(ap, unsigned long), aNum, sizeof(aNum), 0,
+                           0);
+            (void)nNum;
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
+        } else if (szFmt[i] == 'p') {
+            void *p = va_arg(ap, void *);
+
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, "0x");
+            nNum = gj_xtoa((unsigned long)(uintptr_t)p, aNum, sizeof(aNum), 1,
+                           sizeof(void *) * 2u);
+            (void)nNum;
+            s_sn_puts(szBuf, cbBuf, &iOut, &iNeed, aNum);
+        } else {
+            /* Unknown conversion: emit literally. */
+            s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, '%');
+            s_sn_putc(szBuf, cbBuf, &iOut, &iNeed, szFmt[i]);
+        }
+    }
+    va_end(ap);
+    if (szBuf != NULL && cbBuf > 0) {
+        if (iOut < cbBuf) {
+            szBuf[iOut] = '\0';
+        } else {
+            szBuf[cbBuf - 1u] = '\0';
+        }
+    }
+    return iNeed;
 }

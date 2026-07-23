@@ -17,6 +17,7 @@
 #   5. On lab host: picocom -b 115200 /dev/ttyUSB0  (GreenJade console)
 #   6. Soft-scan a serial capture:
 #        ./scripts/gj-product-summary.sh logs/serial-….txt   # soft exit 0
+#        ./scripts/gj-quick-keys.sh logs/serial-….txt        # hard product keys
 #
 # Stick-local alternative (no tree checkout needed on lab host):
 #   sudo mount -L GJ-PERSIST /mnt/gj-persist

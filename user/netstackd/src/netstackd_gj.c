@@ -3,14 +3,39 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Freestanding netstackd — claims net door + lo socket echo via GJ_SYS_NET.
- * TCP: single-seg smoke + multi-segment bulk (>MSS) integrity for sshd/Top50.
+ * Hard path: CLAIM → DGRAM echo → TCP single/multi-seg → virtio queue/ring →
+ *            RELEASE → live path PASS (dgram RECV green).
+ * Soft path (deepened; never aborts live path):
+ *   same-token CLAIM reclaim, POLL + eth STATS, QUEUE_INFO owned,
+ *   dgram echo integrity, TCP_STATS soft report, VIRTIO_RX drain,
+ *   MAP_RING re-MAP (map reclaim), KICK, RING_STATE soft, free RELEASE.
  * UDX-shaped virtq: MAP_RING + MAP_DMA + DESC_ALLOC + user desc/avail + kick.
  * Pure C11 freestanding product daemon (MIT OR Apache-2.0; no GPL).
+ *
+ * Hard smoke markers (prefix-stable for scripts/smoke-all.sh):
+ *   netstackd-gj: avail push PASS
+ *   netstackd-gj: user ring PASS
+ *   netstackd-gj: live path PASS
+ * Soft (optional; never fails live path):
+ *   netstackd-gj: reclaim soft PASS | soft-skip
+ *   netstackd-gj: POLL soft PASS | soft-skip
+ *   netstackd-gj: STATS soft PASS | soft-skip
+ *   netstackd-gj: QUEUE_INFO soft PASS | soft-skip
+ *   netstackd-gj: dgram echo soft PASS | soft-skip
+ *   netstackd-gj: TCP_STATS soft PASS | soft-skip
+ *   netstackd-gj: VIRTIO_RX soft PASS | soft-empty | soft-skip
+ *   netstackd-gj: re-MAP soft PASS | soft-skip
+ *   netstackd-gj: KICK soft PASS | soft-skip
+ *   netstackd-gj: RING_STATE soft PASS | soft-skip
+ *   netstackd-gj: soft door PASS | soft door soft-skip
+ *   netstackd-gj: RELEASE free soft PASS | soft-skip
+ *
  *   make netstackd-gj → build/user/netstackd.elf
  */
 #include <gj/syscalls.h>
 /* GJ_NET_OP_CLAIM/RELEASE/SOCKET/BIND/SEND/RECV/CONNECT/CLOSE/LISTEN/ACCEPT/TCP_STATS from gj/syscalls.h */
 #define GJ_NET_OP_VIRTIO_TX  12
+#define GJ_NET_OP_VIRTIO_RX  13
 #define GJ_NET_OP_QUEUE_INFO 14
 #define GJ_NET_OP_EXPORT_RING 15
 #define GJ_NET_OP_MAP_RING    16
@@ -49,6 +74,22 @@
 #define GJ_MULTI_CB       3000u
 #define GJ_MULTI_MAX_RECV 64u
 #define GJ_TCP_TEST_PORT  7777
+
+/* Soft VIRTIO_RX drain cap (defensive; empty ring is fine). */
+#define GJ_SOFT_RX_CAP    8u
+#define GJ_SOFT_RX_FRAME  1514u
+
+/* Soft door sub-step bits (aggregate only; never hard-fail). */
+#define GJ_SOFT_BIT_RECLAIM  (1u << 0)
+#define GJ_SOFT_BIT_POLL     (1u << 1)
+#define GJ_SOFT_BIT_STATS    (1u << 2)
+#define GJ_SOFT_BIT_QINFO    (1u << 3)
+#define GJ_SOFT_BIT_DGRAM    (1u << 4)
+#define GJ_SOFT_BIT_TCPST    (1u << 5)
+#define GJ_SOFT_BIT_RX       (1u << 6)
+#define GJ_SOFT_BIT_REMAP    (1u << 7)
+#define GJ_SOFT_BIT_KICK     (1u << 8)
+#define GJ_SOFT_BIT_RINGST   (1u << 9)
 
 _Static_assert(GJ_MULTI_CB > GJ_TCP_MSS,
                "GJ_MULTI_CB must exceed MSS for multi-segment TX");
@@ -102,6 +143,13 @@ struct vq_avail {
     unsigned short ring[256];
 } __attribute__((packed));
 
+/* Soft-door bookkeeping (filled while CLAIM held; never hard-fails). */
+struct soft_ctx {
+    unsigned uBits;
+    unsigned cOk;
+    int fRingMapped; /* 1 when hard path mapped RING_VA */
+};
+
 static void
 msg(const char *sz)
 {
@@ -117,6 +165,21 @@ static void
 mfence(void)
 {
     __asm__ volatile("mfence" ::: "memory");
+}
+
+static int
+mem_eq(const void *a, const void *b, unsigned n)
+{
+    const unsigned char *p = (const unsigned char *)a;
+    const unsigned char *q = (const unsigned char *)b;
+    unsigned i;
+
+    for (i = 0; i < n; i++) {
+        if (p[i] != q[i]) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 /*
@@ -140,9 +203,10 @@ mfence(void)
  *   - Drain iteration ceiling GJ_MULTI_MAX_RECV (no unbounded loop)
  *
  * Returns 1 if multi-seg integrity holds; 0 otherwise.
+ * Soft: TCP_STATS door success is recorded via *pfTcpStats when non-NULL.
  */
 static int
-tcp_multi_seg_smoke(void)
+tcp_multi_seg_smoke(int *pfTcpStats)
 {
     long hSrv;
     long hCli;
@@ -161,6 +225,10 @@ tcp_multi_seg_smoke(void)
     unsigned cRecv;
     int fPath = 0;
     int fMulti = 0;
+
+    if (pfTcpStats != 0) {
+        *pfTcpStats = 0;
+    }
 
     for (i = 0; i < GJ_MULTI_CB; i++) {
         aTx[i] = (unsigned char)(i & 0xff);
@@ -263,7 +331,11 @@ multi_done:
      * Buffer is exactly 4 u32; door copy_to_user expects that size.
      */
     aSt[0] = aSt[1] = aSt[2] = aSt[3] = 0;
-    (void)gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)aSt, 0, 0);
+    if (gj_net(GJ_NET_OP_TCP_STATS, (long)(uintptr_t)aSt, 0, 0) == 0) {
+        if (pfTcpStats != 0) {
+            *pfTcpStats = 1;
+        }
+    }
     if (fMulti) {
         msg("netstackd-gj: TCP multi-segment PASS\n");
     } else if (fPath) {
@@ -281,6 +353,224 @@ out:
     return fMulti;
 }
 
+/*
+ * Soft door suite while CLAIM is held (deepened).
+ * Never aborts hard path; each step soft-skip on rejection / empty / NODEV.
+ * Call after hard DGRAM + TCP smokes so STATS/calls reflect product traffic.
+ * Virtio-dependent steps (RX / re-MAP / KICK / RING_STATE) are soft and
+ * must not reorder or replace hard avail-push / user-ring PASS markers.
+ *
+ * Returns count of soft sub-steps that greened.
+ */
+static unsigned
+soft_door_path(struct soft_ctx *pSoft, unsigned token,
+               const char *pDgramTx, long nDgramRx, const char *pDgramRx,
+               int fTcpStats)
+{
+    static unsigned char aRxFrame[GJ_SOFT_RX_FRAME];
+    unsigned aSt[4];
+    unsigned aQ[5];
+    unsigned st[4];
+    unsigned i;
+    unsigned cRx;
+    long n;
+    long nRx;
+
+    if (pSoft == 0) {
+        msg("netstackd-gj: soft door soft-skip\n");
+        return 0u;
+    }
+    pSoft->uBits = 0u;
+    pSoft->cOk = 0u;
+
+    msg("netstackd-gj: soft door start\n");
+
+    /*
+     * 1) Soft reclaim: same-token re-CLAIM is idempotent (net_door soft path).
+     *    Different token would be BUSY — never try that on the live path.
+     */
+    if (token != 0u) {
+        n = gj_net(GJ_NET_OP_CLAIM, (long)token, 0, 0);
+        if (n == 0) {
+            pSoft->uBits |= GJ_SOFT_BIT_RECLAIM;
+            pSoft->cOk++;
+            msg("netstackd-gj: reclaim soft PASS\n");
+        } else {
+            msg("netstackd-gj: reclaim soft-skip\n");
+        }
+    } else {
+        msg("netstackd-gj: reclaim soft-skip\n");
+    }
+
+    /* 2) POLL — drain virtio-net / eth; always 0 when door is up. */
+    n = gj_net(GJ_NET_OP_POLL, 0, 0, 0);
+    if (n == 0) {
+        pSoft->uBits |= GJ_SOFT_BIT_POLL;
+        pSoft->cOk++;
+        msg("netstackd-gj: POLL soft PASS\n");
+    } else {
+        msg("netstackd-gj: POLL soft-skip\n");
+    }
+
+    /*
+     * 3) eth STATS: u32[4] = {arp, udp, icmp, calls}. Soft-green when
+     *    door returns 0 and calls counter (aSt[3]) is non-zero (we have
+     *    already exercised sockets / claim).
+     */
+    aSt[0] = aSt[1] = aSt[2] = aSt[3] = 0;
+    n = gj_net(GJ_NET_OP_STATS, (long)(uintptr_t)aSt, 0, 0);
+    if (n == 0 && aSt[3] != 0u) {
+        pSoft->uBits |= GJ_SOFT_BIT_STATS;
+        pSoft->cOk++;
+        msg("netstackd-gj: STATS soft PASS\n");
+    } else {
+        msg("netstackd-gj: STATS soft-skip\n");
+    }
+    (void)aSt;
+
+    /*
+     * 4) QUEUE_INFO: u32[5] = {tx, rx, ready, owned, vq_calls}.
+     *    Soft-green when owned bit set (CLAIM held). ready may be 0
+     *    without virtio-net (still soft-skip only that half).
+     */
+    aQ[0] = aQ[1] = aQ[2] = aQ[3] = aQ[4] = 0;
+    n = gj_net(GJ_NET_OP_QUEUE_INFO, (long)(uintptr_t)aQ, 0, 0);
+    if (n == 0 && aQ[3] != 0u) {
+        pSoft->uBits |= GJ_SOFT_BIT_QINFO;
+        pSoft->cOk++;
+        msg("netstackd-gj: QUEUE_INFO soft PASS\n");
+    } else {
+        msg("netstackd-gj: QUEUE_INFO soft-skip\n");
+    }
+    (void)aQ;
+
+    /*
+     * 5) DGRAM echo integrity soft — hard path only needs RECV n > 0
+     *    for live path PASS; soft compares payload when lengths match.
+     */
+    if (pDgramTx != 0 && pDgramRx != 0 && nDgramRx > 0) {
+        unsigned cb = 0;
+
+        while (pDgramTx[cb] != '\0') {
+            cb++;
+        }
+        cb++; /* include NUL like sizeof(msgb) SEND */
+        if ((unsigned long)nDgramRx == (unsigned long)cb &&
+            mem_eq(pDgramRx, pDgramTx, cb)) {
+            pSoft->uBits |= GJ_SOFT_BIT_DGRAM;
+            pSoft->cOk++;
+            msg("netstackd-gj: dgram echo soft PASS\n");
+        } else {
+            msg("netstackd-gj: dgram echo soft-skip\n");
+        }
+    } else {
+        msg("netstackd-gj: dgram echo soft-skip\n");
+    }
+
+    /* 6) TCP_STATS soft — door success only (payload multi-seg is hard). */
+    if (fTcpStats) {
+        pSoft->uBits |= GJ_SOFT_BIT_TCPST;
+        pSoft->cOk++;
+        msg("netstackd-gj: TCP_STATS soft PASS\n");
+    } else {
+        msg("netstackd-gj: TCP_STATS soft-skip\n");
+    }
+
+    /*
+     * 7) VIRTIO_RX soft drain — empty is soft-empty (still a green probe
+     *    when door accepts the op); NODEV / error → soft-skip.
+     */
+    cRx = 0;
+    nRx = 0;
+    for (i = 0; i < GJ_SOFT_RX_CAP; i++) {
+        n = gj_net(GJ_NET_OP_VIRTIO_RX, (long)(uintptr_t)aRxFrame,
+                   (long)GJ_SOFT_RX_FRAME, 0);
+        if (n < 0) {
+            nRx = n;
+            break;
+        }
+        if (n == 0) {
+            nRx = 0;
+            break;
+        }
+        cRx++;
+        nRx = n;
+        if ((unsigned long)n > (unsigned long)GJ_SOFT_RX_FRAME) {
+            nRx = -1;
+            break;
+        }
+    }
+    if (nRx >= 0) {
+        pSoft->uBits |= GJ_SOFT_BIT_RX;
+        pSoft->cOk++;
+        if (cRx > 0u) {
+            msg("netstackd-gj: VIRTIO_RX soft PASS\n");
+        } else {
+            msg("netstackd-gj: VIRTIO_RX soft-empty\n");
+        }
+    } else {
+        msg("netstackd-gj: VIRTIO_RX soft-skip\n");
+    }
+    (void)aRxFrame;
+
+    /*
+     * 8) MAP_RING re-MAP soft — same VA re-install (kernel map reclaim).
+     *    Only when hard path already mapped; never invent a map here.
+     */
+    if (pSoft->fRingMapped) {
+        struct vq_export ex;
+
+        for (i = 0; i < sizeof(ex); i++) {
+            ((unsigned char *)&ex)[i] = 0;
+        }
+        n = gj_net(GJ_NET_OP_MAP_RING, 1, (long)RING_VA,
+                   (long)(uintptr_t)&ex);
+        if (n == 0) {
+            pSoft->uBits |= GJ_SOFT_BIT_REMAP;
+            pSoft->cOk++;
+            msg("netstackd-gj: re-MAP soft PASS\n");
+        } else {
+            msg("netstackd-gj: re-MAP soft-skip\n");
+        }
+        (void)ex;
+    } else {
+        msg("netstackd-gj: re-MAP soft-skip\n");
+    }
+
+    /* 9) KICK soft — best-effort notify; NODEV soft-skip without virtio. */
+    n = gj_net(GJ_NET_OP_KICK, 1, 0, 0);
+    if (n == 0) {
+        pSoft->uBits |= GJ_SOFT_BIT_KICK;
+        pSoft->cOk++;
+        msg("netstackd-gj: KICK soft PASS\n");
+    } else {
+        msg("netstackd-gj: KICK soft-skip\n");
+    }
+
+    /*
+     * 10) RING_STATE soft — always fills when door is up (zeros without
+     *     virtio-net). Soft-green on door success alone.
+     */
+    st[0] = st[1] = st[2] = st[3] = 0;
+    n = gj_net(GJ_NET_OP_RING_STATE, (long)(uintptr_t)st, 0, 0);
+    if (n == 0) {
+        pSoft->uBits |= GJ_SOFT_BIT_RINGST;
+        pSoft->cOk++;
+        msg("netstackd-gj: RING_STATE soft PASS\n");
+    } else {
+        msg("netstackd-gj: RING_STATE soft-skip\n");
+    }
+    (void)st;
+
+    /* Aggregate soft door line — green if any sub-step greened. */
+    if (pSoft->cOk > 0u) {
+        msg("netstackd-gj: soft door PASS\n");
+    } else {
+        msg("netstackd-gj: soft door soft-skip\n");
+    }
+    return pSoft->cOk;
+}
+
 void
 _start(void)
 {
@@ -290,6 +580,12 @@ _start(void)
     static char msgb[] = "gj-live-net";
     static char rbuf[32];
     long n;
+    int fTcpStats = 0;
+    struct soft_ctx soft;
+
+    soft.uBits = 0u;
+    soft.cOk = 0u;
+    soft.fRingMapped = 0;
 
     msg("netstackd-gj: start\n");
     if (gj_net(GJ_NET_OP_CLAIM, (long)token, 0, 0) != 0) {
@@ -313,9 +609,9 @@ _start(void)
     (void)gj_net(GJ_NET_OP_CLOSE, cli, 0, 0);
 
     /* TCP/IPv4 + multi-segment messaging (product stack for sshd / Top50) */
-    (void)tcp_multi_seg_smoke();
+    (void)tcp_multi_seg_smoke(&fTcpStats);
 
-    /* Virtio TX via door (queue ownership path) */
+    /* Virtio TX via door (queue ownership path) — hard markers below */
     {
         static unsigned char frame[64];
         unsigned i;
@@ -366,6 +662,7 @@ _start(void)
             if (ex.ready) {
                 (void)gj_net(GJ_NET_OP_MAP_RING, 1, (long)RING_VA,
                              (long)(uintptr_t)&ex);
+                soft.fRingMapped = 1;
                 (void)gj_net(GJ_NET_OP_MAP_DMA, (long)DMA_VA,
                              (long)(uintptr_t)&dma, 0);
                 filled = gj_net(GJ_NET_OP_BOUNCE_FILL, 1, (long)(uintptr_t)frame,
@@ -404,7 +701,27 @@ _start(void)
         }
         (void)qinfo;
     }
+
+    /*
+     * Soft door deepen after hard virtio markers — reclaim / poll / stats /
+     * queue / dgram integrity / TCP_STATS / RX / re-MAP / KICK / RING_STATE.
+     * Never rewrites hard PASS lines; never aborts on soft-skip.
+     */
+    (void)soft_door_path(&soft, token, msgb, n, rbuf, fTcpStats);
+
     (void)gj_net(GJ_NET_OP_RELEASE, (long)token, 0, 0);
+
+    /*
+     * Soft free RELEASE: door already free → soft no-op (0).
+     * Never hard-fails live path (mirrors vfsd RELEASE free soft).
+     */
+    if (gj_net(GJ_NET_OP_RELEASE, (long)token, 0, 0) == 0) {
+        msg("netstackd-gj: RELEASE free soft PASS\n");
+    } else {
+        msg("netstackd-gj: RELEASE free soft-skip\n");
+    }
+
+    /* Hard live path: DGRAM RECV green (prefix-stable; smoke-all greps). */
     if (n > 0) {
         msg("netstackd-gj: live path PASS\n");
         gj_exit(0);

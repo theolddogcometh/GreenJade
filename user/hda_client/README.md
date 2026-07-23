@@ -4,8 +4,9 @@ Freestanding ring-3 HDA stream client for GreenJade. Exercises
 `GJ_SYS_HDA_STREAM` (nr **94**) via `gj_hda_stream`:
 
 **open → write PCM → start → tick → stats → underrun tick → close**, then a
-**soft multi-op** second cycle that prints `q`/`p`/`u` stats (soft-skip on
-OPEN/WRITE/START fail; never fails the live path).
+**deepened soft suite** that exercises multi-op, partial-tick, multi-write,
+soft underrun, mono format, reclaim re-OPEN, and reject probes (soft-skip on
+fail; never fails the live path).
 
 This is kernel-door smoke — not Steam audio, PipeWire, or game PCM.
 
@@ -46,16 +47,17 @@ Live smoke via `gj_hda_stream` / `GJ_SYS_HDA_STREAM` (stereo 48 kHz 16-bit LE;
 5. **STATS** — `q=0 p=256 u=0` after full consume
 6. Empty-ring **TICK** → **STATS** with `u > 0` (underrun)
 7. **CLOSE**
-8. **Soft multi-op** — second open/write/start/tick/stats/close (128 B);
-   soft-skip on OPEN/WRITE/START fail; STATS soft-miss still soft-PASS
+8. **Soft suite** — multi-op + partial-tick + multi-write + soft underrun +
+   mono + reclaim + reject (each soft-skip independent; never hard-fails)
 
 ### Hard vs soft
 
 | Path | Failure | Exit |
 |------|---------|------|
 | Hard (steps 1–7) | OPEN/WRITE/START/TICK/STATS/underrun | `gj_exit(1)` after best-effort CLOSE |
-| Soft multi-op | OPEN/WRITE/START | log + `soft multi-op soft-skip`; live path still PASS |
-| Soft multi-op | STATS miss | log + CLOSE + `soft multi-op PASS` |
+| Soft suite sub-step | any sub-step fail | log + `… soft-skip`; live path still PASS |
+| Soft suite aggregate | all sub-steps soft-skip | `soft suite soft-skip`; live path still PASS |
+| Soft suite aggregate | ≥1 sub-step PASS | `soft suite PASS` |
 
 Boot embed (parent tree): `kernel/proc/hda_client_embed.S` (`.incbin` of
 `build/user/hda_client.elf`). Kernel spawn markers include
@@ -96,29 +98,57 @@ hda_client-gj: live path PASS
 | `CLOSE PASS` | Stream closed |
 | `live path PASS` | Aggregate freestanding success (required) |
 
-### Soft multi-op (never fails live path)
+### Soft suite (never fails live path)
 
 ```text
+hda_client-gj: soft suite start
 hda_client-gj: soft multi-op start
 hda_client-gj: soft TICK played=128
 hda_client-gj: stats soft q=… p=… u=…
 hda_client-gj: soft multi-op PASS
+hda_client-gj: soft partial TICK1 played=64
+hda_client-gj: stats soft partial mid q=128 p=… u=…
+hda_client-gj: soft partial TICK2 played=128
+hda_client-gj: soft partial-tick PASS
+hda_client-gj: stats soft multi-write pre q=128 …
+hda_client-gj: soft multi-write PASS
+hda_client-gj: stats soft underrun q=0 p=… u=…   (u > 0)
+hda_client-gj: soft underrun PASS
+hda_client-gj: soft mono TICK played=64
+hda_client-gj: soft mono PASS
+hda_client-gj: stats soft reclaim q=0 p=0 u=…
+hda_client-gj: soft reclaim PASS
+hda_client-gj: soft reject PASS
+hda_client-gj: soft suite PASS
 ```
 
-— or on soft OPEN/WRITE/START failure:
+— or on soft sub-step failure (example):
 
 ```text
 hda_client-gj: soft OPEN|WRITE|START fail ret=<n>
 hda_client-gj: soft multi-op soft-skip
+…
+hda_client-gj: soft suite PASS          (if any other sub-step greened)
+hda_client-gj: soft suite soft-skip     (if every sub-step soft-skipped)
 ```
 
 | Marker | Meaning |
 |--------|---------|
-| `soft multi-op start` | Second cycle begins |
-| `soft TICK played=…` | Soft tick result (diagnostic) |
-| `stats soft q= p= u=` | Soft STATS snapshot |
-| `soft multi-op PASS` | Soft cycle completed (or STATS soft-miss after CLOSE) |
-| `soft multi-op soft-skip` | OPEN/WRITE/START failed; live path still green |
+| `soft suite start` | Soft orchestrator begins |
+| `soft multi-op start` | Second full open/write/start/tick/stats cycle |
+| `soft TICK played=…` | Soft multi-op tick result |
+| `stats soft q= p= u=` | Soft multi-op STATS snapshot |
+| `soft multi-op PASS` | Multi-op cycle completed (STATS soft-miss still PASS) |
+| `soft multi-op soft-skip` | OPEN/WRITE/START failed in multi-op |
+| `soft partial-tick PASS` | Mid-buffer TICK left residual queue, then drain |
+| `soft multi-write PASS` | Two WRITE chunks then single TICK |
+| `soft underrun PASS` | Soft empty-ring underrun counter non-zero |
+| `soft mono PASS` | Mono 16-bit 48 kHz short path greened |
+| `soft reclaim PASS` | Re-OPEN while open reset queue/played |
+| `soft reject PASS` | Invalid OPEN (ch=0 / bits=24) rejected by door |
+| `… soft-skip` | That sub-step failed; live path still green |
+| `soft suite PASS` | ≥1 soft sub-step greened |
+| `soft suite soft-skip` | All soft sub-steps soft-skipped |
 
 Hard failure lines: `hda_client-gj: <tag> fail ret=<n>` (then best-effort
 CLOSE + `gj_exit(1)` on hard path only).
@@ -145,6 +175,18 @@ Door: `GJ_SYS_HDA_STREAM` = **94** (libgj / kernel native; keep stable).
 
 Defined in `user/libgj/include/gj/syscalls.h` (`GJ_HDA_OP_*` / `gj_hda_stream`).
 Local `#ifndef` aliases in `hda_gj.c` mirror those values for self-description.
+
+### Soft suite sub-paths (door surface deepen)
+
+| Soft step | Door ops exercised | Expect |
+|-----------|--------------------|--------|
+| multi-op | OPEN→WRITE 128 B→START→TICK 32→STATS→CLOSE | full soft cycle |
+| partial-tick | WRITE 192 B, TICK 16 then remainder | mid `q=128`, end `q=0` |
+| multi-write | WRITE 64 + WRITE 64, pre-STATS `q=128`, TICK 32 | both chunks play |
+| underrun | full soft consume + empty TICK | `u > 0` |
+| mono | OPEN ch=1 bits=16, WRITE 64 B, TICK 32 | mono frame size |
+| reclaim | OPEN→WRITE→re-OPEN→STATS | `q=0 p=0` after re-OPEN |
+| reject | OPEN ch=0; OPEN bits=24 | both non-zero (INVAL) |
 
 ## Build
 
@@ -180,6 +222,10 @@ Do not treat this directory as owning Makefile or kernel edits.
 ```text
 hda_client-gj: start
 …
+hda_client-gj: CLOSE PASS
+hda_client-gj: soft suite start
+…
+hda_client-gj: soft suite PASS
 hda_client-gj: live path PASS
 hda_client: live spawn PASS
 ```

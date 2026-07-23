@@ -4,6 +4,10 @@
  *
  * Percpu pool + GS_BASE. Layout of struct gj_cpu is an asm contract —
  * see cpu.h; do not reorder leading fields (sched / SYSCALL / swapgs).
+ *
+ * Soft deepen (boot telemetry only — not hot-path locks):
+ *   Static vs dyn online counts, OOM/reject/idempotent counters,
+ *   max online id, last dyn PA/pages, GS sanity, greppable cpu_soft_log.
  */
 #include <gj/cpu.h>
 #include <gj/gdt.h>
@@ -28,6 +32,15 @@ static u32 g_u32NOnline = 1;
 /* Successful PMM-backed percpu allocations (boot telemetry / soft inventory). */
 static u32 g_u32DynPercpu;
 
+/* Soft sticky counters (boot / bring-up observability). */
+static u32 g_u32SoftOom;
+static u32 g_u32SoftReject;
+static u32 g_u32SoftIdempotent;
+static u32 g_u32SoftMaxOnlineId;
+static u32 g_u32SoftLastInitId;
+static u32 g_u32SoftLastPages;
+static u64 g_u64SoftLastDynPa;
+
 static u64
 rdmsr(u32 u32Msr)
 {
@@ -43,6 +56,76 @@ wrmsr(u32 u32Msr, u64 u64Val)
     u32 u32Hi = (u32)(u64Val >> 32);
     __asm__ volatile ("wrmsr" : : "c"(u32Msr), "a"(u32Lo), "d"(u32Hi));
     (void)rdmsr;
+}
+
+/** Soft: mark slot published — bump max online id. */
+static void
+cpu_soft_note_online(u32 u32CpuId)
+{
+    if (u32CpuId > g_u32SoftMaxOnlineId) {
+        g_u32SoftMaxOnlineId = u32CpuId;
+    }
+}
+
+/** Soft: count online slots in static BSS pool. */
+static u32
+cpu_soft_count_static(void)
+{
+    u32 i;
+    u32 u32N = 0;
+
+    for (i = 0; i < GJ_CPU_STATIC_MAX; i++) {
+        if (g_aCpus[i].u32Online != 0) {
+            u32N++;
+        }
+    }
+    return u32N;
+}
+
+/** Soft: count online PMM-dyn slots. */
+static u32
+cpu_soft_count_dyn(void)
+{
+    u32 i;
+    u32 u32N = 0;
+    struct gj_cpu *pCpu;
+
+    for (i = GJ_CPU_STATIC_MAX; i < GJ_MAX_CPUS; i++) {
+        pCpu = g_apCpuDyn[i];
+        if (pCpu != NULL && pCpu->u32Online != 0) {
+            u32N++;
+        }
+    }
+    return u32N;
+}
+
+/**
+ * Soft: true if va matches a published online percpu (static or dyn).
+ * Used by GS sanity probe — walks pool, not hot path.
+ */
+static int
+cpu_soft_va_is_published(u64 u64Va)
+{
+    u32 i;
+    struct gj_cpu *pCpu;
+
+    if (u64Va == 0) {
+        return 0;
+    }
+    for (i = 0; i < GJ_CPU_STATIC_MAX; i++) {
+        if (g_aCpus[i].u32Online != 0 &&
+            (u64)(gj_vaddr_t)&g_aCpus[i] == u64Va) {
+            return 1;
+        }
+    }
+    for (i = GJ_CPU_STATIC_MAX; i < GJ_MAX_CPUS; i++) {
+        pCpu = g_apCpuDyn[i];
+        if (pCpu != NULL && pCpu->u32Online != 0 &&
+            (u64)(gj_vaddr_t)pCpu == u64Va) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 void
@@ -74,11 +157,22 @@ cpu_init_bsp(void)
     pCpu->pCurrent = NULL;
     g_u32NOnline = 1;
     g_u32DynPercpu = 0;
+    /* Soft sticky counters reset on BSP re-init (bring-up only). */
+    g_u32SoftOom = 0;
+    g_u32SoftReject = 0;
+    g_u32SoftIdempotent = 0;
+    g_u32SoftMaxOnlineId = 0;
+    g_u32SoftLastInitId = 0;
+    g_u32SoftLastPages = 0;
+    g_u64SoftLastDynPa = 0;
+    cpu_soft_note_online(0);
     cpu_gs_init(pCpu);
     /* Greppable: cpu: BSP ... */
     kprintf("cpu: BSP id=0 percpu=%p kstack=%lx cr3=%lx static_max=%u max=%u\n",
             (void *)pCpu, (unsigned long)pCpu->u64KernelRsp,
             (unsigned long)pCpu->u64Cr3, GJ_CPU_STATIC_MAX, GJ_MAX_CPUS);
+    /* Greppable soft inventory after BSP publish. */
+    cpu_soft_log();
 }
 
 void
@@ -88,14 +182,28 @@ cpu_init_ap(u32 u32CpuId)
     u32 cPages;
     gj_paddr_t paBase;
 
+    g_u32SoftLastInitId = u32CpuId;
+
     /* Reject BSP (handled by cpu_init_bsp) and out-of-range design ceiling. */
     if (u32CpuId == 0 || u32CpuId >= GJ_MAX_CPUS) {
+        if (g_u32SoftReject < 0xffffffffu) {
+            g_u32SoftReject++;
+        }
+        /* Greppable: cpu: soft reject */
+        kprintf("cpu: soft reject id=%u (bsp_or_oob) reject=%u\n",
+                u32CpuId, g_u32SoftReject);
         return;
     }
     if (u32CpuId < GJ_CPU_STATIC_MAX) {
         pCpu = &g_aCpus[u32CpuId];
         /* Idempotent: never re-memset a live online percpu (pCurrent/GS). */
         if (pCpu->u32Online != 0) {
+            if (g_u32SoftIdempotent < 0xffffffffu) {
+                g_u32SoftIdempotent++;
+            }
+            /* Greppable: cpu: soft idempotent */
+            kprintf("cpu: soft idempotent id=%u kind=%u n=%u\n",
+                    u32CpuId, GJ_CPU_SOFT_KIND_STATIC, g_u32SoftIdempotent);
             return;
         }
     } else {
@@ -107,20 +215,34 @@ cpu_init_ap(u32 u32CpuId)
          */
         pCpu = g_apCpuDyn[u32CpuId];
         if (pCpu != NULL && pCpu->u32Online != 0) {
+            if (g_u32SoftIdempotent < 0xffffffffu) {
+                g_u32SoftIdempotent++;
+            }
+            /* Greppable: cpu: soft idempotent */
+            kprintf("cpu: soft idempotent id=%u kind=%u n=%u\n",
+                    u32CpuId, GJ_CPU_SOFT_KIND_DYN, g_u32SoftIdempotent);
             return; /* already published */
         }
         if (pCpu == NULL) {
             cPages = (u32)((sizeof(struct gj_cpu) + GJ_PAGE_SIZE - 1) /
                            GJ_PAGE_SIZE);
+            g_u32SoftLastPages = cPages;
             if (cPages == 0) {
+                if (g_u32SoftReject < 0xffffffffu) {
+                    g_u32SoftReject++;
+                }
                 return; /* defensive: sizeof edge */
             }
             paBase = pmm_alloc_pages(cPages);
             /* pmm_alloc_pages → 0 on OOM: leave AP without GS percpu. */
             if (paBase == 0) {
+                if (g_u32SoftOom < 0xffffffffu) {
+                    g_u32SoftOom++;
+                }
                 /* Greppable: cpu: ... PMM percpu alloc fail */
-                kprintf("cpu: AP id=%u PMM percpu alloc fail pages=%u\n",
-                        u32CpuId, cPages);
+                kprintf("cpu: AP id=%u PMM percpu alloc fail pages=%u "
+                        "oom=%u soft\n",
+                        u32CpuId, cPages, g_u32SoftOom);
                 return;
             }
             if (hhdm_ready() || paBase >= 0x100000000ull) {
@@ -130,9 +252,13 @@ cpu_init_ap(u32 u32CpuId)
                 pCpu = (struct gj_cpu *)(gj_vaddr_t)paBase;
             }
             if (pCpu == NULL) {
+                if (g_u32SoftReject < 0xffffffffu) {
+                    g_u32SoftReject++;
+                }
                 return; /* unreachable; keeps null-VA guard explicit */
             }
             g_apCpuDyn[u32CpuId] = pCpu;
+            g_u64SoftLastDynPa = (u64)paBase;
             if (g_u32DynPercpu < GJ_MAX_CPUS) {
                 g_u32DynPercpu++;
             }
@@ -153,9 +279,12 @@ cpu_init_ap(u32 u32CpuId)
     if (g_u32NOnline < GJ_MAX_CPUS) {
         g_u32NOnline++;
     }
+    cpu_soft_note_online(u32CpuId);
     /* Greppable: cpu: AP id=... online= */
-    kprintf("cpu: AP id=%u percpu=%p online=%u dyn=%u\n", u32CpuId, (void *)pCpu,
-            g_u32NOnline, g_u32DynPercpu);
+    kprintf("cpu: AP id=%u percpu=%p online=%u dyn=%u kind=%u soft\n",
+            u32CpuId, (void *)pCpu, g_u32NOnline, g_u32DynPercpu,
+            (u32CpuId < GJ_CPU_STATIC_MAX) ? GJ_CPU_SOFT_KIND_STATIC
+                                           : GJ_CPU_SOFT_KIND_DYN);
 }
 
 u32
@@ -193,6 +322,163 @@ u32
 cpu_dyn_percpu_count(void)
 {
     return g_u32DynPercpu;
+}
+
+/* ---- Soft percpu pool observability API ---------------------------- */
+
+u32
+cpu_soft_kind(u32 u32CpuId)
+{
+    if (u32CpuId >= GJ_MAX_CPUS) {
+        return GJ_CPU_SOFT_KIND_NONE;
+    }
+    if (u32CpuId < GJ_CPU_STATIC_MAX) {
+        return (g_aCpus[u32CpuId].u32Online != 0) ? GJ_CPU_SOFT_KIND_STATIC
+                                                  : GJ_CPU_SOFT_KIND_NONE;
+    }
+    if (g_apCpuDyn[u32CpuId] != NULL &&
+        g_apCpuDyn[u32CpuId]->u32Online != 0) {
+        return GJ_CPU_SOFT_KIND_DYN;
+    }
+    return GJ_CPU_SOFT_KIND_NONE;
+}
+
+u32
+cpu_soft_static_online(void)
+{
+    return cpu_soft_count_static();
+}
+
+u32
+cpu_soft_dyn_online(void)
+{
+    return cpu_soft_count_dyn();
+}
+
+u32
+cpu_soft_oom_count(void)
+{
+    return g_u32SoftOom;
+}
+
+u32
+cpu_soft_max_online_id(void)
+{
+    return g_u32SoftMaxOnlineId;
+}
+
+u64
+cpu_soft_kstack_top(u32 u32CpuId)
+{
+    struct gj_cpu *pCpu = cpu_for_id(u32CpuId);
+
+    if (pCpu == NULL) {
+        return 0;
+    }
+    return pCpu->u64KernelRsp;
+}
+
+u64
+cpu_soft_cr3(u32 u32CpuId)
+{
+    struct gj_cpu *pCpu = cpu_for_id(u32CpuId);
+
+    if (pCpu == NULL) {
+        return 0;
+    }
+    return pCpu->u64Cr3;
+}
+
+int
+cpu_soft_gs_sane(void)
+{
+    u64 u64Gs = rdmsr(MSR_GS_BASE);
+
+    return cpu_soft_va_is_published(u64Gs);
+}
+
+void
+cpu_soft_snapshot(struct gj_cpu_soft *pOut)
+{
+    if (pOut == NULL) {
+        return;
+    }
+    pOut->u32Online = g_u32NOnline;
+    pOut->u32StaticOnline = cpu_soft_count_static();
+    pOut->u32DynOnline = cpu_soft_count_dyn();
+    pOut->u32DynAlloc = g_u32DynPercpu;
+    pOut->u32Oom = g_u32SoftOom;
+    pOut->u32Reject = g_u32SoftReject;
+    pOut->u32Idempotent = g_u32SoftIdempotent;
+    pOut->u32MaxOnlineId = g_u32SoftMaxOnlineId;
+    pOut->u32StaticMax = GJ_CPU_STATIC_MAX;
+    pOut->u32MaxCpus = GJ_MAX_CPUS;
+    pOut->u32LastInitId = g_u32SoftLastInitId;
+    pOut->u32LastPages = g_u32SoftLastPages;
+    pOut->u64LastDynPa = g_u64SoftLastDynPa;
+    pOut->u32PercpuBytes = (u32)sizeof(struct gj_cpu);
+    pOut->u32GsSane = cpu_soft_gs_sane() ? 1u : 0u;
+}
+
+void
+cpu_soft_log(void)
+{
+    struct gj_cpu_soft stSoft;
+    u32 i;
+    u32 u32Kind;
+    struct gj_cpu *pCpu;
+    const char *szVerdict;
+
+    cpu_soft_snapshot(&stSoft);
+
+    /*
+     * Verdict (soft product inventory):
+     *   UP      — BSP only, no OOM/reject noise
+     *   PASS    — multi-CPU published, no OOM
+     *   PARTIAL — some online + OOM or dyn alloc without matching online
+     *   DEGRADED— OOM or reject with only BSP / inconsistent online
+     */
+    if (stSoft.u32Oom != 0 && stSoft.u32Online <= 1u) {
+        szVerdict = "DEGRADED";
+    } else if (stSoft.u32Oom != 0 ||
+               (stSoft.u32DynAlloc > stSoft.u32DynOnline)) {
+        szVerdict = "PARTIAL";
+    } else if (stSoft.u32Online > 1u) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "UP";
+    }
+
+    /*
+     * Greppable soft pool line (product / smoke inventory):
+     *   cpu: soft PASS|UP|PARTIAL|DEGRADED online=… static=… dyn=… …
+     */
+    kprintf("cpu: soft %s online=%u static=%u dyn=%u dyn_alloc=%u oom=%u "
+            "reject=%u idem=%u max_id=%u last_id=%u last_pa=0x%lx "
+            "pages=%u percpu_cb=%u gs_sane=%u static_max=%u max_cpus=%u\n",
+            szVerdict, stSoft.u32Online, stSoft.u32StaticOnline,
+            stSoft.u32DynOnline, stSoft.u32DynAlloc, stSoft.u32Oom,
+            stSoft.u32Reject, stSoft.u32Idempotent, stSoft.u32MaxOnlineId,
+            stSoft.u32LastInitId, (unsigned long)stSoft.u64LastDynPa,
+            stSoft.u32LastPages, stSoft.u32PercpuBytes, stSoft.u32GsSane,
+            stSoft.u32StaticMax, stSoft.u32MaxCpus);
+
+    /* Per-slot soft detail: published slots only (cap-bounded walk). */
+    for (i = 0; i <= stSoft.u32MaxOnlineId && i < GJ_MAX_CPUS; i++) {
+        u32Kind = cpu_soft_kind(i);
+        if (u32Kind == GJ_CPU_SOFT_KIND_NONE) {
+            continue;
+        }
+        pCpu = cpu_for_id(i);
+        if (pCpu == NULL) {
+            continue;
+        }
+        kprintf("cpu: soft slot=%u kind=%u kstack=0x%lx cr3=0x%lx thr=%p "
+                "online=%u\n",
+                i, u32Kind, (unsigned long)pCpu->u64KernelRsp,
+                (unsigned long)pCpu->u64Cr3, (void *)pCpu->pCurrent,
+                pCpu->u32Online);
+    }
 }
 
 struct gj_cpu *

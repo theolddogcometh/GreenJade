@@ -16,6 +16,7 @@
 #   2. Expect serial: GJ-EFI, KERNEL.ELF loaded, M0 OK
 #   3. Soft-scan serial capture:
 #        ./scripts/gj-product-summary.sh logs/serial-….txt   # soft exit 0
+#        ./scripts/gj-quick-keys.sh logs/serial-….txt        # hard keys; exit 1 on miss
 #   4. After bootable: install Steam userspace when ready; fill
 #      matrix/deck-top50-*.md (real DUT only — never claim Top-50 from media alone)
 #
@@ -52,3 +53,4 @@ echo "install-usb: PASS wrote $img → $dev"
 echo "  Next: reboot to EFI, select GreenJade BOOTX64.EFI"
 echo "  Serial should show GJ-EFI / KERNEL.ELF / M0 OK"
 echo "  Soft summary: ./scripts/gj-product-summary.sh <serial-log>"
+echo "  Hard keys:    ./scripts/gj-quick-keys.sh <serial-log>"

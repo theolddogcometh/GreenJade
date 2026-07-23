@@ -57,7 +57,7 @@ udx_ioremap(u64 u64Phys, u64 u64Len)
     struct udx_iomem *pIo;
     void *pVa;
 
-    if (u64Len == 0) {
+    if (u64Len == 0 || u64Phys + u64Len < u64Phys) {
         return NULL;
     }
 

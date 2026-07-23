@@ -3,6 +3,13 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * GNU error.h family — error / error_at_line.
+ *
+ * greppable: CGJ_ERROR_GNU_SOFT
+ * greppable: CGJ_ERROR_GNU_SOFT_FFLUSH
+ * greppable: CGJ_ERROR_GNU_SOFT_ONE_PER_LINE
+ *
+ * Soft deepen: fflush stdout then stderr before exit (glibc-shaped),
+ * careful error_one_per_line suppress when file+line match last emit.
  */
 #include <error.h>
 #include <errno.h>
@@ -31,11 +38,23 @@ print_prog(void)
     }
 }
 
+static void
+error_soft_flush_exit(int nStatus)
+{
+    /* greppable: CGJ_ERROR_GNU_SOFT_FFLUSH */
+    (void)fflush(stdout);
+    (void)fflush(stderr);
+    if (nStatus != 0) {
+        exit(nStatus);
+    }
+}
+
 void
 error(int nStatus, int nErrnum, const char *szFmt, ...)
 {
     va_list ap;
 
+    /* greppable: CGJ_ERROR_GNU_SOFT */
     print_prog();
     if (szFmt != NULL) {
         va_start(ap, szFmt);
@@ -48,9 +67,7 @@ error(int nStatus, int nErrnum, const char *szFmt, ...)
     }
     (void)fputc('\n', stderr);
     error_message_count++;
-    if (nStatus != 0) {
-        exit(nStatus);
-    }
+    error_soft_flush_exit(nStatus);
 }
 
 void
@@ -58,15 +75,18 @@ error_at_line(int nStatus, int nErrnum, const char *szFile, unsigned nLine,
               const char *szFmt, ...)
 {
     static const char *szLastFile;
-    static unsigned nLastLine;
-    va_list ap;
+    static unsigned    nLastLine;
+    va_list            ap;
 
-    if (error_one_per_line && szFile != NULL && szLastFile != NULL &&
+    /* greppable: CGJ_ERROR_GNU_SOFT_ONE_PER_LINE */
+    if (error_one_per_line != 0 && szFile != NULL && szLastFile != NULL &&
         strcmp(szFile, szLastFile) == 0 && nLine == nLastLine) {
         return;
     }
-    szLastFile = szFile;
-    nLastLine = nLine;
+    if (szFile != NULL) {
+        szLastFile = szFile;
+        nLastLine = nLine;
+    }
 
     print_prog();
     if (szFile != NULL) {
@@ -83,7 +103,5 @@ error_at_line(int nStatus, int nErrnum, const char *szFile, unsigned nLine,
     }
     (void)fputc('\n', stderr);
     error_message_count++;
-    if (nStatus != 0) {
-        exit(nStatus);
-    }
+    error_soft_flush_exit(nStatus);
 }

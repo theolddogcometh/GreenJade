@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room getopt + getopt_long (POSIX/glibc-shaped subset).
+ * Clean-room getopt + getopt_long (POSIX/glibc-shaped soft subset).
+ * Supports leading '+' / '-' / ':', optional "::" args, optind==0 reset.
  */
 #include <getopt.h>
 #include <string.h>
@@ -15,49 +16,129 @@ int   optopt;
 
 static int g_nPos = 1; /* index within current argv[optind] after '-' */
 
+static void
+opt_reset_if_needed(void)
+{
+    /* glibc: optind == 0 forces a full reset. */
+    if (optind == 0) {
+        optind = 1;
+        g_nPos = 1;
+        optarg = NULL;
+        optopt = 0;
+    }
+}
+
+/* Skip leading mode chars in optstring: '+', '-', then optional ':'. */
+static const char *
+optstring_body(const char *szOptstring, int *pfColon, int *pfPlus, int *pfDash)
+{
+    const char *p = szOptstring;
+
+    *pfColon = 0;
+    *pfPlus = 0;
+    *pfDash = 0;
+    if (p == NULL) {
+        return "";
+    }
+    if (*p == '+') {
+        *pfPlus = 1;
+        p++;
+    } else if (*p == '-') {
+        *pfDash = 1;
+        p++;
+    }
+    if (*p == ':') {
+        *pfColon = 1;
+        p++;
+    }
+    return p;
+}
+
+static int
+opt_err_colon(const char *szOptstring)
+{
+    int fColon = 0;
+    int fPlus = 0;
+    int fDash = 0;
+
+    (void)optstring_body(szOptstring, &fColon, &fPlus, &fDash);
+    return fColon;
+}
+
 int
 getopt(int argc, char *const argv[], const char *szOptstring)
 {
+    const char *szBody;
     const char *p;
     int c;
     int fArg;
+    int fOptArg;
+    int fColon = 0;
+    int fPlus = 0;
+    int fDash = 0;
 
+    opt_reset_if_needed();
     if (szOptstring == NULL || argv == NULL) {
         return -1;
     }
+    szBody = optstring_body(szOptstring, &fColon, &fPlus, &fDash);
+    (void)fPlus; /* default already stops at first non-option */
+
     if (optind >= argc || argv[optind] == NULL) {
         return -1;
     }
-    if (argv[optind][0] != '-' || argv[optind][1] == '\0') {
-        return -1;
-    }
-    if (strcmp(argv[optind], "--") == 0) {
-        optind++;
+
+    /* Continue a clustered short-option argv element. */
+    if (g_nPos > 1 && argv[optind] != NULL && argv[optind][0] == '-' &&
+        argv[optind][1] != '\0' && argv[optind][1] != '-') {
+        /* fall through using g_nPos */
+    } else {
+        if (argv[optind][0] != '-' || argv[optind][1] == '\0') {
+            if (fDash) {
+                /* Soft GNU: return non-options as 1 with optarg set. */
+                optarg = argv[optind];
+                optind++;
+                g_nPos = 1;
+                return 1;
+            }
+            return -1;
+        }
+        if (strcmp(argv[optind], "--") == 0) {
+            optind++;
+            g_nPos = 1;
+            return -1;
+        }
+        /* Long options are not handled here; getopt_long peels them first. */
+        if (argv[optind][1] == '-') {
+            return -1;
+        }
         g_nPos = 1;
-        return -1;
     }
-    /* Long options are not handled here; getopt_long peels them first. */
-    if (argv[optind][1] == '-') {
-        return -1;
-    }
+
     c = (unsigned char)argv[optind][g_nPos];
     g_nPos++;
     optopt = c;
-    p = strchr(szOptstring, c);
+    p = strchr(szBody, c);
     if (p == NULL) {
-        if (opterr && szOptstring[0] != ':') {
+        if (opterr && !fColon) {
             (void)write(2, "libcgj: illegal option\n", 23);
         }
         if (argv[optind][g_nPos] == '\0') {
             optind++;
             g_nPos = 1;
         }
-        return (szOptstring[0] == ':') ? ':' : '?';
+        return fColon ? ':' : '?';
     }
     fArg = (p[1] == ':');
+    fOptArg = (fArg && p[2] == ':');
     if (fArg) {
         if (argv[optind][g_nPos] != '\0') {
             optarg = &argv[optind][g_nPos];
+            optind++;
+            g_nPos = 1;
+        } else if (fOptArg) {
+            /* Optional argument absent. */
+            optarg = NULL;
             optind++;
             g_nPos = 1;
         } else if (optind + 1 < argc) {
@@ -66,7 +147,7 @@ getopt(int argc, char *const argv[], const char *szOptstring)
             optind++;
             g_nPos = 1;
         } else {
-            if (opterr && szOptstring[0] != ':') {
+            if (opterr && !fColon) {
                 (void)write(2, "libcgj: option requires an argument\n", 36);
             }
             optarg = NULL;
@@ -74,7 +155,8 @@ getopt(int argc, char *const argv[], const char *szOptstring)
                 optind++;
                 g_nPos = 1;
             }
-            return (szOptstring[0] == ':') ? ':' : '?';
+            /* Missing required arg: ':' if optstring mode, else '?'. */
+            return fColon ? ':' : '?';
         }
     } else {
         optarg = NULL;
@@ -102,19 +184,54 @@ match_long(const char *szArg, const struct option *pLongopts, int *pIdx,
     }
     pEq = strchr(szArg, '=');
     nName = (pEq != NULL) ? (size_t)(pEq - szArg) : strlen(szArg);
+    if (nName == 0) {
+        return -1;
+    }
     for (i = 0; pLongopts[i].name != NULL; i++) {
         size_t nOpt = strlen(pLongopts[i].name);
 
         if (nOpt == nName && strncmp(pLongopts[i].name, szArg, nName) == 0) {
             nHit = i;
-            nHits++;
-        } else if (nOpt > nName &&
-                   strncmp(pLongopts[i].name, szArg, nName) == 0) {
-            /* unique prefix match */
+            nHits = 1;
+            /* Exact match wins immediately. */
+            break;
+        }
+        if (nOpt > nName && strncmp(pLongopts[i].name, szArg, nName) == 0) {
             if (nHits == 0) {
                 nHit = i;
             }
             nHits++;
+        }
+    }
+    /* If exact matched above, nHits==1 and nHit set. Re-scan prefixes only
+     * when no exact hit. */
+    if (nHits == 1 && nHit >= 0 &&
+        strlen(pLongopts[nHit].name) == nName) {
+        if (pIdx != NULL) {
+            *pIdx = nHit;
+        }
+        *ppEq = pEq;
+        return nHit;
+    }
+    /* Prefix-only path: recount unique prefixes if exact not taken. */
+    if (nHits != 1) {
+        nHit = -1;
+        nHits = 0;
+        for (i = 0; pLongopts[i].name != NULL; i++) {
+            size_t nOpt = strlen(pLongopts[i].name);
+
+            if (nOpt >= nName &&
+                strncmp(pLongopts[i].name, szArg, nName) == 0) {
+                if (nOpt == nName) {
+                    nHit = i;
+                    nHits = 1;
+                    break;
+                }
+                if (nHits == 0) {
+                    nHit = i;
+                }
+                nHits++;
+            }
         }
     }
     if (nHits != 1) {
@@ -135,15 +252,19 @@ getopt_long_inner(int argc, char *const argv[], const char *szOptstring,
     const char *pEq;
     int nIdx;
     int n;
+    int fColon;
     const struct option *pO;
 
-    (void)fOnly;
+    opt_reset_if_needed();
+    fColon = opt_err_colon(szOptstring);
+
     if (argv == NULL || optind >= argc || argv[optind] == NULL) {
         return -1;
     }
     sz = argv[optind];
     if (sz[0] != '-' || sz[1] == '\0') {
-        return -1;
+        /* Let getopt handle dash-mode non-options. */
+        return getopt(argc, argv, szOptstring != NULL ? szOptstring : "");
     }
     if (strcmp(sz, "--") == 0) {
         optind++;
@@ -151,7 +272,7 @@ getopt_long_inner(int argc, char *const argv[], const char *szOptstring,
         return -1;
     }
 
-    /* Long form: --name or --name=arg (and -name if long_only) */
+    /* Long form: --name or --name=arg (and -name if long_only). */
     if (sz[1] == '-' || fOnly) {
         const char *szName = (sz[1] == '-') ? sz + 2 : sz + 1;
 
@@ -185,8 +306,7 @@ getopt_long_inner(int argc, char *const argv[], const char *szOptstring,
                             optind++;
                             optarg = argv[optind];
                         } else {
-                            if (opterr &&
-                                (szOptstring == NULL || szOptstring[0] != ':')) {
+                            if (opterr && !fColon) {
                                 (void)write(2,
                                             "libcgj: option requires an argument\n",
                                             36);
@@ -194,15 +314,14 @@ getopt_long_inner(int argc, char *const argv[], const char *szOptstring,
                             optind++;
                             g_nPos = 1;
                             optopt = pO->val;
-                            return (szOptstring != NULL && szOptstring[0] == ':')
-                                       ? ':'
-                                       : '?';
+                            return fColon ? ':' : '?';
                         }
                     }
+                    /* optional_argument with no '=' and no next argv: NULL */
                 } else if (pEq != NULL) {
-                    /* argument given to no_argument option */
-                    if (opterr) {
-                        (void)write(2, "libcgj: option doesn't allow an argument\n",
+                    if (opterr && !fColon) {
+                        (void)write(2,
+                                    "libcgj: option doesn't allow an argument\n",
                                     41);
                     }
                     optind++;
@@ -219,8 +338,7 @@ getopt_long_inner(int argc, char *const argv[], const char *szOptstring,
                 return pO->val;
             }
             if (sz[1] == '-') {
-                /* unknown long option */
-                if (opterr && (szOptstring == NULL || szOptstring[0] != ':')) {
+                if (opterr && !fColon) {
                     (void)write(2, "libcgj: unrecognized option\n", 28);
                 }
                 optind++;

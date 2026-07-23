@@ -29,8 +29,8 @@
 #   - Soft MANIFEST / READY / STAGE_META stamps
 #   - Always: bar3 client run OPEN; Top50 NOT-TRIED
 #
-# Wave 19 soft note (exclusive scripts high-water era):
-#   Continuum soft high-water advancing toward M=16100 (CREATE-ONLY soft graph).
+# Wave 20 soft note (exclusive scripts high-water era):
+#   Continuum soft high-water advancing toward M=16200 (CREATE-ONLY soft graph).
 #   Honest makefile_max is a Makefile scan — may still report 16000 until parent wires.
 #   Do not hardcode false makefile_max=16100. Product lamps remain 0.
 #   multi_server=0 confine=0 bar3 OPEN lamps 0.
@@ -319,7 +319,7 @@ esac
 
 echo "  note:   soft check — exit 0 always; does not download or run Steam"
 echo "  note:   media READY ≠ smoke-all PASS ≠ bar3 client / Top50"
-echo "  note:   Wave 19 soft  continuum toward M=16100 ≠ bar3; makefile_max=scan truth (may be 16000)"
+echo "  note:   Wave 20 soft  continuum toward M=16200 ≠ bar3; makefile_max=scan truth (may be 16000)"
 echo "  note:   soft ≠ product complete; product lamps 0; Top50 NOT-TRIED × 50"
 echo "  bar3:   OPEN (client launch + matrix fill still required)"
 echo "  see:    docs/STEAM_BAR3_STATUS.md  docs/STEAM_HWTEST.md"

@@ -77,8 +77,8 @@
 /* Soft FLUSH serial depth (one outstanding barrier on product path). */
 #define VIRTIO_BLK_FLUSH_DEPTH 1u
 /* Wave 16 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_BLK_SOFT_DEEPEN_WAVE  19u
-#define VIRTIO_BLK_SOFT_DEEPEN_AREAS 36u
+#define VIRTIO_BLK_SOFT_DEEPEN_WAVE  20u
+#define VIRTIO_BLK_SOFT_DEEPEN_AREAS 38u
 
 /* Feature: capacity is always present in device config (first 8 bytes). */
 struct virtio_blk_config {
@@ -226,7 +226,7 @@ q_kick_counted(void)
  *   virtio-blk: soft oasis      — OASIS type+status constants (Wave 15)
  *   virtio-blk: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-blk: soft retcode    — Wave 19 retcode catalog
- *   virtio-blk: soft deepen     — wave=19 areas stamp
+ *   virtio-blk: soft deepen     — wave=20 areas stamp
  *   virtio-blk: soft PASS|NODEV|PARTIAL
  *   virtio-blk: soft inventory PASS|NODEV|PARTIAL
  *
@@ -624,21 +624,36 @@ blk_soft_inventory(const char *szVia)
             "(retcode catalog; Soft≠product)\n",
             (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-blk: soft deepen (Wave 19 stamp) */
+    /* Grep: virtio-blk: soft deepen (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: virtio-blk: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: virtio-blk: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("virtio-blk: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE);
-    /* Grep: virtio-blk: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: virtio-blk: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("virtio-blk: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: virtio-blk: soft retbound — Wave 20 return-bound honesty */
+    kprintf("virtio-blk: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE);
+    /* Grep: virtio-blk: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("virtio-blk: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE);
     kprintf("virtio-blk: soft deepen wave=%u areas=%u ready=%u io=%u "
             "err=%u log_n=%u\n",

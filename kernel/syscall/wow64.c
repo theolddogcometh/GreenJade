@@ -8,7 +8,7 @@
  * Hybrid SYSCALL uses this table; soft thunk zero-extends and fixes mmap2
  * pgoff / socketcall demux for pure-C paths without hardware compat CS.
  *
- * Soft inventory (Wave 14 base; Wave 19 exclusive deepen) —
+ * Soft inventory (Wave 14 base; Wave 20 exclusive deepen) —
  * greppable "wow64: soft …":
  *   wow64: soft inventory …
  *   wow64: soft map …
@@ -42,13 +42,13 @@ static u32 g_u32Mmap2Hits;
 static u32 g_u32SocketcallHits;
 
 /*
- * Soft product inventory (Wave 14 base; Wave 19 deepen). Cumulative path
+ * Soft product inventory (Wave 14 base; Wave 20 deepen). Cumulative path
  * tallies. greppable: wow64: soft …
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE  19u
-#define GJ_WOW64_SOFT_AREAS 18u
+#define GJ_WOW64_SOFT_WAVE  20u
+#define GJ_WOW64_SOFT_AREAS 20u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -90,7 +90,7 @@ soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable soft WoW64 inventory (product / smoke; Wave 19 deepen).
+ * Greppable soft WoW64 inventory (product / smoke; Wave 20 deepen).
  * Prefix-stable markers (wow64: soft …):
  *   wow64: soft inventory     — personality + public counter rollup
  *   wow64: soft map           — translate / is_mapped path tallies
@@ -104,7 +104,7 @@ soft_inc(u32 *pCtr)
  *   wow64: soft surfaces      — Wave 19 surface count lamp
  *   wow64: soft catalog       — Wave 19 area name rollup
  *   wow64: soft note          — Wave 16 milestone note
- *   wow64: soft deepen        — Wave 19 stamp
+ *   wow64: soft deepen        — Wave 20 stamp
  *   wow64: soft inventory PASS / soft PASS
  * greppable: wow64: soft
  * Honesty: soft inventory only — not product gate; not bar3.
@@ -194,73 +194,88 @@ soft_inventory_log(void)
             (unsigned)GJ_WOW64_SOFT_AREAS,
             (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft rates (Wave 19 deepen) */
+    /* Grep: wow64: soft rates (Wave 20 deepen) */
     kprintf("wow64: soft rates bp_map=%u bp_identity=%u bp_thunk=%u "
             "calls=%u map=%u thunk=%u wave=%u\n",
             u32MapRatio, u32IdentityBp, u32ThunkBp,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,
             (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft honesty (Wave 19 deepen) */
+    /* Grep: wow64: soft honesty (Wave 20 deepen) */
     kprintf("wow64: soft honesty hybrid=OptionC open=1 bar3=0 "
             "product_pe32=userspace soft_only=1 pe32_int80=trap "
             "wave=%u (soft inventory; never closes hybrid)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft last (Wave 19 deepen) */
+    /* Grep: wow64: soft last (Wave 20 deepen) */
     kprintf("wow64: soft last enabled=%u calls=%u map=%u thunk=%u "
             "adjust=%u logs=%u once=%u wave=%u\n",
             u32Enabled, g_u32Calls, g_u32MapHits, g_u32ThunkHits,
             g_u32SoftAdjustEnter, g_u32SoftLogN,
             g_fSoftInvOnce ? 1u : 0u, (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft surfaces (Wave 19 deepen) */
+    /* Grep: wow64: soft surfaces (Wave 20 deepen) */
     kprintf("wow64: soft surfaces count=%u "
             "names=inventory,map,thunk,adjust,personality,path,rates,"
             "honesty,last,surfaces,catalog,note,return,retmap,deepen,PASS wave=%u\n",
             (unsigned)GJ_WOW64_SOFT_AREAS,
             (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft catalog (Wave 19 deepen) */
+    /* Grep: wow64: soft catalog (Wave 20 deepen) */
     kprintf("wow64: soft catalog wave=%u areas=%u "
             "surfaces=inventory,map,thunk,adjust,personality,path,rates,"
             "honesty,last,surfaces,catalog,note,return,retmap,deepen,PASS\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS);
 
-    /* Grep: wow64: soft note (Wave 19 deepen) */
-    kprintf("wow64: soft note milestone=wave19 exclusive=1 "
+    /* Grep: wow64: soft note (Wave 20 deepen) */
+    kprintf("wow64: soft note milestone=wave20 exclusive=1 "
             "soft_only=1 not_bar3=1 calls=%u map=%u wave=%u\n",
             g_u32Calls, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
-    /* Grep: wow64: soft return (Wave 19 deepen) */
+    /* Grep: wow64: soft return (Wave 20 deepen) */
     kprintf("wow64: soft return thunk_ok=%u thunk_null=%u translate_null=%u "
             "adjust_nop=%u map=%u product_gate=0 wave=%u\n",
             g_u32SoftThunkOk, g_u32SoftThunkNull, g_u32SoftTranslateNull,
             g_u32SoftAdjustNop, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft retmap — Wave 19 return-surface map */
-    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
     /* Grep: wow64: soft deepen wave */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: wow64: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: wow64: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("wow64: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE);
-    /* Grep: wow64: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: wow64: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("wow64: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: wow64: soft retbound — Wave 20 return-bound honesty */
+    kprintf("wow64: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)GJ_WOW64_SOFT_WAVE);
+    /* Grep: wow64: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("wow64: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
+            (unsigned)GJ_WOW64_SOFT_WAVE);
     kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
-            "(Wave 19 exclusive; not bar3)\n",
+            "(Wave 20 exclusive; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,

@@ -17,7 +17,7 @@
  *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
  *   when virtio-input is absent (empty ring).
  *
- * Soft door inventory (Wave 19 exclusive deepen; this unit only):
+ * Soft door inventory (Wave 20 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Ownership: claim / reclaim / release / busy / claim_inval
@@ -52,8 +52,8 @@
 #define GJ_SESS_MAX_DIM 256u
 #define GJ_SESS_TMP_W   64u
 #define GJ_SESS_TMP_H   64u
-/* Wave 19 deepen stamp (file-local; never hard-gates). */
-#define GJ_SESS_SOFT_WAVE 19u
+/* Wave 20 deepen stamp (file-local; never hard-gates). */
+#define GJ_SESS_SOFT_WAVE 20u
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -63,7 +63,7 @@ static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
 /*
- * Soft product inventory (Wave 19 exclusive deepen). Cumulative path tallies.
+ * Soft product inventory (Wave 20 exclusive deepen). Cumulative path tallies.
  * greppable: session_door: soft …
  */
 static u32 g_u32SoftClaimInval;    /* CLAIM bad token */
@@ -251,7 +251,7 @@ sess_soft_note_op(u32 u32Op)
 }
 
 /**
- * Greppable soft session door inventory (product / smoke; Wave 19 deepen).
+ * Greppable soft session door inventory (product / smoke; Wave 20 deepen).
  *   session_door: soft honesty …
  *   session_door: soft inventory …
  *   session_door: soft claim …
@@ -546,23 +546,38 @@ sess_soft_inventory_log(void)
     cAreas++;
 
     /* Grep: session_door: soft retmap — Wave 19 return-surface map */
-    kprintf("session_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("session_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
-    /* Grep: session_door: soft deepen — Wave 19 stamp + area count. */
+    /* Grep: session_door: soft deepen — Wave 20 stamp + area count. */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: session_door: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: session_door: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("session_door: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)GJ_SESS_SOFT_WAVE);
-    /* Grep: session_door: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: session_door: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("session_door: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_SESS_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: session_door: soft retbound — Wave 20 return-bound honesty */
+    kprintf("session_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)GJ_SESS_SOFT_WAVE);
+    /* Grep: session_door: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("session_door: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_SESS_SOFT_WAVE);
     kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u owned=%u presents_user=%u claims=%u multi=%u "

@@ -23,7 +23,7 @@
  *   usb: soft honesty    — bar3/HID/rings non-claims
  *   usb: soft return rate — Wave 19 ok/fail rate lamps
  *   usb: soft retcode    — Wave 19 retcode catalog
- *   usb: soft deepen     — wave=19 areas stamp
+ *   usb: soft deepen     — wave=20 areas stamp
  *   usb: soft ratio      — Wave 16 identify/BAR occupancy
  *   usb: soft headroom   — Wave 16 map/bar head
  *   usb: soft surface    — Wave 16 area catalog
@@ -51,9 +51,9 @@
 #define USB_PIF_EHCI 0x20u
 #define USB_PIF_XHCI 0x30u
 
-/* Wave 19 deepen area count (fixed greppable categories in inventory log). */
-#define USB_SOFT_DEEPEN_AREAS 25u
-#define USB_SOFT_DEEPEN_WAVE  19u
+/* Wave 20 deepen area count (fixed greppable categories in inventory log). */
+#define USB_SOFT_DEEPEN_AREAS 27u
+#define USB_SOFT_DEEPEN_WAVE  20u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -498,21 +498,36 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
             "(retcode catalog; Soft≠product)\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
 
-    /* Grep: usb: soft deepen wave (Wave 19 stamp) */
+    /* Grep: usb: soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: usb: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: usb: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("usb: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
-    /* Grep: usb: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: usb: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("usb: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: usb: soft retbound — Wave 20 return-bound honesty */
+    kprintf("usb: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+    /* Grep: usb: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("usb: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
     kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",

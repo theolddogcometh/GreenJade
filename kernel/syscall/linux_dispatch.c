@@ -5,7 +5,7 @@
  * Hybrid Option C: hot table / cold personality (doors) / ENOSYS.
  * Pure C11 clean-room Linux x86_64 surface — no GPL source.
  *
- * Soft inventory (Wave 12/14 base + Wave 19 exclusive deepen; this unit):
+ * Soft inventory (Wave 12/14 base + Wave 20 exclusive deepen; this unit):
  *   "linux: nr class soft …"     — table inventory + runtime (legacy + deepen)
  *   "linux: dispatch soft …"     — twin path/API tallies (agent-friendly)
  *
@@ -52,7 +52,7 @@ static struct gj_linux_nr_class_stats g_class;
 static int g_fNrClassLive;
 
 /*
- * Soft product inventory (Wave 12/14 base + Wave 19 exclusive deepen).
+ * Soft product inventory (Wave 12/14 base + Wave 20 exclusive deepen).
  * File-local path tallies. Cumulative unless noted; wrap OK; never hard-gates.
  * greppable: linux: nr class soft … / linux: dispatch soft …
  */
@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE  19u
-#define LINUX_DISPATCH_SOFT_AREAS 34u
+#define LINUX_DISPATCH_SOFT_WAVE  20u
+#define LINUX_DISPATCH_SOFT_AREAS 36u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -363,7 +363,7 @@ soft_dispatch_deepen_log(void)
             "(soft inventory; never closes hybrid)\n",
             u32Live, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft edge (Wave 19 deepen) */
+    /* Grep: linux: nr class soft edge (Wave 20 deepen) */
     kprintf("linux: nr class soft edge entries=%llu null_guard=%u "
             "path_hot=%u path_cold=%u path_none=%u path_oor=%u "
             "wow64=%u wave=%u\n",
@@ -372,7 +372,7 @@ soft_dispatch_deepen_log(void)
             g_u32SoftPathOor, g_u32SoftWow64Enter,
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft share (Wave 19 deepen) */
+    /* Grep: linux: nr class soft share (Wave 20 deepen) */
     kprintf("linux: nr class soft share pct_hot=%u pct_cold=%u "
             "pct_none=%u pct_class=%u bp_hot=%llu bp_cold=%llu "
             "armed_ok=%u wave=%u\n",
@@ -380,25 +380,25 @@ soft_dispatch_deepen_log(void)
             (unsigned long long)u64BpHot, (unsigned long long)u64BpCold,
             u32ArmedOk, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft surfaces (Wave 19 deepen) */
+    /* Grep: linux: nr class soft surfaces (Wave 20 deepen) */
     kprintf("linux: nr class soft surfaces count=%u wave=%u "
             "names=inventory,path,rates,ret,honesty,edge,share,catalog,"
             "surfaces,note,return,retmap,deepen,PASS\n",
             LINUX_DISPATCH_SOFT_AREAS,
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft note (Wave 19 deepen) */
-    kprintf("linux: nr class soft note milestone=wave19 exclusive=1 "
+    /* Grep: linux: nr class soft note (Wave 20 deepen) */
+    kprintf("linux: nr class soft note milestone=wave20 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft catalog (Wave 19 deepen) */
+    /* Grep: linux: nr class soft catalog (Wave 20 deepen) */
     kprintf("linux: nr class soft catalog wave=%u areas=%u "
             "surfaces=fill,register,integrity,route,cold_route,path,"
             "rates,ret,honesty,edge,share,catalog,deepen\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS);
 
-    /* Grep: linux: nr class soft return (Wave 19 deepen) */
+    /* Grep: linux: nr class soft return (Wave 20 deepen) */
     kprintf("linux: nr class soft return live=%u table=%u class=%u "
             "ret_neg=%u ret_zero=%u ret_pos=%u product_gate=0 wave=%u\n",
             u32Live, u32Table, u32Class,
@@ -411,19 +411,34 @@ soft_dispatch_deepen_log(void)
 
     /* Grep: linux: nr class soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: linux: nr class: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: linux: nr class: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("linux: nr class: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
-    /* Grep: linux: nr class: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: linux: nr class: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("linux: nr class: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: linux: nr class: soft retbound — Wave 20 return-bound honesty */
+    kprintf("linux: nr class: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+    /* Grep: linux: nr class: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("linux: nr class: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
     kprintf("linux: nr class soft deepen wave=%u areas=%u live=%u "
             "table=%u class=%u log_n=%u\n",
@@ -523,7 +538,7 @@ soft_dispatch_deepen_log(void)
             "(soft inventory; never closes hybrid)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft edge (Wave 19 deepen) */
+    /* Grep: linux: dispatch soft edge (Wave 20 deepen) */
     kprintf("linux: dispatch soft edge entries=%llu null_guard=%u "
             "path_hot=%u path_cold=%u path_none=%u path_oor=%u "
             "hot_direct=%u hot_defer=%u cold_ipc=%u wave=%u\n",
@@ -532,7 +547,7 @@ soft_dispatch_deepen_log(void)
             g_u32SoftPathOor, g_u32SoftPathHotDirect, g_u32SoftPathHotDefer,
             g_u32SoftPathColdIpc, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft share (Wave 19 deepen) */
+    /* Grep: linux: dispatch soft share (Wave 20 deepen) */
     kprintf("linux: dispatch soft share bp_hot=%llu bp_cold=%llu "
             "bp_enosys=%llu bp_ret_neg=%llu pct_class=%u armed_ok=%u "
             "wave=%u\n",
@@ -540,26 +555,26 @@ soft_dispatch_deepen_log(void)
             (unsigned long long)u64BpEnosys, (unsigned long long)u64BpRetNeg,
             u32PctClass, u32ArmedOk, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft surfaces (Wave 19 deepen) */
+    /* Grep: linux: dispatch soft surfaces (Wave 20 deepen) */
     kprintf("linux: dispatch soft surfaces count=%u wave=%u "
             "names=inventory,path,rates,ret,last,honesty,edge,share,"
             "catalog,surfaces,note,return,retmap,deepen,PASS\n",
             LINUX_DISPATCH_SOFT_AREAS,
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft note (Wave 19 deepen) */
-    kprintf("linux: dispatch soft note milestone=wave19 exclusive=1 "
+    /* Grep: linux: dispatch soft note (Wave 20 deepen) */
+    kprintf("linux: dispatch soft note milestone=wave20 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft catalog (Wave 19 deepen) */
+    /* Grep: linux: dispatch soft catalog (Wave 20 deepen) */
     kprintf("linux: dispatch soft catalog wave=%u areas=%u "
             "surfaces=inventory,init,classify,cold_bind,wow64,runtime,"
             "hits,path,rates,ret,last,honesty,edge,share,catalog,"
             "deepen,PASS\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS);
 
-    /* Grep: linux: dispatch soft return (Wave 19 deepen) */
+    /* Grep: linux: dispatch soft return (Wave 20 deepen) */
     kprintf("linux: dispatch soft return live=%u hot=%u cold=%u none=%u "
             "ret_neg=%u ret_zero=%u ret_pos=%u product_gate=0 wave=%u\n",
             u32Live, u32Hot, u32Cold, u32None,
@@ -568,19 +583,34 @@ soft_dispatch_deepen_log(void)
 
     /* Grep: linux: dispatch soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: linux: dispatch: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: linux: dispatch: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("linux: dispatch: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
-    /* Grep: linux: dispatch: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: linux: dispatch: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("linux: dispatch: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: linux: dispatch: soft retbound — Wave 20 return-bound honesty */
+    kprintf("linux: dispatch: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+    /* Grep: linux: dispatch: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("linux: dispatch: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
     kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "
             "table=%u hot=%u cold=%u none=%u log_n=%u\n",
@@ -1329,6 +1359,6 @@ gj_linux_nr_class_soft_log(void)
             (unsigned long long)g_class.u64LastNr,
             (unsigned long long)g_class.u64LastRet);
 
-    /* Wave 12 + Wave 19 exclusive deepen (additive; never hard-gates). */
+    /* Wave 12 + Wave 20 exclusive deepen (additive; never hard-gates). */
     soft_dispatch_deepen_log();
 }

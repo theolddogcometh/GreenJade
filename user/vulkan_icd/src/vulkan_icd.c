@@ -9,9 +9,9 @@
  *   "vk: QueuePresentKHR", "vk: QueueSubmit", "vk_icd: negotiate"
  * Do not change those substrings without updating the smoke harness.
  *
- * Soft inventory (Wave 19 exclusive deepen; greppable; not bar3 GPU):
- *   vk_icd: soft inventory wave=19 negotiate=… present=… submit=… acquire=…
- *   vk_icd: soft deepen wave=19 areas=negotiate,instance,device,swapchain,
+ * Soft inventory (Wave 20 exclusive deepen; greppable; not bar3 GPU):
+ *   vk_icd: soft inventory wave=20 negotiate=… present=… submit=… acquire=…
+ *   vk_icd: soft deepen wave=20 areas=negotiate,instance,device,swapchain,
  *           acquire,present,submit,lookup,host,path,counts,features,note,crc
  *   vk_icd: soft path software_present|virtio_gpu bar3=0
  * Soft counters wrap OK; never hard-gate product returns.
@@ -1015,7 +1015,7 @@ static uint32_t g_u32HostPresents;
 static uint32_t g_u32HostPresentCrc;
 
 /*
- * Wave 19 soft inventory counters (file-local; wrap OK; never hard-gate).
+ * Wave 20 soft inventory counters (file-local; wrap OK; never hard-gate).
  * Grep: vk_icd: soft
  */
 #define VK_ICD_SOFT_WAVE     19u
@@ -1048,10 +1048,10 @@ vk_icd_soft_inc(volatile uint32_t *pCtr)
 }
 
 /*
- * Soft inventory blob (Wave 19). Grep: vk_icd: soft inventory
+ * Soft inventory blob (Wave 20). Grep: vk_icd: soft inventory
  */
 static const char g_szVkIcdSoftInventory[] =
-    "vk_icd: soft inventory wave=19 surfaces=10 areas=14 "
+    "vk_icd: soft inventory wave=20 surfaces=10 areas=14 "
     "negotiate=1 instance=1 device=1 swapchain=1 acquire=1 present=1 "
     "submit=1 lookup=1 host=1 path=1 counts=1 features=1 note=1 crc=1 "
     "bar3=0 (soft inventory; not bar3)";
@@ -1060,7 +1060,7 @@ static const char g_szVkIcdSoftInventory[] =
  * Grep: vk_icd: soft deepen
  */
 static const char g_szVkIcdSoftDeepen[] =
-    "vk_icd: soft deepen wave=19 areas=14 "
+    "vk_icd: soft deepen wave=20 areas=14 "
     "negotiate,instance,device,swapchain,acquire,present,submit,"
     "lookup,host,path,counts,features,note,crc "
     "software_present=1 multi_server=0 confine=0 bar3=0";
@@ -1084,9 +1084,9 @@ static const char g_szVkIcdSoftPath[] =
  */
 static const char g_szVkIcdSoftHonesty[] =
     "vk_icd: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=19";
+    "soft=1 product_kernel=OPEN wave=20";
 
-/* Soft area name catalog (Wave 19; cold only). */
+/* Soft area name catalog (Wave 20; cold only). */
 static const char *const g_apszVkIcdSoftAreas[] = {
     "negotiate",
     "instance",
@@ -1201,7 +1201,7 @@ gj_vk_icd_loader_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 19 exclusive). Grep: vk_icd: soft honesty
+ * Cold soft honesty line (Wave 20 exclusive). Grep: vk_icd: soft honesty
  */
 const char *
 gj_vk_icd_loader_soft_honesty(void)
@@ -1289,7 +1289,7 @@ gj_vk_icd_loader_soft_note_counts(uint32_t *pNegotiate, uint32_t *pPresent,
 }
 
 /*
- * Soft host present CRC note (Wave 19 deepen). Grep: vk_icd: soft crc
+ * Soft host present CRC note (Wave 20 deepen). Grep: vk_icd: soft crc
  */
 uint32_t
 gj_vk_icd_loader_soft_crc_note(void)

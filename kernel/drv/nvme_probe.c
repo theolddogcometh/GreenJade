@@ -25,7 +25,7 @@
  *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
  *   nvme: soft return rate — Wave 19 ok/fail rate lamps
  *   nvme: soft retcode    — Wave 19 retcode catalog
- *   nvme: soft deepen     — wave=19 areas stamp
+ *   nvme: soft deepen     — wave=20 areas stamp
  *   nvme: soft ratio      — Wave 15 CAP/rdy/en basis lamps
  *   nvme: soft headroom   — Wave 15 MQES-derived soft head
  *   nvme: soft surface    — Wave 16 area catalog
@@ -104,9 +104,9 @@
 #define NVME_CAP_CRMS(c)   ((u32)(((c) >> 59) & 3u))
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
 
-/* Wave 19 deepen area count (fixed greppable categories in inventory log). */
-#define NVME_SOFT_DEEPEN_AREAS 28u
-#define NVME_SOFT_DEEPEN_WAVE  19u
+/* Wave 20 deepen area count (fixed greppable categories in inventory log). */
+#define NVME_SOFT_DEEPEN_AREAS 30u
+#define NVME_SOFT_DEEPEN_WAVE  20u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -650,21 +650,36 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
             "(retcode catalog; Soft≠product)\n",
             (unsigned)NVME_SOFT_DEEPEN_WAVE);
 
-    /* Grep: nvme: soft deepen wave (Wave 19 stamp) */
+    /* Grep: nvme: soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: nvme: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: nvme: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("nvme: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)NVME_SOFT_DEEPEN_WAVE);
-    /* Grep: nvme: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: nvme: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("nvme: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: nvme: soft retbound — Wave 20 return-bound honesty */
+    kprintf("nvme: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)NVME_SOFT_DEEPEN_WAVE);
+    /* Grep: nvme: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("nvme: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)NVME_SOFT_DEEPEN_WAVE);
     kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
             "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "

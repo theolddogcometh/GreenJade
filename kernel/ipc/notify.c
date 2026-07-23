@@ -18,7 +18,7 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 19 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 20 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
@@ -42,7 +42,7 @@
  *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
  *   notify: soft return selftest — Wave 19 terminal return surface
  *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=19 areas stamp
+ *   notify: soft deepen            — wave=20 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -76,16 +76,16 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 19 exclusive soft deepen stamp (greppable wave=19). */
-#define NOTIFY_SOFT_DEEPEN_WAVE  19u
+/* Wave 20 exclusive soft deepen stamp (greppable wave=20). */
+#define NOTIFY_SOFT_DEEPEN_WAVE  20u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define NOTIFY_SOFT_DEEPEN_AREAS 30u
+#define NOTIFY_SOFT_DEEPEN_AREAS 32u
 
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped on product return paths; never hard-gate behavior.
  * Pulse path is IRQ-callable → atomic RMW only (no kprintf).
- * Wave 19 deepen: pulse/wait splits + multi + badge + install + query +
+ * Wave 20 deepen: pulse/wait splits + multi + badge + install + query +
  * msix + capacity + catalog + outcome + path + return surfaces.
  * Soft multi-waiter ≠ multi-process notify product.
  * Soft ≠ MIG REPLY product.
@@ -296,7 +296,7 @@ notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
 }
 
 /**
- * Greppable soft pulse/wait inventory + Wave 19 deepen surfaces.
+ * Greppable soft pulse/wait inventory + Wave 20 deepen surfaces.
  * Called from notify_msix_init and once after first wait activity.
  * Never allocates; not for hard-IRQ (kprintf only from product paths).
  * Soft multi-waiter ≠ multi-process notify product (multi_proc=0).
@@ -471,7 +471,7 @@ notify_soft_log(void)
     /*
      * Catalog lines (prefix-stable): declare multi-waiter capacity and the
      * pulse/wait soft path surface so smoke/scripts can grep product depth
-     * without parsing C. Wave 19 deepen splits pulse/wait/multi/badge/
+     * without parsing C. Wave 20 deepen splits pulse/wait/multi/badge/
      * install/abort/msix/query/capacity/catalog/outcome/path/return.
      * Soft multi-waiter ≠ multi-process notify product.
      * Soft ≠ MIG REPLY product.
@@ -526,7 +526,7 @@ notify_soft_log(void)
             (unsigned long)s.u64WaitLoop,
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft pulse — path tallies (Wave 19 deepen) */
+    /* Grep: notify: soft pulse — path tallies (Wave 20 deepen) */
     kprintf("notify: soft pulse enter=%lu hit=%lu dead=%lu "
             "dead_null=%lu dead_ready=%lu dead_state=%lu "
             "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu "
@@ -561,7 +561,7 @@ notify_soft_log(void)
             (unsigned long)s.u64PulseDeadState,
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft wait — path tallies (Wave 19 deepen) */
+    /* Grep: notify: soft wait — path tallies (Wave 20 deepen) */
     kprintf("notify: soft wait enter=%lu hit=%lu park=%lu poll_miss=%lu "
             "dead=%lu dead_enter=%lu dead_loop=%lu cas_retry=%lu "
             "self_wake=%lu mask_any=%lu block=%lu noblock=%lu "
@@ -848,21 +848,36 @@ notify_soft_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft deepen wave (Wave 19 stamp) */
+    /* Grep: notify: soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: notify: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: notify: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("notify: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-    /* Grep: notify: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: notify: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("notify: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: notify: soft retbound — Wave 20 return-bound honesty */
+    kprintf("notify: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+    /* Grep: notify: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("notify: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
     kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
             "wait_enter=%lu multi_calls=%lu msix_init=%lu "

@@ -23,7 +23,7 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Soft inventory (Wave 19 exclusive deepen; this unit only):
+ * Soft inventory (Wave 20 exclusive deepen; this unit only):
  *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
  *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
  *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
@@ -40,7 +40,7 @@
  *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
  *   cap: cdt soft return selftest — Wave 19 terminal return surface
  *   cap: cdt soft retmap     — Wave 19 return-surface map
- *   cap: cdt soft deepen     — wave=19 areas stamp
+ *   cap: cdt soft deepen     — wave=20 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
  * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
@@ -51,10 +51,10 @@
 #include <gj/klog.h>
 #include <gj/types.h>
 
-/* Wave 19 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE  19u
+/* Wave 20 deepen stamp (file-local; never hard-gates). */
+#define GJ_CDT_SOFT_WAVE  20u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_CDT_SOFT_AREAS 20u
+#define GJ_CDT_SOFT_AREAS 22u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -1090,21 +1090,36 @@ cdt_soft_inventory_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)GJ_CDT_SOFT_WAVE);
 
-    /* Grep: cap: cdt soft deepen wave (Wave 19 stamp) */
+    /* Grep: cap: cdt soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: cap: cdt: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: cap: cdt: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("cap: cdt: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)GJ_CDT_SOFT_WAVE);
-    /* Grep: cap: cdt: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: cap: cdt: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("cap: cdt: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_CDT_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: cap: cdt: soft retbound — Wave 20 return-bound honesty */
+    kprintf("cap: cdt: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)GJ_CDT_SOFT_WAVE);
+    /* Grep: cap: cdt: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("cap: cdt: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_CDT_SOFT_WAVE);
     kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
             "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "
@@ -1723,7 +1738,7 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
         cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
         /*
-         * Soft delete edge coverage (Wave 19 deepen).
+         * Soft delete edge coverage (Wave 20 deepen).
          * Grep: cap: cdt delete
          */
         kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "

@@ -31,7 +31,7 @@
  * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
  * keep those ABI-stable.
  *
- * Soft product inventory (Wave 19 exclusive deepen; file-local sticky).
+ * Soft product inventory (Wave 20 exclusive deepen; file-local sticky).
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  * Never hard-gates; wrap OK; diagnostics only. Soft ≠ bar3.
@@ -53,7 +53,7 @@
  *   net_door: soft stats       — aggregate enter + group counters
  *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
  *   net_door: soft path        — honesty: soft inventory ≠ bar3 / product
- *   net_door: soft deepen      — wave=19 stamp + area count
+ *   net_door: soft deepen      — wave=20 stamp + area count
  *   net_door: soft inventory PASS / net_door: soft PASS
  */
 #include <gj/config.h>
@@ -81,12 +81,12 @@
  */
 #define NET_XFER_MAX 4096u
 #define NET_ETH_MAX  1514u
-/* Wave 19 exclusive soft deepen stamp (greppable wave=19). */
-#define NET_DOOR_SOFT_DEEPEN_WAVE  19u
+/* Wave 20 exclusive soft deepen stamp (greppable wave=20). */
+#define NET_DOOR_SOFT_DEEPEN_WAVE  20u
 /* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
  * group capacity catalog outcome stats backend path
  * headroom surface ratio return deepen PASS = 23 */
-#define NET_DOOR_SOFT_DEEPEN_AREAS 26u
+#define NET_DOOR_SOFT_DEEPEN_AREAS 28u
 
 /* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
@@ -102,7 +102,7 @@ static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
 static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
 
 /*
- * Soft product inventory (Wave 19 exclusive). Cumulative path tallies.
+ * Soft product inventory (Wave 20 exclusive). Cumulative path tallies.
  * greppable: net_door: soft …
  */
 struct net_door_soft {
@@ -287,7 +287,7 @@ net_door_soft_note_ret(i64 i64Ret)
 }
 
 /**
- * Greppable soft net door inventory (product / smoke). Wave 19 deepen.
+ * Greppable soft net door inventory (product / smoke). Wave 20 deepen.
  *   net_door: soft inventory …
  *   net_door: soft claim …
  *   net_door: soft sock …
@@ -603,23 +603,38 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64NotInit, (unsigned long)s.u64Enter, u32Wave);
 
     /* Grep: net_door: soft retmap — Wave 19 return-surface map */
-    kprintf("net_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("net_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
-    /* Grep: net_door: soft deepen (Wave 19 stamp) */
+    /* Grep: net_door: soft deepen (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: net_door: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: net_door: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("net_door: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-    /* Grep: net_door: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: net_door: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("net_door: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: net_door: soft retbound — Wave 20 return-bound honesty */
+    kprintf("net_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
+    /* Grep: net_door: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("net_door: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
     kprintf("net_door: soft deepen wave=%u areas=%u init=%u owned=%u "
             "enter=%lu sock=%lu ring=%lu virtio=%lu logs=%lu "

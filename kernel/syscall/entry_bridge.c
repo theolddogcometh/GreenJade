@@ -32,10 +32,10 @@
 #include <gj/syscall.h>
 #include <gj/types.h>
 
-/* Wave 19 soft inventory stamp (file-local; never product gate). */
-#define ENTRY_BRIDGE_SOFT_WAVE  19u
+/* Wave 20 soft inventory stamp (file-local; never product gate). */
+#define ENTRY_BRIDGE_SOFT_WAVE  20u
 /* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
-#define ENTRY_BRIDGE_SOFT_AREAS 14u
+#define ENTRY_BRIDGE_SOFT_AREAS 16u
 
 /*
  * Soft edge tallies (wrap OK). Diagnostics only — does not alter route.
@@ -63,7 +63,7 @@ entry_bridge_soft_inc(u64 *pCtr)
 }
 
 /**
- * Greppable soft entry-bridge inventory (Wave 19 exclusive deepen).
+ * Greppable soft entry-bridge inventory (Wave 20 exclusive deepen).
  * Prefix-stable markers:
  *   entry_bridge: soft inventory  — edge enter/null/route rollup
  *   entry_bridge: soft path       — honesty claim (LSTAR → note → dispatch)
@@ -148,29 +148,29 @@ entry_bridge_soft_inventory_log(void)
             g_fBridgeSoftOnce ? 1u : 0u,
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
 
-    /* Grep: entry_bridge: soft surfaces (Wave 19 deepen) */
+    /* Grep: entry_bridge: soft surfaces (Wave 20 deepen) */
     kprintf("entry_bridge: soft surfaces count=%u "
             "names=inventory,path,rates,honesty,last,surfaces,note,"
             "catalog,return,retmap,deepen,PASS wave=%u\n",
             (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
 
-    /* Grep: entry_bridge: soft note (Wave 19 deepen) */
-    kprintf("entry_bridge: soft note milestone=wave19 exclusive=1 "
+    /* Grep: entry_bridge: soft note (Wave 20 deepen) */
+    kprintf("entry_bridge: soft note milestone=wave20 exclusive=1 "
             "edge=LSTAR soft_only=1 not_bar3=1 "
             "enter=%lu route=%lu wave=%u\n",
             (unsigned long)u64Enter,
             (unsigned long)u64Route,
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
 
-    /* Grep: entry_bridge: soft catalog (Wave 19 deepen) */
+    /* Grep: entry_bridge: soft catalog (Wave 20 deepen) */
     kprintf("entry_bridge: soft catalog wave=%u areas=%u "
             "surfaces=inventory,path,rates,honesty,last,surfaces,note,"
             "catalog,return,retmap,deepen,PASS\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
             (unsigned)ENTRY_BRIDGE_SOFT_AREAS);
 
-    /* Grep: entry_bridge: soft return (Wave 19 deepen) */
+    /* Grep: entry_bridge: soft return (Wave 20 deepen) */
     kprintf("entry_bridge: soft return null_guard=1 ret_rewrite=0 "
             "route_void=1 enter_only=1 product_gate=0 "
             "enter=%lu route=%lu wave=%u\n",
@@ -179,27 +179,42 @@ entry_bridge_soft_inventory_log(void)
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
 
     /* Grep: entry_bridge: soft retmap — Wave 19 return-surface map */
-    kprintf("entry_bridge: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("entry_bridge: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
     /* Grep: entry_bridge: soft deepen wave */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: entry_bridge: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: entry_bridge: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("entry_bridge: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
-    /* Grep: entry_bridge: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: entry_bridge: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("entry_bridge: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: entry_bridge: soft retbound — Wave 20 return-bound honesty */
+    kprintf("entry_bridge: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
+    /* Grep: entry_bridge: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("entry_bridge: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
+            (unsigned)ENTRY_BRIDGE_SOFT_WAVE);
     kprintf("entry_bridge: soft deepen wave=%u areas=%u enter=%lu "
             "route=%lu logs=%lu "
-            "(Wave 19 exclusive; not bar3)\n",
+            "(Wave 20 exclusive; not bar3)\n",
             (unsigned)ENTRY_BRIDGE_SOFT_WAVE,
             (unsigned)ENTRY_BRIDGE_SOFT_AREAS,
             (unsigned long)u64Enter,

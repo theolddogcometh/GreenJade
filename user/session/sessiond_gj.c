@@ -4,7 +4,7 @@
  *
  * Freestanding sessiond — session door ownership live path:
  *   CLAIM → DISPLAY_INFO → PRESENT_FB → soft health → RELEASE →
- *   soft free → soft inventory (Wave 19) → ownership path PASS
+ *   soft free → soft inventory (Wave 20) → ownership path PASS
  * Built as user ELF for embed/spawn (kernel/proc/sessiond_embed.S).
  * Host A1 smoke remains sessiond.c (libc).
  *
@@ -26,9 +26,9 @@
  *   sessiond-gj: soft PRESENT_FB PASS | soft PRESENT soft-skip
  *   sessiond-gj: free soft | free RELEASE soft
  *
- * Soft inventory (Wave 19 exclusive deepen — greppable "sessiond-gj: soft …"):
+ * Soft inventory (Wave 20 exclusive deepen — greppable "sessiond-gj: soft …"):
  *   sessiond-gj: soft inventory health_ok=… health_skip=… free_ok=… free_skip=…
- *                flags_ok=… stats_snap=… areas=… wave=19
+ *                flags_ok=… stats_snap=… areas=… wave=20
  *   sessiond-gj: soft health display=… map=… input=… reclaim=… stats=…
  *                present=… fb2=… fb3=… multi=… bits=…
  *   sessiond-gj: soft free own=… release=… stats=… map=… display=… bits=…
@@ -40,18 +40,18 @@
  *   sessiond-gj: soft present interim=… fb2=… fb3=… hard_fb=… multi=… bits=…
  *   sessiond-gj: soft input drained=… pend=… cap=… ok=…
  *   sessiond-gj: soft reclaim claim=… flag=…
- *   sessiond-gj: soft deepen wave=19 areas=… ok=… skip=… token=0x…
+ *   sessiond-gj: soft deepen wave=20 areas=… ok=… skip=… token=0x…
  *   sessiond-gj: soft path claim=live present=fb multi_frame=bit18
  *                reclaim=bit19 free=unowned multi_server=0 confine=0
  *                (soft; not bar3; soft ≠ product multi-server confine)
- *   sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=19
+ *   sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=20
  * Diagnostics only — never hard-fail ownership path PASS; not a compositor claim.
  *
  * Soft health deepens door surface beyond hard claim/present/release:
  *   DISPLAY_INFO recheck, MAP_SCANOUT geometry, INPUT_POLL/POP drain,
  *   same-token CLAIM reclaim (STATS bit19), STATS ownership/ready flags,
  *   interim PRESENT, second PRESENT_FB (multi-frame bit18 / user-fb bit17).
- * Wave 19 free path also soft-probes STATS / MAP_SCANOUT / DISPLAY_INFO
+ * Wave 20 free path also soft-probes STATS / MAP_SCANOUT / DISPLAY_INFO
  * while unowned; geom match + present/input/reclaim/deepen/path rollups.
  * Honesty: soft inventory ≠ product multi-server confine.
  *
@@ -105,7 +105,7 @@
 /* Soft INPUT_POP drain cap (defensive; empty ring is fine). */
 #define SESS_SOFT_POP_CAP 64u
 
-/* Soft health sub-step bits (Wave 10 inventory; Wave 19 still tallies). */
+/* Soft health sub-step bits (Wave 10 inventory; Wave 20 still tallies). */
 #define SOFT_H_DISPLAY  (1u << 0)
 #define SOFT_H_MAP      (1u << 1)
 #define SOFT_H_INPUT    (1u << 2)
@@ -116,7 +116,7 @@
 #define SOFT_H_FB3      (1u << 7)
 #define SOFT_H_MULTI    (1u << 8)
 
-/* Soft free-path bits (Wave 19 deepen: stats/map/display while unowned). */
+/* Soft free-path bits (Wave 20 deepen: stats/map/display while unowned). */
 #define SOFT_F_OWN      (1u << 0)
 #define SOFT_F_RELEASE  (1u << 1)
 #define SOFT_F_STATS    (1u << 2)
@@ -132,9 +132,9 @@
 #define SOFT_FLG_RECLAIM (1u << 5)
 #define SOFT_FLG_DROP    (1u << 6)
 
-/* Wave 19 soft inventory area count (fixed greppable categories). */
+/* Wave 20 soft inventory area count (fixed greppable categories). */
 #define SOFT_INV_AREAS  12u
-/* Soft inventory wave stamp (Wave 19 exclusive deepen). */
+/* Soft inventory wave stamp (Wave 20 exclusive deepen). */
 #define SOFT_INV_WAVE   19u
 
 /* Matches kernel struct gj_input_event layout (type, code, value). */
@@ -147,7 +147,7 @@ struct sess_input_ev {
 static unsigned g_uToken;
 
 /*
- * Soft inventory tallies (Wave 19 exclusive deepen).
+ * Soft inventory tallies (Wave 20 exclusive deepen).
  * Wrap-OK counters; diagnostics only — never gate ownership path PASS.
  * greppable: sessiond-gj: soft
  */
@@ -168,7 +168,7 @@ static unsigned g_uSoftMapH;
 static unsigned g_uSoftMapStride;
 static unsigned g_cSoftDrained;
 static unsigned g_cSoftPend;
-/* Wave 19 deepen snapshots / tallies. */
+/* Wave 20 deepen snapshots / tallies. */
 static unsigned g_cSoftStatsSnap;   /* successful STATS door snapshots */
 static unsigned g_cSoftHardFb;      /* hard PRESENT_FB PASS observed */
 static unsigned g_uSoftTokenSnap;   /* last STATS owner token seen */
@@ -343,7 +343,7 @@ msg_input_soft(unsigned cPop, unsigned cPend)
     msg(aLine);
 }
 
-/* Note one soft health sub-step into Wave 19 inventory counters. */
+/* Note one soft health sub-step into Wave 20 inventory counters. */
 static void
 soft_health_note(unsigned uBit, int fOk)
 {
@@ -357,7 +357,7 @@ soft_health_note(unsigned uBit, int fOk)
     }
 }
 
-/* Note one soft free sub-step into Wave 19 inventory counters. */
+/* Note one soft free sub-step into Wave 20 inventory counters. */
 static void
 soft_free_note(unsigned uBit, int fOk)
 {
@@ -388,7 +388,7 @@ soft_flags_note(unsigned uBit)
     }
 }
 
-/* Soft: remember a successful STATS snapshot for Wave 19 inventory. */
+/* Soft: remember a successful STATS snapshot for Wave 20 inventory. */
 static void
 soft_stats_snap(const unsigned *aSt)
 {
@@ -406,7 +406,7 @@ soft_stats_snap(const unsigned *aSt)
     }
 }
 
-/* Soft: refresh display-vs-map geometry match lamp (Wave 19). */
+/* Soft: refresh display-vs-map geometry match lamp (Wave 20). */
 static void
 soft_geom_refresh(void)
 {
@@ -420,7 +420,7 @@ soft_geom_refresh(void)
 }
 
 /*
- * Soft inventory dump (Wave 19 exclusive deepen).
+ * Soft inventory dump (Wave 20 exclusive deepen).
  * Greppable prefix: "sessiond-gj: soft …"
  * Pure observation — always soft; never gates ownership path PASS.
  * Honesty: soft ≠ product multi-server confine.
@@ -596,7 +596,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft geom (Wave 19) */
+    /* Grep: sessiond-gj: soft geom (Wave 20) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft geom disp_w=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDispW);
@@ -614,7 +614,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft present (Wave 19) */
+    /* Grep: sessiond-gj: soft present (Wave 20) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft present interim=");
     append_u(aLine, sizeof(aLine), &o,
@@ -639,7 +639,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft input (Wave 19) */
+    /* Grep: sessiond-gj: soft input (Wave 20) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft input drained=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDrained);
@@ -654,7 +654,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft reclaim (Wave 19) */
+    /* Grep: sessiond-gj: soft reclaim (Wave 20) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft reclaim claim=");
     append_u(aLine, sizeof(aLine), &o,
@@ -666,7 +666,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft deepen wave (Wave 19 stamp) */
+    /* Grep: sessiond-gj: soft deepen wave (Wave 20 stamp) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_INV_WAVE);
@@ -683,7 +683,7 @@ soft_inventory_log(void)
     msg(aLine);
 
     /*
-     * Grep: sessiond-gj: soft path (Wave 19 honesty; not bar3).
+     * Grep: sessiond-gj: soft path (Wave 20 honesty; not bar3).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("sessiond-gj: soft path claim=live present=fb multi_frame=bit18 "
@@ -691,11 +691,11 @@ soft_inventory_log(void)
         "(soft; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: sessiond-gj: soft honesty (Wave 19 exclusive deepen).
+     * Grep: sessiond-gj: soft honesty (Wave 20 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=19\n");
+        "exclusive=1 soft=1 product_kernel=OPEN wave=20\n");
 }
 
 static void
@@ -729,7 +729,7 @@ fb_fill(unsigned char *pFb, unsigned char b, unsigned char g, unsigned char r)
  * Soft-decode STATS flags after ownership / multi-frame work.
  * Emits ready / input-ready / ownership / user-fb / multi-frame / reclaim
  * markers when the corresponding door bits are set. Never hard-fails.
- * Tallies Wave 19 soft flag inventory (sessiond-gj: soft flags …).
+ * Tallies Wave 20 soft flag inventory (sessiond-gj: soft flags …).
  * Returns number of soft markers that counted as success.
  */
 static unsigned
@@ -790,7 +790,7 @@ soft_stats_flags(const unsigned *aSt)
  *   same-token CLAIM reclaim, STATS ownership/ready/user-fb/reclaim flags,
  *   interim PRESENT, second PRESENT_FB tint, multi-frame STATS recheck.
  * Never aborts the hard ownership path.
- * Tallies Wave 19 soft inventory (sessiond-gj: soft …).
+ * Tallies Wave 20 soft inventory (sessiond-gj: soft …).
  */
 static void
 soft_health(unsigned char *pFb)
@@ -1064,8 +1064,8 @@ _start(void)
     /*
      * Soft free path: RELEASE when already free is 0 (door contract).
      * Confirm STATS no longer owned — never fails ownership path PASS.
-     * Wave 19 deepen: also soft-probe MAP_SCANOUT + DISPLAY_INFO unowned.
-     * Tallies Wave 19 soft free inventory (sessiond-gj: soft free …).
+     * Wave 20 deepen: also soft-probe MAP_SCANOUT + DISPLAY_INFO unowned.
+     * Tallies Wave 20 soft free inventory (sessiond-gj: soft free …).
      */
     {
         unsigned long u64Va = 0;
@@ -1100,7 +1100,7 @@ _start(void)
             soft_free_note(SOFT_F_STATS, 0);
         }
 
-        /* Wave 19: MAP_SCANOUT while free (soft — geometry optional) */
+        /* Wave 20: MAP_SCANOUT while free (soft — geometry optional) */
         u64Va = 0;
         aInfo[0] = aInfo[1] = aInfo[2] = 0;
         n = gj_session(GJ_SESS_OP_MAP_SCANOUT, (long)(uintptr_t)&u64Va,
@@ -1116,7 +1116,7 @@ _start(void)
         }
         (void)u64Va;
 
-        /* Wave 19: DISPLAY_INFO while free (soft — dimensions optional) */
+        /* Wave 20: DISPLAY_INFO while free (soft — dimensions optional) */
         aWh[0] = aWh[1] = 0;
         n = gj_session(GJ_SESS_OP_DISPLAY_INFO, (long)(uintptr_t)aWh, 0, 0);
         if (n == 0 && aWh[0] != 0u && aWh[1] != 0u) {
@@ -1131,7 +1131,7 @@ _start(void)
     }
 
     /*
-     * Wave 19 exclusive soft inventory rollup (greppable "sessiond-gj: soft …").
+     * Wave 20 exclusive soft inventory rollup (greppable "sessiond-gj: soft …").
      * Emitted after all soft sub-paths; never gates ownership path PASS.
      */
     soft_inventory_log();

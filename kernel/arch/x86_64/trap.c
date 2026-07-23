@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    19u
+#define TRAP_SOFT_WAVE    20u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -267,7 +267,7 @@ read_cr2(void)
  *   trap: soft halt       — kernel / null frame halt entries
  *   trap: soft rate       — milestone / quiet / force / skip rollup
  *   trap: soft path       — product claim + honesty
- *   trap: soft deepen     — Wave 19 stamp line
+ *   trap: soft deepen     — Wave 20 stamp line
  * Wave 15 complementary (kept; never reshape primary):
  *   trap: soft honesty / api / frame / vec / mile
  * Wave 16 complementary (kept) + Wave 19 return surfaces:
@@ -600,19 +600,34 @@ trap_soft_inventory_log(void)
 
     /* Grep: trap: soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: trap: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: trap: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("trap: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)TRAP_SOFT_WAVE);
-    /* Grep: trap: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: trap: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("trap: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)TRAP_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: trap: soft retbound — Wave 20 return-bound honesty */
+    kprintf("trap: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)TRAP_SOFT_WAVE);
+    /* Grep: trap: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("trap: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)TRAP_SOFT_WAVE);
     kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"

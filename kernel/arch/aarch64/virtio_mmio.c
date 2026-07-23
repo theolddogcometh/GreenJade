@@ -16,7 +16,7 @@
  *        QueueReady stays 0 — no real DMA.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 11 base + Wave 19 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 20 exclusive deepen; this unit only —
  * greppable "aarch64: virtio soft …")
  * -------------------------------------------------------------------------
  * Soft scan: slot count + base/stride + magic/dev tallies after probe.
@@ -28,7 +28,7 @@
  * Soft path honesty: mmio=1 dma=0 ready0=1 neon=0 kick=0 features_ok=0
  *   driver_ok=0 — soft probe only; not product block/net I/O.
  *
- * Wave 19 deepen areas (multi-line, prefix-stable):
+ * Wave 20 deepen areas (multi-line, prefix-stable):
  *   inventory | slots | dev0 | feats | ring | status | used | gates |
  *   path | deepen
  * Status soft: ACK/DRIVER bit lamps + unarmed ready/pfn.
@@ -109,9 +109,9 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_SOFT_QNUM     8u
 #define VIRTIO_SOFT_ALIGN    4096u
 
-/* Wave 19 soft inventory stamp (file-local; never product gate). */
-#define VIRTIO_SOFT_WAVE   19u
-#define VIRTIO_SOFT_AREAS  15u
+/* Wave 20 soft inventory stamp (file-local; never product gate). */
+#define VIRTIO_SOFT_WAVE   20u
+#define VIRTIO_SOFT_AREAS  17u
 
 /*
  * Guest-side soft split virtqueue layout (OASIS public shape).
@@ -668,20 +668,35 @@ virtio_soft_inventory(const struct virtio_soft_snap *pSnap)
 
     /* Grep: aarch64: virtio soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: aarch64: virtio: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: aarch64: virtio: soft retclass — Wave 19 return-class taxonomy (kept) */
     aarch64_uart_puts("aarch64: virtio: soft retclass ok|fail|inval|nodev|busy|nomem "
                       "soft_only=1 product_gate=0 wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" (retclass taxonomy; Soft!=product; not bar3)\n");
-    /* Grep: aarch64: virtio: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: aarch64: virtio: soft retlane — Wave 19 return-lane catalog (kept) */
     aarch64_uart_puts("aarch64: virtio: soft retlane inv|selftest|rate|retcode|retmap|class "
                       "product_kernel=OPEN soft_ne_product=1 wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" (retlane catalog; Soft!=product)\n");
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft!=product; not bar3.
+     */
+    /* Grep: aarch64: virtio: soft retbound — Wave 20 return-bound honesty */
+    aarch64_uart_puts("aarch64: virtio: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+                      "never_blocks_m0=1 wave=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+    aarch64_uart_puts(" (retbound honesty; Soft!=product; not bar3)\n");
+    /* Grep: aarch64: virtio: soft retseal — Wave 20 exclusive seal stamp */
+    aarch64_uart_puts("aarch64: virtio: soft retseal exclusive=1 soft_ne_product=1 "
+                      "product_kernel=OPEN bar3=0 wave=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+    aarch64_uart_puts(" (retseal stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: virtio soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -696,7 +711,7 @@ virtio_soft_inventory(const struct virtio_soft_snap *pSnap)
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: virtio soft exclusive — Wave 19 exclusive deepen */
+    /* Grep: aarch64: virtio soft exclusive — Wave 20 exclusive deepen */
     aarch64_uart_puts("aarch64: virtio soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);

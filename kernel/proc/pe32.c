@@ -7,7 +7,7 @@
  * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
  * greppable "pe32: … PASS" markers stay stable.
  *
- * Soft inventory (Wave 11 base + Wave 19 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 20 exclusive deepen; this unit only —
  * greppable "pe32: soft …"):
  *   pe32: soft inventory   — capacity + pipeline catalog + log tallies
  *   pe32: soft parse       — parse/sections enter+ok snapshot
@@ -29,7 +29,7 @@
  *   pe32: soft return      — Wave 19 pipeline return-path catalog
  *   pe32: soft ret_surface — Wave 19 terminal return classes
  *   pe32: soft surface     — Wave 19 area catalog
- *   pe32: soft deepen      — wave=19 areas stamp
+ *   pe32: soft deepen      — wave=20 areas stamp
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -58,7 +58,7 @@
 #define OPT_PE32P  0x20bu
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define PE32_SOFT_WAVE 19u
+#define PE32_SOFT_WAVE 20u
 
 static u32
 rd32(const u8 *p)
@@ -425,23 +425,38 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned)PE32_SOFT_WAVE);
 
     /* Grep: pe32: soft retmap — Wave 19 return-surface map */
-    kprintf("pe32: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("pe32: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
     /* Grep: pe32: soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: pe32: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: pe32: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("pe32: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)PE32_SOFT_WAVE);
-    /* Grep: pe32: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: pe32: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("pe32: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)PE32_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: pe32: soft retbound — Wave 20 return-bound honesty */
+    kprintf("pe32: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)PE32_SOFT_WAVE);
+    /* Grep: pe32: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("pe32: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)PE32_SOFT_WAVE);
     kprintf("pe32: soft deepen wave=%u areas="
             "inventory,parse,stage,load,exec,int80,path,"

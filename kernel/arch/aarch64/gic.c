@@ -58,7 +58,7 @@
  * bits remain, and SPI capacity covers UART/virtio0 INTIDs.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 19 exclusive; this unit only)
+ * Soft inventory deepen (Wave 20 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: gic soft …" under fixed areas:
  *   inventory | dist | cpuif | spi | ppi | iar | gates | path | deepen
@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 19 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE   19u
-#define GIC_SOFT_AREAS  14u
+/* Wave 20 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE   20u
+#define GIC_SOFT_AREAS  16u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -670,20 +670,35 @@ gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
 
     /* Grep: aarch64: gic soft deepen */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: aarch64: gic: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: aarch64: gic: soft retclass — Wave 19 return-class taxonomy (kept) */
     aarch64_uart_puts("aarch64: gic: soft retclass ok|fail|inval|nodev|busy|nomem "
                       "soft_only=1 product_gate=0 wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" (retclass taxonomy; Soft!=product; not bar3)\n");
-    /* Grep: aarch64: gic: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: aarch64: gic: soft retlane — Wave 19 return-lane catalog (kept) */
     aarch64_uart_puts("aarch64: gic: soft retlane inv|selftest|rate|retcode|retmap|class "
                       "product_kernel=OPEN soft_ne_product=1 wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" (retlane catalog; Soft!=product)\n");
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft!=product; not bar3.
+     */
+    /* Grep: aarch64: gic: soft retbound — Wave 20 return-bound honesty */
+    aarch64_uart_puts("aarch64: gic: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+                      "never_blocks_m0=1 wave=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+    aarch64_uart_puts(" (retbound honesty; Soft!=product; not bar3)\n");
+    /* Grep: aarch64: gic: soft retseal — Wave 20 exclusive seal stamp */
+    aarch64_uart_puts("aarch64: gic: soft retseal exclusive=1 soft_ne_product=1 "
+                      "product_kernel=OPEN bar3=0 wave=");
+    aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+    aarch64_uart_puts(" (retseal stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -698,7 +713,7 @@ gic_soft_inventory(unsigned uTyper, unsigned cIrqLines, unsigned uIsen0)
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: gic soft exclusive — Wave 19 exclusive deepen */
+    /* Grep: aarch64: gic soft exclusive — Wave 20 exclusive deepen */
     aarch64_uart_puts("aarch64: gic soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);

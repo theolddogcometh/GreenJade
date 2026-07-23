@@ -19,7 +19,7 @@
  *   linked, try siblings, soft-retry a bounded number of re-walks, then
  *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
  *
- * Soft inventory (Wave 19 exclusive deepen; this unit only):
+ * Soft inventory (Wave 20 exclusive deepen; this unit only):
  *   - Phase A begin path: ok / dead / busy / again / null / queue full
  *   - Deferred queue: push / drop / pending samples / cursor / full
  *   - CDT walk batch: enter / clear / busy / stale / visit / pass / retry
@@ -29,7 +29,7 @@
  *   - honesty / deepen / PASS / mutex / reply non-claims
  *   - return surface (Wave 17): begin|walk|deferred|reclaim gj_status /
  *     u32 cleared buckets under "cap: revoke soft return …"
- *   - return rate / retcode (Wave 19 deepen): ok/fail rate lamps + retcode
+ *   - return rate / retcode (Wave 20 deepen): ok/fail rate lamps + retcode
  *     catalog under "cap: revoke soft return rate|retcode …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product mutex.
  *   Soft ≠ bar3. Soft ≠ GJ_CAP_REPLY product. Soft ≠ MIG REPLY product.
@@ -37,7 +37,7 @@
  *
  * Grep: cap:cdt deferred / cap:cdt walk / cap:quota soft
  * Grep: cap: revoke try-lock / cap:cdt R2 soft / cap:cdt trylock
- * Grep: cap: revoke soft  (Wave 19 deepen surface)
+ * Grep: cap: revoke soft  (Wave 20 deepen surface)
  * Grep: cap: revoke soft honesty|inventory|deepen|PASS|mutex|reply|return
  * Grep: cap: revoke …     (begin|walk|deferred|reclaim|r2|try-lock|queue)
  */
@@ -55,10 +55,10 @@
  */
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
-/* Wave 19 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE  19u
+/* Wave 20 deepen stamp (file-local; never hard-gates). */
+#define GJ_REVOKE_SOFT_WAVE  20u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_REVOKE_SOFT_AREAS 20u
+#define GJ_REVOKE_SOFT_AREAS 22u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -92,7 +92,7 @@ static u32 g_u32R2Retries;
 static u32 g_u32R2SlotsCleared;
 
 /*
- * Wave 19 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
+ * Wave 20 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
  * Grep: cap: revoke soft
  */
 static u32 g_u32SoftBeginEnter;     /* gj_obj_revoke_begin entries */
@@ -180,7 +180,7 @@ soft_note_pending_peak(u32 u32Pending)
 }
 
 /**
- * Greppable soft revoke inventory (Wave 19 deepen).
+ * Greppable soft revoke inventory (Wave 20 deepen).
  * Prefix family (keep stable for smokes / tooling):
  *   cap: revoke soft inventory|begin|queue|walk|r2|deferred|reclaim|path|…
  *   cap: revoke soft honesty|mutex|reply|return|deepen|PASS
@@ -215,7 +215,7 @@ soft_revoke_inventory_log(void)
     soft_note_pending_peak(u32Pending);
 
     /*
-     * Primary Wave 19 deepen lines under "cap: revoke soft …".
+     * Primary Wave 20 deepen lines under "cap: revoke soft …".
      * Honesty: soft u32SoftLock only — product try-lock still partial.
      * Soft ≠ GJ_CAP_REPLY product / MIG REPLY product / full CDT mutex.
      */
@@ -422,21 +422,36 @@ soft_revoke_inventory_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)GJ_REVOKE_SOFT_WAVE);
 
-    /* Grep: cap: revoke soft deepen wave (Wave 19 stamp) */
+    /* Grep: cap: revoke soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: cap: revoke: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: cap: revoke: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("cap: revoke: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)GJ_REVOKE_SOFT_WAVE);
-    /* Grep: cap: revoke: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: cap: revoke: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("cap: revoke: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_REVOKE_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: cap: revoke: soft retbound — Wave 20 return-bound honesty */
+    kprintf("cap: revoke: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)GJ_REVOKE_SOFT_WAVE);
+    /* Grep: cap: revoke: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("cap: revoke: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_REVOKE_SOFT_WAVE);
     kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "

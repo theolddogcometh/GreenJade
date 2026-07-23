@@ -9,7 +9,7 @@
 # ----------------------------------
 # GreenJade grows the clean-room libcgj *graph continuum* as CREATE-ONLY
 # freestanding pure-C TUs (user/libcgj/src/graph_batchN.c). A continuum
-# *decade* is a closed batch range ending at a milestone M (e.g. M=16100
+# *decade* is a closed batch range ending at a milestone M (e.g. M=16200
 # → exclusive wave 16051–16100). Soft host probes
 # (user/libcgj/tests/cgj_soft_milestone_M.c) KAT the decade marker lamps
 # only; identity/fill bands are structural unique surfaces.
@@ -17,7 +17,7 @@
 # This script is the **parent paste half** of that workflow:
 #
 #   1. CREATE-ONLY sources land first (generators / exclusive agents).
-#      Example generator for the 16100 wave (Wave 19 exclusive):
+#      Example generator for the 16100 wave (Wave 20 exclusive):
 #        user/libcgj/src/_gen_milestone_16100.py
 #        python3 user/libcgj/src/_gen_milestone_16100.py --dry-run
 #      (prior Wave 17: _gen_milestone_15900.py / M=15900)
@@ -33,12 +33,12 @@
 # The scan has **no artificial cap** — it correctly reports through
 # graph_batch16100.c (and beyond) once those basenames are wired.
 #
-# Wave 19 soft note (16100-era): the exclusive target decade is M=16100
+# Wave 20 soft note (16100-era): the exclusive target decade is M=16200
 # (CREATE-ONLY 16051–16100; optional extension 16001–16050). Until parent
 # pastes those basenames into CGJ_SRCS, ``--max`` may still report the
 # prior high-water (e.g. makefile_max=16000). **Scan is the source of
 # truth** — do not hardcode a false makefile_max here or in side panels.
-# Soft high-water may be described as **advancing toward 16100** while the
+# Soft high-water may be described as **advancing toward 16200** while the
 # honest scan remains at the prior tip.
 #
 # Verify anytime (stdout is greppable by product-summary side panels):
@@ -51,7 +51,7 @@
 # not Deck Top-50 title runs, and not product score (gj_bar3_ready_16100
 # and gj_product_score_16100 remain 0 by design). Soft ≠ product complete.
 #
-# Decade paste hygiene (16100-era / Wave 19 example)
+# Decade paste hygiene (16100-era / Wave 20 example)
 # ------------------------------------------------
 # After CREATE-ONLY wave 16051–16100 exists on disk (optional extension
 # 16001–16050 may land ahead of the decade bands):
@@ -74,7 +74,7 @@
 #   fill       [M-24, M-10]   gj_batch_id_N + unique soft unit helper
 #   markers    [M-9,  M]      decade soft-gate lamps (host probe surface)
 #
-# For M=16100 that is identity 16051–16075, fill 16076–16090,
+# For M=16200 that is identity 16051–16075, fill 16076–16090,
 # markers 16091–16100. Continuum extension 16001–16050 sits ahead of
 # the decade bands. Prior decade M=15900: identity 15851–15875,
 # fill 15876–15890, markers 15891–15900.
@@ -109,7 +109,7 @@
 #
 # Example paste target (end of CGJ_SRCS before rand48.c):
 #   user/libcgj/src/graph_batch16000.c \   ← prior high-water (if still tip)
-#   user/libcgj/src/graph_batch16001.c \   ← Wave 19 helper output starts here
+#   user/libcgj/src/graph_batch16001.c \   ← Wave 20 helper output starts here
 #   … through graph_batch16100.c once CREATE-ONLY + parent wire land
 #
 # Non-claims (keep soft continuum honest)
@@ -123,7 +123,7 @@
 #
 # See also:
 #   user/libcgj/src/_gen_milestone_15900.py   (prior Wave 17 CREATE-ONLY emitter)
-#   user/libcgj/src/_gen_milestone_16100.py   (Wave 19 CREATE-ONLY emitter, when present)
+#   user/libcgj/src/_gen_milestone_16100.py   (Wave 20 CREATE-ONLY emitter, when present)
 #   user/libcgj/tests/NOTES_milestone_15900.txt
 #   user/libcgj/tests/NOTES_milestone_16100.txt
 #   user/libcgj/tests/cgj_soft_milestone_15900.c
@@ -161,17 +161,17 @@ makefile_max honesty:
   --max scans the Makefile for the highest graph_batchN.c already wired.
   Scan has no artificial cap (supports through graph_batch16100.c and beyond).
   High-water is whatever the scan prints (source of truth) — do not hardcode.
-  Wave 19 exclusive target decade: M=16100 (soft graph only — not bar3 /
+  Wave 20 exclusive target decade: M=16200 (soft graph only — not bar3 /
   Steam client / Top-50 titles). Until parent wires 16001–16100, --max may
   still report prior tip (e.g. makefile_max=16000). Soft high-water may
-  advance toward 16100 while scan remains at prior tip.
+  advance toward 16200 while scan remains at prior tip.
 
 Workflow:
   1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_16100.py)
   2. Paste this helper's stdout into CGJ_SRCS (before rand48.c etc.)
   3. Rebuild libcgj; optional cgj_soft_milestone_*.c host probes
 
-Decade bands for milestone M=16100 (docs only; helper emits paths only):
+Decade bands for milestone M=16200 (docs only; helper emits paths only):
   identity 16051-16075 | fill 16076-16090 | markers 16091-16100
   extension 16001-16050 (pre-decade; may land ahead of identity/fill/markers)
   (prior M=16000: identity 15951-15975 | fill 15976-15990 | markers 15991-16000)

@@ -14,7 +14,7 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 19 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 20 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
@@ -49,8 +49,8 @@
 #define GJ_COMP_MIN_W      32u
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
-/* Wave 19 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE  19u
+/* Wave 20 deepen stamp (file-local; never hard-gates). */
+#define GJ_COMP_SOFT_WAVE  20u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -66,7 +66,7 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 19 exclusive deepen). Cumulative unless noted
+ * Soft product inventory (Wave 20 exclusive deepen). Cumulative unless noted
  * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
@@ -159,7 +159,7 @@ soft_note_peaks(void)
 }
 
 /**
- * Greppable soft compositor inventory (product / smoke; Wave 19 deepen).
+ * Greppable soft compositor inventory (product / smoke; Wave 20 deepen).
  *   compositor: soft honesty …
  *   compositor: soft inventory …
  *   compositor: soft init …
@@ -438,23 +438,38 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
-    /* Grep: compositor: soft deepen — Wave 19 stamp + area count. */
+    /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: compositor: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: compositor: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("compositor: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)GJ_COMP_SOFT_WAVE);
-    /* Grep: compositor: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: compositor: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("compositor: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)GJ_COMP_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: compositor: soft retbound — Wave 20 return-bound honesty */
+    kprintf("compositor: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)GJ_COMP_SOFT_WAVE);
+    /* Grep: compositor: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("compositor: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_COMP_SOFT_WAVE);
     kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "

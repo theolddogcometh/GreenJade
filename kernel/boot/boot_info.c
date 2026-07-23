@@ -12,7 +12,7 @@
  *   boot_info_soft_log     — greppable serial markers (post serial_init)
  *     includes soft Multiboot2 / tag inventory (P-BOOT-2 dev path)
  *
- * Wave 19 exclusive soft deepen — greppable prefix-stable "boot: soft …"
+ * Wave 20 exclusive soft deepen — greppable prefix-stable "boot: soft …"
  * (diagnostics only; never hard-gate product / ExitBootServices):
  *   boot: soft honesty       — explicit non-claims (soft never gates EBS)
  *   boot: soft inventory     — master surface + wave stamp
@@ -36,7 +36,7 @@
  *   boot: soft validate      — Wave 15 handoff validity classify
  *   boot: soft identity      — Wave 15 identity-bridge note (separate unit)
  *   boot: soft catalog       — Wave 19 area name rollup
- *   boot: soft deepen        — wave=19 stamp + area count
+ *   boot: soft deepen        — wave=20 stamp + area count
  *   boot: soft mb2           — PASS|SKIP|REJECT|PARTIAL tag walk
  *   boot: soft mb2 tag       — per-class tag counts
  *   boot: soft mb2 mmap      — first mmap tag entry inventory
@@ -867,8 +867,8 @@ boot_info_soft_mb2_log(const struct gj_boot_info *pInfo)
             (unsigned)g_cSoftMb2InvCalls);
 }
 
-/* Wave 19 exclusive soft deepen stamp (this unit only). */
-#define BI_SOFT_WAVE 19u
+/* Wave 20 exclusive soft deepen stamp (this unit only). */
+#define BI_SOFT_WAVE 20u
 
 /*
  * Wave 15: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
@@ -1255,7 +1255,7 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
             (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft surfaces (Wave 19 deepen) */
+    /* Grep: boot: soft surfaces (Wave 20 deepen) */
     kprintf("boot: soft surfaces count=%u wave=%u "
             "names=honesty,inventory,path,handoff,memmap,gop,flags,caps,"
             "contract,fields,geometry,magic,validate,identity,catalog,"
@@ -1263,8 +1263,8 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
             (unsigned)cAreas + 4u, (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft note (Wave 19 deepen) */
-    kprintf("boot: soft note milestone=wave19 exclusive=1 "
+    /* Grep: boot: soft note (Wave 20 deepen) */
+    kprintf("boot: soft note milestone=wave20 exclusive=1 "
             "soft_only=1 not_bar3=1 handoff=%s source=%u wave=%u\n",
             szHandoff, (unsigned)u32Source, (unsigned)BI_SOFT_WAVE);
     cAreas++;
@@ -1277,7 +1277,7 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
             (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft return (Wave 19 deepen) */
+    /* Grep: boot: soft return (Wave 20 deepen) */
     kprintf("boot: soft return handoff=%s source=%u magic_ok=%d "
             "soft_never_gates=1 product_gate=0 higher_half=OPEN "
             "wave=%u\n",
@@ -1286,23 +1286,38 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
     cAreas++;
 
     /* Grep: boot: soft retmap — Wave 19 return-surface map */
-    kprintf("boot: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=19\n");
+    kprintf("boot: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=20\n");
 
-    /* Grep: boot: soft deepen — Wave 19 stamp + area count. */
+    /* Grep: boot: soft deepen — Wave 20 stamp + area count. */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: boot: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: boot: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("boot: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)BI_SOFT_WAVE);
-    /* Grep: boot: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: boot: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("boot: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)BI_SOFT_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: boot: soft retbound — Wave 20 return-bound honesty */
+    kprintf("boot: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)BI_SOFT_WAVE);
+    /* Grep: boot: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("boot: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)BI_SOFT_WAVE);
     kprintf("boot: soft deepen wave=%u areas=%u handoff=%s source=%u "
             "src=%s memmap=%s gop=%s magic_ok=%d cap_bits=%u "

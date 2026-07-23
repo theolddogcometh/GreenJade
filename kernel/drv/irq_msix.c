@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14/15 base; Wave 19 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 20 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -27,7 +27,7 @@
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
  *   irq: soft return rate — Wave 19 ok/fail rate lamps
  *   irq: soft retcode    — Wave 19 retcode catalog
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=19 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=20 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
  *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
@@ -61,9 +61,9 @@ static u32 g_u32LastPath;
 static int g_fReady;
 static int g_fInHandler;
 
-/* Wave 19 deepen area count (fixed greppable categories in inventory log). */
-#define IRQ_MSIX_SOFT_DEEPEN_AREAS 26u
-#define IRQ_MSIX_SOFT_DEEPEN_WAVE  19u
+/* Wave 20 deepen area count (fixed greppable categories in inventory log). */
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 28u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE  20u
 
 /*
  * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
@@ -392,21 +392,36 @@ irq_msix_soft_inventory_log(const char *szVia)
             "(retcode catalog; Soft≠product)\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: irq: soft deepen wave (Wave 19 stamp) */
+    /* Grep: irq: soft deepen wave (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: irq: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: irq: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("irq: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: irq: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: irq: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("irq: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: irq: soft retbound — Wave 20 return-bound honesty */
+    kprintf("irq: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /* Grep: irq: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("irq: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
             "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
@@ -621,21 +636,36 @@ irq_msix_soft_inventory_log(const char *szVia)
             "wave=%u soft PASS\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: irq_msix: soft deepen (Wave 19 stamp) */
+    /* Grep: irq_msix: soft deepen (Wave 20 stamp) */
     /*
-     * ---- Wave 19 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: irq_msix: soft retclass — Wave 19 return-class taxonomy */
+    /* Grep: irq_msix: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("irq_msix: soft retclass ok|fail|inval|nodev|busy|nomem "
             "soft_only=1 product_gate=0 wave=%u "
             "(retclass taxonomy; Soft≠product; not bar3)\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
-    /* Grep: irq_msix: soft retlane — Wave 19 return-lane catalog */
+    /* Grep: irq_msix: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("irq_msix: soft retlane inv|selftest|rate|retcode|retmap|class "
             "product_kernel=OPEN soft_ne_product=1 wave=%u "
             "(retlane catalog; Soft≠product)\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /*
+     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft≠product; not bar3.
+     */
+    /* Grep: irq_msix: soft retbound — Wave 20 return-bound honesty */
+    kprintf("irq_msix: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
+            "never_blocks_m0=1 wave=%u "
+            "(retbound honesty; Soft≠product; not bar3)\n",
+            (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    /* Grep: irq_msix: soft retseal — Wave 20 exclusive seal stamp */
+    kprintf("irq_msix: soft retseal exclusive=1 soft_ne_product=1 "
+            "product_kernel=OPEN bar3=0 wave=%u "
+            "(retseal stamp; Soft≠product)\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",

@@ -10,7 +10,7 @@
  * First few ICR writes are rate-limited to serial (greppable).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 15 exclusive deepen) — greppable "x2apic: soft …"
+ * Soft inventory (Wave 16 exclusive deepen) — greppable "x2apic: soft …"
  * -------------------------------------------------------------------------
  * Pure observation; never hard-gates IPI delivery. Counters wrap OK.
  * Soft ≠ full ICR/timer replace product (timer.c / apic.c product paths
@@ -42,7 +42,10 @@
  *   x2apic: soft outcome     — enable+bringup soft outcome rollup
  *   x2apic: soft api         — soft accessor / log API surface
  *   x2apic: soft note        — ICR soft-note entry + rate-log tallies
- *   x2apic: soft deepen      — wave=15 areas stamp
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *   x2apic: soft exclusive   — exclusive=1 unit stamp + wave
+ *   x2apic: soft ratio       — probe/enable/icr/eoi path ratios
+ *   x2apic: soft deepen      — wave=16 areas stamp
  *   x2apic: soft PASS|FAIL|idle — soft lamp (never hard-gates)
  *
  * Legacy ICR soft lines kept: "x2apic: icr soft …" (bring-up continuity).
@@ -51,6 +54,7 @@
  * greppable: x2apic: supported=
  * greppable: MSR 0x830 0x83F P-IRQ-1 P-SMP-3
  * greppable: soft != full ICR/timer replace
+ * greppable: x2apic: soft exclusive
  */
 #include <gj/apic.h>
 #include <gj/cpu.h>
@@ -72,10 +76,10 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
-#define X2APIC_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
+#define X2APIC_SOFT_DEEPEN_WAVE  16u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
-#define X2APIC_SOFT_DEEPEN_AREAS 26u
+#define X2APIC_SOFT_DEEPEN_AREAS 28u
 
 /* Soft ICR field masks (SDM ICR; decode only — never rewrites product ICR). */
 #define X2APIC_SOFT_ICR_DM_SHIFT     11u /* destination mode (phys/logical) */
@@ -707,7 +711,33 @@ x2apic_soft_inventory(void)
             (unsigned)X2APIC_SOFT_CPU_SLOTS,
             (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
 
-    /* Grep: x2apic: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     */
+    /* Grep: x2apic: soft exclusive */
+    kprintf("x2apic: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=x2apic.c bar3=0 hard_gate=0 "
+            "full_icr_replace=0 full_timer_replace=0 "
+            "soft_ne_full_replace=1 areas=%u\n",
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE,
+            (unsigned)X2APIC_SOFT_DEEPEN_AREAS);
+
+    /* Grep: x2apic: soft ratio — probe/enable/icr/eoi path ratios */
+    kprintf("x2apic: soft ratio probe=%lu enable_ok=%lu enable_fail=%lu "
+            "icr_writes=%lu icr_self=%lu eoi=%lu note=%lu "
+            "inv_log=%lu slots_en=%u wave=%u\n",
+            (unsigned long)g_u64SoftProbe,
+            (unsigned long)g_u64SoftEnableOk,
+            (unsigned long)g_u64SoftEnableFail,
+            (unsigned long)g_u64IcrWrites,
+            (unsigned long)g_u64IcrSelf,
+            (unsigned long)g_u64SoftEoi,
+            (unsigned long)g_u64SoftIcrNote,
+            (unsigned long)g_u64SoftInventoryLog,
+            cEn,
+            (unsigned)X2APIC_SOFT_DEEPEN_WAVE);
+
+    /* Grep: x2apic: soft deepen wave (Wave 16 stamp) */
     kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

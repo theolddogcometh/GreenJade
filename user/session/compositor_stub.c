@@ -21,6 +21,11 @@
  *   9 MAP_SCANOUT   va hint + u32[3] w,h,stride
  *
  * This stub only prints the product pointer; it does not open the door.
+ *
+ * Soft inventory (Wave 16 exclusive deepen — greppable):
+ *   session-compositor: soft deepen wave=16 …
+ *   session-compositor: soft honesty multi_server=0 confine=0 bar3=0 …
+ * Soft pointer only — never a bar3 / multi-server claim.
  */
 #include <stdio.h>
 
@@ -33,5 +38,10 @@ main(void)
     printf("session-compositor: door ops PRESENT..MAP_SCANOUT = 1..9 "
            "(stable)\n");
     printf("session-compositor: soft reclaim + multi-frame + free path\n");
+    /* Grep: session-compositor: soft deepen (Wave 16 exclusive) */
+    printf("session-compositor: soft deepen wave=16 areas=1 "
+           "multi_server=0 confine=0 bar3=0 exclusive=1\n");
+    printf("session-compositor: soft honesty multi_server=0 confine=0 "
+           "bar3=0 exclusive=1 soft=1 wave=16\n");
     return 0;
 }

@@ -8,7 +8,7 @@
  * Soft deepen: greppable #PF COW path logs + trap soft stats (trap.h).
  * Keep vmm "COW break" strings untouched; except_port_deliver path unchanged.
  *
- * Soft trap inventory (Wave 13 base + Wave 15 exclusive complementary deepen;
+ * Soft trap inventory (Wave 13 base + Wave 16 exclusive complementary deepen;
  * this unit only):
  *   Lifetime classify / #PF COW / PE32 / except-or-kill tallies (gj_trap_stats).
  *   File-local resume/halt/last-frame/rate lamps (never hard-gate).
@@ -26,17 +26,22 @@
  *     trap: soft rate …
  *     trap: soft path …
  *     trap: soft deepen …
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 complementary surfaces (kept; never reshape primary fields):
  *     trap: soft honesty …  — soft-only / non-claim catalog
  *     trap: soft api …      — trap_stats_get/reset/soft call tallies
  *     trap: soft frame …    — last full frame lamps (err/rip/cs/rsp/ss/rflags)
  *     trap: soft vec …      — last vector class + name lamp
  *     trap: soft mile …     — power-of-two milestone / quiet / skip rollup
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *     trap: soft exclusive …— exclusive=1 unit stamp + wave
+ *     trap: soft claim …    — product claim bounds (classify+pe32+cow)
+ *     trap: soft ratio …    — class/outcome/resume/halt path ratios
  *   Emissions only at power-of-two trap_dispatch milestones, hard-capped at
  *   TRAP_SOFT_LOG_MAX. Explicit trap_stats_soft() always dumps (smoke path).
  *   Never hard-gates product policy. Pure C. Soft ≠ bar3.
  * Grep: trap: soft · trap: #PF soft
  * greppable: trap: soft deepen
+ * greppable: trap: soft exclusive
  */
 #include <gj/config.h>
 #include <gj/cpu.h>
@@ -198,12 +203,12 @@ static const char *const g_aszExc[] = {
 static struct gj_trap_stats g_trapStats;
 
 /*
- * Soft inventory serial budget (Wave 15). Absolute cap of greppable dumps;
+ * Soft inventory serial budget (Wave 16). Absolute cap of greppable dumps;
  * milestones are power-of-two non-null trap_dispatch entries (1,2,4,…).
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    15u
+#define TRAP_SOFT_WAVE    16u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -241,7 +246,7 @@ read_cr2(void)
 }
 
 /**
- * Greppable soft trap inventory (product / smoke) — Wave 15 deepen.
+ * Greppable soft trap inventory (product / smoke) — Wave 16 deepen.
  * Prefix-stable markers (trap: soft …):
  *   trap: soft inventory  — totals + rate-limit lamps + wave stamp
  *   trap: soft class      — user/kernel + vector class
@@ -255,9 +260,11 @@ read_cr2(void)
  *   trap: soft halt       — kernel / null frame halt entries
  *   trap: soft rate       — milestone / quiet / force / skip rollup
  *   trap: soft path       — product claim + honesty
- *   trap: soft deepen     — Wave 15 stamp line
- * Wave 15 complementary (never reshape primary):
+ *   trap: soft deepen     — Wave 16 stamp line
+ * Wave 15 complementary (kept; never reshape primary):
  *   trap: soft honesty / api / frame / vec / mile
+ * Wave 16 exclusive complementary (never reshape primary):
+ *   trap: soft exclusive / claim / ratio
  *
  * Never allocates; never hard-gates. Diagnostics only (wrap OK).
  * greppable: trap: soft
@@ -452,16 +459,8 @@ trap_soft_inventory_log(void)
             "rate=pow2+cap wave=%u (soft inventory; not bar3)\n",
             (unsigned)TRAP_SOFT_WAVE);
 
-    /* Grep: trap: soft deepen */
-    kprintf("trap: soft deepen wave=%u areas="
-            "inventory,class,pf,pe32,outcome,stats,"
-            "limit,last,resume,halt,rate,path,"
-            "honesty,api,frame,vec,mile "
-            "unit=trap.c only rate_limited=1\n",
-            (unsigned)TRAP_SOFT_WAVE);
-
     /*
-     * ---- Wave 15 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 15 complementary surfaces (kept; never reshape primary).
      */
 
     /* Grep: trap: soft honesty */
@@ -517,6 +516,53 @@ trap_soft_inventory_log(void)
             g_u32SoftLogged,
             (unsigned)TRAP_SOFT_LOG_MAX,
             u32AtCap);
+
+    /*
+     * ---- Wave 16 exclusive complementary surfaces (never reshape primary).
+     */
+
+    /* Grep: trap: soft exclusive */
+    kprintf("trap: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=trap.c bar3=0 hard_gate=0 soft_only=1 "
+            "rate_limited=1 product_complete=0\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft claim — product claim bounds */
+    kprintf("trap: soft claim classify=1 pe32=1 cow=1 except=1 "
+            "kill_fallthrough=1 rate=pow2+cap "
+            "bar3=0 hard_gate=0 soft_only=1 wave=%u\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft ratio — class/outcome/resume/halt path ratios */
+    kprintf("trap: soft ratio total=%lu user=%lu kern=%lu "
+            "vec32=%lu vec_hi=%lu pf_user=%lu cow_ok=%lu cow_miss=%lu "
+            "pe32_bp=%lu pe32_int80=%lu except_ok=%lu kill=%lu "
+            "halt_kern=%lu halt_null=%lu logs=%u wave=%u\n",
+            (unsigned long)g_trapStats.u64Total,
+            (unsigned long)g_trapStats.u64User,
+            (unsigned long)g_trapStats.u64Kernel,
+            (unsigned long)g_trapStats.u64VecLt32,
+            (unsigned long)g_trapStats.u64VecGe32,
+            (unsigned long)g_trapStats.u64PfUser,
+            (unsigned long)g_trapStats.u64PfCowOk,
+            (unsigned long)g_trapStats.u64PfCowMiss,
+            (unsigned long)g_trapStats.u64Pe32Bp,
+            (unsigned long)g_trapStats.u64Pe32Int80,
+            (unsigned long)g_trapStats.u64ExceptDeliver,
+            (unsigned long)g_trapStats.u64Kill,
+            (unsigned long)g_u64SoftHaltKern,
+            (unsigned long)g_u64SoftHaltNull,
+            g_u32SoftLogged,
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft deepen */
+    kprintf("trap: soft deepen wave=%u areas="
+            "inventory,class,pf,pe32,outcome,stats,"
+            "limit,last,resume,halt,rate,path,"
+            "honesty,api,frame,vec,mile,"
+            "exclusive,claim,ratio "
+            "unit=trap.c only rate_limited=1\n",
+            (unsigned)TRAP_SOFT_WAVE);
 }
 
 /**

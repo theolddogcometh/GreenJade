@@ -35,16 +35,21 @@
  *   "gdt: soft tssbase …"  — TSS descriptor base reconstruct + limit
  *   "gdt: soft expect …"   — product expected access/gran catalog
  *
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 complementary surfaces (kept; never reshape primary fields):
  *   "gdt: soft honesty …"  — soft-only / non-claim catalog
  *   "gdt: soft query …"    — accessor / soft-API sample tallies
  *   "gdt: soft match …"    — expect-vs-live match lamps (all product slots)
  *   "gdt: soft selector …" — raw selector catalog + STAR base
  *   "gdt: soft tssrsp …"   — RSP0/IST1 tops + match/align lamps
- *   "gdt: soft deepen …"   — wave=15 areas stamp
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *   "gdt: soft exclusive …"— exclusive=1 unit stamp + wave
+ *   "gdt: soft claim …"    — product claim bounds (shared GDT/TSS)
+ *   "gdt: soft ratio …"    — init/ap/rsp0/query path ratios
+ *   "gdt: soft deepen …"   — wave=16 areas stamp
  * Soft never hard-gates boot. No bar3 claim.
  * greppable: gdt: soft
  * greppable: gdt: soft deepen
+ * greppable: gdt: soft exclusive
  */
 #include <gj/gdt.h>
 #include <gj/klog.h>
@@ -134,7 +139,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE     15u   /* Wave 15 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE     16u   /* Wave 16 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -585,7 +590,7 @@ gdt_soft_inventory(void)
             (unsigned)GJ_GDT_SOFT_WAVE);
 
     /*
-     * ---- Wave 15 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 15 complementary surfaces (kept; never reshape primary).
      */
 
     /* Grep: gdt: soft honesty */
@@ -646,11 +651,40 @@ gdt_soft_inventory(void)
             (unsigned)g_Tss.u16IomapBase, (unsigned)sizeof(g_Tss),
             g_u32SoftRsp0Set, g_u32SoftRsp0UseIrq, g_u32SoftRsp0UseSkip);
 
-    /* Grep: gdt: soft deepen — Wave 15 stamp + area catalog */
+    /*
+     * ---- Wave 16 exclusive complementary surfaces (never reshape primary).
+     */
+
+    /* Grep: gdt: soft exclusive */
+    kprintf("gdt: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=gdt.c bar3=0 hard_gate=0 per_cpu_tss=0 seh=0 "
+            "soft_only=1\n",
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft claim — shared GDT/TSS product bounds */
+    kprintf("gdt: soft claim slots=8 tss_sel=0x30 star_user_base=0x18 "
+            "shared_gdt=1 bsp_ltr=1 ap_ltr=0 per_cpu_tss=0 "
+            "user_cs32=1 user_cs64=1 user_ds=1 flat=1 "
+            "bar3=0 hard_gate=0 wave=%u\n",
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft ratio — init/ap/rsp0/query path ratios */
+    kprintf("gdt: soft ratio inits=%u ap=%u logs=%u "
+            "rsp0_set=%u rsp0_use_irq=%u rsp0_use_skip=%u "
+            "info_get=%u log_call=%u verify_call=%u "
+            "ctr_get=%u byte_get=%u inv_logs=%u wave=%u\n",
+            g_u32SoftInits, g_u32SoftApLoads, g_u32SoftLogCall,
+            g_u32SoftRsp0Set, g_u32SoftRsp0UseIrq, g_u32SoftRsp0UseSkip,
+            g_u32SoftInfoGet, g_u32SoftLogCall, g_u32SoftVerifyCall,
+            g_u32SoftCtrGet, g_u32SoftByteGet, g_u32SoftInvLogs,
+            (unsigned)GJ_GDT_SOFT_WAVE);
+
+    /* Grep: gdt: soft deepen — Wave 16 stamp + area catalog */
     kprintf("gdt: soft deepen wave=%u areas="
             "inventory,slots,user,tss,lamps,counters,star,path,"
             "kernel,null,cs32,cs64,ds,desc,lar,verify,init,stack,"
-            "geom,tssbase,expect,honesty,query,match,selector,tssrsp "
+            "geom,tssbase,expect,honesty,query,match,selector,tssrsp,"
+            "exclusive,claim,ratio "
             "unit=gdt.c only hard_gate=0\n",
             (unsigned)GJ_GDT_SOFT_WAVE);
 

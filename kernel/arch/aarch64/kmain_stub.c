@@ -6,7 +6,7 @@
  * Not linked by default (product path uses kmain.o which wraps kmain).
  *
  * -------------------------------------------------------------------------
- * Soft product surface (Wave 15 exclusive deepen; never hard-fails M0)
+ * Soft product surface (Wave 16 exclusive deepen; never hard-fails M0)
  * -------------------------------------------------------------------------
  * Soft enter/exit markers bracket GIC + timer probes so a stub-only link
  * still has greppable phase lines. Callees emit their own PASS markers.
@@ -17,9 +17,10 @@
  *   aarch64: kmain_stub soft enter
  *   aarch64: GIC PASS          (from aarch64_gic_init)
  *   aarch64: timer PASS        (from aarch64_timer_probe)
- *   aarch64: kmain_stub soft inventory wave=15 …
+ *   aarch64: kmain_stub soft inventory wave=16 …
  *   aarch64: kmain_stub soft surf …
- *   aarch64: kmain_stub soft deepen wave=15 areas=…
+ *   aarch64: kmain_stub soft deepen wave=16 areas=…
+ *   aarch64: kmain_stub soft return product_kernel=OPEN …
  *   aarch64: kmain_stub soft path product_kernel=OPEN …
  *   aarch64: kmain_stub soft honesty product_kernel=OPEN …
  *   aarch64: kmain_stub soft PASS
@@ -33,10 +34,10 @@ void aarch64_uart_put_hex(unsigned long v);
 void aarch64_gic_init(void);
 void aarch64_timer_probe(void);
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define KMAIN_STUB_SOFT_WAVE  15u
-/* Areas: enter,gic,timer,inventory,surf,path,honesty,deepen */
-#define KMAIN_STUB_SOFT_AREAS 8u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define KMAIN_STUB_SOFT_WAVE  16u
+/* Areas: enter,gic,timer,inventory,surf,return,path,honesty,deepen */
+#define KMAIN_STUB_SOFT_AREAS 9u
 
 void
 aarch64_kmain_stub(void)
@@ -92,8 +93,19 @@ aarch64_kmain_stub(void)
     aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_AREAS);
-    aarch64_uart_puts(" catalog=enter,gic,timer,inventory,surf,path,honesty,"
-                      "deepen soft_only=1\n");
+    aarch64_uart_puts(" catalog=enter,gic,timer,inventory,surf,return,path,"
+                      "honesty,deepen soft_only=1\n");
+
+    /* Grep: aarch64: kmain_stub soft return — Wave 16 return surfaces */
+    aarch64_uart_puts("aarch64: kmain_stub soft return gic=");
+    aarch64_uart_put_hex((unsigned long)uGicDone);
+    aarch64_uart_puts(" timer=");
+    aarch64_uart_put_hex((unsigned long)uTimerDone);
+    aarch64_uart_puts(" bits=");
+    aarch64_uart_put_hex((unsigned long)uSurfBits);
+    aarch64_uart_puts(" product_kernel=OPEN wave=");
+    aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     /* Grep: aarch64: kmain_stub soft path */
     aarch64_uart_puts("aarch64: kmain_stub soft path stub=1 product_kmain=0 "

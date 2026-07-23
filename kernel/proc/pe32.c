@@ -7,7 +7,7 @@
  * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
  * greppable "pe32: … PASS" markers stay stable.
  *
- * Soft inventory (Wave 11 base + Wave 15 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 16 exclusive deepen; this unit only —
  * greppable "pe32: soft …"):
  *   pe32: soft inventory   — capacity + pipeline catalog + log tallies
  *   pe32: soft parse       — parse/sections enter+ok snapshot
@@ -17,7 +17,7 @@
  *   pe32: soft int80       — CS32 int80 smoke surface catalog (not bar3)
  *   pe32: soft path        — honesty: kernel PE soft ≠ Steam/Proton titles
  *   pe32: soft inventory PASS / pe32: soft PASS
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15/16 exclusive complementary surfaces (never reshape primary fields):
  *   pe32: soft reject      — parse/sec/stage/map/validate/reloc/load fails
  *   pe32: soft format      — PE32/PE32+ + i386/amd64 accept tallies
  *   pe32: soft reloc       — ABSOLUTE/HIGHLOW/DIR64/HIGH/LOW/skip/delta0
@@ -25,8 +25,10 @@
  *   pe32: soft stats       — aggregate enter/ok/fail rollup + wave
  *   pe32: soft lamps       — pipeline readiness lamps (software only)
  *   pe32: soft smoke       — smoke/spawn/wow64/int80/vfs ok snapshot
- *   pe32: soft capacity    — Wave 15 max_sec/stage_cap/soft_va geometry
- *   pe32: soft deepen      — wave=15 areas stamp
+ *   pe32: soft capacity    — max_sec/stage_cap/soft_va geometry
+ *   pe32: soft return      — Wave 16 pipeline return-path catalog
+ *   pe32: soft surface     — Wave 16 area catalog
+ *   pe32: soft deepen      — wave=16 areas stamp
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -55,7 +57,7 @@
 #define OPT_PE32P  0x20bu
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define PE32_SOFT_WAVE 15u
+#define PE32_SOFT_WAVE 16u
 
 static u32
 rd32(const u8 *p)
@@ -372,7 +374,7 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned long)g_soft.u64CompatOk,
             (unsigned long)g_soft.u64SoftIretqOk);
 
-    /* Grep: pe32: soft capacity (Wave 15 geometry) */
+    /* Grep: pe32: soft capacity (Wave 16 geometry) */
     kprintf("pe32: soft capacity max_sec=%u stage_cap=0x8000 "
             "soft_va=0x50000000 pe32=1 pe32p=1 i386=1 amd64=1 "
             "parse_ok=%lu load_ok=%lu soft_exec_ok=%lu wave=%u\n",
@@ -382,11 +384,44 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned long)g_soft.u64SoftExecOk,
             (unsigned)PE32_SOFT_WAVE);
 
+    /*
+     * Grep: pe32: soft return
+     * Wave 16 return-path catalog — pipeline enter vs ok outcomes.
+     * Soft ≠ Steam/Proton title / bar3 claim.
+     */
+    kprintf("pe32: soft return parse_ok=%lu parse_e=%lu stage_ok=%lu "
+            "stage_e=%lu map_ok=%lu map_e=%lu validate_ok=%lu "
+            "validate_e=%lu reloc_ok=%lu reloc_e=%lu load_ok=%lu "
+            "load_e=%lu soft_exec_ok=%lu soft_exec_e=%lu "
+            "soft_iretq_ok=%lu wave=%u\n",
+            (unsigned long)g_soft.u64ParseOk,
+            (unsigned long)g_soft.u64ParseEnter,
+            (unsigned long)g_soft.u64StageOk,
+            (unsigned long)g_soft.u64StageEnter,
+            (unsigned long)g_soft.u64MapOk,
+            (unsigned long)g_soft.u64MapEnter,
+            (unsigned long)g_soft.u64ValidateOk,
+            (unsigned long)g_soft.u64ValidateEnter,
+            (unsigned long)g_soft.u64RelocOk,
+            (unsigned long)g_soft.u64RelocEnter,
+            (unsigned long)g_soft.u64LoadOk,
+            (unsigned long)g_soft.u64LoadEnter,
+            (unsigned long)g_soft.u64SoftExecOk,
+            (unsigned long)g_soft.u64SoftExecEnter,
+            (unsigned long)g_soft.u64SoftIretqOk,
+            (unsigned)PE32_SOFT_WAVE);
+
+    /* Grep: pe32: soft surface — Wave 16 area catalog */
+    kprintf("pe32: soft surface inventory,parse,stage,load,exec,int80,"
+            "path,reject,format,reloc,soft_va,stats,lamps,smoke,"
+            "capacity,return,surface,deepen areas=18 wave=%u\n",
+            (unsigned)PE32_SOFT_WAVE);
+
     /* Grep: pe32: soft deepen */
     kprintf("pe32: soft deepen wave=%u areas="
             "inventory,parse,stage,load,exec,int80,path,"
-            "reject,format,reloc,soft_va,stats,lamps,smoke,capacity "
-            "unit=pe32.c only hard_gate=0 via=%s\n",
+            "reject,format,reloc,soft_va,stats,lamps,smoke,capacity,"
+            "return,surface unit=pe32.c only hard_gate=0 via=%s\n",
             (unsigned)PE32_SOFT_WAVE, szViaSafe);
 
     /* Grep: pe32: soft inventory PASS / pe32: soft PASS */

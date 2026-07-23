@@ -7,8 +7,9 @@
  *   PRESENT, DISPLAY_INFO, INPUT_POLL, INPUT_POP, STATS,
  *   PRESENT_FB, CLAIM, RELEASE, MAP_SCANOUT
  * Host CI simulates the same present + input fanout protocol shapes.
- * Freestanding live path: sessiond_gj.c (Wave 14 soft inventory exclusive).
+ * Freestanding live path: sessiond_gj.c (Wave 16 soft inventory exclusive).
  * Host A1 here is libc soft-shape only — soft ≠ product multi-server confine.
+ * Soft honesty: multi_server=0 confine=0 bar3=0 (Wave 16 exclusive deepen).
  *
  * Smoke markers (prefix-stable; scripts/smoke-all.sh greps sessiond: PASS):
  *   sessiond: PRESENT_FB path PASS
@@ -402,6 +403,14 @@ main(void)
     }
 
     printf("sessiond: compositor path PASS\n");
+    /*
+     * Grep: sessiond: soft deepen / soft honesty (Wave 16 exclusive).
+     * Host A1 soft inventory only — soft ≠ product multi-server confine.
+     */
+    printf("sessiond: soft deepen wave=16 areas=1 multi_server=0 "
+           "confine=0 bar3=0 exclusive=1\n");
+    printf("sessiond: soft honesty multi_server=0 confine=0 bar3=0 "
+           "exclusive=1 soft=1 wave=16\n");
     printf("sessiond: PASS\n");
     return 0;
 }

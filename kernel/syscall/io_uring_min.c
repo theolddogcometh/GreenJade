@@ -17,7 +17,7 @@
  * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
  * not bar3, and not a Deck Top-50 claim.
  *
- * Soft inventory (Wave 14 base + Wave 15 exclusive deepen) — greppable "io_uring: soft …":
+ * Soft inventory (Wave 14 base + Wave 16 exclusive deepen) — greppable "io_uring: soft …":
  *   io_uring: soft inventory   — pool/depth caps + call rollup + wave
  *   io_uring: soft setup       — setup ok/enomem/efault tallies
  *   io_uring: soft enter       — enter/submit/inject/eagain tallies
@@ -31,7 +31,7 @@
  *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
  *   io_uring: soft last        — Wave 15 live pool snapshot lamps
  *   io_uring: soft catalog     — Wave 15 surface catalog stamp
- *   io_uring: soft deepen      — wave=15 areas stamp
+ *   io_uring: soft deepen      — wave=16 areas stamp
  *   io_uring: soft inventory PASS / soft PASS
  * greppable: io_uring: soft
  *
@@ -273,13 +273,13 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE  15u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define GJ_IORING_SOFT_WAVE  16u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 15u
+#define GJ_IORING_SOFT_AREAS 18u
 
 /*
- * Soft product inventory (Wave 15 exclusive deepen). File-local sticky
+ * Soft product inventory (Wave 16 exclusive deepen). File-local sticky
  * counters; wrap OK; diagnostics only — never hard-gate setup/enter/register.
  * greppable: io_uring: soft
  */
@@ -426,7 +426,7 @@ ioring_soft_scan(void)
 }
 
 /**
- * Greppable soft inventory (Wave 15 exclusive deepen). Prefix "io_uring: soft …".
+ * Greppable soft inventory (Wave 16 exclusive deepen). Prefix "io_uring: soft …".
  * Pure observation — never gates min-rings smoke PASS.
  * Honesty: min rings ≠ full game I/O (soft scaffold only).
  *
@@ -632,10 +632,22 @@ ioring_soft_log(void)
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS);
 
-    /* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
+        /* Grep: io_uring: soft surfaces (Wave 16 deepen) */
+    kprintf("io_uring: soft surfaces count=%u wave=%u "
+            "names=inventory,pool,calls,path,caps,inject,honesty,rates,"
+            "last,catalog,surfaces,note,deepen,PASS\n",
+            (unsigned)GJ_IORING_SOFT_AREAS, (unsigned)GJ_IORING_SOFT_WAVE);
+
+    /* Grep: io_uring: soft note (Wave 16 deepen) */
+    kprintf("io_uring: soft note milestone=wave16 exclusive=1 "
+            "min_rings=1 full_game_io=0 soft_only=1 not_bar3=1 "
+            "wave=%u\n",
+            (unsigned)GJ_IORING_SOFT_WAVE);
+
+/* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
     kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "
             "used=%u mapped=%u setup_ok=%lu enter_ok=%lu sqe_exec=%lu "
-            "(Wave 15 exclusive; min rings soft scaffold; not product game I/O; "
+            "(Wave 16 exclusive; min rings soft scaffold; not product game I/O; "
             "not bar3)\n",
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS,

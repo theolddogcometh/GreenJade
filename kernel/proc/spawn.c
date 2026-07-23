@@ -54,10 +54,10 @@ static u32 g_cMintSoft;      /* soft post-mint verify PASS */
 static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
 
 /*
- * Soft product inventory (Wave 15 deepen). Cumulative unless noted live/peak.
+ * Soft product inventory (Wave 16 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 15u
+#define GJ_SPAWN_SOFT_WAVE 16u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -161,7 +161,7 @@ soft_note_live_peak(void)
 }
 
 /**
- * Greppable soft spawn inventory (Wave 15 deepen; product / smoke).
+ * Greppable soft spawn inventory (Wave 16 deepen; product / smoke).
  * Prefix-stable markers (spawn: soft …):
  *   spawn: soft inventory  — table caps + live/peak + rights + logs
  *   spawn: soft stats      — cumulative ok/fail/live/kill/wait/mint*
@@ -170,10 +170,12 @@ soft_note_live_peak(void)
  *   spawn: soft kill       — enter/ok/idem + deny catalog
  *   spawn: soft wait       — enter/ok/again + deny catalog
  *   spawn: soft from_cap   — process_from_cap hit/miss
- *   spawn: soft teardown   — Wave 15 reverse-path + AS teardown
- *   spawn: soft lifecycle  — Wave 15 persona/JIT/wait-reg/last thr
- *   spawn: soft capacity   — Wave 15 table/cnode/rights geometry
- *   spawn: soft deepen     — Wave 15 stamp
+ *   spawn: soft teardown   — reverse-path + AS teardown
+ *   spawn: soft lifecycle  — persona/JIT/wait-reg/last thr
+ *   spawn: soft capacity   — table/cnode/rights geometry
+ *   spawn: soft return     — Wave 16 return-path catalog
+ *   spawn: soft surface    — Wave 16 area catalog
+ *   spawn: soft deepen     — Wave 16 stamp
  *   spawn: soft path       — honesty: fixed table ≠ full posix_spawn
  *   spawn: soft inventory PASS / spawn: soft PASS
  *
@@ -282,6 +284,28 @@ soft_inventory_log(const char *szVia)
             "posix_spawn=0 multi_server_confine=0 via=%s wave=%u "
             "(soft inventory; not bar3)\n",
             GJ_SPAWN_MAX, (unsigned)GJ_SPAWN_CNODE_SLOTS, szViaSafe,
+            GJ_SPAWN_SOFT_WAVE);
+
+    /*
+     * Grep: spawn: soft return
+     * Wave 16 return-path catalog — spawn/mint/kill/wait deny outcomes.
+     * Soft ≠ posix_spawn / multi-server confine product.
+     */
+    kprintf("spawn: soft return spawn_ok=%u spawn_fail=%u deny_null=%u "
+            "deny_full=%u deny_as=%u deny_mint=%u deny_thr=%u "
+            "mint_ok=%u mint_fail=%u mint_soft=%u mint_soft_bad=%u "
+            "kill_ok=%u kill_idem=%u wait_ok=%u wait_again=%u "
+            "from_cap_hit=%u from_cap_miss=%u wave=%u\n",
+            g_cSpawned, g_cSpawnFail, g_u32SoftDenyNull, g_u32SoftDenyFull,
+            g_u32SoftDenyAs, g_u32SoftDenyMint, g_u32SoftDenyThr, g_cMintOk,
+            g_cMintFail, g_cMintSoft, g_cMintSoftBad, g_cKill,
+            g_u32SoftKillIdem, g_cWait, g_u32SoftWaitAgain,
+            g_u32SoftFromCapHit, g_u32SoftFromCapMiss, GJ_SPAWN_SOFT_WAVE);
+
+    /* Grep: spawn: soft surface — Wave 16 area catalog */
+    kprintf("spawn: soft surface inventory,stats,spawn,mint,kill,wait,"
+            "from_cap,teardown,lifecycle,capacity,path,return,surface,"
+            "deepen areas=14 wave=%u\n",
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft deepen */

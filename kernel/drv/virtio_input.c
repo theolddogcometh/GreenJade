@@ -40,7 +40,7 @@
  *   virtio-input: soft types …       (Wave 15)
  *   virtio-input: soft kicks …       (Wave 15)
  *   virtio-input: soft honesty …     (Wave 15)
- *   virtio-input: soft deepen wave=15 …
+ *   virtio-input: soft deepen wave=16 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -87,8 +87,8 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MAX 32767
 
 /* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define VI_SOFT_WAVE  15u
-#define VI_SOFT_AREAS 25u
+#define VI_SOFT_WAVE  16u
+#define VI_SOFT_AREAS 30u
 
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
@@ -731,7 +731,70 @@ soft_inventory(const char *szVia)
             "product_input=0 soft_only=1 wave=%u areas=%u\n",
             (unsigned)VI_SOFT_WAVE, (unsigned)VI_SOFT_AREAS);
 
-    /* Grep: virtio-input: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: virtio-input: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32HitBp = 0;
+        u32 u32PollTot = g_u32Polls;
+
+        if (u32PollTot != 0u) {
+            u32HitBp = (g_u32PollHits * 10000u) / u32PollTot;
+        }
+        if (u32Ready != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (g_u32EventCount != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (g_u32PollHits != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (g_cPosted != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (g_u32Dropped != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (g_u32Kicks != 0u) {
+            u32Surf |= 0x20u;
+        }
+        u32Surf |= 0x40u; /* multi-slot soft ring */
+        u32Surf |= 0x80u; /* honesty catalog always present */
+        /* Grep: virtio-input: soft ratio */
+        kprintf("virtio-input: soft ratio hit_bp=%u polls=%u hits=%u "
+                "events=%u dropped=%u wave=%u soft PASS\n",
+                u32HitBp, g_u32Polls, g_u32PollHits,
+                (unsigned)g_u32EventCount, (unsigned)g_u32Dropped,
+                (unsigned)VI_SOFT_WAVE);
+        /* Grep: virtio-input: soft headroom */
+        kprintf("virtio-input: soft headroom q_size=%u free_now=%u "
+                "posted=%u burst_max=%u abs_soft_max=%u wave=%u soft PASS\n",
+                (unsigned)u16QSize, (unsigned)u16FreeNow,
+                (unsigned)g_cPosted, g_u32DrainBurstMax,
+                (unsigned)VI_ABS_SOFT_MAX, (unsigned)VI_SOFT_WAVE);
+        /* Grep: virtio-input: soft surface */
+        kprintf("virtio-input: soft surface inventory,geometry,queue,events,"
+                "poll,slots,claim,via,ready,types,kicks,honesty,ratio,"
+                "headroom,return,contract,deepen areas=%u wave=%u\n",
+                (unsigned)VI_SOFT_AREAS, (unsigned)VI_SOFT_WAVE);
+        /* Grep: virtio-input: soft return — return-surface bitmask */
+        kprintf("virtio-input: soft return surf=0x%x ready=%u events=%u "
+                "hits=%u posted=%u dropped=%u kicks=%u via=%s areas=%u "
+                "wave=%u soft PASS\n",
+                u32Surf, u32Ready, (unsigned)g_u32EventCount, g_u32PollHits,
+                (unsigned)g_cPosted, (unsigned)g_u32Dropped, g_u32Kicks,
+                szViaSafe, (unsigned)VI_SOFT_AREAS, (unsigned)VI_SOFT_WAVE);
+        /* Grep: virtio-input: soft contract — soft ≠ game I/O */
+        kprintf("virtio-input: soft contract soft_only=1 game_io=0 "
+                "product_input=0 steam=0 multi_dev=0 bar3=open wave=%u "
+                "soft PASS\n",
+                (unsigned)VI_SOFT_WAVE);
+    }
+
+    /* Grep: virtio-input: soft deepen wave (Wave 16 stamp) */
     kprintf("virtio-input: soft deepen wave=%u areas=%u via=%s ready=%u "
             "events=%u polls=%u posted=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

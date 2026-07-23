@@ -22,8 +22,8 @@
  * (no putchar flood). Soft ≠ IRQ console, ≠ bar3, ≠ product TTY.
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
- * Wave 15 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=15
+ * Wave 16 exclusive deepen, prefix-stable):
+ *   serial: soft inventory … wave=16
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -34,13 +34,18 @@
  *   serial: soft path polled=1 irq=0 fcr=0x… spin_cap=… ready=… live=…
  *   serial: soft expect ier_ok=… lcr_ok=… mcr_ok=… div_ok=… live_ok=…
  *   serial: soft verify PASS|FAIL|idle (ok=… bad=…)
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 complementary surfaces (kept; never reshape primary fields):
  *   serial: soft lamps …      — ready/live/thre/temt/dtr/rts/out2/noint
  *   serial: soft stats …      — aggregate path counters + wave
  *   serial: soft mcr …        — DTR|RTS|OUT2 path lamps
  *   serial: soft float …      — float/live presence axis
  *   serial: soft honesty …    — soft ≠ IRQ console / bar3 / product TTY
- *   serial: soft deepen …     — wave=15 areas stamp
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *   serial: soft exclusive …  — exclusive=1 unit stamp + wave
+ *   serial: soft claim …      — product claim bounds (polled console)
+ *   serial: soft ratio …      — ok/bad + poll hit/miss + thr path ratios
+ *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
+ *   serial: soft deepen …     — wave=16 areas stamp
  *
  * Soft APIs (linkable; no main hook required — serial_init self-logs):
  *   serial_soft_inits / chars / spinmax / thr_waits / polls / getcs
@@ -112,7 +117,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 15u
+#define UART_SOFT_WAVE 16u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -717,9 +722,9 @@ serial_soft_verify(void)
 
 /**
  * Greppable soft summary (product / smoke inventory).
- * Wave 10 base + Wave 13 path + Wave 15 exclusive complementary deepen;
+ * Wave 10 base + Wave 13 path + Wave 16 exclusive complementary deepen;
  * re-verify once per log. Not hot-path — soft stats smoke only (no flood).
- * Primary field names stay stable; Wave 15 adds complementary sub-lines.
+ * Primary field names stay stable; Wave 16 adds complementary sub-lines.
  */
 void
 serial_soft_log(void)
@@ -736,7 +741,7 @@ serial_soft_log(void)
     }
 
     /*
-     * Grep: serial: soft inventory — Wave 15 rollup + wave stamp.
+     * Grep: serial: soft inventory — Wave 16 rollup + wave stamp.
      * One catalog line; densifies counters without boot spam.
      * Prior keys remain prefix-stable; wave= advances.
      */
@@ -842,7 +847,7 @@ serial_soft_log(void)
             (unsigned)g_SoftSnap.u8ScrOk, (unsigned)g_SoftSnap.u8VerifyOk);
 
     /*
-     * Wave 15 exclusive complementary sub-lines (never reshape primary).
+     * Wave 15 complementary sub-lines (kept; never reshape primary).
      */
     /* Grep: serial: soft lamps */
     kprintf("serial: soft lamps ready=%u live=%u float=%u thre=%u "
@@ -895,10 +900,53 @@ serial_soft_log(void)
             "soft_ne_product_tty=1 wave=%u unit=serial.c\n",
             (unsigned)UART_SOFT_WAVE);
 
+    /*
+     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     */
+    /* Grep: serial: soft exclusive */
+    kprintf("serial: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=serial.c bar3=0 hard_gate=0 irq_console=0 "
+            "product_tty=0 soft_ne_product_tty=1\n",
+            (unsigned)UART_SOFT_WAVE);
+
+    /* Grep: serial: soft claim — polled console product bounds */
+    kprintf("serial: soft claim polled=1 irq=0 baud=%u div=0x%x "
+            "lcr=8n1 mcr=dtr|rts|out2 fcr_shadow=1 ier=0 "
+            "spin_cap=%u irq_console=0 bar3=0 product_tty=0 wave=%u\n",
+            (unsigned)UART_SOFT_BAUD,
+            (unsigned)(UART_SOFT_DIV_LO | ((unsigned)UART_SOFT_DIV_HI << 8)),
+            (unsigned)UART_SOFT_SPIN_MAX,
+            (unsigned)UART_SOFT_WAVE);
+
+    /* Grep: serial: soft ratio — ok/bad + poll/thr path ratios */
+    kprintf("serial: soft ratio ok=%u bad=%u match=%u "
+            "poll_hit=%u poll_miss=%u thrwait=%u txfull=%u "
+            "spin_cap_hit=%u putchar=%u write=%u cr_expand=%u "
+            "chars=%u wave=%u\n",
+            (unsigned)g_u32SoftVerifyOk, (unsigned)g_u32SoftVerifyBad,
+            (unsigned)g_SoftSnap.u8VerifyOk,
+            (unsigned)g_u32SoftPollHit, (unsigned)g_u32SoftPollMiss,
+            (unsigned)g_u32SoftThrWaits, (unsigned)g_u32SoftTxFullHits,
+            (unsigned)g_u32SoftSpinCapHit, (unsigned)g_u32SoftPutcharN,
+            (unsigned)g_u32SoftWriteN, (unsigned)g_u32SoftCrExpand,
+            (unsigned)g_u32SoftChars, (unsigned)UART_SOFT_WAVE);
+
+    /* Grep: serial: soft err — LSR error lamp rollup */
+    kprintf("serial: soft err oe=%u pe=%u fe=%u bi=%u err=%u "
+            "lsr=0x%x any=%u wave=%u\n",
+            (unsigned)g_SoftSnap.u8Oe, (unsigned)g_SoftSnap.u8Pe,
+            (unsigned)g_SoftSnap.u8Fe, (unsigned)g_SoftSnap.u8Bi,
+            (unsigned)g_SoftSnap.u8Err, (unsigned)g_SoftSnap.u8Lsr,
+            (unsigned)((g_SoftSnap.u8Oe | g_SoftSnap.u8Pe |
+                        g_SoftSnap.u8Fe | g_SoftSnap.u8Bi |
+                        g_SoftSnap.u8Err) != 0u ? 1u : 0u),
+            (unsigned)UART_SOFT_WAVE);
+
     /* Grep: serial: soft deepen — wave stamp + area catalog */
     kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,"
             "port,div,msr,thr,iir,path,expect,verify,"
-            "lamps,stats,mcr,float,honesty "
+            "lamps,stats,mcr,float,honesty,"
+            "exclusive,claim,ratio,err "
             "unit=serial.c only hard_gate=0 ready=%u live=%u\n",
             (unsigned)UART_SOFT_WAVE,
             (unsigned)(g_fSerialReady ? 1u : 0u),

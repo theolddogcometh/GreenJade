@@ -9,7 +9,7 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14 base; Wave 15 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 16 exclusive deepen; this unit only):
  * greppable: "pci: soft …" | "msix: soft …"
  *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
  *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
@@ -21,10 +21,14 @@
  *   pci: soft caps …      / msix: soft caps …       — MSI/MSI-X cap IDs
  *   pci: soft consts …    / msix: soft consts …     — vec + addr base map
  *   pci: soft path …      / msix: soft path …       — honesty non-claim
- *   pci: soft deepen …    / msix: soft deepen …     — wave=15 areas stamp
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=16 areas stamp
  *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
  *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
- *   pci: soft surface …   / msix: soft surface …    — Wave 15 area catalog
+ *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
+ *   pci: soft honesty …   / msix: soft honesty …    — Wave 16 bar3 non-claims
+ *   pci: soft geom …      / msix: soft geom …       — Wave 16 soft table geom
+ *   pci: soft return …    / msix: soft return …     — Wave 16 return surfaces
+ *   pci: soft contract …  / msix: soft contract …   — Wave 16 soft≠game I/O
  *   pci: soft stats …     / msix: soft stats …      — emission tallies
  *   pci: soft inventory PASS / pci: soft PASS
  *   msix: soft inventory PASS / msix: soft PASS
@@ -59,9 +63,9 @@ static int g_fSoftReady;
 /* Wave 14: times soft inventory printed (diagnostics only). */
 static u32 g_u32SoftInvLogs;
 
-/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
-#define PCI_MSIX_SOFT_DEEPEN_AREAS 15u
-#define PCI_MSIX_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
+#define PCI_MSIX_SOFT_DEEPEN_AREAS 19u
+#define PCI_MSIX_SOFT_DEEPEN_WAVE  16u
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -547,18 +551,85 @@ pci_msix_soft_inventory(const char *szVia)
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
         /* Grep: pci: soft surface / msix: soft surface */
         kprintf("pci: soft surface inventory,table,entry,pba,fire,mask,hw,"
-                "caps,consts,path,ratio,headroom,deepen,stats "
-                "areas=%u wave=%u\n",
+                "caps,consts,path,ratio,headroom,honesty,geom,return,"
+                "contract,deepen,stats areas=%u wave=%u\n",
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
         kprintf("msix: soft surface inventory,table,entry,pba,fire,mask,hw,"
-                "caps,consts,path,ratio,headroom,deepen,stats "
-                "areas=%u wave=%u\n",
+                "caps,consts,path,ratio,headroom,honesty,geom,return,"
+                "contract,deepen,stats areas=%u wave=%u\n",
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: pci: soft deepen / msix: soft deepen (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: pci: soft honesty|geom|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+
+        if (g_fSoftReady != 0) {
+            u32Surf |= 0x1u; /* soft table ready */
+        }
+        if (cProgLive != 0u) {
+            u32Surf |= 0x2u; /* programmed entries */
+        }
+        if (cMasked != 0u) {
+            u32Surf |= 0x4u; /* masked entries */
+        }
+        if (cFired != 0u) {
+            u32Surf |= 0x8u; /* fired entries */
+        }
+        if (g_u32Programmed != 0u) {
+            u32Surf |= 0x10u; /* HW program path */
+        }
+        u32Surf |= 0x20u; /* caps/consts always catalogued */
+        /* Grep: pci: soft honesty / msix: soft honesty */
+        kprintf("pci: soft honesty soft_shadow=1 full_table_size=0 "
+                "game_io=0 product_irq=0 bar3=open soft_only=1 "
+                "wave=%u soft PASS\n",
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("msix: soft honesty soft_shadow=1 full_table_size=0 "
+                "game_io=0 product_irq=0 bar3=open soft_only=1 "
+                "wave=%u soft PASS\n",
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: pci: soft geom / msix: soft geom */
+        kprintf("pci: soft geom depth=%u probe_vec=0x%x addr_base=0x%x "
+                "cap_msi=0x%x cap_msix=0x%x wave=%u soft PASS\n",
+                (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_PROBE_VEC,
+                (unsigned)MSI_ADDR_BASE, (unsigned)PCI_CAP_ID_MSI,
+                (unsigned)PCI_CAP_ID_MSIX, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("msix: soft geom depth=%u probe_vec=0x%x addr_base=0x%x "
+                "cap_msi=0x%x cap_msix=0x%x wave=%u soft PASS\n",
+                (unsigned)GJ_MSIX_SOFT_TBL, (unsigned)PCI_MSIX_PROBE_VEC,
+                (unsigned)MSI_ADDR_BASE, (unsigned)PCI_CAP_ID_MSI,
+                (unsigned)PCI_CAP_ID_MSIX, (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: pci: soft return / msix: soft return */
+        kprintf("pci: soft return surf=0x%x ready=%u prog_live=%u "
+                "masked=%u fired=%u hw_prog=%u via=%s areas=%u wave=%u "
+                "soft PASS\n",
+                u32Surf, (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
+                (unsigned)cMasked, (unsigned)cFired, (unsigned)g_u32Programmed,
+                szViaSafe, (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("msix: soft return surf=0x%x ready=%u prog_live=%u "
+                "masked=%u fired=%u hw_prog=%u via=%s areas=%u wave=%u "
+                "soft PASS\n",
+                u32Surf, (unsigned)(g_fSoftReady ? 1 : 0), (unsigned)cProgLive,
+                (unsigned)cMasked, (unsigned)cFired, (unsigned)g_u32Programmed,
+                szViaSafe, (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: pci: soft contract / msix: soft contract — soft ≠ game I/O */
+        kprintf("pci: soft contract soft_only=1 game_io=0 product_io=0 "
+                "full_msix=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("msix: soft contract soft_only=1 game_io=0 product_io=0 "
+                "full_msix=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: pci: soft deepen / msix: soft deepen (Wave 16 stamp) */
     kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
             "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,

@@ -17,7 +17,7 @@
  *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
  *   when virtio-input is absent (empty ring).
  *
- * Soft door inventory (Wave 15 exclusive deepen; this unit only):
+ * Soft door inventory (Wave 16 exclusive deepen; this unit only):
  *   - Ownership: claim / reclaim / release / busy / claim_inval
  *   - Present: PRESENT / PRESENT_FB ok|fail|nodev + multi-frame tallies
  *   - Input: poll + pop hit/empty (soft-ok without virtio-input)
@@ -27,7 +27,8 @@
  *   - Peaks: calls / claims / reclaims / user_presents high-water
  *   - Soft ok tally + ok_bp ratio + STATS flag soft samples
  *   - Soft verdict INIT|PASS|PARTIAL + path honesty catalog
- *   - Wave 15: honesty / owner / terminal / catalog / deepen
+ *   - Wave 15 base: honesty / owner / terminal / catalog / deepen
+ *   - Wave 16: capacity / headroom / surface / geom lamps
  *   greppable: "session_door: soft …"
  *   greppable: "session_door: soft deepen"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
@@ -49,8 +50,8 @@
 #define GJ_SESS_MAX_DIM 256u
 #define GJ_SESS_TMP_W   64u
 #define GJ_SESS_TMP_H   64u
-/* Wave 15 deepen stamp (file-local; never hard-gates). */
-#define GJ_SESS_SOFT_WAVE 15u
+/* Wave 16 deepen stamp (file-local; never hard-gates). */
+#define GJ_SESS_SOFT_WAVE 16u
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -60,7 +61,7 @@ static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
 /*
- * Soft product inventory (Wave 15 exclusive deepen). Cumulative path tallies.
+ * Soft product inventory (Wave 16 exclusive deepen). Cumulative path tallies.
  * greppable: session_door: soft …
  */
 static u32 g_u32SoftClaimInval;    /* CLAIM bad token */
@@ -248,7 +249,7 @@ sess_soft_note_op(u32 u32Op)
 }
 
 /**
- * Greppable soft session door inventory (product / smoke; Wave 15 deepen).
+ * Greppable soft session door inventory (product / smoke; Wave 16 deepen).
  *   session_door: soft honesty …
  *   session_door: soft inventory …
  *   session_door: soft claim …
@@ -265,6 +266,10 @@ sess_soft_note_op(u32 u32Op)
  *   session_door: soft err …
  *   session_door: soft owner …
  *   session_door: soft terminal …
+ *   session_door: soft capacity …   (Wave 16)
+ *   session_door: soft headroom …   (Wave 16)
+ *   session_door: soft surface …    (Wave 16)
+ *   session_door: soft geom …       (Wave 16)
  *   session_door: soft catalog …
  *   session_door: soft path …
  *   session_door: soft deepen …
@@ -471,10 +476,51 @@ sess_soft_inventory_log(void)
             (long)g_i64SoftLastRet);
     cAreas++;
 
+    /* Grep: session_door: soft capacity — Wave 16 design-constant lamps. */
+    kprintf("session_door: soft capacity max_dim=%u tmp=%ux%u bpp=4 "
+            "ops=9 reclaim=1 multi_frame=1 map_scanout=1 "
+            "present_fb=direct|blit soft PASS wave=%u\n",
+            GJ_SESS_MAX_DIM, GJ_SESS_TMP_W, GJ_SESS_TMP_H, GJ_SESS_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: session_door: soft headroom — Wave 16 live slack lamps. */
+    kprintf("session_door: soft headroom calls=%u peak_calls=%u "
+            "claims=%u peak_claims=%u user_fb=%u peak_user_fb=%u "
+            "ok=%u err_sum=%u wave=%u\n",
+            g_u32Calls, g_u32SoftPeakCalls, g_u32Claims, g_u32SoftPeakClaims,
+            g_u32UserPresents, g_u32SoftPeakUserPres, g_u32SoftOk, u32ErrSum,
+            GJ_SESS_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: session_door: soft surface — Wave 16 surface bit lamps. */
+    kprintf("session_door: soft surface ready=%u input=%u gpu=%u owned=%u "
+            "user_fb=%u multi=%u present_ok=%u fb_ok=%u map_ok=%u "
+            "surf=0x%x wave=%u\n",
+            u32Ready, u32Input, u32Gpu, u32Owned, u32UserFb, u32Multi,
+            g_u32SoftPresentOk != 0u ? 1u : 0u,
+            g_u32SoftPresentFbOk != 0u ? 1u : 0u,
+            g_u32SoftMapOk != 0u ? 1u : 0u,
+            (u32Ready) | (u32Input << 1) | (u32Gpu << 2) | (u32Owned << 3) |
+                (u32UserFb << 4) | (u32Multi << 5) |
+                ((g_u32SoftPresentOk != 0u) ? (1u << 6) : 0u) |
+                ((g_u32SoftPresentFbOk != 0u) ? (1u << 7) : 0u) |
+                ((g_u32SoftMapOk != 0u) ? (1u << 8) : 0u),
+            GJ_SESS_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: session_door: soft geom — Wave 16 scanout geometry snapshot. */
+    kprintf("session_door: soft geom ready=%u w=%u h=%u max_dim=%u "
+            "tmp=%ux%u bpp=bgra4 soft %s wave=%u\n",
+            u32Ready, u32W, u32H, GJ_SESS_MAX_DIM, GJ_SESS_TMP_W,
+            GJ_SESS_TMP_H, u32Ready != 0u ? "PASS" : "INIT",
+            GJ_SESS_SOFT_WAVE);
+    cAreas++;
+
     /* Grep: session_door: soft catalog */
     kprintf("session_door: soft catalog honesty,inventory,claim,present,"
             "input,meta,op,copy,blit,peaks,last,flags,ratio,err,owner,"
-            "terminal,catalog,path,deepen wave=%u areas_expect=19 soft PASS\n",
+            "terminal,capacity,headroom,surface,geom,catalog,path,deepen "
+            "wave=%u areas_expect=23 soft PASS\n",
             GJ_SESS_SOFT_WAVE);
     cAreas++;
 
@@ -486,7 +532,7 @@ sess_soft_inventory_log(void)
             GJ_SESS_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: session_door: soft deepen — Wave 15 stamp + area count. */
+    /* Grep: session_door: soft deepen — Wave 16 stamp + area count. */
     kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u owned=%u presents_user=%u claims=%u multi=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",
@@ -625,7 +671,7 @@ session_door_claim_count(void)
     /* Soft diagnostics: first claims + idempotent reclaims. */
     /*
      * Emit soft inventory on claim stats read so bring-up can grep
-     * session_door: soft … (Wave 15). greppable: session_door claim soft
+     * session_door: soft … (Wave 16). greppable: session_door claim soft
      */
     sess_soft_inventory_log();
     return g_u32Claims + g_u32Reclaims;

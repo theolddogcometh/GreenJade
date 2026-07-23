@@ -20,6 +20,11 @@
  *   cpu: soft ratio|headroom|surface|deepen  — bp ratios + catalog stamp
  *   Inventory wave stamp → 15; areas → 12. Primary PASS|counters|probe|slot
  *   lines stay field-stable. Never hard-gates product; wrap-OK + kprintf only.
+ *
+ * Wave 16 exclusive soft deepen (this unit only — greppable "cpu: soft …"):
+ *   cpu: soft return|surface|deepen  — publish/init/gs return-path catalog
+ *   Inventory wave stamp → 16; areas → 15. Primary PASS|counters|probe|slot
+ *   lines stay field-stable. Soft ≠ bar3 / multi-CPU product gate.
  */
 #include <gj/cpu.h>
 #include <gj/gdt.h>
@@ -647,9 +652,9 @@ cpu_soft_log(void)
     }
 
     /*
-     * Wave 14/15 exclusive deepen (complementary; never reshapes primary):
+     * Wave 14/15/16 exclusive deepen (complementary; never reshapes primary):
      *   cpu: soft inventory|pool|publish|reject_class|dyn|gs|layout|path
-     *   cpu: soft ratio|headroom|surface|deepen  (Wave 15)
+     *   cpu: soft ratio|headroom|surface|return|deepen  (Wave 15/16)
      * greppable: cpu: soft
      */
     {
@@ -663,6 +668,9 @@ cpu_soft_log(void)
         u32 u32RejectBp;
         u32 u32OomBp;
         u32 u32HhdmBp;
+        u32 u32IdentBp;
+        u32 u32PublishSum;
+        u32 u32PublishOkBp;
         u64 u64GsNow;
 
         /* Soft headroom vs design ceilings (diagnostics only). */
@@ -709,8 +717,20 @@ cpu_soft_log(void)
         }
         if (stSoft.u32DynAlloc != 0) {
             u32HhdmBp = (g_u32SoftDynHhdm * 10000u) / stSoft.u32DynAlloc;
+            u32IdentBp = (g_u32SoftDynIdent * 10000u) / stSoft.u32DynAlloc;
         } else {
             u32HhdmBp = 0;
+            u32IdentBp = 0;
+        }
+        /* Wave 16: publish success share vs static+dyn publish attempts. */
+        u32PublishSum = g_u32SoftPublishStatic + g_u32SoftPublishDyn +
+                        stSoft.u32Reject + stSoft.u32Oom;
+        if (u32PublishSum != 0) {
+            u32PublishOkBp =
+                ((g_u32SoftPublishStatic + g_u32SoftPublishDyn) * 10000u) /
+                u32PublishSum;
+        } else {
+            u32PublishOkBp = 0;
         }
         u64GsNow = rdmsr(MSR_GS_BASE);
         u32GsBaseMatch = cpu_soft_va_is_published(u64GsNow) ? 1u : 0u;
@@ -718,7 +738,7 @@ cpu_soft_log(void)
         /* Grep: cpu: soft inventory */
         kprintf("cpu: soft inventory verdict=%s online=%u static=%u dyn=%u "
                 "dyn_alloc=%u oom=%u reject=%u idem=%u max_id=%u "
-                "gs_sane=%u walk_match=%u logs=%u wave=15\n",
+                "gs_sane=%u walk_match=%u logs=%u wave=16\n",
                 szVerdict, stSoft.u32Online, stSoft.u32StaticOnline,
                 stSoft.u32DynOnline, stSoft.u32DynAlloc, stSoft.u32Oom,
                 stSoft.u32Reject, stSoft.u32Idempotent,
@@ -765,25 +785,39 @@ cpu_soft_log(void)
                 (unsigned long)GJ_HHDM_BASE);
         /* Grep: cpu: soft path */
         kprintf("cpu: soft path claim=static_bss+pmm_dyn gs=MSR_GS_BASE "
-                "kgs=0 kind=STATIC|DYN soft=Wave15 "
+                "kgs=0 kind=STATIC|DYN soft=Wave16 "
                 "(soft inventory; not bar3)\n");
-        /* Grep: cpu: soft ratio (Wave 15) */
+        /* Grep: cpu: soft ratio (Wave 15/16) */
         kprintf("cpu: soft ratio pool_occ_bp=%u static_occ_bp=%u "
                 "dyn_occ_bp=%u reject_bp=%u oom_bp=%u hhdm_bp=%u "
-                "wave=15\n",
+                "ident_bp=%u publish_ok_bp=%u wave=16\n",
                 u32PoolOccBp, u32StaticOccBp, u32DynOccBp, u32RejectBp,
-                u32OomBp, u32HhdmBp);
-        /* Grep: cpu: soft headroom (Wave 15) */
+                u32OomBp, u32HhdmBp, u32IdentBp, u32PublishOkBp);
+        /* Grep: cpu: soft headroom (Wave 15/16) */
         kprintf("cpu: soft headroom static=%u dyn=%u dyn_ceil=%u "
-                "max_cpus=%u online=%u max_id=%u wave=15\n",
+                "max_cpus=%u online=%u max_id=%u wave=16\n",
                 u32StaticHead, u32DynHead, u32DynCeil, stSoft.u32MaxCpus,
                 stSoft.u32Online, stSoft.u32MaxOnlineId);
-        /* Grep: cpu: soft surface (Wave 15 area catalog) */
+        /*
+         * Grep: cpu: soft return
+         * Wave 16 return-path catalog — publish/init/gs outcomes only.
+         * Soft ≠ product bring-up gate.
+         */
+        kprintf("cpu: soft return publish_static=%u publish_dyn=%u "
+                "idem=%u reject=%u reject_bsp=%u reject_oob=%u "
+                "zero_pages=%u null_va=%u oom=%u gs_init=%u bsp_init=%u "
+                "id_mis=%u walk_match=%u gs_sane=%u wave=16\n",
+                g_u32SoftPublishStatic, g_u32SoftPublishDyn,
+                stSoft.u32Idempotent, stSoft.u32Reject, g_u32SoftRejectBsp,
+                g_u32SoftRejectOob, g_u32SoftZeroPages, g_u32SoftNullVa,
+                stSoft.u32Oom, g_u32SoftGsInit, g_u32SoftBspInit,
+                g_u32SoftIdMatchFail, u32WalkMatch, stSoft.u32GsSane);
+        /* Grep: cpu: soft surface (Wave 16 area catalog) */
         kprintf("cpu: soft surface inventory,pool,publish,reject_class,"
-                "dyn,gs,layout,path,ratio,headroom,deepen areas=12 "
-                "wave=15\n");
+                "dyn,gs,layout,path,ratio,headroom,return,deepen,"
+                "counters,probe,slot areas=15 wave=16\n");
         /* Grep: cpu: soft deepen */
-        kprintf("cpu: soft deepen wave=15 areas=12 online=%u static=%u "
+        kprintf("cpu: soft deepen wave=16 areas=15 online=%u static=%u "
                 "dyn=%u oom=%u reject=%u logs=%u\n",
                 stSoft.u32Online, stSoft.u32StaticOnline,
                 stSoft.u32DynOnline, stSoft.u32Oom, stSoft.u32Reject,

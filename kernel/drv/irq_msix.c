@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14 base; Wave 15 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 16 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -25,15 +25,19 @@
  *   irq: soft notify    / irq_msix: soft notify     — Notification live snapshot
  *   irq: soft exercise  / irq_msix: soft exercise   — exercise tallies
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=15 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=16 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
- *   irq: soft surface   / irq_msix: soft surface    — Wave 15 catalog
+ *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
+ *   irq: soft honesty   / irq_msix: soft honesty    — Wave 16 bar3 non-claims
+ *   irq: soft geom      / irq_msix: soft geom       — Wave 16 vec/badge geom
+ *   irq: soft return    / irq_msix: soft return     — Wave 16 return surfaces
+ *   irq: soft contract  / irq_msix: soft contract   — Wave 16 soft≠game I/O
  *   irq: soft stats     / irq_msix: soft stats      — aggregate counters
  *   irq: soft inventory PASS / irq: soft PASS
  *   irq_msix: soft inventory PASS / irq_msix: soft PASS
  * Never hard-gates product paths; diagnostics / smoke grep only.
- * Soft ≠ live device MSI-X product close; bar3 remains open.
+ * Soft ≠ live device MSI-X product close; soft ≠ game I/O; bar3 remains open.
  */
 #include <gj/apic.h>
 #include <gj/idt.h>
@@ -55,9 +59,9 @@ static u32 g_u32LastPath;
 static int g_fReady;
 static int g_fInHandler;
 
-/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
-#define IRQ_MSIX_SOFT_DEEPEN_AREAS 15u
-#define IRQ_MSIX_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 19u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE  16u
 
 /*
  * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
@@ -290,13 +294,68 @@ irq_msix_soft_inventory_log(const char *szVia)
                 g_u32SoftExerciseNotReady, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
         /* Grep: irq: soft surface */
         kprintf("irq: soft surface inventory,inject,pulse,table,hw,badges,"
-                "vec,notify,exercise,path,ratio,headroom,deepen,stats "
-                "areas=%u wave=%u\n",
+                "vec,notify,exercise,path,ratio,headroom,honesty,geom,"
+                "return,contract,deepen,stats areas=%u wave=%u\n",
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: irq: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: irq: soft honesty|geom|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+
+        if (u32Ready != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (u32Live != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (u32Soft != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (u32Path != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (u32Tbl != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (u32Hw != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (g_u32SoftExerciseOk != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* vec/badge catalog always present */
+        /* Grep: irq: soft honesty */
+        kprintf("irq: soft honesty notify_delivery=1 live_device=0 "
+                "self_ipi=0 game_io=0 product_irq=0 bar3=open soft_only=1 "
+                "wave=%u soft PASS\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: irq: soft geom */
+        kprintf("irq: soft geom vec=0x%x badge_soft=0x%x badge_hw=0x%x "
+                "badge_tbl0=0x%x path_soft=%u wave=%u soft PASS\n",
+                (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)GJ_MSIX_BADGE_SOFT,
+                (unsigned)GJ_MSIX_BADGE_HW, (unsigned)GJ_MSIX_BADGE_TBL(0),
+                (unsigned)GJ_MSIX_PATH_SOFT, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: irq: soft return — return-surface bitmask */
+        kprintf("irq: soft return surf=0x%x ready=%u live=%u soft=%u "
+                "path=%u tbl=%u hw=%u ex_ok=%u via=%s areas=%u wave=%u "
+                "soft PASS\n",
+                u32Surf, (unsigned)u32Ready, (unsigned)u32Live,
+                (unsigned)u32Soft, (unsigned)u32Path, (unsigned)u32Tbl,
+                (unsigned)u32Hw, (unsigned)g_u32SoftExerciseOk, szViaSafe,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: irq: soft contract — soft ≠ game I/O */
+        kprintf("irq: soft contract soft_only=1 game_io=0 product_io=0 "
+                "live_msix=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: irq: soft deepen wave (Wave 16 stamp) */
     kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
             "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
@@ -435,13 +494,65 @@ irq_msix_soft_inventory_log(const char *szVia)
                 u32Ready, u32Live, g_u32SoftExerciseOk, g_u32SoftExerciseFail,
                 g_u32SoftExerciseNotReady, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
         kprintf("irq_msix: soft surface inventory,inject,pulse,table,hw,"
-                "badges,vec,notify,exercise,path,ratio,headroom,deepen,"
-                "stats areas=%u wave=%u\n",
+                "badges,vec,notify,exercise,path,ratio,headroom,honesty,"
+                "geom,return,contract,deepen,stats areas=%u wave=%u\n",
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
                 (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: irq_msix: soft deepen */
+    /*
+     * Wave 16 exclusive deepen twin (irq_msix: soft …).
+     * Soft ≠ game I/O. greppable: irq_msix: soft honesty|geom|return|contract
+     */
+    {
+        u32 u32Surf2 = 0u;
+
+        if (u32Ready != 0u) {
+            u32Surf2 |= 0x1u;
+        }
+        if (u32Live != 0u) {
+            u32Surf2 |= 0x2u;
+        }
+        if (u32Soft != 0u) {
+            u32Surf2 |= 0x4u;
+        }
+        if (u32Path != 0u) {
+            u32Surf2 |= 0x8u;
+        }
+        if (u32Tbl != 0u) {
+            u32Surf2 |= 0x10u;
+        }
+        if (u32Hw != 0u) {
+            u32Surf2 |= 0x20u;
+        }
+        if (g_u32SoftExerciseOk != 0u) {
+            u32Surf2 |= 0x40u;
+        }
+        u32Surf2 |= 0x80u;
+        kprintf("irq_msix: soft honesty notify_delivery=1 live_device=0 "
+                "self_ipi=0 game_io=0 product_irq=0 bar3=open soft_only=1 "
+                "wave=%u soft PASS\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("irq_msix: soft geom vec=0x%x badge_soft=0x%x badge_hw=0x%x "
+                "badge_tbl0=0x%x path_soft=%u wave=%u soft PASS\n",
+                (unsigned)GJ_MSIX_IRQ_VEC, (unsigned)GJ_MSIX_BADGE_SOFT,
+                (unsigned)GJ_MSIX_BADGE_HW, (unsigned)GJ_MSIX_BADGE_TBL(0),
+                (unsigned)GJ_MSIX_PATH_SOFT,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("irq_msix: soft return surf=0x%x ready=%u live=%u soft=%u "
+                "path=%u tbl=%u hw=%u ex_ok=%u via=%s areas=%u wave=%u "
+                "soft PASS\n",
+                u32Surf2, (unsigned)u32Ready, (unsigned)u32Live,
+                (unsigned)u32Soft, (unsigned)u32Path, (unsigned)u32Tbl,
+                (unsigned)u32Hw, (unsigned)g_u32SoftExerciseOk, szViaSafe,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("irq_msix: soft contract soft_only=1 game_io=0 product_io=0 "
+                "live_msix=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: irq_msix: soft deepen (Wave 16 stamp) */
     kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,

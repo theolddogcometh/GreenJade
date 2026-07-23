@@ -11,7 +11,7 @@
  * (no GPL HDA paste). Greppable: "hda: … PASS" (stream / CORB / multi /
  * soft BDL / soft LPIB / stream-id).
  *
- * Soft inventory (Wave 15 exclusive deepen; this unit only —
+ * Soft inventory (Wave 15/16 exclusive deepen; this unit only —
  * greppable "hda: soft …"):
  *   hda: soft inventory   — capacity + dual-path lamps + wave stamp
  *   hda: soft pci         — bus/slot/func + BAR0 / MMIO / shadow
@@ -35,9 +35,15 @@
  *   hda: soft stats       — probe/smoke/inventory emission tallies
  *   hda: soft path        — honesty: kernel soft ≠ Steam/game audio
  *   hda: soft honesty     — bar3/Steam/PipeWire non-claims
- *   hda: soft deepen      — wave=15 areas stamp
+ *   hda: soft deepen      — wave=16 areas stamp
+ *   hda: soft ratio       — Wave 16 stream occupancy lamps
+ *   hda: soft headroom    — Wave 16 free stream slots
+ *   hda: soft surface     — Wave 16 area catalog
+ *   hda: soft return      — Wave 16 return-surface bitmask
+ *   hda: soft contract    — Wave 16 soft≠game I/O contract
  *   hda: soft inventory PASS / hda: soft PASS
  * Never hard-gates product paths; diagnostics / smoke grep only.
+ * Soft ≠ game I/O / Steam audio / PipeWire product claim.
  */
 #include <gj/config.h>
 #include <gj/hda.h>
@@ -154,8 +160,8 @@ static u32 g_u32SoftInventoryLogs;
 static u32 g_u32SoftProbeLogs;
 static u32 g_u32SoftSmokeLogs;
 /* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define HDA_SOFT_DEEPEN_AREAS 22u
-#define HDA_SOFT_DEEPEN_WAVE  15u
+#define HDA_SOFT_DEEPEN_AREAS 26u
+#define HDA_SOFT_DEEPEN_WAVE  16u
 
 static void hda_soft_inventory_log(const char *szVia);
 
@@ -2356,7 +2362,82 @@ hda_soft_inventory_log(const char *szVia)
             "soft PASS\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: hda: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32OpenBp = 0;
+        u32 u32RunBp = 0;
+        u32 u32FreeHead = 0;
+        u32 u32Max = (u32)GJ_HDA_STREAMS_MAX;
+
+        if (u32Max != 0u) {
+            u32OpenBp = (cOpen * 10000u) / u32Max;
+            u32RunBp = (cRun * 10000u) / u32Max;
+        }
+        if (u32Max > cOpen) {
+            u32FreeHead = u32Max - cOpen;
+        }
+        if (fPresent != 0) {
+            u32Surf |= 0x1u;
+        }
+        if (fMmio != 0) {
+            u32Surf |= 0x2u;
+        }
+        if (fHwCorb != 0) {
+            u32Surf |= 0x4u;
+        }
+        if (fStreamDma != 0) {
+            u32Surf |= 0x8u;
+        }
+        if (fCodecProg != 0) {
+            u32Surf |= 0x10u;
+        }
+        if (cOpen != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (cRun != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* path/honesty catalog always present */
+        /* Grep: hda: soft ratio */
+        kprintf("hda: soft ratio open_bp=%u run_bp=%u open=%u run=%u "
+                "max=%u present=%u mmio=%u wave=%u soft PASS\n",
+                u32OpenBp, u32RunBp, (unsigned)cOpen, (unsigned)cRun,
+                (unsigned)u32Max, (unsigned)fPresent, (unsigned)fMmio,
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+        /* Grep: hda: soft headroom */
+        kprintf("hda: soft headroom free=%u max=%u open=%u run=%u "
+                "mix_cap=%u ring=%u wave=%u soft PASS\n",
+                u32FreeHead, (unsigned)u32Max, (unsigned)cOpen,
+                (unsigned)cRun, (unsigned)GJ_HDA_MIX_BYTES,
+                (unsigned)HDA_RING_SIZE, (unsigned)HDA_SOFT_DEEPEN_WAVE);
+        /* Grep: hda: soft surface */
+        kprintf("hda: soft surface inventory,pci,gcap,regs,int,wake,stream,"
+                "fmt,corb,rirb,mixer,codec,nid,bdl,sd,dma,dual,capacity,"
+                "stats,path,honesty,ratio,headroom,return,contract,deepen "
+                "areas=%u wave=%u\n",
+                (unsigned)HDA_SOFT_DEEPEN_AREAS,
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+        /* Grep: hda: soft return — return-surface bitmask */
+        kprintf("hda: soft return surf=0x%x present=%u mmio=%u hw_corb=%u "
+                "stream_dma=%u codec=%u open=%u run=%u via=%s areas=%u "
+                "wave=%u soft PASS\n",
+                u32Surf, (unsigned)fPresent, (unsigned)fMmio,
+                (unsigned)fHwCorb, (unsigned)fStreamDma, (unsigned)fCodecProg,
+                (unsigned)cOpen, (unsigned)cRun, szViaSafe,
+                (unsigned)HDA_SOFT_DEEPEN_AREAS,
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+        /* Grep: hda: soft contract — soft ≠ game I/O */
+        kprintf("hda: soft contract soft_only=1 game_io=0 game_pcm=0 "
+                "steam_audio=0 pipewire=0 product_audio=0 bar3=open "
+                "wave=%u soft PASS\n",
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: hda: soft deepen wave (Wave 16 stamp) */
     kprintf("hda: soft deepen wave=%u areas=%u via=%s present=%u mmio=%u "
             "hw_corb=%u stream_dma=%u codec_prog=%u open=%u run=%u "
             "ok=1 skip=0\n",

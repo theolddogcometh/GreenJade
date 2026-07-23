@@ -11,7 +11,7 @@
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  *
- * Wave 15 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
+ * Wave 16 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
  *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
  *   vtd: soft tables     — root/context/SLPT identity construct
  *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
@@ -28,10 +28,15 @@
  *   vtd: soft lamps      — composite soft lamps
  *   vtd: soft honesty    — explicit non-claims catalog (W15)
  *   vtd: soft stats      — rollup for agent greps (W15)
- *   vtd: soft deepen     — wave=15 stamp + area count
+ *   vtd: soft surfaces   — Wave 16 return-surface catalog
+ *   vtd: soft did        — Wave 16 DID pool return surface
+ *   vtd: soft mmio       — Wave 16 DRHD MMIO program surface
+ *   vtd: soft return     — Wave 16 attach/domain return taxonomy
+ *   vtd: soft deepen     — wave=16 stamp + area count
  *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
  *   vtd: soft PASS | soft inventory PASS
- * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close.
+ * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close;
+ * soft ≠ product.
  */
 #include <gj/config.h>
 #include <gj/iommu.h>
@@ -92,10 +97,44 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define VTD_SOFT_WAVE  15u
-/* Fixed greppable categories for deepen stamp (inventory…OPEN + W15 axes). */
-#define VTD_SOFT_AREAS 18u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define VTD_SOFT_WAVE  16u
+/* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
+#define VTD_SOFT_AREAS 22u
+
+/*
+ * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * greppable: vtd: soft surfaces
+ */
+#define VTD_SOFT_SURF_INVENTORY (1u << 0)
+#define VTD_SOFT_SURF_TABLES    (1u << 1)
+#define VTD_SOFT_SURF_CAP       (1u << 2)
+#define VTD_SOFT_SURF_DMAR      (1u << 3)
+#define VTD_SOFT_SURF_TE        (1u << 4)
+#define VTD_SOFT_SURF_DOMAIN    (1u << 5)
+#define VTD_SOFT_SURF_IDENTITY  (1u << 6)
+#define VTD_SOFT_SURF_PRODUCT   (1u << 7)
+#define VTD_SOFT_SURF_ATTACH    (1u << 8)
+#define VTD_SOFT_SURF_FEAT      (1u << 9)
+#define VTD_SOFT_SURF_QI        (1u << 10)
+#define VTD_SOFT_SURF_ROOT      (1u << 11)
+#define VTD_SOFT_SURF_PATH      (1u << 12)
+#define VTD_SOFT_SURF_LAMPS     (1u << 13)
+#define VTD_SOFT_SURF_HONESTY   (1u << 14)
+#define VTD_SOFT_SURF_STATS     (1u << 15)
+#define VTD_SOFT_SURF_OPEN      (1u << 16)
+#define VTD_SOFT_SURF_SURFACES  (1u << 17)
+#define VTD_SOFT_SURF_DID       (1u << 18)
+#define VTD_SOFT_SURF_MMIO      (1u << 19)
+#define VTD_SOFT_SURF_RETURN    (1u << 20)
+#define VTD_SOFT_SURF_CATALOG                                                      \
+    (VTD_SOFT_SURF_INVENTORY | VTD_SOFT_SURF_TABLES | VTD_SOFT_SURF_CAP |          \
+     VTD_SOFT_SURF_DMAR | VTD_SOFT_SURF_TE | VTD_SOFT_SURF_DOMAIN |                \
+     VTD_SOFT_SURF_IDENTITY | VTD_SOFT_SURF_PRODUCT | VTD_SOFT_SURF_ATTACH |       \
+     VTD_SOFT_SURF_FEAT | VTD_SOFT_SURF_QI | VTD_SOFT_SURF_ROOT |                  \
+     VTD_SOFT_SURF_PATH | VTD_SOFT_SURF_LAMPS | VTD_SOFT_SURF_HONESTY |            \
+     VTD_SOFT_SURF_STATS | VTD_SOFT_SURF_OPEN | VTD_SOFT_SURF_SURFACES |           \
+     VTD_SOFT_SURF_DID | VTD_SOFT_SURF_MMIO | VTD_SOFT_SURF_RETURN)
 
 /*
  * Product-default soft BDF (P-DMA-4 smoke). Kept off main enforce 0:2.0 and
@@ -155,7 +194,7 @@ static u32                    g_u32DomUsed;
 /* Product-default soft (P-DMA-4): local deny-path ticks while enforce armed */
 static u32 g_u32ProdSoftDeny;
 
-/* Wave 15 greppable soft inventory dump count (vtd: soft …) */
+/* Wave 16 greppable soft inventory dump count (vtd: soft …) */
 static u32 g_cSoftInvLogs;
 
 /*
@@ -795,7 +834,7 @@ vtd_soft_note_att_peak(void)
 }
 
 /**
- * Wave 15 greppable soft inventory dump (prefix "vtd: soft …").
+ * Wave 16 greppable soft inventory dump (prefix "vtd: soft …").
  * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
  *
  * greppable: vtd: soft
@@ -817,6 +856,10 @@ vtd_soft_note_att_peak(void)
  * greppable: vtd: soft stats
  * greppable: vtd: soft deepen
  * greppable: vtd: soft OPEN
+ * greppable: vtd: soft surfaces
+ * greppable: vtd: soft did
+ * greppable: vtd: soft mmio
+ * greppable: vtd: soft return
  * greppable: vtd: soft PASS
  */
 static void
@@ -824,6 +867,7 @@ vtd_soft_inventory_log(void)
 {
     u32 cAtt = 0;
     u32 iAtt;
+    u32 u32Surf;
     int fReady;
     int fTe;
     int nMode;
@@ -871,6 +915,7 @@ vtd_soft_inventory_log(void)
         }
     }
     u32Feat = g_Soft.u32Feat;
+    u32Surf = VTD_SOFT_SURF_CATALOG;
 
     /* Grep: vtd: soft inventory */
     kprintf("vtd: soft inventory ready=%d pages=%u ctx_dev=%u ctx_present=%u "
@@ -1023,11 +1068,58 @@ vtd_soft_inventory_log(void)
             g_cSoftDomCreate, g_cSoftAttOk, g_u32ProdSoftDeny, u32Feat,
             szMode, g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
 
-    /* Grep: vtd: soft deepen wave (Wave 15 stamp) */
-    kprintf("vtd: soft deepen wave=%u areas=%u logs=%u "
-            "(Wave 15 exclusive; soft only; not product always-on IOMMU; "
+    /*
+     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Grep: vtd: soft surfaces
+     */
+    kprintf("vtd: soft surfaces surf=0x%x catalog=%u "
+            "tables=1 cap=1 domain=1 attach=1 qi=1 root=1 "
+            "did=1 mmio=1 return=1 open=1 wave=%u "
+            "(return surfaces; soft only; not product always-on IOMMU; "
             "not bar3)\n",
-            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs);
+            (unsigned)u32Surf, (unsigned)VTD_SOFT_AREAS,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /*
+     * Wave 16: DID pool return surface.
+     * Grep: vtd: soft did
+     */
+    kprintf("vtd: soft did used=%u max=%u create=%u destroy=%u "
+            "attach_live=%u attach_peak=%u default0=%u wave=%u "
+            "(software DID pool; soft only; not QI product; not bar3)\n",
+            g_u32DomUsed, (unsigned)GJ_IOMMU_DOMAIN_MAX,
+            g_cSoftDomCreate, g_cSoftDomDestroy, cAtt, g_cSoftAttPeak,
+            g_aDom[0].u8Used ? 1u : 0u, (unsigned)VTD_SOFT_WAVE);
+
+    /*
+     * Wave 16: DRHD MMIO program surface (optional; soft).
+     * Grep: vtd: soft mmio
+     */
+    kprintf("vtd: soft mmio has_drhd=%d base=0x%lx cap_src=%s "
+            "cap_mmio=%d te_mode=%s srtp=soft_or_hw wave=%u "
+            "(soft MMIO surface; not product always-on TE; not bar3)\n",
+            (g_u64Drhd != 0) ? 1 : 0, (unsigned long)g_u64Drhd, szCapSrc,
+            g_fCapFromMmio ? 1 : 0, szMode, (unsigned)VTD_SOFT_WAVE);
+
+    /*
+     * Wave 16: attach/domain return taxonomy.
+     * Grep: vtd: soft return
+     */
+    kprintf("vtd: soft return att_ok=%u att_rebind=%u att_fail=%u "
+            "det_ok=%u det_miss=%u ctx_did_ok=%u ctx_did_fail=%u "
+            "dom_create=%u dom_destroy=%u wave=%u "
+            "(soft return taxonomy; not product; not bar3)\n",
+            g_cSoftAttOk, g_cSoftAttRebind, g_cSoftAttFail,
+            g_cSoftDetOk, g_cSoftDetMiss, g_cSoftCtxDidWrite,
+            g_cSoftCtxDidFail, g_cSoftDomCreate, g_cSoftDomDestroy,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft deepen wave (Wave 16 stamp) */
+    kprintf("vtd: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
+            "(Wave 16 exclusive; soft only; not product always-on IOMMU; "
+            "not bar3; soft≠product)\n",
+            (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs,
+            (unsigned)u32Surf);
 
     /*
      * Explicit OPEN honesty for always-on product IOMMU.
@@ -1036,7 +1128,8 @@ vtd_soft_inventory_log(void)
     kprintf("vtd: soft OPEN always_on_product=OPEN "
             "no_open_bus_master_product=OPEN hw_te_default=OPEN "
             "qi_product=OPEN inventory_only=1 wave=%u "
-            "(soft deepen ≠ product always-on IOMMU claim; not bar3)\n",
+            "(soft deepen ≠ product always-on IOMMU claim; not bar3; "
+            "soft≠product)\n",
             (unsigned)VTD_SOFT_WAVE);
 
     /* Grep: vtd: soft inventory PASS | vtd: soft PASS */
@@ -1229,7 +1322,7 @@ iommu_vtd_soft_probe(void)
      */
     (void)vtd_product_default_soft();
     /*
-     * Wave 15 exclusive soft inventory (greppable "vtd: soft …").
+     * Wave 16 exclusive soft inventory (greppable "vtd: soft …").
      * Soft deepen only; always-on product IOMMU remains OPEN.
      */
     vtd_soft_inventory_log();

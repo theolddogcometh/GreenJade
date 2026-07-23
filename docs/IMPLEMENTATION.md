@@ -771,54 +771,54 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-## Progress note — GreenJade Wave 15 soft continuum (2026-07-23)
+## Progress note — GreenJade Wave 16 soft continuum (2026-07-23)
 
-**Additive only (Wave 15 exclusive for this file).** Prior progress rows and Wave 10/12/14 soft stamps above stay historical ledger. This section is Wave 15 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+**Additive only (Wave 16 exclusive for this file).** Prior progress rows and Wave 10/12/14 soft stamps above stay historical ledger. This section is Wave 16 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
 
-### Soft stamp (Wave 15)
+### Soft stamp (Wave 16)
 
 | Field | Value |
 |-------|--------|
-| **Wave** | GreenJade Wave 15 (soft continuum honesty) |
-| **Continuum** | makefile target high-water **advancing toward 15700** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=15600**) |
+| **Wave** | GreenJade Wave 16 (soft continuum honesty) |
+| **Continuum** | makefile target high-water **advancing toward 15800** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=15700**) |
 | **bar3** | **OPEN** |
 | **Matrix** | **NOT-TRIED × 50** (no titles tried) |
 | **Product lamps** | **0** (soft stubs stay zero by design) |
 
-**Soft stamp (Wave 15):** continuum high-water **advancing toward 15700** soft only (parent wires). **Do not hardcode false `makefile_max=15700`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports **15600** until parent wires. **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+**Soft stamp (Wave 16):** continuum high-water **advancing toward 15800** soft only (parent wires). **Do not hardcode false `makefile_max=15800`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports **15700** until parent wires. **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
 
-### Soft continuum ≠ bar3 (Wave 15 honesty)
+### Soft continuum ≠ bar3 (Wave 16 honesty)
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 15700** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
-| Honest scan **makefile_max=15600** (when still tip) | Makefile wire truth until 15700 basenames land | Claim that 15700 is already greppable |
+| Continuum **toward 15800** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Honest scan **makefile_max=15700** (when still tip) | Makefile wire truth until 15800 basenames land | Claim that 15800 is already greppable |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
 | Product lamps **0** | Soft score / bar3-ready stubs remain zero | Any product-score claim |
 
-**Hard rule:** never promote continuum advancing toward **15700**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
+**Hard rule:** never promote continuum advancing toward **15800**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
 
-### Explicit non-claims (Wave 15)
+### Explicit non-claims (Wave 16)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Continuum high-water advancing toward **15700** (parent wire soft)” | **Yes** — soft only |
-| “Honest scan still `makefile_max=15600` until parent wires 15700” | **Yes** — scan is source of truth |
-| “Soft continuum toward 15700 = Steam client / Top-50 / product score” | **No** |
-| “Product lamps lit / product complete from Wave 15 soft deepen” | **No** — lamps remain **0** |
-| “bar3 closed by continuum toward 15700 / media READY / kernel soft gates” | **No** |
+| “Continuum high-water advancing toward **15800** (parent wire soft)” | **Yes** — soft only |
+| “Honest scan still `makefile_max=15700` until parent wires 15800” | **Yes** — scan is source of truth |
+| “Soft continuum toward 15800 = Steam client / Top-50 / product score” | **No** |
+| “Product lamps lit / product complete from Wave 16 soft deepen” | **No** — lamps remain **0** |
+| “bar3 closed by continuum toward 15800 / media READY / kernel soft gates” | **No** |
 | “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
 | Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
 
-### Open (unchanged by Wave 15)
+### Open (unchanged by Wave 16)
 
 - **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
 - Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
-- Soft continuum growth toward **15700** — **soft only**; does **not** close bar3; product lamps stay **0**
+- Soft continuum growth toward **15800** — **soft only**; does **not** close bar3; product lamps stay **0**
 
-**Bar3 remains OPEN.** Wave 15 honesty: continuum **advancing toward 15700 soft only**; scan may still be **15600**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+**Bar3 remains OPEN.** Wave 16 honesty: continuum **advancing toward 15800 soft only**; scan may still be **15700**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
 
 ### Related honesty surfaces
 
@@ -829,5 +829,5 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-*Wave 15 soft continuum (2026-07-23): high-water **advancing toward 15700 soft only**; honest scan may still be **15600**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 16 soft continuum (2026-07-23): high-water **advancing toward 15800 soft only**; honest scan may still be **15700**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
 

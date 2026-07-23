@@ -22,7 +22,7 @@
  *   later reply into a freed slot — reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
  *
- * Soft door call inventory (Wave 15 exclusive deepen — this unit only):
+ * Soft door call inventory (Wave 16 exclusive deepen — this unit only):
  *   - inventory / call / recv / reply / lifecycle / cold / err / path / PASS
  *   - Call: enter / claim / reply / eio / etimedout / enosys / slot_wait /
  *     client_wait + outcome rollup
@@ -30,11 +30,13 @@
  *   - Reply: enter / ok / stale / not_ready (+ single-use cross-link) + outcome
  *   - Lifecycle: abort / cancel / thr_exit / thr_cli / thr_srv / install
  *   - capacity / catalog / tags / deepen / flight / badge / reply_su_inval
+ *   - return surface (Wave 16): call|recv|install i64/gj_status buckets
+ *     greppable: "door: soft return …"
  *   - Cold product snapshot + badge transfer grant/move/fail
  *   greppable: "door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3 / MIG product.
  *
- * Soft ephemeral single-use REPLY (Wave 15 deepen — not full MIG product):
+ * Soft ephemeral single-use REPLY (Wave 16 deepen — not full MIG product):
  *   On slot claim, kernel mints a soft REPLY right bound to the door flight.
  *   First door_reply consumes it; second use fails (stale / second_fail).
  *   Timeout / peer death / thr-exit / init invalidates the soft right.
@@ -64,17 +66,17 @@
 #define DOOR_TAG_CLIENT 2u /* client waiting for a reply */
 #define DOOR_TAG_SLOT   3u /* contender waiting for single-flight slot */
 
-/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
-#define DOOR_SOFT_DEEPEN_WAVE  15u
-/* Fixed greppable categories emitted under "door: soft …". */
-#define DOOR_SOFT_DEEPEN_AREAS 22u
+/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
+#define DOOR_SOFT_DEEPEN_WAVE  16u
+/* +return surface over Wave 15 fixed greppable categories. */
+#define DOOR_SOFT_DEEPEN_AREAS 24u
 
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
 static u8             g_fReplySoftSelfcheck; /* cold-init self-check once */
 
 /*
- * Soft product inventory (Wave 15 exclusive). Cumulative path tallies across
+ * Soft product inventory (Wave 16 exclusive). Cumulative path tallies across
  * all doors that enter this module. Live/product counters remain per-door
  * (door_stats). greppable: door: soft …
  */
@@ -86,6 +88,8 @@ static u64 g_u64SoftCallEtimedout; /* -ETIMEDOUT terminal arms */
 static u64 g_u64SoftCallEnosys;    /* -ENOSYS terminal arms */
 static u64 g_u64SoftCallSlotWait;  /* contender tag-3 block entries */
 static u64 g_u64SoftCallClientWait;/* in-flight client tag-2 blocks */
+static u64 g_u64SoftCallRetPos;    /* Wave 16: call returned i64Ret >= 0 */
+static u64 g_u64SoftCallRetNeg;    /* Wave 16: call returned i64Ret < 0 */
 static u64 g_u64SoftRecvEnter;     /* door_recv entries */
 static u64 g_u64SoftRecvOk;        /* request delivered to server */
 static u64 g_u64SoftRecvPeerDead;  /* PEER_DEAD terminal */
@@ -102,6 +106,9 @@ static u64 g_u64SoftThrExitClient; /* thr-exit cleared client slot */
 static u64 g_u64SoftThrExitServer; /* thr-exit cleared server role */
 static u64 g_u64SoftInstallOk;     /* door_install_endpoint success */
 static u64 g_u64SoftInstallFail;   /* install reject (inval/nodev/cap) */
+static u64 g_u64SoftInstallFailNull; /* Wave 16: null args / no cnode */
+static u64 g_u64SoftInstallFailDead; /* Wave 16: door not live */
+static u64 g_u64SoftInstallFailCap;  /* Wave 16: cap_alloc_install fail */
 static u64 g_u64SoftLogN;          /* inventory log emissions */
 static u8  g_fSoftOnce;            /* one-shot after first call activity */
 
@@ -481,26 +488,27 @@ door_reply_soft_selfcheck(void)
 }
 
 /**
- * Greppable soft door call inventory (Wave 15 exclusive; product / smoke).
+ * Greppable soft door call inventory (Wave 16 exclusive; product / smoke).
  * Prefix-stable markers (door: soft …):
  *   door: soft inventory  — rollup enter/claim/reply + logs + wave
  *   door: soft call       — call path terminal arms + wait tallies
- *   door: soft call outcome — Wave 15 terminal rollup
+ *   door: soft call outcome — terminal rollup
  *   door: soft recv       — recv path ok / peer_dead / inval / block
- *   door: soft recv outcome — Wave 15 terminal rollup
+ *   door: soft recv outcome — terminal rollup
  *   door: soft reply      — reply enter/ok/stale/not_ready
- *   door: soft reply outcome — Wave 15 terminal rollup
+ *   door: soft reply outcome — terminal rollup
  *   door: soft lifecycle  — abort/cancel/thr_exit/install
  *   door: soft cold       — cold personality / caller door snapshot
  *   door: soft reply_su   — ephemeral single-use REPLY tallies
- *   door: soft reply_su inval — Wave 15 inval reason split
+ *   door: soft reply_su inval — inval reason split
  *   door: soft err        — call eio/etimedout/enosys + reply rejects
  *   door: soft capacity   — fixed soft table / tag lamps
  *   door: soft catalog    — path surface catalog (impl vs not)
  *   door: soft tags       — wait-key tag surface
  *   door: soft flight     — single-flight snap (has_req/reply/roles)
  *   door: soft badge      — badge transfer soft under door: soft
- *   door: soft deepen     — wave=15 areas stamp
+ *   door: soft return     — Wave 16 call|recv|install return surfaces
+ *   door: soft deepen     — wave=16 areas stamp
  *   door: soft path       — honesty: soft ≠ bar3 / MIG REPLY product
  *   door: soft inventory PASS / door: soft PASS
  * Companion (not door: soft … prefix):
@@ -607,9 +615,10 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             (unsigned long)g_u64SoftCallClientWait,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft call outcome — Wave 15 terminal rollup */
+    /* Grep: door: soft call outcome — terminal rollup */
     kprintf("door: soft call outcome reply=%lu eio=%lu etimedout=%lu "
-            "enosys=%lu claim=%lu slot_wait=%lu client_wait=%lu wave=%u\n",
+            "enosys=%lu claim=%lu slot_wait=%lu client_wait=%lu "
+            "ret_pos=%lu ret_neg=%lu wave=%u\n",
             (unsigned long)g_u64SoftCallReply,
             (unsigned long)g_u64SoftCallEio,
             (unsigned long)g_u64SoftCallEtimedout,
@@ -617,6 +626,8 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             (unsigned long)g_u64SoftCallClaim,
             (unsigned long)g_u64SoftCallSlotWait,
             (unsigned long)g_u64SoftCallClientWait,
+            (unsigned long)g_u64SoftCallRetPos,
+            (unsigned long)g_u64SoftCallRetNeg,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
     /* Grep: door: soft recv */
@@ -629,7 +640,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             (unsigned long)g_u64SoftRecvBlock,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft recv outcome — Wave 15 terminal rollup */
+    /* Grep: door: soft recv outcome — terminal rollup */
     kprintf("door: soft recv outcome ok=%lu peer_dead=%lu inval=%lu "
             "block=%lu wave=%u\n",
             (unsigned long)g_u64SoftRecvOk,
@@ -649,7 +660,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             (unsigned long)g_u64ReplySuSecondFail,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft reply outcome — Wave 15 terminal rollup */
+    /* Grep: door: soft reply outcome — terminal rollup */
     kprintf("door: soft reply outcome ok=%lu stale=%lu not_ready=%lu "
             "su_consume=%lu su_second=%lu wave=%u\n",
             (unsigned long)g_u64SoftReplyOk,
@@ -700,7 +711,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
 
     /*
      * Soft REPLY single-use under door: soft … so a single "door: soft"
-     * grep also hits the ephemeral right surface (Wave 15).
+     * grep also hits the ephemeral right surface (Wave 16).
      * Grep: door: soft reply_su
      */
     kprintf("door: soft reply_su create=%lu new=%lu rebind=%lu "
@@ -718,7 +729,7 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             g_fReplySoftSelfPass ? 1u : 0u,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft reply_su inval — Wave 15 reason split */
+    /* Grep: door: soft reply_su inval — reason split */
     kprintf("door: soft reply_su inval total=%lu cancel=%lu abort=%lu "
             "thr=%lu init=%lu wave=%u\n",
             (unsigned long)g_u64ReplySuInval,
@@ -726,6 +737,62 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             (unsigned long)g_u64ReplySuInvalAbort,
             (unsigned long)g_u64ReplySuInvalThr,
             (unsigned long)g_u64ReplySuInvalInit,
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: door: soft return
+     * Wave 16 public return-surface: call i64 / recv status / install.
+     * Soft ≠ MIG REPLY product.
+     */
+    kprintf("door: soft return call_pos=%lu call_neg=%lu call_eio=%lu "
+            "call_etimedout=%lu call_enosys=%lu call_reply=%lu "
+            "recv_ok=%lu recv_peer_dead=%lu recv_inval=%lu "
+            "install_ok=%lu install_fail=%lu "
+            "install_null=%lu install_dead=%lu install_cap=%lu "
+            "cnode_mig_reply=0 soft_ne_mig_reply=1 wave=%u\n",
+            (unsigned long)g_u64SoftCallRetPos,
+            (unsigned long)g_u64SoftCallRetNeg,
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
+            (unsigned long)g_u64SoftCallReply,
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftRecvPeerDead,
+            (unsigned long)g_u64SoftRecvInval,
+            (unsigned long)g_u64SoftInstallOk,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftInstallFailNull,
+            (unsigned long)g_u64SoftInstallFailDead,
+            (unsigned long)g_u64SoftInstallFailCap,
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /* Grep: door: soft return call — i64 terminal surface */
+    kprintf("door: soft return call pos=%lu neg=%lu reply=%lu eio=%lu "
+            "etimedout=%lu enosys=%lu wave=%u\n",
+            (unsigned long)g_u64SoftCallRetPos,
+            (unsigned long)g_u64SoftCallRetNeg,
+            (unsigned long)g_u64SoftCallReply,
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /* Grep: door: soft return recv — status surface */
+    kprintf("door: soft return recv ok=%lu peer_dead=%lu inval=%lu "
+            "wave=%u\n",
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftRecvPeerDead,
+            (unsigned long)g_u64SoftRecvInval,
+            (unsigned)DOOR_SOFT_DEEPEN_WAVE);
+
+    /* Grep: door: soft return install — status surface */
+    kprintf("door: soft return install ok=%lu fail=%lu null=%lu "
+            "dead=%lu cap=%lu wave=%u\n",
+            (unsigned long)g_u64SoftInstallOk,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftInstallFailNull,
+            (unsigned long)g_u64SoftInstallFailDead,
+            (unsigned long)g_u64SoftInstallFailCap,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
     /* Grep: door: soft err */
@@ -793,16 +860,21 @@ door_soft_inventory_log(const struct gj_door *pDoor)
             g_fReplySoftSelfPass ? 1u : 0u,
             (unsigned)DOOR_SOFT_DEEPEN_WAVE);
 
-    /* Grep: door: soft deepen wave (Wave 15 stamp) */
+    /* Grep: door: soft deepen wave (Wave 16 stamp) */
     kprintf("door: soft deepen wave=%u areas=%u call_enter=%lu "
             "recv_enter=%lu reply_enter=%lu reply_su_create=%lu "
-            "soft_log=%lu cold_init=%u ok=1 skip=0\n",
+            "ret_call_pos=%lu ret_call_neg=%lu ret_recv_ok=%lu "
+            "ret_inst_ok=%lu soft_log=%lu cold_init=%u ok=1 skip=0\n",
             (unsigned)DOOR_SOFT_DEEPEN_WAVE,
             (unsigned)DOOR_SOFT_DEEPEN_AREAS,
             (unsigned long)g_u64SoftCallEnter,
             (unsigned long)g_u64SoftRecvEnter,
             (unsigned long)g_u64SoftReplyEnter,
             (unsigned long)g_u64ReplySuCreate,
+            (unsigned long)g_u64SoftCallRetPos,
+            (unsigned long)g_u64SoftCallRetNeg,
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftInstallOk,
             (unsigned long)g_u64SoftLogN,
             g_fColdInited ? 1u : 0u);
 
@@ -984,7 +1056,7 @@ door_cold_init(void)
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
     /* Soft REPLY single-use self-check (private scratch door; honesty only). */
     door_reply_soft_selfcheck();
-    /* Grep: door: soft (baseline inventory after cold init; wave=15) */
+    /* Grep: door: soft (baseline inventory after cold init; wave=16) */
     door_soft_inventory_log(&g_doorCold);
 }
 
@@ -1018,7 +1090,7 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
     }
     /*
      * Emit soft inventory on stats read so bring-up smoke also greps
-     * door: soft call/recv/reply/reply_su lines (Wave 15; mirrors
+     * door: soft call/recv/reply/reply_su/return lines (Wave 16; mirrors
      * file_lock_count). greppable: door: soft
      */
     door_soft_inventory_log(pDoor);
@@ -1033,10 +1105,12 @@ door_install_endpoint(struct gj_process *pProc, struct gj_door *pDoor,
     if (pProc == NULL || pDoor == NULL || pOutRef == NULL ||
         pProc->pCnode == NULL) {
         door_soft_inc(&g_u64SoftInstallFail);
+        door_soft_inc(&g_u64SoftInstallFailNull); /* Wave 16 return */
         return GJ_ERR_INVAL;
     }
     if (!door_live(pDoor)) {
         door_soft_inc(&g_u64SoftInstallFail);
+        door_soft_inc(&g_u64SoftInstallFailDead);
         return GJ_ERR_NODEV;
     }
     if (u16Rights == 0) {
@@ -1048,6 +1122,7 @@ door_install_endpoint(struct gj_process *pProc, struct gj_door *pDoor,
         door_soft_inc(&g_u64SoftInstallOk);
     } else {
         door_soft_inc(&g_u64SoftInstallFail);
+        door_soft_inc(&g_u64SoftInstallFailCap);
     }
     return st;
 }
@@ -1209,17 +1284,20 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
 
     if (pDoor == NULL || pRegs == NULL || !pDoor->u32Ready) {
         door_soft_inc(&g_u64SoftCallEnosys);
+        door_soft_inc(&g_u64SoftCallRetNeg); /* Wave 16 return surface */
         door_soft_maybe_once();
         return -LINUX_ENOSYS;
     }
     if (!door_live(pDoor)) {
         door_soft_inc(&g_u64SoftCallEio);
+        door_soft_inc(&g_u64SoftCallRetNeg);
         door_soft_maybe_once();
         return -LINUX_EIO; /* peer/object not live (PEER_DEAD) */
     }
     pCur = thread_current();
     if (pCur == NULL) {
         door_soft_inc(&g_u64SoftCallEnosys);
+        door_soft_inc(&g_u64SoftCallRetNeg);
         door_soft_maybe_once();
         return -LINUX_ENOSYS;
     }
@@ -1228,6 +1306,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
     for (;;) {
         if (!door_live(pDoor)) {
             door_soft_inc(&g_u64SoftCallEio);
+            door_soft_inc(&g_u64SoftCallRetNeg);
             door_soft_maybe_once();
             return -LINUX_EIO;
         }
@@ -1237,6 +1316,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
              timer_mono_nsec() >= u64DeadlineMonoNsec)) {
             pDoor->u64Timeouts++;
             door_soft_inc(&g_u64SoftCallEtimedout);
+            door_soft_inc(&g_u64SoftCallRetNeg);
             door_soft_maybe_once();
             return -LINUX_ETIMEDOUT;
         }
@@ -1295,6 +1375,12 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             if (i64Ret == -(i64)LINUX_EIO) {
                 door_soft_inc(&g_u64SoftCallEio);
             }
+            /* Wave 16 return surface: pos vs neg i64. */
+            if (i64Ret < 0) {
+                door_soft_inc(&g_u64SoftCallRetNeg);
+            } else {
+                door_soft_inc(&g_u64SoftCallRetPos);
+            }
             door_soft_maybe_once();
             return i64Ret;
         }
@@ -1303,6 +1389,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             door_snapshot_last_badge(pDoor);
             door_cancel_inflight(pDoor, pCur);
             door_soft_inc(&g_u64SoftCallEio);
+            door_soft_inc(&g_u64SoftCallRetNeg);
             door_soft_maybe_once();
             return -LINUX_EIO;
         }
@@ -1317,6 +1404,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
             door_cancel_inflight(pDoor, pCur);
             pDoor->u64Timeouts++;
             door_soft_inc(&g_u64SoftCallEtimedout);
+            door_soft_inc(&g_u64SoftCallRetNeg);
             door_soft_maybe_once();
             return -LINUX_ETIMEDOUT;
         }

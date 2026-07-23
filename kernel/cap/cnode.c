@@ -23,7 +23,7 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Soft inventory (Wave 15 exclusive deepen; this unit only):
+ * Soft inventory (Wave 16 exclusive deepen; this unit only):
  *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
  *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
  *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
@@ -34,20 +34,23 @@
  *   cap: cdt soft pool       — alloc/free/miss churn
  *   cap: cdt soft type       — type catalog; REPLY scaffold-only honesty
  *   cap: cdt soft path       — surface catalog + non-claims
- *   cap: cdt soft deepen     — wave=15 areas stamp
+ *   cap: cdt soft return     — Wave 16 public return-surface (gj_status buckets)
+ *   cap: cdt soft return install|mint|copy|move|delete|alloc — per-API ret
+ *   cap: cdt soft deepen     — wave=16 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
- * not full CDT mutex/turnstile product; bar3 OPEN.
+ * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
  * Grep: cap: cdt soft
  */
 #include <gj/cap.h>
+#include <gj/error.h>
 #include <gj/klog.h>
 #include <gj/types.h>
 
-/* Wave 15 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE  15u
-/* honesty|inventory|resolve|trylock|install|coverage|audit|pool|type|path|deepen|PASS */
-#define GJ_CDT_SOFT_AREAS 12u
+/* Wave 16 deepen stamp (file-local; never hard-gates). */
+#define GJ_CDT_SOFT_WAVE  16u
+/* +return (+return install|mint|copy|move|delete|alloc) over Wave 15 set */
+#define GJ_CDT_SOFT_AREAS 14u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -66,9 +69,9 @@ static void cdt_soft_inventory_maybe_once(void);
 static void cdt_soft_inc(u32 *pCtr);
 
 /*
- * Wave 15 soft path tallies (file-local; wrap OK; never hard-gate).
+ * Wave 16 soft path tallies (file-local; wrap OK; never hard-gate).
  * Placed early so resolve/trylock/install can instrument without forward
- * static issues. Grep: cap: cdt soft resolve|trylock|install
+ * static issues. Grep: cap: cdt soft resolve|trylock|install|return
  */
 static u32 g_u32SoftResEnter;       /* gj_cap_resolve entries */
 static u32 g_u32SoftResOk;          /* resolve success */
@@ -84,9 +87,40 @@ static u32 g_u32SoftUnlock;         /* gj_cnode_unlock releases */
 static u32 g_u32SoftInstEnter;      /* gj_cap_slot_install entries */
 static u32 g_u32SoftInstOk;         /* install success */
 static u32 g_u32SoftInstFail;       /* install reject (any arm) */
+static u32 g_u32SoftInstFailInval;  /* Wave 16: install → GJ_ERR_INVAL */
+static u32 g_u32SoftInstFailDead;   /* Wave 16: install → GJ_ERR_DEAD */
+static u32 g_u32SoftInstFailPerm;   /* Wave 16: install → GJ_ERR_PERM */
+static u32 g_u32SoftInstFailBusy;   /* Wave 16: install → GJ_ERR_BUSY */
+static u32 g_u32SoftInstFailQuota;  /* Wave 16: install → GJ_ERR_QUOTA */
 static u32 g_u32SoftInstReplyType;  /* type==GJ_CAP_REPLY scaffold installs */
 static u32 g_u32SoftInvLogs;        /* soft inventory dump emissions */
-static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 15 rollup */
+static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 16 rollup */
+/* Wave 16: public API return-surface buckets (mint/copy/move/delete/alloc). */
+static u32 g_u32SoftRetMintOk;
+static u32 g_u32SoftRetMintFail;
+static u32 g_u32SoftRetMintInval;
+static u32 g_u32SoftRetMintPerm;
+static u32 g_u32SoftRetMintOther;
+static u32 g_u32SoftRetCopyOk;
+static u32 g_u32SoftRetCopyFail;
+static u32 g_u32SoftRetCopyInval;
+static u32 g_u32SoftRetCopyPerm;
+static u32 g_u32SoftRetCopyOther;
+static u32 g_u32SoftRetMoveOk;
+static u32 g_u32SoftRetMoveFail;
+static u32 g_u32SoftRetMoveInval;
+static u32 g_u32SoftRetMovePerm;
+static u32 g_u32SoftRetMoveOther;
+static u32 g_u32SoftRetDelOk;
+static u32 g_u32SoftRetDelFail;
+static u32 g_u32SoftRetDelInval;
+static u32 g_u32SoftRetDelPerm;
+static u32 g_u32SoftRetDelOther;
+static u32 g_u32SoftRetAllocOk;
+static u32 g_u32SoftRetAllocFail;
+static u32 g_u32SoftRetAllocInval;
+static u32 g_u32SoftRetAllocQuota;
+static u32 g_u32SoftRetAllocOther;
 
 /** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
 static void
@@ -361,26 +395,31 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     if (pCnode == NULL || pObj == NULL || pOutRef == NULL ||
         pCnode->pSlots == NULL) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailInval); /* Wave 16 return surface */
         return GJ_ERR_INVAL;
     }
     if (pCnode->cSlots == 0 || u64Slot >= pCnode->cSlots) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailInval);
         return GJ_ERR_INVAL;
     }
     if (u16Type == (u16)GJ_CAP_INVALID) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailInval);
         return GJ_ERR_INVAL;
     }
 
     u32State = pObj->u32State;
     if (u32State != (u32)GJ_OBJ_LIVE) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailDead);
         return GJ_ERR_DEAD;
     }
     u32ObjGen = pObj->u32Gen;
     /* Object gen 0 is never live; refuse mint that could alias null. */
     if (u32ObjGen == 0) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailInval);
         return GJ_ERR_INVAL;
     }
 
@@ -388,11 +427,13 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     if (u64Slot == GJ_CAP_SLOT_ROOT_META &&
         u16Type != (u16)GJ_CAP_ROOT_META) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailPerm);
         return GJ_ERR_PERM;
     }
     if (u64Slot != GJ_CAP_SLOT_ROOT_META &&
         u16Type == (u16)GJ_CAP_ROOT_META) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailPerm);
         return GJ_ERR_PERM;
     }
 
@@ -400,6 +441,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
 
     if (pSlot->u16Type != (u16)GJ_CAP_INVALID) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailBusy);
         return GJ_ERR_BUSY;
     }
 
@@ -409,12 +451,14 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
      */
     if (pObj->u32State != (u32)GJ_OBJ_LIVE || pObj->u32Gen != u32ObjGen) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailDead);
         return GJ_ERR_DEAD;
     }
 
     /* Accounting: refuse wrap of derived-slot count (S4/S6). */
     if (pObj->u32SlotsLeft == 0xffffffffu) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailQuota);
         return GJ_ERR_QUOTA;
     }
 
@@ -423,6 +467,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     stQuota = gj_cap_quota_slot_charge(pCnode->pQuotaAccount);
     if (stQuota != GJ_OK) {
         cdt_soft_inc(&g_u32SoftInstFail);
+        cdt_soft_inc(&g_u32SoftInstFailQuota);
         return stQuota;
     }
 
@@ -466,30 +511,66 @@ gj_cap_alloc_install(struct gj_cnode *pCnode, u16 u16Type, u16 u16Rights,
                      struct gj_obj_hdr *pObj, struct gj_cap_ref *pOutRef)
 {
     u64 iSlot;
+    gj_status_t st;
 
     if (pCnode == NULL || pCnode->pSlots == NULL || pObj == NULL ||
         pOutRef == NULL) {
+        /* Grep: cap: cdt soft return alloc */
+        cdt_soft_inc(&g_u32SoftRetAllocFail);
+        cdt_soft_inc(&g_u32SoftRetAllocInval);
         return GJ_ERR_INVAL;
     }
     if (pCnode->cSlots == 0) {
+        cdt_soft_inc(&g_u32SoftRetAllocFail);
+        cdt_soft_inc(&g_u32SoftRetAllocInval);
         return GJ_ERR_INVAL;
     }
     if (u16Type == (u16)GJ_CAP_INVALID) {
+        cdt_soft_inc(&g_u32SoftRetAllocFail);
+        cdt_soft_inc(&g_u32SoftRetAllocInval);
         return GJ_ERR_INVAL;
     }
     if (u16Type == (u16)GJ_CAP_ROOT_META) {
         /* Root meta only via explicit install at slot 0 */
-        return gj_cap_slot_install(pCnode, GJ_CAP_SLOT_ROOT_META, u16Type,
-                                   u16Rights, pObj, pOutRef);
+        st = gj_cap_slot_install(pCnode, GJ_CAP_SLOT_ROOT_META, u16Type,
+                                 u16Rights, pObj, pOutRef);
+        if (st == GJ_OK) {
+            cdt_soft_inc(&g_u32SoftRetAllocOk);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetAllocFail);
+            if (st == GJ_ERR_QUOTA) {
+                cdt_soft_inc(&g_u32SoftRetAllocQuota);
+            } else if (st == GJ_ERR_INVAL) {
+                cdt_soft_inc(&g_u32SoftRetAllocInval);
+            } else {
+                cdt_soft_inc(&g_u32SoftRetAllocOther);
+            }
+        }
+        return st;
     }
 
     /* Skip slot 0 (root meta reserved) */
     for (iSlot = 1; iSlot < pCnode->cSlots; iSlot++) {
         if (pCnode->pSlots[iSlot].u16Type == (u16)GJ_CAP_INVALID) {
-            return gj_cap_slot_install(pCnode, iSlot, u16Type, u16Rights, pObj,
-                                       pOutRef);
+            st = gj_cap_slot_install(pCnode, iSlot, u16Type, u16Rights, pObj,
+                                     pOutRef);
+            if (st == GJ_OK) {
+                cdt_soft_inc(&g_u32SoftRetAllocOk);
+            } else {
+                cdt_soft_inc(&g_u32SoftRetAllocFail);
+                if (st == GJ_ERR_QUOTA) {
+                    cdt_soft_inc(&g_u32SoftRetAllocQuota);
+                } else if (st == GJ_ERR_INVAL) {
+                    cdt_soft_inc(&g_u32SoftRetAllocInval);
+                } else {
+                    cdt_soft_inc(&g_u32SoftRetAllocOther);
+                }
+            }
+            return st;
         }
     }
+    cdt_soft_inc(&g_u32SoftRetAllocFail);
+    cdt_soft_inc(&g_u32SoftRetAllocQuota);
     return GJ_ERR_QUOTA;
 }
 
@@ -812,10 +893,11 @@ cdt_soft_tally_log(void)
 }
 
 /**
- * Wave 15 greppable soft inventory dump (never hard-gates product).
+ * Wave 16 greppable soft inventory dump (never hard-gates product).
  * Prefix-stable family: "cap: cdt soft …"
- * Honesty: soft ≠ GJ_CAP_REPLY product / full CDT mutex product.
- * Grep: cap: cdt soft inventory|resolve|trylock|install|type|path|deepen
+ * Honesty: soft ≠ GJ_CAP_REPLY product / full CDT mutex product /
+ * Soft ≠ MIG REPLY product.
+ * Grep: cap: cdt soft inventory|resolve|trylock|install|return|type|path|deepen
  */
 static void
 cdt_soft_inventory_log(void)
@@ -828,8 +910,9 @@ cdt_soft_inventory_log(void)
      */
     kprintf("cap: cdt soft honesty reply_product=0 full_cdt_mutex=0 "
             "soft_lock=u32SoftLock sleep_not_spin=1 bar3=0 "
-            "wave=%u (soft != GJ_CAP_REPLY product; soft != full CDT "
-            "mutex product; soft inventory only)\n",
+            "soft_ne_mig_reply=1 wave=%u (soft != GJ_CAP_REPLY product; "
+            "soft != MIG REPLY product; soft != full CDT mutex product; "
+            "soft inventory only)\n",
             GJ_CDT_SOFT_WAVE);
 
     /* Grep: cap: cdt soft inventory */
@@ -862,10 +945,62 @@ cdt_soft_inventory_log(void)
 
     /* Grep: cap: cdt soft install */
     kprintf("cap: cdt soft install enter=%u ok=%u fail=%u "
-            "reply_type=%u reply_product=0 wave=%u "
-            "(REPLY scaffold count only; not GJ_CAP_REPLY product)\n",
+            "fail_inval=%u fail_dead=%u fail_perm=%u fail_busy=%u "
+            "fail_quota=%u reply_type=%u reply_product=0 wave=%u "
+            "(REPLY scaffold count only; not GJ_CAP_REPLY product; "
+            "soft != MIG REPLY product)\n",
             g_u32SoftInstEnter, g_u32SoftInstOk, g_u32SoftInstFail,
-            g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+            g_u32SoftInstFailInval, g_u32SoftInstFailDead,
+            g_u32SoftInstFailPerm, g_u32SoftInstFailBusy,
+            g_u32SoftInstFailQuota, g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+
+    /*
+     * Grep: cap: cdt soft return
+     * Wave 16 public return-surface: gj_status buckets across CNode APIs.
+     * Soft ≠ MIG REPLY product / full CDT mutex product.
+     */
+    kprintf("cap: cdt soft return resolve_ok=%u resolve_fail=%u "
+            "inst_ok=%u inst_fail=%u mint_ok=%u mint_fail=%u "
+            "copy_ok=%u copy_fail=%u move_ok=%u move_fail=%u "
+            "del_ok=%u del_fail=%u alloc_ok=%u alloc_fail=%u "
+            "reply_product=0 wave=%u\n",
+            g_u32SoftResOk,
+            g_u32SoftResInval + g_u32SoftResNoent + g_u32SoftResStale +
+                g_u32SoftResLiveFail,
+            g_u32SoftInstOk, g_u32SoftInstFail, g_u32SoftRetMintOk,
+            g_u32SoftRetMintFail, g_u32SoftRetCopyOk, g_u32SoftRetCopyFail,
+            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail, g_u32SoftRetDelOk,
+            g_u32SoftRetDelFail, g_u32SoftRetAllocOk, g_u32SoftRetAllocFail,
+            GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft return install — Wave 16 status split */
+    kprintf("cap: cdt soft return install ok=%u fail=%u inval=%u dead=%u "
+            "perm=%u busy=%u quota=%u wave=%u\n",
+            g_u32SoftInstOk, g_u32SoftInstFail, g_u32SoftInstFailInval,
+            g_u32SoftInstFailDead, g_u32SoftInstFailPerm,
+            g_u32SoftInstFailBusy, g_u32SoftInstFailQuota, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft return mint|copy|move|delete|alloc */
+    kprintf("cap: cdt soft return mint ok=%u fail=%u inval=%u perm=%u "
+            "other=%u wave=%u\n",
+            g_u32SoftRetMintOk, g_u32SoftRetMintFail, g_u32SoftRetMintInval,
+            g_u32SoftRetMintPerm, g_u32SoftRetMintOther, GJ_CDT_SOFT_WAVE);
+    kprintf("cap: cdt soft return copy ok=%u fail=%u inval=%u perm=%u "
+            "other=%u wave=%u\n",
+            g_u32SoftRetCopyOk, g_u32SoftRetCopyFail, g_u32SoftRetCopyInval,
+            g_u32SoftRetCopyPerm, g_u32SoftRetCopyOther, GJ_CDT_SOFT_WAVE);
+    kprintf("cap: cdt soft return move ok=%u fail=%u inval=%u perm=%u "
+            "other=%u wave=%u\n",
+            g_u32SoftRetMoveOk, g_u32SoftRetMoveFail, g_u32SoftRetMoveInval,
+            g_u32SoftRetMovePerm, g_u32SoftRetMoveOther, GJ_CDT_SOFT_WAVE);
+    kprintf("cap: cdt soft return delete ok=%u fail=%u inval=%u perm=%u "
+            "other=%u wave=%u\n",
+            g_u32SoftRetDelOk, g_u32SoftRetDelFail, g_u32SoftRetDelInval,
+            g_u32SoftRetDelPerm, g_u32SoftRetDelOther, GJ_CDT_SOFT_WAVE);
+    kprintf("cap: cdt soft return alloc ok=%u fail=%u inval=%u quota=%u "
+            "other=%u wave=%u\n",
+            g_u32SoftRetAllocOk, g_u32SoftRetAllocFail, g_u32SoftRetAllocInval,
+            g_u32SoftRetAllocQuota, g_u32SoftRetAllocOther, GJ_CDT_SOFT_WAVE);
 
     /* Grep: cap: cdt soft pool */
     kprintf("cap: cdt soft pool used=%u sz=%u alloc_ok=%u miss=%u "
@@ -890,31 +1025,34 @@ cdt_soft_inventory_log(void)
     /* Grep: cap: cdt soft path */
     kprintf("cap: cdt soft path resolve=1 install=1 mint=1 copy=1 move=1 "
             "delete=1 trylock=soft_u32SoftLock quota=soft_hier "
-            "cdt_pool=%u empty_edge_audit=soft "
-            "reply_product=0 full_cdt_mutex=0 "
+            "cdt_pool=%u empty_edge_audit=soft return_surface=1 "
+            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1 "
             "wave=%u (soft inventory; not bar3; soft != GJ_CAP_REPLY "
-            "product; soft != full CDT mutex product)\n",
+            "product; soft != MIG REPLY product; soft != full CDT mutex "
+            "product)\n",
             GJ_CDT_EDGE_POOL, GJ_CDT_SOFT_WAVE);
 
-    /* Grep: cap: cdt soft deepen wave (Wave 15 stamp) */
+    /* Grep: cap: cdt soft deepen wave (Wave 16 stamp) */
     kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
             "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "
-            "move_ok=%u log_n=%u ok=1 skip=0\n",
+            "move_ok=%u ret_mint_ok=%u ret_copy_ok=%u ret_move_ok=%u "
+            "ret_del_ok=%u ret_alloc_ok=%u log_n=%u ok=1 skip=0\n",
             GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS, cdt_edge_pool_used(),
             g_u32SoftResOk, g_u32SoftTryOk, g_u32SoftInstOk,
             g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
-            g_u32SoftInvLogs);
+            g_u32SoftRetMintOk, g_u32SoftRetCopyOk, g_u32SoftRetMoveOk,
+            g_u32SoftRetDelOk, g_u32SoftRetAllocOk, g_u32SoftInvLogs);
 
     /* Grep: cap: cdt soft inventory PASS / cap: cdt soft PASS */
     kprintf("cap: cdt soft inventory PASS log_n=%u wave=%u areas=%u "
-            "reply_product=0 full_cdt_mutex=0\n",
+            "reply_product=0 full_cdt_mutex=0 soft_ne_mig_reply=1\n",
             g_u32SoftInvLogs, GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
     kprintf("cap: cdt soft PASS wave=%u areas=%u\n",
             GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
 }
 
 /**
- * Emit Wave 15 soft inventory once after first meaningful CNode activity.
+ * Emit Wave 16 soft inventory once after first meaningful CNode activity.
  * Avoids spam; greppable surface lands on first install/resolve/wire.
  */
 static void
@@ -1268,6 +1406,9 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     u16 u16New;
 
     if (pOut == NULL) {
+        /* Grep: cap: cdt soft return mint */
+        cdt_soft_inc(&g_u32SoftRetMintFail);
+        cdt_soft_inc(&g_u32SoftRetMintInval);
         return GJ_ERR_INVAL;
     }
     if (pDstCnode == NULL) {
@@ -1275,18 +1416,38 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     }
     st = gj_cap_resolve(pSrcCnode, u64SrcSlot, u32SrcGen, &res);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetMintFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetMintInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetMintPerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetMintOther);
+        }
         return st;
     }
     if ((res.u16Rights & GJ_RIGHT_MINT) == 0) {
+        cdt_soft_inc(&g_u32SoftRetMintFail);
+        cdt_soft_inc(&g_u32SoftRetMintPerm);
         return GJ_ERR_PERM;
     }
     u16New = rights_weaker(res.u16Rights, u16Rights);
     if (u16New == 0) {
+        cdt_soft_inc(&g_u32SoftRetMintFail);
+        cdt_soft_inc(&g_u32SoftRetMintPerm);
         return GJ_ERR_PERM;
     }
     /* Derived must not gain rights source lacks (already masked). */
     st = gj_cap_alloc_install(pDstCnode, res.u16Type, u16New, res.pObj, pOut);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetMintFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetMintInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetMintPerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetMintOther);
+        }
         return st;
     }
     /*
@@ -1301,6 +1462,8 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     cdt_edge_try_wire(res.pObj, pDstCnode, pOut->u64Slot, "mint",
                       &g_u32CdtMintAttempt, &g_u32CdtMintEdgeOk,
                       &g_u32CdtMintEdgeMiss);
+    cdt_soft_inc(&g_u32SoftRetMintOk);
+    cdt_soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -1313,18 +1476,39 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     u16 u16New;
 
     if (pOut == NULL) {
+        /* Grep: cap: cdt soft return copy */
+        cdt_soft_inc(&g_u32SoftRetCopyFail);
+        cdt_soft_inc(&g_u32SoftRetCopyInval);
         return GJ_ERR_INVAL;
     }
     st = gj_cap_resolve(pCnode, u64SrcSlot, u32SrcGen, &res);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetCopyFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetCopyInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetCopyPerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetCopyOther);
+        }
         return st;
     }
     if ((res.u16Rights & GJ_RIGHT_GRANT) == 0) {
+        cdt_soft_inc(&g_u32SoftRetCopyFail);
+        cdt_soft_inc(&g_u32SoftRetCopyPerm);
         return GJ_ERR_PERM;
     }
     u16New = rights_weaker(res.u16Rights, u16Rights != 0 ? u16Rights : res.u16Rights);
     st = gj_cap_alloc_install(pCnode, res.u16Type, u16New, res.pObj, pOut);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetCopyFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetCopyInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetCopyPerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetCopyOther);
+        }
         return st;
     }
     /*
@@ -1334,6 +1518,8 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     cdt_edge_try_wire(res.pObj, pCnode, pOut->u64Slot, "copy",
                       &g_u32CdtCopyAttempt, &g_u32CdtCopyEdgeOk,
                       &g_u32CdtCopyEdgeMiss);
+    cdt_soft_inc(&g_u32SoftRetCopyOk);
+    cdt_soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -1346,21 +1532,44 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     gj_status_t st;
 
     if (pOut == NULL) {
+        /* Grep: cap: cdt soft return move */
+        cdt_soft_inc(&g_u32SoftRetMoveFail);
+        cdt_soft_inc(&g_u32SoftRetMoveInval);
         return GJ_ERR_INVAL;
     }
     st = gj_cap_resolve(pCnode, u64SrcSlot, u32SrcGen, &res);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetMoveFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetMoveInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetMovePerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetMoveOther);
+        }
         return st;
     }
     if ((res.u16Rights & GJ_RIGHT_GRANT) == 0) {
+        cdt_soft_inc(&g_u32SoftRetMoveFail);
+        cdt_soft_inc(&g_u32SoftRetMovePerm);
         return GJ_ERR_PERM;
     }
     if (u64SrcSlot == GJ_CAP_SLOT_ROOT_META) {
+        cdt_soft_inc(&g_u32SoftRetMoveFail);
+        cdt_soft_inc(&g_u32SoftRetMovePerm);
         return GJ_ERR_PERM;
     }
     st = gj_cap_alloc_install(pCnode, res.u16Type, res.u16Rights, res.pObj,
                               pOut);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftRetMoveFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetMoveInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetMovePerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetMoveOther);
+        }
         return st;
     }
     /*
@@ -1391,6 +1600,8 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     gj_cap_slot_invalidate_locked(pSrc, res.pObj);
     /* Soft: charge on install + refund on source = net-zero interact. */
     cdt_soft_inc(&g_u32SoftMoveNet0); /* cap: cdt soft */
+    cdt_soft_inc(&g_u32SoftRetMoveOk);
+    cdt_soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -1402,13 +1613,26 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
 
     st = gj_cap_resolve(pCnode, u64Slot, u32SlotGen, &res);
     if (st != GJ_OK) {
+        /* Grep: cap: cdt soft return delete */
+        cdt_soft_inc(&g_u32SoftRetDelFail);
+        if (st == GJ_ERR_INVAL) {
+            cdt_soft_inc(&g_u32SoftRetDelInval);
+        } else if (st == GJ_ERR_PERM) {
+            cdt_soft_inc(&g_u32SoftRetDelPerm);
+        } else {
+            cdt_soft_inc(&g_u32SoftRetDelOther);
+        }
         return st;
     }
     if (u64Slot == GJ_CAP_SLOT_ROOT_META) {
+        cdt_soft_inc(&g_u32SoftRetDelFail);
+        cdt_soft_inc(&g_u32SoftRetDelPerm);
         return GJ_ERR_PERM;
     }
     if ((res.u16Rights & GJ_RIGHT_DESTROY) == 0 &&
         (res.u16Rights & GJ_RIGHT_GRANT) == 0) {
+        cdt_soft_inc(&g_u32SoftRetDelFail);
+        cdt_soft_inc(&g_u32SoftRetDelPerm);
         return GJ_ERR_PERM;
     }
     {
@@ -1426,7 +1650,7 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
         cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
         /*
-         * Soft delete edge coverage (Wave 15 deepen).
+         * Soft delete edge coverage (Wave 16 deepen).
          * Grep: cap: cdt delete
          */
         kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "
@@ -1436,6 +1660,7 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
                 u32SlotsPre, cdt_edge_pool_used(), g_u32CdtPoolFreeOk,
                 g_u32CdtDeleteEdge, g_u32SoftDeleteRefund, GJ_CDT_SOFT_WAVE);
         gj_cap_slot_invalidate_locked(res.pSlot, res.pObj);
+        cdt_soft_inc(&g_u32SoftRetDelOk);
         cdt_soft_inventory_maybe_once();
         return GJ_OK;
     }

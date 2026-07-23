@@ -6,16 +6,16 @@
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
  *
- * Soft product deepen (Wave 15 exclusive; this unit only):
+ * Soft product deepen (Wave 16 exclusive; this unit only):
  *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
  *   - pick_next soft stats + equal-rank wait-age fairness
  *   - kstack base+mid canary + poison HWM soft scan
  *   - soft sched inventory: ready/run snap + HWM + transition counts
  *   - path tallies: create/block/wake/yield/switch/exit + aff/proc
- *   - Wave 15 greppable "thread: soft …" deepen (wave=15 stamp):
+ *   - Wave 16 greppable "thread: soft …" deepen (wave=16 stamp):
  *       inventory|table|ready|run|create|block|wake|yield|switch|
  *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
- *       hwm|sysuser|user|boost|exec|invariant
+ *       hwm|sysuser|user|boost|exec|invariant|return|ratio|surface|headroom
  *     twin "sched: soft …" retained for legacy smoke greps
  *   Soft only — does NOT claim product RR / full preemption complete.
  *   Never hard-gates pick_next; diagnostics only (wrap OK).
@@ -58,13 +58,13 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
-#define THREAD_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
+#define THREAD_SOFT_DEEPEN_WAVE  16u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 26u
+#define THREAD_SOFT_DEEPEN_AREAS 30u
 
 /*
- * Soft sched inventory (Wave 15; file-local; ready = RUNNABLE, run = RUNNING).
+ * Soft sched inventory (Wave 16; file-local; ready = RUNNABLE, run = RUNNING).
  * Snapshots from table walk; HWM of live ready/run; transition + path tallies.
  * Diagnostics only — never hard-gates pick_next.
  * greppable: sched: soft … / thread: soft …
@@ -323,12 +323,12 @@ sched_soft_inventory_scan(void)
 }
 
 /*
- * Greppable soft inventory dump (Wave 15 product / smoke).
+ * Greppable soft inventory dump (Wave 16 product / smoke).
  * Twin prefixes so either agent grep works:
  *   sched: soft inventory|ready|run|create|block|wake|yield|switch|path|aff …
  *   thread: soft table|ready|run|inventory|create|block|wake|yield|switch|
  *           path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
- *           hwm|sysuser|user|boost|exec|invariant …
+ *           hwm|sysuser|user|boost|exec|invariant|return|ratio|surface|headroom
  * greppable: sched: soft
  * greppable: thread: soft
  * Soft only — never claims product RR / full preemption complete.
@@ -421,7 +421,7 @@ sched_soft_inventory_print(void)
             GJ_QOS_BOOST_CAP, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
 
     /*
-     * Wave 15 exclusive "thread: soft …" deepen surface (prefix-stable).
+     * Wave 16 exclusive "thread: soft …" deepen surface (prefix-stable).
      * Each area greppable on its own for continuum / smoke.
      */
     /* Grep: thread: soft inventory */
@@ -664,7 +664,75 @@ sched_soft_inventory_print(void)
             "preempt_complete=0 wave=%u\n",
             (unsigned)GJ_THR_STACK_SIZE, (unsigned)GJ_THR_KSTACK_SIZE,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
-    /* Grep: thread: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Grep: thread: soft return
+     * Wave 16 return-path catalog — create/wake/schedule outcomes.
+     * Soft ≠ product RR / preemption complete.
+     */
+    kprintf("thread: soft return create_ok=%lu create_full=%lu "
+            "wake_thr=%lu wake_none=%lu sched_self=%lu sched_switch=%lu "
+            "sched_spin=%lu yield_pend=%lu canary_fail=%lu "
+            "canary_ok=%lu wave=%u\n",
+            (unsigned long)g_u64SoftCreateOk,
+            (unsigned long)g_u64SoftCreateFull,
+            (unsigned long)g_u64SoftWakeThr,
+            (unsigned long)g_u64SoftWakeNone,
+            (unsigned long)g_u64SoftSchedSelf,
+            (unsigned long)g_u64SoftSchedSwitch,
+            (unsigned long)g_u64SoftSchedSpin,
+            (unsigned long)g_u64SoftYieldPendHit,
+            (unsigned long)g_soft.u64CanaryFail,
+            (unsigned long)g_soft.u64CanaryOk,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft ratio — Wave 16 basis-point rollup */
+    {
+        u32 u32CreateOkBp;
+        u32 u32WakeHitBp;
+        u32 u32SwitchBp;
+        u32 u32CreateDenom;
+        u32 u32WakeDenom;
+        u32 u32SchedDenom;
+
+        u32CreateDenom = (u32)(g_u64SoftCreateOk + g_u64SoftCreateFull);
+        if (u32CreateDenom != 0) {
+            u32CreateOkBp =
+                (u32)((g_u64SoftCreateOk * 10000ull) / (u64)u32CreateDenom);
+        } else {
+            u32CreateOkBp = 0;
+        }
+        u32WakeDenom = (u32)(g_u64SoftWakeThr + g_u64SoftWakeNone);
+        if (u32WakeDenom != 0) {
+            u32WakeHitBp =
+                (u32)((g_u64SoftWakeThr * 10000ull) / (u64)u32WakeDenom);
+        } else {
+            u32WakeHitBp = 0;
+        }
+        u32SchedDenom = (u32)(g_u64SoftSchedEnter);
+        if (u32SchedDenom != 0) {
+            u32SwitchBp =
+                (u32)((g_u64SoftSchedSwitch * 10000ull) / (u64)u32SchedDenom);
+        } else {
+            u32SwitchBp = 0;
+        }
+        kprintf("thread: soft ratio create_ok_bp=%u wake_hit_bp=%u "
+                "switch_bp=%u ready_snap=%u live_snap=%u wave=%u\n",
+                u32CreateOkBp, u32WakeHitBp, u32SwitchBp, g_u32SoftReadySnap,
+                g_u32SoftLiveSnap, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    }
+    /* Grep: thread: soft headroom — table free slots */
+    kprintf("thread: soft headroom unused=%u max=%u live=%u live_hwm=%u "
+            "ready_hwm=%u blocked_hwm=%u wave=%u\n",
+            g_u32SoftUnusedSnap, (unsigned)GJ_MAX_THREADS, g_u32SoftLiveSnap,
+            g_u32SoftLiveHwm, g_u32SoftReadyHwm, g_u32SoftBlockedHwm,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft surface — Wave 16 area catalog */
+    kprintf("thread: soft surface inventory,table,ready,run,create,block,"
+            "wake,yield,switch,path,qos,canary,aff,pick,stack,idle,caps,"
+            "stats,exit,deepen,hwm,sysuser,user,boost,exec,invariant,"
+            "return,ratio,surface,headroom areas=%u wave=%u\n",
+            (unsigned)THREAD_SOFT_DEEPEN_AREAS,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft deepen wave (Wave 16 stamp) */
     kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
             "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",
             (unsigned)THREAD_SOFT_DEEPEN_WAVE,

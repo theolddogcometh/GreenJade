@@ -7,7 +7,7 @@
  * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
  * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  *
- * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 15 exclusive deepen;
+ * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 16 exclusive deepen;
  * this unit only — greppable "apic: soft …"):
  *   apic: soft PASS|PARTIAL|UP|FAIL|NONE …  — primary verdict (Wave 10+)
  *   apic: soft inventory …                  — rollup catalog + wave tag
@@ -24,17 +24,23 @@
  *   apic: soft irq …                        — timer/resched/tlb IRQ tallies
  *   apic: soft bringup …                    — PASS|idle|active INIT/SIPI
  *   apic: soft path …                       — honesty non-claim (≠ bar3)
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 complementary surfaces (kept; never reshape primary fields):
  *   apic: soft query …                      — ready/cal/bus/ticks/npt samples
  *   apic: soft lapic …                      — MMIO vs x2 r/w path split
  *   apic: soft sample …                     — cal window enter/ok/fail
  *   apic: soft lamps …                      — ready/cal/periodic/svr lamps
  *   apic: soft reject …                     — !ready / clamp / icr-cap skips
- *   apic: soft capacity …                   — Wave 15 vec/div/cal geometry
- *   apic: soft deepen …                     — wave=15 areas stamp
+ *   apic: soft capacity …                   — vec/div/cal geometry
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *   apic: soft exclusive …                  — exclusive=1 unit stamp + wave
+ *   apic: soft claim …                      — product claim bounds
+ *   apic: soft ratio …                      — cal/ipi/tlb/irq path ratios
+ *   apic: soft honesty …                    — soft ≠ bar3 / multi-server
+ *   apic: soft deepen …                     — wave=16 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
+ * greppable: apic: soft exclusive
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -86,7 +92,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE        15u
+#define APIC_SOFT_WAVE        16u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -114,7 +120,7 @@ static u32            g_u32HzProgrammed;
 
 /*
  * Soft inventory counters (file-local; wrap OK; diagnostics only).
- * Wave 10 base + Wave 12 path + Wave 15 exclusive deepen.
+ * Wave 10 base + Wave 12 path + Wave 16 exclusive deepen.
  * Hot IRQ path only bumps counters already present — no kprintf.
  * greppable: apic: soft
  * greppable: apic: soft stats
@@ -650,7 +656,7 @@ apic_soft_inventory(const char *szVia)
             szVia, (unsigned)APIC_SOFT_WAVE);
 
     /*
-     * Wave 15 exclusive complementary sub-lines (never reshape primary).
+     * Wave 15 complementary sub-lines (kept; never reshape primary).
      */
     /* Grep: apic: soft query */
     kprintf("apic: soft query ready=%lu cal=%lu bus_hz=%lu ticks=%lu "
@@ -723,7 +729,7 @@ apic_soft_inventory(const char *szVia)
             (unsigned long)g_u64SoftIcrCap,
             (unsigned long)g_u64SoftTlbNotReady);
 
-    /* Grep: apic: soft capacity (Wave 15 geometry) */
+    /* Grep: apic: soft capacity (geometry) */
     kprintf("apic: soft capacity timer_vec=%u resched_vec=%u tlb_vec=%u "
             "div=%u cal_samples_max=%u cal_wait_ticks=%u "
             "icr_spin_max=%u ready=%u cal=%u wave=%u\n",
@@ -734,11 +740,52 @@ apic_soft_inventory(const char *szVia)
             g_fReady ? 1u : 0u, g_fCalibrated ? 1u : 0u,
             (unsigned)APIC_SOFT_WAVE);
 
+    /*
+     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     */
+    /* Grep: apic: soft exclusive */
+    kprintf("apic: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=apic.c bar3=0 hard_gate=0 multi_server=0 "
+            "hot_irq_kprintf=0 via=%s\n",
+            (unsigned)APIC_SOFT_WAVE, szVia);
+
+    /* Grep: apic: soft claim — product claim bounds */
+    kprintf("apic: soft claim xapic_timer=1 ipi=1 tlb=1 "
+            "p_irq1=1 p_time4=1 p_smp5=1 mono=bsp_only "
+            "x2_optional=1 multi_server=0 bar3=0 hard_gate=0 "
+            "wave=%u via=%s\n",
+            (unsigned)APIC_SOFT_WAVE, szVia);
+
+    /* Grep: apic: soft ratio — cal/ipi/tlb/irq path ratios */
+    kprintf("apic: soft ratio cal_ok=%u cal_fail=%u samples=%u "
+            "ipi_send=%lu ipi_self=%lu init_sipi=%lu resched=%lu "
+            "tlb_shoot=%lu timer_irq=%lu eoi=%u "
+            "ipi_nrdy=%lu timer_hz_skip=%lu wave=%u\n",
+            (unsigned)g_u32CalOk, (unsigned)g_u32CalFail,
+            (unsigned)g_u32CalSamples,
+            (unsigned long)g_u64SoftIpiSend,
+            (unsigned long)g_u64SoftIpiSelf,
+            (unsigned long)g_u64SoftInitSipi,
+            (unsigned long)g_u64SoftResched,
+            (unsigned long)g_u64SoftTlbShoot,
+            (unsigned long)g_u64SoftTimerIrq,
+            (unsigned)g_u32SoftEoi,
+            (unsigned long)g_u64SoftIpiNotReady,
+            (unsigned long)g_u64SoftTimerHzSkip,
+            (unsigned)APIC_SOFT_WAVE);
+
+    /* Grep: apic: soft honesty */
+    kprintf("apic: soft honesty soft_ne_product_complete=1 "
+            "bar3=0 multi_server=0 hard_gate=0 "
+            "claim=xapic_timer+ipi+tlb mono=bsp_only "
+            "x2_optional=1 wave=%u unit=apic.c via=%s\n",
+            (unsigned)APIC_SOFT_WAVE, szVia);
+
     /* Grep: apic: soft deepen */
     kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"
             "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject,"
-            "capacity "
+            "capacity,exclusive,claim,ratio,honesty "
             "unit=apic.c only hot_irq_kprintf=0 via=%s\n",
             (unsigned)APIC_SOFT_WAVE, szVia);
 }

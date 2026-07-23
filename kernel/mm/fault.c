@@ -29,15 +29,18 @@
  *   Views soft: bind axes + access tag + pages peak
  *   Never hard-gates; wrap OK. Soft ≠ product pager; soft ≠ bar3.
  *
- * Soft deepen (Wave 15 exclusive; this unit only):
+ * Soft deepen (Wave 16 exclusive; this unit only):
  *   Soft Call + FRAME under CR3 inventory deepen (shape only):
  *     honesty | inventory | class | cluster | cookie | serial |
- *     call | frame | cr3 | views | path | deepen | PASS
- *     deepen wave=15 stamp + surf= bitmask
+ *     call | frame | cr3 | views | path | surfaces | deadline |
+ *     deepen | PASS
+ *     deepen wave=16 stamp + surf= bitmask
  *   Call soft: doors-like Call shape after cookie mint (not product IPC)
  *   FRAME soft: expected-frame shape at view install; product_validate=0
  *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
- *   Honesty: Soft ≠ real pager product Call+FRAME under CR3; ≠ bar3.
+ *   Wave 16: surfaces return catalog + deadline/timeout soft axes
+ *   Honesty: Soft ≠ real pager product Call+FRAME under CR3; ≠ bar3;
+ *            soft ≠ product.
  *   Never hard-gates; wrap OK. Pure C freestanding.
  *
  * greppable: FAULT_MAP_COOKIE
@@ -58,6 +61,8 @@
  * greppable: fault: soft cr3
  * greppable: fault: soft views
  * greppable: fault: soft path
+ * greppable: fault: soft surfaces
+ * greppable: fault: soft deadline
  * greppable: fault: soft deepen
  * greppable: fault: soft PASS
  * greppable: fault: pager call soft
@@ -84,20 +89,22 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 15u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 16u
 
 /*
- * Soft inventory area count (Wave 15 greppable categories for deepen stamp):
+ * Soft inventory area count (Wave 16 greppable categories for deepen stamp):
  * honesty | inventory | class | cluster | cookie | serial |
- * call | frame | cr3 | views | path | deepen  (=12; PASS is close lamp)
+ * call | frame | cr3 | views | path | surfaces | deadline | deepen
+ * (=14; PASS is close lamp)
  */
-#define FAULT_SOFT_AREAS 12u
+#define FAULT_SOFT_AREAS 14u
 
 /*
- * Soft surface bit lamps (Wave 15; surf=0x… on inventory/deepen lines).
+ * Soft surface bit lamps (Wave 16; surf=0x… on inventory/deepen lines).
  * Bits mark which greppable soft areas are live in this unit — not product.
  * greppable: fault: soft deepen
+ * greppable: fault: soft surfaces
  */
 #define FAULT_SOFT_SURF_HONESTY   (1u << 0)
 #define FAULT_SOFT_SURF_INVENTORY (1u << 1)
@@ -115,15 +122,17 @@
 #define FAULT_SOFT_SURF_PAGER     (1u << 13) /* legacy pager-path alias */
 #define FAULT_SOFT_SURF_KILL      (1u << 14)
 #define FAULT_SOFT_SURF_FAIL      (1u << 15)
+#define FAULT_SOFT_SURF_SURFACES  (1u << 16) /* Wave 16 return catalog */
+#define FAULT_SOFT_SURF_DEADLINE  (1u << 17) /* Wave 16 deadline/timeout */
 
-/* All Wave 15 soft surfaces this unit can emit (catalog bitmask). */
+/* All Wave 16 soft surfaces this unit can emit (catalog bitmask). */
 #define FAULT_SOFT_SURF_CATALOG                                                    \
     (FAULT_SOFT_SURF_HONESTY | FAULT_SOFT_SURF_INVENTORY | FAULT_SOFT_SURF_CLASS | \
      FAULT_SOFT_SURF_CLUSTER | FAULT_SOFT_SURF_COOKIE | FAULT_SOFT_SURF_SERIAL |  \
      FAULT_SOFT_SURF_CALL | FAULT_SOFT_SURF_FRAME | FAULT_SOFT_SURF_CR3 |          \
      FAULT_SOFT_SURF_VIEWS | FAULT_SOFT_SURF_PATH | FAULT_SOFT_SURF_DEEPEN |      \
      FAULT_SOFT_SURF_PASS | FAULT_SOFT_SURF_PAGER | FAULT_SOFT_SURF_KILL |        \
-     FAULT_SOFT_SURF_FAIL)
+     FAULT_SOFT_SURF_FAIL | FAULT_SOFT_SURF_SURFACES | FAULT_SOFT_SURF_DEADLINE)
 
 static struct gj_map_cookie g_aCookies[GJ_COOKIE_TAB];
 
@@ -990,13 +999,45 @@ fault_soft_inventory_log(void)
             (unsigned)u32Surf);
     u32Areas++;
 
-    /* Grep: fault: soft deepen wave (Wave 15 exclusive stamp). */
+    /*
+     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Grep: fault: soft surfaces
+     */
+    kprintf("fault: soft surfaces surf=0x%x catalog=%u areas_live=%u "
+            "honesty=1 inventory=1 class=1 cluster=1 cookie=1 serial=1 "
+            "call=1 frame=1 cr3=1 views=1 path=1 deadline=1 "
+            "pager=1 kill=1 fail=1 deepen=1 pass=1 wave=%u "
+            "(return surfaces; Soft≠real pager product; soft≠product; "
+            "not bar3)\n",
+            (unsigned)u32Surf, (unsigned)FAULT_SOFT_AREAS, u32Areas + 2u,
+            (unsigned)FAULT_SOFT_WAVE);
+    u32Areas++;
+
+    /*
+     * Wave 16: deadline / kill-on-timeout soft axes (shape only).
+     * Grep: fault: soft deadline
+     */
+    kprintf("fault: soft deadline kill_timeout=%llu call_deadline=%llu "
+            "call_no_deadline=%llu cookie_timeout=%llu "
+            "product_timeout_policy=OPEN wave=%u "
+            "(deadline soft; Soft≠real pager product; soft≠product)\n",
+            (unsigned long long)__atomic_load_n(&g_u64KillOnTimeoutSoft,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallDeadline,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallNoDeadline,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64Timeout,
+            (unsigned)FAULT_SOFT_WAVE);
+    u32Areas++;
+
+    /* Grep: fault: soft deepen wave (Wave 16 exclusive stamp). */
     u32Areas++; /* deepen area itself */
     kprintf("fault: soft deepen wave=%u areas=%u logs=%llu "
             "surf=0x%x call=%llu frame=%llu cr3=%llu "
             "product_call=0 product_frame=0 product_cr3_map=0 "
-            "(Wave 15 exclusive; Soft≠real pager product Call+FRAME "
-            "under CR3; not bar3)\n",
+            "(Wave 16 exclusive; Soft≠real pager product Call+FRAME "
+            "under CR3; not bar3; soft≠product)\n",
             (unsigned)FAULT_SOFT_WAVE,
             (unsigned)FAULT_SOFT_AREAS,
             (unsigned long long)u64Logs,
@@ -1151,7 +1192,7 @@ fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages, u32 u32Access,
 }
 
 /*
- * Soft FRAME shape after consume (Wave 15 exclusive deepen).
+ * Soft FRAME shape after consume (Wave 16 exclusive deepen).
  *
  * Product: validate LIVE RAM FRAMEs from pager reply (rights ⊆ access;
  * no EXEC unless fault asked X) before any map (SOLARIS S2–S5). Soft:
@@ -1241,7 +1282,7 @@ fault_frame_soft_note(const struct gj_map_cookie *pCookie)
 }
 
 /*
- * Soft CR3 map-under-space shape after consume (Wave 15 exclusive deepen).
+ * Soft CR3 map-under-space shape after consume (Wave 16 exclusive deepen).
  *
  * Product: vmm_map_page under the fault space CR3 after FRAME validate;
  * pages owned by memory object; maps are views (Apple §2). Soft: shape

@@ -6,7 +6,7 @@
  * (QEMU virt). Pure freestanding C; MRS system registers only.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 15 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 16 exclusive deepen; this unit only — greppable
  * "aarch64: cpu soft …")
  * -------------------------------------------------------------------------
  * Soft-read ID_AA64* / CTR / DCZID / CLIDR / DFR0 and emit greppable
@@ -38,9 +38,10 @@
  *   aarch64: cpu soft regs pfr0=… isar0=… mmfr0=…
  *   aarch64: cpu soft path mrs=1 mmu=0 gic=0 timer=0 claim=0 product_kernel=OPEN
  *   aarch64: cpu soft inv el1=… el0_a64=… el1_a64=… tgran4=… ok=…
- *   aarch64: cpu soft inventory wave=15 …
+ *   aarch64: cpu soft inventory wave=16 …
  *   aarch64: cpu soft surf …
- *   aarch64: cpu soft deepen wave=15 areas=…
+ *   aarch64: cpu soft deepen wave=16 areas=…
+ *   aarch64: cpu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: cpu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: cpu soft PASS | FAIL
  *
@@ -94,12 +95,12 @@ extern void aarch64_uart_soft_selftest(void);
 #define DCZID_BS_MASK 0xful
 #define DCZID_DZP_BIT (1ul << 4)
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define CPU_SOFT_WAVE   15u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define CPU_SOFT_WAVE   16u
 /* Areas: id,midr,mpidr,pfr,isar,mmfr,cache,extra,regs,path,inv,surf,honesty,deepen */
-#define CPU_SOFT_AREAS  14u
+#define CPU_SOFT_AREAS  15u
 
-/* Soft inventory emit counter (Wave 15 stats). */
+/* Soft inventory emit counter (Wave 16 stats). */
 static unsigned g_cCpuSoftLogs;
 
 /* MIDR_EL1 — implementer / part soft decode. */
@@ -127,7 +128,7 @@ static unsigned g_cCpuSoftLogs;
 #define MPIDR_AFF3_MASK  0xfful
 
 /*
- * Soft inventory snapshot (Wave 15; file-local; never hard-gates boot).
+ * Soft inventory snapshot (Wave 16; file-local; never hard-gates boot).
  * greppable: aarch64: cpu soft
  */
 struct cpu_soft_snap {
@@ -181,7 +182,7 @@ struct cpu_soft_snap {
 
 /*
  * Soft feature observe: read ID registers, decode product-relevant fields,
- * print legacy "features soft" detail lines, fill Wave 15 snap.
+ * print legacy "features soft" detail lines, fill Wave 16 snap.
  * Returns 1 if EL1 and EL0 AArch64 are present in PFR0 (QEMU virt shape)
  * and CurrentEL is EL1 and 4K granule is implemented.
  */
@@ -351,7 +352,7 @@ cpu_features_soft_observe(unsigned long u64El, struct cpu_soft_snap *pSnap)
 }
 
 /*
- * Wave 15 soft inventory emission — greppable "aarch64: cpu soft …".
+ * Wave 16 soft inventory emission — greppable "aarch64: cpu soft …".
  * Returns 1 if inv gates held (EL1 + EL0/EL1 AArch64 + TGran4).
  */
 static int
@@ -500,7 +501,7 @@ cpu_soft_inventory(const struct cpu_soft_snap *pSnap)
         g_cCpuSoftLogs++;
     }
 
-    /* Grep: aarch64: cpu soft inventory — Wave 15 rollup */
+    /* Grep: aarch64: cpu soft inventory — Wave 16 rollup */
     aarch64_uart_puts("aarch64: cpu soft inventory wave=");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
     aarch64_uart_puts(" el=");
@@ -513,7 +514,7 @@ cpu_soft_inventory(const struct cpu_soft_snap *pSnap)
     aarch64_uart_put_hex((unsigned long)g_cCpuSoftLogs);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: cpu soft surf — Wave 15 inv gate lamps */
+    /* Grep: aarch64: cpu soft surf — Wave 16 inv gate lamps */
     aarch64_uart_puts("aarch64: cpu soft surf el1=");
     aarch64_uart_put_hex_n((unsigned long)pSnap->uEl1Ok, 1u);
     aarch64_uart_puts(" el0_a64=");
@@ -541,7 +542,7 @@ cpu_soft_inventory(const struct cpu_soft_snap *pSnap)
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_AREAS);
     aarch64_uart_puts(" catalog=id,midr,mpidr,pfr,isar,mmfr,cache,extra,"
-                      "regs,path,inv,surf,honesty,deepen logs=");
+                      "regs,path,inv,surf,return,honesty,deepen logs=");
     aarch64_uart_put_hex((unsigned long)g_cCpuSoftLogs);
     aarch64_uart_puts(" soft_only=1\n");
 
@@ -557,6 +558,15 @@ cpu_soft_inventory(const struct cpu_soft_snap *pSnap)
         pSnap->uTgran4Ok != 0u) {
         fOk = 1;
     }
+
+    /* Grep: aarch64: cpu soft return — Wave 16 return surfaces */
+    aarch64_uart_puts("aarch64: cpu soft return inv_ret=");
+    aarch64_uart_put_hex((unsigned long)(fOk != 0 ? 1ul : 0ul));
+    aarch64_uart_puts(" el1=");
+    aarch64_uart_put_hex((unsigned long)pSnap->uEl1Ok);
+    aarch64_uart_puts(" product_kernel=OPEN wave=");
+    aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: cpu soft PASS\n");
@@ -664,14 +674,14 @@ aarch64_cpu_probe(void)
     aarch64_uart_put_hex(u64Revidr);
     aarch64_uart_puts("\n");
 
-    /* Soft feature deepen (ID regs + decode) → fills Wave 15 snap. */
+    /* Soft feature deepen (ID regs + decode) → fills Wave 16 snap. */
     fSoft = cpu_features_soft_observe(u64El, &snap);
 
     /* Greppable primary marker (smoke scripts). */
     aarch64_uart_puts("aarch64: cpu PASS\n");
 
     /*
-     * Wave 15 combined soft inventory under "aarch64: cpu soft …".
+     * Wave 16 combined soft inventory under "aarch64: cpu soft …".
      * Emits multi-field lamps + final soft PASS|FAIL (smoke greps PASS).
      */
     fInvSoft = cpu_soft_inventory(&snap);

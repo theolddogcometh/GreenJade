@@ -5,7 +5,7 @@
  * Hybrid Option C: hot table / cold personality (doors) / ENOSYS.
  * Pure C11 clean-room Linux x86_64 surface — no GPL source.
  *
- * Soft inventory (Wave 12/14 base + Wave 15 exclusive deepen; this unit):
+ * Soft inventory (Wave 12/14 base + Wave 16 exclusive deepen; this unit):
  *   "linux: nr class soft …"     — table inventory + runtime (legacy + deepen)
  *   "linux: dispatch soft …"     — twin path/API tallies (agent-friendly)
  *
@@ -52,7 +52,7 @@ static struct gj_linux_nr_class_stats g_class;
 static int g_fNrClassLive;
 
 /*
- * Soft product inventory (Wave 12/14 base + Wave 15 exclusive deepen).
+ * Soft product inventory (Wave 12/14 base + Wave 16 exclusive deepen).
  * File-local path tallies. Cumulative unless noted; wrap OK; never hard-gates.
  * greppable: linux: nr class soft … / linux: dispatch soft …
  */
@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE  15u
-#define LINUX_DISPATCH_SOFT_AREAS 26u
+#define LINUX_DISPATCH_SOFT_WAVE  16u
+#define LINUX_DISPATCH_SOFT_AREAS 30u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -363,7 +363,7 @@ soft_dispatch_deepen_log(void)
             "(soft inventory; never closes hybrid)\n",
             u32Live, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft edge (Wave 15 deepen) */
+    /* Grep: linux: nr class soft edge (Wave 16 deepen) */
     kprintf("linux: nr class soft edge entries=%llu null_guard=%u "
             "path_hot=%u path_cold=%u path_none=%u path_oor=%u "
             "wow64=%u wave=%u\n",
@@ -372,7 +372,7 @@ soft_dispatch_deepen_log(void)
             g_u32SoftPathOor, g_u32SoftWow64Enter,
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft share (Wave 15 deepen) */
+    /* Grep: linux: nr class soft share (Wave 16 deepen) */
     kprintf("linux: nr class soft share pct_hot=%u pct_cold=%u "
             "pct_none=%u pct_class=%u bp_hot=%llu bp_cold=%llu "
             "armed_ok=%u wave=%u\n",
@@ -380,7 +380,19 @@ soft_dispatch_deepen_log(void)
             (unsigned long long)u64BpHot, (unsigned long long)u64BpCold,
             u32ArmedOk, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: nr class soft catalog (Wave 15 deepen) */
+    /* Grep: linux: nr class soft surfaces (Wave 16 deepen) */
+    kprintf("linux: nr class soft surfaces count=%u wave=%u "
+            "names=inventory,path,rates,ret,honesty,edge,share,catalog,"
+            "surfaces,note,deepen,PASS\n",
+            LINUX_DISPATCH_SOFT_AREAS,
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
+    /* Grep: linux: nr class soft note (Wave 16 deepen) */
+    kprintf("linux: nr class soft note milestone=wave16 exclusive=1 "
+            "soft_only=1 not_bar3=1 wave=%u\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
+    /* Grep: linux: nr class soft catalog (Wave 16 deepen) */
     kprintf("linux: nr class soft catalog wave=%u areas=%u "
             "surfaces=fill,register,integrity,route,cold_route,path,"
             "rates,ret,honesty,edge,share,catalog,deepen\n",
@@ -485,7 +497,7 @@ soft_dispatch_deepen_log(void)
             "(soft inventory; never closes hybrid)\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft edge (Wave 15 deepen) */
+    /* Grep: linux: dispatch soft edge (Wave 16 deepen) */
     kprintf("linux: dispatch soft edge entries=%llu null_guard=%u "
             "path_hot=%u path_cold=%u path_none=%u path_oor=%u "
             "hot_direct=%u hot_defer=%u cold_ipc=%u wave=%u\n",
@@ -494,7 +506,7 @@ soft_dispatch_deepen_log(void)
             g_u32SoftPathOor, g_u32SoftPathHotDirect, g_u32SoftPathHotDefer,
             g_u32SoftPathColdIpc, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft share (Wave 15 deepen) */
+    /* Grep: linux: dispatch soft share (Wave 16 deepen) */
     kprintf("linux: dispatch soft share bp_hot=%llu bp_cold=%llu "
             "bp_enosys=%llu bp_ret_neg=%llu pct_class=%u armed_ok=%u "
             "wave=%u\n",
@@ -502,7 +514,19 @@ soft_dispatch_deepen_log(void)
             (unsigned long long)u64BpEnosys, (unsigned long long)u64BpRetNeg,
             u32PctClass, u32ArmedOk, (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
-    /* Grep: linux: dispatch soft catalog (Wave 15 deepen) */
+    /* Grep: linux: dispatch soft surfaces (Wave 16 deepen) */
+    kprintf("linux: dispatch soft surfaces count=%u wave=%u "
+            "names=inventory,path,rates,ret,last,honesty,edge,share,"
+            "catalog,surfaces,note,deepen,PASS\n",
+            LINUX_DISPATCH_SOFT_AREAS,
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
+    /* Grep: linux: dispatch soft note (Wave 16 deepen) */
+    kprintf("linux: dispatch soft note milestone=wave16 exclusive=1 "
+            "soft_only=1 not_bar3=1 wave=%u\n",
+            (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
+    /* Grep: linux: dispatch soft catalog (Wave 16 deepen) */
     kprintf("linux: dispatch soft catalog wave=%u areas=%u "
             "surfaces=inventory,init,classify,cold_bind,wow64,runtime,"
             "hits,path,rates,ret,last,honesty,edge,share,catalog,"
@@ -1257,6 +1281,6 @@ gj_linux_nr_class_soft_log(void)
             (unsigned long long)g_class.u64LastNr,
             (unsigned long long)g_class.u64LastRet);
 
-    /* Wave 12 + Wave 15 exclusive deepen (additive; never hard-gates). */
+    /* Wave 12 + Wave 16 exclusive deepen (additive; never hard-gates). */
     soft_dispatch_deepen_log();
 }

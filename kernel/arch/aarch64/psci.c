@@ -16,7 +16,7 @@
  * Soft conduit detail + recover-fault counters are greppable.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 15 exclusive; this unit only)
+ * Soft inventory deepen (Wave 16 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: psci soft …" under fixed areas:
  *   inventory | version | conduit | features | recover | gates | path | deepen
@@ -37,6 +37,7 @@
  *   aarch64: psci soft recover …
  *   aarch64: psci soft gates …
  *   aarch64: psci soft path …
+ *   aarch64: psci soft return inv_ret=… product_kernel=OPEN
  *   aarch64: psci soft deepen …
  *   aarch64: psci soft PASS | FAIL
  *
@@ -72,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE    15u
-#define PSCI_SOFT_AREAS   10u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE    16u
+#define PSCI_SOFT_AREAS   11u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -295,7 +296,7 @@ psci_conduit_soft_log(int fEl3)
 }
 
 /*
- * Wave 15 combined soft inventory under "aarch64: psci soft …".
+ * Wave 16 combined soft inventory under "aarch64: psci soft …".
  * Emits multi-area lamps + final soft PASS|FAIL. Never hard-gates.
  * Grep areas: inventory | version | conduit | features | recover | gates |
  *             path | deepen
@@ -399,7 +400,7 @@ psci_soft_inventory(int fFeatSoft)
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts(" (soft inventory; not bar3)\n");
 
-    /* Grep: aarch64: psci soft surf — Wave 15 gate bit lamps */
+    /* Grep: aarch64: psci soft surf — Wave 16 gate bit lamps */
     aarch64_uart_puts("aarch64: psci soft surf live=");
     aarch64_uart_put_hex((unsigned long)uGateLive);
     aarch64_uart_puts(" conduit=");
@@ -424,7 +425,7 @@ psci_soft_inventory(int fFeatSoft)
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_AREAS);
     aarch64_uart_puts(" catalog=inventory,version,conduit,features,recover,"
-                      "gates,path,surf,honesty,deepen unit=psci.c only "
+                      "gates,path,surf,return,honesty,deepen unit=psci.c only "
                       "rate_limited=0 soft_only=1\n");
 
     /* Grep: aarch64: psci soft honesty */
@@ -438,6 +439,13 @@ psci_soft_inventory(int fFeatSoft)
         uGateConduit != 0u) {
         fOk = 1;
     }
+
+    /* Grep: aarch64: psci soft return — Wave 16 return surfaces */
+    aarch64_uart_puts("aarch64: psci soft return inv_ret=");
+    aarch64_uart_put_hex((unsigned long)(fOk != 0 ? 1ul : 0ul));
+    aarch64_uart_puts(" product_kernel=OPEN wave=");
+    aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: psci soft PASS\n");
@@ -485,7 +493,7 @@ aarch64_psci_probe(void)
         aarch64_uart_puts("aarch64: psci soft SKIP (no firmware)\n");
         psci_conduit_soft_log(fEl3);
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
-        /* Wave 15: still emit multi-area inventory on SKIP path. */
+        /* Wave 16: still emit multi-area inventory on SKIP path. */
         fInvSoft = psci_soft_inventory(0);
         (void)fInvSoft;
         return;
@@ -537,7 +545,7 @@ aarch64_psci_probe(void)
         aarch64_uart_puts("aarch64: psci features soft FAIL\n");
     }
 
-    /* Wave 15 combined soft inventory under "aarch64: psci soft …". */
+    /* Wave 16 combined soft inventory under "aarch64: psci soft …". */
     fInvSoft = psci_soft_inventory(fFeatSoft);
     (void)fInvSoft;
 }

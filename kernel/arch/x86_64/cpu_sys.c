@@ -28,15 +28,17 @@
  *   "cpu: syscall soft msr …"
  *   "cpu: syscall soft flags …"
  *   "cpu: syscall soft init …"
- *   "cpu: syscall soft capacity …"  (Wave 15: MSR/selector geometry)
- *   "cpu: syscall soft deepen …"    (Wave 15 stamp)
+ *   "cpu: syscall soft capacity …"  (MSR/selector geometry)
+ *   "cpu: syscall soft deepen …"    (wave stamp)
  *   "cpu: syscall soft verify PASS|FAIL|idle|armed"
  * Soft never hard-gates product; wrap-OK counters only. No bar3 claim.
  * greppable: cpu: syscall soft
  *
- * Wave 15 exclusive deepen (this unit only) — leftover x86 soft track
- * after wave 13 gdt/idt/trap/timer/serial/x2apic. Extra greppable
- * surfaces + path tallies; product MSR program path unchanged.
+ * Wave 16 exclusive deepen (this unit only) — x86 SYSCALL soft track.
+ * Wave 15 complementary surfaces kept; Wave 16 adds exclusive/claim/
+ * ratio/honesty complementary sub-lines. Product MSR program path
+ * unchanged. Primary field names stay prefix-stable.
+ * greppable: cpu: syscall soft exclusive
  */
 #include <gj/cpu.h>
 #include <gj/cpu_sys.h>
@@ -60,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 15u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 16u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -476,7 +478,7 @@ cpu_syscall_soft_inventory(void)
             g_u32SoftStarGet, g_u32SoftLstarGet, g_u32SoftSfmaskGet,
             g_u32SoftEferGet, g_u32SoftInitsGet, g_u32SoftCtrGet);
 
-    /* Grep: cpu: syscall soft capacity (Wave 15 geometry) */
+    /* Grep: cpu: syscall soft capacity (geometry) */
     kprintf("cpu: syscall soft capacity star_kern=0x%x star_user=0x%x "
             "user_cs32=0x%x user_cs64=0x%x user_ds=0x%x "
             "sfmask=0x%lx rflags_if=0x%lx inv_logs=%u wave=%u\n",
@@ -488,10 +490,46 @@ cpu_syscall_soft_inventory(void)
             (unsigned long)GJ_CPU_SOFT_RFLAGS_IF, g_u32SoftInvLogs,
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
-    /* Grep: cpu: syscall soft deepen (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive complementary sub-lines (never reshape primary).
+     */
+    /* Grep: cpu: syscall soft exclusive */
+    kprintf("cpu: syscall soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=cpu_sys.c bar3=0 hard_gate=0 product_complete=0 "
+            "soft_only=1\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft claim — SYSCALL MSR product bounds */
+    kprintf("cpu: syscall soft claim sce=1 nxe=1 star=1 lstar=1 "
+            "cstar_eq_lstar=1 sfmask=1 enter64=1 enter32=1 "
+            "per_cpu_msr=0 bar3=0 hard_gate=0 wave=%u\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft ratio — program/enter/verify path ratios */
+    kprintf("cpu: syscall soft ratio inits=%u enter64=%u enter32=%u "
+            "enter_bad=%u verify_ok=%u verify_bad=%u "
+            "info_get=%u log_call=%u inv_logs=%u ready=%u live=%u "
+            "wave=%u\n",
+            g_u32SoftInits, g_u32SoftEnter64, g_u32SoftEnter32,
+            g_u32SoftEnterBad, g_u32SoftVerifyOk, g_u32SoftVerifyBad,
+            g_u32SoftInfoGet, g_u32SoftLogCall, g_u32SoftInvLogs,
+            (unsigned)(g_fSyscallReady ? 1u : 0u),
+            (unsigned)(g_fSoftSnapLive ? 1u : 0u),
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft honesty */
+    kprintf("cpu: syscall soft honesty soft_ne_product_complete=1 "
+            "bar3=0 hard_gate=0 soft_only=1 "
+            "claim=star+lstar+sfmask+sce wave=%u unit=cpu_sys.c\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft deepen (Wave 16 stamp) */
     kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
-            "(Wave 15 exclusive; soft only; not bar3)\n",
+            "areas=inventory,program,star,lstar,cstar,sfmask,efer,"
+            "enter,verify,expect,path,geom,msr,flags,init,capacity,"
+            "exclusive,claim,ratio,honesty "
+            "(Wave 16 exclusive; soft only; not bar3)\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
             (unsigned)(g_fSyscallReady ? 1u : 0u),
             (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,

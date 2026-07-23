@@ -22,7 +22,7 @@
  *   aarch64: exception soft daif=… i_held=… el=…
  *   aarch64: exception soft PASS | FAIL
  *
- * Soft inventory deepen (Wave 15 exclusive; this unit only):
+ * Soft inventory deepen (Wave 16 exclusive; this unit only):
  *   Multi-line greppable areas under "aarch64: exception soft …":
  *     inventory | vbar | class | counts | daif | banks | gates | path | deepen
  *   Banks soft: CurrentEL SP_ELx / SP_EL0 / Lower AArch64 / Lower AArch32
@@ -37,8 +37,9 @@
  *            aarch64: exception soft gates …
  *            aarch64: exception soft path … product_kernel=OPEN
  *            aarch64: exception soft surf …
+ *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=15 …
+ *            aarch64: exception soft deepen wave=16 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -76,9 +77,9 @@
 #define EXC_SOFT_DAIF_A_BIT     (1ul << 8)
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE   15u
-#define EXC_SOFT_AREAS  11u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define EXC_SOFT_WAVE   16u
+#define EXC_SOFT_AREAS  12u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -99,7 +100,7 @@ static unsigned long g_cSyncSoft;
 static unsigned long g_cSerrorSoft;
 
 /*
- * Soft exception inventory deepen (install-time; Wave 15 multi-area).
+ * Soft exception inventory deepen (install-time; Wave 16 multi-area).
  * Greppable family: "aarch64: exception soft …"
  * Pure integer / system-register MRS; no FP/NEON. Never hard-gates.
  *
@@ -294,7 +295,7 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
     aarch64_uart_puts(" (soft inventory; not bar3)\n");
 
-    /* Grep: aarch64: exception soft surf — Wave 15 gate bit lamps */
+    /* Grep: aarch64: exception soft surf — Wave 16 gate bit lamps */
     aarch64_uart_puts("aarch64: exception soft surf match=");
     aarch64_uart_put_hex(u64Match);
     aarch64_uart_puts(" align=");
@@ -319,12 +320,19 @@ exception_soft_inventory(unsigned long u64Vbar, unsigned long u64VecPa)
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_AREAS);
     aarch64_uart_puts(" catalog=inventory,vbar,class,counts,daif,banks,"
-                      "gates,path,surf,honesty,deepen unit=exception.c "
+                      "gates,path,surf,return,honesty,deepen unit=exception.c "
                       "only rate_limited=0 soft_only=1\n");
 
     /* Grep: aarch64: exception soft honesty */
     aarch64_uart_puts("aarch64: exception soft honesty product_kernel=OPEN "
                       "soft_only=1 no_irq_deliver=1 no_bar3=1 wave=");
+    aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: exception soft return — Wave 16 return surfaces */
+    aarch64_uart_puts("aarch64: exception soft return inv_ret=");
+    aarch64_uart_put_hex((unsigned long)(fOk != 0 ? 1ul : 0ul));
+    aarch64_uart_puts(" product_kernel=OPEN wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 

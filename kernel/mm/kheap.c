@@ -11,7 +11,7 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Soft product inventory (Wave 15 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 16 exclusive deepen; this unit only):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
  *   - Lifetime: charged / released / net / peak components / max-one
@@ -19,7 +19,8 @@
  *   - Fail taxonomy: zero / uninit / oversize / oom / double_free
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
- *   - Path catalog + stats rollup + deepen wave=15 + PASS/NONE
+ *   - Wave 16: surfaces / magic / return / header return surfaces
+ *   - Path catalog + stats rollup + deepen wave=16 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -42,7 +43,11 @@
  *   kheap: soft lamps …      (Wave 15 readiness lamps)
  *   kheap: soft path …
  *   kheap: soft stats …
- *   kheap: soft deepen wave=15 …
+ *   kheap: soft surfaces …   (Wave 16 return-surface catalog)
+ *   kheap: soft magic …      (Wave 16 LIVE/FREE magic catalog)
+ *   kheap: soft return …     (Wave 16 null/fail return taxonomy)
+ *   kheap: soft header …     (Wave 16 block header geometry)
+ *   kheap: soft deepen wave=16 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -53,8 +58,42 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 15u
+/* Wave 16 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 16u
+/* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
+#define KHEAP_SOFT_AREAS 18u
+
+/*
+ * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * greppable: kheap: soft surfaces
+ */
+#define KHEAP_SOFT_SURF_HONESTY   (1u << 0)
+#define KHEAP_SOFT_SURF_BASELINE  (1u << 1)
+#define KHEAP_SOFT_SURF_INVENTORY (1u << 2)
+#define KHEAP_SOFT_SURF_LIVE      (1u << 3)
+#define KHEAP_SOFT_SURF_LIFETIME  (1u << 4)
+#define KHEAP_SOFT_SURF_WASTE     (1u << 5)
+#define KHEAP_SOFT_SURF_FAIL      (1u << 6)
+#define KHEAP_SOFT_SURF_OPS       (1u << 7)
+#define KHEAP_SOFT_SURF_DESIGN    (1u << 8)
+#define KHEAP_SOFT_SURF_FREELIST  (1u << 9)
+#define KHEAP_SOFT_SURF_GROW      (1u << 10)
+#define KHEAP_SOFT_SURF_SCRUB     (1u << 11)
+#define KHEAP_SOFT_SURF_LAMPS     (1u << 12)
+#define KHEAP_SOFT_SURF_PATH      (1u << 13)
+#define KHEAP_SOFT_SURF_STATS     (1u << 14)
+#define KHEAP_SOFT_SURF_SURFACES  (1u << 15)
+#define KHEAP_SOFT_SURF_MAGIC     (1u << 16)
+#define KHEAP_SOFT_SURF_RETURN    (1u << 17)
+#define KHEAP_SOFT_SURF_HEADER    (1u << 18)
+#define KHEAP_SOFT_SURF_CATALOG                                                    \
+    (KHEAP_SOFT_SURF_HONESTY | KHEAP_SOFT_SURF_BASELINE |                          \
+     KHEAP_SOFT_SURF_INVENTORY | KHEAP_SOFT_SURF_LIVE | KHEAP_SOFT_SURF_LIFETIME | \
+     KHEAP_SOFT_SURF_WASTE | KHEAP_SOFT_SURF_FAIL | KHEAP_SOFT_SURF_OPS |          \
+     KHEAP_SOFT_SURF_DESIGN | KHEAP_SOFT_SURF_FREELIST | KHEAP_SOFT_SURF_GROW |    \
+     KHEAP_SOFT_SURF_SCRUB | KHEAP_SOFT_SURF_LAMPS | KHEAP_SOFT_SURF_PATH |        \
+     KHEAP_SOFT_SURF_STATS | KHEAP_SOFT_SURF_SURFACES | KHEAP_SOFT_SURF_MAGIC |    \
+     KHEAP_SOFT_SURF_RETURN | KHEAP_SOFT_SURF_HEADER)
 
 /* Live / free magic — detects double-free and obvious header corruption. */
 #define GJ_KHEAP_MAGIC_LIVE  0x4B4C4956u /* 'KLIV' */
@@ -541,6 +580,7 @@ kheap_dump_stats(void)
     size_t cbSoftLive;
     u64 u64SoftNet;
     u32 cAreas = 0;
+    u32 u32Surf;
     int fPass;
     size_t cbFreeMin;
     size_t cbFreeMax;
@@ -588,6 +628,7 @@ kheap_dump_stats(void)
         }
     }
     u32Hdr = (u32)sizeof(struct kheap_block);
+    u32Surf = KHEAP_SOFT_SURF_CATALOG;
 
     kprintf("kheap: stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_align=%lu soft_unsplit=%lu\n",
@@ -842,20 +883,80 @@ kheap_dump_stats(void)
             (unsigned)KHEAP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: kheap: soft deepen wave (Wave 15 stamp; areas = prior soft lines). */
-    kprintf("kheap: soft deepen wave=%u areas=%u logs=%lu init=%d "
-            "used=%lu free=%lu soft_frag=%lu free_min=%lu free_max=%lu "
-            "product_tib=0 bar3=OPEN "
-            "(soft; not product; not bar3; not 1TiB product)\n",
+    /*
+     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Grep: kheap: soft surfaces
+     */
+    kprintf("kheap: soft surfaces surf=0x%x catalog=%u areas_live=%u "
+            "honesty=1 live=1 waste=1 fail=1 freelist=1 grow=1 scrub=1 "
+            "magic=1 return=1 header=1 wave=%u "
+            "(return surfaces; soft only; not product; not bar3)\n",
+            (unsigned)u32Surf, (unsigned)KHEAP_SOFT_AREAS, cAreas + 4u,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: LIVE/FREE magic catalog (observe-only).
+     * Grep: kheap: soft magic
+     */
+    kprintf("kheap: soft magic live=0x%x free=0x%x double_free_guard=1 "
+            "bad_walk=%u wave=%u "
+            "(soft magic; not product; not bar3)\n",
+            (unsigned)GJ_KHEAP_MAGIC_LIVE,
+            (unsigned)GJ_KHEAP_MAGIC_FREE,
+            cBadMagic,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: null/fail return taxonomy (alloc/free soft returns).
+     * Grep: kheap: soft return
+     */
+    kprintf("kheap: soft return null_uninit=%lu null_zero=%lu "
+            "null_oversize=%lu null_oom=%lu free_null=%lu free_uninit=%lu "
+            "double_free=%lu wave=%u "
+            "(soft return surfaces; not product; not bar3)\n",
+            (unsigned long)g_cSoftFailUninit,
+            (unsigned long)g_cSoftFailZero,
+            (unsigned long)g_cSoftFailOversize,
+            (unsigned long)g_cSoftFailOom,
+            (unsigned long)g_cSoftNullFree,
+            (unsigned long)g_cSoftFreeUninit,
+            (unsigned long)g_cDoubleFree,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: block header geometry (constants; not product capacity).
+     * Grep: kheap: soft header
+     */
+    kprintf("kheap: soft header sizeof=%u align_field=u16 unsplit_field=u16 "
+            "magic_field=u32 next_ptr=1 page_payload=%lu split_min=%lu "
+            "wave=%u (soft header geometry; not product; not bar3)\n",
+            u32Hdr,
+            (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
+            (unsigned long)GJ_KHEAP_SPLIT_MIN,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: kheap: soft deepen wave (Wave 16 stamp; areas = prior soft lines). */
+    kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
+            "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "
+            "free_max=%lu surf=0x%x product_tib=0 bar3=OPEN "
+            "(Wave 16 exclusive; soft; not product; not bar3; "
+            "not 1TiB product; soft≠product)\n",
             (unsigned)KHEAP_SOFT_WAVE,
             cAreas,
+            (unsigned)KHEAP_SOFT_AREAS,
             (unsigned long)g_cSoftLogN,
             g_fInit,
             (unsigned long)g_cbUsed,
             (unsigned long)g_cbFree,
             (unsigned long)cbSoftLive,
             (unsigned long)cbFreeMin,
-            (unsigned long)cbFreeMax);
+            (unsigned long)cbFreeMax,
+            (unsigned)u32Surf);
+    (void)KHEAP_SOFT_AREAS;
 
     /*
      * Close markers: freelist soft readiness only.

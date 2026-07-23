@@ -12,7 +12,7 @@
  *   boot_info_soft_log     — greppable serial markers (post serial_init)
  *     includes soft Multiboot2 / tag inventory (P-BOOT-2 dev path)
  *
- * Wave 15 exclusive soft deepen — greppable prefix-stable "boot: soft …"
+ * Wave 16 exclusive soft deepen — greppable prefix-stable "boot: soft …"
  * (diagnostics only; never hard-gate product / ExitBootServices):
  *   boot: soft honesty       — explicit non-claims (soft never gates EBS)
  *   boot: soft inventory     — master surface + wave stamp
@@ -35,8 +35,8 @@
  *   boot: soft magic         — Wave 15 magic/version lamps
  *   boot: soft validate      — Wave 15 handoff validity classify
  *   boot: soft identity      — Wave 15 identity-bridge note (separate unit)
- *   boot: soft catalog       — Wave 15 area name rollup
- *   boot: soft deepen        — wave=15 stamp + area count
+ *   boot: soft catalog       — Wave 16 area name rollup
+ *   boot: soft deepen        — wave=16 stamp + area count
  *   boot: soft mb2           — PASS|SKIP|REJECT|PARTIAL tag walk
  *   boot: soft mb2 tag       — per-class tag counts
  *   boot: soft mb2 mmap      — first mmap tag entry inventory
@@ -867,8 +867,8 @@ boot_info_soft_mb2_log(const struct gj_boot_info *pInfo)
             (unsigned)g_cSoftMb2InvCalls);
 }
 
-/* Wave 15 exclusive soft deepen stamp (this unit only). */
-#define BI_SOFT_WAVE 15u
+/* Wave 16 exclusive soft deepen stamp (this unit only). */
+#define BI_SOFT_WAVE 16u
 
 /*
  * Wave 15: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
@@ -1255,7 +1255,21 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
             (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft catalog — Wave 15 area name rollup. */
+    /* Grep: boot: soft surfaces (Wave 16 deepen) */
+    kprintf("boot: soft surfaces count=%u wave=%u "
+            "names=honesty,inventory,path,handoff,memmap,gop,flags,caps,"
+            "contract,fields,geometry,magic,validate,identity,catalog,"
+            "surfaces,note,deepen\n",
+            (unsigned)cAreas + 3u, (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: boot: soft note (Wave 16 deepen) */
+    kprintf("boot: soft note milestone=wave16 exclusive=1 "
+            "soft_only=1 not_bar3=1 handoff=%s source=%u wave=%u\n",
+            szHandoff, (unsigned)u32Source, (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: boot: soft catalog — Wave 16 area name rollup. */
     kprintf("boot: soft catalog honesty,inventory,path,handoff,memmap,gop,"
             "flags,caps,source,kernel,rsdp,contract,fields,efi_mt,"
             "geometry,publish,derive,stats,magic,validate,identity,"
@@ -1263,7 +1277,7 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
             (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft deepen — Wave 15 stamp + area count. */
+    /* Grep: boot: soft deepen — Wave 16 stamp + area count. */
     kprintf("boot: soft deepen wave=%u areas=%u handoff=%s source=%u "
             "src=%s memmap=%s gop=%s magic_ok=%d cap_bits=%u "
             "higher_half_product=OPEN soft_never_gates=1\n",

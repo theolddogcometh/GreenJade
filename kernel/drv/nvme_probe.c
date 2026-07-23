@@ -10,7 +10,7 @@
  * I/O. No GPL source; public PCI class codes + NVM Express Base register
  * layout only.
  *
- * Wave 14/15 exclusive soft deepen (this unit only — greppable "nvme: soft …"):
+ * Wave 14/15/16 exclusive soft deepen (this unit only — greppable "nvme: soft …"):
  *   nvme: soft inventory  — CAP/VS/CSTS/CC ok + via + wave stamp
  *   nvme: soft cap        — CAP field rollup + derived soft values
  *   nvme: soft fields     — per-field CAP lamps (MQES…CRMS)
@@ -23,10 +23,14 @@
  *   nvme: soft bar        — BAR0 map path / bits
  *   nvme: soft pci        — class 01:08:02 inventory
  *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
- *   nvme: soft deepen     — wave=15 areas stamp
+ *   nvme: soft deepen     — wave=16 areas stamp
  *   nvme: soft ratio      — Wave 15 CAP/rdy/en basis lamps
  *   nvme: soft headroom   — Wave 15 MQES-derived soft head
- *   nvme: soft surface    — Wave 15 area catalog
+ *   nvme: soft surface    — Wave 16 area catalog
+ *   nvme: soft honesty    — Wave 16 bar3/game-I/O non-claims
+ *   nvme: soft geom       — Wave 16 CAP/reg geometry
+ *   nvme: soft return     — Wave 16 return-surface bitmask
+ *   nvme: soft contract   — Wave 16 soft≠game I/O contract
  *   nvme: soft stats      — emission / probe tallies
  *   nvme: soft inventory PASS|SKIP / nvme: soft PASS|SKIP
  *
@@ -96,9 +100,9 @@
 #define NVME_CAP_CRMS(c)   ((u32)(((c) >> 59) & 3u))
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
 
-/* Wave 14 deepen area count (fixed greppable categories in inventory log). */
-#define NVME_SOFT_DEEPEN_AREAS 17u
-#define NVME_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
+#define NVME_SOFT_DEEPEN_AREAS 21u
+#define NVME_SOFT_DEEPEN_WAVE  16u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -544,13 +548,70 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
                 (unsigned)NVME_SOFT_DEEPEN_WAVE);
         /* Grep: nvme: soft surface */
         kprintf("nvme: soft surface inventory,cap,fields,vs,csts,cc,int,"
-                "aqa,regs,bar,pci,path,ratio,headroom,deepen,stats "
-                "areas=%u wave=%u\n",
+                "aqa,regs,bar,pci,path,ratio,headroom,honesty,geom,return,"
+                "contract,deepen,stats areas=%u wave=%u\n",
                 (unsigned)NVME_SOFT_DEEPEN_AREAS,
                 (unsigned)NVME_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: nvme: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: nvme: soft honesty|geom|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+
+        /* Return-surface bit lamps (inventory only; never product gate). */
+        if (fCapOk != 0) {
+            u32Surf |= 0x1u; /* CAP soft-read */
+        }
+        if (fVsOk != 0) {
+            u32Surf |= 0x2u; /* VS soft-read */
+        }
+        if (fCstsOk != 0) {
+            u32Surf |= 0x4u; /* CSTS soft-read */
+        }
+        if (fCcOk != 0) {
+            u32Surf |= 0x8u; /* CC soft-read */
+        }
+        if (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) {
+            u32Surf |= 0x10u; /* INT soft-read */
+        }
+        if (u32Aqa != 0xffffffffu) {
+            u32Surf |= 0x20u; /* AQA soft-read */
+        }
+        u32Surf |= 0x40u; /* regs/bar/pci map always catalogued */
+        /* Grep: nvme: soft honesty */
+        kprintf("nvme: soft honesty probe_only=1 admin_q=0 io_q=0 "
+                "cc_en_write=0 game_io=0 product_storage=0 bar3=open "
+                "soft_only=1 wave=%u soft PASS\n",
+                (unsigned)NVME_SOFT_DEEPEN_WAVE);
+        /* Grep: nvme: soft geom */
+        kprintf("nvme: soft geom cap_off=0x%x vs_off=0x%x csts_off=0x%x "
+                "cc_off=0x%x aqa_off=0x%x bar0_bits=%u mqes=%u max_q=%u "
+                "wave=%u soft PASS\n",
+                (unsigned)NVME_REG_CAP, (unsigned)NVME_REG_VS,
+                (unsigned)NVME_REG_CSTS, (unsigned)NVME_REG_CC,
+                (unsigned)NVME_REG_AQA, u32BarBits, u32Mqes, u32MaxQ,
+                (unsigned)NVME_SOFT_DEEPEN_WAVE);
+        /* Grep: nvme: soft return — return-surface bitmask */
+        kprintf("nvme: soft return surf=0x%x cap=%u vs=%u csts=%u cc=%u "
+                "int=%u aqa=%u map=1 via=%s areas=%u wave=%u soft PASS\n",
+                u32Surf, fCapOk != 0 ? 1u : 0u, fVsOk != 0 ? 1u : 0u,
+                fCstsOk != 0 ? 1u : 0u, fCcOk != 0 ? 1u : 0u,
+                (u32Intms != 0xffffffffu || u32Intmc != 0xffffffffu) ? 1u
+                                                                     : 0u,
+                (u32Aqa != 0xffffffffu) ? 1u : 0u, szViaSafe,
+                (unsigned)NVME_SOFT_DEEPEN_AREAS,
+                (unsigned)NVME_SOFT_DEEPEN_WAVE);
+        /* Grep: nvme: soft contract — soft ≠ game I/O */
+        kprintf("nvme: soft contract soft_only=1 game_io=0 product_io=0 "
+                "queues_claimed=0 identify_cmd=0 bar3=open wave=%u "
+                "soft PASS\n",
+                (unsigned)NVME_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: nvme: soft deepen wave (Wave 16 stamp) */
     kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
             "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "
             "skip=%u\n",

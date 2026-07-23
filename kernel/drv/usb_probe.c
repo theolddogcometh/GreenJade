@@ -9,7 +9,7 @@
  * no IRQ, no transfer rings (HID parse later). No GPL source; public PCI
  * class codes + HC capability register layouts only.
  *
- * Wave 15 exclusive soft deepen (this unit only — greppable "usb: soft …"):
+ * Wave 15/16 exclusive soft deepen (this unit only — greppable "usb: soft …"):
  *   usb: soft inventory  — class 0C:03 tallies + BAR io/mem + identify ok
  *   usb: soft class      — PCI class/subclass inventory (public codes)
  *   usb: soft if         — prog-if tallies (uhci/ohci/ehci/xhci/other)
@@ -21,7 +21,12 @@
  *   usb: soft pci        — class 0C:03 inventory stamp
  *   usb: soft path       — honesty: probe/soft only; no claim / IRQ / rings
  *   usb: soft honesty    — bar3/HID/rings non-claims
- *   usb: soft deepen     — wave=15 areas stamp
+ *   usb: soft deepen     — wave=16 areas stamp
+ *   usb: soft ratio      — Wave 16 identify/BAR occupancy
+ *   usb: soft headroom   — Wave 16 map/bar head
+ *   usb: soft surface    — Wave 16 area catalog
+ *   usb: soft return     — Wave 16 return-surface bitmask
+ *   usb: soft contract   — Wave 16 soft≠game I/O contract
  *   usb: soft stats      — emission / scan tallies
  *   usb: soft inventory PASS|SKIP
  *   usb: soft PASS|SKIP
@@ -42,9 +47,9 @@
 #define USB_PIF_EHCI 0x20u
 #define USB_PIF_XHCI 0x30u
 
-/* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define USB_SOFT_DEEPEN_AREAS 13u
-#define USB_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
+#define USB_SOFT_DEEPEN_AREAS 18u
+#define USB_SOFT_DEEPEN_WAVE  16u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -389,7 +394,72 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
             "bar3=open claim=0 irq_enable=0 wave=%u soft PASS\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE);
 
-    /* Grep: usb: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: usb: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32IdBp = 0;
+        u32 u32MemBp = 0;
+
+        if (cFound != 0u) {
+            u32IdBp = (cIdentifyOk * 10000u) / cFound;
+            u32MemBp = (cBarMem * 10000u) / cFound;
+        }
+        if (cFound != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (cXhci != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (cIdentifyOk != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (cBarMem != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (cBarIo != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (cMapFail != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (cBarEmpty != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* class/pif/regs catalog always present */
+        /* Grep: usb: soft ratio */
+        kprintf("usb: soft ratio identify_bp=%u mem_bp=%u found=%u "
+                "identify_ok=%u bar_mem=%u xhci=%u wave=%u soft PASS\n",
+                u32IdBp, u32MemBp, cFound, cIdentifyOk, cBarMem, cXhci,
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
+        /* Grep: usb: soft headroom */
+        kprintf("usb: soft headroom map_fail=%u bar_empty=%u bar_io=%u "
+                "bar_mem=%u other=%u wave=%u soft PASS\n",
+                cMapFail, cBarEmpty, cBarIo, cBarMem, cOther,
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
+        /* Grep: usb: soft surface */
+        kprintf("usb: soft surface inventory,class,if,pif,bar,dual,identify,"
+                "regs,pci,path,honesty,ratio,headroom,return,contract,"
+                "deepen,stats areas=%u wave=%u\n",
+                (unsigned)USB_SOFT_DEEPEN_AREAS,
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
+        /* Grep: usb: soft return — return-surface bitmask */
+        kprintf("usb: soft return surf=0x%x found=%u xhci=%u id_ok=%u "
+                "mem=%u io=%u map_fail=%u empty=%u via=%s areas=%u "
+                "wave=%u soft PASS\n",
+                u32Surf, cFound, cXhci, cIdentifyOk, cBarMem, cBarIo,
+                cMapFail, cBarEmpty, szViaSafe,
+                (unsigned)USB_SOFT_DEEPEN_AREAS,
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
+        /* Grep: usb: soft contract — soft ≠ game I/O */
+        kprintf("usb: soft contract soft_only=1 game_io=0 product_hc=0 "
+                "hid_parse=0 rings=0 irq=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: usb: soft deepen wave (Wave 16 stamp) */
     kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,

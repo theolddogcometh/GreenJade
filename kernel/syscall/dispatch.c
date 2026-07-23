@@ -11,7 +11,7 @@
  *   - This file only routes and binds Linux "current"; handlers live in
  *     native.c / linux_*.c. Do not put subsystem logic here.
  *
- * Soft inventory (Wave 14 base + Wave 15 exclusive deepen; this unit only):
+ * Soft inventory (Wave 15 base + Wave 16 exclusive deepen; this unit only):
  *   "syscall: soft stats …"       — legacy aggregate (field-stable)
  *   "syscall: soft inventory …"   — wave stamp + caps + log_n
  *   "syscall: soft bridge …"      — LSTAR bridge enter/null
@@ -24,10 +24,12 @@
  *   "syscall: soft api …"         — stats_get / reset / soft_log tallies
  *   "syscall: soft rates …"       — soft share basis points
  *   "syscall: soft honesty …"     — hybrid open; not bar3
- *   "syscall: soft edge …"        — Wave 15 bridge+dispatch combined
- *   "syscall: soft share …"       — Wave 15 native/linux complete share
- *   "syscall: soft catalog …"     — Wave 15 surface catalog stamp
- *   "syscall: soft deepen …"      — wave=15 area stamp
+ *   "syscall: soft edge …"        — bridge+dispatch combined
+ *   "syscall: soft share …"       — native/linux complete share
+ *   "syscall: soft catalog …"     — surface catalog stamp
+ *   "syscall: soft surfaces …"    — Wave 16 surface count lamp
+ *   "syscall: soft note …"        — Wave 16 milestone note
+ *   "syscall: soft deepen …"      — wave=16 area stamp
  *   "syscall: soft path …"        — surface catalog honesty
  *   "syscall: soft inventory PASS" / "syscall: soft PASS"
  * greppable: SYSCALL_ENTRY_SOFT_STATS / "syscall: soft"
@@ -45,9 +47,9 @@
 #include <gj/syscall.h>
 #include <gj/thread.h>
 
-/* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE  15u
-#define SYSCALL_SOFT_AREAS 17u
+/* Wave 16 soft inventory stamp + area count (greppable deepen). */
+#define SYSCALL_SOFT_WAVE  16u
+#define SYSCALL_SOFT_AREAS 20u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -59,7 +61,7 @@ static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
 static struct gj_syscall_entry_stats g_entryStats;
 
 /*
- * Wave 15 exclusive deepen (file-local; never hard-gates; wrap OK).
+ * Wave 16 exclusive deepen (file-local; never hard-gates; wrap OK).
  * greppable: syscall: soft …
  */
 static u64 g_u64SoftLogN;       /* inventory / multi-line dump emissions */
@@ -125,7 +127,7 @@ entry_soft_note_complete(struct gj_syscall_regs *pRegs)
 }
 
 /**
- * Greppable Wave 15 soft entry inventory (product / smoke).
+ * Greppable Wave 16 soft entry inventory (product / smoke).
  * Snapshots public entry stats + file-local deepen counters.
  * Diagnostics only; wrap OK; never hard-gates.
  * greppable: syscall: soft
@@ -171,7 +173,7 @@ entry_soft_inventory_log(void)
     } else {
         u64BpNeg = 0;
     }
-    /* Wave 15: complete share of route + combined edge enter. */
+    /* Wave 16: complete share of route + combined edge enter. */
     if (u64Route != 0) {
         u64BpComplete = (s.u64Complete * 10000ull) / u64Route;
     } else {
@@ -321,7 +323,7 @@ entry_soft_inventory_log(void)
             "not_bar3=1 wave=%u (soft inventory; never closes hybrid)\n",
             (unsigned)SYSCALL_SOFT_WAVE);
 
-    /* Grep: syscall: soft edge (Wave 15 deepen) */
+    /* Grep: syscall: soft edge */
     kprintf("syscall: soft edge bridge=%llu bridge_null=%llu "
             "disp=%llu disp_null=%llu edge_sum=%llu note=%llu "
             "wave=%u\n",
@@ -333,7 +335,7 @@ entry_soft_inventory_log(void)
             (unsigned long long)g_u64SoftBridgeNote,
             (unsigned)SYSCALL_SOFT_WAVE);
 
-    /* Grep: syscall: soft share (Wave 15 deepen) */
+    /* Grep: syscall: soft share */
     kprintf("syscall: soft share bp_native=%llu bp_linux=%llu "
             "bp_complete=%llu bp_bound=%llu bp_ret_neg=%llu "
             "route_sum=%llu complete=%llu wave=%u\n",
@@ -346,11 +348,27 @@ entry_soft_inventory_log(void)
             (unsigned long long)s.u64Complete,
             (unsigned)SYSCALL_SOFT_WAVE);
 
-    /* Grep: syscall: soft catalog (Wave 15 deepen) */
+    /* Grep: syscall: soft surfaces (Wave 16 deepen) */
+    kprintf("syscall: soft surfaces count=%u "
+            "names=inventory,stats,bridge,route,personality,bind,"
+            "lifecycle,outcome,last,api,rates,honesty,edge,share,"
+            "catalog,surfaces,note,deepen,path,PASS wave=%u\n",
+            SYSCALL_SOFT_AREAS, (unsigned)SYSCALL_SOFT_WAVE);
+
+    /* Grep: syscall: soft note (Wave 16 deepen) */
+    kprintf("syscall: soft note milestone=wave16 exclusive=1 "
+            "soft_only=1 hybrid=OptionC not_bar3=1 "
+            "disp=%llu native=%llu linux=%llu wave=%u\n",
+            (unsigned long long)s.u64DispatchEnter,
+            (unsigned long long)s.u64Native,
+            (unsigned long long)s.u64Linux,
+            (unsigned)SYSCALL_SOFT_WAVE);
+
+    /* Grep: syscall: soft catalog */
     kprintf("syscall: soft catalog wave=%u areas=%u "
             "surfaces=inventory,stats,bridge,route,personality,bind,"
             "lifecycle,outcome,last,api,rates,honesty,edge,share,"
-            "catalog,deepen,path\n",
+            "catalog,surfaces,note,deepen,path,PASS\n",
             (unsigned)SYSCALL_SOFT_WAVE, SYSCALL_SOFT_AREAS);
 
     /* Grep: syscall: soft deepen */
@@ -358,7 +376,7 @@ entry_soft_inventory_log(void)
             "prefix=syscall:soft "
             "surfaces=inventory,stats,bridge,route,personality,bind,"
             "lifecycle,outcome,last,api,rates,honesty,edge,share,"
-            "catalog,deepen,path\n",
+            "catalog,surfaces,note,deepen,path,PASS\n",
             (unsigned)SYSCALL_SOFT_WAVE, SYSCALL_SOFT_AREAS);
 
     /* Grep: syscall: soft path */

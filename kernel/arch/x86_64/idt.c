@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * IDT load + gate install. Soft IDT inventory (Wave 13 base + Wave 15
+ * IDT load + gate install. Soft IDT inventory (Wave 13 base + Wave 16
  * exclusive complementary deepen): exception / int80 / IRQ install counters,
  * last-gate snapshot, present/DPL/type/layout/contract inventory, base-layout
  * soft verify, vector-band / type-exact / span / key-entry lamps, greppable
@@ -25,19 +25,24 @@
  *   idt: soft verify PASS|FAIL|idle|armed …
  *   idt: soft PASS|PARTIAL|idle …
  *
- * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 complementary surfaces (kept; never reshape primary fields):
  *   idt: soft honesty …   — soft-only / non-claim catalog
  *   idt: soft query …     — soft-API / accessor sample tallies
  *   idt: soft expect …    — base product expect catalog
  *   idt: soft ist …       — IST / selector / zero-pad lamps
  *   idt: soft sel …       — kernel-CS contract + mismatch tally
- *   idt: soft deepen …    — wave=15 areas stamp
+ * Wave 16 exclusive complementary surfaces (never reshape primary fields):
+ *   idt: soft exclusive … — exclusive=1 unit stamp + wave
+ *   idt: soft claim …     — product claim bounds (exc32+int80+gates)
+ *   idt: soft ratio …     — install/reject/verify/band path ratios
+ *   idt: soft deepen …    — wave=16 areas stamp
  *
  * Legacy greppable (kept for existing smoke):
  *   idt: gate soft …
  *
  * greppable: idt: soft
  * greppable: idt: soft deepen
+ * greppable: idt: soft exclusive
  * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Honesty: soft IDT inventory ≠ product multi-server / bar3 close.
@@ -92,7 +97,7 @@ static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define IDT_SOFT_WAVE 15u
+#define IDT_SOFT_WAVE 16u
 
 /*
  * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
@@ -555,6 +560,9 @@ idt_gate_soft_verify_inner(void)
  *   idt: soft expect …
  *   idt: soft ist …
  *   idt: soft sel …
+ *   idt: soft exclusive …
+ *   idt: soft claim …
+ *   idt: soft ratio …
  *   idt: soft deepen …
  *   idt: soft verify PASS|FAIL|idle|armed …
  *   idt: soft PASS|PARTIAL|idle …
@@ -686,7 +694,7 @@ idt_soft_inventory_print(void)
             (unsigned)IDT_SOFT_WAVE);
 
     /*
-     * ---- Wave 15 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 15 complementary surfaces (kept; never reshape primary).
      */
 
     /* Grep: idt: soft honesty */
@@ -731,11 +739,40 @@ idt_soft_inventory_print(void)
             (unsigned)g_SoftSnap.u8LastType,
             g_fSoftSnapLive ? 1u : 0u, g_fIdtReady ? 1u : 0u);
 
-    /* Grep: idt: soft deepen — Wave 15 stamp + area catalog */
+    /*
+     * ---- Wave 16 exclusive complementary surfaces (never reshape primary).
+     */
+
+    /* Grep: idt: soft exclusive */
+    kprintf("idt: soft exclusive wave=%u exclusive=1 soft=1 "
+            "unit=idt.c bar3=0 multi_server=0 hard_gate=0 "
+            "soft_only=1 shared_idt=1 ap_lidt=1\n",
+            (unsigned)IDT_SOFT_WAVE);
+
+    /* Grep: idt: soft claim — product claim bounds */
+    kprintf("idt: soft claim exc32=1 int80=1 dynamic_gates=1 "
+            "base_present=33 type_8e=30 type_ef=2 type_ee=1 "
+            "shared_idt=1 ap_lidt=1 multi_server=0 bar3=0 "
+            "hard_gate=0 wave=%u\n",
+            (unsigned)IDT_SOFT_WAVE);
+
+    /* Grep: idt: soft ratio — install/reject/verify/band path ratios */
+    kprintf("idt: soft ratio install=%u reject=%u reinstall=%u "
+            "exc=%u int80=%u irq=%u verify_ok=%u verify_bad=%u "
+            "present=%u absent=%u band_exc=%u band_int80=%u "
+            "inv_logs=%u wave=%u\n",
+            g_u32SoftInstalls, g_u32SoftReject, g_u32SoftReinstall,
+            g_u32SoftException, g_u32SoftInt80, g_u32SoftIrq,
+            g_u32SoftVerifyOk, g_u32SoftVerifyBad,
+            g_SoftSnap.u32Present, g_u32SoftAbsent,
+            g_u32SoftBandExc, g_u32SoftBandInt80,
+            g_u32SoftInvLogs, (unsigned)IDT_SOFT_WAVE);
+
+    /* Grep: idt: soft deepen — Wave 16 stamp + area catalog */
     kprintf("idt: soft deepen wave=%u areas="
             "inventory,present,layout,contract,bands,type,span,"
             "vectors,entry,last,stats,path,program,verify,"
-            "honesty,query,expect,ist,sel "
+            "honesty,query,expect,ist,sel,exclusive,claim,ratio "
             "unit=idt.c only hot_irq_kprintf=0\n",
             (unsigned)IDT_SOFT_WAVE);
 

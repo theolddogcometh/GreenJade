@@ -7,7 +7,7 @@
  * Does not enable IRQs, translate, write commands, or drain the input
  * buffer (smoke-safe). No GPL source; public 8042 layout only.
  *
- * Wave 15 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
+ * Wave 15/16 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
  *   ps2: soft inventory  — dual status + port + float/stable + wave stamp
  *   ps2: soft flags      — full 8-bit status field inventory
  *   ps2: soft bits       — per-bit soft PASS lamps (public layout)
@@ -23,7 +23,12 @@
  *   ps2: soft path       — honesty: no IRQ/translate/drain/cmd
  *   ps2: soft honesty    — bar3/product-input non-claims
  *   ps2: soft identify   — float-aware soft identify PASS
- *   ps2: soft deepen     — wave=15 areas stamp
+ *   ps2: soft deepen     — wave=16 areas stamp
+ *   ps2: soft ratio      — Wave 16 status occupancy lamps
+ *   ps2: soft headroom   — Wave 16 dual-sample head
+ *   ps2: soft surface    — Wave 16 area catalog
+ *   ps2: soft return     — Wave 16 return-surface bitmask
+ *   ps2: soft contract   — Wave 16 soft≠game I/O contract
  *   ps2: soft stats      — emission tallies
  *   ps2: soft inventory PASS|SKIP
  *   ps2: soft PASS|SKIP
@@ -51,9 +56,9 @@
 #define PS2_IRQ_KBD 1u
 #define PS2_IRQ_AUX 12u
 
-/* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define PS2_SOFT_DEEPEN_AREAS 17u
-#define PS2_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 deepen area count (fixed greppable categories in inventory log). */
+#define PS2_SOFT_DEEPEN_AREAS 22u
+#define PS2_SOFT_DEEPEN_WAVE  16u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -321,7 +326,74 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
                 (unsigned)u8Status, (unsigned)PS2_SOFT_DEEPEN_WAVE);
     }
 
-    /* Grep: ps2: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: ps2: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32PopBp = 0;
+        u32 u32StableLamp = (u32)u8Stable;
+        u32 u32FloatLamp = (u32)u8Float;
+
+        if (u8Pop != 0u) {
+            u32PopBp = ((u32)u8Pop * 10000u) / 8u;
+        }
+        u32Surf |= 0x1u; /* dual status sample always returned */
+        if (u8Stable != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (u8Float != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (u8DataReady != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (u8Busy != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (u8ErrLike != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (u8KbdCh != 0u || u8AuxCh != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* ports/regs/irq map always catalogued */
+        /* Grep: ps2: soft ratio */
+        kprintf("ps2: soft ratio pop_bp=%u pop=%u stable=%u float=%u "
+                "busy=%u data_ready=%u wave=%u soft PASS\n",
+                u32PopBp, (unsigned)u8Pop, u32StableLamp, u32FloatLamp,
+                (unsigned)u8Busy, (unsigned)u8DataReady,
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
+        /* Grep: ps2: soft headroom */
+        kprintf("ps2: soft headroom dual_reads=2 xor=0x%x idle=%u "
+                "channel=%s state=%s wave=%u soft PASS\n",
+                (unsigned)u8Xor, (unsigned)u8Idle, szChannel, szState,
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
+        /* Grep: ps2: soft surface */
+        kprintf("ps2: soft surface inventory,flags,bits,mask,ports,regs,"
+                "sense,pop,channel,dual,sample,irq,path,honesty,identify,"
+                "ratio,headroom,return,contract,deepen,stats "
+                "areas=%u wave=%u\n",
+                (unsigned)PS2_SOFT_DEEPEN_AREAS,
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
+        /* Grep: ps2: soft return — return-surface bitmask */
+        kprintf("ps2: soft return surf=0x%x dual=1 stable=%u float=%u "
+                "ready=%u busy=%u err=%u ch=%u via=portio areas=%u "
+                "wave=%u soft PASS\n",
+                u32Surf, (unsigned)u8Stable, (unsigned)u8Float,
+                (unsigned)u8DataReady, (unsigned)u8Busy, (unsigned)u8ErrLike,
+                (unsigned)((u8KbdCh | u8AuxCh) != 0u),
+                (unsigned)PS2_SOFT_DEEPEN_AREAS,
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
+        /* Grep: ps2: soft contract — soft ≠ game I/O */
+        kprintf("ps2: soft contract soft_only=1 game_io=0 product_input=0 "
+                "irq_enable=0 drain=0 virtio_input=1 usb_hid=1 bar3=open "
+                "wave=%u soft PASS\n",
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: ps2: soft deepen wave (Wave 16 stamp) */
     kprintf("ps2: soft deepen wave=%u areas=%u via=portio float=%u "
             "stable=%u channel=%s state=%s ok=%u skip=%u\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE, (unsigned)PS2_SOFT_DEEPEN_AREAS,

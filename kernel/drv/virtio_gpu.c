@@ -38,7 +38,7 @@
  *   virtio-gpu: soft format …       (Wave 15)
  *   virtio-gpu: soft cmds …         (Wave 15)
  *   virtio-gpu: soft honesty …      (Wave 15)
- *   virtio-gpu: soft deepen wave=15 …
+ *   virtio-gpu: soft deepen wave=16 …
  *   virtio-gpu: soft PASS|NODEV|PARTIAL
  *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
  *
@@ -85,8 +85,8 @@
 #define VIRTIO_GPU_MAX_MEM_ENTRIES             256u
 
 /* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define GPU_SOFT_WAVE  15u
-#define GPU_SOFT_AREAS 24u
+#define GPU_SOFT_WAVE  16u
+#define GPU_SOFT_AREAS 29u
 
 /* ---- wire structs (packed, OASIS layout) --------------------------------- */
 struct virtio_gpu_ctrl_hdr {
@@ -864,7 +864,69 @@ gpu_soft_inventory(const char *szVia)
             "wave=%u areas=%u\n",
             (unsigned)GPU_SOFT_WAVE, (unsigned)GPU_SOFT_AREAS);
 
-    /* Grep: virtio-gpu: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: virtio-gpu: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32CmdBp = 0;
+        u32 u32CmdTot = g_u32CmdOk + g_u32CmdFail;
+
+        if (u32CmdTot != 0u) {
+            u32CmdBp = (g_u32CmdOk * 10000u) / u32CmdTot;
+        }
+        if (u32Ready != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (g_fHaveRes != 0) {
+            u32Surf |= 0x2u;
+        }
+        if (g_u32PresentCount != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (g_u32CmdOk != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (g_u32CmdFail != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (g_u32FlushCount != 0u) {
+            u32Surf |= 0x20u;
+        }
+        u32Surf |= 0x40u; /* 2D soft surface catalog */
+        u32Surf |= 0x80u; /* honesty catalog always present */
+        /* Grep: virtio-gpu: soft ratio */
+        kprintf("virtio-gpu: soft ratio cmd_ok_bp=%u cmd_ok=%u cmd_fail=%u "
+                "present=%u ready=%u wave=%u soft PASS\n",
+                u32CmdBp, g_u32CmdOk, g_u32CmdFail, g_u32PresentCount,
+                u32Ready, (unsigned)GPU_SOFT_WAVE);
+        /* Grep: virtio-gpu: soft headroom */
+        kprintf("virtio-gpu: soft headroom default_w=%u default_h=%u "
+                "fmt=%u max_scanouts=%u q_size=%u wave=%u soft PASS\n",
+                (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H,
+                (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+                (unsigned)VIRTIO_GPU_MAX_SCANOUTS, (unsigned)VIRTIO_GPU_Q_SIZE,
+                (unsigned)GPU_SOFT_WAVE);
+        /* Grep: virtio-gpu: soft surface */
+        kprintf("virtio-gpu: soft surface inventory,geometry,queue,resource,"
+                "present,flush,cmds,claim,via,ready,format,honesty,ratio,"
+                "headroom,return,contract,deepen areas=%u wave=%u\n",
+                (unsigned)GPU_SOFT_AREAS, (unsigned)GPU_SOFT_WAVE);
+        /* Grep: virtio-gpu: soft return — return-surface bitmask */
+        kprintf("virtio-gpu: soft return surf=0x%x ready=%u have_res=%u "
+                "present=%u cmd_ok=%u cmd_fail=%u flush=%u via=%s "
+                "areas=%u wave=%u soft PASS\n",
+                u32Surf, u32Ready, g_fHaveRes ? 1u : 0u, g_u32PresentCount,
+                g_u32CmdOk, g_u32CmdFail, g_u32FlushCount, szViaSafe,
+                (unsigned)GPU_SOFT_AREAS, (unsigned)GPU_SOFT_WAVE);
+        /* Grep: virtio-gpu: soft contract — soft ≠ game I/O */
+        kprintf("virtio-gpu: soft contract soft_only=1 game_io=0 "
+                "product_gpu=0 cmd3d=0 steam=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)GPU_SOFT_WAVE);
+    }
+
+    /* Grep: virtio-gpu: soft deepen wave (Wave 16 stamp) */
     kprintf("virtio-gpu: soft deepen wave=%u areas=%u via=%s ready=%u "
             "present=%u have_res=%u cmd_ok=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

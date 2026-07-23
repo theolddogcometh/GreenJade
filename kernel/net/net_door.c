@@ -31,7 +31,7 @@
  * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
  * keep those ABI-stable.
  *
- * Soft product inventory (Wave 15 exclusive deepen; file-local sticky).
+ * Soft product inventory (Wave 16 exclusive deepen; file-local sticky).
  * Never hard-gates; wrap OK; diagnostics only. Soft ≠ bar3.
  * Greppable prefix-stable serial markers (net_door: soft …):
  *   net_door: soft inventory   — owned/token/calls/vq/ring catalog + wave
@@ -51,7 +51,7 @@
  *   net_door: soft stats       — aggregate enter + group counters
  *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
  *   net_door: soft path        — honesty: soft inventory ≠ bar3 / product
- *   net_door: soft deepen      — wave=15 stamp + area count
+ *   net_door: soft deepen      — wave=16 stamp + area count
  *   net_door: soft inventory PASS / net_door: soft PASS
  */
 #include <gj/config.h>
@@ -79,11 +79,12 @@
  */
 #define NET_XFER_MAX 4096u
 #define NET_ETH_MAX  1514u
-/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
-#define NET_DOOR_SOFT_DEEPEN_WAVE  15u
+/* Wave 16 exclusive soft deepen stamp (greppable wave=16). */
+#define NET_DOOR_SOFT_DEEPEN_WAVE  16u
 /* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
- * group capacity catalog outcome stats backend path deepen PASS = 19 */
-#define NET_DOOR_SOFT_DEEPEN_AREAS 19u
+ * group capacity catalog outcome stats backend path
+ * headroom surface ratio deepen PASS = 22 */
+#define NET_DOOR_SOFT_DEEPEN_AREAS 22u
 
 /* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
@@ -99,7 +100,7 @@ static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
 static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
 
 /*
- * Soft product inventory (Wave 15 exclusive). Cumulative path tallies.
+ * Soft product inventory (Wave 16 exclusive). Cumulative path tallies.
  * greppable: net_door: soft …
  */
 struct net_door_soft {
@@ -284,7 +285,7 @@ net_door_soft_note_ret(i64 i64Ret)
 }
 
 /**
- * Greppable soft net door inventory (product / smoke). Wave 15 deepen.
+ * Greppable soft net door inventory (product / smoke). Wave 16 deepen.
  *   net_door: soft inventory …
  *   net_door: soft claim …
  *   net_door: soft sock …
@@ -550,7 +551,46 @@ net_door_soft_inventory_log(void)
             "(soft inventory; not bar3)\n",
             u32Wave);
 
-    /* Grep: net_door: soft deepen (Wave 15 stamp) */
+    /* Grep: net_door: soft headroom — Wave 16 live slack lamps. */
+    kprintf("net_door: soft headroom xfer_max=%u eth_max=%u "
+            "q_free_tx=%u q_free_rx=%u owned=%u virtio=%u "
+            "calls=%u ring_calls=%u wave=%u\n",
+            NET_XFER_MAX, NET_ETH_MAX, u32QFreeTx, u32QFreeRx, u32Owned,
+            u32Ready, g_u32Calls, g_u32RingCalls, u32Wave);
+
+    /* Grep: net_door: soft surface — Wave 16 surface bit lamps. */
+    kprintf("net_door: soft surface init=%u owned=%u virtio=%u "
+            "sock=%u ring=%u xfer=%u surf=0x%x wave=%u\n",
+            g_fInit ? 1u : 0u, u32Owned, u32Ready,
+            u64SockEnter != 0ull ? 1u : 0u,
+            u64RingEnter != 0ull ? 1u : 0u,
+            (s.u64SendOk + s.u64RecvOk) != 0ull ? 1u : 0u,
+            (g_fInit ? 1u : 0u) | (u32Owned << 1) | (u32Ready << 2) |
+                ((u64SockEnter != 0ull) ? 8u : 0u) |
+                ((u64RingEnter != 0ull) ? 16u : 0u) |
+                (((s.u64SendOk + s.u64RecvOk) != 0ull) ? 32u : 0u),
+            u32Wave);
+
+    /* Grep: net_door: soft ratio — Wave 16 ok/err basis points. */
+    {
+        u64 u64Ok = s.u64Ok;
+        u64 u64Err = s.u64Nodev + s.u64Inval + s.u64Busy + s.u64Fault +
+                     s.u64Io + s.u64Nomem + s.u64Nosupport + s.u64NotInit;
+        u64 u64Tot = u64Ok + u64Err;
+        u32 u32OkBp = 0;
+        u32 u32ErrBp = 0;
+
+        if (u64Tot != 0ull) {
+            u32OkBp = (u32)((u64Ok * 10000ull) / u64Tot);
+            u32ErrBp = (u32)((u64Err * 10000ull) / u64Tot);
+        }
+        kprintf("net_door: soft ratio ok_bp=%u err_bp=%u ok=%lu err=%lu "
+                "enter=%lu wave=%u\n",
+                u32OkBp, u32ErrBp, (unsigned long)u64Ok,
+                (unsigned long)u64Err, (unsigned long)s.u64Enter, u32Wave);
+    }
+
+    /* Grep: net_door: soft deepen (Wave 16 stamp) */
     kprintf("net_door: soft deepen wave=%u areas=%u init=%u owned=%u "
             "enter=%lu sock=%lu ring=%lu virtio=%lu logs=%lu "
             "ok=1 skip_hard=0\n",

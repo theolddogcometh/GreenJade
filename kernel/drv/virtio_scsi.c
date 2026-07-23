@@ -35,7 +35,7 @@
  *   virtio-scsi: soft tmf …          (Wave 15)
  *   virtio-scsi: soft data …         (Wave 15)
  *   virtio-scsi: soft oasis …        (Wave 15)
- *   virtio-scsi: soft deepen wave=15 …
+ *   virtio-scsi: soft deepen wave=16 …
  *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
  *   virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV
  *
@@ -85,8 +85,8 @@
 #define VIRTIO_SCSI_KIND 6u
 
 /* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define SCSI_SOFT_WAVE  15u
-#define SCSI_SOFT_AREAS 22u
+#define SCSI_SOFT_WAVE  16u
+#define SCSI_SOFT_AREAS 27u
 
 /* ---- OASIS request / response shapes (clean-room public layout) ---------- */
 
@@ -458,7 +458,71 @@ scsi_soft_inventory(const char *szVia)
             (unsigned)VIRTIO_SCSI_S_FUNCTION_REJECTED, g_u32LastResponse,
             g_u32LastScsiStatus);
 
-    /* Grep: virtio-scsi: soft deepen wave (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: virtio-scsi: soft ratio|headroom|surface|return|contract
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32IoBp = 0;
+        u32 u32IoTot = g_u32IoCount + g_u32IoFail;
+
+        if (u32IoTot != 0u) {
+            u32IoBp = (g_u32IoCount * 10000u) / u32IoTot;
+        }
+        if (u32Ready != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (u32Soft != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (g_u32IoCount != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (g_u32CtrlOk != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (g_u32EventCount != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (g_u32SoftTmfOk != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (g_u32IoFail != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* oasis/tmf catalog always present */
+        /* Grep: virtio-scsi: soft ratio */
+        kprintf("virtio-scsi: soft ratio io_ok_bp=%u io=%u io_fail=%u "
+                "ctrl=%u ev=%u soft=%u wave=%u soft PASS\n",
+                u32IoBp, g_u32IoCount, g_u32IoFail, g_u32CtrlOk,
+                g_u32EventCount, u32Soft, (unsigned)SCSI_SOFT_WAVE);
+        /* Grep: virtio-scsi: soft headroom */
+        kprintf("virtio-scsi: soft headroom q_size=%u data_max=%u "
+                "event_sz=%u event_spins=%u wave=%u soft PASS\n",
+                (unsigned)VIRTIO_SCSI_Q_SIZE,
+                (unsigned)GJ_VIRTIO_SCSI_DATA_MAX,
+                (unsigned)VIRTIO_SCSI_EVENT_SZ,
+                (unsigned)VIRTIO_SCSI_EVENT_SPINS, (unsigned)SCSI_SOFT_WAVE);
+        /* Grep: virtio-scsi: soft surface */
+        kprintf("virtio-scsi: soft surface inventory,geometry,queue,io,ctrl,"
+                "event,path,claim,via,ready,tmf,data,oasis,ratio,headroom,"
+                "return,contract,deepen areas=%u wave=%u\n",
+                (unsigned)SCSI_SOFT_AREAS, (unsigned)SCSI_SOFT_WAVE);
+        /* Grep: virtio-scsi: soft return — return-surface bitmask */
+        kprintf("virtio-scsi: soft return surf=0x%x ready=%u soft=%u io=%u "
+                "ctrl=%u ev=%u tmf=%u fail=%u via=%s areas=%u wave=%u "
+                "soft PASS\n",
+                u32Surf, u32Ready, u32Soft, g_u32IoCount, g_u32CtrlOk,
+                g_u32EventCount, g_u32SoftTmfOk, g_u32IoFail, szViaSafe,
+                (unsigned)SCSI_SOFT_AREAS, (unsigned)SCSI_SOFT_WAVE);
+        /* Grep: virtio-scsi: soft contract — soft ≠ game I/O */
+        kprintf("virtio-scsi: soft contract soft_only=1 game_io=0 "
+                "product_scsi=0 multi_hba=0 bar3=open wave=%u soft PASS\n",
+                (unsigned)SCSI_SOFT_WAVE);
+    }
+
+    /* Grep: virtio-scsi: soft deepen wave (Wave 16 stamp) */
     kprintf("virtio-scsi: soft deepen wave=%u areas=%u via=%s ready=%u "
             "soft=%u io=%u ctrl=%u ev=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

@@ -18,7 +18,7 @@
  *   pop_order_split: exact order, else split a higher block and push
  *   sibling buddies back (rearranges nodes only — never invents frames).
  *
- * Wave 15 soft inventory deepen (extends Wave 13; greppable: pmm: soft):
+ * Wave 16 soft inventory deepen (extends Wave 13; greppable: pmm: soft):
  *   "pmm: soft honesty …"    explicit non-claims (not 1 TiB product; not bar3)
  *   "pmm: soft inventory …"  free/total, zones, pending, hierarchy snapshot
  *   "pmm: soft zones …"      low/high free frames + release state
@@ -35,10 +35,14 @@
  *   "pmm: soft hhdm …"       high-zone vs HHDM dependency (Wave 15)
  *   "pmm: soft lamps …"      composite readiness lamps (Wave 15)
  *   "pmm: soft OPEN …"       P-MEM-3 / product_tib / bar3 OPEN (Wave 15)
- *   "pmm: soft deepen …"     wave=15 stamp + area count
+ *   "pmm: soft surfaces …"   Wave 16 return-surface catalog (surf bitmask)
+ *   "pmm: soft ratio …"      Wave 16 free/total soft ratio lamps
+ *   "pmm: soft sites …"      Wave 16 emission-site catalog
+ *   "pmm: soft api …"        Wave 16 alloc/free surface return lamps
+ *   "pmm: soft deepen …"     wave=16 stamp + area count
  *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
  * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3;
- *          soft ≠ bar3.
+ *          soft ≠ bar3; soft ≠ product.
  *
  * 1 TiB design observability (no 1 TiB host required — soft markers):
  *   Zone free frame counts (low/high) + per-order node counts.
@@ -67,10 +71,44 @@
 #define PMM_MAX_ORDER        9u
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
-/* Wave 15 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE        15u
-/* Catalog area count for deepen stamp (honesty..OPEN prior to deepen line). */
-#define PMM_SOFT_AREAS       16u
+/* Wave 16 greppable soft inventory stamp (file-local; never product gate). */
+#define PMM_SOFT_WAVE        16u
+/* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
+#define PMM_SOFT_AREAS       20u
+
+/*
+ * Wave 16 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
+ * Bits mark greppable soft areas this unit emits — not product close.
+ * greppable: pmm: soft surfaces
+ */
+#define PMM_SOFT_SURF_HONESTY   (1u << 0)
+#define PMM_SOFT_SURF_INVENTORY (1u << 1)
+#define PMM_SOFT_SURF_ZONES     (1u << 2)
+#define PMM_SOFT_SURF_HIER      (1u << 3)
+#define PMM_SOFT_SURF_ORDERS    (1u << 4)
+#define PMM_SOFT_SURF_HEADS     (1u << 5)
+#define PMM_SOFT_SURF_PENDING   (1u << 6)
+#define PMM_SOFT_SURF_HOST      (1u << 7)
+#define PMM_SOFT_SURF_DESIGN    (1u << 8)
+#define PMM_SOFT_SURF_PATH      (1u << 9)
+#define PMM_SOFT_SURF_STATS     (1u << 10)
+#define PMM_SOFT_SURF_GEOMETRY  (1u << 11)
+#define PMM_SOFT_SURF_KERNEL    (1u << 12)
+#define PMM_SOFT_SURF_HHDM      (1u << 13)
+#define PMM_SOFT_SURF_LAMPS     (1u << 14)
+#define PMM_SOFT_SURF_OPEN      (1u << 15)
+#define PMM_SOFT_SURF_SURFACES  (1u << 16)
+#define PMM_SOFT_SURF_RATIO     (1u << 17)
+#define PMM_SOFT_SURF_SITES     (1u << 18)
+#define PMM_SOFT_SURF_API       (1u << 19)
+#define PMM_SOFT_SURF_CATALOG                                                      \
+    (PMM_SOFT_SURF_HONESTY | PMM_SOFT_SURF_INVENTORY | PMM_SOFT_SURF_ZONES |     \
+     PMM_SOFT_SURF_HIER | PMM_SOFT_SURF_ORDERS | PMM_SOFT_SURF_HEADS |           \
+     PMM_SOFT_SURF_PENDING | PMM_SOFT_SURF_HOST | PMM_SOFT_SURF_DESIGN |         \
+     PMM_SOFT_SURF_PATH | PMM_SOFT_SURF_STATS | PMM_SOFT_SURF_GEOMETRY |         \
+     PMM_SOFT_SURF_KERNEL | PMM_SOFT_SURF_HHDM | PMM_SOFT_SURF_LAMPS |           \
+     PMM_SOFT_SURF_OPEN | PMM_SOFT_SURF_SURFACES | PMM_SOFT_SURF_RATIO |         \
+     PMM_SOFT_SURF_SITES | PMM_SOFT_SURF_API)
 
 struct pmm_pending {
     gj_paddr_t paBase;
@@ -437,7 +475,7 @@ log_tib_design_soft(void)
 }
 
 /**
- * Wave 15 greppable soft PMM inventory dump (product / smoke deepen).
+ * Wave 16 greppable soft PMM inventory dump (product / smoke deepen).
  * Prefix-stable markers (pmm: soft …):
  *   pmm: soft honesty    — explicit non-claims (not 1 TiB product; not bar3)
  *   pmm: soft inventory  — free/total, zones, pending, hierarchy snapshot
@@ -455,12 +493,16 @@ log_tib_design_soft(void)
  *   pmm: soft hhdm       — high-zone vs HHDM dependency (Wave 15)
  *   pmm: soft lamps      — composite readiness lamps (Wave 15)
  *   pmm: soft OPEN       — P-MEM-3 / product_tib / bar3 OPEN (Wave 15)
- *   pmm: soft deepen     — wave=15 stamp + area count
+ *   pmm: soft surfaces   — Wave 16 return-surface catalog (surf bitmask)
+ *   pmm: soft ratio      — Wave 16 free/total soft ratio lamps
+ *   pmm: soft sites      — Wave 16 emission-site catalog
+ *   pmm: soft api        — Wave 16 alloc/free surface return lamps
+ *   pmm: soft deepen     — wave=16 stamp + area count
  *   pmm: soft PASS | EMPTY | NONE | inventory PASS
  *
  * Never allocates. Safe after pmm_init (and later release/soak paths).
  * Honesty: soft inventory ≠ 1 TiB product claim; never closes P-MEM-3;
- *          soft ≠ bar3.
+ *          soft ≠ bar3; soft ≠ product.
  * greppable: pmm: soft
  */
 static void
@@ -474,6 +516,9 @@ pmm_soft_inventory(const char *szWhere)
     u32 o;
     u32 cAreas = 0;
     u32 u32Hhdm;
+    u32 u32Surf;
+    u32 u32FreePct;
+    u32 u32LowPct;
     const char *szReady;
     const char *szHost;
     int fReady;
@@ -494,6 +539,7 @@ pmm_soft_inventory(const char *szWhere)
 
     cNodesAll = g_aOrderCount[0] + cHi;
     u32Hhdm = hhdm_ready() ? 1u : 0u;
+    u32Surf = PMM_SOFT_SURF_CATALOG;
 
     if (g_paKernel1 > g_paKernel0) {
         cKerPages = (u64)(g_paKernel1 - g_paKernel0) / (u64)GJ_PAGE_SIZE;
@@ -518,6 +564,21 @@ pmm_soft_inventory(const char *szWhere)
     /* Host size soft gate only — never product 1 TiB claim. */
     fHostTib = (g_paMaxSeen >= PMM_TIB_BYTES) ? 1 : 0;
     szHost = fHostTib ? "PASS" : "SKIP";
+
+    /* Soft free/total ratio lamps (diagnostics only; never product gate). */
+    if (g_cFramesTotal == 0) {
+        u32FreePct = 0;
+        u32LowPct = 0;
+    } else {
+        u32FreePct = (u32)((g_cFramesFree * 100ull) / g_cFramesTotal);
+        if (u32FreePct > 100u) {
+            u32FreePct = 100u;
+        }
+        u32LowPct = (u32)((g_cFramesFreeLow * 100ull) / g_cFramesTotal);
+        if (u32LowPct > 100u) {
+            u32LowPct = 100u;
+        }
+    }
 
     /*
      * Honesty first: freestanding soft inventory is NOT 1 TiB product,
@@ -715,14 +776,65 @@ pmm_soft_inventory(const char *szWhere)
     cAreas++;
 
     /*
-     * Grep: pmm: soft deepen wave (Wave 15 stamp; areas = prior soft lines).
+     * Wave 16: return-surface catalog (surf bitmask; soft ≠ product).
+     * Grep: pmm: soft surfaces
+     */
+    kprintf("pmm: soft surfaces surf=0x%x catalog=%u areas_live=%u "
+            "honesty=1 inventory=1 zones=1 hier=1 orders=1 heads=1 "
+            "pending=1 host=1 design=1 path=1 stats=1 geometry=1 "
+            "kernel=1 hhdm=1 lamps=1 open=1 ratio=1 sites=1 api=1 "
+            "wave=%u (return surfaces; soft only; not product; not bar3)\n",
+            (unsigned)u32Surf, (unsigned)PMM_SOFT_AREAS, cAreas + 4u,
+            (unsigned)PMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: free/total soft ratio lamps (never product gate).
+     * Grep: pmm: soft ratio
+     */
+    kprintf("pmm: soft ratio free_pct=%u low_pct=%u free=%lu total=%lu "
+            "in_use=%lu free_low=%lu free_high=%lu high_order_nodes=%lu "
+            "wave=%u (soft ratio; not 1TiB product; not bar3)\n",
+            u32FreePct, u32LowPct,
+            (unsigned long)g_cFramesFree, (unsigned long)g_cFramesTotal,
+            (unsigned long)cInUse,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh,
+            (unsigned long)cHi, (unsigned)PMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: emission-site catalog (via= string space).
+     * Grep: pmm: soft sites
+     */
+    kprintf("pmm: soft sites via=%s "
+            "emit=init|high_release|soak|soak_soft|soak_tib|api "
+            "logs=%u dual_zone=1 hierarchical=1 wave=%u "
+            "(soft emission sites; not product; not bar3)\n",
+            szWhere, g_cSoftInvLogs, (unsigned)PMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 16: alloc/free surface return lamps (observability only).
+     * Grep: pmm: soft api
+     */
+    kprintf("pmm: soft api alloc=1 free=1 alloc_pages=1 free_pages=1 "
+            "release_high=1 soak=1 soak_tib=1 log_orders=1 "
+            "prefer_low=1 split=1 product_tib=0 pmem3=OPEN wave=%u "
+            "(soft API return surfaces; not product; not bar3)\n",
+            (unsigned)PMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Grep: pmm: soft deepen wave (Wave 16 stamp; areas = prior soft lines).
      * catalog=PMM_SOFT_AREAS is design high-water; areas is this emission.
      */
     kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
-            "free=%lu logs=%u product_tib=0 pmem3=OPEN bar3=OPEN "
-            "(Wave 15 exclusive; soft; not 1TiB product; not bar3)\n",
+            "free=%lu logs=%u surf=0x%x product_tib=0 pmem3=OPEN bar3=OPEN "
+            "(Wave 16 exclusive; soft; not 1TiB product; not bar3; "
+            "soft≠product)\n",
             (unsigned)PMM_SOFT_WAVE, cAreas, (unsigned)PMM_SOFT_AREAS,
-            szWhere, szReady, (unsigned long)g_cFramesFree, g_cSoftInvLogs);
+            szWhere, szReady, (unsigned long)g_cFramesFree, g_cSoftInvLogs,
+            (unsigned)u32Surf);
 
     /*
      * Close markers: freelist soft readiness only.

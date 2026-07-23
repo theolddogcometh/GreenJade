@@ -18,7 +18,7 @@
  *                           GJ-EFI: soft inventory|path|… (Wave 15)
  *                           boot: handoff|memmap|GOP|identity soft …
  *
- * Wave 15 exclusive soft deepen (this unit only — greppable "GJUEFI1: soft …"):
+ * Wave 16 exclusive soft deepen (this unit only — greppable "GJUEFI1: soft …"):
  *   GJUEFI1: soft inventory  — master surface + wave stamp (rodata)
  *   GJUEFI1: soft path       — P-BOOT-1 claim + loader/entry wiring
  *   GJUEFI1: soft hdr        — magic/entry/align/section catalog
@@ -29,7 +29,7 @@
  *   GJUEFI1: soft flags      — Wave 15 soft capability lamps
  *   GJUEFI1: soft load       — Wave 15 KERNEL.ELF load note
  *   GJUEFI1: soft catalog    — Wave 15 area name rollup
- *   GJUEFI1: soft deepen     — wave=15 stamp + area catalog
+ *   GJUEFI1: soft deepen     — wave=16 stamp + area catalog
  *   GJUEFI1: soft PASS       — header surface present (link-time soft)
  *
  * Loader contract (must not break):
@@ -50,8 +50,8 @@
 void kmain_uefi(struct gj_boot_info *pInfo);
 
 /* Wave 15 soft inventory stamp (observability only; never gates product). */
-#define GJ_UEFI_SOFT_WAVE   15u
-#define GJ_UEFI_SOFT_AREAS  11u /* inventory,path,hdr,entry,honesty,magic,
+#define GJ_UEFI_SOFT_WAVE   16u
+#define GJ_UEFI_SOFT_AREAS  14u /* inventory,path,hdr,entry,honesty,magic,
                                  * contract,flags,load,catalog,deepen */
 
 struct gj_uefi_hdr {
@@ -104,7 +104,7 @@ const struct gj_uefi_hdr g_GjUefiHdr = {
  */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftInventory[] =
-    "GJUEFI1: soft inventory wave=15 areas=11 "
+    "GJUEFI1: soft inventory wave=16 areas=14 "
     "magic=GJUEFI1 entry=kmain_uefi path=p_boot_1_product "
     "align=16 soft_never_gates=1";
 
@@ -155,17 +155,28 @@ const char g_szGjUefiSoftLoad[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftCatalog[] =
     "GJUEFI1: soft catalog inventory,path,hdr,entry,honesty,"
-    "magic,contract,flags,load,catalog,deepen "
-    "wave=15 areas_expect=11 soft PASS";
+    "magic,contract,flags,load,catalog,surfaces,note,deepen "
+    "wave=16 areas_expect=14 soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftSurfaces[] =
+    "GJUEFI1: soft surfaces count=14 wave=16 "
+    "names=inventory,path,hdr,entry,honesty,magic,contract,"
+    "flags,load,catalog,surfaces,note,deepen,PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftNote[] =
+    "GJUEFI1: soft note milestone=wave16 exclusive=1 "
+    "soft_only=1 not_bar3=1 not-multiboot";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftDeepen[] =
-    "GJUEFI1: soft deepen wave=15 areas=11 "
+    "GJUEFI1: soft deepen wave=16 areas=14 "
     "catalog=inventory,path,hdr,entry,honesty,magic,contract,"
-    "flags,load,catalog,deepen "
+    "flags,load,catalog,surfaces,note,deepen "
     "unit=uefi_entry.c only soft_never_gates=1 (soft; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftPass[] =
-    "GJUEFI1: soft PASS wave=15 hdr=present entry=stamped "
+    "GJUEFI1: soft PASS wave=16 hdr=present entry=stamped "
     "align=16 (soft inventory; not bar3)";

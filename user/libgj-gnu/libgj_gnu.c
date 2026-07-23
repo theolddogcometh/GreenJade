@@ -32,9 +32,9 @@
  *   greppable: GJ_GNU_SOFT_SURFACE
  *   greppable: GJ_GNU_SOFT_NOTE
  *
- * Soft inventory (Wave 15 exclusive deepen):
- *   libgj-gnu: soft inventory wave=15 surfaces=12 caps=0xf stamp=GNU1
- *   libgj-gnu: soft deepen wave=15 areas=export,stamp,caps,get,id,probe,
+ * Soft inventory (Wave 16 exclusive deepen):
+ *   libgj-gnu: soft inventory wave=16 surfaces=12 caps=0xf stamp=GNU1
+ *   libgj-gnu: soft deepen wave=16 areas=export,stamp,caps,get,id,probe,
  *              touch,inventory,wave,surface,path,note
  *   libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 bar3=0
  * Diagnostics only — never a product bar3 claim; product 0x43 unchanged.
@@ -54,8 +54,8 @@
 #define GJ_GNU_SOFT_CAP_TOUCH   ((uint32_t)0x8u)
 #define GJ_GNU_SOFT_CAP_MASK    ((uint32_t)0xfu)
 
-/* Wave 15 exclusive soft inventory stamp. */
-#define GJ_GNU_SOFT_WAVE        15u
+/* Wave 16 exclusive soft inventory stamp. */
+#define GJ_GNU_SOFT_WAVE        16u
 /* Soft dynsym surface count (export+init+stamp+caps+get+id+probe+touch
  * +inventory+wave+surface+note+deepen+path — product + soft catalog). */
 #define GJ_GNU_SOFT_SURFACES    12u
@@ -85,20 +85,22 @@ static volatile uint32_t g_u32SoftPathN;
  * Grep: libgj-gnu: soft inventory
  */
 static const char g_szGnuSoftInventory[] =
-    "libgj-gnu: soft inventory wave=15 surfaces=12 areas=12 "
+    "libgj-gnu: soft inventory wave=16 surfaces=12 areas=12 "
     "export=0x43 stamp=GNU1 caps=0xf "
     "get=1 id=1 probe=1 touch=1 inventory=1 deepen=1 path=1 note=1 "
-    "hash=gnu soname=libgj-gnu.so.1 freestanding=1 bar3=0";
+    "hash=gnu soname=libgj-gnu.so.1 freestanding=1 "
+    "multi_server=0 confine=0 bar3=0";
 
 /*
- * Wave 15 soft deepen stamp.
+ * Wave 16 soft deepen stamp.
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
 static const char g_szGnuSoftDeepen[] =
-    "libgj-gnu: soft deepen wave=15 areas=12 "
+    "libgj-gnu: soft deepen wave=16 areas=12 "
     "export,stamp,caps,get,id,probe,touch,inventory,wave,surface,path,note "
-    "product_export=0x43 soft_stamp=GNU1 hot_path=clean bar3=0";
+    "product_export=0x43 soft_stamp=GNU1 hot_path=clean "
+    "multi_server=0 confine=0 bar3=0";
 
 /*
  * Soft path honesty line.
@@ -107,9 +109,17 @@ static const char g_szGnuSoftDeepen[] =
 static const char g_szGnuSoftPath[] =
     "libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 "
     "export=0x43 freestanding=1 pure_c=1 no_heap=1 "
-    "bar3=0 (soft inventory; not bar3)";
+    "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
-/* Soft area name catalog (Wave 15; cold only). */
+/*
+ * Soft honesty line (Wave 16 exclusive).
+ * Grep: libgj-gnu: soft honesty
+ */
+static const char g_szGnuSoftHonesty[] =
+    "libgj-gnu: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "soft=1 wave=16";
+
+/* Soft area name catalog (Wave 16; cold only). */
 static const char *const g_apszGnuSoftAreas[] = {
     "export",
     "stamp",
@@ -190,7 +200,7 @@ gj_gnu_soft_touch(void)
 }
 
 /*
- * Cold soft inventory accessor (Wave 15).
+ * Cold soft inventory accessor (Wave 16).
  * greppable: GJ_GNU_SOFT_INVENTORY
  * Grep: libgj-gnu: soft inventory
  */
@@ -202,7 +212,7 @@ gj_gnu_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 15).
+ * Cold soft deepen stamp (Wave 16).
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
@@ -225,7 +235,17 @@ gj_gnu_soft_path(void)
 }
 
 /*
- * Soft wave stamp (15). greppable: GJ_GNU_SOFT_WAVE
+ * Cold soft honesty line (Wave 16 exclusive).
+ * Grep: libgj-gnu: soft honesty
+ */
+const char *
+gj_gnu_soft_honesty(void)
+{
+    return g_szGnuSoftHonesty;
+}
+
+/*
+ * Soft wave stamp (16). greppable: GJ_GNU_SOFT_WAVE
  * Grep: libgj-gnu: soft wave=
  */
 uint32_t
@@ -246,7 +266,7 @@ gj_gnu_soft_surface_count(void)
 }
 
 /*
- * Soft area catalog size (Wave 15 deepen areas).
+ * Soft area catalog size (Wave 16 deepen areas).
  * Grep: libgj-gnu: soft areas=
  */
 uint32_t
@@ -314,7 +334,7 @@ gj_gnu_soft_note_counts(uint32_t *pGet, uint32_t *pId, uint32_t *pProbe,
 }
 
 /*
- * Soft note extend (Wave 15): deepen + path call counters.
+ * Soft note extend (Wave 16): deepen + path call counters.
  * Grep: libgj-gnu: soft note
  */
 void

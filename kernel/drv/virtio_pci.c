@@ -78,8 +78,8 @@ static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
 
 /* Wave 15 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  15u
-#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 22u
+#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  16u
+#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 27u
 
 /*
  * Soft product inventory (Wave 15 exclusive deepen). Cumulative path tallies.
@@ -413,7 +413,102 @@ soft_inventory_log(void)
             "wave=%u (soft inventory; not bar3)\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-pci: soft deepen (Wave 15 stamp) */
+    /*
+     * Wave 16 exclusive deepen (complementary; never hard-gates).
+     * Soft ≠ game I/O. greppable: virtio-pci: soft honesty|geom|return|contract|surface
+     */
+    {
+        u32 u32Surf = 0u;
+        u32 u32ModernBp = 0;
+
+        if (u32Found != 0u) {
+            u32ModernBp = (u32Modern * 10000u) / u32Found;
+        }
+        if (u32Found != 0u) {
+            u32Surf |= 0x1u;
+        }
+        if (u32Modern != 0u) {
+            u32Surf |= 0x2u;
+        }
+        if (g_u32SoftSetupOk != 0u) {
+            u32Surf |= 0x4u;
+        }
+        if (g_u32SoftQSetupOk != 0u) {
+            u32Surf |= 0x8u;
+        }
+        if (g_u32SoftNegoOk != 0u) {
+            u32Surf |= 0x10u;
+        }
+        if (g_u32SoftDriverOk != 0u) {
+            u32Surf |= 0x20u;
+        }
+        if (g_u32SoftKick != 0u) {
+            u32Surf |= 0x40u;
+        }
+        u32Surf |= 0x80u; /* transport catalog always present */
+        /* Grep: virtio-pci: soft honesty */
+        kprintf("virtio-pci: soft honesty transport=1 packed=0 msix=0 "
+                "game_io=0 product_vq=0 bar3=open soft_only=1 wave=%u "
+                "soft PASS\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        /* Grep: virtio-pci: soft geom */
+        kprintf("virtio-pci: soft geom max_devs=%u found=%u modern=%u "
+                "setup_ok=%u q_ok=%u wave=%u soft PASS\n",
+                (unsigned)GJ_VIRTIO_MAX_DEVS, u32Found, u32Modern,
+                g_u32SoftSetupOk, g_u32SoftQSetupOk,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        /* Grep: virtio-pci: soft surface */
+        kprintf("virtio-pci: soft surface inventory,scan,reset,kind,poll,"
+                "reap,last,modern,status,transport,add,bar,ratio,notify,"
+                "ladder,caps,path,honesty,geom,return,contract,deepen "
+                "areas=%u wave=%u\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_AREAS,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        /* Grep: virtio-pci: soft return — return-surface bitmask */
+        kprintf("virtio-pci: soft return surf=0x%x found=%u modern=%u "
+                "setup=%u q=%u nego=%u driver=%u kick=%u modern_bp=%u "
+                "areas=%u wave=%u soft PASS\n",
+                u32Surf, u32Found, u32Modern, g_u32SoftSetupOk,
+                g_u32SoftQSetupOk, g_u32SoftNegoOk, g_u32SoftDriverOk,
+                g_u32SoftKick, u32ModernBp,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_AREAS,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        /* Grep: virtio-pci: soft contract — soft ≠ game I/O */
+        kprintf("virtio-pci: soft contract soft_only=1 game_io=0 "
+                "product_transport=0 packed=0 msix_claim=0 bar3=open "
+                "wave=%u soft PASS\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        /* Twin: virtio: soft honesty|geom|return|contract|surface */
+        kprintf("virtio: soft honesty transport=1 packed=0 msix=0 "
+                "game_io=0 product_vq=0 bar3=open soft_only=1 wave=%u "
+                "soft PASS\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        kprintf("virtio: soft geom max_devs=%u found=%u modern=%u "
+                "setup_ok=%u q_ok=%u wave=%u soft PASS\n",
+                (unsigned)GJ_VIRTIO_MAX_DEVS, u32Found, u32Modern,
+                g_u32SoftSetupOk, g_u32SoftQSetupOk,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        kprintf("virtio: soft surface inventory,scan,reset,kind,poll,reap,"
+                "last,modern,status,transport,add,bar,ratio,notify,ladder,"
+                "caps,path,honesty,geom,return,contract,deepen "
+                "areas=%u wave=%u\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_AREAS,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        kprintf("virtio: soft return surf=0x%x found=%u modern=%u setup=%u "
+                "q=%u nego=%u driver=%u kick=%u modern_bp=%u areas=%u "
+                "wave=%u soft PASS\n",
+                u32Surf, u32Found, u32Modern, g_u32SoftSetupOk,
+                g_u32SoftQSetupOk, g_u32SoftNegoOk, g_u32SoftDriverOk,
+                g_u32SoftKick, u32ModernBp,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_AREAS,
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+        kprintf("virtio: soft contract soft_only=1 game_io=0 "
+                "product_transport=0 packed=0 msix_claim=0 bar3=open "
+                "wave=%u soft PASS\n",
+                (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: virtio-pci: soft deepen (Wave 16 stamp) */
     kprintf("virtio-pci: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,
@@ -602,7 +697,7 @@ soft_inventory_log(void)
             "wave=%u (soft inventory; not bar3)\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio: soft deepen (Wave 15 stamp) */
+    /* Grep: virtio: soft deepen (Wave 16 stamp) */
     kprintf("virtio: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,

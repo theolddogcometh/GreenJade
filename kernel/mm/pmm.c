@@ -43,7 +43,7 @@
  *   "pmm: soft retcode …"    Wave 17 alloc/free retcode catalog
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   "pmm: soft deepen …"     wave=21 stamp + area count
+ *   "pmm: soft deepen …"     wave=22 stamp + area count
  *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
  * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3;
  *          soft ≠ bar3; soft ≠ product.
@@ -76,9 +76,9 @@
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
 /* Wave 19 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE        21u
+#define PMM_SOFT_WAVE        22u
 /* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
-#define PMM_SOFT_AREAS       30u
+#define PMM_SOFT_AREAS 32u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -503,7 +503,7 @@ log_tib_design_soft(void)
  *   pmm: soft api        — Wave 17 alloc/free surface return lamps
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   pmm: soft deepen     — wave=21 stamp + area count
+ *   pmm: soft deepen     — wave=22 stamp + area count
  *   pmm: soft PASS | EMPTY | NONE | inventory PASS
  *
  * Never allocates. Safe after pmm_init (and later release/soak paths).
@@ -903,23 +903,38 @@ pmm_soft_inventory(const char *szWhere)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)PMM_SOFT_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: pmm: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: pmm: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("pmm: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)PMM_SOFT_WAVE);
-            /* Grep: pmm: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: pmm: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("pmm: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)PMM_SOFT_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: pmm: soft retphase — Wave 22 return-phase honesty */
+            kprintf("pmm: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)PMM_SOFT_WAVE);
+            /* Grep: pmm: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("pmm: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)PMM_SOFT_WAVE);
     kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
             "free=%lu logs=%u surf=0x%x product_tib=0 pmem3=OPEN bar3=OPEN "
-            "(Wave 21 exclusive; soft; not 1TiB product; not bar3; "
+            "(Wave 22 exclusive; soft; not 1TiB product; not bar3; "
             "soft≠product)\n",
             (unsigned)PMM_SOFT_WAVE, cAreas, (unsigned)PMM_SOFT_AREAS,
             szWhere, szReady, (unsigned long)g_cFramesFree, g_cSoftInvLogs,

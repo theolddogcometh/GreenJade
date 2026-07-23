@@ -23,7 +23,7 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Soft inventory (Wave 21 exclusive deepen; this unit only):
+ * Soft inventory (Wave 22 exclusive deepen; this unit only):
  *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
  *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
  *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
@@ -40,7 +40,7 @@
  *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
  *   cap: cdt soft return selftest — Wave 19 terminal return surface
  *   cap: cdt soft retmap     — Wave 19 return-surface map
- *   cap: cdt soft deepen     — wave=21 areas stamp
+ *   cap: cdt soft deepen     — wave=22 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
  * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
@@ -52,9 +52,9 @@
 #include <gj/types.h>
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE  21u
+#define GJ_CDT_SOFT_WAVE  22u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_CDT_SOFT_AREAS 24u
+#define GJ_CDT_SOFT_AREAS 26u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -1090,7 +1090,7 @@ cdt_soft_inventory_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)GJ_CDT_SOFT_WAVE);
 
-    /* Grep: cap: cdt soft deepen wave (Wave 21 stamp) */
+    /* Grep: cap: cdt soft deepen wave (Wave 22 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -1122,19 +1122,34 @@ cdt_soft_inventory_log(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_CDT_SOFT_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: cap: cdt: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: cap: cdt: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("cap: cdt: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_CDT_SOFT_WAVE);
-            /* Grep: cap: cdt: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: cap: cdt: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("cap: cdt: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
+                    (unsigned)GJ_CDT_SOFT_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: cap: cdt: soft retphase — Wave 22 return-phase honesty */
+            kprintf("cap: cdt: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_CDT_SOFT_WAVE);
+            /* Grep: cap: cdt: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("cap: cdt: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
                     (unsigned)GJ_CDT_SOFT_WAVE);
     kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
             "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "

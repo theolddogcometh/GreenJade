@@ -7,7 +7,7 @@
  * ledger, death-cleanup soft note (product multi-server confine OPEN).
  * Grep: confine: expose soft | confine: ledger soft | confine: death soft
  *
- * Soft inventory (Wave 14 base + Wave 21 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14 base + Wave 22 exclusive deepen; this unit only):
  *   protonrt: soft inventory|enter|fs|net|proc|time|mem|other|confine|
  *             attach|path|rates|honesty|catalog|deepen|PASS …
  *   cold_link: soft … (twin prefix)
@@ -81,9 +81,9 @@ static u8  g_u8DeathSoftOnce;
 static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
 
 /* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define GJ_PROTONRT_SOFT_WAVE  21u
+#define GJ_PROTONRT_SOFT_WAVE  22u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_PROTONRT_SOFT_AREAS 27u
+#define GJ_PROTONRT_SOFT_AREAS 29u
 
 /*
  * Soft NR group buckets for cold personality enter tallies (Wave 15).
@@ -100,7 +100,7 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 21 exclusive deepen).
+ * Soft product inventory (Wave 22 exclusive deepen).
  * greppable: protonrt: soft … / cold_link: soft …
  */
 static u64 g_u64PrtSoftEnter;                 /* protonrt_service entries */
@@ -304,7 +304,7 @@ protonrt_soft_note_enter(u64 u64Nr)
 }
 
 /**
- * Greppable soft cold personality inventory (Wave 21 exclusive deepen).
+ * Greppable soft cold personality inventory (Wave 22 exclusive deepen).
  * Twin prefixes: protonrt: soft … / cold_link: soft …
  * greppable: protonrt: soft
  * greppable: cold_link: soft
@@ -460,7 +460,7 @@ protonrt_soft_inventory_log(void)
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft note (Wave 20 deepen) */
-    kprintf("protonrt: soft note milestone=wave21 exclusive=1 "
+    kprintf("protonrt: soft note milestone=wave22 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
@@ -484,9 +484,9 @@ protonrt_soft_inventory_log(void)
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft retmap — Wave 19 return-surface map */
-    kprintf("protonrt: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=21\n");
+    kprintf("protonrt: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=22\n");
 
-    /* Grep: protonrt: soft deepen wave (Wave 21 stamp) */
+    /* Grep: protonrt: soft deepen wave (Wave 22 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -518,23 +518,38 @@ protonrt_soft_inventory_log(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: protonrt: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: protonrt: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("protonrt: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: protonrt: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: protonrt: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("protonrt: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)GJ_PROTONRT_SOFT_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: protonrt: soft retphase — Wave 22 return-phase honesty */
+            kprintf("protonrt: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
+            /* Grep: protonrt: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("protonrt: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
     kprintf("protonrt: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
             "fs=%llu net=%llu proc=%llu confine_deny=%u "
-            "(Wave 21 exclusive; cold link soft; not bar3)\n",
+            "(Wave 22 exclusive; cold link soft; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned long long)g_u64PrtSoftLogN,
@@ -642,7 +657,7 @@ protonrt_soft_inventory_log(void)
             g_u32ConfinePromiseDeny + g_u32ConfineExposeDeny,
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
-    /* Grep: cold_link: soft deepen wave (Wave 21 stamp) */
+    /* Grep: cold_link: soft deepen wave (Wave 22 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -674,22 +689,37 @@ protonrt_soft_inventory_log(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: cold_link: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: cold_link: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("cold_link: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_PROTONRT_SOFT_WAVE);
-            /* Grep: cold_link: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: cold_link: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("cold_link: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)GJ_PROTONRT_SOFT_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: cold_link: soft retphase — Wave 22 return-phase honesty */
+            kprintf("cold_link: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
+            /* Grep: cold_link: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("cold_link: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)GJ_PROTONRT_SOFT_WAVE);
     kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
-            "(Wave 21 exclusive; cold link soft; not bar3)\n",
+            "(Wave 22 exclusive; cold link soft; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,
             (unsigned)GJ_PROTONRT_SOFT_AREAS,
             (unsigned long long)g_u64PrtSoftLogN,

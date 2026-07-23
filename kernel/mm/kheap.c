@@ -11,7 +11,7 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Soft product inventory (Wave 21 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 22 exclusive deepen; this unit only):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
  *   - Lifetime: charged / released / net / peak components / max-one
@@ -20,7 +20,7 @@
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
  *   - Wave 19: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=21 + PASS/NONE
+ *   - Path catalog + stats rollup + deepen wave=22 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=21 …
+ *   kheap: soft deepen wave=22 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -60,10 +60,10 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 21 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 21u
+/* Wave 22 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 22u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 28u
+#define KHEAP_SOFT_AREAS 30u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1020,24 +1020,39 @@ kheap_dump_stats(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)KHEAP_SOFT_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: kheap: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: kheap: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("kheap: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)KHEAP_SOFT_WAVE);
-            /* Grep: kheap: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: kheap: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("kheap: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
                     (unsigned)KHEAP_SOFT_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: kheap: soft retphase — Wave 22 return-phase honesty */
+            kprintf("kheap: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)KHEAP_SOFT_WAVE);
+            /* Grep: kheap: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("kheap: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
+                    (unsigned)KHEAP_SOFT_WAVE);
     kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
             "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "
             "free_max=%lu surf=0x%x product_tib=0 bar3=OPEN "
-            "(Wave 21 exclusive; soft; not product; not bar3; "
+            "(Wave 22 exclusive; soft; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)KHEAP_SOFT_WAVE,
             cAreas,

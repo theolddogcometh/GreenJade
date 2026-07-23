@@ -31,7 +31,7 @@
  * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
  * keep those ABI-stable.
  *
- * Soft product inventory (Wave 21 exclusive deepen; file-local sticky).
+ * Soft product inventory (Wave 22 exclusive deepen; file-local sticky).
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  * Never hard-gates; wrap OK; diagnostics only. Soft ≠ bar3.
@@ -53,7 +53,7 @@
  *   net_door: soft stats       — aggregate enter + group counters
  *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
  *   net_door: soft path        — honesty: soft inventory ≠ bar3 / product
- *   net_door: soft deepen      — wave=21 stamp + area count
+ *   net_door: soft deepen      — wave=22 stamp + area count
  *   net_door: soft inventory PASS / net_door: soft PASS
  */
 #include <gj/config.h>
@@ -81,12 +81,12 @@
  */
 #define NET_XFER_MAX 4096u
 #define NET_ETH_MAX  1514u
-/* Wave 21 exclusive soft deepen stamp (greppable wave=21). */
-#define NET_DOOR_SOFT_DEEPEN_WAVE  21u
+/* Wave 22 exclusive soft deepen stamp (greppable wave=22). */
+#define NET_DOOR_SOFT_DEEPEN_WAVE  22u
 /* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
  * group capacity catalog outcome stats backend path
  * headroom surface ratio return deepen PASS = 23 */
-#define NET_DOOR_SOFT_DEEPEN_AREAS 30u
+#define NET_DOOR_SOFT_DEEPEN_AREAS 32u
 
 /* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
@@ -603,7 +603,7 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64NotInit, (unsigned long)s.u64Enter, u32Wave);
 
     /* Grep: net_door: soft retmap — Wave 19 return-surface map */
-    kprintf("net_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=21\n");
+    kprintf("net_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=22\n");
 
     /* Grep: net_door: soft deepen (Wave 20 stamp) */
     /*
@@ -637,19 +637,34 @@ net_door_soft_inventory_log(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: net_door: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: net_door: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("net_door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
-            /* Grep: net_door: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: net_door: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("net_door: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
+                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: net_door: soft retphase — Wave 22 return-phase honesty */
+            kprintf("net_door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
+            /* Grep: net_door: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("net_door: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
                     (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE);
     kprintf("net_door: soft deepen wave=%u areas=%u init=%u owned=%u "
             "enter=%lu sock=%lu ring=%lu virtio=%lu logs=%lu "

@@ -25,7 +25,7 @@
  *   ps2: soft identify   — float-aware soft identify PASS
  *   ps2: soft return rate — Wave 19 ok/fail rate lamps
  *   ps2: soft retcode    — Wave 19 retcode catalog
- *   ps2: soft deepen     — wave=21 areas stamp
+ *   ps2: soft deepen     — wave=22 areas stamp
  *   ps2: soft ratio      — Wave 16 status occupancy lamps
  *   ps2: soft headroom   — Wave 16 dual-sample head
  *   ps2: soft surface    — Wave 16 area catalog
@@ -61,8 +61,8 @@
 #define PS2_IRQ_AUX 12u
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define PS2_SOFT_DEEPEN_AREAS 33u
-#define PS2_SOFT_DEEPEN_WAVE  21u
+#define PS2_SOFT_DEEPEN_AREAS 35u
+#define PS2_SOFT_DEEPEN_WAVE  22u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -432,7 +432,7 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
             "(retcode catalog; Soft≠product)\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ps2: soft deepen wave (Wave 21 stamp) */
+    /* Grep: ps2: soft deepen wave (Wave 22 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -464,19 +464,34 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)PS2_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: ps2: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: ps2: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("ps2: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)PS2_SOFT_DEEPEN_WAVE);
-            /* Grep: ps2: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: ps2: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("ps2: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
+                    (unsigned)PS2_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: ps2: soft retphase — Wave 22 return-phase honesty */
+            kprintf("ps2: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)PS2_SOFT_DEEPEN_WAVE);
+            /* Grep: ps2: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("ps2: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
                     (unsigned)PS2_SOFT_DEEPEN_WAVE);
     kprintf("ps2: soft deepen wave=%u areas=%u via=portio float=%u "
             "stable=%u channel=%s state=%s ok=%u skip=%u\n",

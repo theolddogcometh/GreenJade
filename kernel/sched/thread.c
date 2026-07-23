@@ -6,13 +6,13 @@
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
  *
- * Soft product deepen (Wave 21 exclusive; this unit only):
+ * Soft product deepen (Wave 22 exclusive; this unit only):
  *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
  *   - pick_next soft stats + equal-rank wait-age fairness
  *   - kstack base+mid canary + poison HWM soft scan
  *   - soft sched inventory: ready/run snap + HWM + transition counts
  *   - path tallies: create/block/wake/yield/switch/exit + aff/proc
- *   - Wave 19 greppable "thread: soft …" deepen (wave=21 stamp):
+ *   - Wave 19 greppable "thread: soft …" deepen (wave=22 stamp):
  *       inventory|table|ready|run|create|block|wake|yield|switch|
  *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
  *       hwm|sysuser|user|boost|exec|invariant|return|ret_surface|ratio|surface|headroom
@@ -58,10 +58,10 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 21 exclusive soft deepen stamp (greppable wave=21). */
-#define THREAD_SOFT_DEEPEN_WAVE  21u
+/* Wave 22 exclusive soft deepen stamp (greppable wave=22). */
+#define THREAD_SOFT_DEEPEN_WAVE  22u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 39u
+#define THREAD_SOFT_DEEPEN_AREAS 41u
 
 /*
  * Soft sched inventory (Wave 19; file-local; ready = RUNNABLE, run = RUNNING).
@@ -743,9 +743,9 @@ sched_soft_inventory_print(void)
             (unsigned)THREAD_SOFT_DEEPEN_AREAS,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft retmap — Wave 19 return-surface map */
-    kprintf("thread: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=21\n");
+    kprintf("thread: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=22\n");
 
-    /* Grep: thread: soft deepen wave (Wave 21 stamp) */
+    /* Grep: thread: soft deepen wave (Wave 22 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -777,19 +777,34 @@ sched_soft_inventory_print(void)
             "(retseal stamp; Soft≠product)\n",
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
             */
-            /* Grep: thread: soft retpulse — Wave 21 return-pulse honesty */
+            /* Grep: thread: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("thread: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retpulse honesty; Soft≠product; not bar3)\n",
                     (unsigned)THREAD_SOFT_DEEPEN_WAVE);
-            /* Grep: thread: soft retmark — Wave 21 exclusive mark stamp */
+            /* Grep: thread: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("thread: soft retmark exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retmark stamp; Soft≠product)\n",
+                    (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: thread: soft retphase — Wave 22 return-phase honesty */
+            kprintf("thread: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retphase honesty; Soft≠product; not bar3)\n",
+                    (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+            /* Grep: thread: soft retbadge — Wave 22 exclusive badge stamp */
+            kprintf("thread: soft retbadge exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbadge stamp; Soft≠product)\n",
                     (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
             "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",

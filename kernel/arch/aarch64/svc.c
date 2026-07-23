@@ -26,7 +26,7 @@
  *   5. Soft SVC inventory — greppable "aarch64: svc soft …" (Wave 9)
  *   6. Soft inventory deepen — Wave 19 multi-area inventory (this unit only)
  *
- * Soft inventory deepen (Wave 21 exclusive; this unit only):
+ * Soft inventory deepen (Wave 22 exclusive; this unit only):
  *   Multi-line greppable "aarch64: svc soft …" under fixed areas:
  *     inventory | count | nrs | have | groups | gates | path | deepen
  *   Groups soft: io / mm / net / proc / sync NR presence rollups
@@ -58,9 +58,9 @@
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
 
-/* Wave 21 soft inventory stamp (file-local; never product gate). */
-#define SVC_SOFT_WAVE   21u
-#define SVC_SOFT_AREAS  17u
+/* Wave 22 soft inventory stamp (file-local; never product gate). */
+#define SVC_SOFT_WAVE   22u
+#define SVC_SOFT_AREAS 19u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -337,7 +337,7 @@ aarch64_svc_try_handle(unsigned long u64Vec, unsigned long esr,
 }
 
 /*
- * Soft SVC inventory (Wave 9 base + Wave 21 exclusive deepen).
+ * Soft SVC inventory (Wave 9 base + Wave 22 exclusive deepen).
  * Walks the in-arch NR stub table, tallies soft-covered NRs, checks
  * non-decreasing NR order and key deepen presence, then emits greppable
  * "aarch64: svc soft …" multi-area lines. Pure C; no shared dispatch,
@@ -714,21 +714,37 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" (retseal stamp; Soft!=product)\n");
     /*
-     * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft!=product; not bar3.
      */
-    /* Grep: aarch64: svc: soft retpulse — Wave 21 return-pulse honesty */
+    /* Grep: aarch64: svc: soft retpulse — Wave 21 return-pulse honesty (kept) */
     aarch64_uart_puts("aarch64: svc: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
                       "never_blocks_m0=1 wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" (retpulse honesty; Soft!=product; not bar3)\n");
-    /* Grep: aarch64: svc: soft retmark — Wave 21 exclusive mark stamp */
+    /* Grep: aarch64: svc: soft retmark — Wave 21 mark stamp (kept) */
     aarch64_uart_puts("aarch64: svc: soft retmark exclusive=1 soft_ne_product=1 "
                       "product_kernel=OPEN bar3=0 wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" (retmark stamp; Soft!=product)\n");
-    aarch64_uart_puts("aarch64: svc soft deepen wave=");
+    
+/*
+ * ---- Wave 22 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: svc: soft retphase — Wave 22 return-phase honesty */
+aarch64_uart_puts("aarch64: svc: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
+              "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (retphase honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: svc: soft retbadge — Wave 22 exclusive badge stamp */
+aarch64_uart_puts("aarch64: svc: soft retbadge exclusive=1 soft_ne_product=1 "
+              "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (retbadge stamp; Soft!=product)\n");
+aarch64_uart_puts("aarch64: svc soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_AREAS);
@@ -742,7 +758,7 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: svc soft exclusive — Wave 21 exclusive deepen */
+    /* Grep: aarch64: svc soft exclusive — Wave 22 exclusive deepen */
     aarch64_uart_puts("aarch64: svc soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);

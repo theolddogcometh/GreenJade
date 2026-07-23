@@ -6,10 +6,10 @@
  * With GJ_VK_KERNEL_SMOKE: linked into the kernel (virtio-gpu + PMM).
  * Without it: stubs return failure so host builds only need vulkan_icd.c.
  *
- * Soft inventory (Wave 14 exclusive deepen; greppable; not bar3 GPU):
- *   gj_vk_icd: soft inventory wave=14 surfaces=14 pools=inst,dev,sc
- *   gj_vk_icd: soft deepen wave=14 areas=display,present,instance,device,
- *              swapchain,acquire,pixels,features,name,host,path,counts
+ * Soft inventory (Wave 15 exclusive deepen; greppable; not bar3 GPU):
+ *   gj_vk_icd: soft inventory wave=15 surfaces=16 pools=inst,dev,sc
+ *   gj_vk_icd: soft deepen wave=15 areas=display,present,instance,device,
+ *              swapchain,acquire,pixels,features,name,host,path,counts,note,area
  *   gj_vk_icd: soft path kernel_smoke|host_stub bar3=0
  * Soft counters wrap OK; never hard-gate product returns.
  * greppable: "gj_vk_icd: soft"
@@ -20,10 +20,10 @@
 #define GJ_VK_DEV_MAGIC  0x44564a47u /* 'GJVD' */
 #define GJ_VK_SC_MAGIC   0x53564a47u /* 'GJVS' */
 
-/* Wave 14 exclusive soft inventory stamp. */
-#define GJ_VK_ICD_SOFT_WAVE      14u
-#define GJ_VK_ICD_SOFT_SURFACES  14u /* public convenience entry count */
-#define GJ_VK_ICD_SOFT_AREAS     12u
+/* Wave 15 exclusive soft inventory stamp. */
+#define GJ_VK_ICD_SOFT_WAVE      15u
+#define GJ_VK_ICD_SOFT_SURFACES  16u /* public convenience entry count + note/area */
+#define GJ_VK_ICD_SOFT_AREAS     14u
 
 /*
  * Soft path counters (cold; wrap OK). Shared host-stub + kernel smoke.
@@ -468,13 +468,13 @@ gj_vk_image_pixels(gj_vk_swapchain_t pSc, uint32_t u32Index)
 #endif /* GJ_VK_KERNEL_SMOKE */
 
 /*
- * Soft inventory blob (Wave 14). Shared host-stub + kernel smoke.
+ * Soft inventory blob (Wave 15). Shared host-stub + kernel smoke.
  * Grep: gj_vk_icd: soft inventory
  */
 static const char g_szGjVkIcdSoftInventory[] =
-    "gj_vk_icd: soft inventory wave=14 surfaces=14 areas=12 "
+    "gj_vk_icd: soft inventory wave=15 surfaces=16 areas=14 "
     "display=1 present=1 instance=1 device=1 swapchain=1 acquire=1 "
-    "pixels=1 features=1 name=1 host=1 path=1 counts=1 "
+    "pixels=1 features=1 name=1 host=1 path=1 counts=1 note=1 area=1 "
     "feat=present_2d,swapchain,instance,named_export "
     "bar3=0 (soft inventory; not bar3)";
 
@@ -482,9 +482,9 @@ static const char g_szGjVkIcdSoftInventory[] =
  * Grep: gj_vk_icd: soft deepen
  */
 static const char g_szGjVkIcdSoftDeepen[] =
-    "gj_vk_icd: soft deepen wave=14 areas=12 "
+    "gj_vk_icd: soft deepen wave=15 areas=14 "
     "display,present,instance,device,swapchain,acquire,pixels,"
-    "features,name,host,path,counts "
+    "features,name,host,path,counts,note,area "
     "hot_path=clean bar3=0";
 
 /*
@@ -499,6 +499,23 @@ static const char g_szGjVkIcdSoftPath[] =
     "freestanding=1 bar3=0 (soft inventory; not bar3)";
 #endif
 
+/* Soft area name catalog (Wave 15; cold only). */
+static const char *const g_apszGjVkIcdSoftAreas[] = {
+    "display",
+    "present",
+    "instance",
+    "device",
+    "swapchain",
+    "acquire",
+    "pixels",
+    "features",
+    "name",
+    "host",
+    "path",
+    "counts",
+    "note",
+    "area",
+};
 const char *
 gj_vk_icd_name(void)
 {
@@ -541,7 +558,7 @@ gj_vk_icd_soft_path(void)
 }
 
 /*
- * Soft wave stamp (14). Grep: gj_vk_icd: soft wave=
+ * Soft wave stamp (15). Grep: gj_vk_icd: soft wave=
  */
 uint32_t
 gj_vk_icd_soft_wave(void)
@@ -565,6 +582,19 @@ uint32_t
 gj_vk_icd_soft_area_count(void)
 {
     return (uint32_t)GJ_VK_ICD_SOFT_AREAS;
+}
+
+/*
+ * Soft area name by index (0..areas-1), or NULL.
+ * Grep: gj_vk_icd: soft areas=
+ */
+const char *
+gj_vk_icd_soft_area_name(uint32_t uArea)
+{
+    if (uArea >= (uint32_t)GJ_VK_ICD_SOFT_AREAS) {
+        return 0;
+    }
+    return g_apszGjVkIcdSoftAreas[uArea];
 }
 
 /*

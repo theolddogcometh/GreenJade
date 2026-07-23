@@ -19,14 +19,15 @@
  *   - Method-tagged soft probes (gj_so_export / gj_gnu_export / *_init)
  *   - Soft deepen probes (gj_so_soft_* / gj_gnu_soft_* companions)
  *
- * Soft inventory (Wave 14 exclusive deepen — greppable "ld-gj: soft …"):
+ * Soft inventory (Wave 15 exclusive deepen — greppable "ld-gj: soft …"):
  *   ld-gj: soft inventory so=… res_gnu=… res_sysv=… res_scan=… res_builtin=…
- *                areas=… wave=14
+ *                areas=… wave=15
  *   ld-gj: soft methods gnu=… sysv=… scan=… builtin=…
  *   ld-gj: soft so used=… hash=… gnu=… dyn=…
  *   ld-gj: soft probe so=… gnu=… so_soft=… gnu_soft=… hit=…
- *   ld-gj: soft deepen wave=14 areas=… so=… hit=… meth=…
- *   ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan (soft; not bar3)
+ *   ld-gj: soft deepen wave=15 areas=… so=… hit=… meth=…
+ *   ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan bar3=0
+ *   ld-gj: soft resolve inv=… id=… so_inv=… gnu_inv=… bar3=0
  * Diagnostics only — never hard-fail live/scaffold PASS.
  *
  * Smoke markers (prefix-stable): ld-gj: handoff magic PASS, multi-SO,
@@ -102,10 +103,10 @@
 /* Chain/scan guards — align with kernel elf_load bring-up bounds */
 #define GJ_LD_HASH_GUARD 4096u
 
-/* Wave 14 soft inventory stamp + fixed greppable area count. */
-#define GJ_LD_SOFT_WAVE   14u
-#define GJ_LD_SOFT_AREAS  6u
-/* areas: inventory methods so probe deepen path */
+/* Wave 15 soft inventory stamp + fixed greppable area count. */
+#define GJ_LD_SOFT_WAVE   15u
+#define GJ_LD_SOFT_AREAS  8u
+/* areas: inventory methods so probe deepen path handoff resolve */
 
 struct gj_ld_so_ent {
     uint64_t u64Bias;
@@ -200,7 +201,7 @@ static unsigned         g_cResSysv;
 static unsigned         g_cResScan;
 static unsigned         g_cResBuiltin;
 /*
- * Wave 14 soft inventory tallies (diagnostics only; never hard-gate).
+ * Wave 15 soft inventory tallies (diagnostics only; never hard-gate).
  * greppable: ld-gj: soft
  */
 static unsigned         g_cSoftSoHash;   /* loaded SOs with DT_HASH */
@@ -211,6 +212,10 @@ static unsigned         g_cSoftSoExport; /* gj_so_export soft bind */
 static unsigned         g_cSoftGnuExport;/* gj_gnu_export soft bind */
 static unsigned         g_cSoftSoSoft;   /* gj_so_soft_* soft bind hits */
 static unsigned         g_cSoftGnuSoft;  /* gj_gnu_soft_* soft bind hits */
+static unsigned         g_cSoftSoInv;    /* inventory/deepen/path soft binds */
+static unsigned         g_cSoftGnuInv;   /* gnu inventory/deepen/path soft binds */
+static unsigned         g_cSoftSoId;     /* soft_id bind hits */
+static unsigned         g_cSoftGnuId;    /* gnu soft_id bind hits */
 static unsigned         g_fSoftHandoff;  /* handoff page seen this run */
 
 static const struct {
@@ -948,7 +953,7 @@ load_so_from_handoff(const struct gj_ld_handoff *pHo)
         cOk++;
     }
     g_cSoImg = cOk;
-    /* Wave 14 soft inventory: remember hash table lamps across load. */
+    /* Wave 15 soft inventory: remember hash table lamps across load. */
     g_cSoftSoHash = cHash;
     g_cSoftSoGnu = cGnu;
     if (cOk > 0) {
@@ -1014,7 +1019,7 @@ soft_append_s(char *aLine, unsigned cb, unsigned *po, const char *sz)
 }
 
 /*
- * Soft inventory dump (Wave 14 exclusive deepen).
+ * Soft inventory dump (Wave 15 exclusive deepen).
  * Greppable prefix: "ld-gj: soft …"
  * Pure observation — always soft; never gates live/scaffold PASS.
  */
@@ -1091,7 +1096,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     gj_puts(aLine);
 
-    /* Grep: ld-gj: soft deepen wave (Wave 14 stamp) */
+    /* Grep: ld-gj: soft deepen wave (Wave 15 stamp) */
     o = 0u;
     soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft deepen wave=");
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_LD_SOFT_WAVE);
@@ -1107,7 +1112,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     gj_puts(aLine);
 
-    /* Grep: ld-gj: soft path (Wave 14 honesty; not bar3) */
+    /* Grep: ld-gj: soft path (Wave 15 honesty; not bar3) */
     o = 0u;
     soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft path handoff=");
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_fSoftHandoff);
@@ -1115,14 +1120,30 @@ soft_inventory_log(void)
                   " multi=");
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)(g_cSoImg > 0u));
     soft_append_s(aLine, sizeof(aLine), &o,
-                  " resolve=sysv+gnu+scan (soft; not bar3)\n");
+                  " resolve=sysv+gnu+scan bar3=0 (soft; not bar3)\n");
+    aLine[o] = '\0';
+    gj_puts(aLine);
+
+    /* Grep: ld-gj: soft resolve (Wave 15 companion probe rollup) */
+    o = 0u;
+    soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft resolve inv=");
+    soft_append_u(aLine, sizeof(aLine), &o,
+                  (unsigned long)(g_cSoftSoInv + g_cSoftGnuInv));
+    soft_append_s(aLine, sizeof(aLine), &o, " id=");
+    soft_append_u(aLine, sizeof(aLine), &o,
+                  (unsigned long)(g_cSoftSoId + g_cSoftGnuId));
+    soft_append_s(aLine, sizeof(aLine), &o, " so_inv=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoInv);
+    soft_append_s(aLine, sizeof(aLine), &o, " gnu_inv=");
+    soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftGnuInv);
+    soft_append_s(aLine, sizeof(aLine), &o, " bar3=0\n");
     aLine[o] = '\0';
     gj_puts(aLine);
 }
 
 /*
  * Soft multi-SO hash/sym probe set. Keeps legacy PASS lines and deepens with
- * function exports + method-path markers + Wave 14 soft companions.
+ * function exports + method-path markers + Wave 15 soft companions.
  * Never hard-fails the product path.
  */
 static void
@@ -1134,13 +1155,21 @@ soft_resolve_probe(void)
         "gj_gnu_export",
         "gj_so_init",
         "gj_gnu_init",
-        /* Wave 14 soft deepen companions (optional; miss is soft) */
+        /* Wave 14/15 soft deepen companions (optional; miss is soft) */
         "gj_so_soft_get",
         "gj_so_soft_probe",
         "gj_so_soft_touch",
+        "gj_so_soft_id",
+        "gj_so_soft_inventory",
+        "gj_so_soft_deepen",
+        "gj_so_soft_path",
         "gj_gnu_soft_get",
         "gj_gnu_soft_probe",
         "gj_gnu_soft_touch",
+        "gj_gnu_soft_id",
+        "gj_gnu_soft_inventory",
+        "gj_gnu_soft_deepen",
+        "gj_gnu_soft_path",
     };
     unsigned i;
     unsigned cSoHit = 0;
@@ -1160,7 +1189,7 @@ soft_resolve_probe(void)
     }
 
     if (g_cSoImg == 0) {
-        /* Wave 14 soft inventory still greppable with empty SO registry. */
+        /* Wave 15 soft inventory still greppable with empty SO registry. */
         soft_inventory_log();
         return;
     }
@@ -1187,9 +1216,25 @@ soft_resolve_probe(void)
                    name_eq(aSoNames[i], "gj_so_soft_probe") ||
                    name_eq(aSoNames[i], "gj_so_soft_touch")) {
             g_cSoftSoSoft++;
+        } else if (name_eq(aSoNames[i], "gj_so_soft_id")) {
+            g_cSoftSoId++;
+            g_cSoftSoSoft++;
+        } else if (name_eq(aSoNames[i], "gj_so_soft_inventory") ||
+                   name_eq(aSoNames[i], "gj_so_soft_deepen") ||
+                   name_eq(aSoNames[i], "gj_so_soft_path")) {
+            g_cSoftSoInv++;
+            g_cSoftSoSoft++;
         } else if (name_eq(aSoNames[i], "gj_gnu_soft_get") ||
                    name_eq(aSoNames[i], "gj_gnu_soft_probe") ||
                    name_eq(aSoNames[i], "gj_gnu_soft_touch")) {
+            g_cSoftGnuSoft++;
+        } else if (name_eq(aSoNames[i], "gj_gnu_soft_id")) {
+            g_cSoftGnuId++;
+            g_cSoftGnuSoft++;
+        } else if (name_eq(aSoNames[i], "gj_gnu_soft_inventory") ||
+                   name_eq(aSoNames[i], "gj_gnu_soft_deepen") ||
+                   name_eq(aSoNames[i], "gj_gnu_soft_path")) {
+            g_cSoftGnuInv++;
             g_cSoftGnuSoft++;
         }
     }
@@ -1232,7 +1277,7 @@ soft_resolve_probe(void)
         gj_puts("ld-gj: multi-SO resolve miss\n");
     }
 
-    /* Wave 14 exclusive soft inventory rollup (greppable "ld-gj: soft …"). */
+    /* Wave 15 exclusive soft inventory rollup (greppable "ld-gj: soft …"). */
     soft_inventory_log();
 }
 
@@ -1541,7 +1586,7 @@ _start(void)
     pHo = (const struct gj_ld_handoff *)(uintptr_t)GJ_LD_HANDOFF_VA;
     if (pHo->u64Magic == GJ_LD_HANDOFF_MAGIC) {
         fHandoff = 1;
-        g_fSoftHandoff = 1u; /* Wave 14 soft inventory lamp */
+        g_fSoftHandoff = 1u; /* Wave 15 soft inventory lamp */
         u64Entry = pHo->u64Entry;
         u64Base = pHo->u64Base;
         gj_puts("ld-gj: handoff magic PASS\n");

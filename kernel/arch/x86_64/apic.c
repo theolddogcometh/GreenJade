@@ -7,7 +7,7 @@
  * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
  * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  *
- * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 14 exclusive deepen;
+ * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 15 exclusive deepen;
  * this unit only — greppable "apic: soft …"):
  *   apic: soft PASS|PARTIAL|UP|FAIL|NONE …  — primary verdict (Wave 10+)
  *   apic: soft inventory …                  — rollup catalog + wave tag
@@ -24,13 +24,14 @@
  *   apic: soft irq …                        — timer/resched/tlb IRQ tallies
  *   apic: soft bringup …                    — PASS|idle|active INIT/SIPI
  *   apic: soft path …                       — honesty non-claim (≠ bar3)
- * Wave 14 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 exclusive complementary surfaces (never reshape primary fields):
  *   apic: soft query …                      — ready/cal/bus/ticks/npt samples
  *   apic: soft lapic …                      — MMIO vs x2 r/w path split
  *   apic: soft sample …                     — cal window enter/ok/fail
  *   apic: soft lamps …                      — ready/cal/periodic/svr lamps
  *   apic: soft reject …                     — !ready / clamp / icr-cap skips
- *   apic: soft deepen …                     — wave=14 areas stamp
+ *   apic: soft capacity …                   — Wave 15 vec/div/cal geometry
+ *   apic: soft deepen …                     — wave=15 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -85,7 +86,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE        14u
+#define APIC_SOFT_WAVE        15u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -113,7 +114,7 @@ static u32            g_u32HzProgrammed;
 
 /*
  * Soft inventory counters (file-local; wrap OK; diagnostics only).
- * Wave 10 base + Wave 12 path + Wave 14 exclusive deepen.
+ * Wave 10 base + Wave 12 path + Wave 15 exclusive deepen.
  * Hot IRQ path only bumps counters already present — no kprintf.
  * greppable: apic: soft
  * greppable: apic: soft stats
@@ -176,7 +177,7 @@ static u64            g_u64SoftLocalDefault;/* local start fallback INIT */
 static u64            g_u64SoftLocalProg;   /* local start programmed INIT */
 static u64            g_u64SoftIpiInit;     /* apic_ipi_init entries */
 
-/* Wave 14 exclusive path tallies (complementary; never hard-gate). */
+/* Wave 15 exclusive path tallies (complementary; never hard-gate). */
 static u64            g_u64SoftLapicRdX2;   /* lapic_r via x2APIC MSR */
 static u64            g_u64SoftLapicRdMmio; /* lapic_r via MMIO */
 static u64            g_u64SoftLapicRdNull; /* lapic_r null MMIO */
@@ -326,10 +327,10 @@ cal_fail(u32 u32Status)
 }
 
 /**
- * Wave 14 greppable soft APIC inventory (product / smoke).
+ * Wave 15 greppable soft APIC inventory (product / smoke).
  * Prefix-stable markers under "apic: soft …". Never hard-gates; no alloc.
  * via= names the call site (init / calibrate / timer_hz / cal_log / …).
- * Primary Wave 10/12 field names stay stable; Wave 14 adds complementary
+ * Primary Wave 10/12 field names stay stable; Wave 15 adds complementary
  * sub-lines only.
  * greppable: apic: soft
  */
@@ -649,7 +650,7 @@ apic_soft_inventory(const char *szVia)
             szVia, (unsigned)APIC_SOFT_WAVE);
 
     /*
-     * Wave 14 exclusive complementary sub-lines (never reshape primary).
+     * Wave 15 exclusive complementary sub-lines (never reshape primary).
      */
     /* Grep: apic: soft query */
     kprintf("apic: soft query ready=%lu cal=%lu bus_hz=%lu ticks=%lu "
@@ -722,10 +723,22 @@ apic_soft_inventory(const char *szVia)
             (unsigned long)g_u64SoftIcrCap,
             (unsigned long)g_u64SoftTlbNotReady);
 
+    /* Grep: apic: soft capacity (Wave 15 geometry) */
+    kprintf("apic: soft capacity timer_vec=%u resched_vec=%u tlb_vec=%u "
+            "div=%u cal_samples_max=%u cal_wait_ticks=%u "
+            "icr_spin_max=%u ready=%u cal=%u wave=%u\n",
+            (unsigned)LAPIC_TIMER_VEC, (unsigned)LAPIC_IPI_RESCHED_VEC,
+            (unsigned)LAPIC_IPI_TLB_VEC, (unsigned)LAPIC_DIV_FACTOR,
+            (unsigned)APIC_CAL_SAMPLES_MAX, (unsigned)APIC_CAL_WAIT_TICKS,
+            (unsigned)APIC_SOFT_ICR_SPIN_MAX,
+            g_fReady ? 1u : 0u, g_fCalibrated ? 1u : 0u,
+            (unsigned)APIC_SOFT_WAVE);
+
     /* Grep: apic: soft deepen */
     kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"
-            "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject "
+            "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject,"
+            "capacity "
             "unit=apic.c only hot_irq_kprintf=0 via=%s\n",
             (unsigned)APIC_SOFT_WAVE, szVia);
 }
@@ -849,7 +862,7 @@ apic_init(void)
     g_u64SoftLocalDefault = 0;
     g_u64SoftLocalProg = 0;
     g_u64SoftIpiInit = 0;
-    /* Wave 14 exclusive path deepen reset. */
+    /* Wave 15 exclusive path deepen reset. */
     g_u64SoftLapicRdX2 = 0;
     g_u64SoftLapicRdMmio = 0;
     g_u64SoftLapicRdNull = 0;

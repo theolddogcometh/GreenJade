@@ -14,7 +14,7 @@
  *   g_fSoft after failed/absent probe — TMF/stats/event_poll soft;
  *   CDB I/O stays with scsi_mid soft LUN (submit returns -1).
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates;
+ * Soft inventory (Wave 15 exclusive deepen; this unit only; never hard-gates;
  * not bar3 — greppable "virtio-scsi: soft …"):
  *   virtio-scsi: soft inventory …
  *   virtio-scsi: soft pci …
@@ -29,7 +29,13 @@
  *   virtio-scsi: soft api …
  *   virtio-scsi: soft errors …
  *   virtio-scsi: soft path …
- *   virtio-scsi: soft deepen wave=14 …
+ *   virtio-scsi: soft claim …        (Wave 15)
+ *   virtio-scsi: soft via …          (Wave 15)
+ *   virtio-scsi: soft ready …        (Wave 15)
+ *   virtio-scsi: soft tmf …          (Wave 15)
+ *   virtio-scsi: soft data …         (Wave 15)
+ *   virtio-scsi: soft oasis …        (Wave 15)
+ *   virtio-scsi: soft deepen wave=15 …
  *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
  *   virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV
  *
@@ -78,9 +84,9 @@
 /* Product kind marker from virtio_pci kind_from_device (scsi modern/transitional). */
 #define VIRTIO_SCSI_KIND 6u
 
-/* Wave 14 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define SCSI_SOFT_WAVE  14u
-#define SCSI_SOFT_AREAS 16u
+/* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define SCSI_SOFT_WAVE  15u
+#define SCSI_SOFT_AREAS 22u
 
 /* ---- OASIS request / response shapes (clean-room public layout) ---------- */
 
@@ -167,6 +173,8 @@ static u32 g_u32ApiQFree;       /* virtio_scsi_q_free enters */
 static u32 g_u32DataInOps;      /* data-in submit completions */
 static u32 g_u32DataOutOps;     /* data-out submit completions */
 static u32 g_u32NoDataOps;      /* no-data submit completions */
+/* Wave 15 sticky via (inventory only). */
+static const char *g_szLastVia;
 
 /* Single outstanding command buffers (identity-mapped BSS). */
 static struct virtio_scsi_req_cmd      g_Req __attribute__((aligned(16)));
@@ -176,7 +184,7 @@ static struct virtio_scsi_ctrl_tmf_resp g_TmfResp __attribute__((aligned(16)));
 static u8 g_aData[GJ_VIRTIO_SCSI_DATA_MAX] __attribute__((aligned(16)));
 static u8 g_aEvent[VIRTIO_SCSI_EVENT_SZ] __attribute__((aligned(16)));
 
-/* ---- Soft inventory (Wave 14 exclusive deepen) --------------------------- */
+/* ---- Soft inventory (Wave 15 exclusive deepen) --------------------------- */
 
 /* Forward: emit after soft-arm / probe / activity / qstats. */
 static void scsi_soft_inventory(const char *szVia);
@@ -206,7 +214,7 @@ q_note_free(void)
 }
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-scsi: soft …" — never hard-gates; kprintf only.
  * Soft only — not bar3 / not product multi-HBA close.
  *
@@ -242,6 +250,7 @@ scsi_soft_inventory(const char *szVia)
     u64 u64PaReq;
 
     szViaSafe = (szVia != NULL) ? szVia : "path";
+    g_szLastVia = szViaSafe;
 
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
@@ -404,7 +413,52 @@ scsi_soft_inventory(const char *szVia)
             u32Claim, u32Soft, u32Claim, (unsigned long)u64FeatDev,
             (unsigned long)u64FeatDrv);
 
-    /* Grep: virtio-scsi: soft deepen wave (Wave 14 stamp) */
+    /* Grep: virtio-scsi: soft claim (Wave 15) */
+    kprintf("virtio-scsi: soft claim ready=%u soft=%u claim=%u modern=%u "
+            "kind=%u event_posted=%u\n",
+            u32Ready, u32Soft, u32Claim, (unsigned)u8Modern, u32Kind,
+            g_fEventPosted ? 1u : 0u);
+
+    /* Grep: virtio-scsi: soft via (Wave 15) */
+    kprintf("virtio-scsi: soft via last=%s log_n=%u once=%u\n",
+            (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
+            g_fSoftOnce ? 1u : 0u);
+
+    /* Grep: virtio-scsi: soft ready (Wave 15) */
+    kprintf("virtio-scsi: soft ready live=%u soft_armed=%u io=%u "
+            "ctrl=%u ev=%u soft_tmf=%u soft_miss=%u\n",
+            u32Ready, u32Soft, g_u32IoCount, g_u32CtrlOk, g_u32EventCount,
+            g_u32SoftTmfOk, g_u32SoftSubmitMiss);
+
+    /* Grep: virtio-scsi: soft tmf (Wave 15) */
+    kprintf("virtio-scsi: soft tmf type=%u soft_ok=%u soft_fail=%u "
+            "live_ok=%u live_fail=%u timeout=%u q_add_fail=%u "
+            "last_sub=%u\n",
+            (unsigned)VIRTIO_SCSI_T_TMF, g_u32SoftTmfOk, g_u32SoftTmfFail,
+            g_u32CtrlOk, g_u32CtrlFail, g_u32CtrlTimeout, g_u32CtrlQAddFail,
+            g_u32LastTmfSubtype);
+
+    /* Grep: virtio-scsi: soft data (Wave 15) */
+    kprintf("virtio-scsi: soft data in=%u out=%u nodata=%u "
+            "data_max=%u last_cdb_len=%u last_data_len=%u "
+            "io=%u io_fail=%u\n",
+            g_u32DataInOps, g_u32DataOutOps, g_u32NoDataOps,
+            (unsigned)GJ_VIRTIO_SCSI_DATA_MAX, g_u32LastCdbLen,
+            g_u32LastDataLen, g_u32IoCount, g_u32IoFail);
+
+    /* Grep: virtio-scsi: soft oasis (Wave 15 response-code catalog) */
+    kprintf("virtio-scsi: soft oasis s_ok=%u s_overrun=%u s_aborted=%u "
+            "s_bad_target=%u s_reset=%u s_busy=%u s_transport=%u "
+            "s_func_ok=%u s_func_rej=%u last_resp=%u last_scsi=%u\n",
+            (unsigned)VIRTIO_SCSI_S_OK, (unsigned)VIRTIO_SCSI_S_OVERRUN,
+            (unsigned)VIRTIO_SCSI_S_ABORTED, (unsigned)VIRTIO_SCSI_S_BAD_TARGET,
+            (unsigned)VIRTIO_SCSI_S_RESET, (unsigned)VIRTIO_SCSI_S_BUSY,
+            (unsigned)VIRTIO_SCSI_S_TRANSPORT_FAILURE,
+            (unsigned)VIRTIO_SCSI_S_FUNCTION_SUCCEEDED,
+            (unsigned)VIRTIO_SCSI_S_FUNCTION_REJECTED, g_u32LastResponse,
+            g_u32LastScsiStatus);
+
+    /* Grep: virtio-scsi: soft deepen wave (Wave 15 stamp) */
     kprintf("virtio-scsi: soft deepen wave=%u areas=%u via=%s ready=%u "
             "soft=%u io=%u ctrl=%u ev=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

@@ -6,14 +6,16 @@
  * Exercises GJ_SYS_HDA_STREAM (nr 94) via gj_hda_stream:
  *   open → write PCM → start → tick → stats → underrun tick → close
  * then a deepened soft suite (multi-op + partial-tick + multi-write +
- * soft underrun + mono format + reclaim re-OPEN + reject probe). Soft
- * steps never hard-fail the live path.
+ * soft underrun + mono + reclaim + reject + bits8 + idle + closed +
+ * zerotick). Soft steps never hard-fail the live path.
  *
- * Soft inventory (Wave 13 exclusive deepen):
+ * Soft inventory (Wave 15 exclusive deepen):
  *   - Cumulative soft sub-step ok/skip; door open/write/start/tick/stats
  *   - Soft played-byte sum; underrun / reject / mono / reclaim lamps
- *   - Per-step lamps (multi/partial/multiwrite/…), miss rollup, last STATS
- *   - inventory / steps / miss / last / deepen / path greppable lines
+ *   - Per-step lamps (multi/partial/…/bits8/idle/closed/zerotick)
+ *   - miss rollup, last/first STATS, peak q/p/u, ops/format/ratio
+ *   - inventory / steps / miss / last / deepen / path / ops / first /
+ *     peak / format / ratio / honesty greppable lines
  *   greppable: "hda_client: soft …"
  *   greppable: "hda-gj: soft …"
  * Diagnostics only — never gates live path PASS.
@@ -38,20 +40,32 @@
  *   hda_client-gj: soft mono PASS | soft mono soft-skip
  *   hda_client-gj: soft reclaim PASS | soft reclaim soft-skip
  *   hda_client-gj: soft reject PASS | soft reject soft-skip
+ *   hda_client-gj: soft bits8 PASS | soft bits8 soft-skip
+ *   hda_client-gj: soft idle PASS | soft idle soft-skip
+ *   hda_client-gj: soft closed PASS | soft closed soft-skip
+ *   hda_client-gj: soft zerotick PASS | soft zerotick soft-skip
  *   hda_client-gj: stats soft q=… p=… u=…
  *   hda_client-gj: soft suite PASS | soft suite soft-skip
  *   hda_client: soft suite ok=… skip=…
  *   hda_client: soft door open=… write=… start=… tick=… stats=… close=…
  *   hda_client: soft played=… underrun=… reject=… mono=… reclaim=…
  *   hda_client: soft inventory ok=… skip=… door_ok=… door_miss=… played=…
- *                wave=13 areas=…
+ *                wave=15 areas=…
  *   hda_client: soft steps multi=… partial=… multiwrite=… underrun=…
- *                mono=… reclaim=… reject=… bits=…
+ *                mono=… reclaim=… reject=… bits8=… idle=… closed=…
+ *                zerotick=… bits=…
  *   hda_client: soft miss open=… write=… start=… tick=… stats=…
  *   hda_client: soft last q=… p=… u=… snaps=…
- *   hda_client: soft deepen wave=13 areas=… ok=… skip=… played=…
+ *   hda_client: soft first q=… p=… u=…
+ *   hda_client: soft peak q=… p=… u=…
+ *   hda_client: soft ops open=… write=… start=… tick=… stats=… close=…
+ *   hda_client: soft format stereo=… mono=… bits8=…
+ *   hda_client: soft ratio ok=… skip=… door_ok=… door_miss=…
+ *   hda_client: soft deepen wave=15 areas=… ok=… skip=… played=…
  *   hda_client: soft path open=stereo write=pcm … (soft; not bar3)
- *   hda-gj: soft suite|door|played|inventory|steps|miss|last|deepen twins
+ *   hda_client: soft honesty not-bar3 not-pipewire soft-inventory-only
+ *   hda-gj: soft suite|door|played|inventory|steps|miss|last|first|
+ *           peak|ops|format|ratio|deepen|path|honesty twins
  *
  * Fail lines: hda_client-gj: <tag> fail ret=<n>
  *
@@ -77,11 +91,14 @@
 #define GJ_HDA_CHANNELS_MONO   1u
 #define GJ_HDA_RATE_48K        48000u
 #define GJ_HDA_BITS_16         16u
+#define GJ_HDA_BITS_8          8u
 
 /* Frame size: stereo 16-bit LE → 4 bytes/frame. */
 #define HDA_BYTES_PER_FRAME 4u
 /* Mono 16-bit LE → 2 bytes/frame. */
 #define HDA_MONO_BYTES_PER_FRAME 2u
+/* Stereo 8-bit → 2 bytes/frame. */
+#define HDA_BITS8_BYTES_PER_FRAME 2u
 
 /* Hard smoke: 64 frames × 4 B = 256 B full-buffer consume. */
 #define HDA_SMOKE_FRAMES 64u
@@ -105,11 +122,19 @@
 #define HDA_SOFT_MONO_FRAMES 32u
 #define HDA_SOFT_MONO_BYTES  (HDA_SOFT_MONO_FRAMES * HDA_MONO_BYTES_PER_FRAME)
 
-/* Wave stamp + inventory area count (Wave 13 exclusive deepen). */
-#define HDA_SOFT_WAVE   13u
-#define HDA_SOFT_AREAS  9u   /* suite door played inventory steps miss last deepen path */
+/* Soft bits8 stereo: 32 frames × 2 B = 64 B. */
+#define HDA_SOFT_BITS8_FRAMES 32u
+#define HDA_SOFT_BITS8_BYTES  (HDA_SOFT_BITS8_FRAMES * HDA_BITS8_BYTES_PER_FRAME)
 
-/* Soft suite sub-step bits (Wave 13 greppable steps line). */
+/*
+ * Wave stamp + inventory area count (Wave 15 exclusive deepen).
+ * Areas: suite door played inventory steps miss last deepen path
+ *        ops first peak format ratio honesty
+ */
+#define HDA_SOFT_WAVE   15u
+#define HDA_SOFT_AREAS  15u
+
+/* Soft suite sub-step bits (Wave 15 greppable steps line). */
 #define SOFT_S_MULTI      (1u << 0)
 #define SOFT_S_PARTIAL    (1u << 1)
 #define SOFT_S_MULTIWRITE (1u << 2)
@@ -117,6 +142,10 @@
 #define SOFT_S_MONO       (1u << 4)
 #define SOFT_S_RECLAIM    (1u << 5)
 #define SOFT_S_REJECT     (1u << 6)
+#define SOFT_S_BITS8      (1u << 7)
+#define SOFT_S_IDLE       (1u << 8)
+#define SOFT_S_CLOSED     (1u << 9)
+#define SOFT_S_ZEROTICK   (1u << 10)
 
 /* STATS u32[3] slots — match kernel {queued, played, underruns}. */
 enum {
@@ -127,7 +156,7 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 13 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 15 exclusive deepen). Cumulative for this
  * process. greppable: hda_client: soft … / hda-gj: soft …
  * Never hard-gates live path.
  */
@@ -149,12 +178,20 @@ static unsigned g_cSoftUnderrun;   /* soft underrun sub-step PASS */
 static unsigned g_cSoftReject;     /* soft reject sub-step PASS */
 static unsigned g_cSoftMono;       /* soft mono sub-step PASS */
 static unsigned g_cSoftReclaim;    /* soft reclaim sub-step PASS */
-/* Wave 13 per-step lamps + last STATS snapshot. */
+/* Wave 13/15 per-step lamps + last/first STATS + peak. */
 static unsigned g_cSoftMulti;      /* soft multi-op PASS */
 static unsigned g_cSoftPartial;    /* soft partial-tick PASS */
 static unsigned g_cSoftMultiWrite; /* soft multi-write PASS */
+static unsigned g_cSoftBits8;      /* soft bits8 sub-step PASS */
+static unsigned g_cSoftIdle;       /* soft idle STATS sub-step PASS */
+static unsigned g_cSoftClosed;     /* soft closed-ops sub-step PASS */
+static unsigned g_cSoftZeroTick;   /* soft zerotick sub-step PASS */
+static unsigned g_cSoftStereoFmt;  /* soft stereo OPEN greened paths */
 static unsigned g_uSoftStepBits;   /* SOFT_S_* mask of greened sub-steps */
-static unsigned g_aSoftLast[HDA_ST_COUNT]; /* last successful soft STATS */
+static unsigned g_aSoftLast[HDA_ST_COUNT];  /* last successful soft STATS */
+static unsigned g_aSoftFirst[HDA_ST_COUNT]; /* first successful soft STATS */
+static unsigned g_fSoftFirst;      /* first STATS captured */
+static unsigned g_aSoftPeak[HDA_ST_COUNT];  /* peak q/p/u observed */
 static unsigned g_cSoftStatsSnap;  /* successful soft STATS snapshots */
 
 static void
@@ -321,6 +358,7 @@ soft_open_stereo(const char *tag)
         msg_fail_ret(tag, n);
     } else {
         g_cSoftOpenOk++;
+        g_cSoftStereoFmt++;
     }
     return n;
 }
@@ -347,6 +385,23 @@ soft_stats(const char *tag, unsigned *aSt)
     g_aSoftLast[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
     g_aSoftLast[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
     g_aSoftLast[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
+    /* Wave 15: first successful STATS snapshot. */
+    if (g_fSoftFirst == 0u) {
+        g_aSoftFirst[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
+        g_aSoftFirst[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
+        g_aSoftFirst[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
+        g_fSoftFirst = 1u;
+    }
+    /* Wave 15: peak q/p/u across soft STATS. */
+    if (aSt[HDA_ST_QUEUED] > g_aSoftPeak[HDA_ST_QUEUED]) {
+        g_aSoftPeak[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
+    }
+    if (aSt[HDA_ST_PLAYED] > g_aSoftPeak[HDA_ST_PLAYED]) {
+        g_aSoftPeak[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
+    }
+    if (aSt[HDA_ST_UNDERRUNS] > g_aSoftPeak[HDA_ST_UNDERRUNS]) {
+        g_aSoftPeak[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
+    }
     msg_stats(tag, aSt);
     return 0;
 }
@@ -397,24 +452,36 @@ soft_note_step(int fOk)
 }
 
 /*
- * Greppable soft inventory (Wave 13 exclusive deepen).
+ * Greppable soft inventory (Wave 15 exclusive deepen).
  * Twin prefixes for product/agent greps:
- *   hda_client: soft suite|door|played|inventory|steps|miss|last|deepen|path …
- *   hda-gj: soft suite|door|played|inventory|steps|miss|last|deepen …
+ *   hda_client: soft suite|door|played|inventory|steps|miss|last|first|
+ *               peak|ops|format|ratio|deepen|path|honesty …
+ *   hda-gj: soft suite|door|played|inventory|steps|miss|last|first|
+ *           peak|ops|format|ratio|deepen|path|honesty …
  * Pure observation — always soft; does not gate live path.
  */
 static void
 soft_inventory_log(void)
 {
-    char aLine[192];
+    char aLine[224];
     unsigned o;
     unsigned cDoorOk;
     unsigned cDoorMiss;
+    unsigned cOpenTot;
+    unsigned cWriteTot;
+    unsigned cStartTot;
+    unsigned cTickTot;
+    unsigned cStatsTot;
 
     cDoorOk = g_cSoftOpenOk + g_cSoftWriteOk + g_cSoftStartOk +
               g_cSoftTickOk + g_cSoftStatsOk;
     cDoorMiss = g_cSoftOpenMiss + g_cSoftWriteMiss + g_cSoftStartMiss +
                 g_cSoftTickMiss + g_cSoftStatsMiss;
+    cOpenTot = g_cSoftOpenOk + g_cSoftOpenMiss;
+    cWriteTot = g_cSoftWriteOk + g_cSoftWriteMiss;
+    cStartTot = g_cSoftStartOk + g_cSoftStartMiss;
+    cTickTot = g_cSoftTickOk + g_cSoftTickMiss;
+    cStatsTot = g_cSoftStatsOk + g_cSoftStatsMiss;
 
     /* Grep: hda_client: soft suite */
     o = 0;
@@ -431,28 +498,23 @@ soft_inventory_log(void)
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft door open=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenOk);
     append_s(aLine, sizeof(aLine), &o, "/");
-    append_u(aLine, sizeof(aLine), &o,
-             (unsigned long)(g_cSoftOpenOk + g_cSoftOpenMiss));
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cOpenTot);
     append_s(aLine, sizeof(aLine), &o, " write=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftWriteOk);
     append_s(aLine, sizeof(aLine), &o, "/");
-    append_u(aLine, sizeof(aLine), &o,
-             (unsigned long)(g_cSoftWriteOk + g_cSoftWriteMiss));
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cWriteTot);
     append_s(aLine, sizeof(aLine), &o, " start=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStartOk);
     append_s(aLine, sizeof(aLine), &o, "/");
-    append_u(aLine, sizeof(aLine), &o,
-             (unsigned long)(g_cSoftStartOk + g_cSoftStartMiss));
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStartTot);
     append_s(aLine, sizeof(aLine), &o, " tick=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftTickOk);
     append_s(aLine, sizeof(aLine), &o, "/");
-    append_u(aLine, sizeof(aLine), &o,
-             (unsigned long)(g_cSoftTickOk + g_cSoftTickMiss));
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cTickTot);
     append_s(aLine, sizeof(aLine), &o, " stats=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsOk);
     append_s(aLine, sizeof(aLine), &o, "/");
-    append_u(aLine, sizeof(aLine), &o,
-             (unsigned long)(g_cSoftStatsOk + g_cSoftStatsMiss));
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStatsTot);
     append_s(aLine, sizeof(aLine), &o, " close=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClose);
     append_s(aLine, sizeof(aLine), &o, "\n");
@@ -475,7 +537,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft inventory (Wave 13 rollup) */
+    /* Grep: hda_client: soft inventory (Wave 15 rollup) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft inventory ok=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
@@ -495,7 +557,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft steps (Wave 13 per-sub-step lamps) */
+    /* Grep: hda_client: soft steps (Wave 15 per-sub-step lamps) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft steps multi=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMulti);
@@ -511,13 +573,21 @@ soft_inventory_log(void)
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
     append_s(aLine, sizeof(aLine), &o, " reject=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " bits8=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftBits8);
+    append_s(aLine, sizeof(aLine), &o, " idle=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftIdle);
+    append_s(aLine, sizeof(aLine), &o, " closed=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClosed);
+    append_s(aLine, sizeof(aLine), &o, " zerotick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftZeroTick);
     append_s(aLine, sizeof(aLine), &o, " bits=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStepBits);
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft miss (Wave 13 door miss rollup) */
+    /* Grep: hda_client: soft miss (door miss rollup) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft miss open=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenMiss);
@@ -533,7 +603,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft last (Wave 13 last STATS snapshot) */
+    /* Grep: hda_client: soft last (last STATS snapshot) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft last q=");
     append_u(aLine, sizeof(aLine), &o,
@@ -550,7 +620,83 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft deepen (Wave 13 stamp) */
+    /* Grep: hda_client: soft first (Wave 15 first STATS) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft first q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, " set=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_fSoftFirst);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft peak (Wave 15 peak q/p/u) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft peak q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft ops (Wave 15 total door op attempts) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft ops open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cOpenTot);
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cWriteTot);
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStartTot);
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cTickTot);
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStatsTot);
+    append_s(aLine, sizeof(aLine), &o, " close=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClose);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft format (Wave 15 format lamps) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft format stereo=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStereoFmt);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " bits8=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftBits8);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft ratio (Wave 15 ok/skip + door rollup) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft ratio ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_miss=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorMiss);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft deepen (Wave 15 stamp) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
@@ -571,8 +717,13 @@ soft_inventory_log(void)
      * Static route labels for agent greps (not live counters).
      */
     msg("hda_client: soft path open=stereo write=pcm start=arm "
-        "tick=frames stats=qpu mono=ch1 reclaim=reopen reject=inval "
+        "tick=frames stats=qpu mono=ch1 bits8=ch2 reclaim=reopen "
+        "reject=inval idle=empty closed=reject zerotick=0 "
         "(soft inventory; not bar3)\n");
+
+    /* Grep: hda_client: soft honesty (Wave 15; never bar3) */
+    msg("hda_client: soft honesty not-bar3 not-pipewire not-product-audio "
+        "soft-inventory-only wave=15\n");
 
     /* Twin prefix: hda-gj: soft … (agent-friendly alias) */
     o = 0;
@@ -650,6 +801,14 @@ soft_inventory_log(void)
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
     append_s(aLine, sizeof(aLine), &o, " reject=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " bits8=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftBits8);
+    append_s(aLine, sizeof(aLine), &o, " idle=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftIdle);
+    append_s(aLine, sizeof(aLine), &o, " closed=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClosed);
+    append_s(aLine, sizeof(aLine), &o, " zerotick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftZeroTick);
     append_s(aLine, sizeof(aLine), &o, " bits=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStepBits);
     append_s(aLine, sizeof(aLine), &o, "\n");
@@ -688,6 +847,77 @@ soft_inventory_log(void)
     msg(aLine);
 
     o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft first q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftFirst[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, " set=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_fSoftFirst);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft peak q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftPeak[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft ops open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cOpenTot);
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cWriteTot);
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStartTot);
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cTickTot);
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cStatsTot);
+    append_s(aLine, sizeof(aLine), &o, " close=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftClose);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft format stereo=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStereoFmt);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " bits8=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftBits8);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft ratio ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_miss=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorMiss);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda-gj: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
     append_s(aLine, sizeof(aLine), &o, " areas=");
@@ -701,6 +931,13 @@ soft_inventory_log(void)
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
+
+    msg("hda-gj: soft path open=stereo write=pcm start=arm tick=frames "
+        "stats=qpu mono=ch1 bits8=ch2 reclaim=reopen reject=inval "
+        "idle=empty closed=reject zerotick=0 "
+        "(soft inventory; not bar3)\n");
+    msg("hda-gj: soft honesty not-bar3 not-pipewire not-product-audio "
+        "soft-inventory-only wave=15\n");
 }
 
 /*
@@ -1153,6 +1390,211 @@ soft_reject_inval(void)
 }
 
 /*
+ * Soft bits8 format: OPEN ch=2 rate=48000 bits=8, short write/tick.
+ * Kernel accepts 8-bit; soft-skip if door rejects.
+ */
+static int
+soft_bits8_format(void)
+{
+    static unsigned char aTone[HDA_SOFT_BITS8_BYTES];
+    static unsigned aSt[HDA_ST_COUNT];
+    long n;
+    long nPlayed;
+    unsigned i;
+
+    n = gj_hda_stream(GJ_HDA_OP_OPEN, (long)GJ_HDA_CHANNELS_STEREO,
+                      (long)GJ_HDA_RATE_48K, (long)GJ_HDA_BITS_8);
+    if (n != 0) {
+        g_cSoftOpenMiss++;
+        msg_fail_ret("soft bits8 OPEN", n);
+        msg("hda_client-gj: soft bits8 soft-skip\n");
+        return 0;
+    }
+    g_cSoftOpenOk++;
+
+    for (i = 0; i < sizeof(aTone); i++) {
+        aTone[i] = (unsigned char)((i & 4u) ? 0x55u : 0xaau);
+    }
+    n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
+                      (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
+    if (n != (long)sizeof(aTone)) {
+        msg_fail_ret("soft bits8 WRITE", n);
+        soft_close();
+        msg("hda_client-gj: soft bits8 soft-skip\n");
+        return 0;
+    }
+
+    n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
+    if (n != 0) {
+        msg_fail_ret("soft bits8 START", n);
+        soft_close();
+        msg("hda_client-gj: soft bits8 soft-skip\n");
+        return 0;
+    }
+
+    nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_BITS8_FRAMES, 0, 0);
+    soft_note_tick(nPlayed);
+    msg_tick("soft bits8 TICK", nPlayed);
+    if (nPlayed != (long)sizeof(aTone)) {
+        msg_fail_ret("soft bits8 TICK", nPlayed);
+        soft_close();
+        msg("hda_client-gj: soft bits8 soft-skip\n");
+        return 0;
+    }
+
+    (void)soft_stats("soft bits8", aSt);
+    soft_close();
+    g_cSoftBits8++;
+    g_uSoftStepBits |= SOFT_S_BITS8;
+    msg("hda_client-gj: soft bits8 PASS\n");
+    return 1;
+}
+
+/*
+ * Soft idle STATS: OPEN → STATS with empty ring (q=0 p=0) → CLOSE.
+ * Deepens pre-write STATS surface without PCM.
+ */
+static int
+soft_idle_stats(void)
+{
+    static unsigned aSt[HDA_ST_COUNT];
+
+    if (soft_open_stereo("soft idle OPEN") != 0) {
+        msg("hda_client-gj: soft idle soft-skip\n");
+        return 0;
+    }
+
+    if (soft_stats("soft idle", aSt) != 0 ||
+        aSt[HDA_ST_QUEUED] != 0u || aSt[HDA_ST_PLAYED] != 0u) {
+        soft_close();
+        msg("hda_client-gj: soft idle soft-skip\n");
+        return 0;
+    }
+
+    soft_close();
+    g_cSoftIdle++;
+    g_uSoftStepBits |= SOFT_S_IDLE;
+    msg("hda_client-gj: soft idle PASS\n");
+    return 1;
+}
+
+/*
+ * Soft closed-ops: after CLOSE, WRITE returns 0 and START fails.
+ * Proves door rejects post-close traffic (soft PASS on reject observed).
+ */
+static int
+soft_closed_ops(void)
+{
+    static unsigned char aTone[HDA_SOFT_CHUNK_BYTES];
+    long nWrite;
+    long nStart;
+    long nTick;
+
+    /* Ensure stream is closed. */
+    soft_close();
+
+    fill_pcm(aTone, (unsigned)sizeof(aTone), 8u);
+    nWrite = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
+                           (long)sizeof(aTone), 0);
+    /* Closed WRITE must not accept bytes. */
+    if (nWrite != 0) {
+        g_cSoftWriteOk++; /* unexpected accept */
+        soft_close();
+        msg("hda_client-gj: soft closed soft-skip\n");
+        return 0;
+    }
+    g_cSoftWriteMiss++; /* expected zero-accept */
+
+    nStart = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    if (nStart == 0) {
+        g_cSoftStartOk++; /* unexpected */
+        soft_close();
+        msg("hda_client-gj: soft closed soft-skip\n");
+        return 0;
+    }
+    g_cSoftStartMiss++; /* expected reject */
+
+    nTick = gj_hda_stream(GJ_HDA_OP_TICK, 8, 0, 0);
+    soft_note_tick(nTick);
+    if (nTick != 0) {
+        soft_close();
+        msg("hda_client-gj: soft closed soft-skip\n");
+        return 0;
+    }
+
+    g_cSoftClosed++;
+    g_uSoftStepBits |= SOFT_S_CLOSED;
+    msg("hda_client-gj: soft closed PASS\n");
+    return 1;
+}
+
+/*
+ * Soft zerotick: armed stream + TICK frames=0 must return 0 and leave
+ * residual queue intact. Deepens zero-frame TICK edge.
+ */
+static int
+soft_zero_tick(void)
+{
+    static unsigned char aTone[HDA_SOFT_BYTES];
+    static unsigned aSt[HDA_ST_COUNT];
+    long n;
+    long nPlayed;
+
+    if (soft_open_stereo("soft zerotick OPEN") != 0) {
+        msg("hda_client-gj: soft zerotick soft-skip\n");
+        return 0;
+    }
+
+    fill_pcm(aTone, (unsigned)sizeof(aTone), 16u);
+    n = gj_hda_stream(GJ_HDA_OP_WRITE, (long)(uintptr_t)aTone,
+                      (long)sizeof(aTone), 0);
+    soft_note_write(n, (unsigned)sizeof(aTone));
+    if (n != (long)sizeof(aTone)) {
+        msg_fail_ret("soft zerotick WRITE", n);
+        soft_close();
+        msg("hda_client-gj: soft zerotick soft-skip\n");
+        return 0;
+    }
+
+    n = gj_hda_stream(GJ_HDA_OP_START, 0, 0, 0);
+    soft_note_start(n);
+    if (n != 0) {
+        msg_fail_ret("soft zerotick START", n);
+        soft_close();
+        msg("hda_client-gj: soft zerotick soft-skip\n");
+        return 0;
+    }
+
+    nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, 0, 0, 0);
+    soft_note_tick(nPlayed);
+    msg_tick("soft zerotick TICK0", nPlayed);
+    if (nPlayed != 0) {
+        msg_fail_ret("soft zerotick TICK0", nPlayed);
+        soft_close();
+        msg("hda_client-gj: soft zerotick soft-skip\n");
+        return 0;
+    }
+
+    if (soft_stats("soft zerotick mid", aSt) != 0 ||
+        aSt[HDA_ST_QUEUED] != (unsigned)sizeof(aTone)) {
+        soft_close();
+        msg("hda_client-gj: soft zerotick soft-skip\n");
+        return 0;
+    }
+
+    /* Drain residual so later soft steps see a clean door. */
+    nPlayed = gj_hda_stream(GJ_HDA_OP_TICK, (long)HDA_SOFT_FRAMES, 0, 0);
+    soft_note_tick(nPlayed);
+    soft_close();
+    g_cSoftZeroTick++;
+    g_uSoftStepBits |= SOFT_S_ZEROTICK;
+    msg("hda_client-gj: soft zerotick PASS\n");
+    return 1;
+}
+
+/*
  * Soft suite orchestrator — deepens freestanding door surface beyond the
  * single multi-op cycle. Each sub-step is independent; aggregate greened if
  * any sub-step PASS. Never hard-fails live path.
@@ -1193,7 +1635,24 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 13 soft inventory — greppable hda_client: soft / hda-gj: soft. */
+    /* Wave 15 exclusive soft door deepen. */
+    fStep = soft_bits8_format();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_idle_stats();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_closed_ops();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    fStep = soft_zero_tick();
+    soft_note_step(fStep);
+    cOk += (unsigned)fStep;
+
+    /* Wave 15 soft inventory — greppable hda_client: soft / hda-gj: soft. */
     soft_inventory_log();
 
     if (cOk > 0u) {

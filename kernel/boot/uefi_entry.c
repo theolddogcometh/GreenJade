@@ -15,16 +15,21 @@
  *   gj_boot_info        — filled by stub: memmap, optional GOP/RSDP, image span
  *   soft markers        — see boot_info.h / uefi_stub.c / identity_map.c:
  *                           GJ-EFI: GOP|memmap|handoff soft …
- *                           GJ-EFI: soft inventory|path|… (Wave 14)
+ *                           GJ-EFI: soft inventory|path|… (Wave 15)
  *                           boot: handoff|memmap|GOP|identity soft …
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "GJUEFI1: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "GJUEFI1: soft …"):
  *   GJUEFI1: soft inventory  — master surface + wave stamp (rodata)
  *   GJUEFI1: soft path       — P-BOOT-1 claim + loader/entry wiring
  *   GJUEFI1: soft hdr        — magic/entry/align/section catalog
  *   GJUEFI1: soft entry      — kmain_uefi product entry honesty
  *   GJUEFI1: soft honesty    — not Multiboot; e_entry unused; not bar3
- *   GJUEFI1: soft deepen     — wave=14 stamp + area catalog
+ *   GJUEFI1: soft magic      — Wave 15 magic byte catalog
+ *   GJUEFI1: soft contract   — Wave 15 loader scan contract
+ *   GJUEFI1: soft flags      — Wave 15 soft capability lamps
+ *   GJUEFI1: soft load       — Wave 15 KERNEL.ELF load note
+ *   GJUEFI1: soft catalog    — Wave 15 area name rollup
+ *   GJUEFI1: soft deepen     — wave=15 stamp + area catalog
  *   GJUEFI1: soft PASS       — header surface present (link-time soft)
  *
  * Loader contract (must not break):
@@ -44,15 +49,16 @@
 /* Declared in main.c — long-mode kernel entry after ExitBootServices. */
 void kmain_uefi(struct gj_boot_info *pInfo);
 
-/* Wave 14 soft inventory stamp (observability only; never gates product). */
-#define GJ_UEFI_SOFT_WAVE   14u
-#define GJ_UEFI_SOFT_AREAS  6u /* inventory,path,hdr,entry,honesty,deepen */
+/* Wave 15 soft inventory stamp (observability only; never gates product). */
+#define GJ_UEFI_SOFT_WAVE   15u
+#define GJ_UEFI_SOFT_AREAS  11u /* inventory,path,hdr,entry,honesty,magic,
+                                 * contract,flags,load,catalog,deepen */
 
 struct gj_uefi_hdr {
     char aMagic[8];
     u64  u64Entry;
     /*
-     * Wave 14 soft catalog (observability only). Loader reads only the first
+     * Wave 15 soft catalog (observability only). Loader reads only the first
      * 16 bytes (magic + entry); these fields are greppable in KERNEL.ELF and
      * never consulted by uefi_stub.
      */
@@ -68,6 +74,7 @@ struct gj_uefi_hdr {
 #define GJ_UEFI_SOFT_F_ALIGN16 (1u << 2) /* 16-byte aligned header */
 #define GJ_UEFI_SOFT_F_PBOOT1  (1u << 3) /* product UEFI path marker */
 #define GJ_UEFI_SOFT_F_NO_EENT (1u << 4) /* e_entry not product entry */
+#define GJ_UEFI_SOFT_F_W15     (1u << 5) /* Wave 15 soft catalog present */
 
 /*
  * Must appear in a loaded PT_LOAD segment (linked into .rodata/.data).
@@ -88,16 +95,16 @@ const struct gj_uefi_hdr g_GjUefiHdr = {
     GJ_UEFI_SOFT_AREAS,
     16u,
     (GJ_UEFI_SOFT_F_MAGIC | GJ_UEFI_SOFT_F_ENTRY | GJ_UEFI_SOFT_F_ALIGN16 |
-     GJ_UEFI_SOFT_F_PBOOT1 | GJ_UEFI_SOFT_F_NO_EENT),
+     GJ_UEFI_SOFT_F_PBOOT1 | GJ_UEFI_SOFT_F_NO_EENT | GJ_UEFI_SOFT_F_W15),
 };
 
 /*
- * Wave 14 greppable soft catalog strings (KERNEL.ELF PT_LOAD / .rodata).
+ * Wave 15 greppable soft catalog strings (KERNEL.ELF PT_LOAD / .rodata).
  * Binary and source greps: "GJUEFI1: soft …". Soft only — no runtime call.
  */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftInventory[] =
-    "GJUEFI1: soft inventory wave=14 areas=6 "
+    "GJUEFI1: soft inventory wave=15 areas=11 "
     "magic=GJUEFI1 entry=kmain_uefi path=p_boot_1_product "
     "align=16 soft_never_gates=1";
 
@@ -126,12 +133,39 @@ const char g_szGjUefiSoftHonesty[] =
     "(Apple/product bars open; link-time surface only)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftMagic[] =
+    "GJUEFI1: soft magic bytes=GJUEFI1 nul_term=1 scan_key=1 "
+    "step=8 align=16 soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftContract[] =
+    "GJUEFI1: soft contract first16=magic+entry soft_after=1 "
+    "stub_reads_soft=0 kernel_rodata=1 soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftFlags[] =
+    "GJUEFI1: soft flags magic=1 entry=1 align16=1 pboot1=1 "
+    "no_eent=1 w15=1 soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftLoad[] =
+    "GJUEFI1: soft load file=EFI/GREENJADE/KERNEL.ELF "
+    "pt_load_scan=1 entry=kmain_uefi soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftCatalog[] =
+    "GJUEFI1: soft catalog inventory,path,hdr,entry,honesty,"
+    "magic,contract,flags,load,catalog,deepen "
+    "wave=15 areas_expect=11 soft PASS";
+
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftDeepen[] =
-    "GJUEFI1: soft deepen wave=14 areas=6 "
-    "catalog=inventory,path,hdr,entry,honesty,deepen "
+    "GJUEFI1: soft deepen wave=15 areas=11 "
+    "catalog=inventory,path,hdr,entry,honesty,magic,contract,"
+    "flags,load,catalog,deepen "
     "unit=uefi_entry.c only soft_never_gates=1 (soft; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftPass[] =
-    "GJUEFI1: soft PASS wave=14 hdr=present entry=stamped "
+    "GJUEFI1: soft PASS wave=15 hdr=present entry=stamped "
     "align=16 (soft inventory; not bar3)";

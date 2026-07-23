@@ -11,7 +11,7 @@
  *   virtio-net: features
  *   virtio-net: multi-buf
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 15 exclusive deepen; this unit only; never hard-gates):
  * greppable: "virtio-net: soft …"
  *   virtio-net: soft inventory …
  *   virtio-net: soft multi-buf …
@@ -31,6 +31,12 @@
  *   virtio-net: soft bytes …
  *   virtio-net: soft empty …
  *   virtio-net: soft link …
+ *   virtio-net: soft pci …          (Wave 15)
+ *   virtio-net: soft probe …        (Wave 15)
+ *   virtio-net: soft claim …        (Wave 15)
+ *   virtio-net: soft via …          (Wave 15)
+ *   virtio-net: soft kicks …        (Wave 15)
+ *   virtio-net: soft oasis …        (Wave 15)
  *   virtio-net: soft deepen …
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *   virtio-net: soft inventory PASS|NODEV|PARTIAL
@@ -92,9 +98,9 @@ static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
 /* Bounce pool for userspace AVAIL_PUSH (ring programming path) */
 #define GJ_NET_BOUNCE_N 8u
 #define GJ_NET_BOUNCE_SZ 2048u
-/* Wave 14 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_NET_SOFT_DEEPEN_WAVE  14u
-#define VIRTIO_NET_SOFT_DEEPEN_AREAS 18u
+/* Wave 15 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_NET_SOFT_DEEPEN_WAVE  15u
+#define VIRTIO_NET_SOFT_DEEPEN_AREAS 24u
 static u8                    g_aBounce[GJ_NET_BOUNCE_N][GJ_NET_BOUNCE_SZ]
     __attribute__((aligned(16)));
 static u8                    g_aBounceUsed[GJ_NET_BOUNCE_N];
@@ -248,7 +254,7 @@ net_q_note_free(void)
 }
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-net: soft …" — never hard-gates; kprintf only.
  *
  *   virtio-net: soft inventory  — ready + PCI + geometry + free watermarks
@@ -269,7 +275,13 @@ net_q_note_free(void)
  *   virtio-net: soft bytes      — TX/RX byte totals (Wave 14)
  *   virtio-net: soft empty      — RX empty / soft miss (Wave 14)
  *   virtio-net: soft link       — MAC+STATUS feature lamps (Wave 14)
- *   virtio-net: soft deepen     — wave=14 areas stamp
+ *   virtio-net: soft pci        — bus/slot/func/modern (Wave 15)
+ *   virtio-net: soft probe      — probe outcome lamps (Wave 15)
+ *   virtio-net: soft claim      — transport claim honesty (Wave 15)
+ *   virtio-net: soft via        — sticky last inventory via (Wave 15)
+ *   virtio-net: soft kicks      — kick/reap tallies (Wave 15)
+ *   virtio-net: soft oasis      — feature-bit constant catalog (Wave 15)
+ *   virtio-net: soft deepen     — wave=15 areas stamp
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *
  * greppable: virtio-net: soft
@@ -515,7 +527,45 @@ virtio_net_soft_inventory(const char *szVia)
             (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
             g_u32ProbeOk, g_u32ProbeNodev);
 
-    /* Grep: virtio-net: soft deepen (Wave 14 stamp) */
+    /* Grep: virtio-net: soft pci (Wave 15) */
+    kprintf("virtio-net: soft pci bus=%x slot=%x func=%x modern=%u "
+            "ready=%u mac_have=%u\n",
+            (unsigned)u8Bus, (unsigned)u8Slot, (unsigned)u8Func,
+            (unsigned)u8Modern, u32Ready, (unsigned)g_fHaveMac);
+
+    /* Grep: virtio-net: soft probe (Wave 15) */
+    kprintf("virtio-net: soft probe ok=%u nodev=%u fail=%u ready=%u "
+            "tx=%u rx=%u\n",
+            g_u32ProbeOk, g_u32ProbeNodev, g_u32ProbeFail, u32Ready,
+            (unsigned)g_Stats.u32TxCount, (unsigned)g_Stats.u32RxCount);
+
+    /* Grep: virtio-net: soft claim (Wave 15) */
+    kprintf("virtio-net: soft claim ready=%u claim=%u modern=%u "
+            "rx_q=%u tx_q=%u multi_buf=1 bounce=1\n",
+            u32Ready, u32Ready, (unsigned)u8Modern,
+            (unsigned)(g_fReady ? 1u : 0u), (unsigned)(g_fReady ? 1u : 0u));
+
+    /* Grep: virtio-net: soft via (Wave 15) */
+    kprintf("virtio-net: soft via last=%s log_n=%u once=%u\n",
+            (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
+            g_fSoftOnce ? 1u : 0u);
+
+    /* Grep: virtio-net: soft kicks (Wave 15) */
+    kprintf("virtio-net: soft kicks desc=%u api=%u reaps=%u "
+            "avail_push=%u user_ring=%u\n",
+            (unsigned)g_Stats.u32Kicks, g_u32KickApi,
+            (unsigned)g_Stats.u32Reaps, (unsigned)g_Stats.u32AvailPushes,
+            (unsigned)g_Stats.u32UserRingPushes);
+
+    /* Grep: virtio-net: soft oasis (Wave 15 feature-bit catalog) */
+    kprintf("virtio-net: soft oasis bit_mac=5 bit_status=16 bit_mrg=15 "
+            "hdr_sz=%u rx_n=%u rx_sz=%u bounce_n=%u "
+            "mac=%u status=%u mrg=%u v1=%u gso=0 csum=0 mq=0\n",
+            (unsigned)sizeof(struct virtio_net_hdr),
+            (unsigned)GJ_VIRTIO_NET_RX_N, (unsigned)GJ_VIRTIO_NET_RX_SZ,
+            (unsigned)GJ_NET_BOUNCE_N, fMac, fStatus, fMrg, fV1);
+
+    /* Grep: virtio-net: soft deepen (Wave 15 stamp) */
     kprintf("virtio-net: soft deepen wave=%u areas=%u ready=%u tx=%u "
             "rx=%u log_n=%u\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE,

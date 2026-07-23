@@ -7,20 +7,32 @@
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
  *
- * Soft product paths (this file only; not product-complete; no bar3):
- *   Apple §13 bootstrap seal checklist — greppable (Wave 13 deepen):
+ * Soft product inventory (Wave 15 exclusive deepen; this unit only):
+ * greppable: "process: soft …"
+ *   process: soft inventory …
+ *   process: soft stats …
+ *   process: soft init …
+ *   process: soft seal …
+ *   process: soft confine …
+ *   process: soft pager …
+ *   process: soft fault …
+ *   process: soft wait …
+ *   process: soft death …
+ *   process: soft fork …
+ *   process: soft jit …
+ *   process: soft promise …
+ *   process: soft path …
+ *   process: soft deepen wave=15 …
+ *   process: soft PASS|PARTIAL
+ *   Apple §13 bootstrap seal checklist (wave=15 stamp):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=13 …
- *     enumerates root meta, ambient drop, pager empty, promises, plus soft
- *     Apple s13 open lamps: retype / irq_bind_any / root_untyped / sticky
- *   G-PROC-5 death tallies — greppable process: death … (Wave 13 deepen):
- *     pager clear, fault_lock force, CNode wipe, AS destroy, exc clear,
- *     scrub (confine/jit), seal_note (death ≠ product seal), deepen tallies
- *   Soft confine exposes PCB u32Confined / u32Promises (ambient drop lamps)
+ *     process: bootstrap seal soft deepen wave=15 …
+ *   G-PROC-5 death tallies (wave=15 stamp):
+ *     process: death … / process: death deepen wave=15 …
  *
- * Honesty: seal checklist is soft inventory only — not product multi-server
- * seal, not Apple §13 closed, not bar3. Death cleanup ≠ bootstrap seal product.
+ * Honesty: soft inventory only — not product multi-server seal, not Apple §13
+ * closed, not bar3. Death cleanup ≠ bootstrap seal product.
  * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md §13 ·
  * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/SECURITY_CORE_DESIGN.md §13
  */
@@ -34,11 +46,262 @@
 #include <gj/thread.h>
 #include <gj/vmm.h>
 
+/* ---- Wave 15 exclusive soft inventory (this unit only) ------------------ */
+#define GJ_PROCESS_SOFT_WAVE   15u
+#define GJ_PROCESS_SOFT_AREAS  16u /* greppable inventory area count */
+#define GJ_SEAL_SOFT_WAVE      15u /* Apple s13 seal checklist stamp */
+#define GJ_SEAL_SOFT_LOG_MAX   8u
+
+/* Forward: wait table lives later; soft census snapshots used/zombie/free. */
+#define GJ_WAIT_SLOTS 64u
+#define GJ_WAIT_PID_BASE 100u
+#define GJ_FORK_STUBS 16u
+
+/*
+ * Soft path tallies (diagnostics only; wrap OK). Never hard-gate product.
+ * greppable: process: soft …
+ */
+static u32 g_u32SoftInitOk;
+static u32 g_u32SoftInitNull;
+static u32 g_u32SoftRootMetaOk;
+static u32 g_u32SoftRootMetaFail;
+static u32 g_u32SoftRootMetaBusy;
+static u32 g_u32SoftConfineN;
+static u32 g_u32SoftConfineNull;
+static u32 g_u32SoftPromiseOkHit;
+static u32 g_u32SoftPromiseOkMiss;
+static u32 g_u32SoftPromiseReqOk;
+static u32 g_u32SoftPromiseReqDeny;
+static u32 g_u32SoftJitSetOn;
+static u32 g_u32SoftJitSetOff;
+static u32 g_u32SoftJitQueryHit;
+static u32 g_u32SoftJitQueryMiss;
+static u32 g_u32SoftPagerSetOk;
+static u32 g_u32SoftPagerSetFail;
+static u32 g_u32SoftPagerClear;
+static u32 g_u32SoftPagerRefreshClear;
+static u32 g_u32SoftPagerRefreshKeep;
+static u32 g_u32SoftPagerMirrorOk;
+static u32 g_u32SoftPagerHasHit;
+static u32 g_u32SoftPagerHasMiss;
+static u32 g_u32SoftFaultEnter;
+static u32 g_u32SoftFaultNoPager;
+static u32 g_u32SoftFaultWxDeny;
+static u32 g_u32SoftFaultBusy;
+static u32 g_u32SoftFaultAgain;
+static u32 g_u32SoftWaitRegOk;
+static u32 g_u32SoftWaitRegIdem;
+static u32 g_u32SoftWaitRegFull;
+static u32 g_u32SoftWaitRegNull;
+static u32 g_u32SoftWaitZombie;
+static u32 g_u32SoftWaitReap;
+static u32 g_u32SoftWaitNowait;
+static u32 g_u32SoftWaitReparentN;
+static u32 g_u32SoftWaitForget;
+static u32 g_u32SoftWait4Enter;
+static u32 g_u32SoftWait4Echild;
+static u32 g_u32SoftWait4Nohang0;
+static u32 g_u32SoftForkEnter;
+static u32 g_u32SoftForkOk;
+static u32 g_u32SoftForkFull;
+static u32 g_u32SoftForkVfork;
+static u32 g_u32SoftForkDeferred;
+static u32 g_u32SoftForkAsOk;
+static u32 g_u32SoftForkAsFail;
+static u32 g_u32SoftForkCloneOk;
+static u32 g_u32SoftForkCloneFail;
+static u32 g_u32SoftDeathEnter;
+static u32 g_u32SoftLogN;
+static u8  g_fSoftInvOnce;
+
+static void process_soft_inc(u32 *pCtr);
+static void process_soft_inventory(const char *szVia);
+static void process_soft_maybe_once(void);
+static void process_soft_wait_census(u32 *pUsed, u32 *pZombie, u32 *pLive,
+                                     u32 *pFree);
+
+/** Soft: saturating bump (avoid wrap for small smokes). */
+static void
+process_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/*
+ * Greppable Wave 15 soft process inventory (product / smoke).
+ * Prefix-stable: "process: soft …". Never hard-gates.
+ * greppable: process: soft
+ */
+static void
+process_soft_inventory(const char *szVia)
+{
+    const char *szViaSafe;
+    const char *szVerdict;
+    u32 u32Used = 0;
+    u32 u32Zombie = 0;
+    u32 u32Live = 0;
+    u32 u32Free = 0;
+
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    process_soft_inc(&g_u32SoftLogN);
+    process_soft_wait_census(&u32Used, &u32Zombie, &u32Live, &u32Free);
+
+    if (g_u32SoftInitOk != 0u || g_u32SoftRootMetaOk != 0u ||
+        g_u32SoftDeathEnter != 0u || g_u32SoftWaitRegOk != 0u ||
+        g_u32SoftPagerSetOk != 0u) {
+        szVerdict = "PASS";
+    } else if (g_u32SoftInitNull != 0u || g_u32SoftRootMetaFail != 0u ||
+               g_u32SoftPagerSetFail != 0u || g_u32SoftForkFull != 0u) {
+        szVerdict = "PARTIAL";
+    } else {
+        szVerdict = "PARTIAL";
+    }
+
+    /* Grep: process: soft inventory */
+    kprintf("process: soft inventory via=%s wave=%u areas=%u logs=%u "
+            "wait_used=%u wait_zombie=%u wait_live=%u wait_free=%u "
+            "init_ok=%u root_meta_ok=%u death=%u "
+            "(soft inventory only; not bar3)\n",
+            szViaSafe, GJ_PROCESS_SOFT_WAVE, GJ_PROCESS_SOFT_AREAS,
+            g_u32SoftLogN, u32Used, u32Zombie, u32Live, u32Free,
+            g_u32SoftInitOk, g_u32SoftRootMetaOk, g_u32SoftDeathEnter);
+
+    /* Grep: process: soft stats */
+    kprintf("process: soft stats init_ok=%u init_null=%u root_ok=%u "
+            "root_fail=%u root_busy=%u confine=%u pager_set=%u "
+            "pager_fail=%u death=%u wait_reg=%u wait_reap=%u "
+            "fork_ok=%u logs=%u wave=%u\n",
+            g_u32SoftInitOk, g_u32SoftInitNull, g_u32SoftRootMetaOk,
+            g_u32SoftRootMetaFail, g_u32SoftRootMetaBusy, g_u32SoftConfineN,
+            g_u32SoftPagerSetOk, g_u32SoftPagerSetFail, g_u32SoftDeathEnter,
+            g_u32SoftWaitRegOk, g_u32SoftWaitReap, g_u32SoftForkOk,
+            g_u32SoftLogN, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft init */
+    kprintf("process: soft init ok=%u null=%u wave=%u\n",
+            g_u32SoftInitOk, g_u32SoftInitNull, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft seal */
+    kprintf("process: soft seal root_ok=%u root_fail=%u root_busy=%u "
+            "wave=%u (checklist via process: bootstrap seal soft)\n",
+            g_u32SoftRootMetaOk, g_u32SoftRootMetaFail, g_u32SoftRootMetaBusy,
+            GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft confine */
+    kprintf("process: soft confine n=%u null=%u wave=%u\n",
+            g_u32SoftConfineN, g_u32SoftConfineNull, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft pager */
+    kprintf("process: soft pager set_ok=%u set_fail=%u clear=%u "
+            "refresh_clear=%u refresh_keep=%u mirror_ok=%u "
+            "has_hit=%u has_miss=%u wave=%u\n",
+            g_u32SoftPagerSetOk, g_u32SoftPagerSetFail, g_u32SoftPagerClear,
+            g_u32SoftPagerRefreshClear, g_u32SoftPagerRefreshKeep,
+            g_u32SoftPagerMirrorOk, g_u32SoftPagerHasHit, g_u32SoftPagerHasMiss,
+            GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft fault */
+    kprintf("process: soft fault enter=%u no_pager=%u wx_deny=%u busy=%u "
+            "again=%u wave=%u\n",
+            g_u32SoftFaultEnter, g_u32SoftFaultNoPager, g_u32SoftFaultWxDeny,
+            g_u32SoftFaultBusy, g_u32SoftFaultAgain, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft wait */
+    kprintf("process: soft wait reg_ok=%u reg_idem=%u reg_full=%u "
+            "reg_null=%u zombie=%u reap=%u nowait=%u reparent=%u "
+            "forget=%u wait4_enter=%u echild=%u nohang0=%u "
+            "used=%u zombie_now=%u live=%u free=%u wave=%u\n",
+            g_u32SoftWaitRegOk, g_u32SoftWaitRegIdem, g_u32SoftWaitRegFull,
+            g_u32SoftWaitRegNull, g_u32SoftWaitZombie, g_u32SoftWaitReap,
+            g_u32SoftWaitNowait, g_u32SoftWaitReparentN, g_u32SoftWaitForget,
+            g_u32SoftWait4Enter, g_u32SoftWait4Echild, g_u32SoftWait4Nohang0,
+            u32Used, u32Zombie, u32Live, u32Free, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft death */
+    kprintf("process: soft death enter=%u wave=%u "
+            "(detail via process: death tallies / deepen)\n",
+            g_u32SoftDeathEnter, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft fork */
+    kprintf("process: soft fork enter=%u ok=%u full=%u vfork=%u "
+            "deferred=%u as_ok=%u as_fail=%u clone_ok=%u clone_fail=%u "
+            "wave=%u\n",
+            g_u32SoftForkEnter, g_u32SoftForkOk, g_u32SoftForkFull,
+            g_u32SoftForkVfork, g_u32SoftForkDeferred, g_u32SoftForkAsOk,
+            g_u32SoftForkAsFail, g_u32SoftForkCloneOk, g_u32SoftForkCloneFail,
+            GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft jit */
+    kprintf("process: soft jit set_on=%u set_off=%u query_hit=%u "
+            "query_miss=%u wave=%u\n",
+            g_u32SoftJitSetOn, g_u32SoftJitSetOff, g_u32SoftJitQueryHit,
+            g_u32SoftJitQueryMiss, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft promise */
+    kprintf("process: soft promise ok_hit=%u ok_miss=%u req_ok=%u "
+            "req_deny=%u wave=%u\n",
+            g_u32SoftPromiseOkHit, g_u32SoftPromiseOkMiss,
+            g_u32SoftPromiseReqOk, g_u32SoftPromiseReqDeny,
+            GJ_PROCESS_SOFT_WAVE);
+
+    /*
+     * Honesty: PCB + fixed wait table + soft seal lamps ≠ multi-server
+     * product seal / full posix wait / bar3.
+     * Grep: process: soft path
+     */
+    kprintf("process: soft path claim=pcb,root_meta,pager,confine,"
+            "wait4,death,fork G-PROC-5=1 Apple_s13_open=1 "
+            "fixed_wait_table=%u fork_stubs=%u multi_server_seal=0 "
+            "bar3=0 via=%s wave=%u (soft inventory; not product gate)\n",
+            GJ_WAIT_SLOTS, GJ_FORK_STUBS, szViaSafe, GJ_PROCESS_SOFT_WAVE);
+
+    /* Grep: process: soft deepen */
+    kprintf("process: soft deepen wave=%u areas=%u via=%s init_ok=%u "
+            "root_ok=%u confine=%u pager_set=%u fault=%u wait_reg=%u "
+            "death=%u fork_ok=%u logs=%u "
+            "(soft inventory only; not product gate)\n",
+            GJ_PROCESS_SOFT_WAVE, GJ_PROCESS_SOFT_AREAS, szViaSafe,
+            g_u32SoftInitOk, g_u32SoftRootMetaOk, g_u32SoftConfineN,
+            g_u32SoftPagerSetOk, g_u32SoftFaultEnter, g_u32SoftWaitRegOk,
+            g_u32SoftDeathEnter, g_u32SoftForkOk, g_u32SoftLogN);
+
+    /* Grep: process: soft PASS | PARTIAL */
+    kprintf("process: soft %s via=%s wave=%u logs=%u areas=%u\n",
+            szVerdict, szViaSafe, GJ_PROCESS_SOFT_WAVE, g_u32SoftLogN,
+            GJ_PROCESS_SOFT_AREAS);
+}
+
+/**
+ * After first product activity, print soft inventory once.
+ * Diagnostics only — never hard-gates.
+ */
+static void
+process_soft_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftInitOk == 0u && g_u32SoftRootMetaOk == 0u &&
+        g_u32SoftConfineN == 0u && g_u32SoftPagerSetOk == 0u &&
+        g_u32SoftWaitRegOk == 0u && g_u32SoftDeathEnter == 0u &&
+        g_u32SoftForkOk == 0u) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    process_soft_inventory("once");
+}
+
 void
 gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
                 struct gj_cap_slot *pSlots, u64 cSlots)
 {
     if (pProc == NULL || pCnode == NULL || pSlots == NULL) {
+        process_soft_inc(&g_u32SoftInitNull);
         return;
     }
 
@@ -73,6 +336,8 @@ gj_process_init(struct gj_process *pProc, struct gj_cnode *pCnode,
     pProc->u32ExitCode = 0;
     pProc->u32Alive = 1;
     memset(&pProc->excPort, 0, sizeof(pProc->excPort));
+    process_soft_inc(&g_u32SoftInitOk);
+    process_soft_maybe_once();
 }
 
 void
@@ -83,10 +348,15 @@ gj_process_set_jit(struct gj_process *pProc, int fEnable)
     }
     /* G-JIT-4: u32Jit is cache of GJ_RIGHT_JIT authority */
     pProc->u32Jit = fEnable ? 1u : 0u;
+    if (fEnable) {
+        process_soft_inc(&g_u32SoftJitSetOn);
+    } else {
+        process_soft_inc(&g_u32SoftJitSetOff);
+    }
 }
 
 /*
- * Soft Apple §13 bootstrap seal checklist (process.c only; Wave 13 deepen).
+ * Soft Apple §13 bootstrap seal checklist (process.c only; Wave 15 deepen).
  * Enumerates PCB lamps: root meta, ambient/confine, pager empty, promises,
  * plus soft open inventory for Apple s13 product seal items (all 0 until
  * product retype/IRQ/untyped seal exists — honesty inventory only).
@@ -112,10 +382,8 @@ static u32 g_u32SealProductRetype;     /* 0 = open (not product-sealed) */
 static u32 g_u32SealProductIrqBind;    /* 0 = open */
 static u32 g_u32SealProductRootUntyped; /* 0 = open */
 static u32 g_u32SealProductStickyNs;   /* 0 = open (sticky bootstrap ns) */
-#define GJ_SEAL_SOFT_LOG_MAX 8u
-#define GJ_SEAL_SOFT_WAVE 13u
 
-/* Soft G-PROC-5 death tallies (grep: process: death). Wave 13 deepen. */
+/* Soft G-PROC-5 death tallies (grep: process: death). Wave 15 deepen. */
 static u64 g_u64DeathTotal;
 static u64 g_u64DeathPagerClear;
 static u64 g_u64DeathFaultForce;
@@ -333,11 +601,13 @@ void
 gj_process_confine(struct gj_process *pProc, u32 u32Promises)
 {
     if (pProc == NULL) {
+        process_soft_inc(&g_u32SoftConfineNull);
         return;
     }
     /* Soft: set confined; promises are the allowed ambient set. */
     pProc->u32Confined = 1u;
     pProc->u32Promises = u32Promises;
+    process_soft_inc(&g_u32SoftConfineN);
     /*
      * Soft confine expose PCB flags + ambient authority drop lamp.
      * Grep: process: confine soft | process: seal checklist
@@ -348,18 +618,29 @@ gj_process_confine(struct gj_process *pProc, u32 u32Promises)
             pProc->u32Confined, pProc->u32Promises);
     /* Confine is the soft ambient-drop edge — re-emit seal checklist lamps. */
     process_bootstrap_seal_soft_try(pProc, "confine");
+    process_soft_maybe_once();
 }
 
 int
 gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise)
 {
+    int fOk;
+
     if (pProc == NULL) {
+        process_soft_inc(&g_u32SoftPromiseOkMiss);
         return 0;
     }
     if (pProc->u32Confined == 0u) {
+        process_soft_inc(&g_u32SoftPromiseOkHit);
         return 1; /* ambient */
     }
-    return (pProc->u32Promises & u32Promise) != 0u ? 1 : 0;
+    fOk = (pProc->u32Promises & u32Promise) != 0u ? 1 : 0;
+    if (fOk != 0) {
+        process_soft_inc(&g_u32SoftPromiseOkHit);
+    } else {
+        process_soft_inc(&g_u32SoftPromiseOkMiss);
+    }
+    return fOk;
 }
 
 int
@@ -367,11 +648,14 @@ gj_process_promise_require(const struct gj_process *pProc, u32 u32Promise)
 {
     /* NULL process: no confine subject (product ambient smokes). */
     if (pProc == NULL) {
+        process_soft_inc(&g_u32SoftPromiseReqOk);
         return 0;
     }
     if (gj_process_promise_ok(pProc, u32Promise)) {
+        process_soft_inc(&g_u32SoftPromiseReqOk);
         return 0;
     }
+    process_soft_inc(&g_u32SoftPromiseReqDeny);
     return -13; /* LINUX_EACCES shape (linux_abi.h LINUX_EACCES) */
 }
 
@@ -382,7 +666,12 @@ gj_process_has_jit(const struct gj_process *pProc)
      * CapJit: bool cache OR PROCESS self-right when wired via parent mint.
      * Authority source is GJ_RIGHT_JIT on task cap (G-JIT-1); cache for speed.
      */
-    return pProc != NULL && pProc->u32Jit != 0;
+    if (pProc != NULL && pProc->u32Jit != 0) {
+        process_soft_inc(&g_u32SoftJitQueryHit);
+        return 1;
+    }
+    process_soft_inc(&g_u32SoftJitQueryMiss);
+    return 0;
 }
 
 gj_status_t
@@ -395,11 +684,13 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
     u16 u16Rights;
 
     if (pProc == NULL || pMeta == NULL || pProc->pCnode == NULL) {
+        process_soft_inc(&g_u32SoftRootMetaFail);
         return GJ_ERR_INVAL;
     }
 
     /* Already filled? */
     if (pProc->pRootMeta != NULL) {
+        process_soft_inc(&g_u32SoftRootMetaBusy);
         return GJ_ERR_BUSY;
     }
 
@@ -421,12 +712,14 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
         pProc->pRootMeta = NULL;
         pMeta->pProc = NULL;
         pMeta->pCnode = NULL;
+        process_soft_inc(&g_u32SoftRootMetaFail);
         return st;
     }
 
     if (pOutRef != NULL) {
         *pOutRef = ref;
     }
+    process_soft_inc(&g_u32SoftRootMetaOk);
     /*
      * Soft Apple §13 seal checklist after root meta install.
      * Enumerates root_meta / pager_empty / ambient / promises (rate-limited).
@@ -434,6 +727,7 @@ gj_process_bootstrap_root_meta(struct gj_process *pProc,
      * Honesty: not product-complete; no bar3.
      */
     process_seal_checklist_soft(pProc, "root_meta");
+    process_soft_maybe_once();
     return GJ_OK;
 }
 
@@ -530,6 +824,7 @@ process_pager_mirror_install(struct gj_process *pProc, struct gj_obj_hdr *pEp,
                              (u16)GJ_CAP_ENDPOINT, u16MirRights, pEp,
                              &refMirror);
     if (st == GJ_OK) {
+        process_soft_inc(&g_u32SoftPagerMirrorOk);
         kprintf("process: pager mirror slot=%lu gen=%u soft\n",
                 (unsigned long)refMirror.u64Slot, refMirror.u32SlotGen);
     }
@@ -550,6 +845,7 @@ gj_process_clear_pager(struct gj_process *pProc)
     pProc->u32PagerBadge = 0;
     /* Soft: drop kernel hold after PCB cleared (SOLARIS_STYLE §9 clear). */
     process_pager_ref_drop(pOld);
+    process_soft_inc(&g_u32SoftPagerClear);
 }
 
 void
@@ -566,7 +862,10 @@ gj_process_pager_refresh(struct gj_process *pProc)
         pProc->pPagerEpObj->u32State != (u32)GJ_OBJ_LIVE) {
         kprintf("process: pager refresh clear (ep dead) soft\n");
         gj_process_clear_pager(pProc);
+        process_soft_inc(&g_u32SoftPagerRefreshClear);
+        return;
     }
+    process_soft_inc(&g_u32SoftPagerRefreshKeep);
 }
 
 u32
@@ -588,32 +887,39 @@ gj_process_set_pager_badge(struct gj_process *pProc, u64 u64EpSlot,
     u32 u32SnapBadge;
 
     if (pProc == NULL || pProc->pCnode == NULL) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_INVAL;
     }
 
     /* Clear pager */
     if (u32EpGen == 0) {
         gj_process_clear_pager(pProc);
+        process_soft_inc(&g_u32SoftPagerSetOk);
         return GJ_OK;
     }
 
     /* Endpoint must resolve in *this* process CNode (Scheme A). */
     st = gj_cap_resolve(pProc->pCnode, u64EpSlot, u32EpGen, &res);
     if (st != GJ_OK) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return st;
     }
     /* Pager must be ENDPOINT (doors-like Call/reply); GRANT required. */
     if (res.u16Type != (u16)GJ_CAP_ENDPOINT) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_PERM;
     }
     if ((res.u16Rights & (u16)GJ_RIGHT_GRANT) == 0) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_PERM;
     }
     if (res.pObj == NULL) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_INVAL;
     }
     /* Soft LIVE check — refuse DEAD/REVOKING endpoints (fail closed). */
     if (res.pObj->u32State != (u32)GJ_OBJ_LIVE) {
+        process_soft_inc(&g_u32SoftPagerSetFail);
         return GJ_ERR_DEAD;
     }
 
@@ -636,6 +942,8 @@ gj_process_set_pager_badge(struct gj_process *pProc, u64 u64EpSlot,
         process_pager_ref_drop(res.pObj);
     }
     process_pager_mirror_install(pProc, res.pObj, res.u16Rights);
+    process_soft_inc(&g_u32SoftPagerSetOk);
+    process_soft_maybe_once();
     kprintf("process: set_pager slot=%lu gen=%u badge=%u ref=%u soft\n",
             (unsigned long)u64EpSlot, u32EpGen, u32SnapBadge,
             res.pObj->u32Ref);
@@ -653,9 +961,11 @@ int
 gj_process_has_pager(const struct gj_process *pProc)
 {
     if (pProc == NULL) {
+        process_soft_inc(&g_u32SoftPagerHasMiss);
         return 0;
     }
     if (gj_cap_ref_is_null(&pProc->refPager)) {
+        process_soft_inc(&g_u32SoftPagerHasMiss);
         return 0;
     }
     /*
@@ -664,8 +974,10 @@ gj_process_has_pager(const struct gj_process *pProc)
      */
     if (pProc->pPagerEpObj != NULL &&
         pProc->pPagerEpObj->u32State != (u32)GJ_OBJ_LIVE) {
+        process_soft_inc(&g_u32SoftPagerHasMiss);
         return 0;
     }
+    process_soft_inc(&g_u32SoftPagerHasHit);
     return 1;
 }
 
@@ -691,17 +1003,21 @@ gj_process_handle_fault(struct gj_process *pProc, u64 u64FaultVa, int fWrite,
         return GJ_ERR_INVAL;
     }
 
+    process_soft_inc(&g_u32SoftFaultEnter);
+
     /* Soft: drop PCB pager if endpoint was revoked under us. */
     gj_process_pager_refresh(pProc);
 
     st = gj_space_fault_enter(&pProc->fault);
     if (st != GJ_OK) {
         /* Full impl: wait on CV with mono timeout */
+        process_soft_inc(&g_u32SoftFaultBusy);
         return st;
     }
 
     if (!gj_process_has_pager(pProc)) {
         gj_space_fault_leave(&pProc->fault);
+        process_soft_inc(&g_u32SoftFaultNoPager);
         return GJ_ERR_FAULT; /* kill path */
     }
 
@@ -721,6 +1037,7 @@ gj_process_handle_fault(struct gj_process *pProc, u64 u64FaultVa, int fWrite,
     /* W^X: refuse W|X at policy layer when mapping */
     if ((u32Access & GJ_FAULT_ACCESS_W) && (u32Access & GJ_FAULT_ACCESS_X)) {
         gj_space_fault_leave(&pProc->fault);
+        process_soft_inc(&g_u32SoftFaultWxDeny);
         return GJ_ERR_PERM;
     }
 
@@ -742,13 +1059,11 @@ gj_process_handle_fault(struct gj_process *pProc, u64 u64FaultVa, int fWrite,
     (void)cookie;
     gj_map_cookie_invalidate(msg.u64CookieLo, msg.u64CookieHi);
     gj_space_fault_leave(&pProc->fault);
+    process_soft_inc(&g_u32SoftFaultAgain);
     return GJ_ERR_AGAIN;
 }
 
 /* ---- wait4 reaper (product: PROCESS caps; interim fixed zombie table) --- */
-
-#define GJ_WAIT_SLOTS 64u
-#define GJ_WAIT_PID_BASE 100u
 
 struct process_wait_slot {
     u8                 u8Used;
@@ -770,6 +1085,43 @@ static u64                      g_u64WaitReap;
 static u64                      g_u64WaitReparent;
 static u64                      g_u64WaitNowaitPeek;
 
+/*
+ * Soft wait-table census (Wave 15 inventory). Snapshots used/zombie/live/free.
+ * Does not lock (soft OK). greppable via process: soft wait …
+ */
+static void
+process_soft_wait_census(u32 *pUsed, u32 *pZombie, u32 *pLive, u32 *pFree)
+{
+    u32 i;
+    u32 cUsed = 0;
+    u32 cZombie = 0;
+    u32 cLive = 0;
+
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        if (!g_aWait[i].u8Used) {
+            continue;
+        }
+        cUsed++;
+        if (g_aWait[i].u8Zombie && !g_aWait[i].u8Reaped) {
+            cZombie++;
+        } else if (!g_aWait[i].u8Zombie && !g_aWait[i].u8Reaped) {
+            cLive++;
+        }
+    }
+    if (pUsed != NULL) {
+        *pUsed = cUsed;
+    }
+    if (pZombie != NULL) {
+        *pZombie = cZombie;
+    }
+    if (pLive != NULL) {
+        *pLive = cLive;
+    }
+    if (pFree != NULL) {
+        *pFree = (cUsed < GJ_WAIT_SLOTS) ? (GJ_WAIT_SLOTS - cUsed) : 0u;
+    }
+}
+
 u32
 process_wait_register(struct gj_process *pChild, u32 u32Ppid)
 {
@@ -778,11 +1130,13 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
     u32 u32ParentPid;
 
     if (pChild == NULL) {
+        process_soft_inc(&g_u32SoftWaitRegNull);
         return 0;
     }
     /* Already registered? */
     for (i = 0; i < GJ_WAIT_SLOTS; i++) {
         if (g_aWait[i].u8Used && g_aWait[i].pProc == pChild) {
+            process_soft_inc(&g_u32SoftWaitRegIdem);
             return g_aWait[i].u32Pid;
         }
     }
@@ -814,11 +1168,14 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
                 }
             }
             g_u64WaitRegister++;
+            process_soft_inc(&g_u32SoftWaitRegOk);
+            process_soft_maybe_once();
             kprintf("process: wait register pid=%u ppid=%u\n", pid,
                     g_aWait[i].u32Ppid);
             return pid;
         }
     }
+    process_soft_inc(&g_u32SoftWaitRegFull);
     return 0; /* table full — caller may continue without wait4 */
 }
 
@@ -837,6 +1194,7 @@ process_wait_note_exit(struct gj_process *pChild, u32 u32Code)
             /* Soft: re-note updates exit code even if already zombie. */
             if (!g_aWait[i].u8Zombie) {
                 g_u64WaitZombie++;
+                process_soft_inc(&g_u32SoftWaitZombie);
             }
             g_aWait[i].u8Zombie = 1;
             g_aWait[i].u32Exit = u32Code;
@@ -864,6 +1222,7 @@ process_wait_forget(struct gj_process *pProc)
             g_aWait[i].u32Pid = 0;
             g_aWait[i].u32Ppid = 0;
             g_aWait[i].pProc = NULL;
+            process_soft_inc(&g_u32SoftWaitForget);
             return;
         }
     }
@@ -907,6 +1266,7 @@ process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid)
         }
         u32N++;
         g_u64WaitReparent++;
+        process_soft_inc(&g_u32SoftWaitReparentN);
         kprintf("process: wait reparent pid=%u ppid %u→%u soft\n",
                 g_aWait[i].u32Pid, u32OldPpid, u32NewPpid);
     }
@@ -1063,6 +1423,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     if (pProc == NULL) {
         return;
     }
+    process_soft_inc(&g_u32SoftDeathEnter);
     /* Idempotent: second death only re-notes zombie code */
     if (!pProc->u32Alive && pProc->u64Cr3 == 0 && !gj_process_has_pager(pProc)) {
         g_u64DeathIdempotent++;
@@ -1263,14 +1624,14 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             (unsigned long long)g_u64DeathAsDestroyFail,
             (unsigned long long)g_u64DeathAsSkip);
     /*
-     * Wave 13 deepen tallies (extra axes; wrap OK).
+     * Wave 15 deepen tallies (extra axes; wrap OK).
      * Grep: process: death deepen | process: death tallies deepen
      */
     kprintf("process: death deepen wave=%u tallies wait_child=%llu "
             "long_lived=%llu idempotent=%llu regions=%llu reparent=%llu "
             "exc_clear=%llu confine_scrub=%llu jit_scrub=%llu soft "
             "(G-PROC-5; no bar3)\n",
-            GJ_SEAL_SOFT_WAVE,
+            GJ_PROCESS_SOFT_WAVE,
             (unsigned long long)g_u64DeathWaitChild,
             (unsigned long long)g_u64DeathLongLived,
             (unsigned long long)g_u64DeathIdempotent,
@@ -1284,10 +1645,11 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             "wait_child=%d soft (G-PROC-5)\n",
             u32ExitCode, u32Reparented, u32RegionsDropped, u32Cleared,
             u32AsOk, u32AsFail, u32AsSkip, fWaitChild);
+    /* Wave 15: unified soft inventory dump after death path. */
+    process_soft_inventory("death");
 }
 
 /* Stub children for Linux fork/vfork (no full AS clone until product spawn). */
-#define GJ_FORK_STUBS 16u
 static struct gj_process g_aForkStub[GJ_FORK_STUBS];
 static u8                g_aForkUsed[GJ_FORK_STUBS];
 
@@ -1317,12 +1679,14 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     u32 pid;
     u32 thr = 0;
 
+    process_soft_inc(&g_u32SoftForkEnter);
     for (i = 0; i < GJ_FORK_STUBS; i++) {
         if (!g_aForkUsed[i]) {
             break;
         }
     }
     if (i >= GJ_FORK_STUBS) {
+        process_soft_inc(&g_u32SoftForkFull);
         return -11; /* EAGAIN */
     }
     memset(&g_aForkStub[i], 0, sizeof(g_aForkStub[i]));
@@ -1337,6 +1701,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
         u32 cCloned = 0;
         extern struct gj_process *g_pLinuxProc;
 
+        process_soft_inc(&g_u32SoftForkAsOk);
         kprintf("process: linux_fork as cr3=0x%lx\n",
                 (unsigned long)g_aForkStub[i].u64Cr3);
         if (g_pLinuxProc != NULL && g_pLinuxProc->u64Cr3 != 0 &&
@@ -1346,19 +1711,25 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
             if (vmm_as_clone_user_pages(g_pLinuxProc->u64Cr3,
                                         g_aForkStub[i].u64Cr3, 512,
                                         &cCloned) == GJ_OK) {
+                process_soft_inc(&g_u32SoftForkCloneOk);
                 kprintf("process: linux_fork clone pages=%u PASS\n", cCloned);
             } else {
+                process_soft_inc(&g_u32SoftForkCloneFail);
                 kprintf("process: linux_fork clone pages FAIL\n");
             }
         }
+    } else {
+        process_soft_inc(&g_u32SoftForkAsFail);
     }
     pid = process_wait_register(&g_aForkStub[i], u32Ppid ? u32Ppid : 1u);
     if (pid == 0) {
         g_aForkUsed[i] = 0;
+        process_soft_inc(&g_u32SoftForkFull);
         return -12; /* ENOMEM */
     }
     if (fExitNow) {
         /* vfork-shaped: child already exited; free AS shell */
+        process_soft_inc(&g_u32SoftForkVfork);
         process_death(&g_aForkStub[i], 0);
     } else {
         /*
@@ -1370,10 +1741,14 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
         if (thr == 0) {
             /* Fallback: immediate exit so wait still works */
             process_death(&g_aForkStub[i], 0);
+            process_soft_inc(&g_u32SoftForkOk);
             kprintf("process: linux_fork pid=%u (no thr, exit now)\n", pid);
             return (i64)pid;
         }
+        process_soft_inc(&g_u32SoftForkDeferred);
     }
+    process_soft_inc(&g_u32SoftForkOk);
+    process_soft_maybe_once();
     kprintf("process: linux_fork pid=%u exit_now=%d thr=%u\n", pid, fExitNow,
             thr);
     return (i64)pid;
@@ -1424,6 +1799,7 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
     int fNoWait = (nOptions & GJ_WAIT_WNOWAIT) != 0;
     u32 u32MaxAttempts = fNoHang ? 1u : 64u;
 
+    process_soft_inc(&g_u32SoftWait4Enter);
     /*
      * Soft: WUNTRACED / WCONTINUED ignored (no stop/continue state yet).
      * pid 0 treated as any-child (bring-up); pid < -1 process-group unsupported.
@@ -1465,6 +1841,7 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
             if (fNoWait) {
                 /* Soft WNOWAIT: report zombie without consuming the slot. */
                 g_u64WaitNowaitPeek++;
+                process_soft_inc(&g_u32SoftWaitNowait);
                 kprintf("process: wait4 nowait pid=%u status=0x%x soft\n",
                         pS->u32Pid, (unsigned)i32Status);
                 return i64Ret;
@@ -1472,6 +1849,7 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
 
             pS->u8Reaped = 1;
             g_u64WaitReap++;
+            process_soft_inc(&g_u32SoftWaitReap);
             kprintf("process: wait4 reaped pid=%u status=0x%x\n", pS->u32Pid,
                     (unsigned)i32Status);
             {
@@ -1496,14 +1874,17 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
         }
         /* No unreaped children at all → ECHILD */
         if (!fHaveChild) {
+            process_soft_inc(&g_u32SoftWait4Echild);
             return -10; /* ECHILD */
         }
         /* Live children, none exited yet */
         if (fNoHang) {
+            process_soft_inc(&g_u32SoftWait4Nohang0);
             return 0; /* WNOHANG */
         }
         /* Blocking-ish: yield so fork exit workers can run */
         thread_yield();
     }
+    process_soft_inc(&g_u32SoftWait4Echild);
     return -10; /* ECHILD — timed out waiting for child exit */
 }

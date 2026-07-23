@@ -20,27 +20,33 @@
  *   segs = TX segments + RX segments seen by net_tcp_input
  *   rtx  = successful last-segment retransmits from net_tcp_poll
  *
- * Soft inventory (Wave 13 exclusive deepen; this unit only):
+ * Soft inventory (Wave 15 exclusive deepen; this unit only):
  *   Lifetime path / ring / multi-seg / rtx / TW tallies (struct tcp_soft).
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
- *     net: tcp soft inventory …
- *     net: tcp soft sock …
- *     net: tcp soft bind …
- *     net: tcp soft life …
- *     net: tcp soft xfer …
- *     net: tcp soft input …
- *     net: tcp soft poll …
- *     net: tcp soft ring …
- *     net: tcp soft stats …
- *     net: tcp soft path …
- *     net: tcp soft slot=…
+ *     net: tcp soft inventory …  — live table + caps + wave
+ *     net: tcp soft sock …       — mint ok|fail + hwm
+ *     net: tcp soft bind …       — bind ok|fail
+ *     net: tcp soft life …       — listen/conn/accept/close path
+ *     net: tcp soft xfer …       — send/recv multi-seg/wnd/eof
+ *     net: tcp soft input …      — hit|miss|syn|fin|rst|data
+ *     net: tcp soft poll …       — rtx / TW reclaim ticks
+ *     net: tcp soft ring …       — RX/TX ring + push soft
+ *     net: tcp soft multi …      — multi-seg + peer-wnd clamp rollup
+ *     net: tcp soft state …      — live state-class distribution
+ *     net: tcp soft capacity …   — fixed table / MSS / bulk lamps
+ *     net: tcp soft catalog …    — surface catalog (impl soft lamps)
+ *     net: tcp soft outcome …    — ok|fail|again rollup
+ *     net: tcp soft stats …      — aggregate path tallies
+ *     net: tcp soft path …       — honesty: soft inventory ≠ bar3
+ *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
+ *     net: tcp soft deepen …     — wave=15 stamp + area count
  *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
  *     net: tcp soft PASS …
  *   Twin prefix also emitted: "net_tcp: soft …".
  *   Cadence dumps at power-of-two op milestones, hard-capped at
  *   TCP_SOFT_LOG_MAX (force emfile / stats / rtx-poll also capped).
  *   Init always emits once. Event lines share TCP_SOFT_EVENT_MAX.
- *   Never hard-gates product policy. Pure C.
+ *   Never hard-gates product policy. Soft ≠ bar3. Pure C.
  * Grep: net: tcp soft / net_tcp: soft
  */
 #include <gj/klog.h>
@@ -62,17 +68,22 @@
 #define TCP_TW_MS    1000 /* soft TIME_WAIT reclaim */
 #define TCP_BACKLOG_MAX 8
 /*
- * Soft inventory serial budget (Wave 13). Absolute cap of greppable full
+ * Soft inventory serial budget (Wave 15). Absolute cap of greppable full
  * cadence dumps; milestones are power-of-two API op counts (1,2,4,…).
  * Legacy EVERY remains as a secondary cadence for dense op streams.
  * Event lines (listen/accept/emfile/syn/connect/multi-seg) share a
  * separate hard cap. Slot detail only on force or first N dumps.
- * greppable: net: tcp soft
+ * greppable: net: tcp soft / net_tcp: soft
  */
 #define TCP_SOFT_LOG_EVERY 32u
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
+/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
+#define TCP_SOFT_DEEPEN_WAVE  15u
+/* inventory sock bind life xfer input poll ring multi state capacity
+ * catalog outcome stats path PASS slot deepen = 18 greppable dump areas */
+#define TCP_SOFT_DEEPEN_AREAS 18u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -144,7 +155,8 @@ static u16 g_u16IpId;
 /*
  * Soft product inventory counters — wrap OK; diagnostics only; never
  * hard-gate product paths. Grep: net: tcp soft / net_tcp: soft
- * Wave 13 deepen: multi-line path dumps, rate-limit lamps, PASS.
+ * Wave 15 deepen: multi-line path dumps, capacity/catalog/outcome,
+ * rate-limit lamps, deepen stamp, PASS. Soft ≠ bar3.
  */
 struct tcp_soft {
 	u64 u64Ops;          /* total API entries (success + fail) */
@@ -318,10 +330,11 @@ tcp_soft_event_ok(void)
 }
 
 /*
- * Greppable soft product inventory + path dumps (Wave 13 exclusive).
+ * Greppable soft product inventory + path dumps (Wave 15 exclusive).
  * Prefix-stable: "net: tcp soft …" and twin "net_tcp: soft …".
  * fForce: include per-live-slot detail (init / emfile / stats / rtx-poll).
  * Cadence dumps skip slots after TCP_SOFT_SLOT_LOGS to avoid flood.
+ * Soft only — never hard-gates product policy; soft ≠ bar3.
  */
 static void
 tcp_soft_print(int fForce)
@@ -340,8 +353,12 @@ tcp_soft_print(int fForce)
 	u32 cRtxLive = 0;
 	u32 i;
 	u32 fSlots;
+	u32 u32Wave;
+	u32 u32Areas;
 	struct tcp_soft s;
 
+	u32Wave = TCP_SOFT_DEEPEN_WAVE;
+	u32Areas = TCP_SOFT_DEEPEN_AREAS;
 	tcp_soft_tally(&cUsed, &cFree, &cListen, &cEstab, &cSyn, &cCw, &cFw,
 		       &cTw, &cLoop, &cPending, &cRx, &cRtxLive);
 	s = g_soft;
@@ -360,7 +377,7 @@ tcp_soft_print(int fForce)
 		"pending=%u rx_bytes=%u rtx_live=%u hwm=%llu max=%u "
 		"fd_base=%u mss=%u wnd=%u rx_max=%u tx_max=%u "
 		"backlog_max=%u rtx_ms=%u tw_ms=%u logs=%u skip=%llu "
-		"event_n=%u event_skip=%llu wave=13\n",
+		"event_n=%u event_skip=%llu wave=%u\n",
 		cUsed, cFree, cListen, cEstab, cSyn, cCw, cFw, cTw, cLoop,
 		cPending, cRx, cRtxLive, (unsigned long long)s.u64HwmUsed,
 		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
@@ -368,34 +385,47 @@ tcp_soft_print(int fForce)
 		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
 		(unsigned)TCP_TW_MS, g_soft.u32SoftLogN,
 		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
-		(unsigned long long)s.u64EventSkip);
+		(unsigned long long)s.u64EventSkip, u32Wave);
 
 	/* Grep: net_tcp: soft inventory (twin prefix) */
 	kprintf("net_tcp: soft inventory used=%u free=%u listen=%u estab=%u "
 		"hwm=%llu accepts=%u segs=%u rx=%u tx=%u rtx=%u tw_reap=%u "
-		"log_n=%u wave=13\n",
+		"log_n=%u areas=%u wave=%u\n",
 		cUsed, cFree, cListen, cEstab,
 		(unsigned long long)s.u64HwmUsed, g_u32Accepts, g_u32Segs,
-		g_u32RxB, g_u32TxB, g_u32Rtx, g_u32TwReap, g_soft.u32SoftLogN);
+		g_u32RxB, g_u32TxB, g_u32Rtx, g_u32TwReap, g_soft.u32SoftLogN,
+		u32Areas, u32Wave);
 
 	/* Grep: net: tcp soft sock */
 	kprintf("net: tcp soft sock ok=%llu fail=%llu hwm=%llu max=%u "
-		"fd_base=%u\n",
+		"fd_base=%u wave=%u\n",
 		(unsigned long long)s.u64SockOk,
 		(unsigned long long)s.u64SockFail,
 		(unsigned long long)s.u64HwmUsed, (unsigned)TCP_MAX,
-		(unsigned)TCP_FD_BASE);
+		(unsigned)TCP_FD_BASE, u32Wave);
+
+	/* Grep: net_tcp: soft sock (twin) */
+	kprintf("net_tcp: soft sock ok=%llu fail=%llu hwm=%llu max=%u "
+		"wave=%u\n",
+		(unsigned long long)s.u64SockOk,
+		(unsigned long long)s.u64SockFail,
+		(unsigned long long)s.u64HwmUsed, (unsigned)TCP_MAX, u32Wave);
 
 	/* Grep: net: tcp soft bind */
-	kprintf("net: tcp soft bind ok=%llu fail=%llu\n",
+	kprintf("net: tcp soft bind ok=%llu fail=%llu wave=%u\n",
 		(unsigned long long)s.u64BindOk,
-		(unsigned long long)s.u64BindFail);
+		(unsigned long long)s.u64BindFail, u32Wave);
+
+	/* Grep: net_tcp: soft bind (twin) */
+	kprintf("net_tcp: soft bind ok=%llu fail=%llu wave=%u\n",
+		(unsigned long long)s.u64BindOk,
+		(unsigned long long)s.u64BindFail, u32Wave);
 
 	/* Grep: net: tcp soft life */
 	kprintf("net: tcp soft life listen=%llu listen_fail=%llu "
 		"conn=%llu conn_fail=%llu conn_again=%llu conn_refused=%llu "
 		"accept=%llu accept_fail=%llu accept_again=%llu "
-		"close=%llu close_fail=%llu\n",
+		"close=%llu close_fail=%llu wave=%u\n",
 		(unsigned long long)s.u64ListenOk,
 		(unsigned long long)s.u64ListenFail,
 		(unsigned long long)s.u64ConnOk,
@@ -406,13 +436,23 @@ tcp_soft_print(int fForce)
 		(unsigned long long)s.u64AcceptFail,
 		(unsigned long long)s.u64AcceptAgain,
 		(unsigned long long)s.u64CloseOk,
-		(unsigned long long)s.u64CloseFail);
+		(unsigned long long)s.u64CloseFail, u32Wave);
+
+	/* Grep: net_tcp: soft life (twin) */
+	kprintf("net_tcp: soft life listen=%llu conn=%llu conn_again=%llu "
+		"conn_refused=%llu accept=%llu close=%llu wave=%u\n",
+		(unsigned long long)s.u64ListenOk,
+		(unsigned long long)s.u64ConnOk,
+		(unsigned long long)s.u64ConnAgain,
+		(unsigned long long)s.u64ConnRefused,
+		(unsigned long long)s.u64AcceptOk,
+		(unsigned long long)s.u64CloseOk, u32Wave);
 
 	/* Grep: net: tcp soft xfer */
 	kprintf("net: tcp soft xfer send=%llu send_fail=%llu send_again=%llu "
 		"send_partial=%llu send_multi=%llu send_wnd=%llu "
 		"recv=%llu recv_fail=%llu recv_again=%llu recv_eof=%llu "
-		"tx_bytes=%u rx_bytes=%u segs=%u mss=%u\n",
+		"tx_bytes=%u rx_bytes=%u segs=%u mss=%u wave=%u\n",
 		(unsigned long long)s.u64SendOk,
 		(unsigned long long)s.u64SendFail,
 		(unsigned long long)s.u64SendAgain,
@@ -423,35 +463,173 @@ tcp_soft_print(int fForce)
 		(unsigned long long)s.u64RecvFail,
 		(unsigned long long)s.u64RecvAgain,
 		(unsigned long long)s.u64RecvEof, g_u32TxB, g_u32RxB,
-		g_u32Segs, (unsigned)TCP_MSS);
+		g_u32Segs, (unsigned)TCP_MSS, u32Wave);
+
+	/* Grep: net_tcp: soft xfer (twin) */
+	kprintf("net_tcp: soft xfer send=%llu multi=%llu wnd=%llu "
+		"recv=%llu eof=%llu tx_b=%u rx_b=%u segs=%u wave=%u\n",
+		(unsigned long long)s.u64SendOk,
+		(unsigned long long)s.u64SendMulti,
+		(unsigned long long)s.u64SendWndLim,
+		(unsigned long long)s.u64RecvOk,
+		(unsigned long long)s.u64RecvEof, g_u32TxB, g_u32RxB,
+		g_u32Segs, u32Wave);
 
 	/* Grep: net: tcp soft input */
 	kprintf("net: tcp soft input hit=%llu miss=%llu syn=%llu "
-		"syn_drop=%llu rst=%llu fin=%llu data=%llu accepts=%u\n",
+		"syn_drop=%llu rst=%llu fin=%llu data=%llu accepts=%u "
+		"wave=%u\n",
 		(unsigned long long)s.u64InputHit,
 		(unsigned long long)s.u64InputMiss,
 		(unsigned long long)s.u64InputSyn,
 		(unsigned long long)s.u64InputSynDrop,
 		(unsigned long long)s.u64InputRst,
 		(unsigned long long)s.u64InputFin,
-		(unsigned long long)s.u64InputData, g_u32Accepts);
+		(unsigned long long)s.u64InputData, g_u32Accepts, u32Wave);
+
+	/* Grep: net_tcp: soft input (twin) */
+	kprintf("net_tcp: soft input hit=%llu miss=%llu syn=%llu "
+		"syn_drop=%llu rst=%llu fin=%llu data=%llu wave=%u\n",
+		(unsigned long long)s.u64InputHit,
+		(unsigned long long)s.u64InputMiss,
+		(unsigned long long)s.u64InputSyn,
+		(unsigned long long)s.u64InputSynDrop,
+		(unsigned long long)s.u64InputRst,
+		(unsigned long long)s.u64InputFin,
+		(unsigned long long)s.u64InputData, u32Wave);
 
 	/* Grep: net: tcp soft poll (cadence rollup; event poll is separate) */
 	kprintf("net: tcp soft poll ticks=%llu rtx=%llu tw=%llu "
-		"total_rtx=%u total_tw=%u rtx_ms=%u rtx_max=%u tw_ms=%u\n",
+		"total_rtx=%u total_tw=%u rtx_ms=%u rtx_max=%u tw_ms=%u "
+		"wave=%u\n",
 		(unsigned long long)s.u64PollTicks,
 		(unsigned long long)s.u64PollRtx,
 		(unsigned long long)s.u64PollTw, g_u32Rtx, g_u32TwReap,
 		(unsigned)TCP_RTX_MS, (unsigned)TCP_RTX_MAX,
-		(unsigned)TCP_TW_MS);
+		(unsigned)TCP_TW_MS, u32Wave);
+
+	/* Grep: net_tcp: soft poll (twin) */
+	kprintf("net_tcp: soft poll ticks=%llu rtx=%llu tw=%llu "
+		"total_rtx=%u total_tw=%u wave=%u\n",
+		(unsigned long long)s.u64PollTicks,
+		(unsigned long long)s.u64PollRtx,
+		(unsigned long long)s.u64PollTw, g_u32Rtx, g_u32TwReap,
+		u32Wave);
 
 	/* Grep: net: tcp soft ring */
 	kprintf("net: tcp soft ring rx_max=%u tx_max=%u mss=%u wnd=%u "
 		"push_full=%llu push_partial=%llu rx_live=%u rtx_live=%u "
-		"bulk=3000\n",
+		"bulk=3000 wave=%u\n",
 		(unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX, (unsigned)TCP_MSS,
 		(unsigned)TCP_WND, (unsigned long long)s.u64PushFull,
-		(unsigned long long)s.u64PushPartial, cRx, cRtxLive);
+		(unsigned long long)s.u64PushPartial, cRx, cRtxLive, u32Wave);
+
+	/* Grep: net_tcp: soft ring (twin) */
+	kprintf("net_tcp: soft ring rx_max=%u tx_max=%u mss=%u push_full=%llu "
+		"push_partial=%llu rx_live=%u rtx_live=%u wave=%u\n",
+		(unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX, (unsigned)TCP_MSS,
+		(unsigned long long)s.u64PushFull,
+		(unsigned long long)s.u64PushPartial, cRx, cRtxLive, u32Wave);
+
+	/* Grep: net: tcp soft multi (Wave 15 multi-seg / peer-wnd rollup) */
+	kprintf("net: tcp soft multi send_multi=%llu send_partial=%llu "
+		"send_wnd=%llu segs=%u mss=%u bulk=3000 tx_b=%u wave=%u\n",
+		(unsigned long long)s.u64SendMulti,
+		(unsigned long long)s.u64SendPartial,
+		(unsigned long long)s.u64SendWndLim, g_u32Segs,
+		(unsigned)TCP_MSS, g_u32TxB, u32Wave);
+
+	/* Grep: net_tcp: soft multi (twin) */
+	kprintf("net_tcp: soft multi multi=%llu partial=%llu wnd=%llu "
+		"segs=%u mss=%u wave=%u\n",
+		(unsigned long long)s.u64SendMulti,
+		(unsigned long long)s.u64SendPartial,
+		(unsigned long long)s.u64SendWndLim, g_u32Segs,
+		(unsigned)TCP_MSS, u32Wave);
+
+	/* Grep: net: tcp soft state (Wave 15 live state-class distribution) */
+	kprintf("net: tcp soft state used=%u free=%u listen=%u syn=%u "
+		"estab=%u close_wait=%u fin_wait=%u time_wait=%u loop=%u "
+		"pending=%u rtx_live=%u hwm=%llu wave=%u\n",
+		cUsed, cFree, cListen, cSyn, cEstab, cCw, cFw, cTw, cLoop,
+		cPending, cRtxLive, (unsigned long long)s.u64HwmUsed,
+		u32Wave);
+
+	/* Grep: net_tcp: soft state (twin) */
+	kprintf("net_tcp: soft state used=%u listen=%u estab=%u syn=%u "
+		"cw=%u fw=%u tw=%u loop=%u hwm=%llu wave=%u\n",
+		cUsed, cListen, cEstab, cSyn, cCw, cFw, cTw, cLoop,
+		(unsigned long long)s.u64HwmUsed, u32Wave);
+
+	/* Grep: net: tcp soft capacity (Wave 15 fixed lamps) */
+	kprintf("net: tcp soft capacity max=%u fd_base=%u mss=%u wnd=%u "
+		"rx_max=%u tx_max=%u backlog_max=%u rtx_ms=%u rtx_max=%u "
+		"tw_ms=%u bulk=3000 log_every=%u log_max=%u event_max=%u "
+		"slot_logs=%u heap=0 wave=%u\n",
+		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
+		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
+		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
+		(unsigned)TCP_RTX_MAX, (unsigned)TCP_TW_MS,
+		(unsigned)TCP_SOFT_LOG_EVERY, (unsigned)TCP_SOFT_LOG_MAX,
+		(unsigned)TCP_SOFT_EVENT_MAX, (unsigned)TCP_SOFT_SLOT_LOGS,
+		u32Wave);
+
+	/* Grep: net_tcp: soft capacity (twin) */
+	kprintf("net_tcp: soft capacity max=%u mss=%u wnd=%u bulk=3000 "
+		"log_max=%u event_max=%u wave=%u\n",
+		(unsigned)TCP_MAX, (unsigned)TCP_MSS, (unsigned)TCP_WND,
+		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
+		u32Wave);
+
+	/* Grep: net: tcp soft catalog (Wave 15 surface catalog lamps) */
+	kprintf("net: tcp soft catalog sock=1 bind=1 listen=1 connect=1 "
+		"accept=1 send=1 recv=1 close=1 input=1 poll=1 "
+		"multi_seg=1 peer_wnd=1 rtx=1 tw_reap=1 backlog_soft=1 "
+		"loop_pair=1 full_stack=0 netstackd=0 bar3=0 wave=%u\n",
+		u32Wave);
+
+	/* Grep: net_tcp: soft catalog (twin) */
+	kprintf("net_tcp: soft catalog sock=1 bind=1 listen=1 connect=1 "
+		"accept=1 xfer=1 input=1 poll=1 multi=1 rtx=1 tw=1 "
+		"bar3=0 wave=%u\n",
+		u32Wave);
+
+	/* Grep: net: tcp soft outcome (Wave 15 ok|fail|again rollup) */
+	kprintf("net: tcp soft outcome sock_ok=%llu sock_fail=%llu "
+		"bind_ok=%llu bind_fail=%llu listen_ok=%llu conn_ok=%llu "
+		"conn_again=%llu conn_refused=%llu accept_ok=%llu "
+		"accept_again=%llu send_ok=%llu send_again=%llu "
+		"recv_ok=%llu recv_again=%llu recv_eof=%llu close_ok=%llu "
+		"wave=%u\n",
+		(unsigned long long)s.u64SockOk,
+		(unsigned long long)s.u64SockFail,
+		(unsigned long long)s.u64BindOk,
+		(unsigned long long)s.u64BindFail,
+		(unsigned long long)s.u64ListenOk,
+		(unsigned long long)s.u64ConnOk,
+		(unsigned long long)s.u64ConnAgain,
+		(unsigned long long)s.u64ConnRefused,
+		(unsigned long long)s.u64AcceptOk,
+		(unsigned long long)s.u64AcceptAgain,
+		(unsigned long long)s.u64SendOk,
+		(unsigned long long)s.u64SendAgain,
+		(unsigned long long)s.u64RecvOk,
+		(unsigned long long)s.u64RecvAgain,
+		(unsigned long long)s.u64RecvEof,
+		(unsigned long long)s.u64CloseOk, u32Wave);
+
+	/* Grep: net_tcp: soft outcome (twin) */
+	kprintf("net_tcp: soft outcome sock_ok=%llu sock_fail=%llu "
+		"conn_ok=%llu conn_again=%llu accept_ok=%llu send_ok=%llu "
+		"recv_ok=%llu multi=%llu wave=%u\n",
+		(unsigned long long)s.u64SockOk,
+		(unsigned long long)s.u64SockFail,
+		(unsigned long long)s.u64ConnOk,
+		(unsigned long long)s.u64ConnAgain,
+		(unsigned long long)s.u64AcceptOk,
+		(unsigned long long)s.u64SendOk,
+		(unsigned long long)s.u64RecvOk,
+		(unsigned long long)s.u64SendMulti, u32Wave);
 
 	/* Grep: net: tcp soft stats (legacy field-stable rollup) */
 	kprintf("net: tcp soft stats ops=%llu sock=%llu sock_fail=%llu "
@@ -466,7 +644,8 @@ tcp_soft_print(int fForce)
 		"input_syn_drop=%llu input_rst=%llu input_fin=%llu "
 		"input_data=%llu poll=%llu poll_rtx=%llu poll_tw=%llu "
 		"push_full=%llu push_partial=%llu dumps=%llu "
-		"skip=%llu event_skip=%llu log_max=%u event_max=%u\n",
+		"skip=%llu event_skip=%llu log_max=%u event_max=%u "
+		"wave=%u\n",
 		(unsigned long long)s.u64Ops,
 		(unsigned long long)s.u64SockOk,
 		(unsigned long long)s.u64SockFail,
@@ -508,37 +687,78 @@ tcp_soft_print(int fForce)
 		(unsigned long long)g_soft.u64LogDumps,
 		(unsigned long long)s.u64LogSkip,
 		(unsigned long long)s.u64EventSkip,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX);
+		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
+		u32Wave);
 
 	/* Grep: net_tcp: soft stats (twin) */
 	kprintf("net_tcp: soft stats ops=%llu multi=%llu wnd=%llu "
-		"syn_drop=%llu rtx=%u tw=%u dumps=%llu wave=13\n",
+		"syn_drop=%llu rtx=%u tw=%u dumps=%llu wave=%u\n",
 		(unsigned long long)s.u64Ops,
 		(unsigned long long)s.u64SendMulti,
 		(unsigned long long)s.u64SendWndLim,
 		(unsigned long long)s.u64InputSynDrop, g_u32Rtx, g_u32TwReap,
-		(unsigned long long)g_soft.u64LogDumps);
+		(unsigned long long)g_soft.u64LogDumps, u32Wave);
 
 	/* Grep: net: tcp soft path */
 	kprintf("net: tcp soft path sock=table_mint bind=lport "
 		"listen=backlog_soft conn=loop_pair|refused|again "
 		"accept=mint_peer xfer=multi_seg|peer_wnd|rx_ring "
 		"input=syn|data|fin|rst poll=rtx|tw_reap "
-		"fd=%u..%u mss=%u bulk=3000 "
+		"fd=%u..%u mss=%u bulk=3000 wave=%u "
 		"(soft inventory; not bar3; not netstackd)\n",
 		(unsigned)TCP_FD_BASE,
-		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS);
+		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
+		u32Wave);
+
+	/* Grep: net_tcp: soft path (twin) */
+	kprintf("net_tcp: soft path sock=table_mint bind=lport "
+		"listen=backlog_soft conn=loop_pair|refused|again "
+		"accept=mint xfer=multi_seg|peer_wnd poll=rtx|tw "
+		"fd=%u..%u mss=%u wave=%u "
+		"(soft inventory; not bar3; not netstackd)\n",
+		(unsigned)TCP_FD_BASE,
+		(unsigned)(TCP_FD_BASE + TCP_MAX - 1u), (unsigned)TCP_MSS,
+		u32Wave);
+
+	/* Grep: net: tcp soft deepen (Wave 15 stamp) */
+	kprintf("net: tcp soft deepen wave=%u areas=%u used=%u estab=%u "
+		"ops=%llu multi=%llu logs=%u skip=%llu "
+		"event_n=%u event_skip=%llu ok=1 skip_hard=0\n",
+		u32Wave, u32Areas, cUsed, cEstab,
+		(unsigned long long)s.u64Ops,
+		(unsigned long long)s.u64SendMulti, g_soft.u32SoftLogN,
+		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
+		(unsigned long long)s.u64EventSkip);
+
+	/* Grep: net_tcp: soft deepen (twin) */
+	kprintf("net_tcp: soft deepen wave=%u areas=%u used=%u ops=%llu "
+		"multi=%llu logs=%u ok=1\n",
+		u32Wave, u32Areas, cUsed, (unsigned long long)s.u64Ops,
+		(unsigned long long)s.u64SendMulti, g_soft.u32SoftLogN);
 
 	/* Grep: net: tcp soft PASS */
-	kprintf("net: tcp soft PASS wave=13 logs=%u skip=%llu event_n=%u "
-		"event_skip=%llu max=%u event_max=%u force=%u slots=%u "
-		"used=%u estab=%u multi=%llu "
+	kprintf("net: tcp soft PASS wave=%u areas=%u logs=%u skip=%llu "
+		"event_n=%u event_skip=%llu max=%u event_max=%u force=%u "
+		"slots=%u used=%u estab=%u multi=%llu "
 		"(soft inventory only; not product gate)\n",
-		g_soft.u32SoftLogN, (unsigned long long)s.u64LogSkip,
-		g_soft.u32EventN, (unsigned long long)s.u64EventSkip,
+		u32Wave, u32Areas, g_soft.u32SoftLogN,
+		(unsigned long long)s.u64LogSkip, g_soft.u32EventN,
+		(unsigned long long)s.u64EventSkip,
 		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
 		fForce ? 1u : 0u, fSlots, cUsed, cEstab,
 		(unsigned long long)s.u64SendMulti);
+
+	/* Grep: net_tcp: soft PASS (twin) */
+	kprintf("net_tcp: soft PASS wave=%u areas=%u logs=%u used=%u "
+		"estab=%u multi=%llu "
+		"(soft inventory only; not product gate)\n",
+		u32Wave, u32Areas, g_soft.u32SoftLogN, cUsed, cEstab,
+		(unsigned long long)s.u64SendMulti);
+
+	/* Grep: net: tcp soft inventory PASS */
+	kprintf("net: tcp soft inventory PASS used=%u free=%u estab=%u "
+		"logs=%u wave=%u areas=%u\n",
+		cUsed, cFree, cEstab, g_soft.u32SoftLogN, u32Wave, u32Areas);
 
 	/* Per-live-slot soft detail (rate-limited; product smoke inventory). */
 	if (fSlots == 0u) {
@@ -552,7 +772,8 @@ tcp_soft_print(int fForce)
 		kprintf("net: tcp soft slot=%u state=%u listen=%u loop=%u "
 			"lport=%u rport=%u peer=%d bl=%u pend=%u "
 			"rx=%u head=%u peer_wnd=%u rtx_v=%u rtx_n=%u "
-			"fin=%u snd_una=%u snd_nxt=%u rcv_nxt=%u fd=%u\n",
+			"fin=%u snd_una=%u snd_nxt=%u rcv_nxt=%u fd=%u "
+			"wave=%u\n",
 			i, (unsigned)g_aT[i].u8State,
 			(unsigned)g_aT[i].u8Listening,
 			(unsigned)g_aT[i].u8IsLoop,
@@ -569,7 +790,7 @@ tcp_soft_print(int fForce)
 			(unsigned)g_aT[i].u32SndUna,
 			(unsigned)g_aT[i].u32SndNxt,
 			(unsigned)g_aT[i].u32RcvNxt,
-			(unsigned)(TCP_FD_BASE + i));
+			(unsigned)(TCP_FD_BASE + i), u32Wave);
 	}
 }
 
@@ -938,15 +1159,17 @@ net_tcp_init(void)
 	/* Grep: net: tcp soft init / net_tcp: soft init */
 	kprintf("net: tcp soft init max=%u fd_base=%u mss=%u wnd=%u "
 		"rx_max=%u tx_max=%u backlog_max=%u rtx_ms=%u tw_ms=%u "
-		"log_every=%u log_max=%u event_max=%u wave=13\n",
+		"log_every=%u log_max=%u event_max=%u areas=%u wave=%u\n",
 		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
 		(unsigned)TCP_WND, (unsigned)TCP_RX_MAX, (unsigned)TCP_TX_MAX,
 		(unsigned)TCP_BACKLOG_MAX, (unsigned)TCP_RTX_MS,
 		(unsigned)TCP_TW_MS, (unsigned)TCP_SOFT_LOG_EVERY,
-		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX);
+		(unsigned)TCP_SOFT_LOG_MAX, (unsigned)TCP_SOFT_EVENT_MAX,
+		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_SOFT_DEEPEN_WAVE);
 	kprintf("net_tcp: soft init max=%u fd_base=%u mss=%u bulk=3000 "
-		"wave=13\n",
-		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS);
+		"areas=%u wave=%u\n",
+		(unsigned)TCP_MAX, (unsigned)TCP_FD_BASE, (unsigned)TCP_MSS,
+		(unsigned)TCP_SOFT_DEEPEN_AREAS, (unsigned)TCP_SOFT_DEEPEN_WAVE);
 	tcp_soft_print(1);
 }
 
@@ -960,13 +1183,16 @@ net_tcp_socket(void)
 		/* Grep: net: tcp soft emfile (rate-limited) */
 		if (tcp_soft_event_ok()) {
 			kprintf("net: tcp soft emfile max=%u ops=%llu "
-				"used_hwm=%llu\n",
+				"used_hwm=%llu wave=%u\n",
 				(unsigned)TCP_MAX,
 				(unsigned long long)g_soft.u64Ops,
-				(unsigned long long)g_soft.u64HwmUsed);
-			kprintf("net_tcp: soft emfile max=%u ops=%llu\n",
+				(unsigned long long)g_soft.u64HwmUsed,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+			kprintf("net_tcp: soft emfile max=%u ops=%llu "
+				"wave=%u\n",
 				(unsigned)TCP_MAX,
-				(unsigned long long)g_soft.u64Ops);
+				(unsigned long long)g_soft.u64Ops,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
 		}
 		tcp_soft_maybe_log(1);
 		return -24;
@@ -1033,13 +1259,16 @@ net_tcp_listen(i64 fd, int backlog)
 	/* Grep: net: tcp soft listen / net_tcp: soft listen (rate-limited) */
 	if (tcp_soft_event_ok()) {
 		kprintf("net: tcp soft listen fd=%lld port=%u backlog=%u "
-			"pending=%u\n",
+			"pending=%u wave=%u\n",
 			(long long)fd, (unsigned)g_aT[s].u16Lport,
 			(unsigned)g_aT[s].u8Backlog,
-			(unsigned)g_aT[s].u8Pending);
-		kprintf("net_tcp: soft listen fd=%lld port=%u backlog=%u\n",
+			(unsigned)g_aT[s].u8Pending,
+			(unsigned)TCP_SOFT_DEEPEN_WAVE);
+		kprintf("net_tcp: soft listen fd=%lld port=%u backlog=%u "
+			"wave=%u\n",
 			(long long)fd, (unsigned)g_aT[s].u16Lport,
-			(unsigned)g_aT[s].u8Backlog);
+			(unsigned)g_aT[s].u8Backlog,
+			(unsigned)TCP_SOFT_DEEPEN_WAVE);
 	}
 	tcp_soft_maybe_log(0);
 	return 0;
@@ -1105,12 +1334,14 @@ net_tcp_connect(i64 fd, u16 port)
 			if (tcp_soft_event_ok()) {
 				kprintf("net: tcp soft connect fd=%lld "
 					"port=%u peer_slot=%d loop=1 "
-					"listen_pending=%u\n",
+					"listen_pending=%u wave=%u\n",
 					(long long)fd, (unsigned)port, ns,
-					(unsigned)g_aT[i].u8Pending);
+					(unsigned)g_aT[i].u8Pending,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 				kprintf("net_tcp: soft connect fd=%lld "
-					"port=%u peer=%d\n",
-					(long long)fd, (unsigned)port, ns);
+					"port=%u peer=%d wave=%u\n",
+					(long long)fd, (unsigned)port, ns,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 			}
 			tcp_soft_maybe_log(0);
 			return 0;
@@ -1157,12 +1388,15 @@ net_tcp_accept(i64 fd)
 	/* Grep: net: tcp soft accept / net_tcp: soft accept (rate-limited) */
 	if (tcp_soft_event_ok()) {
 		kprintf("net: tcp soft accept listen_fd=%lld new_fd=%u "
-			"peer_slot=%d state=%u pending=%u\n",
+			"peer_slot=%d state=%u pending=%u wave=%u\n",
 			(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer),
 			(int)peer, (unsigned)g_aT[peer].u8State,
-			(unsigned)g_aT[s].u8Pending);
-		kprintf("net_tcp: soft accept listen_fd=%lld new_fd=%u\n",
-			(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer));
+			(unsigned)g_aT[s].u8Pending,
+			(unsigned)TCP_SOFT_DEEPEN_WAVE);
+		kprintf("net_tcp: soft accept listen_fd=%lld new_fd=%u "
+			"wave=%u\n",
+			(long long)fd, (unsigned)(TCP_FD_BASE + (u32)peer),
+			(unsigned)TCP_SOFT_DEEPEN_WAVE);
 	}
 	tcp_soft_maybe_log(0);
 	return slot_to_fd((u32)peer);
@@ -1275,15 +1509,17 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 			if (tcp_soft_event_ok()) {
 				kprintf("net: tcp soft multi-seg fd=%lld "
 					"bytes=%lld segs=%u mss=%u "
-					"tx_max=%u loop=%u\n",
+					"tx_max=%u loop=%u wave=%u\n",
 					(long long)fd, (long long)n,
 					(unsigned)cSegs, (unsigned)TCP_MSS,
 					(unsigned)TCP_TX_MAX,
-					(unsigned)g_aT[s].u8IsLoop);
+					(unsigned)g_aT[s].u8IsLoop,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 				kprintf("net_tcp: soft multi-seg fd=%lld "
-					"bytes=%lld segs=%u\n",
+					"bytes=%lld segs=%u wave=%u\n",
 					(long long)fd, (long long)n,
-					(unsigned)cSegs);
+					(unsigned)cSegs,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 			}
 		}
 	} else {
@@ -1479,14 +1715,17 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			/* Grep: net: tcp soft syn_drop (rate-limited) */
 			if (tcp_soft_event_ok()) {
 				kprintf("net: tcp soft syn_drop port=%u "
-					"pending=%u backlog=%u reason=full\n",
+					"pending=%u backlog=%u reason=full "
+					"wave=%u\n",
 					(unsigned)dport,
 					(unsigned)g_aT[ls].u8Pending,
-					(unsigned)g_aT[ls].u8Backlog);
+					(unsigned)g_aT[ls].u8Backlog,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 				kprintf("net_tcp: soft syn_drop port=%u "
-					"pending=%u\n",
+					"pending=%u wave=%u\n",
 					(unsigned)dport,
-					(unsigned)g_aT[ls].u8Pending);
+					(unsigned)g_aT[ls].u8Pending,
+					(unsigned)TCP_SOFT_DEEPEN_WAVE);
 			}
 			return 1;
 		}
@@ -1521,13 +1760,15 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		/* Grep: net: tcp soft syn / net_tcp: soft syn (rate-limited) */
 		if (tcp_soft_event_ok()) {
 			kprintf("net: tcp soft syn port=%u sport=%u slot=%d "
-				"pending=%u wnd=%u state=%u\n",
+				"pending=%u wnd=%u state=%u wave=%u\n",
 				(unsigned)dport, (unsigned)sport, ns,
 				(unsigned)g_aT[ls].u8Pending,
 				(unsigned)g_aT[ns].u16PeerWnd,
-				(unsigned)g_aT[ns].u8State);
-			kprintf("net_tcp: soft syn port=%u slot=%d\n",
-				(unsigned)dport, ns);
+				(unsigned)g_aT[ns].u8State,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+			kprintf("net_tcp: soft syn port=%u slot=%d wave=%u\n",
+				(unsigned)dport, ns,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
 		}
 		return 1;
 	}
@@ -1676,12 +1917,15 @@ net_tcp_poll(void)
 		/* Grep: net: tcp soft poll (event; rate-limited) */
 		if (tcp_soft_event_ok()) {
 			kprintf("net: tcp soft poll rtx=%u tw_reap=%u "
-				"total_rtx=%u total_tw=%u ticks=%llu\n",
+				"total_rtx=%u total_tw=%u ticks=%llu "
+				"wave=%u\n",
 				(unsigned)cRtx, (unsigned)cTw, g_u32Rtx,
 				g_u32TwReap,
-				(unsigned long long)g_soft.u64PollTicks);
-			kprintf("net_tcp: soft poll rtx=%u tw=%u\n",
-				(unsigned)cRtx, (unsigned)cTw);
+				(unsigned long long)g_soft.u64PollTicks,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
+			kprintf("net_tcp: soft poll rtx=%u tw=%u wave=%u\n",
+				(unsigned)cRtx, (unsigned)cTw,
+				(unsigned)TCP_SOFT_DEEPEN_WAVE);
 		}
 		if (g_soft.u32SoftLogN < TCP_SOFT_LOG_MAX) {
 			tcp_soft_print(1);

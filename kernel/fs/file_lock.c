@@ -13,7 +13,7 @@
  *   - GETLK: lowest-start conflict; write preferred on equal start
  *   - Overflow-safe range ends; adjacent same-type coalesce
  *
- * Soft lock inventory (Wave 8 baseline + Wave 13 exclusive deepen):
+ * Soft lock inventory (Wave 8 baseline + Wave 13 deepen + Wave 15 exclusive):
  *   - Live held + free slot counts; peak held; waiter / wake_gen snapshot
  *   - Soft deny tallies: EAGAIN (nonblock conflict), EDEADLK, ENOLCK
  *   - Cumulative set_ok / unlk_ok / get / get_hit / block / wake / release
@@ -24,6 +24,10 @@
  *   - Live type scan (rd/wr/eof) under lock on inventory dump
  *   - Sub-lines: inventory|held|deny|set|get|block|wake|wait|carve|
  *                release|types|path (primary held/deny/get field-stable)
+ * Wave 15 exclusive (this unit only — greppable "file_lock: soft …"):
+ *   - Waiter peak; deadlk probe/hit; eof|finite grants; wake zero|some
+ *   - Complementary: total|rate|deadlk|grant|catalog|deepen
+ *   Soft honesty remains soft: advisory inventory ≠ bar3 / product flock
  *   Never hard-gates; wrap-OK counters. Soft ≠ bar3.
  *   greppable: "file_lock: soft …"
  *
@@ -85,7 +89,7 @@ static struct gj_spinlock  g_lkLock;
 static u32                 g_u32WaitObj;
 
 /*
- * Soft product inventory (Wave 8 baseline + Wave 13 exclusive deepen).
+ * Soft product inventory (Wave 8 baseline + Wave 13 + Wave 15 deepen).
  * Cumulative unless noted live/peak. Never hard-gates. Wrap OK.
  * greppable: file_lock: soft …
  */
@@ -140,8 +144,21 @@ static u32 g_u32SoftGenSample;    /* file_lock_wake_gen samples */
 static u32 g_u32SoftLogN;         /* soft inventory emissions */
 static u8  g_fSoftOnce;           /* one-shot after first activity */
 
+/* Wave 15 exclusive soft deepen — complementary path tallies. */
+static u32 g_u32SoftWaitPeak;     /* peak live waiters */
+static u32 g_u32SoftDeadlkProbe;  /* soft_deadlock probes */
+static u32 g_u32SoftDeadlkHit;    /* soft_deadlock true */
+static u32 g_u32SoftEofGrant;     /* SET grant with EOF end */
+static u32 g_u32SoftFiniteGrant;  /* SET grant with finite end */
+static u32 g_u32SoftWakeZero;     /* soft_wake returned 0 */
+static u32 g_u32SoftWakeSome;     /* soft_wake returned >0 */
+static u32 g_u32SoftBlockRetry;   /* continue after block/yield */
+static u32 g_u32SoftLastType;     /* last set type (rd/wr/unlk codes) */
+static u32 g_u32SoftLastDenyCode; /* 0 none, 1 eagain, 2 deadlk, 3 nolck */
+
 static void soft_inc(u32 *pu32Ctr);
 static void soft_held_note(void);
+static void soft_wait_peak_note(void);
 static void soft_deny_note(u32 *pu32Bucket);
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
@@ -201,6 +218,17 @@ file_lock_init(void)
     g_u32SoftGenSample = 0;
     g_u32SoftLogN = 0;
     g_fSoftOnce = 0;
+    /* Wave 15 exclusive soft deepen tallies. */
+    g_u32SoftWaitPeak = 0;
+    g_u32SoftDeadlkProbe = 0;
+    g_u32SoftDeadlkHit = 0;
+    g_u32SoftEofGrant = 0;
+    g_u32SoftFiniteGrant = 0;
+    g_u32SoftWakeZero = 0;
+    g_u32SoftWakeSome = 0;
+    g_u32SoftBlockRetry = 0;
+    g_u32SoftLastType = 0;
+    g_u32SoftLastDenyCode = 0;
     gj_spin_init(&g_lkLock);
     kprintf("file_lock: init slots=%u waiters=%u locks=0\n", GJ_FLOCK_MAX,
             GJ_FLOCK_MAX_WAITERS);
@@ -235,6 +263,17 @@ soft_held_note(void)
 }
 
 /**
+ * Note live waiter high-water. Caller holds g_lkLock.
+ */
+static void
+soft_wait_peak_note(void)
+{
+    if (g_u32NWaiters > g_u32SoftWaitPeak) {
+        g_u32SoftWaitPeak = g_u32NWaiters;
+    }
+}
+
+/**
  * Bump soft deny total + optional typed bucket. Caller holds g_lkLock or
  * is on a terminal return path before unlock is fine either way (u32 only).
  */
@@ -245,10 +284,18 @@ soft_deny_note(u32 *pu32Bucket)
     if (pu32Bucket != NULL) {
         soft_inc(pu32Bucket);
     }
+    /* Wave 15: last deny code snapshot. */
+    if (pu32Bucket == &g_u32SoftDenyEagain) {
+        g_u32SoftLastDenyCode = 1u;
+    } else if (pu32Bucket == &g_u32SoftDenyDeadlk) {
+        g_u32SoftLastDenyCode = 2u;
+    } else if (pu32Bucket == &g_u32SoftDenyNolck) {
+        g_u32SoftLastDenyCode = 3u;
+    }
 }
 
 /**
- * Greppable soft lock inventory (product / smoke; Wave 13 exclusive deepen).
+ * Greppable soft lock inventory (product / smoke; Wave 15 exclusive deepen).
  * Primary field-stable lines (Wave 8):
  *   file_lock: soft held=… free=… peak=… waiters=… gen=…
  *   file_lock: soft deny=… eagain=… deadlk=… nolck=… set_ok=… unlk_ok=…
@@ -256,6 +303,8 @@ soft_deny_note(u32 *pu32Bucket)
  * Wave 13 complementary sub-lines (agent greps):
  *   file_lock: soft inventory|held|deny|set|get|block|wake|wait|carve|
  *              release|types|path …
+ * Wave 15 complementary:
+ *   file_lock: soft total|rate|deadlk|grant|catalog|deepen
  * greppable: file_lock: soft
  */
 static void
@@ -286,6 +335,8 @@ soft_inventory_log(void)
     u32 u32Slot;
     u32 u32OccPct;
     u32 u32DenyShare;
+    u32 u32OkBp;
+    u32 u32WaitPeak;
 
     soft_inc(&g_u32SoftLogN);
 
@@ -300,6 +351,7 @@ soft_inventory_log(void)
                       ? ((u32)GJ_FLOCK_MAX_WAITERS - u32Wait)
                       : 0u;
     u32Peak = g_u32SoftHeldPeak;
+    u32WaitPeak = g_u32SoftWaitPeak;
     u32Deny = g_u32SoftDeny;
     u32Eagain = g_u32SoftDenyEagain;
     u32Deadlk = g_u32SoftDenyDeadlk;
@@ -334,8 +386,10 @@ soft_inventory_log(void)
     /* Soft deny share of set enters (basis points; 0 if none entered). */
     if (g_u32SoftSetEnter != 0u) {
         u32DenyShare = (u32Deny * 10000u) / g_u32SoftSetEnter;
+        u32OkBp = (u32SetOk * 10000u) / g_u32SoftSetEnter;
     } else {
         u32DenyShare = 0;
+        u32OkBp = 0;
     }
 
     /*
@@ -357,9 +411,10 @@ soft_inventory_log(void)
 
     /*
      * Wave 13 exclusive deepen (complementary; never reshapes primary lines).
+     * Wave 15 bumps wave stamp + adds total/rate/deadlk/grant/catalog/deepen.
      */
     /* Grep: file_lock: soft inventory */
-    kprintf("file_lock: soft inventory wave=13 slots=%u waiters_max=%u "
+    kprintf("file_lock: soft inventory wave=15 slots=%u waiters_max=%u "
             "wake_budget=%u deadlk_depth=%u held=%u free=%u peak=%u "
             "waiters=%u gen=%u occ_pct=%u deny_bp=%u log_n=%u "
             "count_sample=%u gen_sample=%u "
@@ -396,21 +451,23 @@ soft_inventory_log(void)
 
     /* Grep: file_lock: soft block */
     kprintf("file_lock: soft block enter=%u thr=%u yield=%u lost_wake_self=%u "
-            "deadlk=%u eagain=%u\n",
+            "deadlk=%u eagain=%u retry=%u\n",
             u32Block, g_u32SoftBlockThr, g_u32SoftBlockYield,
-            g_u32SoftLostWakeSelf, u32Deadlk, u32Eagain);
+            g_u32SoftLostWakeSelf, u32Deadlk, u32Eagain, g_u32SoftBlockRetry);
 
     /* Grep: file_lock: soft wake */
     kprintf("file_lock: soft wake calls=%u woken=%u gen=%u gen_bump=%u "
-            "budget=%u tag=%u\n",
+            "budget=%u tag=%u zero=%u some=%u\n",
             u32Wake, u32WakeN, u32Gen, g_u32SoftWakeGenBump,
-            GJ_FLOCK_SOFT_WAKE_MAX, GJ_FLOCK_TAG_WAITER);
+            GJ_FLOCK_SOFT_WAKE_MAX, GJ_FLOCK_TAG_WAITER, g_u32SoftWakeZero,
+            g_u32SoftWakeSome);
 
     /* Grep: file_lock: soft wait */
     kprintf("file_lock: soft wait live=%u free=%u max=%u reg=%u full=%u "
-            "unreg=%u samples=%u\n",
+            "unreg=%u samples=%u peak=%u\n",
             u32Wait, u32WaitFree, GJ_FLOCK_MAX_WAITERS, g_u32SoftWaitReg,
-            g_u32SoftWaitFull, g_u32SoftWaitUnreg, g_u32SoftWaitSample);
+            g_u32SoftWaitFull, g_u32SoftWaitUnreg, g_u32SoftWaitSample,
+            u32WaitPeak);
 
     /* Grep: file_lock: soft carve */
     kprintf("file_lock: soft carve ok=%u nolck=%u split_hole=%u coalesce=%u "
@@ -430,12 +487,51 @@ soft_inventory_log(void)
             "held=%u\n",
             u32Rd, u32Wr, u32Eof, g_u32SoftSetRd, g_u32SoftSetWr, u32Held);
 
+    /*
+     * Wave 15 exclusive deepen (complementary; never reshapes primary lines).
+     */
+    /* Grep: file_lock: soft total */
+    kprintf("file_lock: soft total set_ok=%u unlk_ok=%u deny=%u get=%u "
+            "block=%u wake=%u logs=%u wave=15\n",
+            u32SetOk, u32UnlkOk, u32Deny, u32Get, u32Block, u32Wake,
+            g_u32SoftLogN);
+
+    /* Grep: file_lock: soft rate */
+    kprintf("file_lock: soft rate ok_bp=%u deny_bp=%u set_enter=%u "
+            "occ_pct=%u wait_peak=%u held_peak=%u\n",
+            u32OkBp, u32DenyShare, g_u32SoftSetEnter, u32OccPct, u32WaitPeak,
+            u32Peak);
+
+    /* Grep: file_lock: soft deadlk */
+    kprintf("file_lock: soft deadlk probe=%u hit=%u deny=%u depth=%u "
+            "last_deny=%u wave=15\n",
+            g_u32SoftDeadlkProbe, g_u32SoftDeadlkHit, u32Deadlk,
+            GJ_FLOCK_DEADLOCK_DEPTH, g_u32SoftLastDenyCode);
+
+    /* Grep: file_lock: soft grant */
+    kprintf("file_lock: soft grant eof=%u finite=%u rd=%u wr=%u "
+            "last_type=%u\n",
+            g_u32SoftEofGrant, g_u32SoftFiniteGrant, g_u32SoftSetRd,
+            g_u32SoftSetWr, g_u32SoftLastType);
+
+    /* Grep: file_lock: soft catalog */
+    kprintf("file_lock: soft catalog slots=%u waiters_max=%u wake_budget=%u "
+            "deadlk_depth=%u tag=%u eof_sent=-1 wave=15\n",
+            GJ_FLOCK_MAX, GJ_FLOCK_MAX_WAITERS, GJ_FLOCK_SOFT_WAKE_MAX,
+            GJ_FLOCK_DEADLOCK_DEPTH, GJ_FLOCK_TAG_WAITER);
+
+    /* Grep: file_lock: soft deepen */
+    kprintf("file_lock: soft deepen wave=15 areas=total,rate,deadlk,grant,"
+            "catalog,wait_peak,wake_zero logs=%u "
+            "(Wave 15 exclusive; advisory soft inventory; not bar3)\n",
+            g_u32SoftLogN);
+
     /* Grep: file_lock: soft path */
     kprintf("file_lock: soft path claim=advisory_flock set=carve+insert "
             "get=conflict_probe block=thread_block+schedule "
             "wake=multi_budget coalesce=adjacent_same_type "
             "split=FLOCK_CONFLICT_SPLIT multi=FLOCK_SOFT_MULTI_WAITER "
-            "deadlk=FLOCK_SOFT_DEADLOCK wave=13 "
+            "deadlk=FLOCK_SOFT_DEADLOCK soft_honesty=soft wave=15 "
             "(advisory soft inventory; not bar3)\n");
 }
 
@@ -587,6 +683,11 @@ soft_wake_waiters(void)
     u32N = thread_wake(&g_u32WaitObj, GJ_FLOCK_TAG_WAITER, GJ_FLOCK_SOFT_WAKE_MAX);
     soft_inc(&g_u32SoftWakeCalls);
     g_u32SoftWakeN += u32N;
+    if (u32N == 0u) {
+        soft_inc(&g_u32SoftWakeZero); /* Wave 15 */
+    } else {
+        soft_inc(&g_u32SoftWakeSome);
+    }
     return u32N;
 }
 
@@ -792,6 +893,7 @@ waiter_register(i64 i64Fd, i16 i16Type, i64 i64Start, i64 i64End, u32 u32Pid,
             g_aWait[iW].u32BlockerPid = u32BlockerPid;
             g_aWait[iW].u32GenSeen = g_u32WakeGen;
             g_u32NWaiters++;
+            soft_wait_peak_note(); /* Wave 15: waiter high-water */
             soft_inc(&g_u32SoftWaitReg);
             return (int)iW;
         }
@@ -841,10 +943,12 @@ soft_deadlock(u32 u32SelfPid, u32 u32BlockerPid)
     u32 u32Depth;
     u32 iW;
 
+    soft_inc(&g_u32SoftDeadlkProbe); /* Wave 15: probe sample */
     if (u32BlockerPid == 0 || u32SelfPid == 0) {
         return 0;
     }
     if (u32BlockerPid == u32SelfPid) {
+        soft_inc(&g_u32SoftDeadlkHit);
         return 1;
     }
     u32Cur = u32BlockerPid;
@@ -864,6 +968,7 @@ soft_deadlock(u32 u32SelfPid, u32 u32BlockerPid)
             return 0;
         }
         if (u32Next == u32SelfPid) {
+            soft_inc(&g_u32SoftDeadlkHit);
             return 1;
         }
         u32Cur = u32Next;
@@ -924,6 +1029,18 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
     struct gj_thread *pCur;
 
     soft_inc(&g_u32SoftSetEnter); /* Wave 13: set path enter */
+    if (pFl != NULL) {
+        /* Wave 15: last type snapshot (0=unlk, 1=rd, 2=wr, 3=other). */
+        if (pFl->i16Type == GJ_F_UNLCK) {
+            g_u32SoftLastType = 0u;
+        } else if (pFl->i16Type == GJ_F_RDLCK) {
+            g_u32SoftLastType = 1u;
+        } else if (pFl->i16Type == GJ_F_WRLCK) {
+            g_u32SoftLastType = 2u;
+        } else {
+            g_u32SoftLastType = 3u;
+        }
+    }
 
     i64St = flock_validate(i64Fd, pFl, &i64Start, &i64End, &u32Pid);
     if (i64St != 0) {
@@ -1022,6 +1139,7 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
                 soft_inc(&g_u32SoftBlockYield);
                 thread_yield();
             }
+            soft_inc(&g_u32SoftBlockRetry); /* Wave 15: re-enter loop */
             continue;
         }
 
@@ -1056,6 +1174,13 @@ file_lock_set(i64 i64Fd, const struct gj_flock *pFl, int fBlock)
         } else {
             soft_inc(&g_u32SoftSetWr);
         }
+        /* Wave 15: eof vs finite grant shape. */
+        if (i64End < 0) {
+            soft_inc(&g_u32SoftEofGrant);
+        } else {
+            soft_inc(&g_u32SoftFiniteGrant);
+        }
+        g_u32SoftLastDenyCode = 0u;
         if (fRegistered) {
             waiter_unregister(nWait);
         }

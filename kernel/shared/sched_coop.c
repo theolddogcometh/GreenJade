@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -20,13 +20,17 @@
  *   coop: soft mono        — next_id monotonic across creates
  *   coop: soft align       — SP 16-byte aligned at create
  *   coop: soft path        — surface catalog + non-claims
- *   coop: soft deepen      — wave=14 stamp + area count
+ *   coop: soft geom        — Wave 15 max_thr/stack/frame geometry
+ *   coop: soft deepen      — wave=15 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
 #include <gj/klog.h>
 #include <gj/sched_coop.h>
 #include <gj/string.h>
+
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 15u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -42,7 +46,7 @@ static struct gj_coop_thr g_aThr[GJ_COOP_MAX_THR];
 static u32 g_u32Cur;
 static u32 g_u32NextId = 1;
 static int g_fInited;
-/* Wave 14: soft inventory emission counter (observability only). */
+/* Wave 15: soft inventory emission counter (observability only). */
 static u32 g_cSoftInvLogs;
 
 /* Soft selftest scratch (volatile — observed across yield/switch). */
@@ -130,7 +134,7 @@ gj_coop_create(gj_coop_entry_fn pfn, void *pArg)
     pSp[10] = 0; /* x29 */
     pSp[11] = (u64)(gj_vaddr_t)(void *)coop_trampoline; /* x30 */
     p->u64Sp = (u64)(gj_vaddr_t)(void *)pSp;
-    /* Soft SP align lamp (Wave 14): AAPCS64 requires 16-byte SP. */
+    /* Soft SP align lamp (Wave 15): AAPCS64 requires 16-byte SP. */
     if ((p->u64Sp & 0xful) == 0ul) {
         g_u32SelftestSpAlign = 1;
     } else {
@@ -219,7 +223,7 @@ gj_coop_current_id(void)
     return g_aThr[g_u32Cur].u32Id;
 }
 
-/* Soft slot census (Wave 14 inventory). */
+/* Soft slot census (Wave 15 inventory). */
 static void
 soft_slot_census(u32 *pUnused, u32 *pRunnable, u32 *pRunning, u32 *pExited)
 {
@@ -257,7 +261,7 @@ soft_slot_census(u32 *pUnused, u32 *pRunnable, u32 *pRunning, u32 *pExited)
 }
 
 /*
- * Wave 14 greppable soft inventory dump (never hard-gates boot).
+ * Wave 15 greppable soft inventory dump (never hard-gates boot).
  * Prefix-stable: "coop: soft …". greppable: coop: soft
  */
 static void
@@ -282,42 +286,54 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
      * greppable: coop: soft honesty
      */
     kprintf("coop: soft honesty cooperative=1 preemptive=0 smp=0 "
-            "bar3=0 max_thr=%u stack=%u wave=14 "
+            "bar3=0 max_thr=%u stack=%u wave=%u "
             "(soft inventory only; not product sched)\n",
-            (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK);
+            (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
+            (unsigned)COOP_SOFT_WAVE);
 
     /* Grep: coop: soft inventory */
     kprintf("coop: soft inventory inited=%u cur=%u cur_id=%u next_id=%u "
             "max_thr=%u stack=%u unused=%u runnable=%u running=%u "
-            "exited=%u logs=%u surf=0x%x wave=14\n",
+            "exited=%u logs=%u surf=0x%x wave=%u\n",
             g_fInited ? 1u : 0u, g_u32Cur,
             (unsigned)gj_coop_current_id(), g_u32NextId,
             (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
             cUnused, cRunnable, cRunning, cExited,
-            g_cSoftInvLogs, u32Surf);
+            g_cSoftInvLogs, u32Surf, (unsigned)COOP_SOFT_WAVE);
 
     /* Grep: coop: soft slots */
     kprintf("coop: soft slots unused=%u runnable=%u running=%u "
-            "exited=%u max=%u sum=%u wave=14\n",
+            "exited=%u max=%u sum=%u wave=%u\n",
             cUnused, cRunnable, cRunning, cExited,
             (unsigned)GJ_COOP_MAX_THR,
-            cUnused + cRunnable + cRunning + cExited);
+            cUnused + cRunnable + cRunning + cExited,
+            (unsigned)COOP_SOFT_WAVE);
 
     /* Grep: coop: soft path — surface catalog + non-claims */
     kprintf("coop: soft path init=1 create=1 yield=1 exit=1 "
-            "current_id=1 selftest=1 preemptive=0 smp=0 bar3=0 wave=14\n");
+            "current_id=1 selftest=1 preemptive=0 smp=0 bar3=0 wave=%u\n",
+            (unsigned)COOP_SOFT_WAVE);
+
+    /* Grep: coop: soft geom (Wave 15 max_thr/stack/frame) */
+    kprintf("coop: soft geom max_thr=%u stack=%u frame_words=12 "
+            "sp_align=16 thr_bytes=%u boot_id=0 wave=%u\n",
+            (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
+            (unsigned)sizeof(struct gj_coop_thr),
+            (unsigned)COOP_SOFT_WAVE);
 
     /* Grep: coop: soft deepen */
-    kprintf("coop: soft deepen wave=14 areas=%u max_thr=%u stack=%u "
+    kprintf("coop: soft deepen wave=%u areas=%u max_thr=%u stack=%u "
             "logs=%u surf=0x%x\n",
-            cAreas, (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
+            (unsigned)COOP_SOFT_WAVE, cAreas,
+            (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
             g_cSoftInvLogs, u32Surf);
 
     /* Grep: coop: soft inventory PASS|FAIL / coop: soft PASS|FAIL */
-    kprintf("coop: soft inventory %s cur_id=%u next_id=%u wave=14\n",
-            szVerdict, (unsigned)gj_coop_current_id(), g_u32NextId);
-    kprintf("coop: soft %s areas=%u surf=0x%x wave=14\n",
-            szVerdict, cAreas, u32Surf);
+    kprintf("coop: soft inventory %s cur_id=%u next_id=%u wave=%u\n",
+            szVerdict, (unsigned)gj_coop_current_id(), g_u32NextId,
+            (unsigned)COOP_SOFT_WAVE);
+    kprintf("coop: soft %s areas=%u surf=0x%x wave=%u\n",
+            szVerdict, cAreas, u32Surf, (unsigned)COOP_SOFT_WAVE);
 }
 
 static void
@@ -362,7 +378,7 @@ selftest_quick_exit(void *pArg)
 }
 
 /*
- * Soft deepen Wave 14: boot id, null create, solo yield, arg+id handoff,
+ * Soft deepen Wave 15: boot id, null create, solo yield, arg+id handoff,
  * SP align, EXITED slot reuse, two-thr yield RR, capacity fill+reclaim,
  * next_id monotonic, soft inventory. Returns 1 on PASS.
  */
@@ -618,39 +634,48 @@ soft_out:
 
     /* Grep: per-surface soft PASS lamps (only surfaces that actually ran). */
     if ((u32Surf & SURF_BOOT) != 0u) {
-        kprintf("coop: soft boot soft PASS id=0 wave=14\n");
+        kprintf("coop: soft boot soft PASS id=0 wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_NULL) != 0u) {
-        kprintf("coop: soft null soft PASS wave=14\n");
+        kprintf("coop: soft null soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_SOLO) != 0u) {
-        kprintf("coop: soft solo soft PASS wave=14\n");
+        kprintf("coop: soft solo soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_SLOTS) != 0u) {
-        kprintf("coop: soft slots soft PASS wave=14\n");
+        kprintf("coop: soft slots soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_CREATE) != 0u) {
-        kprintf("coop: soft create soft PASS wave=14\n");
+        kprintf("coop: soft create soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_REUSE) != 0u) {
-        kprintf("coop: soft reuse soft PASS wave=14\n");
+        kprintf("coop: soft reuse soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_RR) != 0u) {
-        kprintf("coop: soft rr soft PASS order=7 wave=14\n");
+        kprintf("coop: soft rr soft PASS order=7 wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_CAP) != 0u) {
-        kprintf("coop: soft cap soft PASS max_thr=%u wave=14\n",
-                (unsigned)GJ_COOP_MAX_THR);
+        kprintf("coop: soft cap soft PASS max_thr=%u wave=%u\n",
+                (unsigned)GJ_COOP_MAX_THR, (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_RECLAIM) != 0u) {
-        kprintf("coop: soft reclaim soft PASS wave=14\n");
+        kprintf("coop: soft reclaim soft PASS wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_MONO) != 0u) {
-        kprintf("coop: soft mono soft PASS next_id=%u wave=14\n",
-                g_u32NextId);
+        kprintf("coop: soft mono soft PASS next_id=%u wave=%u\n",
+                g_u32NextId, (unsigned)COOP_SOFT_WAVE);
     }
     if ((u32Surf & SURF_ALIGN) != 0u) {
-        kprintf("coop: soft align soft PASS sp16=1 wave=14\n");
+        kprintf("coop: soft align soft PASS sp16=1 wave=%u\n",
+                (unsigned)COOP_SOFT_WAVE);
     }
 
     return fOk;

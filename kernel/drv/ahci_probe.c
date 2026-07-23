@@ -7,7 +7,7 @@
  * vmm_map_device_uc (high UC window — never identity-map device MMIO
  * over the kernel).
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "ahci: soft …"):
+ * Wave 14/15 exclusive soft deepen (this unit only — greppable "ahci: soft …"):
  *   ahci: soft inventory  — ports / NP / NCS / CAP ok + PI mask + wave
  *   ahci: soft cap        — CAP field inventory (public AHCI 1.x layout)
  *   ahci: soft cap2       — CAP2 field inventory (observe-only)
@@ -20,7 +20,10 @@
  *   ahci: soft regs       — HBA memory offset map
  *   ahci: soft pci        — class 01:06:01 inventory
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
- *   ahci: soft deepen     — wave=14 areas stamp
+ *   ahci: soft deepen     — wave=15 areas stamp
+ *   ahci: soft ratio      — Wave 15 port/ncs occupancy
+ *   ahci: soft headroom   — Wave 15 NP vs PI head
+ *   ahci: soft surface    — Wave 15 area catalog
  *   ahci: soft stats      — emission / probe tallies
  *   ahci: soft inventory PASS|SKIP
  *   ahci: soft PASS|SKIP
@@ -92,8 +95,8 @@
 #define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
 
 /* Wave 14 deepen area count (fixed greppable categories in inventory log). */
-#define AHCI_SOFT_DEEPEN_AREAS 14u
-#define AHCI_SOFT_DEEPEN_WAVE  14u
+#define AHCI_SOFT_DEEPEN_AREAS 17u
+#define AHCI_SOFT_DEEPEN_WAVE  15u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -392,7 +395,43 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
             "pi=1 ghc_ro=1 is_ro=1 vs=1 bohc_ro=1 via=%s wave=%u\n",
             szViaSafe, (unsigned)AHCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: ahci: soft deepen wave (Wave 14 stamp) */
+    /*
+     * Wave 15 exclusive deepen (complementary; never hard-gates).
+     * greppable: ahci: soft ratio|headroom|surface
+     */
+    {
+        u32 u32PortBp = 0;
+        u32 u32PortHead = 0;
+        u32 u32Ae = 0;
+
+        if (u32Np != 0u) {
+            u32PortBp = (cPortsImpl * 10000u) / u32Np;
+        }
+        if (u32Np > cPortsImpl) {
+            u32PortHead = u32Np - cPortsImpl;
+        }
+        if (fGhcOk != 0) {
+            u32Ae = (u32Ghc & AHCI_GHC_AE) != 0u ? 1u : 0u;
+        }
+        /* Grep: ahci: soft ratio */
+        kprintf("ahci: soft ratio port_bp=%u ports=%u np=%u ncs=%u ae=%u "
+                "iss=%u wave=%u\n",
+                u32PortBp, cPortsImpl, u32Np, u32Ncs, u32Ae, u32Iss,
+                (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+        /* Grep: ahci: soft headroom */
+        kprintf("ahci: soft headroom port_head=%u np=%u ports=%u ncs=%u "
+                "wave=%u\n",
+                u32PortHead, u32Np, cPortsImpl, u32Ncs,
+                (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+        /* Grep: ahci: soft surface */
+        kprintf("ahci: soft surface inventory,cap,cap2,pi,ghc,is,vs,bohc,"
+                "iss,regs,pci,path,ratio,headroom,deepen,stats "
+                "areas=%u wave=%u\n",
+                (unsigned)AHCI_SOFT_DEEPEN_AREAS,
+                (unsigned)AHCI_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: ahci: soft deepen wave (Wave 15 stamp) */
     kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
             "skip=%u\n",

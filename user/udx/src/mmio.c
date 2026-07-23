@@ -5,7 +5,7 @@
  * ioremap / iounmap. Host: malloc iomem + window table.
  * Freestanding: static iomem pool (no libc heap).
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 15 exclusive deepen; this unit only) —
  * greppable "udx: mmio soft …":
  *   udx: mmio soft inventory …
  *   udx: mmio soft map …
@@ -32,10 +32,10 @@ static u8               g_aFsIomemUsed[UDX_FS_IOMEM_SLOTS];
 #endif
 
 /* Soft wave stamp for greppable inventory lines. */
-#define UDX_MMIO_SOFT_WAVE 14u
+#define UDX_MMIO_SOFT_WAVE 15u
 
 /*
- * Soft MMIO product inventory (Wave 14 exclusive deepen). Cumulative for
+ * Soft MMIO product inventory (Wave 15 exclusive deepen). Cumulative for
  * this process. greppable: udx: mmio soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -91,7 +91,7 @@ mmio_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft MMIO inventory (Wave 14 exclusive deepen).
+ * Greppable soft MMIO inventory (Wave 15 exclusive deepen).
  * Prefix-stable "udx: mmio soft …" — never hard-gates; observation only.
  *
  * greppable: udx: mmio soft
@@ -153,6 +153,15 @@ mmio_soft_inventory_log(void)
                    "prefix=udx:_mmio_soft deepen=1 "
                    "(soft inventory; never gates skeleton PASS)\n",
                    UDX_MMIO_SOFT_WAVE);
+
+    /*
+     * Grep: udx: mmio soft honesty (Wave 15 exclusive deepen).
+     * Soft inventory ≠ product multi-server confine.
+     */
+    mmio_soft_emit("udx: mmio soft honesty multi_server=0 confine=0 bar3=0 "
+                  "exclusive=1 soft=1 wave=%u\n",
+                  UDX_MMIO_SOFT_WAVE);
+
 }
 
 /** Soft: one-shot inventory after first successful ioremap. */

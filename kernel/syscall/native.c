@@ -17,7 +17,7 @@
  *     (user vs ksmoke path). Diagnostics only; never hard-gate.
  *     greppable: native: soft stats
  *
- * Soft inventory (Wave 11 baseline + Wave 14 exclusive deepen; this unit only):
+ * Soft inventory (Wave 11/14 base + Wave 15 exclusive deepen; this unit only):
  *   native: soft inventory   — entry/handled/nosupport + caps + log_n
  *   native: soft stats       — aggregate rollup (legacy greppable line)
  *   native: soft outcome     — ok/err + GJ_ERR_* buckets
@@ -33,7 +33,7 @@
  *   native: soft ipc         — IPC_CALL/RECV/REPLY + diag split
  *   native: soft last        — last_nr / last_ret snapshot
  *   native: soft path        — honesty: native GJ path ≠ Linux hybrid / bar3
- * Wave 14 exclusive complementary (never reshape primary lines):
+ * Wave 14/15 exclusive complementary (never reshape primary lines):
  *   native: soft process     — PROCESS_SPAWN (wired) + frozen set_pager/kill
  *   native: soft thread      — THREAD_SET_QOS / SET_CPU
  *   native: soft gpu         — GPU_PRESENT / DISPLAY_INFO
@@ -42,7 +42,10 @@
  *   native: soft notify      — NOTIFY_WAIT
  *   native: soft rates       — handled/nosupport/err basis points
  *   native: soft honesty     — hybrid open; not bar3
- *   native: soft deepen      — wave=14 area stamp
+ *   native: soft deepen      — wave=15 area stamp
+ *   native: soft edge        — Wave 15 entries/null/handled combined
+ *   native: soft share       — Wave 15 door/class share lamps
+ *   native: soft catalog     — Wave 15 surface catalog stamp
  *   native: soft inventory PASS (soft lamp only; not product gate)
  * greppable: native: soft
  *
@@ -92,7 +95,7 @@ extern struct gj_process *g_pLinuxProc;
 static struct gj_native_dispatch_stats g_nativeStats;
 
 /*
- * Wave 11 baseline + Wave 14 exclusive deepen (file-local; never hard-gates).
+ * Wave 11/14 base + Wave 15 exclusive deepen (file-local; never hard-gates).
  * Per-op tallies for multi-op GJ_SYS_* surfaces + inventory emission count.
  * greppable: native: soft …
  */
@@ -140,7 +143,7 @@ struct native_soft_deep {
     u64 u64DiagLog;
     u64 u64DiagYield;
     u64 u64DiagExit;
-    /* Wave 14 exclusive op splits */
+    /* Wave 14/15 exclusive op splits */
     u64 u64ProcSpawn;    /* GJ_SYS_PROCESS_SPAWN */
     u64 u64ThrQos;       /* GJ_SYS_THREAD_SET_QOS */
     u64 u64ThrCpu;       /* GJ_SYS_THREAD_SET_CPU */
@@ -154,8 +157,9 @@ struct native_soft_deep {
     u64 u64NotifyWait;   /* GJ_SYS_NOTIFY_WAIT */
 };
 
-/* Wave 14 soft inventory area count (greppable deepen stamp). */
-#define NATIVE_SOFT_AREAS 24u
+/* Wave 15 soft inventory stamp + area count (greppable deepen). */
+#define NATIVE_SOFT_WAVE  15u
+#define NATIVE_SOFT_AREAS 27u
 
 static struct native_soft_deep g_nativeDeep;
 /* One-shot multi-line inventory after first non-null dispatch (soft). */
@@ -176,9 +180,9 @@ native_soft_inc(u64 *pCtr)
 }
 
 /**
- * Greppable Wave 11 + Wave 14 soft native inventory (product / smoke).
+ * Greppable Wave 11 + Wave 15 soft native inventory (product / smoke).
  * Snapshots public stats + file-local deepen counters before print.
- * Wave 11 primary lines stay field-stable; Wave 14 adds complementary.
+ * Wave 11 primary lines stay field-stable; Wave 14/15 add complementary.
  * Diagnostics only; wrap OK; never hard-gates.
  * greppable: native: soft
  */
@@ -216,7 +220,7 @@ native_soft_inventory_log(void)
             "nosupport=%llu door=%llu logs=%llu "
             "debug_log_max=%u console_chunk=%u hda_chunk=%u scsi_xfer=%u "
             "user_copy=user_range_ok+copy_{to,from}_user "
-            "ksmoke=HHDM/static personality=NATIVE wave=14\n",
+            "ksmoke=HHDM/static personality=NATIVE wave=%u\n",
             (unsigned long long)s.u64Entries,
             (unsigned long long)s.u64NullGuard,
             (unsigned long long)s.u64Handled,
@@ -226,7 +230,8 @@ native_soft_inventory_log(void)
             (unsigned)GJ_NATIVE_DEBUG_LOG_MAX,
             (unsigned)GJ_NATIVE_CONSOLE_CHUNK,
             (unsigned)GJ_NATIVE_HDA_CHUNK,
-            (unsigned)GJ_NATIVE_SCSI_XFER_MAX);
+            (unsigned)GJ_NATIVE_SCSI_XFER_MAX,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /*
      * Legacy aggregate rollup — keep field order stable for existing greps.
@@ -451,70 +456,107 @@ native_soft_inventory_log(void)
             (unsigned long long)d.u64SoftLog);
 
     /*
-     * Wave 14 exclusive complementary surfaces (never reshape primary lines).
+     * Wave 14/15 exclusive complementary surfaces (never reshape primary lines).
      * Grep: native: soft process
      */
     kprintf("native: soft process spawn=%llu handled_total=%llu "
-            "frozen_set_pager_kill=soft_nosupport wave=14\n",
+            "frozen_set_pager_kill=soft_nosupport wave=%u\n",
             (unsigned long long)d.u64ProcSpawn,
-            (unsigned long long)s.u64Process);
+            (unsigned long long)s.u64Process,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft thread */
     kprintf("native: soft thread qos=%llu cpu=%llu handled_total=%llu "
-            "wave=14\n",
+            "wave=%u\n",
             (unsigned long long)d.u64ThrQos,
             (unsigned long long)d.u64ThrCpu,
-            (unsigned long long)s.u64Thread);
+            (unsigned long long)s.u64Thread,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft gpu */
     kprintf("native: soft gpu present=%llu info=%llu handled_total=%llu "
-            "wave=14\n",
+            "wave=%u\n",
             (unsigned long long)d.u64GpuPresent,
             (unsigned long long)d.u64GpuInfo,
-            (unsigned long long)s.u64Gpu);
+            (unsigned long long)s.u64Gpu,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft memobj */
     kprintf("native: soft memobj create=%llu map=%llu handled_total=%llu "
-            "wave=14\n",
+            "wave=%u\n",
             (unsigned long long)d.u64MemobjCreate,
             (unsigned long long)d.u64MemobjMap,
-            (unsigned long long)s.u64Memobj);
+            (unsigned long long)s.u64Memobj,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft cold */
     kprintf("native: soft cold dequeue=%llu reply=%llu serve=%llu "
-            "handled_total=%llu wave=14\n",
+            "handled_total=%llu wave=%u\n",
             (unsigned long long)d.u64ColdDeq,
             (unsigned long long)d.u64ColdReply,
             (unsigned long long)d.u64ColdServe,
-            (unsigned long long)s.u64Cold);
+            (unsigned long long)s.u64Cold,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft notify */
-    kprintf("native: soft notify wait=%llu handled_total=%llu wave=14\n",
+    kprintf("native: soft notify wait=%llu handled_total=%llu wave=%u\n",
             (unsigned long long)d.u64NotifyWait,
-            (unsigned long long)s.u64Notify);
+            (unsigned long long)s.u64Notify,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft rates */
     kprintf("native: soft rates bp_handled=%llu bp_nosupport=%llu "
-            "bp_err=%llu term=%llu ok=%llu err=%llu wave=14\n",
+            "bp_err=%llu term=%llu ok=%llu err=%llu wave=%u\n",
             (unsigned long long)u64BpHandled,
             (unsigned long long)u64BpNosupport,
             (unsigned long long)u64BpErr,
             (unsigned long long)u64Term,
             (unsigned long long)s.u64Ok,
-            (unsigned long long)s.u64Err);
+            (unsigned long long)s.u64Err,
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft honesty */
     kprintf("native: soft honesty native_gj=1 linux_hybrid=0 bar3=0 "
-            "product_linux_abi=open soft_only=1 wave=14 "
-            "(native soft inventory; hybrid product remains open)\n");
+            "product_linux_abi=open soft_only=1 wave=%u "
+            "(native soft inventory; hybrid product remains open)\n",
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft deepen */
-    kprintf("native: soft deepen wave=14 areas=%u ok=1 "
+    /* Grep: native: soft edge (Wave 15 deepen) */
+    kprintf("native: soft edge entries=%llu null=%llu handled=%llu "
+            "nosupport=%llu door=%llu term=%llu wave=%u\n",
+            (unsigned long long)s.u64Entries,
+            (unsigned long long)s.u64NullGuard,
+            (unsigned long long)s.u64Handled,
+            (unsigned long long)s.u64Nosupport,
+            (unsigned long long)s.u64DoorFacade,
+            (unsigned long long)u64Term,
+            (unsigned)NATIVE_SOFT_WAVE);
+
+    /* Grep: native: soft share (Wave 15 deepen) */
+    kprintf("native: soft share bp_handled=%llu bp_nosupport=%llu "
+            "bp_err=%llu door=%llu cap=%llu ipc=%llu wave=%u\n",
+            (unsigned long long)u64BpHandled,
+            (unsigned long long)u64BpNosupport,
+            (unsigned long long)u64BpErr,
+            (unsigned long long)s.u64DoorFacade,
+            (unsigned long long)s.u64Cap,
+            (unsigned long long)s.u64Ipc,
+            (unsigned)NATIVE_SOFT_WAVE);
+
+    /* Grep: native: soft catalog (Wave 15 deepen) */
+    kprintf("native: soft catalog wave=%u areas=%u "
+            "surfaces=inventory,stats,outcome,class,door,reserved,copy,"
+            "platform,console,scsi,hda,cap,ipc,last,process,thread,gpu,"
+            "memobj,cold,notify,rates,honesty,edge,share,catalog,deepen,path\n",
+            (unsigned)NATIVE_SOFT_WAVE, NATIVE_SOFT_AREAS);
+
+    kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "
             "surfaces=inventory,stats,outcome,class,door,reserved,copy,"
             "platform,console,scsi,hda,cap,ipc,last,process,thread,gpu,"
-            "memobj,cold,notify,rates,honesty,deepen,path\n",
-            NATIVE_SOFT_AREAS);
+            "memobj,cold,notify,rates,honesty,edge,share,catalog,deepen,path\n",
+            (unsigned)NATIVE_SOFT_WAVE, NATIVE_SOFT_AREAS);
 
     /*
      * Honesty: native GJ_SYS_* path is not Linux hybrid and not bar3.
@@ -523,20 +565,23 @@ native_soft_inventory_log(void)
     kprintf("native: soft path claim=native_gj_sys "
             "linux_hybrid=0 bar3=0 product_doors=session,net,store,vfs "
             "reserved_stubs=vm,futex,wait,untyped "
-            "copy_user=1 copy_ksmoke=1 soft_only=1 wave=14\n");
+            "copy_user=1 copy_ksmoke=1 soft_only=1 wave=%u\n",
+            (unsigned)NATIVE_SOFT_WAVE);
 
     /*
      * Soft lamp only — inventory emit succeeded. Never hard-gates.
      * Grep: native: soft inventory PASS
      * Grep: native: soft PASS
      */
-    kprintf("native: soft inventory PASS wave=14 logs=%llu entries=%llu "
+    kprintf("native: soft inventory PASS wave=%u logs=%llu entries=%llu "
             "handled=%llu nosupport=%llu\n",
+            (unsigned)NATIVE_SOFT_WAVE,
             (unsigned long long)d.u64SoftLog,
             (unsigned long long)s.u64Entries,
             (unsigned long long)s.u64Handled,
             (unsigned long long)s.u64Nosupport);
-    kprintf("native: soft PASS wave=14 logs=%llu\n",
+    kprintf("native: soft PASS wave=%u logs=%llu\n",
+            (unsigned)NATIVE_SOFT_WAVE,
             (unsigned long long)d.u64SoftLog);
 }
 
@@ -578,7 +623,7 @@ u64
 gj_native_dispatch_stats_soft(void)
 {
     /*
-     * Full Wave 11 + Wave 14 multi-line soft inventory (legacy stats line).
+     * Full Wave 11 + Wave 15 multi-line soft inventory (legacy stats line).
      * Snapshots inside native_soft_inventory_log; never hard-gates.
      * Grep: native: soft stats / native: soft inventory
      */
@@ -1627,6 +1672,6 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
     }
 
     native_stats_finish(pRegs->u64Nr, pRegs->i64Ret, fHitDefault);
-    /* Wave 11/14: one-shot greppable soft inventory after first activity. */
+    /* Wave 15: one-shot greppable soft inventory after first activity. */
     native_soft_maybe_once();
 }

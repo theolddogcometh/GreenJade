@@ -19,7 +19,7 @@
  *   READ(10), WRITE(10), SYNCHRONIZE CACHE(10). LUN 0 only;
  *   illegal LUN / opcode / LBA → CHECK + fixed sense.
  *
- * Soft inventory (Wave 14 exclusive deepen — this unit only):
+ * Soft inventory (Wave 15 exclusive deepen — this unit only):
  *   - Soft submit enter/ok/fail; per-op ok; deny catalog; LUN honesty
  *   - Product door INQUIRY path tracked separate from soft INQUIRY
  *   greppable: "scsi_mid: soft …" via scsi_mid_soft_inventory_log()
@@ -83,11 +83,11 @@ static uint8_t g_aSoftUnitSense[SCSI_MID_SENSE_MAX];
 static uint8_t g_u8SoftUnitSenseLen;
 
 /*
- * Soft product inventory (Wave 14 exclusive deepen). File-local tallies.
+ * Soft product inventory (Wave 15 exclusive deepen). File-local tallies.
  * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft …
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  */
-#define SCSI_MID_SOFT_WAVE 14u
+#define SCSI_MID_SOFT_WAVE 15u
 
 static uint32_t g_u32SoftEnter;     /* soft_submit entries past null-guard */
 static uint32_t g_u32SoftOpTur;
@@ -874,13 +874,13 @@ scsi_mid_submit(struct scsi_io *pIo)
 }
 
 /*
- * Wave 14 exclusive soft inventory dump (product library path).
+ * Wave 15 exclusive soft inventory dump (product library path).
  * Greppable prefix: "scsi_mid: soft …"
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  * Never hard-gates submit / live path. Host uses printf; freestanding
  * uses gj_debug_log when SCSI_HAS_SYS.
  *
- * Exported without header change (Wave 14 exclusive; host server declares).
+ * Exported without header change (Wave 15 exclusive; host server declares).
  */
 void
 scsi_mid_soft_inventory_log(void)
@@ -961,8 +961,13 @@ scsi_mid_soft_inventory_log(void)
     }
     (void)gj_debug_log(
         "scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
-        "lun_honest=soft wave=14 (soft inventory; not bar3)\n",
-        96);
+        "lun_honest=soft multi_server=0 confine=0 wave=15 "
+        "(soft inventory; not bar3)\n",
+        138);
+    (void)gj_debug_log(
+        "scsi_mid: soft honesty multi_server=0 confine=0 bar3=0 "
+        "exclusive=1 soft=1 wave=15\n",
+        82);
     (void)gj_debug_log("scsi_mid: soft inventory PASS\n", 30);
 #undef MID_INV_EMIT
 #else
@@ -1021,7 +1026,13 @@ scsi_mid_soft_inventory_log(void)
      * Honesty: soft LUN ≠ product door INQUIRY; not bar3.
      */
     printf("scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
-           "lun_honest=soft wave=%u (soft inventory; not bar3)\n",
+           "lun_honest=soft multi_server=0 confine=0 wave=%u "
+           "(soft inventory; not bar3)\n",
+           (unsigned)SCSI_MID_SOFT_WAVE);
+
+    /* Grep: scsi_mid: soft honesty (Wave 15 exclusive deepen) */
+    printf("scsi_mid: soft honesty multi_server=0 confine=0 bar3=0 "
+           "exclusive=1 soft=1 wave=%u\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
     /* Grep: scsi_mid: soft inventory PASS */

@@ -6,15 +6,16 @@
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
  *
- * Soft product deepen (Wave 14 exclusive; this unit only):
+ * Soft product deepen (Wave 15 exclusive; this unit only):
  *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
  *   - pick_next soft stats + equal-rank wait-age fairness
  *   - kstack base+mid canary + poison HWM soft scan
  *   - soft sched inventory: ready/run snap + HWM + transition counts
  *   - path tallies: create/block/wake/yield/switch/exit + aff/proc
- *   - Wave 14 greppable "thread: soft …" deepen (wave=14 stamp):
+ *   - Wave 15 greppable "thread: soft …" deepen (wave=15 stamp):
  *       inventory|table|ready|run|create|block|wake|yield|switch|
- *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen
+ *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
+ *       hwm|sysuser|user|boost|exec|invariant
  *     twin "sched: soft …" retained for legacy smoke greps
  *   Soft only — does NOT claim product RR / full preemption complete.
  *   Never hard-gates pick_next; diagnostics only (wrap OK).
@@ -57,13 +58,13 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 14 exclusive soft deepen stamp (greppable wave=14). */
-#define THREAD_SOFT_DEEPEN_WAVE  14u
+/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
+#define THREAD_SOFT_DEEPEN_WAVE  15u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 20u
+#define THREAD_SOFT_DEEPEN_AREAS 26u
 
 /*
- * Soft sched inventory (Wave 14; file-local; ready = RUNNABLE, run = RUNNING).
+ * Soft sched inventory (Wave 15; file-local; ready = RUNNABLE, run = RUNNING).
  * Snapshots from table walk; HWM of live ready/run; transition + path tallies.
  * Diagnostics only — never hard-gates pick_next.
  * greppable: sched: soft … / thread: soft …
@@ -75,17 +76,23 @@ static u32 g_u32SoftExitedSnap;  /* last EXITED count */
 static u32 g_u32SoftUnusedSnap;  /* last UNUSED slots */
 static u32 g_u32SoftLiveSnap;    /* non-UNUSED slots */
 static u32 g_u32SoftUserSnap;    /* live thr with USER_* entry flags */
+static u32 g_u32SoftUser64Snap;  /* live thr with USER_ENTRY only path */
+static u32 g_u32SoftUser32Snap;  /* live thr with USER32_ENTRY path */
 static u32 g_u32SoftBoostSnap;   /* thr with residual soft boost */
+static u32 g_u32SoftBoostTicks;  /* sum residual boost ticks (snap) */
 static u32 g_u32SoftAffAnySnap;  /* live thr affinity=any (0xFF) */
 static u32 g_u32SoftAffPinSnap;  /* live thr pinned (not any) */
 static u32 g_u32SoftProcSnap;    /* live thr with pProc bound */
 static u32 g_u32SoftSysUserSnap; /* live thr with mid-syscall USER_* valid */
+static u32 g_u32SoftBlockObjSnap;/* BLOCKED thr with non-null pBlockObj */
 static u32 g_u32SoftIdleSnap;    /* planted AP/BSP idle thr count */
 static u32 g_u32SoftCr3Snap;     /* live thr with non-zero u64Cr3 */
 static u32 g_u32SoftReadyHwm;    /* max ready seen */
 static u32 g_u32SoftRunHwm;      /* max run seen */
 static u32 g_u32SoftLiveHwm;     /* max live seen */
 static u32 g_u32SoftBlockedHwm;  /* max blocked seen */
+static u32 g_u32SoftExitedHwm;   /* max exited seen */
+static u32 g_u32SoftSysUserHwm;  /* max mid-syscall USER_* live */
 static u64 g_u64SoftInvSamples;  /* inventory walk count */
 static u64 g_u64SoftReadyTrans;  /* thr entered RUNNABLE */
 static u64 g_u64SoftRunTrans;    /* thr entered RUNNING */
@@ -95,16 +102,18 @@ static u32 g_aSoftReadyQos[5];   /* ready thr by base QoS class 0..4 */
 static u32 g_aSoftRunQos[5];     /* run thr by base QoS class 0..4 */
 static int g_fSoftInvOnce;       /* one-shot warm inventory dump */
 
-/* Soft path tallies (cumulative; wrap OK). Wave 14 deepen surfaces. */
+/* Soft path tallies (cumulative; wrap OK). Wave 15 deepen surfaces. */
 static u64 g_u64SoftCreateOk;      /* thread_create success */
 static u64 g_u64SoftCreateFull;    /* table full / no slot */
 static u64 g_u64SoftCreateUser;    /* thread_create_user success */
 static u64 g_u64SoftCreateUser32;  /* thread_create_user32 success */
 static u64 g_u64SoftCreateReuse;   /* EXITED slot recycled */
 static u64 g_u64SoftCreateApIdle;  /* AP idle thr plant */
+static u64 g_u64SoftCreateOnCpu;   /* thread_create_on_cpu success */
 static u64 g_u64SoftBlockN;        /* thread_block entries */
 static u64 g_u64SoftWakeCalls;     /* thread_wake entries */
 static u64 g_u64SoftWakeThr;       /* thr transitioned BLOCKED→RUNNABLE */
+static u64 g_u64SoftWakeNone;      /* wake scanned, zero thr transitioned */
 static u64 g_u64SoftYieldN;        /* thread_yield entries */
 static u64 g_u64SoftYieldReq;      /* thread_yield_request */
 static u64 g_u64SoftYieldPendHit;  /* yield_pending returned true */
@@ -112,8 +121,15 @@ static u64 g_u64SoftSchedEnter;    /* schedule() entries */
 static u64 g_u64SoftSchedSelf;     /* same-thr early return */
 static u64 g_u64SoftSchedSwitch;   /* real switch_context */
 static u64 g_u64SoftSchedSpin;     /* blocked self-spin path used */
+static u64 g_u64SoftSchedAsAct;    /* process_as_activate on resume */
+static u64 g_u64SoftSchedCr3Own;   /* thr u64Cr3 load on resume */
 static u64 g_u64SoftExitN;         /* thread_exit entries */
 static u64 g_u64SoftSetCpuN;       /* thread_set_cpu hits */
+static u64 g_u64SoftExecReplace;   /* thr updated by thread_exec_replace */
+static u64 g_u64SoftExecCalls;     /* thread_exec_replace entries */
+static u64 g_u64SoftSysUserSave;   /* thread_save_sys_user hits */
+static u64 g_u64SoftSysUserRest;   /* thread_restore_sys_user hits */
+static u64 g_u64SoftInstallKstk;   /* thread_install_kstack thr path */
 static u32 g_u32SoftLogN;          /* inventory print emissions */
 
 static void thread_trampoline(void);
@@ -163,7 +179,7 @@ sched_soft_note_exit(void)
 /*
  * Walk fixed thr table; refresh ready/run/blocked/… snaps + HWM.
  * Pure read of thr state / QoS / boost / aff / proc; safe after thread_init.
- * Wave 14: also idle plant count + non-zero CR3 live snap.
+ * Wave 15: user64/user32 split, block-obj snap, boost ticks, exited/sysuser HWM.
  */
 static void
 sched_soft_inventory_scan(void)
@@ -176,11 +192,15 @@ sched_soft_inventory_scan(void)
     u32 cUnused = 0;
     u32 cLive = 0;
     u32 cUser = 0;
+    u32 cUser64 = 0;
+    u32 cUser32 = 0;
     u32 cBoost = 0;
+    u32 cBoostTicks = 0;
     u32 cAffAny = 0;
     u32 cAffPin = 0;
     u32 cProc = 0;
     u32 cSysUser = 0;
+    u32 cBlockObj = 0;
     u32 cIdle = 0;
     u32 cCr3 = 0;
     u32 aReadyQos[5];
@@ -209,8 +229,14 @@ sched_soft_inventory_scan(void)
         if ((u32Flags & (GJ_THR_F_USER_ENTRY | GJ_THR_F_USER32_ENTRY)) != 0) {
             cUser++;
         }
+        if ((u32Flags & GJ_THR_F_USER32_ENTRY) != 0) {
+            cUser32++;
+        } else if ((u32Flags & GJ_THR_F_USER_ENTRY) != 0) {
+            cUser64++;
+        }
         if (g_aThrBoost[iThr] != 0) {
             cBoost++;
+            cBoostTicks += (u32)g_aThrBoost[iThr];
         }
         if (u8Aff == 0xFFu) {
             cAffAny++;
@@ -234,6 +260,9 @@ sched_soft_inventory_scan(void)
             aRunQos[u8Qos]++;
         } else if (u32St == GJ_THR_BLOCKED) {
             cBlocked++;
+            if (g_aThreads[iThr].pBlockObj != NULL) {
+                cBlockObj++;
+            }
         } else if (u32St == GJ_THR_EXITED) {
             cExited++;
         }
@@ -257,11 +286,15 @@ sched_soft_inventory_scan(void)
     g_u32SoftUnusedSnap = cUnused;
     g_u32SoftLiveSnap = cLive;
     g_u32SoftUserSnap = cUser;
+    g_u32SoftUser64Snap = cUser64;
+    g_u32SoftUser32Snap = cUser32;
     g_u32SoftBoostSnap = cBoost;
+    g_u32SoftBoostTicks = cBoostTicks;
     g_u32SoftAffAnySnap = cAffAny;
     g_u32SoftAffPinSnap = cAffPin;
     g_u32SoftProcSnap = cProc;
     g_u32SoftSysUserSnap = cSysUser;
+    g_u32SoftBlockObjSnap = cBlockObj;
     g_u32SoftIdleSnap = cIdle;
     g_u32SoftCr3Snap = cCr3;
     for (iThr = 0; iThr < 5u; iThr++) {
@@ -280,15 +313,22 @@ sched_soft_inventory_scan(void)
     if (cBlocked > g_u32SoftBlockedHwm) {
         g_u32SoftBlockedHwm = cBlocked;
     }
+    if (cExited > g_u32SoftExitedHwm) {
+        g_u32SoftExitedHwm = cExited;
+    }
+    if (cSysUser > g_u32SoftSysUserHwm) {
+        g_u32SoftSysUserHwm = cSysUser;
+    }
     g_u64SoftInvSamples++;
 }
 
 /*
- * Greppable soft inventory dump (Wave 14 product / smoke).
+ * Greppable soft inventory dump (Wave 15 product / smoke).
  * Twin prefixes so either agent grep works:
  *   sched: soft inventory|ready|run|create|block|wake|yield|switch|path|aff …
  *   thread: soft table|ready|run|inventory|create|block|wake|yield|switch|
- *           path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen …
+ *           path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
+ *           hwm|sysuser|user|boost|exec|invariant …
  * greppable: sched: soft
  * greppable: thread: soft
  * Soft only — never claims product RR / full preemption complete.
@@ -332,24 +372,26 @@ sched_soft_inventory_print(void)
             g_aSoftRunQos[GJ_QOS_DRIVER]);
     /* Grep: sched: soft create */
     kprintf("sched: soft create ok=%lu full=%lu user=%lu user32=%lu "
-            "reuse=%lu ap_idle=%lu set_cpu=%lu\n",
+            "reuse=%lu ap_idle=%lu on_cpu=%lu set_cpu=%lu\n",
             (unsigned long)g_u64SoftCreateOk,
             (unsigned long)g_u64SoftCreateFull,
             (unsigned long)g_u64SoftCreateUser,
             (unsigned long)g_u64SoftCreateUser32,
             (unsigned long)g_u64SoftCreateReuse,
             (unsigned long)g_u64SoftCreateApIdle,
+            (unsigned long)g_u64SoftCreateOnCpu,
             (unsigned long)g_u64SoftSetCpuN);
     /* Grep: sched: soft block */
     kprintf("sched: soft block n=%lu trans=%lu blocked_snap=%u "
-            "blocked_hwm=%u\n",
+            "blocked_hwm=%u block_obj=%u\n",
             (unsigned long)g_u64SoftBlockN,
             (unsigned long)g_u64SoftBlockTrans, g_u32SoftBlockedSnap,
-            g_u32SoftBlockedHwm);
+            g_u32SoftBlockedHwm, g_u32SoftBlockObjSnap);
     /* Grep: sched: soft wake */
-    kprintf("sched: soft wake calls=%lu thr=%lu ready_trans=%lu\n",
+    kprintf("sched: soft wake calls=%lu thr=%lu none=%lu ready_trans=%lu\n",
             (unsigned long)g_u64SoftWakeCalls,
             (unsigned long)g_u64SoftWakeThr,
+            (unsigned long)g_u64SoftWakeNone,
             (unsigned long)g_u64SoftReadyTrans);
     /* Grep: sched: soft yield */
     kprintf("sched: soft yield n=%lu req=%lu pend_hit=%lu\n",
@@ -358,13 +400,15 @@ sched_soft_inventory_print(void)
             (unsigned long)g_u64SoftYieldPendHit);
     /* Grep: sched: soft switch */
     kprintf("sched: soft switch enter=%lu self=%lu switch=%lu spin=%lu "
-            "exit=%lu exit_trans=%lu\n",
+            "exit=%lu exit_trans=%lu as_act=%lu cr3_own=%lu\n",
             (unsigned long)g_u64SoftSchedEnter,
             (unsigned long)g_u64SoftSchedSelf,
             (unsigned long)g_u64SoftSchedSwitch,
             (unsigned long)g_u64SoftSchedSpin,
             (unsigned long)g_u64SoftExitN,
-            (unsigned long)g_u64SoftExitTrans);
+            (unsigned long)g_u64SoftExitTrans,
+            (unsigned long)g_u64SoftSchedAsAct,
+            (unsigned long)g_u64SoftSchedCr3Own);
     /* Grep: sched: soft aff */
     kprintf("sched: soft aff any=%u pin=%u proc=%u sys_user=%u "
             "pick_gen=%u\n",
@@ -377,18 +421,20 @@ sched_soft_inventory_print(void)
             GJ_QOS_BOOST_CAP, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
 
     /*
-     * Wave 14 exclusive "thread: soft …" deepen surface (prefix-stable).
+     * Wave 15 exclusive "thread: soft …" deepen surface (prefix-stable).
      * Each area greppable on its own for continuum / smoke.
      */
     /* Grep: thread: soft inventory */
     kprintf("thread: soft inventory ready=%u run=%u blocked=%u exited=%u "
-            "live=%u unused=%u user=%u boost=%u samples=%lu "
-            "slots=%u log_n=%u idle=%u cr3=%u wave=%u areas=%u\n",
+            "live=%u unused=%u user=%u user64=%u user32=%u boost=%u "
+            "samples=%lu slots=%u log_n=%u idle=%u cr3=%u block_obj=%u "
+            "wave=%u areas=%u\n",
             g_u32SoftReadySnap, g_u32SoftRunSnap, g_u32SoftBlockedSnap,
             g_u32SoftExitedSnap, g_u32SoftLiveSnap, g_u32SoftUnusedSnap,
-            g_u32SoftUserSnap, g_u32SoftBoostSnap,
-            (unsigned long)g_u64SoftInvSamples, GJ_MAX_THREADS,
-            g_u32SoftLogN, g_u32SoftIdleSnap, g_u32SoftCr3Snap,
+            g_u32SoftUserSnap, g_u32SoftUser64Snap, g_u32SoftUser32Snap,
+            g_u32SoftBoostSnap, (unsigned long)g_u64SoftInvSamples,
+            GJ_MAX_THREADS, g_u32SoftLogN, g_u32SoftIdleSnap,
+            g_u32SoftCr3Snap, g_u32SoftBlockObjSnap,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE,
             (unsigned)THREAD_SOFT_DEEPEN_AREAS);
     /* Grep: thread: soft table */
@@ -423,24 +469,29 @@ sched_soft_inventory_print(void)
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft create */
     kprintf("thread: soft create ok=%lu full=%lu user=%lu user32=%lu "
-            "reuse=%lu ap_idle=%lu set_cpu=%lu wave=%u\n",
+            "reuse=%lu ap_idle=%lu on_cpu=%lu set_cpu=%lu wave=%u\n",
             (unsigned long)g_u64SoftCreateOk,
             (unsigned long)g_u64SoftCreateFull,
             (unsigned long)g_u64SoftCreateUser,
             (unsigned long)g_u64SoftCreateUser32,
             (unsigned long)g_u64SoftCreateReuse,
             (unsigned long)g_u64SoftCreateApIdle,
+            (unsigned long)g_u64SoftCreateOnCpu,
             (unsigned long)g_u64SoftSetCpuN,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft block */
-    kprintf("thread: soft block n=%lu trans=%lu snap=%u hwm=%u wave=%u\n",
+    kprintf("thread: soft block n=%lu trans=%lu snap=%u hwm=%u "
+            "block_obj=%u wave=%u\n",
             (unsigned long)g_u64SoftBlockN,
             (unsigned long)g_u64SoftBlockTrans, g_u32SoftBlockedSnap,
-            g_u32SoftBlockedHwm, (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+            g_u32SoftBlockedHwm, g_u32SoftBlockObjSnap,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft wake */
-    kprintf("thread: soft wake calls=%lu thr=%lu ready_trans=%lu wave=%u\n",
+    kprintf("thread: soft wake calls=%lu thr=%lu none=%lu "
+            "ready_trans=%lu wave=%u\n",
             (unsigned long)g_u64SoftWakeCalls,
             (unsigned long)g_u64SoftWakeThr,
+            (unsigned long)g_u64SoftWakeNone,
             (unsigned long)g_u64SoftReadyTrans,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft yield */
@@ -452,13 +503,15 @@ sched_soft_inventory_print(void)
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft switch */
     kprintf("thread: soft switch enter=%lu self=%lu switch=%lu spin=%lu "
-            "exit=%lu exit_trans=%lu wave=%u\n",
+            "exit=%lu exit_trans=%lu as_act=%lu cr3_own=%lu wave=%u\n",
             (unsigned long)g_u64SoftSchedEnter,
             (unsigned long)g_u64SoftSchedSelf,
             (unsigned long)g_u64SoftSchedSwitch,
             (unsigned long)g_u64SoftSchedSpin,
             (unsigned long)g_u64SoftExitN,
             (unsigned long)g_u64SoftExitTrans,
+            (unsigned long)g_u64SoftSchedAsAct,
+            (unsigned long)g_u64SoftSchedCr3Own,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft exit */
     kprintf("thread: soft exit n=%lu trans=%lu exited_snap=%u wave=%u\n",
@@ -565,7 +618,53 @@ sched_soft_inventory_print(void)
             (unsigned long)g_u64SoftSchedSwitch,
             (unsigned long)g_u64SoftExitN,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
-    /* Grep: thread: soft deepen wave (Wave 14 stamp) */
+    /* Grep: thread: soft hwm — Wave 15 HWM rollup */
+    kprintf("thread: soft hwm ready=%u run=%u live=%u blocked=%u "
+            "exited=%u sys_user=%u kstack_max=%lu samples=%lu wave=%u\n",
+            g_u32SoftReadyHwm, g_u32SoftRunHwm, g_u32SoftLiveHwm,
+            g_u32SoftBlockedHwm, g_u32SoftExitedHwm, g_u32SoftSysUserHwm,
+            (unsigned long)g_soft.u64StackHwmMax,
+            (unsigned long)g_u64SoftInvSamples,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft sysuser — mid-SYSCALL USER_* save/restore */
+    kprintf("thread: soft sysuser snap=%u hwm=%u save=%lu restore=%lu "
+            "install_kstk=%lu residual_ud_guard=1 wave=%u\n",
+            g_u32SoftSysUserSnap, g_u32SoftSysUserHwm,
+            (unsigned long)g_u64SoftSysUserSave,
+            (unsigned long)g_u64SoftSysUserRest,
+            (unsigned long)g_u64SoftInstallKstk,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft user — user64 / user32 entry split */
+    kprintf("thread: soft user total=%u user64=%u user32=%u "
+            "create_user=%lu create_user32=%lu wave=%u\n",
+            g_u32SoftUserSnap, g_u32SoftUser64Snap, g_u32SoftUser32Snap,
+            (unsigned long)g_u64SoftCreateUser,
+            (unsigned long)g_u64SoftCreateUser32,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft boost — residual soft PI ticks */
+    kprintf("thread: soft boost live=%u ticks=%u set=%lu soft=%lu "
+            "decay=%lu cap=%u wave=%u\n",
+            g_u32SoftBoostSnap, g_u32SoftBoostTicks,
+            (unsigned long)g_soft.u64QosSet,
+            (unsigned long)g_soft.u64QosBoostSoft,
+            (unsigned long)g_soft.u64QosBoostDecay, GJ_QOS_BOOST_CAP,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft exec — exec_replace surface */
+    kprintf("thread: soft exec calls=%lu thr_updated=%lu wave=%u\n",
+            (unsigned long)g_u64SoftExecCalls,
+            (unsigned long)g_u64SoftExecReplace,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /*
+     * Grep: thread: soft invariant
+     * Dual-stack / TSS.RSP0 honesty — soft inventory only, not product RR.
+     */
+    kprintf("thread: soft invariant dual_stack=1 astack=%u kstack=%u "
+            "rsp0=irq_dedicated sysuser_save_restore=1 "
+            "install_kstk_after_switch=1 rr_complete=0 "
+            "preempt_complete=0 wave=%u\n",
+            (unsigned)GJ_THR_STACK_SIZE, (unsigned)GJ_THR_KSTACK_SIZE,
+            (unsigned)THREAD_SOFT_DEEPEN_WAVE);
+    /* Grep: thread: soft deepen wave (Wave 15 stamp) */
     kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
             "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",
             (unsigned)THREAD_SOFT_DEEPEN_WAVE,
@@ -774,6 +873,7 @@ thread_install_kstack(struct gj_thread *pThr)
     if (pCpu != NULL && pThr != NULL && pThr->u64KstackTop != 0) {
         /* SYSCALL path only (GS:0). Not TSS.RSP0. */
         pCpu->u64KernelRsp = pThr->u64KstackTop;
+        g_u64SoftInstallKstk++;
     }
     /*
      * Ring-3 IRQs must not land on thr SYSCALL stacks. Always reassert the
@@ -804,17 +904,23 @@ thread_init(void)
     g_u32SoftUnusedSnap = 0;
     g_u32SoftLiveSnap = 0;
     g_u32SoftUserSnap = 0;
+    g_u32SoftUser64Snap = 0;
+    g_u32SoftUser32Snap = 0;
     g_u32SoftBoostSnap = 0;
+    g_u32SoftBoostTicks = 0;
     g_u32SoftAffAnySnap = 0;
     g_u32SoftAffPinSnap = 0;
     g_u32SoftProcSnap = 0;
     g_u32SoftSysUserSnap = 0;
+    g_u32SoftBlockObjSnap = 0;
     g_u32SoftIdleSnap = 0;
     g_u32SoftCr3Snap = 0;
     g_u32SoftReadyHwm = 0;
     g_u32SoftRunHwm = 0;
     g_u32SoftLiveHwm = 0;
     g_u32SoftBlockedHwm = 0;
+    g_u32SoftExitedHwm = 0;
+    g_u32SoftSysUserHwm = 0;
     g_u64SoftInvSamples = 0;
     g_u64SoftReadyTrans = 0;
     g_u64SoftRunTrans = 0;
@@ -826,9 +932,11 @@ thread_init(void)
     g_u64SoftCreateUser32 = 0;
     g_u64SoftCreateReuse = 0;
     g_u64SoftCreateApIdle = 0;
+    g_u64SoftCreateOnCpu = 0;
     g_u64SoftBlockN = 0;
     g_u64SoftWakeCalls = 0;
     g_u64SoftWakeThr = 0;
+    g_u64SoftWakeNone = 0;
     g_u64SoftYieldN = 0;
     g_u64SoftYieldReq = 0;
     g_u64SoftYieldPendHit = 0;
@@ -836,8 +944,15 @@ thread_init(void)
     g_u64SoftSchedSelf = 0;
     g_u64SoftSchedSwitch = 0;
     g_u64SoftSchedSpin = 0;
+    g_u64SoftSchedAsAct = 0;
+    g_u64SoftSchedCr3Own = 0;
     g_u64SoftExitN = 0;
     g_u64SoftSetCpuN = 0;
+    g_u64SoftExecReplace = 0;
+    g_u64SoftExecCalls = 0;
+    g_u64SoftSysUserSave = 0;
+    g_u64SoftSysUserRest = 0;
+    g_u64SoftInstallKstk = 0;
     g_u32SoftLogN = 0;
     for (iThr = 0; iThr < 5u; iThr++) {
         g_aSoftReadyQos[iThr] = 0;
@@ -1032,6 +1147,7 @@ thread_exec_replace(struct gj_process *pProc, u64 u64Entry, u64 u64Stack)
     u32 iThr;
     u32 cUpdated = 0;
 
+    g_u64SoftExecCalls++;
     if (pProc == NULL || u64Entry == 0 || u64Stack == 0) {
         return 0;
     }
@@ -1053,6 +1169,7 @@ thread_exec_replace(struct gj_process *pProc, u64 u64Entry, u64 u64Stack)
         cUpdated++;
     }
     if (cUpdated > 0) {
+        g_u64SoftExecReplace += (u64)cUpdated;
         kprintf("sched: exec_replace n=%u entry=0x%lx sp=0x%lx\n", cUpdated,
                 (unsigned long)u64Entry, (unsigned long)u64Stack);
     }
@@ -1110,6 +1227,9 @@ thread_wake(void *pBlockObj, u32 u32Tag, u32 u32Max)
         sched_soft_note_ready();
         g_u64SoftWakeThr++;
         u32N++;
+    }
+    if (u32N == 0) {
+        g_u64SoftWakeNone++;
     }
     return u32N;
 }
@@ -1422,7 +1542,7 @@ thread_sched_soft_stats_print(void)
             (unsigned long)g_soft.u64StackHwmMax,
             (unsigned long)g_soft.u64StackHwmSamples,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
-    /* Wave 14: full greppable thread: soft … inventory alongside pick stats. */
+    /* Wave 15: full greppable thread: soft … inventory alongside pick stats. */
     sched_soft_inventory_print();
     return g_soft.u64PickTotal;
 }
@@ -1459,6 +1579,7 @@ thread_create_on_cpu(struct gj_process *pProc, void (*pfn)(void *), void *pArg,
 
     if (u32Id != 0) {
         thread_set_cpu(u32Id, u32Cpu);
+        g_u64SoftCreateOnCpu++;
     }
     return u32Id;
 }
@@ -1484,6 +1605,7 @@ thread_save_sys_user(struct gj_thread *pThr)
     pThr->u64SysUserRsp = pCpu->u64UserRsp;
     pThr->u64SysUserRflags = pCpu->u64UserRflags;
     pThr->u32SysUserValid = 1;
+    g_u64SoftSysUserSave++;
 }
 
 static void
@@ -1501,6 +1623,7 @@ thread_restore_sys_user(struct gj_thread *pThr)
     pCpu->u64UserRip = pThr->u64SysUserRip;
     pCpu->u64UserRsp = pThr->u64SysUserRsp;
     pCpu->u64UserRflags = pThr->u64SysUserRflags;
+    g_u64SoftSysUserRest++;
 }
 
 void
@@ -1590,9 +1713,11 @@ schedule(void)
     thread_check_kstack(pNow);
     if (pNow->pProc != NULL && pNow->pProc->u64Cr3 != 0) {
         process_as_activate(pNow->pProc);
+        g_u64SoftSchedAsAct++;
     } else if (pNow->u64Cr3 != 0) {
         cpu_load_cr3(pNow->u64Cr3);
         vmm_set_anon_cursor(NULL);
+        g_u64SoftSchedCr3Own++;
     } else {
         cpu_load_cr3(u64KerCr3);
         vmm_set_anon_cursor(NULL);

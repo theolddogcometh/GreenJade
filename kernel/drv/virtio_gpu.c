@@ -15,7 +15,7 @@
  *   virtio-gpu: ready PASS
  *   virtio-gpu: present PASS
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only —
+ * Soft inventory (Wave 15 exclusive deepen; this unit only —
  * greppable "virtio-gpu: soft …"; never hard-gates; not bar3/GPU product):
  *   virtio-gpu: soft inventory …
  *   virtio-gpu: soft pci …
@@ -32,7 +32,13 @@
  *   virtio-gpu: soft last …
  *   virtio-gpu: soft errors …
  *   virtio-gpu: soft path …
- *   virtio-gpu: soft deepen wave=14 …
+ *   virtio-gpu: soft claim …        (Wave 15)
+ *   virtio-gpu: soft via …          (Wave 15)
+ *   virtio-gpu: soft ready …        (Wave 15)
+ *   virtio-gpu: soft format …       (Wave 15)
+ *   virtio-gpu: soft cmds …         (Wave 15)
+ *   virtio-gpu: soft honesty …      (Wave 15)
+ *   virtio-gpu: soft deepen wave=15 …
  *   virtio-gpu: soft PASS|NODEV|PARTIAL
  *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
  *
@@ -78,9 +84,9 @@
  */
 #define VIRTIO_GPU_MAX_MEM_ENTRIES             256u
 
-/* Wave 14 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define GPU_SOFT_WAVE  14u
-#define GPU_SOFT_AREAS 18u
+/* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define GPU_SOFT_WAVE  15u
+#define GPU_SOFT_AREAS 24u
 
 /* ---- wire structs (packed, OASIS layout) --------------------------------- */
 struct virtio_gpu_ctrl_hdr {
@@ -222,6 +228,8 @@ static u32 g_u32ApiPresentStub; /* virtio_gpu_present_stub enters */
 static u32 g_u32ApiPresentCount;/* virtio_gpu_present_count enters */
 static u32 g_u32PresentArgFail; /* present arg / overflow rejects */
 static u32 g_u32PresentPathFail;/* present create/attach/scanout/xfer fails */
+/* Wave 15 sticky via (inventory only). */
+static const char *g_szLastVia;
 
 /* ---- control-queue transport --------------------------------------------- */
 
@@ -612,10 +620,10 @@ gpu_xfer_and_flush(u32 u32Res, u32 u32X, u32 u32Y, u32 u32W, u32 u32H,
     return gpu_flush_rect(u32Res, u32X, u32Y, u32W, u32H);
 }
 
-/* ---- soft inventory (Wave 14 exclusive deepen) --------------------------- */
+/* ---- soft inventory (Wave 15 exclusive deepen) --------------------------- */
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-gpu: soft …" — never hard-gates; kprintf only.
  * Soft only — not bar3 / not GPU product close.
  *
@@ -647,6 +655,7 @@ gpu_soft_inventory(const char *szVia)
     u64 u64PaUsed;
 
     szViaSafe = (szVia != NULL) ? szVia : "path";
+    g_szLastVia = szViaSafe;
 
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
@@ -806,7 +815,56 @@ gpu_soft_inventory(const char *szVia)
             "feat_dev=0x%lx feat_drv=0x%lx\n",
             u32Claim, (unsigned long)u64FeatDev, (unsigned long)u64FeatDrv);
 
-    /* Grep: virtio-gpu: soft deepen wave (Wave 14 stamp) */
+    /* Grep: virtio-gpu: soft claim (Wave 15) */
+    kprintf("virtio-gpu: soft claim ready=%u claim=%u modern=%u "
+            "have_res=%u scanout_bound=%u present=%u\n",
+            u32Ready, u32Claim, (unsigned)u8Modern, g_fHaveRes ? 1u : 0u,
+            g_fScanoutBound ? 1u : 0u, g_u32PresentCount);
+
+    /* Grep: virtio-gpu: soft via (Wave 15) */
+    kprintf("virtio-gpu: soft via last=%s log_n=%u once=%u\n",
+            (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
+            g_fSoftOnce ? 1u : 0u);
+
+    /* Grep: virtio-gpu: soft ready (Wave 15) */
+    kprintf("virtio-gpu: soft ready live=%u have_res=%u scanout=%u "
+            "disp_valid=%u present=%u flush=%u cmd_ok=%u\n",
+            u32Ready, g_fHaveRes ? 1u : 0u, g_fScanoutBound ? 1u : 0u,
+            g_fDispValid ? 1u : 0u, g_u32PresentCount, g_u32FlushCount,
+            g_u32CmdOk);
+
+    /* Grep: virtio-gpu: soft format (Wave 15) */
+    kprintf("virtio-gpu: soft format b8g8r8x8=%u default_w=%u default_h=%u "
+            "max_scanouts=%u max_ents=%u req_bytes=%u stride=%u "
+            "w=%u h=%u\n",
+            (unsigned)VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM,
+            (unsigned)VIRTIO_GPU_DEFAULT_W, (unsigned)VIRTIO_GPU_DEFAULT_H,
+            (unsigned)VIRTIO_GPU_MAX_SCANOUTS,
+            (unsigned)VIRTIO_GPU_MAX_MEM_ENTRIES,
+            (unsigned)VIRTIO_GPU_REQ_BYTES, g_u32Stride, g_u32Width,
+            g_u32Height);
+
+    /* Grep: virtio-gpu: soft cmds (Wave 15 OASIS ctrl catalog) */
+    kprintf("virtio-gpu: soft cmds get_disp=0x%x create2d=0x%x unref=0x%x "
+            "set_scanout=0x%x flush=0x%x xfer=0x%x attach=0x%x "
+            "detach=0x%x last=0x%x resp=0x%x\n",
+            (unsigned)VIRTIO_GPU_CMD_GET_DISPLAY_INFO,
+            (unsigned)VIRTIO_GPU_CMD_RESOURCE_CREATE_2D,
+            (unsigned)VIRTIO_GPU_CMD_RESOURCE_UNREF,
+            (unsigned)VIRTIO_GPU_CMD_SET_SCANOUT,
+            (unsigned)VIRTIO_GPU_CMD_RESOURCE_FLUSH,
+            (unsigned)VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D,
+            (unsigned)VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING,
+            (unsigned)VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING,
+            g_u32LastCmdType, g_u32LastRespType);
+
+    /* Grep: virtio-gpu: soft honesty (Wave 15 non-claims) */
+    kprintf("virtio-gpu: soft honesty ctrl_q0=1 cursor_q=0 cmd3d=0 "
+            "edid=0 steam=0 bar3=0 product_gpu=0 soft_only=1 "
+            "wave=%u areas=%u\n",
+            (unsigned)GPU_SOFT_WAVE, (unsigned)GPU_SOFT_AREAS);
+
+    /* Grep: virtio-gpu: soft deepen wave (Wave 15 stamp) */
     kprintf("virtio-gpu: soft deepen wave=%u areas=%u via=%s ready=%u "
             "present=%u have_res=%u cmd_ok=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

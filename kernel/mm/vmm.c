@@ -10,29 +10,34 @@
  * pmm_release_high after success (main.c) for hierarchical free on large
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
- * Soft VMM inventory (Wave 13 exclusive deepen; Wave 10 base):
+ * Soft VMM inventory (Wave 15 exclusive deepen; Wave 10/13 base):
  *   - Live AS / COW table / HHDM / device UC / ensure_id snaps
  *   - Cumulative create/destroy/break/share/table + map/clone rejects
  *   - Peaks / layout / path honesty / soft PASS lamp
+ *   - Wave 15: honesty / unmap / prot / pte / stats / OPEN / deepen
  *   greppable: "vmm: soft …"
  *
- * Soft higher-half readiness inventory (Wave 13 exclusive deepen; soft only):
+ * Soft higher-half readiness inventory (Wave 15 deepen; Wave 13 base; soft only):
  *   - HHDM base / mapped span (P-MEM-5 data map; not kernel image move)
  *   - Identity bridge residual (low PML4 still shared into private AS)
  *   - User half empty goal lamp (empty user half without identity share)
  *   - Geometry / bridge / debt checklist / OPEN honesty multi-line
  *   greppable: "vmm: higher-half soft …"
  *   lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
- * Honesty: higher-half kernel move OPEN; soft inventory only — no relocate.
+ * Honesty: higher-half kernel move OPEN; soft inventory only — no relocate;
+ *          soft ≠ bar3; soft ≠ 1TiB product.
  *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
  *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
  *            "vmm: ensure_identity_rw" (… soft PASS)
- *            "vmm: soft inventory" "vmm: soft as" "vmm: soft cow"
- *            "vmm: soft hhdm" "vmm: soft device_uc" "vmm: soft ensure_id"
- *            "vmm: soft clone" "vmm: soft map" "vmm: soft destroy"
+ *            "vmm: soft honesty" "vmm: soft inventory" "vmm: soft as"
+ *            "vmm: soft cow" "vmm: soft hhdm" "vmm: soft device_uc"
+ *            "vmm: soft ensure_id" "vmm: soft clone" "vmm: soft map"
+ *            "vmm: soft unmap" "vmm: soft prot" "vmm: soft destroy"
  *            "vmm: soft reject" "vmm: soft peak" "vmm: soft layout"
- *            "vmm: soft path" "vmm: soft lamps" "vmm: soft PASS"
+ *            "vmm: soft pte" "vmm: soft path" "vmm: soft lamps"
+ *            "vmm: soft stats" "vmm: soft OPEN" "vmm: soft deepen"
+ *            "vmm: soft PASS"
  *            "vmm: higher-half soft inventory" "vmm: higher-half soft lamps"
  *            "vmm: higher-half soft path" "vmm: higher-half soft residual"
  *            "vmm: higher-half soft geometry" "vmm: higher-half soft bridge"
@@ -93,9 +98,9 @@ static u32               g_cEnsureIdCall;
 static u32               g_cEnsureIdFix;
 
 /*
- * Soft product inventory (Wave 13 exclusive deepen). Cumulative unless
- * noted live/peak. Diagnostics only — never hard-gate product AS/COW/HHDM.
- * greppable: vmm: soft
+ * Soft product inventory (Wave 15 exclusive deepen; extends Wave 13).
+ * Cumulative unless noted live/peak. Diagnostics only — never hard-gate
+ * product AS/COW/HHDM. greppable: vmm: soft
  */
 static u32 g_cAsLivePeak;   /* high-water private AS live count */
 static u32 g_cSoftInvLogs;  /* soft_inventory_log emissions */
@@ -170,7 +175,9 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE           13u
+#define GJ_VMM_SOFT_WAVE           15u
+/* Catalog areas prior to deepen line (honesty..OPEN). */
+#define GJ_VMM_SOFT_AREAS          20u
 
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
@@ -310,7 +317,7 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
 }
 
 /**
- * Soft higher-half readiness inventory (product / smoke; Wave 13 deepen).
+ * Soft higher-half readiness inventory (product / smoke; Wave 15 deepen).
  * Prefix-stable markers (vmm: higher-half soft …):
  *   vmm: higher-half soft inventory  — HHDM base + residual geometry
  *   vmm: higher-half soft lamps      — hhdm_ready / identity_bridge /
@@ -496,7 +503,7 @@ higher_half_soft_inventory(void)
             (unsigned)GJ_VMM_SOFT_WAVE);
 
     /*
-     * Honesty close: higher-half kernel move remains OPEN (deepen Wave 13).
+     * Honesty close: higher-half kernel move remains OPEN (deepen Wave 15).
      * Grep: vmm: higher-half soft OPEN
      */
     kprintf("vmm: higher-half soft OPEN move=OPEN inventory_only=1 "
@@ -510,7 +517,8 @@ higher_half_soft_inventory(void)
 }
 
 /**
- * Greppable soft VMM inventory (product / smoke; Wave 13 exclusive deepen).
+ * Greppable soft VMM inventory (product / smoke; Wave 15 exclusive deepen).
+ *   vmm: soft honesty …
  *   vmm: soft inventory …
  *   vmm: soft as …
  *   vmm: soft cow …
@@ -519,17 +527,23 @@ higher_half_soft_inventory(void)
  *   vmm: soft ensure_id …
  *   vmm: soft clone …
  *   vmm: soft map …
+ *   vmm: soft unmap …
+ *   vmm: soft prot …
  *   vmm: soft destroy …
  *   vmm: soft reject …
  *   vmm: soft peak …
  *   vmm: soft layout …
+ *   vmm: soft pte …
  *   vmm: soft path …
  *   vmm: soft lamps …
+ *   vmm: soft stats …
+ *   vmm: soft OPEN …
+ *   vmm: soft deepen wave=15 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
- * Honesty: soft counters only — not product AS/COW/HHDM complete or bar3.
- * Higher-half kernel move stays OPEN (soft inventory only).
+ * Honesty: soft counters only — not product AS/COW/HHDM complete or bar3;
+ *          soft ≠ 1TiB product. Higher-half kernel move stays OPEN.
  */
 static void
 soft_inventory_log(void)
@@ -537,6 +551,7 @@ soft_inventory_log(void)
     u32 i;
     u32 cCowSlots = 0;
     u32 cCowRefs = 0;
+    u32 cAreas = 0;
     u64 u64Anon;
     int fHhdm;
     int fTemplate;
@@ -556,92 +571,128 @@ soft_inventory_log(void)
     fTemplate = (g_pKernelPml4 != NULL && g_u64KernelCr3 != 0) ? 1 : 0;
     u64Anon = (g_pAnonCursor != NULL) ? *g_pAnonCursor : g_u64AnonNext;
 
+    /*
+     * Honesty first: freestanding soft inventory is NOT product AS/COW complete,
+     * not bar3, not 1TiB product. greppable: vmm: soft honesty
+     */
+    kprintf("vmm: soft honesty not-product-AS not-bar3 not-1TiB-product "
+            "higher_half_move=OPEN user_half_empty=OPEN product_tib=0 "
+            "bar3=OPEN wave=%u "
+            "(soft inventory only; never closes bar3; not 1TiB product)\n",
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
     /* Grep: vmm: soft inventory */
     kprintf("vmm: soft inventory hhdm=%d as_live=%u as_peak=%u cow_live=%u "
             "cow_slots=%u cow_refs=%u logs=%u template=%d wave=%u "
-            "(soft; not product AS complete; not bar3)\n",
+            "(soft; not product AS complete; not bar3; not 1TiB product)\n",
             fHhdm, g_cAsLive, g_cAsLivePeak, g_cCowLive, cCowSlots, cCowRefs,
             g_cSoftInvLogs, fTemplate, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft as */
     kprintf("vmm: soft as create=%u destroy=%u live=%u peak=%u "
             "create_fail=%u destroy_reject=%u "
             "ker_cr3=0x%lx anon_next=0x%lx band=[0x%lx,0x%lx) "
-            "share_id=%u share_slots_last=%u\n",
+            "share_id=%u share_slots_last=%u wave=%u\n",
             g_cAsCreate, g_cAsDestroy, g_cAsLive, g_cAsLivePeak,
             g_cSoftAsCreateFail, g_cSoftAsDestroyReject,
             (unsigned long)g_u64KernelCr3, (unsigned long)u64Anon,
             (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END,
-            g_cHhAsShareIdentity, g_cHhAsShareSlotsLast);
+            g_cHhAsShareIdentity, g_cHhAsShareSlotsLast,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft cow */
     kprintf("vmm: soft cow break=%u share_ok=%u share_full=%u tbl_cow=%u "
             "live=%u peak=%u frees=%u free_old=%u break_nomem=%u "
-            "slots_used=%u slots_max=%u refsum=%u\n",
+            "slots_used=%u slots_max=%u refsum=%u wave=%u\n",
             g_cCowBreak, g_cCowShareOk, g_cCowShareFull, g_cCowTable,
             g_cCowLive, g_cCowLivePeak, g_cCowFrees, g_cSoftCowFreeOld,
             g_cSoftCowBreakNomem, cCowSlots, (unsigned)GJ_COW_REF_MAX,
-            cCowRefs);
+            cCowRefs, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft hhdm */
     kprintf("vmm: soft hhdm ready=%d base=0x%lx mapped=0x%lx "
-            "pages_2mib=%u p_mem5=1 wave=%u (soft inventory)\n",
+            "pages_2mib=%u p_mem5=1 wave=%u "
+            "(soft inventory; not 1TiB product; not bar3)\n",
             fHhdm, (unsigned long)GJ_HHDM_BASE,
             (unsigned long)g_u64HhdmMapped, g_cHhdm2MiB,
             (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft device_uc */
     kprintf("vmm: soft device_uc maps=%u pages=%u pages_peak=%u "
             "reject=%u nomem=%u map_dev_reject=%u "
-            "base=0x%lx span=0x%lx\n",
+            "base=0x%lx span=0x%lx wave=%u\n",
             g_cMapDeviceUc, g_cMapDeviceUcPages, g_cMapDeviceUcPagesPeak,
             g_cSoftDevUcReject, g_cSoftDevUcNomem, g_cSoftMapDevReject,
             (unsigned long)GJ_DEVICE_MMIO_BASE,
-            (unsigned long)GJ_DEVICE_MMIO_SPAN);
+            (unsigned long)GJ_DEVICE_MMIO_SPAN,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft ensure_id */
-    kprintf("vmm: soft ensure_id calls=%u fixed=%u reject=%u nomem=%u\n",
+    kprintf("vmm: soft ensure_id calls=%u fixed=%u reject=%u nomem=%u "
+            "wave=%u\n",
             g_cEnsureIdCall, g_cEnsureIdFix, g_cSoftEnsureReject,
-            g_cSoftEnsureNomem);
+            g_cSoftEnsureNomem, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft clone */
     kprintf("vmm: soft clone call=%u ok=%u reject=%u nomem=%u "
-            "pages=%u cow=%u ro=%u\n",
+            "pages=%u cow=%u ro=%u wave=%u\n",
             g_cSoftCloneCall, g_cSoftCloneOk, g_cSoftCloneReject,
             g_cSoftCloneNomem, g_cSoftClonePages, g_cSoftCloneCow,
-            g_cSoftCloneRo);
+            g_cSoftCloneRo, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft map */
-    kprintf("vmm: soft map ok=%u inval=%u perm=%u nomem=%u "
-            "unmap_ok=%u unmap_miss=%u prot_ok=%u prot_miss=%u "
-            "prot_perm=%u\n",
+    kprintf("vmm: soft map ok=%u inval=%u perm=%u nomem=%u wave=%u\n",
             g_cSoftMapOk, g_cSoftMapInval, g_cSoftMapPerm, g_cSoftMapNomem,
-            g_cSoftUnmapOk, g_cSoftUnmapMiss, g_cSoftProtOk, g_cSoftProtMiss,
-            g_cSoftProtPerm);
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: vmm: soft unmap (Wave 15 split from map surface) */
+    kprintf("vmm: soft unmap ok=%u miss=%u wave=%u "
+            "(soft path tallies; not product gate)\n",
+            g_cSoftUnmapOk, g_cSoftUnmapMiss, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: vmm: soft prot (Wave 15 split from map surface) */
+    kprintf("vmm: soft prot ok=%u miss=%u perm=%u wave=%u "
+            "(soft path tallies; not product gate)\n",
+            g_cSoftProtOk, g_cSoftProtMiss, g_cSoftProtPerm,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft destroy */
     kprintf("vmm: soft destroy calls=%u leaf=%u priv=%u cow_drop=%u "
-            "tables=%u shared_skip=%u reject=%u live=%u\n",
+            "tables=%u shared_skip=%u reject=%u live=%u wave=%u\n",
             g_cAsDestroy, g_cSoftDestroyLeaf, g_cSoftDestroyPriv,
             g_cSoftDestroyCowDrop, g_cSoftDestroyTables, g_cSoftDestroySkip,
-            g_cSoftAsDestroyReject, g_cAsLive);
+            g_cSoftAsDestroyReject, g_cAsLive, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft reject */
     kprintf("vmm: soft reject as_create=%u as_destroy=%u dev_uc=%u "
             "dev_uc_nomem=%u map_dev=%u ensure=%u ensure_nomem=%u "
             "map_inval=%u map_perm=%u map_nomem=%u clone=%u "
-            "clone_nomem=%u cow_break_nomem=%u\n",
+            "clone_nomem=%u cow_break_nomem=%u wave=%u\n",
             g_cSoftAsCreateFail, g_cSoftAsDestroyReject, g_cSoftDevUcReject,
             g_cSoftDevUcNomem, g_cSoftMapDevReject, g_cSoftEnsureReject,
             g_cSoftEnsureNomem, g_cSoftMapInval, g_cSoftMapPerm,
             g_cSoftMapNomem, g_cSoftCloneReject, g_cSoftCloneNomem,
-            g_cSoftCowBreakNomem);
+            g_cSoftCowBreakNomem, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft peak */
     kprintf("vmm: soft peak as_live=%u cow_live=%u device_uc_pages=%u "
-            "logs=%u hh_logs=%u\n",
+            "logs=%u hh_logs=%u wave=%u\n",
             g_cAsLivePeak, g_cCowLivePeak, g_cMapDeviceUcPagesPeak,
-            g_cSoftInvLogs, g_cHhSoftLogs);
+            g_cSoftInvLogs, g_cHhSoftLogs, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft layout */
     kprintf("vmm: soft layout page=%u cow_ref_max=%u pml4_user=%u "
@@ -656,26 +707,76 @@ soft_inventory_log(void)
             (unsigned long)GJ_VMM_SOFT_USER_FLOOR,
             (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END,
             (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /*
-     * Honesty: soft inventory ≠ product higher-half move / bar3.
+     * Wave 15: PTE software-bit catalog (observe-only).
+     * Grep: vmm: soft pte
+     */
+    kprintf("vmm: soft pte p=0 w=1 u=2 ps=7 cow_sw=9 nx=63 "
+            "addr_mask=0x%lx cow_ref_max=%u wave=%u "
+            "(soft bit catalog; not product PTE policy)\n",
+            (unsigned long)PTE_ADDR_MASK, (unsigned)GJ_COW_REF_MAX,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Honesty: soft inventory ≠ product higher-half move / bar3 / 1TiB.
      * Grep: vmm: soft path
      */
     kprintf("vmm: soft path as=private_pml4+shared_kernel_half "
             "cow=ro+soft_bit hhdm=p_mem5_2mib device_uc=high_window "
             "ensure_id=repair_identity higher_half_move=OPEN "
-            "user_half_empty=OPEN identity_bridge=%u wave=%u "
-            "(soft inventory; not bar3)\n",
+            "user_half_empty=OPEN identity_bridge=%u product_tib=0 "
+            "bar3=OPEN wave=%u "
+            "(soft inventory; not bar3; not 1TiB product)\n",
             g_cHhAsShareIdentity != 0u ? 1u : 0u,
             (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: vmm: soft lamps */
     kprintf("vmm: soft lamps hhdm_ready=%d template=%d as_live=%u "
             "cow_live=%u identity_bridge=%u user_half_empty_goal=0 soft "
-            "higher_half_move=OPEN wave=%u\n",
+            "higher_half_move=OPEN product_tib=0 bar3=OPEN wave=%u\n",
             fHhdm, fTemplate, g_cAsLive, g_cCowLive,
             g_cHhAsShareIdentity != 0u ? 1u : 0u,
             (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: vmm: soft stats — rollup for agent greps (Wave 15). */
+    kprintf("vmm: soft stats as_create=%u as_destroy=%u as_live=%u "
+            "cow_break=%u cow_live=%u map_ok=%u unmap_ok=%u prot_ok=%u "
+            "clone_ok=%u dev_uc=%u ensure_fix=%u logs=%u hh_logs=%u "
+            "wave=%u\n",
+            g_cAsCreate, g_cAsDestroy, g_cAsLive, g_cCowBreak, g_cCowLive,
+            g_cSoftMapOk, g_cSoftUnmapOk, g_cSoftProtOk, g_cSoftCloneOk,
+            g_cMapDeviceUc, g_cEnsureIdFix, g_cSoftInvLogs, g_cHhSoftLogs,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 15 honesty close: product AS/COW/HHDM move remain OPEN.
+     * Grep: vmm: soft OPEN
+     */
+    kprintf("vmm: soft OPEN higher_half_move=OPEN as_product=OPEN "
+            "cow_product=OPEN hhdm_data_ok=%d user_half_empty=OPEN "
+            "product_tib=0 bar3=OPEN wave=%u "
+            "(soft inventory; not product AS complete; not bar3; "
+            "not 1TiB product)\n",
+            fHhdm, (unsigned)GJ_VMM_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Grep: vmm: soft deepen wave (Wave 15 stamp; areas = prior soft lines).
+     */
+    kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
+            "hhdm=%d template=%d as_live=%u cow_live=%u product_tib=0 "
+            "bar3=OPEN "
+            "(Wave 15 exclusive; soft only; not product; not bar3; "
+            "not 1TiB product)\n",
+            (unsigned)GJ_VMM_SOFT_WAVE, cAreas,
+            (unsigned)GJ_VMM_SOFT_AREAS, g_cSoftInvLogs, fHhdm, fTemplate,
+            g_cAsLive, g_cCowLive);
 
     /*
      * Soft lamp: template bind is soft-pass; HHDM ready is stronger smoke.
@@ -688,12 +789,16 @@ soft_inventory_log(void)
                 "wave=%u\n",
                 fHhdm, g_cAsLive, g_cSoftInvLogs,
                 (unsigned)GJ_VMM_SOFT_WAVE);
-        kprintf("vmm: soft PASS template=1 hhdm=%d wave=%u\n", fHhdm,
-                (unsigned)GJ_VMM_SOFT_WAVE);
+        kprintf("vmm: soft PASS template=1 hhdm=%d wave=%u "
+                "(soft inventory; not product; not bar3)\n",
+                fHhdm, (unsigned)GJ_VMM_SOFT_WAVE);
     } else {
-        kprintf("vmm: soft FAIL template=0 "
-                "(soft inventory only; not product gate)\n");
+        kprintf("vmm: soft FAIL template=0 wave=%u "
+                "(soft inventory only; not product gate; not bar3)\n",
+                (unsigned)GJ_VMM_SOFT_WAVE);
     }
+
+    (void)GJ_VMM_SOFT_AREAS;
 
     /* Higher-half readiness lamps + path notes (move OPEN; soft only). */
     higher_half_soft_inventory();
@@ -795,7 +900,7 @@ vmm_init(void)
             (unsigned long)g_u64KernelCr3,
             (unsigned long)GJ_VMM_ANON_BASE,
             (unsigned long)GJ_VMM_ANON_END);
-    /* Wave 13: greppable soft inventory baseline after template bind. */
+    /* Wave 15: greppable soft inventory baseline after template bind. */
     soft_inventory_log();
 }
 
@@ -887,7 +992,7 @@ vmm_hhdm_init(u64 paMax)
     kprintf("vmm: HHDM base=0x%lx mapped=0x%lx (%lu x 2MiB)\n",
             (unsigned long)GJ_HHDM_BASE, (unsigned long)paMax,
             (unsigned long)cMapped);
-    /* Wave 13: soft inventory after HHDM ready. */
+    /* Wave 15: soft inventory after HHDM ready. */
     soft_inventory_log();
     return GJ_OK;
 }

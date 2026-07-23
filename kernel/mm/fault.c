@@ -19,10 +19,9 @@
  * Honesty: soft deepen toward region→pager→views; not product pager
  * complete; not bar3; door Call + FRAME validate + real vmm_map still open.
  *
- * Soft deepen (Wave 13 exclusive; this unit only):
+ * Soft deepen (Wave 13 base; this unit only):
  *   Multi-line greppable "fault: soft …" inventory + pager soft axes:
  *     inventory | class | cluster | cookie | serial | pager | views | path
- *     deepen wave=13 stamp
  *   Cluster soft: region|free, single|multi, pages peak, probe null|live
  *   Cookie soft: create/consume fail reason lamps + live peak + bind soft
  *   Pager soft: user|kernel, r|write|exec, deadline|none, space|null,
@@ -30,21 +29,37 @@
  *   Views soft: bind axes + access tag + pages peak
  *   Never hard-gates; wrap OK. Soft ≠ product pager; soft ≠ bar3.
  *
+ * Soft deepen (Wave 15 exclusive; this unit only):
+ *   Soft Call + FRAME under CR3 inventory deepen (shape only):
+ *     honesty | inventory | class | cluster | cookie | serial |
+ *     call | frame | cr3 | views | path | deepen | PASS
+ *     deepen wave=15 stamp + surf= bitmask
+ *   Call soft: doors-like Call shape after cookie mint (not product IPC)
+ *   FRAME soft: expected-frame shape at view install; product_validate=0
+ *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
+ *   Honesty: Soft ≠ real pager product Call+FRAME under CR3; ≠ bar3.
+ *   Never hard-gates; wrap OK. Pure C freestanding.
+ *
  * greppable: FAULT_MAP_COOKIE
  * greppable: FAULT_SERIALIZATION
  * greppable: FAULT_SERIALIZATION_STATS
  * greppable: FAULT_CLUSTER_COALESCE_SOFT
  * greppable: GJ_FAULT_CLUSTER_MAX
  * greppable: fault: soft
+ * greppable: fault: soft honesty
  * greppable: fault: soft inventory
  * greppable: fault: soft class
  * greppable: fault: soft cluster
  * greppable: fault: soft cookie
  * greppable: fault: soft serial
+ * greppable: fault: soft call
  * greppable: fault: soft pager
+ * greppable: fault: soft frame
+ * greppable: fault: soft cr3
  * greppable: fault: soft views
  * greppable: fault: soft path
  * greppable: fault: soft deepen
+ * greppable: fault: soft PASS
  * greppable: fault: pager call soft
  * greppable: fault: cookie view map soft
  * greppable: fault: view install
@@ -69,11 +84,46 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 13 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 13u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 15u
 
-/* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define FAULT_SOFT_AREAS 8u
+/*
+ * Soft inventory area count (Wave 15 greppable categories for deepen stamp):
+ * honesty | inventory | class | cluster | cookie | serial |
+ * call | frame | cr3 | views | path | deepen  (=12; PASS is close lamp)
+ */
+#define FAULT_SOFT_AREAS 12u
+
+/*
+ * Soft surface bit lamps (Wave 15; surf=0x… on inventory/deepen lines).
+ * Bits mark which greppable soft areas are live in this unit — not product.
+ * greppable: fault: soft deepen
+ */
+#define FAULT_SOFT_SURF_HONESTY   (1u << 0)
+#define FAULT_SOFT_SURF_INVENTORY (1u << 1)
+#define FAULT_SOFT_SURF_CLASS     (1u << 2)
+#define FAULT_SOFT_SURF_CLUSTER   (1u << 3)
+#define FAULT_SOFT_SURF_COOKIE    (1u << 4)
+#define FAULT_SOFT_SURF_SERIAL    (1u << 5)
+#define FAULT_SOFT_SURF_CALL      (1u << 6)
+#define FAULT_SOFT_SURF_FRAME     (1u << 7)
+#define FAULT_SOFT_SURF_CR3       (1u << 8)
+#define FAULT_SOFT_SURF_VIEWS     (1u << 9)
+#define FAULT_SOFT_SURF_PATH      (1u << 10)
+#define FAULT_SOFT_SURF_DEEPEN    (1u << 11)
+#define FAULT_SOFT_SURF_PASS      (1u << 12)
+#define FAULT_SOFT_SURF_PAGER     (1u << 13) /* legacy pager-path alias */
+#define FAULT_SOFT_SURF_KILL      (1u << 14)
+#define FAULT_SOFT_SURF_FAIL      (1u << 15)
+
+/* All Wave 15 soft surfaces this unit can emit (catalog bitmask). */
+#define FAULT_SOFT_SURF_CATALOG                                                    \
+    (FAULT_SOFT_SURF_HONESTY | FAULT_SOFT_SURF_INVENTORY | FAULT_SOFT_SURF_CLASS | \
+     FAULT_SOFT_SURF_CLUSTER | FAULT_SOFT_SURF_COOKIE | FAULT_SOFT_SURF_SERIAL |  \
+     FAULT_SOFT_SURF_CALL | FAULT_SOFT_SURF_FRAME | FAULT_SOFT_SURF_CR3 |          \
+     FAULT_SOFT_SURF_VIEWS | FAULT_SOFT_SURF_PATH | FAULT_SOFT_SURF_DEEPEN |      \
+     FAULT_SOFT_SURF_PASS | FAULT_SOFT_SURF_PAGER | FAULT_SOFT_SURF_KILL |        \
+     FAULT_SOFT_SURF_FAIL)
 
 static struct gj_map_cookie g_aCookies[GJ_COOKIE_TAB];
 
@@ -179,7 +229,59 @@ static u64 g_u64SoftCookieBindSet;       /* bind with pMemObj non-NULL */
 static u64 g_u64SoftCookieInvMiss;       /* invalidate no live match */
 static u64 g_u64SoftCookieInvNull;       /* invalidate null cookie */
 
-/* Soft inventory dump emissions (Wave 13 multi-line). */
+/*
+ * Soft FRAME shape inventory (Wave 15; file-local deepen).
+ * Product: pager reply carries FRAME list; kernel validates LIVE RAM FRAMEs
+ * with rights ⊆ access before any PTE write (SOLARIS S2–S5). Soft: expected
+ * frame count = cluster pages; product_validate stays 0 — no real FRAMEs.
+ * greppable: fault: soft frame
+ * Honesty: Soft ≠ real pager product Call+FRAME under CR3.
+ */
+static u64 g_u64SoftFrameShape;       /* soft frame-shape notes (view path) */
+static u64 g_u64SoftFrameExpect;      /* sum of expected FRAME slots */
+static u64 g_u64SoftFrameExpectPeak;  /* peak expected frames on one note */
+static u64 g_u64SoftFrameMemobj;      /* shape with memobj bound */
+static u64 g_u64SoftFrameNoMemobj;    /* shape without memobj */
+static u64 g_u64SoftFrameUser;        /* cluster base in user window */
+static u64 g_u64SoftFrameKernel;      /* cluster base outside user window */
+static u64 g_u64SoftFrameWrite;       /* access includes W */
+static u64 g_u64SoftFrameExec;        /* access includes X */
+static u64 g_u64SoftFrameRead;        /* access neither W nor X */
+static u64 g_u64SoftFrameProductOk;   /* real FRAME validate success (always 0) */
+static u64 g_u64SoftFrameProductOpen; /* times product FRAME path noted OPEN */
+static u32 g_u32FrameSoftLogged;      /* rate-limited frame soft lines */
+
+/*
+ * Soft CR3 map-under-space inventory (Wave 15; file-local deepen).
+ * Product: after FRAME validate, vmm_map_page under the fault space CR3
+ * (G-AS; no ambient map). Soft: shape tallies only; product_map stays 0 —
+ * no CR3 switch, no PTE write from this unit's soft path.
+ * greppable: fault: soft cr3
+ * Honesty: Soft ≠ real pager product Call+FRAME under CR3.
+ */
+static u64 g_u64SoftCr3Shape;         /* soft CR3-map shape notes */
+static u64 g_u64SoftCr3Pages;         /* sum of pages on soft CR3 shape */
+static u64 g_u64SoftCr3PagesPeak;     /* peak pages on one soft CR3 shape */
+static u64 g_u64SoftCr3Space;         /* pSpace non-NULL (bound space soft) */
+static u64 g_u64SoftCr3NoSpace;       /* pSpace NULL */
+static u64 g_u64SoftCr3User;          /* base in user window */
+static u64 g_u64SoftCr3Kernel;        /* base outside user window */
+static u64 g_u64SoftCr3Memobj;        /* memobj bound at shape */
+static u64 g_u64SoftCr3NoMemobj;      /* no memobj at shape */
+static u64 g_u64SoftCr3ProductMap;    /* real vmm_map under CR3 (always 0) */
+static u64 g_u64SoftCr3ProductOpen;   /* times product CR3 map path noted OPEN */
+static u32 g_u32Cr3SoftLogged;        /* rate-limited CR3 soft lines */
+
+/*
+ * Soft Call+FRAME+CR3 composite open lamps (Wave 15 honesty path).
+ * greppable: fault: soft call
+ * greppable: fault: soft path
+ */
+static u64 g_u64SoftCallShape;        /* soft Call notes (alias pager call) */
+static u64 g_u64SoftCallDoorOpen;     /* product door Call still OPEN notes */
+static u64 g_u64SoftCallFrameCr3Open; /* composite product path OPEN notes */
+
+/* Soft inventory dump emissions (Wave 13 multi-line; Wave 15 deepen). */
 static u64 g_u64SoftInvLogs;
 
 static void fault_stat_add(u64 *pu64Field, u64 u64Delta);
@@ -194,6 +296,8 @@ static void fault_pager_path_inventory_log(void);
 static void fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages,
                                   u32 u32Access, void *pSpace, void *pMemObj,
                                   u64 u64DeadlineMono);
+static void fault_frame_soft_note(const struct gj_map_cookie *pCookie);
+static void fault_cr3_map_soft_note(const struct gj_map_cookie *pCookie);
 static void fault_view_install_soft(const struct gj_map_cookie *pCookie);
 static void fault_kill_on_timeout_soft(u64 u64ClusterBase, u32 u32NPages,
                                        u64 u64Deadline, u64 u64Now);
@@ -456,17 +560,20 @@ fault_pager_path_inventory_log(void)
 }
 
 /*
- * Wave 13 multi-line greppable soft inventory.
+ * Wave 15 multi-line greppable soft inventory (Wave 13 base + exclusive deepen).
  * Prefix-stable "fault: soft …" (agent / product greps):
- *   fault: soft inventory | class | cluster | cookie | serial |
- *          pager | views | path | deepen
+ *   fault: soft honesty | inventory | class | cluster | cookie | serial |
+ *          call | pager | frame | cr3 | views | path | deepen | PASS
  * greppable: fault: soft
- * Honesty: soft inventory only — not product pager; not bar3.
+ * Honesty: soft inventory only — Soft ≠ real pager product Call+FRAME
+ *          under CR3; not bar3.
  */
 static void
 fault_soft_inventory_log(void)
 {
     u32 u32Live;
+    u32 u32Surf;
+    u32 u32Areas;
     u64 u64Logs;
     u64 u64EnterOk;
     u64 u64EnterBusy;
@@ -485,11 +592,20 @@ fault_soft_inventory_log(void)
     u64 u64ClPages;
     u64 u64ClCap;
     u64 u64ClPresent;
+    u64 u64PagerCalls;
+    u64 u64Views;
+    u64 u64FrameShape;
+    u64 u64Cr3Shape;
+    u64 u64FrameProductOk;
+    u64 u64Cr3ProductMap;
+    const char *szVerdict;
 
     fault_stat_inc(&g_u64SoftInvLogs);
     u64Logs = __atomic_load_n(&g_u64SoftInvLogs, __ATOMIC_RELAXED);
     u32Live = fault_cookie_live_scan_soft();
     fault_cookie_live_peak_note();
+    u32Surf = FAULT_SOFT_SURF_CATALOG;
+    u32Areas = 0;
 
     u64EnterOk =
         __atomic_load_n(&g_faultStats.u64EnterOk, __ATOMIC_RELAXED);
@@ -525,12 +641,51 @@ fault_soft_inventory_log(void)
         __atomic_load_n(&g_faultStats.u64ClusterSoftCapHit, __ATOMIC_RELAXED);
     u64ClPresent =
         __atomic_load_n(&g_faultStats.u64ClusterSoftPresent, __ATOMIC_RELAXED);
+    u64PagerCalls =
+        __atomic_load_n(&g_u64PagerCallSoft, __ATOMIC_RELAXED);
+    u64Views =
+        __atomic_load_n(&g_u64ViewInstallSoft, __ATOMIC_RELAXED);
+    u64FrameShape =
+        __atomic_load_n(&g_u64SoftFrameShape, __ATOMIC_RELAXED);
+    u64Cr3Shape =
+        __atomic_load_n(&g_u64SoftCr3Shape, __ATOMIC_RELAXED);
+    u64FrameProductOk =
+        __atomic_load_n(&g_u64SoftFrameProductOk, __ATOMIC_RELAXED);
+    u64Cr3ProductMap =
+        __atomic_load_n(&g_u64SoftCr3ProductMap, __ATOMIC_RELAXED);
+
+    /*
+     * Soft activity verdict (inventory only; never hard-gates):
+     *   PASS  — any create/consume/call/view/frame/cr3/class soft activity
+     *   INIT  — inventory dump with no path activity yet
+     * greppable: fault: soft PASS
+     */
+    if (u64CreateOk != 0 || u64ConsumeOk != 0 || u64PagerCalls != 0 ||
+        u64Views != 0 || u64FrameShape != 0 || u64Cr3Shape != 0 ||
+        __atomic_load_n(&g_u64SoftClassCalls, __ATOMIC_RELAXED) != 0 ||
+        u64ClCalls != 0) {
+        szVerdict = "PASS";
+    } else {
+        szVerdict = "INIT";
+    }
+
+    /*
+     * Grep: fault: soft honesty
+     * Explicit non-claims — Soft ≠ real pager product Call+FRAME under CR3.
+     */
+    kprintf("fault: soft honesty not-product not-bar3 "
+            "product_call=0 product_frame=0 product_cr3_map=0 "
+            "door_call=OPEN frame_validate=OPEN cr3_map=OPEN "
+            "bar3=OPEN diagnostics=1 "
+            "(Soft≠real pager product Call+FRAME under CR3; soft only)\n");
+    u32Areas++;
 
     /* Grep: fault: soft inventory */
     kprintf("fault: soft inventory cookie_tab=%u cluster_max=%u live=%u "
             "live_peak=%llu class_calls=%llu pager_calls=%llu views=%llu "
-            "logs=%llu wave=%u "
-            "(soft; not product pager; not bar3)\n",
+            "frame_shape=%llu cr3_shape=%llu "
+            "logs=%llu surf=0x%x wave=%u "
+            "(soft; Soft≠real pager product Call+FRAME under CR3; not bar3)\n",
             (unsigned)GJ_COOKIE_TAB,
             (unsigned)GJ_FAULT_CLUSTER_MAX,
             (unsigned)u32Live,
@@ -538,15 +693,18 @@ fault_soft_inventory_log(void)
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_u64SoftClassCalls,
                                                 __ATOMIC_RELAXED),
-            (unsigned long long)__atomic_load_n(&g_u64PagerCallSoft,
-                                                __ATOMIC_RELAXED),
-            (unsigned long long)__atomic_load_n(&g_u64ViewInstallSoft,
-                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64PagerCalls,
+            (unsigned long long)u64Views,
+            (unsigned long long)u64FrameShape,
+            (unsigned long long)u64Cr3Shape,
             (unsigned long long)u64Logs,
+            (unsigned)u32Surf,
             (unsigned)FAULT_SOFT_WAVE);
+    u32Areas++;
 
     /* Grep: fault: soft class */
     fault_class_soft_log();
+    u32Areas++;
 
     /* Grep: fault: soft cluster */
     kprintf("fault: soft cluster calls=%llu expand=%llu pages=%llu "
@@ -577,6 +735,7 @@ fault_soft_inventory_log(void)
                                                 __ATOMIC_RELAXED),
             (unsigned)__atomic_load_n(&g_u32ClusterSoftLogged,
                                       __ATOMIC_RELAXED));
+    u32Areas++;
 
     /* Grep: fault: soft cookie */
     kprintf("fault: soft cookie create_ok=%llu create_fail=%llu "
@@ -632,6 +791,7 @@ fault_soft_inventory_log(void)
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_u64SoftCookieInvNull,
                                                 __ATOMIC_RELAXED));
+    u32Areas++;
 
     /* Grep: fault: soft serial */
     kprintf("fault: soft serial enter_ok=%llu enter_busy=%llu "
@@ -642,15 +802,61 @@ fault_soft_inventory_log(void)
             (unsigned long long)u64EnterInval,
             (unsigned long long)u64Leave,
             (unsigned long long)u64Waiter);
+    u32Areas++;
 
-    /* Grep: fault: soft pager */
+    /*
+     * Grep: fault: soft call
+     * Wave 15 Call soft surface (doors-like shape; not product door IPC).
+     */
+    kprintf("fault: soft call shape=%llu calls=%llu pages=%llu "
+            "pages_peak=%llu user=%llu kernel=%llu "
+            "write=%llu exec=%llu read=%llu "
+            "deadline=%llu no_deadline=%llu space=%llu no_space=%llu "
+            "memobj=%llu default_pager=%llu door_open=%llu "
+            "call_frame_cr3_open=%llu product_call=0 "
+            "(Call soft; Soft≠real pager product Call+FRAME under CR3)\n",
+            (unsigned long long)__atomic_load_n(&g_u64SoftCallShape,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64PagerCalls,
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallPages,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallPagesPeak,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallUser,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallKernel,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallWrite,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallExec,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallRead,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallDeadline,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallNoDeadline,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallSpace,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallNoSpace,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64PagerCallDefault,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCallDoorOpen,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCallFrameCr3Open,
+                                                __ATOMIC_RELAXED));
+    u32Areas++;
+
+    /* Grep: fault: soft pager (legacy Wave 13 prefix-stable). */
     kprintf("fault: soft pager calls=%llu pages=%llu pages_peak=%llu "
             "user=%llu kernel=%llu write=%llu exec=%llu read=%llu "
             "deadline=%llu no_deadline=%llu space=%llu no_space=%llu "
             "memobj=%llu default_pager=%llu "
             "(pager soft; not product door Call)\n",
-            (unsigned long long)__atomic_load_n(&g_u64PagerCallSoft,
-                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64PagerCalls,
             (unsigned long long)__atomic_load_n(&g_u64PagerCallPages,
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_u64PagerCallPagesPeak,
@@ -678,14 +884,77 @@ fault_soft_inventory_log(void)
             (unsigned long long)__atomic_load_n(&g_u64PagerCallDefault,
                                                 __ATOMIC_RELAXED));
 
+    /*
+     * Grep: fault: soft frame
+     * Wave 15 FRAME shape — expected slots only; product_validate=0.
+     */
+    kprintf("fault: soft frame shape=%llu expect=%llu expect_peak=%llu "
+            "memobj=%llu no_memobj=%llu user=%llu kernel=%llu "
+            "write=%llu exec=%llu read=%llu "
+            "product_ok=%llu product_open=%llu product_validate=0 "
+            "(FRAME soft shape; Soft≠real pager product Call+FRAME under CR3)\n",
+            (unsigned long long)u64FrameShape,
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameExpect,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameExpectPeak,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameNoMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameUser,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameKernel,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameWrite,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameExec,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameRead,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64FrameProductOk,
+            (unsigned long long)__atomic_load_n(&g_u64SoftFrameProductOpen,
+                                                __ATOMIC_RELAXED));
+    u32Areas++;
+
+    /*
+     * Grep: fault: soft cr3
+     * Wave 15 CR3 map-under-space shape — product_map=0; no CR3 switch.
+     */
+    kprintf("fault: soft cr3 shape=%llu pages=%llu pages_peak=%llu "
+            "space=%llu no_space=%llu user=%llu kernel=%llu "
+            "memobj=%llu no_memobj=%llu "
+            "product_map=%llu product_open=%llu product_cr3_map=0 "
+            "(CR3 soft shape; Soft≠real pager product Call+FRAME under CR3)\n",
+            (unsigned long long)u64Cr3Shape,
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3Pages,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3PagesPeak,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3Space,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3NoSpace,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3User,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3Kernel,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3Memobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3NoMemobj,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64Cr3ProductMap,
+            (unsigned long long)__atomic_load_n(&g_u64SoftCr3ProductOpen,
+                                                __ATOMIC_RELAXED));
+    u32Areas++;
+
     /* Grep: fault: soft views */
     kprintf("fault: soft views install=%llu pages=%llu pages_peak=%llu "
             "memobj=%llu no_memobj=%llu user=%llu kernel=%llu "
             "write=%llu exec=%llu read=%llu "
             "kill_timeout=%llu fail_inv=%llu "
             "(views of object pages; soft install; not product map)\n",
-            (unsigned long long)__atomic_load_n(&g_u64ViewInstallSoft,
-                                                __ATOMIC_RELAXED),
+            (unsigned long long)u64Views,
             (unsigned long long)__atomic_load_n(&g_u64ViewInstallPages,
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_u64ViewInstallPagesPeak,
@@ -708,36 +977,85 @@ fault_soft_inventory_log(void)
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_u64FailInvalidateSoft,
                                                 __ATOMIC_RELAXED));
+    u32Areas++;
 
     /* Grep: fault: soft path */
-    kprintf("fault: soft path create→Call→views|FAIL|kill-timeout "
+    kprintf("fault: soft path create→Call→FRAME→CR3-map|FAIL|kill-timeout "
             "cookie_secret=1 single_use=1 cluster_cap=%u "
-            "door_call=OPEN frame_map=OPEN product_pager=OPEN "
-            "bar3=OPEN (honesty; soft only)\n",
-            (unsigned)GJ_FAULT_CLUSTER_MAX);
+            "door_call=OPEN frame_validate=OPEN cr3_map=OPEN "
+            "product_pager=OPEN product_call=0 product_frame=0 "
+            "product_cr3_map=0 bar3=OPEN surf=0x%x "
+            "(honesty; Soft≠real pager product Call+FRAME under CR3)\n",
+            (unsigned)GJ_FAULT_CLUSTER_MAX,
+            (unsigned)u32Surf);
+    u32Areas++;
 
-    /* Grep: fault: soft deepen wave */
+    /* Grep: fault: soft deepen wave (Wave 15 exclusive stamp). */
+    u32Areas++; /* deepen area itself */
     kprintf("fault: soft deepen wave=%u areas=%u logs=%llu "
-            "(Wave 13 exclusive; not product pager; not bar3)\n",
+            "surf=0x%x call=%llu frame=%llu cr3=%llu "
+            "product_call=0 product_frame=0 product_cr3_map=0 "
+            "(Wave 15 exclusive; Soft≠real pager product Call+FRAME "
+            "under CR3; not bar3)\n",
             (unsigned)FAULT_SOFT_WAVE,
             (unsigned)FAULT_SOFT_AREAS,
-            (unsigned long long)u64Logs);
+            (unsigned long long)u64Logs,
+            (unsigned)u32Surf,
+            (unsigned long long)u64PagerCalls,
+            (unsigned long long)u64FrameShape,
+            (unsigned long long)u64Cr3Shape);
+
+    /*
+     * Close lamp. Grep: fault: soft PASS | fault: soft INIT
+     * Never "product PASS" / "bar3 PASS" / "Call+FRAME under CR3 PASS".
+     */
+    kprintf("fault: soft %s areas=%u surf=0x%x call=%llu frame=%llu "
+            "cr3=%llu views=%llu logs=%llu wave=%u "
+            "(soft inventory; Soft≠real pager product Call+FRAME under CR3)\n",
+            szVerdict,
+            (unsigned)FAULT_SOFT_AREAS,
+            (unsigned)u32Surf,
+            (unsigned long long)u64PagerCalls,
+            (unsigned long long)u64FrameShape,
+            (unsigned long long)u64Cr3Shape,
+            (unsigned long long)u64Views,
+            (unsigned long long)u64Logs,
+            (unsigned)FAULT_SOFT_WAVE);
+    if (szVerdict[0] == 'P') {
+        /* Grep: fault: soft inventory PASS */
+        kprintf("fault: soft inventory PASS call=%llu frame=%llu cr3=%llu "
+                "views=%llu logs=%llu wave=%u "
+                "(soft; Soft≠real pager product Call+FRAME under CR3)\n",
+                (unsigned long long)u64PagerCalls,
+                (unsigned long long)u64FrameShape,
+                (unsigned long long)u64Cr3Shape,
+                (unsigned long long)u64Views,
+                (unsigned long long)u64Logs,
+                (unsigned)FAULT_SOFT_WAVE);
+    }
 
     /* Keep legacy single-line pager inventory (prefix-stable greps). */
-    if (__atomic_load_n(&g_u64PagerCallSoft, __ATOMIC_RELAXED) != 0 ||
-        __atomic_load_n(&g_u64ViewInstallSoft, __ATOMIC_RELAXED) != 0 ||
+    if (u64PagerCalls != 0 || u64Views != 0 ||
         __atomic_load_n(&g_u64KillOnTimeoutSoft, __ATOMIC_RELAXED) != 0 ||
         __atomic_load_n(&g_u64FailInvalidateSoft, __ATOMIC_RELAXED) != 0) {
         fault_pager_path_inventory_log();
     }
+
+    /*
+     * u32Areas tracks emit order (honesty..deepen); greppable contract is
+     * FAULT_SOFT_AREAS. Silence unused if counts ever diverge in review.
+     */
+    (void)u32Areas;
 }
 
 /*
  * Soft "Call pager" after a live cookie is minted (doors-like Call shape).
  * Product: ipc_call(pager, fault_msg) with mono timeout; pager never
  * ambient-maps the client. Soft: tally + greppable only.
+ * Wave 15: also soft Call + Call+FRAME+CR3 OPEN honesty lamps.
  * greppable: fault: pager call soft
  * greppable: fault: soft pager
+ * greppable: fault: soft call
  */
 static void
 fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages, u32 u32Access,
@@ -755,6 +1073,10 @@ fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages, u32 u32Access,
     const char *szDl;
 
     fault_stat_inc(&g_u64PagerCallSoft);
+    fault_stat_inc(&g_u64SoftCallShape);
+    /* Product door Call remains OPEN — soft shape only (Wave 15 honesty). */
+    fault_stat_inc(&g_u64SoftCallDoorOpen);
+    fault_stat_inc(&g_u64SoftCallFrameCr3Open);
     fault_stat_add(&g_u64PagerCallPages, (u64)u32NPages);
 
     u64Peak = __atomic_load_n(&g_u64PagerCallPagesPeak, __ATOMIC_RELAXED);
@@ -829,16 +1151,192 @@ fault_pager_call_soft(u64 u64ClusterBase, u32 u32NPages, u32 u32Access,
 }
 
 /*
+ * Soft FRAME shape after consume (Wave 15 exclusive deepen).
+ *
+ * Product: validate LIVE RAM FRAMEs from pager reply (rights ⊆ access;
+ * no EXEC unless fault asked X) before any map (SOLARIS S2–S5). Soft:
+ * expected frame count = cluster pages; product_ok stays 0 — no real
+ * FRAME list, no CNode retype check, no PA accept.
+ *
+ * greppable: fault: soft frame
+ * Honesty: Soft ≠ real pager product Call+FRAME under CR3.
+ */
+static void
+fault_frame_soft_note(const struct gj_map_cookie *pCookie)
+{
+    u32 u32N;
+    u32 u32Pages;
+    int fWrite;
+    int fExec;
+    int fRead;
+    int fUser;
+    int fMemObj;
+    u64 u64Peak;
+    const char *szWx;
+    const char *szUk;
+    const char *szBind;
+
+    if (pCookie == NULL) {
+        return;
+    }
+    u32Pages = pCookie->u32NPages;
+    if (u32Pages == 0 || u32Pages > GJ_FAULT_CLUSTER_MAX) {
+        return;
+    }
+
+    fault_stat_inc(&g_u64SoftFrameShape);
+    fault_stat_add(&g_u64SoftFrameExpect, (u64)u32Pages);
+    u64Peak = __atomic_load_n(&g_u64SoftFrameExpectPeak, __ATOMIC_RELAXED);
+    if ((u64)u32Pages > u64Peak) {
+        __atomic_store_n(&g_u64SoftFrameExpectPeak, (u64)u32Pages,
+                         __ATOMIC_RELAXED);
+    }
+
+    fMemObj = (pCookie->pMemObj != NULL) ? 1 : 0;
+    if (fMemObj) {
+        fault_stat_inc(&g_u64SoftFrameMemobj);
+        szBind = "memobj";
+    } else {
+        fault_stat_inc(&g_u64SoftFrameNoMemobj);
+        szBind = "unbound";
+    }
+    fUser = fault_va_is_user_soft(pCookie->u64ClusterBase);
+    if (fUser) {
+        fault_stat_inc(&g_u64SoftFrameUser);
+        szUk = "user";
+    } else {
+        fault_stat_inc(&g_u64SoftFrameKernel);
+        szUk = "kernel";
+    }
+    szWx = fault_access_tag_soft(pCookie->u32Access, &fWrite, &fExec, &fRead);
+    if (fWrite) {
+        fault_stat_inc(&g_u64SoftFrameWrite);
+    }
+    if (fExec) {
+        fault_stat_inc(&g_u64SoftFrameExec);
+    }
+    if (fRead) {
+        fault_stat_inc(&g_u64SoftFrameRead);
+    }
+    /* product_ok never incremented — soft shape only. */
+    fault_stat_inc(&g_u64SoftFrameProductOpen);
+
+    u32N = __atomic_load_n(&g_u32FrameSoftLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32FrameSoftLogged, &u32N,
+                                        u32N + 1u, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            kprintf("fault: soft frame base=0x%llx expect=%u access=0x%x "
+                    "bind=%s uk=%s wx=%s product_ok=0 product_validate=0 "
+                    "(FRAME soft shape; Soft≠real pager product "
+                    "Call+FRAME under CR3)\n",
+                    (unsigned long long)pCookie->u64ClusterBase,
+                    (unsigned)u32Pages,
+                    (unsigned)pCookie->u32Access,
+                    szBind,
+                    szUk,
+                    szWx);
+        }
+    }
+}
+
+/*
+ * Soft CR3 map-under-space shape after consume (Wave 15 exclusive deepen).
+ *
+ * Product: vmm_map_page under the fault space CR3 after FRAME validate;
+ * pages owned by memory object; maps are views (Apple §2). Soft: shape
+ * tallies only; product_map stays 0 — no CR3 load, no PTE write.
+ *
+ * greppable: fault: soft cr3
+ * Honesty: Soft ≠ real pager product Call+FRAME under CR3.
+ */
+static void
+fault_cr3_map_soft_note(const struct gj_map_cookie *pCookie)
+{
+    u32 u32N;
+    u32 u32Pages;
+    int fUser;
+    int fMemObj;
+    u64 u64Peak;
+    const char *szUk;
+    const char *szSpace;
+    const char *szBind;
+
+    if (pCookie == NULL) {
+        return;
+    }
+    u32Pages = pCookie->u32NPages;
+    if (u32Pages == 0 || u32Pages > GJ_FAULT_CLUSTER_MAX) {
+        return;
+    }
+
+    fault_stat_inc(&g_u64SoftCr3Shape);
+    fault_stat_add(&g_u64SoftCr3Pages, (u64)u32Pages);
+    u64Peak = __atomic_load_n(&g_u64SoftCr3PagesPeak, __ATOMIC_RELAXED);
+    if ((u64)u32Pages > u64Peak) {
+        __atomic_store_n(&g_u64SoftCr3PagesPeak, (u64)u32Pages,
+                         __ATOMIC_RELAXED);
+    }
+
+    if (pCookie->pSpace != NULL) {
+        fault_stat_inc(&g_u64SoftCr3Space);
+        szSpace = "space";
+    } else {
+        fault_stat_inc(&g_u64SoftCr3NoSpace);
+        szSpace = "no_space";
+    }
+    fMemObj = (pCookie->pMemObj != NULL) ? 1 : 0;
+    if (fMemObj) {
+        fault_stat_inc(&g_u64SoftCr3Memobj);
+        szBind = "memobj";
+    } else {
+        fault_stat_inc(&g_u64SoftCr3NoMemobj);
+        szBind = "unbound";
+    }
+    fUser = fault_va_is_user_soft(pCookie->u64ClusterBase);
+    if (fUser) {
+        fault_stat_inc(&g_u64SoftCr3User);
+        szUk = "user";
+    } else {
+        fault_stat_inc(&g_u64SoftCr3Kernel);
+        szUk = "kernel";
+    }
+    /* product_map never incremented — soft shape only; no CR3 switch. */
+    fault_stat_inc(&g_u64SoftCr3ProductOpen);
+
+    u32N = __atomic_load_n(&g_u32Cr3SoftLogged, __ATOMIC_RELAXED);
+    if (u32N < FAULT_PAGER_PATH_LOG_MAX) {
+        if (__atomic_compare_exchange_n(&g_u32Cr3SoftLogged, &u32N,
+                                        u32N + 1u, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            kprintf("fault: soft cr3 base=0x%llx pages=%u space=%p "
+                    "via=%s bind=%s uk=%s product_map=0 "
+                    "(CR3 soft shape; Soft≠real pager product "
+                    "Call+FRAME under CR3)\n",
+                    (unsigned long long)pCookie->u64ClusterBase,
+                    (unsigned)u32Pages,
+                    pCookie->pSpace,
+                    szSpace,
+                    szBind,
+                    szUk);
+        }
+    }
+}
+
+/*
  * Soft install views of object pages after single-use cookie consume.
  *
  * Product path (open): validate FRAMEs from pager reply, then vmm_map_page
  * under the fault space CR3; pages owned by memory object; maps are views
  * (Apple §2 / CAP §1.6). Soft path: record view-install counts + greppable
  * success — no ambient PTE write without validated frames (fail closed soft).
+ * Wave 15: also soft FRAME + CR3 shape notes (product still OPEN).
  *
  * greppable: fault: cookie view map soft
  * greppable: fault: view install
  * greppable: fault: soft views
+ * greppable: fault: soft frame
+ * greppable: fault: soft cr3
  */
 static void
 fault_view_install_soft(const struct gj_map_cookie *pCookie)
@@ -898,6 +1396,15 @@ fault_view_install_soft(const struct gj_map_cookie *pCookie)
     }
 
     /*
+     * Wave 15: soft FRAME shape then soft CR3 map shape. Product path
+     * remains OPEN — Soft ≠ real pager product Call+FRAME under CR3.
+     * greppable: fault: soft frame
+     * greppable: fault: soft cr3
+     */
+    fault_frame_soft_note(pCookie);
+    fault_cr3_map_soft_note(pCookie);
+
+    /*
      * Product would call vmm_map_page per cluster page with validated FRAME
      * PAs and access→prot (W^X at map time). Soft: no PTE write without
      * frames — document as views, count install success soft only.
@@ -910,7 +1417,8 @@ fault_view_install_soft(const struct gj_map_cookie *pCookie)
                                         __ATOMIC_RELAXED)) {
             kprintf("fault: cookie view map soft base=0x%llx pages=%u "
                     "access=0x%x memobj=%p bind=%s uk=%s wx=%s "
-                    "(views of object pages; soft install; not product map)\n",
+                    "(views of object pages; soft install; not product map; "
+                    "Soft≠real pager product Call+FRAME under CR3)\n",
                     (unsigned long long)pCookie->u64ClusterBase,
                     (unsigned)u32Pages,
                     (unsigned)pCookie->u32Access,
@@ -919,7 +1427,8 @@ fault_view_install_soft(const struct gj_map_cookie *pCookie)
                     szUk,
                     szWx);
             kprintf("fault: view install pages=%u ok soft "
-                    "(region→pager→views deepen; not product pager; not bar3)\n",
+                    "(region→Call→FRAME→CR3-map soft deepen; "
+                    "Soft≠real pager product Call+FRAME under CR3; not bar3)\n",
                     (unsigned)u32Pages);
         }
     }
@@ -1587,18 +2096,23 @@ gj_fault_stats_get(struct gj_fault_stats *pOut)
         __atomic_load_n(&g_faultStats.u64ClusterSoftPresent, __ATOMIC_RELAXED);
 
     /*
-     * Wave 13: multi-line soft inventory when any soft / stats activity
+     * Wave 15: multi-line soft inventory when any soft / stats activity
      * has been noted. Never hard-gates.
-     * Honesty: soft region→pager→views deepen; not product pager; not bar3.
+     * Honesty: Soft ≠ real pager product Call+FRAME under CR3; not bar3.
+     * greppable: fault: soft honesty
      * greppable: fault: soft inventory
      * greppable: fault: soft class
      * greppable: fault: soft cluster
      * greppable: fault: soft cookie
      * greppable: fault: soft serial
+     * greppable: fault: soft call
      * greppable: fault: soft pager
+     * greppable: fault: soft frame
+     * greppable: fault: soft cr3
      * greppable: fault: soft views
      * greppable: fault: soft path
      * greppable: fault: soft deepen
+     * greppable: fault: soft PASS
      * greppable: fault: pager call soft
      */
     fAnySoft = 0;
@@ -1721,6 +2235,40 @@ gj_fault_stats_reset(void)
     __atomic_store_n(&g_u64SoftCookieInvMiss, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&g_u64SoftCookieInvNull, 0, __ATOMIC_RELAXED);
 
-    /* Soft inventory log counter (Wave 13 multi-line dumps). */
+    /* Soft inventory log counter (Wave 13 multi-line; Wave 15 deepen). */
     __atomic_store_n(&g_u64SoftInvLogs, 0, __ATOMIC_RELAXED);
+
+    /* Soft FRAME shape inventory (Wave 15). */
+    __atomic_store_n(&g_u64SoftFrameShape, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameExpect, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameExpectPeak, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameMemobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameNoMemobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameUser, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameKernel, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameWrite, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameExec, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameRead, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameProductOk, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftFrameProductOpen, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32FrameSoftLogged, 0, __ATOMIC_RELAXED);
+
+    /* Soft CR3 map-under-space inventory (Wave 15). */
+    __atomic_store_n(&g_u64SoftCr3Shape, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3Pages, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3PagesPeak, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3Space, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3NoSpace, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3User, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3Kernel, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3Memobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3NoMemobj, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3ProductMap, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCr3ProductOpen, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u32Cr3SoftLogged, 0, __ATOMIC_RELAXED);
+
+    /* Soft Call + Call+FRAME+CR3 composite open lamps (Wave 15). */
+    __atomic_store_n(&g_u64SoftCallShape, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCallDoorOpen, 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&g_u64SoftCallFrameCr3Open, 0, __ATOMIC_RELAXED);
 }

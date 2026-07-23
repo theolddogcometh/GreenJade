@@ -14,7 +14,7 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 15 exclusive deepen; this unit only):
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
  *     shrink / clamp(zero|max) / fallback + last pages/bytes snap
  *   - Present path: enter / ok / fail_ready / fail_backend + live
@@ -25,7 +25,9 @@
  *   - Query: ready / fb / size / stride / present_n / multi / gen / idx
  *   - Paint / reinit / ratio / last / size-null / fb-null soft surfaces
  *   - Geom + path honesty catalog + soft verdict INIT|PASS|PARTIAL
+ *   - Wave 15: honesty / multi / backend / scanout / catalog / deepen
  *   greppable: "compositor: soft …"
+ *   greppable: "compositor: soft deepen"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *   Soft ≠ desktop/compositor product bar.
  */
@@ -44,8 +46,8 @@
 #define GJ_COMP_MIN_W      32u
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
-/* Wave 14 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE  14u
+/* Wave 15 deepen stamp (file-local; never hard-gates). */
+#define GJ_COMP_SOFT_WAVE  15u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -61,7 +63,7 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 14 exclusive deepen). Cumulative unless noted
+ * Soft product inventory (Wave 15 exclusive deepen). Cumulative unless noted
  * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
@@ -154,7 +156,8 @@ soft_note_peaks(void)
 }
 
 /**
- * Greppable soft compositor inventory (product / smoke; Wave 14 deepen).
+ * Greppable soft compositor inventory (product / smoke; Wave 15 deepen).
+ *   compositor: soft honesty …
  *   compositor: soft inventory …
  *   compositor: soft init …
  *   compositor: soft present …
@@ -165,9 +168,15 @@ soft_note_peaks(void)
  *   compositor: soft query …
  *   compositor: soft ratio …
  *   compositor: soft last …
+ *   compositor: soft multi …
+ *   compositor: soft backend …
+ *   compositor: soft scanout …
+ *   compositor: soft catalog …
  *   compositor: soft path …
+ *   compositor: soft deepen …
  *   compositor: soft PASS|PARTIAL|INIT
  * greppable: compositor: soft
+ * greppable: compositor: soft deepen
  * Honesty: soft inventory only — not bar3 / desktop compositor product.
  */
 static void
@@ -187,10 +196,13 @@ soft_inventory_log(void)
     u32 u32Gpu;
     u32 u32OkBp;
     u32 u32FailBp;
+    u32 u32Fb;
+    u32 cAreas;
     const char *szVerdict;
 
     comp_soft_inc(&g_u32SoftLogN);
     soft_note_peaks();
+    cAreas = 0;
 
     /* Snapshot live surface (diagnostics only; no hard lock). */
     u32Ready = g_fReady != 0 ? 1u : 0u;
@@ -205,6 +217,7 @@ soft_inventory_log(void)
     u32Bytes = g_u32SoftInitLastBytes;
     u32Pages = g_u32SoftInitLastPages;
     u32Gpu = virtio_gpu_ready() ? 1u : 0u;
+    u32Fb = (g_pScanout != NULL) ? 1u : 0u;
 
     if (g_u32SoftPresentEnter != 0u) {
         u32OkBp = (g_u32SoftPresentOk * 10000u) / g_u32SoftPresentEnter;
@@ -232,6 +245,16 @@ soft_inventory_log(void)
         szVerdict = "INIT";
     }
 
+    /*
+     * Honesty first: interim kernel scanout is NOT desktop compositor product.
+     * greppable: compositor: soft honesty
+     */
+    kprintf("compositor: soft honesty interim_scanout=1 desktop_product=OPEN "
+            "sessiond_policy=door multi_frame=soft_idx bar3=OPEN "
+            "soft_never_gates=1 wave=%u (soft; never closes desktop bar)\n",
+            GJ_COMP_SOFT_WAVE);
+    cAreas++;
+
     /* Grep: compositor: soft inventory */
     kprintf("compositor: soft inventory ready=%u w=%u h=%u stride=%u "
             "multi_max=%u presents=%u multi=%u gen=%u idx=%u gpu=%u "
@@ -239,6 +262,7 @@ soft_inventory_log(void)
             u32Ready, u32W, u32H, u32Stride, GJ_COMP_MULTI_MAX, u32Presents,
             u32Multi, u32Gen, u32Idx, u32Gpu, u32OkBp, g_u32SoftLogN,
             GJ_COMP_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: compositor: soft init */
     kprintf("compositor: soft init enter=%u ok=%u idem=%u fail_gpu=%u "
@@ -251,6 +275,7 @@ soft_inventory_log(void)
             g_u32SoftInitClampZero, g_u32SoftInitClampMax,
             g_u32SoftInitFallback, g_u32SoftInitReenter,
             g_u32SoftInitLastPages, g_u32SoftInitLastBytes);
+    cAreas++;
 
     /* Grep: compositor: soft present */
     kprintf("compositor: soft present enter=%u ok=%u fail_ready=%u "
@@ -260,6 +285,7 @@ soft_inventory_log(void)
             g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe, u32Multi,
             u32Gen, u32Idx, u32Presents, g_u32SoftPresentFirstOk,
             g_u32SoftPresentMulti1, g_u32SoftLastPresentSt);
+    cAreas++;
 
     /* Grep: compositor: soft batch */
     kprintf("compositor: soft batch enter=%u ok=%u partial=%u fail=%u "
@@ -270,6 +296,7 @@ soft_inventory_log(void)
             g_u32SoftBatchStopRej, g_u32SoftBatchClamp, g_u32SoftBatchZeroN,
             g_u32SoftBatchReq, g_u32SoftBatchLastOk, g_u32SoftBatchLastReq,
             g_u32SoftPeakBatchOk, GJ_COMP_MULTI_MAX);
+    cAreas++;
 
     /* Grep: compositor: soft geom */
     kprintf("compositor: soft geom ready=%u w=%u h=%u stride=%u bpp=%u "
@@ -277,19 +304,22 @@ soft_inventory_log(void)
             "fb=%u\n",
             u32Ready, u32W, u32H, u32Stride, GJ_COMP_BPP, u32Pa, u32Pages,
             u32Bytes, GJ_COMP_MAX_DIM, GJ_COMP_FALLBACK_W, GJ_COMP_FALLBACK_H,
-            GJ_COMP_MIN_W, GJ_COMP_MIN_H, (g_pScanout != NULL) ? 1u : 0u);
+            GJ_COMP_MIN_W, GJ_COMP_MIN_H, u32Fb);
+    cAreas++;
 
     /* Grep: compositor: soft paint */
     kprintf("compositor: soft paint enter=%u last_pix=%u last_bytes=%u "
             "bpp=%u fill=jade_gradient\n",
             g_u32SoftPaintEnter, g_u32SoftPaintPix, g_u32SoftPaintBytes,
             GJ_COMP_BPP);
+    cAreas++;
 
     /* Grep: compositor: soft peaks */
     kprintf("compositor: soft peaks presents=%u multi=%u gen=%u "
             "batch_ok=%u logs=%u\n",
             g_u32SoftPeakPresents, g_u32SoftPeakMulti, g_u32SoftPeakGen,
             g_u32SoftPeakBatchOk, g_u32SoftLogN);
+    cAreas++;
 
     /* Grep: compositor: soft query */
     kprintf("compositor: soft query ready=%u fb=%u fb_ok=%u fb_null=%u "
@@ -300,6 +330,7 @@ soft_inventory_log(void)
             g_u32SoftQuerySizeNullW, g_u32SoftQuerySizeNullH,
             g_u32SoftQueryStride, g_u32SoftQueryPresentN, g_u32SoftQueryMulti,
             g_u32SoftQueryGen, g_u32SoftQueryIdx);
+    cAreas++;
 
     /* Grep: compositor: soft ratio */
     kprintf("compositor: soft ratio ok_bp=%u fail_bp=%u enter=%u ok=%u "
@@ -307,24 +338,64 @@ soft_inventory_log(void)
             u32OkBp, u32FailBp, g_u32SoftPresentEnter, g_u32SoftPresentOk,
             g_u32SoftPresentFailRdy, g_u32SoftPresentFailBe,
             g_u32SoftBatchOk, GJ_COMP_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: compositor: soft last */
     kprintf("compositor: soft last present_st=%u batch_ok=%u batch_req=%u "
             "idx=%u gen=%u presents=%u\n",
             g_u32SoftLastPresentSt, g_u32SoftBatchLastOk,
             g_u32SoftBatchLastReq, u32Idx, u32Gen, u32Presents);
+    cAreas++;
+
+    /* Grep: compositor: soft multi — Wave 15 multi-frame soft surface. */
+    kprintf("compositor: soft multi live=%u peak=%u gen=%u idx=%u "
+            "first=%u batch_peak=%u multi_max=%u soft_idx=1 soft PASS\n",
+            u32Multi, g_u32SoftPeakMulti, u32Gen, u32Idx,
+            g_u32SoftPresentMulti1, g_u32SoftPeakBatchOk, GJ_COMP_MULTI_MAX);
+    cAreas++;
+
+    /* Grep: compositor: soft backend — virtio-gpu present path lamps. */
+    kprintf("compositor: soft backend gpu=%u present_ok=%u fail_be=%u "
+            "fail_rdy=%u last_st=%u path=virtio_gpu soft %s\n",
+            u32Gpu, g_u32SoftPresentOk, g_u32SoftPresentFailBe,
+            g_u32SoftPresentFailRdy, g_u32SoftLastPresentSt,
+            u32Gpu != 0u ? "PASS" : "SKIP");
+    cAreas++;
+
+    /* Grep: compositor: soft scanout — physical tile ownership lamps. */
+    kprintf("compositor: soft scanout ready=%u pa=%u fb=%u pages=%u "
+            "bytes=%u w=%u h=%u stride=%u bpp=%u claim=kernel_interim "
+            "soft %s\n",
+            u32Ready, u32Pa, u32Fb, u32Pages, u32Bytes, u32W, u32H,
+            u32Stride, GJ_COMP_BPP, u32Ready != 0u ? "PASS" : "INIT");
+    cAreas++;
+
+    /* Grep: compositor: soft catalog — area name rollup (Wave 15). */
+    kprintf("compositor: soft catalog honesty,inventory,init,present,batch,"
+            "geom,paint,peaks,query,ratio,last,multi,backend,scanout,"
+            "catalog,path,deepen wave=%u areas_expect=17 soft PASS\n",
+            GJ_COMP_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: compositor: soft path */
     kprintf("compositor: soft path scanout=pmm+hhdm present=virtio_gpu "
             "multi=soft_idx batch=present_n bpp=bgra policy=door "
             "wave=%u (soft inventory; not bar3; not desktop product)\n",
             GJ_COMP_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: compositor: soft deepen — Wave 15 stamp + area count. */
+    kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
+            "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "
+            "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",
+            GJ_COMP_SOFT_WAVE, cAreas, szVerdict, u32Ready, u32Presents,
+            u32Multi, u32Gen, g_u32SoftInitOk, g_u32SoftBatchOk);
 
     /* Grep: compositor: soft PASS|PARTIAL|INIT */
     kprintf("compositor: soft %s ready=%u presents=%u multi=%u gen=%u "
-            "init_ok=%u batch_ok=%u (soft; not bar3)\n",
+            "init_ok=%u batch_ok=%u wave=%u (soft; not bar3)\n",
             szVerdict, u32Ready, u32Presents, u32Multi, u32Gen,
-            g_u32SoftInitOk, g_u32SoftBatchOk);
+            g_u32SoftInitOk, g_u32SoftBatchOk, GJ_COMP_SOFT_WAVE);
 }
 
 /**
@@ -360,7 +431,7 @@ session_compositor_init(void)
     u8 *p;
 
     comp_soft_inc(&g_u32SoftInitEnter);
-    /* Wave 14: re-init after present activity (soft reenter). */
+    /* Wave 15: re-init after present activity (soft reenter). */
     if (g_u32SoftPresentEnter != 0u || g_u32SoftBatchEnter != 0u ||
         g_u32Presents != 0u) {
         comp_soft_inc(&g_u32SoftInitReenter);

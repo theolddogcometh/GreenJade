@@ -18,13 +18,16 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 13 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 15 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
  *   notify: soft wait inventory    — wait/poll/CAS/block catalog + counters
  *   notify: soft pulse             — path tallies (hit/dead split/wake/…)
+ *   notify: soft pulse outcome     — Wave 15 hit/dead/wake rollup
+ *   notify: soft pulse dead        — Wave 15 null/ready/state split surface
  *   notify: soft wait              — path tallies (enter/hit/park/… splits)
+ *   notify: soft wait outcome      — Wave 15 hit/park/dead/poll rollup
  *   notify: soft multi             — multi-wake call/sum/zero/peak surface
  *   notify: soft badge             — pending/last/zero_coalesce/bits soft
  *   notify: soft install           — install ok + fail splits
@@ -32,6 +35,9 @@
  *   notify: soft mark_dead         — mark_dead + ready/revoke surface
  *   notify: soft msix              — global MSI-X bind / live snapshot
  *   notify: soft query             — accessor sample tallies
+ *   notify: soft capacity          — multi_max / tag / heap lamps
+ *   notify: soft catalog           — path surface catalog (impl vs not)
+ *   notify: soft deepen            — wave=15 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -49,6 +55,8 @@
  *   notify: soft mark_dead         — mark_dead + abort path
  *   notify: soft install ok        — cap install success
  *   notify: soft install fail      — cap install rejected
+ * Honesty: soft multi-waiter ≠ multi-process notify product
+ *   (multi_proc=0 / soft_ne_multi_proc=1). Soft ≠ bar3.
  * greppable: notify: soft
  */
 #include <gj/cap.h>
@@ -62,12 +70,18 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
+/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
+#define NOTIFY_SOFT_DEEPEN_WAVE  15u
+/* Fixed greppable categories emitted under "notify: soft …". */
+#define NOTIFY_SOFT_DEEPEN_AREAS 22u
+
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped on product return paths; never hard-gate behavior.
  * Pulse path is IRQ-callable → atomic RMW only (no kprintf).
- * Wave 13 deepen: pulse/wait splits + multi + badge + install + query +
- * msix + path surfaces.
+ * Wave 15 deepen: pulse/wait splits + multi + badge + install + query +
+ * msix + capacity + catalog + outcome + path surfaces.
+ * Soft multi-waiter ≠ multi-process notify product.
  * greppable: notify: soft stats
  * greppable: notify: soft
  */
@@ -273,14 +287,18 @@ notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
 }
 
 /**
- * Greppable soft pulse/wait inventory + Wave 13 deepen surfaces.
+ * Greppable soft pulse/wait inventory + Wave 15 deepen surfaces.
  * Called from notify_msix_init and once after first wait activity.
  * Never allocates; not for hard-IRQ (kprintf only from product paths).
+ * Soft multi-waiter ≠ multi-process notify product (multi_proc=0).
  * greppable: notify: soft inventory
  * greppable: notify: soft pulse inventory
  * greppable: notify: soft wait inventory
  * greppable: notify: soft pulse
+ * greppable: notify: soft pulse outcome
+ * greppable: notify: soft pulse dead
  * greppable: notify: soft wait
+ * greppable: notify: soft wait outcome
  * greppable: notify: soft multi
  * greppable: notify: soft badge
  * greppable: notify: soft install
@@ -288,8 +306,12 @@ notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
  * greppable: notify: soft mark_dead
  * greppable: notify: soft msix
  * greppable: notify: soft query
+ * greppable: notify: soft capacity
+ * greppable: notify: soft catalog
+ * greppable: notify: soft deepen
  * greppable: notify: soft path
  * greppable: notify: soft stats
+ * greppable: notify: soft inventory PASS / notify: soft PASS
  */
 static void
 notify_soft_log(void)
@@ -434,25 +456,29 @@ notify_soft_log(void)
     /*
      * Catalog lines (prefix-stable): declare multi-waiter capacity and the
      * pulse/wait soft path surface so smoke/scripts can grep product depth
-     * without parsing C. Wave 13 deepen splits pulse/wait/multi/badge/
-     * install/abort/msix/query/path.
+     * without parsing C. Wave 15 deepen splits pulse/wait/multi/badge/
+     * install/abort/msix/query/capacity/catalog/outcome/path.
+     * Soft multi-waiter ≠ multi-process notify product.
      */
     /* Grep: notify: soft inventory */
     kprintf("notify: soft inventory multi_max=%u tag_waiter=%u "
             "paths=pulse,signal,wait,poll,abort,mark_dead,install,msix "
             "cas=pending_and_mask park=thread_block+schedule "
             "wake=thread_wake soft_log=%lu msix_init=%lu inits=%lu "
-            "wave=13\n",
+            "areas=%u multi_proc=0 wave=%u\n",
             (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
             (unsigned long)s.u64SoftLog, (unsigned long)s.u64MsixInit,
-            (unsigned long)s.u64Init);
+            (unsigned long)s.u64Init,
+            (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft pulse inventory */
     kprintf("notify: soft pulse inventory or=u64Pending "
             "zero_coalesce=bit0 wake=soft_multi_max irq_safe=atomics "
             "enter=%lu hit=%lu dead=%lu dead_null=%lu dead_ready=%lu "
             "dead_state=%lu zero_coalesce=%lu wake=%lu nowaiter=%lu "
-            "signal_alias=%lu multi_wake_calls=%lu multi_wake_sum=%lu\n",
+            "signal_alias=%lu multi_wake_calls=%lu multi_wake_sum=%lu "
+            "wave=%u\n",
             (unsigned long)s.u64PulseEnter,
             (unsigned long)s.u64PulseHit, (unsigned long)s.u64PulseDead,
             (unsigned long)s.u64PulseDeadNull,
@@ -463,7 +489,8 @@ notify_soft_log(void)
             (unsigned long)s.u64PulseNoWaiter,
             (unsigned long)s.u64SignalAlias,
             (unsigned long)s.u64MultiWakeCalls,
-            (unsigned long)s.u64MultiWakeSum);
+            (unsigned long)s.u64MultiWakeSum,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft wait inventory */
     kprintf("notify: soft wait inventory park=thread_block+schedule "
@@ -471,7 +498,8 @@ notify_soft_log(void)
             "paths=hit,park,poll_miss,dead,cas_retry,self_wake,mask_any "
             "enter=%lu hit=%lu park=%lu poll_miss=%lu dead=%lu "
             "cas_retry=%lu self_wake=%lu mask_any=%lu poll=%lu "
-            "block=%lu noblock=%lu register=%lu no_thr=%lu loop=%lu\n",
+            "block=%lu noblock=%lu register=%lu no_thr=%lu loop=%lu "
+            "wave=%u\n",
             (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
             (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
             (unsigned long)s.u64WaitDead, (unsigned long)s.u64WaitCasRetry,
@@ -479,12 +507,14 @@ notify_soft_log(void)
             (unsigned long)s.u64Poll, (unsigned long)s.u64WaitBlock,
             (unsigned long)s.u64WaitNoblock,
             (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
-            (unsigned long)s.u64WaitLoop);
+            (unsigned long)s.u64WaitLoop,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft pulse — path tallies (Wave 13 deepen) */
+    /* Grep: notify: soft pulse — path tallies (Wave 15 deepen) */
     kprintf("notify: soft pulse enter=%lu hit=%lu dead=%lu "
             "dead_null=%lu dead_ready=%lu dead_state=%lu "
-            "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu\n",
+            "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu "
+            "wave=%u\n",
             (unsigned long)s.u64PulseEnter, (unsigned long)s.u64PulseHit,
             (unsigned long)s.u64PulseDead,
             (unsigned long)s.u64PulseDeadNull,
@@ -493,13 +523,33 @@ notify_soft_log(void)
             (unsigned long)s.u64PulseZeroCoalesce,
             (unsigned long)s.u64PulseWake,
             (unsigned long)s.u64PulseNoWaiter,
-            (unsigned long)s.u64SignalAlias);
+            (unsigned long)s.u64SignalAlias,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft wait — path tallies (Wave 13 deepen) */
+    /* Grep: notify: soft pulse outcome — Wave 15 rollup */
+    kprintf("notify: soft pulse outcome hit=%lu dead=%lu wake=%lu "
+            "nowaiter=%lu zero_coalesce=%lu signal_alias=%lu wave=%u\n",
+            (unsigned long)s.u64PulseHit, (unsigned long)s.u64PulseDead,
+            (unsigned long)s.u64PulseWake,
+            (unsigned long)s.u64PulseNoWaiter,
+            (unsigned long)s.u64PulseZeroCoalesce,
+            (unsigned long)s.u64SignalAlias,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /* Grep: notify: soft pulse dead — Wave 15 split surface */
+    kprintf("notify: soft pulse dead total=%lu null=%lu ready=%lu "
+            "state=%lu wave=%u\n",
+            (unsigned long)s.u64PulseDead,
+            (unsigned long)s.u64PulseDeadNull,
+            (unsigned long)s.u64PulseDeadReady,
+            (unsigned long)s.u64PulseDeadState,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /* Grep: notify: soft wait — path tallies (Wave 15 deepen) */
     kprintf("notify: soft wait enter=%lu hit=%lu park=%lu poll_miss=%lu "
             "dead=%lu dead_enter=%lu dead_loop=%lu cas_retry=%lu "
             "self_wake=%lu mask_any=%lu block=%lu noblock=%lu "
-            "register=%lu no_thr=%lu loop=%lu poll=%lu\n",
+            "register=%lu no_thr=%lu loop=%lu poll=%lu wave=%u\n",
             (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
             (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
             (unsigned long)s.u64WaitDead,
@@ -510,12 +560,36 @@ notify_soft_log(void)
             (unsigned long)s.u64WaitMaskAny, (unsigned long)s.u64WaitBlock,
             (unsigned long)s.u64WaitNoblock,
             (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
-            (unsigned long)s.u64WaitLoop, (unsigned long)s.u64Poll);
+            (unsigned long)s.u64WaitLoop, (unsigned long)s.u64Poll,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft multi */
+    /* Grep: notify: soft wait outcome — Wave 15 rollup */
+    kprintf("notify: soft wait outcome hit=%lu park=%lu poll_miss=%lu "
+            "dead=%lu cas_retry=%lu self_wake=%lu register=%lu "
+            "no_thr=%lu wave=%u\n",
+            (unsigned long)s.u64WaitHit, (unsigned long)s.u64WaitPark,
+            (unsigned long)s.u64WaitPollMiss, (unsigned long)s.u64WaitDead,
+            (unsigned long)s.u64WaitCasRetry,
+            (unsigned long)s.u64WaitSelfWake,
+            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /* Grep: notify: soft wait dead — Wave 15 enter/loop split */
+    kprintf("notify: soft wait dead total=%lu enter=%lu loop=%lu "
+            "wave=%u\n",
+            (unsigned long)s.u64WaitDead,
+            (unsigned long)s.u64WaitDeadEnter,
+            (unsigned long)s.u64WaitDeadLoop,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: notify: soft multi
+     * Soft multi-waiter wake budget — not multi-process notify product.
+     */
     kprintf("notify: soft multi calls=%lu sum=%lu zero=%lu null=%lu "
             "peak_woken=%lu peak_waiters=%lu multi_max=%u "
-            "tag_waiter=%u hint=pWaiter count=u32Waiters\n",
+            "tag_waiter=%u hint=pWaiter count=u32Waiters multi_proc=0 "
+            "soft_ne_multi_proc=1 wave=%u\n",
             (unsigned long)s.u64MultiWakeCalls,
             (unsigned long)s.u64MultiWakeSum,
             (unsigned long)s.u64MultiWakeZero,
@@ -523,71 +597,101 @@ notify_soft_log(void)
             (unsigned long)s.u64MultiWakePeak,
             (unsigned long)s.u64WaitersPeak,
             (unsigned)NOTIFY_SOFT_MULTI_MAX,
-            (unsigned)NOTIFY_TAG_WAITER);
+            (unsigned)NOTIFY_TAG_WAITER,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft badge */
     kprintf("notify: soft badge pending=0x%lx pending_bits=%u "
             "last=0x%lx last_bits=%u zero_coalesce=%lu bits_sum=%lu "
-            "last_or=0x%lx coalesce_policy=bit0\n",
+            "last_or=0x%lx coalesce_policy=bit0 wave=%u\n",
             (unsigned long)u64Pending, (unsigned)u32PendBits,
             (unsigned long)u64Last, (unsigned)u32LastBits,
             (unsigned long)s.u64PulseZeroCoalesce,
             (unsigned long)s.u64BadgeBitsSum,
-            (unsigned long)s.u64BadgeLastOr);
+            (unsigned long)s.u64BadgeLastOr,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft install */
     kprintf("notify: soft install ok=%lu fail=%lu fail_null=%lu "
             "fail_dead=%lu fail_cap=%lu default_rights=%lu "
-            "cap=GJ_CAP_NOTIFICATION\n",
+            "cap=GJ_CAP_NOTIFICATION wave=%u\n",
             (unsigned long)s.u64InstallOk,
             (unsigned long)s.u64InstallFail,
             (unsigned long)s.u64InstallFailNull,
             (unsigned long)s.u64InstallFailDead,
             (unsigned long)s.u64InstallFailCap,
-            (unsigned long)s.u64InstallDefaultRights);
+            (unsigned long)s.u64InstallDefaultRights,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft abort */
     kprintf("notify: soft abort enter=%lu wake=%lu nowaiter=%lu "
-            "badge=none multi_wake=1\n",
+            "badge=none multi_wake=1 wave=%u\n",
             (unsigned long)s.u64Abort, (unsigned long)s.u64AbortWake,
-            (unsigned long)s.u64AbortNoWaiter);
+            (unsigned long)s.u64AbortNoWaiter,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft mark_dead */
     kprintf("notify: soft mark_dead enter=%lu revoke=%lu force=%lu "
-            "abort_follow=1 ready_clear=1\n",
+            "abort_follow=1 ready_clear=1 wave=%u\n",
             (unsigned long)s.u64MarkDead,
             (unsigned long)s.u64MarkDeadRevoke,
-            (unsigned long)s.u64MarkDeadForce);
+            (unsigned long)s.u64MarkDeadForce,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft msix */
     kprintf("notify: soft msix init=%lu skip=%lu global=%lu ready=%u "
             "live=%u signals=%u pending=0x%lx last=0x%lx waiters=%u "
-            "has_waiter=%u soft_multi_max=%u\n",
+            "has_waiter=%u soft_multi_max=%u wave=%u\n",
             (unsigned long)s.u64MsixInit,
             (unsigned long)s.u64MsixInitSkip,
             (unsigned long)s.u64MsixGlobal, (unsigned)u32Ready,
             (unsigned)u32Live, (unsigned)u32Signals,
             (unsigned long)u64Pending, (unsigned long)u64Last,
             (unsigned)u32Waiters, (unsigned)u32HasWaiter,
-            (unsigned)NOTIFY_SOFT_MULTI_MAX);
+            (unsigned)NOTIFY_SOFT_MULTI_MAX,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft query */
     kprintf("notify: soft query signals=%lu pending=%lu last_badge=%lu "
-            "waiters=%lu is_live=%lu is_live_yes=%lu is_live_no=%lu\n",
+            "waiters=%lu is_live=%lu is_live_yes=%lu is_live_no=%lu "
+            "wave=%u\n",
             (unsigned long)s.u64QuerySignals,
             (unsigned long)s.u64QueryPending,
             (unsigned long)s.u64QueryLastBadge,
             (unsigned long)s.u64QueryWaiters,
             (unsigned long)s.u64QueryIsLive,
             (unsigned long)s.u64QueryIsLiveYes,
-            (unsigned long)s.u64QueryIsLiveNo);
+            (unsigned long)s.u64QueryIsLiveNo,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft path */
+    /* Grep: notify: soft capacity — fixed multi / tag lamps */
+    kprintf("notify: soft capacity multi_max=%u tag_waiter=%u heap=0 "
+            "multi_proc=0 process_queue=0 spin_product=0 irq_alloc=0 "
+            "wave=%u\n",
+            (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: notify: soft catalog — path surface catalog (impl vs not).
+     * Soft multi-waiter threads on one object; multi-process product open.
+     */
+    kprintf("notify: soft catalog pulse=1 signal_alias=1 wait=1 poll=1 "
+            "abort=1 mark_dead=1 install=1 msix=1 soft_multi=1 "
+            "multi_proc=0 cross_proc_queue=0 bar3=0 wave=%u\n",
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: notify: soft path
+     * Honesty: soft multi-waiter ≠ multi-process notify product; not bar3.
+     */
     kprintf("notify: soft path claim=badge_pulse_wait "
             "irq=pulse_or+soft_multi_wake cas=pending_and_mask "
             "multi_max=%u tag_waiter=%u park=thread_block+schedule "
-            "wave=13 (soft inventory; not bar3)\n",
-            (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER);
+            "multi_proc=0 soft_ne_multi_proc=1 "
+            "wave=%u (soft inventory; not bar3; not multi-process notify "
+            "product)\n",
+            (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
     /* Grep: notify: soft stats */
     kprintf("notify: soft stats init=%lu pulse_hit=%lu pulse_dead=%lu "
@@ -597,7 +701,7 @@ notify_soft_log(void)
             "wait_self_wake=%lu wait_mask_any=%lu poll=%lu "
             "abort=%lu abort_wake=%lu mark_dead=%lu "
             "install_ok=%lu install_fail=%lu multi_wake_calls=%lu "
-            "multi_wake_sum=%lu soft_log=%lu msix_init=%lu wave=13\n",
+            "multi_wake_sum=%lu soft_log=%lu msix_init=%lu wave=%u\n",
             (unsigned long)s.u64Init, (unsigned long)s.u64PulseHit,
             (unsigned long)s.u64PulseDead,
             (unsigned long)s.u64PulseZeroCoalesce,
@@ -613,7 +717,43 @@ notify_soft_log(void)
             (unsigned long)s.u64InstallOk, (unsigned long)s.u64InstallFail,
             (unsigned long)s.u64MultiWakeCalls,
             (unsigned long)s.u64MultiWakeSum, (unsigned long)s.u64SoftLog,
-            (unsigned long)s.u64MsixInit);
+            (unsigned long)s.u64MsixInit,
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+
+    /* Grep: notify: soft deepen wave (Wave 15 stamp) */
+    kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
+            "wait_enter=%lu multi_calls=%lu msix_init=%lu soft_log=%lu "
+            "multi_proc=0 ok=1 skip=0\n",
+            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE,
+            (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
+            (unsigned long)s.u64PulseEnter,
+            (unsigned long)s.u64WaitEnter,
+            (unsigned long)s.u64MultiWakeCalls,
+            (unsigned long)s.u64MsixInit,
+            (unsigned long)s.u64SoftLog);
+
+    /*
+     * Soft lamp: MSI-X bind ready (or inventory emission). Never hard-gates.
+     * Grep: notify: soft inventory PASS | notify: soft PASS
+     */
+    if (u32Ready != 0u && u32Live != 0u) {
+        kprintf("notify: soft inventory PASS ready=%u live=%u "
+                "soft_log=%lu areas=%u multi_proc=0 wave=%u\n",
+                (unsigned)u32Ready, (unsigned)u32Live,
+                (unsigned long)s.u64SoftLog,
+                (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
+                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+        kprintf("notify: soft PASS wave=%u areas=%u soft_log=%lu\n",
+                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE,
+                (unsigned)NOTIFY_SOFT_DEEPEN_AREAS,
+                (unsigned long)s.u64SoftLog);
+    } else {
+        kprintf("notify: soft FAIL ready=%u live=%u "
+                "(soft inventory only; not product gate; not multi-process "
+                "notify) wave=%u\n",
+                (unsigned)u32Ready, (unsigned)u32Live,
+                (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+    }
 }
 
 /** Soft: one-shot deep inventory after first product wait activity. */

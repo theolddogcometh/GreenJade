@@ -7,17 +7,24 @@
  * Does not enable IRQs, translate, write commands, or drain the input
  * buffer (smoke-safe). No GPL source; public 8042 layout only.
  *
- * Wave 13 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
- *   ps2: soft inventory  — dual status + port + float/stable snapshot
+ * Wave 15 exclusive soft deepen (this unit only — greppable "ps2: soft …"):
+ *   ps2: soft inventory  — dual status + port + float/stable + wave stamp
  *   ps2: soft flags      — full 8-bit status field inventory
  *   ps2: soft bits       — per-bit soft PASS lamps (public layout)
  *   ps2: soft mask       — status bit mask constants (HCL map)
  *   ps2: soft ports      — public 8042 port map (no BAR)
+ *   ps2: soft regs       — status/data/cmd offset map (port-space)
  *   ps2: soft sense      — float/stable/busy/ready/xor composite
+ *   ps2: soft pop        — status bit popcount + idle/err composite
  *   ps2: soft channel    — kbd vs aux soft role (OBF+AUX observe)
  *   ps2: soft dual       — dual status sample (side-effect free)
+ *   ps2: soft sample     — read count / xor / stable lamps
+ *   ps2: soft irq        — IRQ1/IRQ12 map inventory (never enable)
  *   ps2: soft path       — honesty: no IRQ/translate/drain/cmd
+ *   ps2: soft honesty    — bar3/product-input non-claims
  *   ps2: soft identify   — float-aware soft identify PASS
+ *   ps2: soft deepen     — wave=15 areas stamp
+ *   ps2: soft stats      — emission tallies
  *   ps2: soft inventory PASS|SKIP
  *   ps2: soft PASS|SKIP
  * Smoke marker (unchanged prefix):
@@ -31,14 +38,26 @@
 #define PS2_CMD_PORT    0x64u
 
 /* Status register bits (Intel 8042 public layout) */
-#define PS2_ST_OBF 0x01u /* output buffer full (data ready) */
-#define PS2_ST_IBF 0x02u /* input buffer full (controller busy) */
-#define PS2_ST_SYS 0x04u /* system flag (POST set) */
-#define PS2_ST_A2  0x08u /* command/data (A2) — last write was cmd */
-#define PS2_ST_INH 0x10u /* keyboard inhibit family (active-low sense) */
-#define PS2_ST_AUX 0x20u /* aux output buffer / transmit timeout family */
-#define PS2_ST_TO  0x40u /* timeout / receive timeout family */
+#define PS2_ST_OBF  0x01u /* output buffer full (data ready) */
+#define PS2_ST_IBF  0x02u /* input buffer full (controller busy) */
+#define PS2_ST_SYS  0x04u /* system flag (POST set) */
+#define PS2_ST_A2   0x08u /* command/data (A2) — last write was cmd */
+#define PS2_ST_INH  0x10u /* keyboard inhibit family (active-low sense) */
+#define PS2_ST_AUX  0x20u /* aux output buffer / transmit timeout family */
+#define PS2_ST_TO   0x40u /* timeout / receive timeout family */
 #define PS2_ST_PERR 0x80u /* parity error */
+
+/* Classic PC/AT IRQ map (inventory only — never programmed here). */
+#define PS2_IRQ_KBD 1u
+#define PS2_IRQ_AUX 12u
+
+/* Wave 15 deepen area count (fixed greppable categories in inventory log). */
+#define PS2_SOFT_DEEPEN_AREAS 17u
+#define PS2_SOFT_DEEPEN_WAVE  15u
+
+/* Soft inventory emission tallies (wrap OK; never hard-gate). */
+static u32 g_u32SoftInvLogs;
+static u32 g_u32SoftProbeLogs;
 
 static inline u8
 inb(u16 u16Port)
@@ -49,8 +68,23 @@ inb(u16 u16Port)
     return u8Val;
 }
 
+/** Soft popcount of 8-bit status (inventory only). */
+static u8
+ps2_soft_pop8(u8 u8V)
+{
+    u8 u8N = 0;
+    u8 u8B;
+
+    for (u8B = 0; u8B < 8u; u8B++) {
+        if ((u8V & (u8)(1u << u8B)) != 0u) {
+            u8N++;
+        }
+    }
+    return u8N;
+}
+
 /**
- * Wave 13 greppable soft inventory dump (product / smoke).
+ * Wave 15 greppable soft inventory dump (product / smoke).
  * Decode one dual status sample into prefix-stable "ps2: soft …" lines.
  * Read-only; never touches data port or command writes.
  *
@@ -72,12 +106,20 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
     u8 u8Busy = u8Ibf;
     u8 u8DataReady = u8Obf;
     u8 u8Xor = (u8)(u8Status ^ u8Status2);
+    u8 u8Pop = ps2_soft_pop8(u8Status);
     u8 u8KbdCh;
     u8 u8AuxCh;
     u8 u8Idle;
     u8 u8ErrLike;
+    u8 u8Ok;
+    u8 u8Skip;
     const char *szChannel;
     const char *szVerdict;
+    const char *szState;
+
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
+    }
 
     /*
      * Soft channel role from observe-only status (no 0x60 drain):
@@ -99,12 +141,34 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
     }
 
     /*
+     * Soft composite state tag (inventory only):
+     *   float — bus float 0xff
+     *   busy  — IBF set (controller input buffer full)
+     *   ready — OBF set (data pending; not drained)
+     *   err   — TO or PERR observed
+     *   idle  — otherwise
+     */
+    if (u8Float != 0u) {
+        szState = "float";
+    } else if (u8ErrLike != 0u) {
+        szState = "err";
+    } else if (u8Busy != 0u) {
+        szState = "busy";
+    } else if (u8DataReady != 0u) {
+        szState = "ready";
+    } else {
+        szState = "idle";
+    }
+
+    /*
      * Soft verdict (inventory only; never claims IRQ1/IRQ12):
      *   PASS — status port readable (PC/QEMU always; float still PASS)
      *   SKIP — reserved (greppable parity with other HCL soft probes)
      * Floating 0xff remains PASS on the port-IO path; float=1 distinguishes.
      */
     szVerdict = "PASS";
+    u8Ok = 1u;
+    u8Skip = 0u;
 
     /*
      * Grep: ps2: soft inventory
@@ -112,21 +176,24 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
      */
     kprintf("ps2: soft inventory status=0x%x status2=0x%x port=0x%x "
             "path=portio float=%u stable=%u xor=0x%x channel=%s "
-            "err_like=%u wave=13\n",
+            "err_like=%u state=%s pop=%u logs=%u wave=%u areas=%u\n",
             (unsigned)u8Status, (unsigned)u8Status2,
             (unsigned)PS2_STATUS_PORT, (unsigned)u8Float,
             (unsigned)u8Stable, (unsigned)u8Xor, szChannel,
-            (unsigned)u8ErrLike);
+            (unsigned)u8ErrLike, szState, (unsigned)u8Pop,
+            (unsigned)g_u32SoftInvLogs, (unsigned)PS2_SOFT_DEEPEN_WAVE,
+            (unsigned)PS2_SOFT_DEEPEN_AREAS);
 
     /* Grep: ps2: soft flags — full 8-bit status field inventory */
     kprintf("ps2: soft flags obf=%u ibf=%u sys=%u a2=%u inh=%u aux=%u "
-            "to=%u perr=%u raw=0x%x\n",
+            "to=%u perr=%u raw=0x%x wave=%u\n",
             (unsigned)u8Obf, (unsigned)u8Ibf, (unsigned)u8Sys,
             (unsigned)u8A2, (unsigned)u8Inh, (unsigned)u8Aux,
-            (unsigned)u8To, (unsigned)u8Perr, (unsigned)u8Status);
+            (unsigned)u8To, (unsigned)u8Perr, (unsigned)u8Status,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
-     * Grep: ps2: soft bits — per-bit soft PASS lamps (Wave 13 deepen).
+     * Grep: ps2: soft bits — per-bit soft PASS lamps (Wave 15 deepen).
      * Each public status bit greppable on its own for HCL / continuum.
      */
     kprintf("ps2: soft bits OBF=%u soft PASS\n", (unsigned)u8Obf);
@@ -137,49 +204,82 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
     kprintf("ps2: soft bits AUX=%u soft PASS\n", (unsigned)u8Aux);
     kprintf("ps2: soft bits TO=%u soft PASS\n", (unsigned)u8To);
     kprintf("ps2: soft bits PERR=%u soft PASS\n", (unsigned)u8Perr);
-    kprintf("ps2: soft bits pop=8 soft PASS raw=0x%x\n",
-            (unsigned)u8Status);
+    kprintf("ps2: soft bits pop=8 soft PASS raw=0x%x wave=%u\n",
+            (unsigned)u8Status, (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
      * Grep: ps2: soft mask — public bit mask constants (compile-time HCL).
      * Values are Intel 8042 layout; never written, inventory only.
      */
     kprintf("ps2: soft mask OBF=0x%x IBF=0x%x SYS=0x%x A2=0x%x "
-            "INH=0x%x AUX=0x%x TO=0x%x PERR=0x%x soft PASS\n",
+            "INH=0x%x AUX=0x%x TO=0x%x PERR=0x%x soft PASS wave=%u\n",
             (unsigned)PS2_ST_OBF, (unsigned)PS2_ST_IBF,
             (unsigned)PS2_ST_SYS, (unsigned)PS2_ST_A2,
             (unsigned)PS2_ST_INH, (unsigned)PS2_ST_AUX,
-            (unsigned)PS2_ST_TO, (unsigned)PS2_ST_PERR);
+            (unsigned)PS2_ST_TO, (unsigned)PS2_ST_PERR,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /* Grep: ps2: soft ports — public 8042 port map (no BAR) */
     kprintf("ps2: soft ports data=0x%x status=0x%x cmd=0x%x bar=n/a "
-            "space=portio width=8 soft PASS\n",
+            "space=portio width=8 soft PASS wave=%u\n",
             (unsigned)PS2_DATA_PORT, (unsigned)PS2_STATUS_PORT,
-            (unsigned)PS2_CMD_PORT);
+            (unsigned)PS2_CMD_PORT, (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft regs — port-space offset map (Wave 15) */
+    kprintf("ps2: soft regs DATA=0x%x STATUS=0x%x CMD=0x%x "
+            "space=portio soft PASS wave=%u\n",
+            (unsigned)PS2_DATA_PORT, (unsigned)PS2_STATUS_PORT,
+            (unsigned)PS2_CMD_PORT, (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
      * Grep: ps2: soft sense — composite lamps from dual sample.
      * float / stable / busy / data_ready / err_like / xor depth.
      */
     kprintf("ps2: soft sense float=%u stable=%u busy=%u data_ready=%u "
-            "err_like=%u xor=0x%x soft PASS\n",
+            "err_like=%u xor=0x%x state=%s soft PASS wave=%u\n",
             (unsigned)u8Float, (unsigned)u8Stable, (unsigned)u8Busy,
-            (unsigned)u8DataReady, (unsigned)u8ErrLike, (unsigned)u8Xor);
+            (unsigned)u8DataReady, (unsigned)u8ErrLike, (unsigned)u8Xor,
+            szState, (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft pop — status bit popcount + idle/err (Wave 15) */
+    kprintf("ps2: soft pop bits=%u idle=%u err_like=%u float=%u "
+            "raw=0x%x soft PASS wave=%u\n",
+            (unsigned)u8Pop, (unsigned)u8Idle, (unsigned)u8ErrLike,
+            (unsigned)u8Float, (unsigned)u8Status,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
      * Grep: ps2: soft channel — kbd/aux/idle role from OBF+AUX only.
      * Observe-only; does not drain OBF via 0x60.
      */
     kprintf("ps2: soft channel role=%s kbd=%u aux=%u idle=%u "
-            "obf=%u aux_bit=%u drain=0 soft PASS\n",
+            "obf=%u aux_bit=%u drain=0 soft PASS wave=%u\n",
             szChannel, (unsigned)u8KbdCh, (unsigned)u8AuxCh,
-            (unsigned)u8Idle, (unsigned)u8Obf, (unsigned)u8Aux);
+            (unsigned)u8Idle, (unsigned)u8Obf, (unsigned)u8Aux,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /* Grep: ps2: soft dual — dual status sample (side-effect free) */
     kprintf("ps2: soft dual s0=0x%x s1=0x%x xor=0x%x stable=%u "
-            "reads=2 soft PASS\n",
+            "reads=2 soft PASS wave=%u\n",
             (unsigned)u8Status, (unsigned)u8Status2,
-            (unsigned)u8Xor, (unsigned)u8Stable);
+            (unsigned)u8Xor, (unsigned)u8Stable,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /* Grep: ps2: soft sample — dual-read geometry (Wave 15) */
+    kprintf("ps2: soft sample reads=2 s0=0x%x s1=0x%x xor=0x%x "
+            "stable=%u float=%u soft PASS wave=%u\n",
+            (unsigned)u8Status, (unsigned)u8Status2, (unsigned)u8Xor,
+            (unsigned)u8Stable, (unsigned)u8Float,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: ps2: soft irq — classic IRQ map inventory only.
+     * Never programs PIC/APIC; never enables IRQ1/IRQ12.
+     */
+    kprintf("ps2: soft irq kbd_irq=%u aux_irq=%u enable=0 unmask=0 "
+            "pic_write=0 soft PASS wave=%u\n",
+            (unsigned)PS2_IRQ_KBD, (unsigned)PS2_IRQ_AUX,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
      * Grep: ps2: soft path — explicit non-claim of product input path.
@@ -189,8 +289,17 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
      */
     kprintf("ps2: soft path claim=0 irq=0 irq1=0 irq12=0 translate=0 "
             "drain=0 cmd_write=0 data_read=0 spin=0 busy=%u "
-            "data_ready=%u portio=1 via=status soft PASS\n",
-            (unsigned)u8Busy, (unsigned)u8DataReady);
+            "data_ready=%u portio=1 via=status wave=%u soft PASS\n",
+            (unsigned)u8Busy, (unsigned)u8DataReady,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: ps2: soft honesty — Wave 15 non-claims (soft inventory only).
+     * Product input remains virtio-input / USB HID; bar3 stays open.
+     */
+    kprintf("ps2: soft honesty product_input=0 virtio_input=1 usb_hid=1 "
+            "bar3=open claim=0 irq_enable=0 wave=%u soft PASS\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /*
      * Soft identify outcome. Floating 0xff is still reported as soft
@@ -199,24 +308,42 @@ ps2_soft_inventory(u8 u8Status, u8 u8Status2)
      */
     if (u8Float != 0u) {
         kprintf("ps2: soft identify float=1 raw=0x%x channel=%s "
-                "stable=%u PASS\n",
-                (unsigned)u8Status, szChannel, (unsigned)u8Stable);
+                "stable=%u state=%s wave=%u PASS\n",
+                (unsigned)u8Status, szChannel, (unsigned)u8Stable, szState,
+                (unsigned)PS2_SOFT_DEEPEN_WAVE);
     } else {
         kprintf("ps2: soft identify float=0 obf=%u ibf=%u sys=%u "
                 "a2=%u inh=%u aux=%u to=%u perr=%u channel=%s "
-                "raw=0x%x PASS\n",
+                "state=%s raw=0x%x wave=%u PASS\n",
                 (unsigned)u8Obf, (unsigned)u8Ibf, (unsigned)u8Sys,
                 (unsigned)u8A2, (unsigned)u8Inh, (unsigned)u8Aux,
-                (unsigned)u8To, (unsigned)u8Perr, szChannel,
-                (unsigned)u8Status);
+                (unsigned)u8To, (unsigned)u8Perr, szChannel, szState,
+                (unsigned)u8Status, (unsigned)PS2_SOFT_DEEPEN_WAVE);
     }
+
+    /* Grep: ps2: soft deepen wave (Wave 15 stamp) */
+    kprintf("ps2: soft deepen wave=%u areas=%u via=portio float=%u "
+            "stable=%u channel=%s state=%s ok=%u skip=%u\n",
+            (unsigned)PS2_SOFT_DEEPEN_WAVE, (unsigned)PS2_SOFT_DEEPEN_AREAS,
+            (unsigned)u8Float, (unsigned)u8Stable, szChannel, szState,
+            (unsigned)u8Ok, (unsigned)u8Skip);
+
+    /* Grep: ps2: soft stats */
+    kprintf("ps2: soft stats inv_logs=%u probe_logs=%u status=0x%x "
+            "float=%u wave=%u\n",
+            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProbeLogs,
+            (unsigned)u8Status, (unsigned)u8Float,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 
     /* Grep: ps2: soft inventory PASS|SKIP / ps2: soft PASS|SKIP */
     kprintf("ps2: soft inventory %s via=portio float=%u stable=%u "
-            "channel=%s\n",
-            szVerdict, (unsigned)u8Float, (unsigned)u8Stable, szChannel);
-    kprintf("ps2: soft %s via=portio status=0x%x channel=%s wave=13\n",
-            szVerdict, (unsigned)u8Status, szChannel);
+            "channel=%s wave=%u areas=%u\n",
+            szVerdict, (unsigned)u8Float, (unsigned)u8Stable, szChannel,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE, (unsigned)PS2_SOFT_DEEPEN_AREAS);
+    kprintf("ps2: soft %s via=portio status=0x%x channel=%s state=%s "
+            "wave=%u\n",
+            szVerdict, (unsigned)u8Status, szChannel, szState,
+            (unsigned)PS2_SOFT_DEEPEN_WAVE);
 }
 
 /**
@@ -236,6 +363,10 @@ ps2_probe(void)
      */
     u8Status = inb(PS2_STATUS_PORT);
     u8Status2 = inb(PS2_STATUS_PORT);
+
+    if (g_u32SoftProbeLogs < 0xffffffffu) {
+        g_u32SoftProbeLogs++;
+    }
 
     /* Smoke marker — prefix-stable for scripts/smoke-all.sh need_mb. */
     kprintf("ps2: status=0x%x probe PASS\n", u8Status);

@@ -11,16 +11,17 @@
  * Live soft bytes are subtracted on free; lifetime soft charged/released
  * and soft waste-hit events are cumulative (wrap OK; diagnostics only).
  *
- * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 15 exclusive deepen; this unit only):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live soft: align / unsplit / frag / peak / used / free / free_blocks
  *   - Lifetime: charged / released / net / peak components / max-one
  *   - Waste events: waste_allocs/frees, align/unsplit hits, take_whole
  *   - Fail taxonomy: zero / uninit / oversize / oom / double_free
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
- *   - Path catalog + stats rollup + deepen wave=14 + PASS/NONE
+ *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
+ *   - Path catalog + stats rollup + deepen wave=15 + PASS/NONE
  *   greppable: "kheap: soft …"
- *   Never hard-gates; diagnostics only (wrap OK).
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
  * Greppable:
  *   kheap: init
@@ -34,9 +35,14 @@
  *   kheap: soft waste …
  *   kheap: soft fail …
  *   kheap: soft ops …
+ *   kheap: soft design …     (Wave 15 geometry)
+ *   kheap: soft freelist …   (Wave 15 free-list walk snap)
+ *   kheap: soft grow …       (Wave 15 PMM grow surface)
+ *   kheap: soft scrub …      (Wave 15 zero/scrub policy lamps)
+ *   kheap: soft lamps …      (Wave 15 readiness lamps)
  *   kheap: soft path …
  *   kheap: soft stats …
- *   kheap: soft deepen wave=14 …
+ *   kheap: soft deepen wave=15 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -46,6 +52,9 @@
 #include <gj/pmm.h>
 #include <gj/string.h>
 #include <gj/vmm.h>
+
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 15u
 
 /* Live / free magic — detects double-free and obvious header corruption. */
 #define GJ_KHEAP_MAGIC_LIVE  0x4B4C4956u /* 'KLIV' */
@@ -478,6 +487,54 @@ kheap_get_stats(struct kheap_stats *pOut)
     pOut->cDoubleFree = g_cDoubleFree;
 }
 
+/**
+ * Soft freelist walk (Wave 15): min/max free payload, walk length, magic
+ * mismatch soft count. Diagnostics only — never mutates freelist.
+ */
+static void
+soft_freelist_scan(size_t *pCbMin, size_t *pCbMax, size_t *pCbSum,
+                   u32 *pCWalk, u32 *pCBadMagic)
+{
+    struct kheap_block *pCur;
+    size_t cbMin = 0;
+    size_t cbMax = 0;
+    size_t cbSum = 0;
+    u32 cWalk = 0;
+    u32 cBad = 0;
+    int fFirst = 1;
+
+    for (pCur = g_pFree; pCur != NULL; pCur = pCur->pNext) {
+        cWalk++;
+        if (pCur->u32Magic != GJ_KHEAP_MAGIC_FREE) {
+            cBad++;
+            continue;
+        }
+        cbSum += pCur->cbSize;
+        if (fFirst != 0 || pCur->cbSize < cbMin) {
+            cbMin = pCur->cbSize;
+        }
+        if (fFirst != 0 || pCur->cbSize > cbMax) {
+            cbMax = pCur->cbSize;
+        }
+        fFirst = 0;
+    }
+    if (pCbMin != NULL) {
+        *pCbMin = cbMin;
+    }
+    if (pCbMax != NULL) {
+        *pCbMax = cbMax;
+    }
+    if (pCbSum != NULL) {
+        *pCbSum = cbSum;
+    }
+    if (pCWalk != NULL) {
+        *pCWalk = cWalk;
+    }
+    if (pCBadMagic != NULL) {
+        *pCBadMagic = cBad;
+    }
+}
+
 void
 kheap_dump_stats(void)
 {
@@ -485,6 +542,15 @@ kheap_dump_stats(void)
     u64 u64SoftNet;
     u32 cAreas = 0;
     int fPass;
+    size_t cbFreeMin;
+    size_t cbFreeMax;
+    size_t cbFreeSumWalk;
+    u32 cFreeWalk;
+    u32 cBadMagic;
+    u32 u32Hdr;
+    u32 u32UtilPct;
+    u32 u32SoftPct;
+    size_t cbLiveTotal;
 
     cbSoftLive = g_cbSoftAlign + g_cbSoftUnsplit;
     /* Lifetime net: charged - released (0 if released ahead; wrap-safe). */
@@ -495,6 +561,9 @@ kheap_dump_stats(void)
     }
     g_cSoftLogN++;
 
+    soft_freelist_scan(&cbFreeMin, &cbFreeMax, &cbFreeSumWalk, &cFreeWalk,
+                       &cBadMagic);
+
     /*
      * Soft PASS lamp: heap inited and has seen grow or live free pool.
      * Diagnostics only — never product / bar3 / 1TiB claim.
@@ -502,6 +571,23 @@ kheap_dump_stats(void)
     fPass = (g_fInit != 0 && (g_cGrow > 0 || g_cbFree > 0 || g_cAlloc > 0))
                 ? 1
                 : 0;
+
+    /* Soft util % of live payload vs free (0 if empty; cap 100). */
+    cbLiveTotal = g_cbUsed + g_cbFree;
+    if (cbLiveTotal == 0) {
+        u32UtilPct = 0;
+        u32SoftPct = 0;
+    } else {
+        u32UtilPct = (u32)((g_cbUsed * 100u) / cbLiveTotal);
+        if (u32UtilPct > 100u) {
+            u32UtilPct = 100u;
+        }
+        u32SoftPct = (u32)((cbSoftLive * 100u) / cbLiveTotal);
+        if (u32SoftPct > 100u) {
+            u32SoftPct = 100u;
+        }
+    }
+    u32Hdr = (u32)sizeof(struct kheap_block);
 
     kprintf("kheap: stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_align=%lu soft_unsplit=%lu\n",
@@ -521,10 +607,11 @@ kheap_dump_stats(void)
             (unsigned long)g_cDoubleFree);
 
     /*
-     * Soft heap inventory deepen (Wave 14) — greppable: kheap: soft
+     * Soft heap inventory deepen (Wave 15) — greppable: kheap: soft
      * Baseline line preserves prior greps (allocs/frees/bytes + waste).
      * Catalog: honesty | inventory | live | lifetime | waste | fail |
-     *          ops | path | stats | deepen | PASS|NONE
+     *          ops | design | freelist | grow | scrub | lamps |
+     *          path | stats | deepen | PASS|NONE
      */
     /*
      * Honesty first: freestanding soft inventory is NOT product / bar3 /
@@ -532,7 +619,9 @@ kheap_dump_stats(void)
      */
     kprintf("kheap: soft honesty not-product not-bar3 not-1TiB-product "
             "product_tib=0 bar3=OPEN freelist=soft_only diagnostics=1 "
-            "multi_page=OPEN (soft inventory only; never closes bar3)\n");
+            "multi_page=OPEN coalesce=OPEN wave=%u "
+            "(soft inventory only; never closes bar3)\n",
+            (unsigned)KHEAP_SOFT_WAVE);
     cAreas++;
 
     /* Grep: kheap: soft (baseline) */
@@ -558,17 +647,19 @@ kheap_dump_stats(void)
     /* Grep: kheap: soft inventory */
     kprintf("kheap: soft inventory page_payload=%lu split_min=%lu "
             "align=16 policy=best_fit grow=pmm_page magic=live+free "
-            "logs=%lu init=%d wave=14 (soft; not bar3; not 1TiB product)\n",
+            "logs=%lu init=%d wave=%u "
+            "(soft; not product; not bar3; not 1TiB product)\n",
             (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
             (unsigned long)GJ_KHEAP_SPLIT_MIN,
             (unsigned long)g_cSoftLogN,
-            g_fInit);
+            g_fInit,
+            (unsigned)KHEAP_SOFT_WAVE);
     cAreas++;
 
     /* Grep: kheap: soft live */
     kprintf("kheap: soft live frag=%lu align=%lu unsplit=%lu peak=%lu "
             "used=%lu used_peak=%lu free=%lu free_blocks=%lu "
-            "free_blocks_peak=%lu\n",
+            "free_blocks_peak=%lu util_pct=%u soft_pct=%u\n",
             (unsigned long)cbSoftLive,
             (unsigned long)g_cbSoftAlign,
             (unsigned long)g_cbSoftUnsplit,
@@ -577,7 +668,9 @@ kheap_dump_stats(void)
             (unsigned long)g_cbUsedPeak,
             (unsigned long)g_cbFree,
             (unsigned long)g_cFreeBlocks,
-            (unsigned long)g_cFreeBlocksPeak);
+            (unsigned long)g_cFreeBlocksPeak,
+            u32UtilPct,
+            u32SoftPct);
     cAreas++;
 
     /* Grep: kheap: soft lifetime */
@@ -629,12 +722,95 @@ kheap_dump_stats(void)
     cAreas++;
 
     /*
+     * Wave 15: design geometry (constants only; not product capacity).
+     * greppable: kheap: soft design
+     */
+    kprintf("kheap: soft design page=%u hdr=%u page_payload=%lu "
+            "split_min=%lu align=16 policy=best_fit single_page=1 "
+            "multi_page=OPEN coalesce=OPEN max_one_alloc=%lu "
+            "wave=%u (soft geometry; not product)\n",
+            (unsigned)GJ_PAGE_SIZE,
+            u32Hdr,
+            (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
+            (unsigned long)GJ_KHEAP_SPLIT_MIN,
+            (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 15: freelist walk snap (read-only).
+     * greppable: kheap: soft freelist
+     */
+    kprintf("kheap: soft freelist blocks=%lu walk=%u sum_walk=%lu "
+            "accounted=%lu min=%lu max=%lu bad_magic=%u head=%u "
+            "peak_blocks=%lu (soft walk; not product)\n",
+            (unsigned long)g_cFreeBlocks,
+            cFreeWalk,
+            (unsigned long)cbFreeSumWalk,
+            (unsigned long)g_cbFree,
+            (unsigned long)cbFreeMin,
+            (unsigned long)cbFreeMax,
+            cBadMagic,
+            g_pFree != NULL ? 1u : 0u,
+            (unsigned long)g_cFreeBlocksPeak);
+    cAreas++;
+
+    /*
+     * Wave 15: grow surface (one PMM page per grow).
+     * greppable: kheap: soft grow
+     */
+    kprintf("kheap: soft grow count=%lu oom=%lu page_payload=%lu "
+            "page_size=%u hhdm_aware=1 multi_page=OPEN "
+            "wave=%u (soft; not product; not bar3)\n",
+            (unsigned long)g_cGrow,
+            (unsigned long)g_cSoftFailOom,
+            (unsigned long)GJ_KHEAP_PAGE_PAYLOAD,
+            (unsigned)GJ_PAGE_SIZE,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 15: scrub/zero policy lamps (always-on soft contract).
+     * greppable: kheap: soft scrub
+     */
+    kprintf("kheap: soft scrub zero_on_alloc=1 scrub_on_free=1 "
+            "magic_live=0x%x magic_free=0x%x double_free_guard=1 "
+            "coalesce=OPEN wave=%u "
+            "(soft policy; not product; not bar3)\n",
+            (unsigned)GJ_KHEAP_MAGIC_LIVE,
+            (unsigned)GJ_KHEAP_MAGIC_FREE,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
+     * Wave 15: readiness lamps (soft only).
+     * greppable: kheap: soft lamps
+     */
+    kprintf("kheap: soft lamps init=%d ready=%u head=%u free_bytes=%lu "
+            "used_bytes=%lu grow=%lu fail=%lu double_free=%lu "
+            "util_pct=%u soft_pct=%u wave=%u "
+            "(soft lamps; not product; not bar3; not 1TiB product)\n",
+            g_fInit,
+            fPass ? 1u : 0u,
+            g_pFree != NULL ? 1u : 0u,
+            (unsigned long)g_cbFree,
+            (unsigned long)g_cbUsed,
+            (unsigned long)g_cGrow,
+            (unsigned long)g_cFail,
+            (unsigned long)g_cDoubleFree,
+            u32UtilPct,
+            u32SoftPct,
+            (unsigned)KHEAP_SOFT_WAVE);
+    cAreas++;
+
+    /*
      * Soft path honesty: surface catalog + explicit non-claims.
      * greppable: kheap: soft path
      */
     kprintf("kheap: soft path claim=freelist+pmm_grow scrub=free "
             "zero=alloc policy=best_fit align=16 single_page=1 "
-            "multi_page=OPEN product_tib=0 bar3=OPEN "
+            "multi_page=OPEN coalesce=OPEN design=1 freelist_walk=1 "
+            "grow=1 scrub=1 lamps=1 product_tib=0 bar3=OPEN "
             "(soft inventory; not product; not bar3; not 1TiB product)\n");
     cAreas++;
 
@@ -642,7 +818,8 @@ kheap_dump_stats(void)
     kprintf("kheap: soft stats used=%lu free=%lu free_blocks=%lu "
             "soft_frag=%lu soft_peak=%lu charged=%lu released=%lu net=%lu "
             "allocs=%lu frees=%lu grow=%lu split=%lu fail=%lu "
-            "waste_allocs=%lu logs=%lu init=%d\n",
+            "waste_allocs=%lu free_min=%lu free_max=%lu "
+            "util_pct=%u logs=%lu init=%d wave=%u\n",
             (unsigned long)g_cbUsed,
             (unsigned long)g_cbFree,
             (unsigned long)g_cFreeBlocks,
@@ -657,20 +834,28 @@ kheap_dump_stats(void)
             (unsigned long)g_cSplit,
             (unsigned long)g_cFail,
             (unsigned long)g_cSoftWasteAlloc,
+            (unsigned long)cbFreeMin,
+            (unsigned long)cbFreeMax,
+            u32UtilPct,
             (unsigned long)g_cSoftLogN,
-            g_fInit);
+            g_fInit,
+            (unsigned)KHEAP_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: kheap: soft deepen wave (Wave 14 stamp; areas = prior soft lines). */
-    kprintf("kheap: soft deepen wave=14 areas=%u logs=%lu init=%d "
-            "used=%lu free=%lu soft_frag=%lu product_tib=0 bar3=OPEN "
+    /* Grep: kheap: soft deepen wave (Wave 15 stamp; areas = prior soft lines). */
+    kprintf("kheap: soft deepen wave=%u areas=%u logs=%lu init=%d "
+            "used=%lu free=%lu soft_frag=%lu free_min=%lu free_max=%lu "
+            "product_tib=0 bar3=OPEN "
             "(soft; not product; not bar3; not 1TiB product)\n",
+            (unsigned)KHEAP_SOFT_WAVE,
             cAreas,
             (unsigned long)g_cSoftLogN,
             g_fInit,
             (unsigned long)g_cbUsed,
             (unsigned long)g_cbFree,
-            (unsigned long)cbSoftLive);
+            (unsigned long)cbSoftLive,
+            (unsigned long)cbFreeMin,
+            (unsigned long)cbFreeMax);
 
     /*
      * Close markers: freelist soft readiness only.
@@ -679,22 +864,26 @@ kheap_dump_stats(void)
      */
     if (fPass) {
         /* Grep: kheap: soft PASS | kheap: soft inventory PASS */
-        kprintf("kheap: soft PASS grow=%lu free=%lu allocs=%lu "
+        kprintf("kheap: soft PASS grow=%lu free=%lu allocs=%lu wave=%u "
                 "(soft inventory; not product; not bar3; not 1TiB product)\n",
                 (unsigned long)g_cGrow,
                 (unsigned long)g_cbFree,
-                (unsigned long)g_cAlloc);
-        kprintf("kheap: soft inventory PASS logs=%lu soft_frag=%lu "
+                (unsigned long)g_cAlloc,
+                (unsigned)KHEAP_SOFT_WAVE);
+        kprintf("kheap: soft inventory PASS logs=%lu soft_frag=%lu wave=%u "
                 "(soft; not product; not bar3; not 1TiB product)\n",
                 (unsigned long)g_cSoftLogN,
-                (unsigned long)cbSoftLive);
+                (unsigned long)cbSoftLive,
+                (unsigned)KHEAP_SOFT_WAVE);
     } else {
         /* Grep: kheap: soft NONE */
         kprintf("kheap: soft NONE init=%d grow=%lu free=%lu allocs=%lu "
+                "wave=%u "
                 "(soft inventory; not product; not bar3; not 1TiB product)\n",
                 g_fInit,
                 (unsigned long)g_cGrow,
                 (unsigned long)g_cbFree,
-                (unsigned long)g_cAlloc);
+                (unsigned long)g_cAlloc,
+                (unsigned)KHEAP_SOFT_WAVE);
     }
 }

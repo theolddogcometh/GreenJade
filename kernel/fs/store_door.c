@@ -22,7 +22,7 @@
  *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
  *   soft reclaim of the map (re-install PTEs, re-export).
  *
- * Soft store inventory (Wave 12 base; Wave 14 exclusive soft deepen):
+ * Soft store inventory (Wave 12 base; Wave 14 deepen; Wave 15 exclusive):
  *   - Ownership: claim / reclaim / release / busy / claim_inval
  *   - Meta: stats/cap/queue/flush ok|inval|fault|nodev splits
  *   - Sector R/W: read/write ok + io/inval/nodev/fault + blk|scsi
@@ -31,6 +31,7 @@
  *   - Aggregate err + ok + not_init + last op/ret/lba snapshot
  *   - Path catalog + xfer ceiling + backend live snapshot
  *   - Wave 14: per-op enter, peak lba/cb, copy path, catalog, PASS
+ *   - Wave 15: ratio|headroom|surface|deepen (wave=15 areas=14)
  *   greppable: "store_door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *
@@ -188,7 +189,7 @@ store_soft_note_err(i64 i64R)
 /**
  * Greppable soft store inventory (product / smoke). Wave 12 base; Wave 14 deepen.
  *   store_door: soft inventory calls=… rw=… claims=… reclaims=…
- *        ring_calls=… owned=… map_va=0x… token=… wave=14
+ *        ring_calls=… owned=… map_va=0x… token=… wave=15
  *   store_door: soft own claim=… reclaim=… release=… release_free=…
  *        claim_inval=… claim_busy=… release_inval=…
  *   store_door: soft meta stats=… stats_inval=… stats_fault=… cap=…
@@ -225,7 +226,7 @@ store_soft_inventory_log(void)
     /* Grep: store_door: soft inventory */
     kprintf("store_door: soft inventory calls=%u rw=%u claims=%u "
             "reclaims=%u ring_calls=%u owned=%u map_va=0x%lx token=0x%x "
-            "logs=%u wave=14\n",
+            "logs=%u wave=15\n",
             g_u32Calls, g_u32DoorRw, g_u32Claims, g_u32Reclaims,
             g_u32RingCalls, u32Owned, (unsigned long)g_u64RingMapVa,
             g_u32OwnerToken, g_u32SoftLogs);
@@ -293,7 +294,7 @@ store_soft_inventory_log(void)
      */
     /* Grep: store_door: soft total */
     kprintf("store_door: soft total ok=%u fail_like=%u calls=%u logs=%u "
-            "unknown=%u not_init=%u wave=14\n",
+            "unknown=%u not_init=%u wave=15\n",
             g_u32SoftOk,
             g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy + g_u32SoftFault +
                 g_u32SoftIo + g_u32SoftNosupport,
@@ -326,23 +327,66 @@ store_soft_inventory_log(void)
     /* Grep: store_door: soft catalog */
     kprintf("store_door: soft catalog xfer_max=%u sector=%u "
             "ops=claim,release,stats,cap,read,write,queue,flush,"
-            "export,map,kick,ring_state wave=14\n",
+            "export,map,kick,ring_state wave=15\n",
             (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR);
 
     /* Grep: store_door: soft path */
     kprintf("store_door: soft path claim=storaged rw=blk|scsi "
             "ring=export|map|kick|state reclaim=idempotent "
             "map_remap=soft_reclaim flush=soft_ok "
-            "wave=14 (soft inventory; not bar3)\n");
+            "wave=15 (soft inventory; not bar3)\n");
+
+    /*
+     * Wave 15 exclusive deepen (complementary; primary lines field-stable).
+     * greppable: store_door: soft ratio|headroom|surface|deepen
+     */
+    {
+        u32 u32OkBp = 0;
+        u32 u32FailLike;
+        u32 u32FailBp = 0;
+        u32 u32OwnedBp = 0;
+        u32 u32RwTot;
+
+        u32FailLike = g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy +
+                      g_u32SoftFault + g_u32SoftIo + g_u32SoftNosupport;
+        if ((g_u32SoftOk + u32FailLike) != 0u) {
+            u32OkBp = (g_u32SoftOk * 10000u) / (g_u32SoftOk + u32FailLike);
+            u32FailBp = (u32FailLike * 10000u) / (g_u32SoftOk + u32FailLike);
+        }
+        u32RwTot = g_u32SoftReadOk + g_u32SoftWriteOk + g_u32SoftRwIo +
+                   g_u32SoftRwInval + g_u32SoftRwNodev + g_u32SoftRwFault;
+        if (u32RwTot != 0u) {
+            u32OwnedBp = (g_u32SoftRwOwned * 10000u) / u32RwTot;
+        }
+        /* Grep: store_door: soft ratio */
+        kprintf("store_door: soft ratio ok_bp=%u fail_bp=%u owned_rw_bp=%u "
+                "rw=%u claims=%u logs=%u wave=15\n",
+                u32OkBp, u32FailBp, u32OwnedBp, g_u32DoorRw, g_u32Claims,
+                g_u32SoftLogs);
+        /* Grep: store_door: soft headroom */
+        kprintf("store_door: soft headroom xfer_max=%u sector=%u q_free=%u "
+                "blk=%u scsi=%u wave=15\n",
+                (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR, u32QFree,
+                u32Blk, u32Scsi);
+        /* Grep: store_door: soft surface */
+        kprintf("store_door: soft surface inventory,own,meta,rw,ring,xfer,"
+                "last,err,backend,total,ops,peak,copy,catalog,ratio,"
+                "headroom,deepen areas=14 wave=15\n");
+        /* Grep: store_door: soft deepen */
+        kprintf("store_door: soft deepen wave=15 areas=14 calls=%u rw=%u "
+                "ok=%u fail_like=%u logs=%u\n",
+                g_u32Calls, g_u32DoorRw, g_u32SoftOk, u32FailLike,
+                g_u32SoftLogs);
+    }
 
     /*
      * Soft lamp: init surface always soft-pass after store_door_init.
      * Grep: store_door: soft inventory PASS | store_door: soft PASS
      */
     kprintf("store_door: soft inventory PASS calls=%u logs=%u blk=%u "
-            "scsi=%u wave=14\n",
+            "scsi=%u wave=15\n",
             g_u32Calls, g_u32SoftLogs, u32Blk, u32Scsi);
-    kprintf("store_door: soft PASS calls=%u wave=14\n", g_u32Calls);
+    kprintf("store_door: soft PASS calls=%u wave=15\n", g_u32Calls);
 }
 
 /**
@@ -494,7 +538,7 @@ store_door_init(void)
     /* Backends may probe later; report readiness snapshot for bring-up. */
     kprintf("store_door: init xfer_max=%u blk=%d scsi=%d\n", STORE_XFER_MAX,
             virtio_blk_ready() ? 1 : 0, scsi_mid_ready() ? 1 : 0);
-    /* Grep: store_door: soft (baseline inventory after init; wave=14) */
+    /* Grep: store_door: soft (baseline inventory after init; wave=15) */
     store_soft_inventory_log();
 }
 

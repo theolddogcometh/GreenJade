@@ -24,9 +24,9 @@
  *   3. aarch64_linux_nr_soft(nr) — soft getpid/gettid return path
  *   4. Selftest exercises stub table + soft getpid without full reg frame
  *   5. Soft SVC inventory — greppable "aarch64: svc soft …" (Wave 9)
- *   6. Soft inventory deepen — Wave 14 multi-area inventory (this unit only)
+ *   6. Soft inventory deepen — Wave 15 multi-area inventory (this unit only)
  *
- * Soft inventory deepen (Wave 14 exclusive; this unit only):
+ * Soft inventory deepen (Wave 15 exclusive; this unit only):
  *   Multi-line greppable "aarch64: svc soft …" under fixed areas:
  *     inventory | count | nrs | have | groups | gates | path | deepen
  *   Groups soft: io / mm / net / proc / sync NR presence rollups
@@ -57,9 +57,9 @@
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define SVC_SOFT_WAVE   14u
-#define SVC_SOFT_AREAS  8u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define SVC_SOFT_WAVE   15u
+#define SVC_SOFT_AREAS  10u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -336,7 +336,7 @@ aarch64_svc_try_handle(unsigned long u64Vec, unsigned long esr,
 }
 
 /*
- * Soft SVC inventory (Wave 9 base + Wave 14 exclusive deepen).
+ * Soft SVC inventory (Wave 9 base + Wave 15 exclusive deepen).
  * Walks the in-arch NR stub table, tallies soft-covered NRs, checks
  * non-decreasing NR order and key deepen presence, then emits greppable
  * "aarch64: svc soft …" multi-area lines. Pure C; no shared dispatch,
@@ -652,15 +652,49 @@ svc_soft_inventory(int fSvcCountOk, int fStubOk, int fDeepOk, int fGetpidOk)
 
     /* Grep: aarch64: svc soft path */
     aarch64_uart_puts("aarch64: svc soft path stub=1 soft_pid=1 x8_frame=0 "
-                      "shared_dispatch=0 neon=0 wave=");
+                      "shared_dispatch=0 neon=0 product_kernel=OPEN "
+                      "hard_gate=0 wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" (soft inventory; not bar3)\n");
+
+    /* Grep: aarch64: svc soft surf — Wave 15 gate bit lamps */
+    aarch64_uart_puts("aarch64: svc soft surf svc=");
+    aarch64_uart_put_hex((unsigned long)uGateSvc);
+    aarch64_uart_puts(" stub=");
+    aarch64_uart_put_hex((unsigned long)uGateStub);
+    aarch64_uart_puts(" deep=");
+    aarch64_uart_put_hex((unsigned long)uGateDeep);
+    aarch64_uart_puts(" getpid=");
+    aarch64_uart_put_hex((unsigned long)uGateGetpid);
+    aarch64_uart_puts(" table=");
+    aarch64_uart_put_hex((unsigned long)uGateTable);
+    aarch64_uart_puts(" soft_hit=");
+    aarch64_uart_put_hex((unsigned long)uGateSoftHit);
+    aarch64_uart_puts(" ordered=");
+    aarch64_uart_put_hex((unsigned long)fOrdered);
+    aarch64_uart_puts(" bits=");
+    aarch64_uart_put_hex((unsigned long)(
+        (uGateSvc << 0) | (uGateStub << 1) | (uGateDeep << 2) |
+        (uGateGetpid << 3) | (uGateTable << 4) | (uGateSoftHit << 5) |
+        (fOrdered << 6)));
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     /* Grep: aarch64: svc soft deepen */
     aarch64_uart_puts("aarch64: svc soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
-    aarch64_uart_puts(" areas=inventory,count,nrs,have,groups,gates,path,"
-                      "deepen unit=svc.c only rate_limited=0\n");
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_AREAS);
+    aarch64_uart_puts(" catalog=inventory,count,nrs,have,groups,gates,"
+                      "path,surf,honesty,deepen unit=svc.c only "
+                      "rate_limited=0 soft_only=1\n");
+
+    /* Grep: aarch64: svc soft honesty */
+    aarch64_uart_puts("aarch64: svc soft honesty product_kernel=OPEN "
+                      "soft_only=1 no_shared_dispatch=1 no_bar3=1 wave=");
+    aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     if (fOk != 0) {
         aarch64_uart_puts("aarch64: svc soft PASS\n");

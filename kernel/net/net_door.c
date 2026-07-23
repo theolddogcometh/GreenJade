@@ -31,7 +31,7 @@
  * EXPORT/MAP, AVAIL_PUSH, RING_STATE, and USER_AVAIL wire semantics —
  * keep those ABI-stable.
  *
- * Soft product inventory (Wave 13 exclusive deepen; file-local sticky).
+ * Soft product inventory (Wave 15 exclusive deepen; file-local sticky).
  * Never hard-gates; wrap OK; diagnostics only. Soft ≠ bar3.
  * Greppable prefix-stable serial markers (net_door: soft …):
  *   net_door: soft inventory   — owned/token/calls/vq/ring catalog + wave
@@ -44,9 +44,14 @@
  *   net_door: soft xfer        — SEND/RECV ok|fail + door byte totals
  *   net_door: soft last        — last opcode + terminal ret snapshot
  *   net_door: soft err         — INVAL/BUSY/NODEV/FAULT/IO/NOSUPPORT
+ *   net_door: soft group       — Wave 15 enter-group rollup (claim/sock/…)
+ *   net_door: soft capacity    — Wave 15 fixed xfer/eth/bounce lamps
+ *   net_door: soft catalog     — Wave 15 opcode soft catalog (impl lamps)
+ *   net_door: soft outcome     — Wave 15 ok|err|nodev rollup
  *   net_door: soft stats       — aggregate enter + group counters
  *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
  *   net_door: soft path        — honesty: soft inventory ≠ bar3 / product
+ *   net_door: soft deepen      — wave=15 stamp + area count
  *   net_door: soft inventory PASS / net_door: soft PASS
  */
 #include <gj/config.h>
@@ -74,6 +79,11 @@
  */
 #define NET_XFER_MAX 4096u
 #define NET_ETH_MAX  1514u
+/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
+#define NET_DOOR_SOFT_DEEPEN_WAVE  15u
+/* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
+ * group capacity catalog outcome stats backend path deepen PASS = 19 */
+#define NET_DOOR_SOFT_DEEPEN_AREAS 19u
 
 /* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
@@ -89,7 +99,7 @@ static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
 static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
 
 /*
- * Soft product inventory (Wave 13 exclusive). Cumulative path tallies.
+ * Soft product inventory (Wave 15 exclusive). Cumulative path tallies.
  * greppable: net_door: soft …
  */
 struct net_door_soft {
@@ -117,7 +127,7 @@ struct net_door_soft {
     u64 u64TcpStats;
     u64 u64TcpStatsInval;
     u64 u64TcpStatsFault;
-    /* Wave 13: socket path routing + outcome */
+    /* Wave 15: socket path routing + outcome */
     u64 u64SockTcp;        /* ops routed to net_tcp */
     u64 u64SockLo;         /* ops routed to net_lo */
     u64 u64SockOk;         /* socket-family non-neg ret */
@@ -136,7 +146,7 @@ struct net_door_soft {
     u64 u64QueueOk;
     u64 u64QueueInval;
     u64 u64QueueFault;
-    /* Wave 13: virtio outcome splits */
+    /* Wave 15: virtio outcome splits */
     u64 u64VirtioTxOk;
     u64 u64VirtioTxInval;
     u64 u64VirtioTxNodev;
@@ -160,7 +170,7 @@ struct net_door_soft {
     u64 u64DescAlloc;
     u64 u64UserAvail;
     u64 u64BounceFill;
-    /* Wave 13: ring outcome splits */
+    /* Wave 15: ring outcome splits */
     u64 u64ExportOk;
     u64 u64ExportInval;
     u64 u64ExportFault;
@@ -196,7 +206,7 @@ struct net_door_soft {
     u64 u64BounceNodev;
     u64 u64BounceFault;
     u64 u64BounceIo;
-    /* Wave 13: user vs kernel-smoke copy path */
+    /* Wave 15: user vs kernel-smoke copy path */
     u64 u64UserCopy;
     u64 u64KernelCopy;
     u64 u64Nodev;          /* virtio-absent soft-skip terminals */
@@ -208,7 +218,7 @@ struct net_door_soft {
     u64 u64Nosupport;      /* unknown op */
     u64 u64Ok;             /* non-negative returns */
     u64 u64SoftLog;        /* inventory log emissions */
-    /* Wave 13: last-op snapshot */
+    /* Wave 15: last-op snapshot */
     u32 u32LastOp;
     i64 i64LastRet;
 };
@@ -274,7 +284,7 @@ net_door_soft_note_ret(i64 i64Ret)
 }
 
 /**
- * Greppable soft net door inventory (product / smoke). Wave 13 deepen.
+ * Greppable soft net door inventory (product / smoke). Wave 15 deepen.
  *   net_door: soft inventory …
  *   net_door: soft claim …
  *   net_door: soft sock …
@@ -285,11 +295,17 @@ net_door_soft_note_ret(i64 i64Ret)
  *   net_door: soft xfer …
  *   net_door: soft last …
  *   net_door: soft err …
+ *   net_door: soft group …
+ *   net_door: soft capacity …
+ *   net_door: soft catalog …
+ *   net_door: soft outcome …
  *   net_door: soft stats …
  *   net_door: soft backend …
  *   net_door: soft path …
+ *   net_door: soft deepen …
  *   net_door: soft inventory PASS / net_door: soft PASS
  * greppable: net_door: soft
+ * Soft only — never hard-gates; soft ≠ bar3.
  */
 static void
 net_door_soft_inventory_log(void)
@@ -303,8 +319,16 @@ net_door_soft_inventory_log(void)
     u32 u32QFreeRx;
     u32 u32AvailP;
     u32 u32UserP;
+    u32 u32Wave;
+    u32 u32Areas;
+    u64 u64SockEnter;
+    u64 u64RingEnter;
+    u64 u64VirtioEnter;
+    u64 u64ClaimEnter;
     int fSoftPass;
 
+    u32Wave = NET_DOOR_SOFT_DEEPEN_WAVE;
+    u32Areas = NET_DOOR_SOFT_DEEPEN_AREAS;
     net_door_soft_inc(&g_soft.u64SoftLog);
     s = g_soft;
     u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
@@ -315,30 +339,41 @@ net_door_soft_inventory_log(void)
     u32QFreeRx = (u32Ready != 0) ? (u32)virtio_net_q_free(0) : 0u;
     u32AvailP = (u32Ready != 0) ? virtio_net_avail_pushes() : 0u;
     u32UserP = (u32Ready != 0) ? virtio_net_user_ring_pushes() : 0u;
+    u64SockEnter = s.u64Socket + s.u64Bind + s.u64Listen + s.u64Accept +
+                   s.u64Connect + s.u64Close + s.u64Send + s.u64Recv +
+                   s.u64TcpStats;
+    u64RingEnter = s.u64ExportRing + s.u64MapRing + s.u64Kick +
+                   s.u64AvailPush + s.u64UsedReap + s.u64RingState +
+                   s.u64MapDma + s.u64DescAlloc + s.u64UserAvail +
+                   s.u64BounceFill;
+    u64VirtioEnter = s.u64VirtioTx + s.u64VirtioRx + s.u64QueueInfo;
+    u64ClaimEnter = s.u64ClaimOk + s.u64ClaimReclaim + s.u64ClaimBusy +
+                    s.u64ClaimInval + s.u64ReleaseOk + s.u64ReleaseFree +
+                    s.u64ReleaseInval;
 
     /* Grep: net_door: soft inventory */
     kprintf("net_door: soft inventory init=%u owned=%u token=0x%x "
             "calls=%u vq=%u ring_calls=%u ring_va=0x%lx claims=%u "
             "reclaims=%u virtio_ready=%u xfer_max=%u eth_max=%u "
-            "log_n=%lu wave=13\n",
+            "log_n=%lu areas=%u wave=%u\n",
             g_fInit ? 1u : 0u, u32Owned, g_u32OwnerToken, g_u32Calls,
             g_u32VqCalls, g_u32RingCalls, (unsigned long)g_u64RingMapVa,
             g_u32Claims, g_u32Reclaims, u32Ready, NET_XFER_MAX, NET_ETH_MAX,
-            (unsigned long)s.u64SoftLog);
+            (unsigned long)s.u64SoftLog, u32Areas, u32Wave);
 
     /* Grep: net_door: soft claim */
     kprintf("net_door: soft claim ok=%lu reclaim=%lu busy=%lu inval=%lu "
-            "release_ok=%lu release_free=%lu release_inval=%lu\n",
+            "release_ok=%lu release_free=%lu release_inval=%lu wave=%u\n",
             (unsigned long)s.u64ClaimOk, (unsigned long)s.u64ClaimReclaim,
             (unsigned long)s.u64ClaimBusy, (unsigned long)s.u64ClaimInval,
             (unsigned long)s.u64ReleaseOk, (unsigned long)s.u64ReleaseFree,
-            (unsigned long)s.u64ReleaseInval);
+            (unsigned long)s.u64ReleaseInval, u32Wave);
 
     /* Grep: net_door: soft sock */
     kprintf("net_door: soft sock poll=%lu stats=%lu socket=%lu bind=%lu "
             "listen=%lu accept=%lu connect=%lu close=%lu send=%lu "
             "recv=%lu tcp_stats=%lu tcp=%lu lo=%lu ok=%lu fail=%lu "
-            "owned=%lu unowned=%lu\n",
+            "owned=%lu unowned=%lu wave=%u\n",
             (unsigned long)s.u64Poll, (unsigned long)s.u64Stats,
             (unsigned long)s.u64Socket, (unsigned long)s.u64Bind,
             (unsigned long)s.u64Listen, (unsigned long)s.u64Accept,
@@ -347,20 +382,20 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64TcpStats, (unsigned long)s.u64SockTcp,
             (unsigned long)s.u64SockLo, (unsigned long)s.u64SockOk,
             (unsigned long)s.u64SockFail, (unsigned long)s.u64SockOwned,
-            (unsigned long)s.u64SockUnowned);
+            (unsigned long)s.u64SockUnowned, u32Wave);
 
     /* Grep: net_door: soft ring (enter surface; prefix-stable) */
     kprintf("net_door: soft ring export=%lu map=%lu remap=%lu kick=%lu "
             "avail=%lu reap=%lu state=%lu dma=%lu desc=%lu user_avail=%lu "
-            "bounce=%lu\n",
+            "bounce=%lu wave=%u\n",
             (unsigned long)s.u64ExportRing, (unsigned long)s.u64MapRing,
             (unsigned long)s.u64MapRemap, (unsigned long)s.u64Kick,
             (unsigned long)s.u64AvailPush, (unsigned long)s.u64UsedReap,
             (unsigned long)s.u64RingState, (unsigned long)s.u64MapDma,
             (unsigned long)s.u64DescAlloc, (unsigned long)s.u64UserAvail,
-            (unsigned long)s.u64BounceFill);
+            (unsigned long)s.u64BounceFill, u32Wave);
 
-    /* Grep: net_door: soft ring_ok (Wave 13 outcome deepen) */
+    /* Grep: net_door: soft ring_ok (Wave 15 outcome deepen) */
     kprintf("net_door: soft ring_ok export_ok=%lu export_inval=%lu "
             "export_fault=%lu export_nodev=%lu map_ok=%lu remap=%lu "
             "map_inval=%lu map_nodev=%lu map_fault=%lu kick_ok=%lu "
@@ -370,7 +405,7 @@ net_door_soft_inventory_log(void)
             "dma_inval=%lu dma_nodev=%lu dma_fault=%lu desc_ok=%lu "
             "desc_nodev=%lu desc_nomem=%lu user_ok=%lu user_nodev=%lu "
             "user_io=%lu bounce_ok=%lu bounce_inval=%lu bounce_nodev=%lu "
-            "bounce_fault=%lu bounce_io=%lu\n",
+            "bounce_fault=%lu bounce_io=%lu wave=%u\n",
             (unsigned long)s.u64ExportOk, (unsigned long)s.u64ExportInval,
             (unsigned long)s.u64ExportFault, (unsigned long)s.u64ExportNodev,
             (unsigned long)s.u64MapOk, (unsigned long)s.u64MapRemap,
@@ -389,20 +424,22 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64UserAvailNodev,
             (unsigned long)s.u64UserAvailIo, (unsigned long)s.u64BounceOk,
             (unsigned long)s.u64BounceInval, (unsigned long)s.u64BounceNodev,
-            (unsigned long)s.u64BounceFault, (unsigned long)s.u64BounceIo);
+            (unsigned long)s.u64BounceFault, (unsigned long)s.u64BounceIo,
+            u32Wave);
 
     /* Grep: net_door: soft virtio */
     kprintf("net_door: soft virtio tx=%lu rx=%lu queue_info=%lu "
-            "ready=%u vq_calls=%u nodev_soft=%lu\n",
+            "ready=%u vq_calls=%u nodev_soft=%lu wave=%u\n",
             (unsigned long)s.u64VirtioTx, (unsigned long)s.u64VirtioRx,
             (unsigned long)s.u64QueueInfo, u32Ready, g_u32VqCalls,
-            (unsigned long)s.u64Nodev);
+            (unsigned long)s.u64Nodev, u32Wave);
 
-    /* Grep: net_door: soft virtio_ok (Wave 13 outcome deepen) */
+    /* Grep: net_door: soft virtio_ok (Wave 15 outcome deepen) */
     kprintf("net_door: soft virtio_ok tx_ok=%lu tx_inval=%lu tx_nodev=%lu "
             "tx_fault=%lu tx_io=%lu rx_ok=%lu rx_inval=%lu rx_nodev=%lu "
             "rx_fault=%lu rx_io=%lu queue_ok=%lu queue_inval=%lu "
-            "queue_fault=%lu tx_b=%lu rx_b=%lu live_tx=%u live_rx=%u\n",
+            "queue_fault=%lu tx_b=%lu rx_b=%lu live_tx=%u live_rx=%u "
+            "wave=%u\n",
             (unsigned long)s.u64VirtioTxOk, (unsigned long)s.u64VirtioTxInval,
             (unsigned long)s.u64VirtioTxNodev,
             (unsigned long)s.u64VirtioTxFault, (unsigned long)s.u64VirtioTxIo,
@@ -412,28 +449,28 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64QueueOk, (unsigned long)s.u64QueueInval,
             (unsigned long)s.u64QueueFault,
             (unsigned long)s.u64VirtioTxBytes,
-            (unsigned long)s.u64VirtioRxBytes, u32TxCnt, u32RxCnt);
+            (unsigned long)s.u64VirtioRxBytes, u32TxCnt, u32RxCnt, u32Wave);
 
     /* Grep: net_door: soft xfer */
     kprintf("net_door: soft xfer send_ok=%lu send_fail=%lu recv_ok=%lu "
             "recv_fail=%lu send_b=%lu recv_b=%lu xfer_max=%u eth_max=%u "
-            "user_copy=%lu k_copy=%lu\n",
+            "user_copy=%lu k_copy=%lu wave=%u\n",
             (unsigned long)s.u64SendOk, (unsigned long)s.u64SendFail,
             (unsigned long)s.u64RecvOk, (unsigned long)s.u64RecvFail,
             (unsigned long)s.u64SendBytes, (unsigned long)s.u64RecvBytes,
             NET_XFER_MAX, NET_ETH_MAX, (unsigned long)s.u64UserCopy,
-            (unsigned long)s.u64KernelCopy);
+            (unsigned long)s.u64KernelCopy, u32Wave);
 
     /* Grep: net_door: soft last */
-    kprintf("net_door: soft last op=%u ret=%ld ring_va=0x%lx\n",
+    kprintf("net_door: soft last op=%u ret=%ld ring_va=0x%lx wave=%u\n",
             s.u32LastOp, (long)s.i64LastRet,
-            (unsigned long)g_u64RingMapVa);
+            (unsigned long)g_u64RingMapVa, u32Wave);
 
     /* Grep: net_door: soft err */
     kprintf("net_door: soft err nodev=%lu inval=%lu busy=%lu fault=%lu "
             "io=%lu nomem=%lu nosupport=%lu ok=%lu not_init=%lu "
             "stats_inval=%lu stats_fault=%lu tcp_stats_inval=%lu "
-            "tcp_stats_fault=%lu\n",
+            "tcp_stats_fault=%lu wave=%u\n",
             (unsigned long)s.u64Nodev, (unsigned long)s.u64Inval,
             (unsigned long)s.u64Busy, (unsigned long)s.u64Fault,
             (unsigned long)s.u64Io, (unsigned long)s.u64Nomem,
@@ -441,33 +478,66 @@ net_door_soft_inventory_log(void)
             (unsigned long)s.u64NotInit, (unsigned long)s.u64StatsInval,
             (unsigned long)s.u64StatsFault,
             (unsigned long)s.u64TcpStatsInval,
-            (unsigned long)s.u64TcpStatsFault);
+            (unsigned long)s.u64TcpStatsFault, u32Wave);
+
+    /* Grep: net_door: soft group (Wave 15 enter-group rollup) */
+    kprintf("net_door: soft group enter=%lu claim=%lu poll=%lu stats=%lu "
+            "sock=%lu ring=%lu virtio=%lu send=%lu recv=%lu "
+            "tcp_stats=%lu wave=%u\n",
+            (unsigned long)s.u64Enter, (unsigned long)u64ClaimEnter,
+            (unsigned long)s.u64Poll, (unsigned long)s.u64Stats,
+            (unsigned long)u64SockEnter, (unsigned long)u64RingEnter,
+            (unsigned long)u64VirtioEnter, (unsigned long)s.u64Send,
+            (unsigned long)s.u64Recv, (unsigned long)s.u64TcpStats, u32Wave);
+
+    /* Grep: net_door: soft capacity (Wave 15 fixed lamps) */
+    kprintf("net_door: soft capacity xfer_max=%u eth_max=%u bulk=3000 "
+            "mss=1024 bounce=1 claim_reclaim=1 map_remap=1 "
+            "virtio_nodev_soft=1 ring_state_nodev_ok=1 heap=0 "
+            "areas=%u wave=%u\n",
+            NET_XFER_MAX, NET_ETH_MAX, u32Areas, u32Wave);
+
+    /* Grep: net_door: soft catalog (Wave 15 opcode soft catalog) */
+    kprintf("net_door: soft catalog claim=1 release=1 poll=1 stats=1 "
+            "socket=1 bind=1 listen=1 accept=1 connect=1 close=1 "
+            "send=1 recv=1 tcp_stats=1 export=1 map=1 kick=1 "
+            "avail=1 reap=1 ring_state=1 dma=1 desc=1 user_avail=1 "
+            "bounce=1 virtio_tx=1 virtio_rx=1 queue_info=1 "
+            "full_stack=0 bar3=0 wave=%u\n",
+            u32Wave);
+
+    /* Grep: net_door: soft outcome (Wave 15 ok|err rollup) */
+    kprintf("net_door: soft outcome ok=%lu nodev=%lu inval=%lu busy=%lu "
+            "fault=%lu io=%lu nomem=%lu nosupport=%lu not_init=%lu "
+            "claim_ok=%lu reclaim=%lu sock_ok=%lu sock_fail=%lu "
+            "send_ok=%lu recv_ok=%lu wave=%u\n",
+            (unsigned long)s.u64Ok, (unsigned long)s.u64Nodev,
+            (unsigned long)s.u64Inval, (unsigned long)s.u64Busy,
+            (unsigned long)s.u64Fault, (unsigned long)s.u64Io,
+            (unsigned long)s.u64Nomem, (unsigned long)s.u64Nosupport,
+            (unsigned long)s.u64NotInit, (unsigned long)s.u64ClaimOk,
+            (unsigned long)s.u64ClaimReclaim, (unsigned long)s.u64SockOk,
+            (unsigned long)s.u64SockFail, (unsigned long)s.u64SendOk,
+            (unsigned long)s.u64RecvOk, u32Wave);
 
     /* Grep: net_door: soft stats */
     kprintf("net_door: soft stats enter=%lu claim_ok=%lu reclaim=%lu "
-            "sock=%lu ring=%lu virtio=%lu log_n=%lu wave=13\n",
+            "sock=%lu ring=%lu virtio=%lu log_n=%lu wave=%u\n",
             (unsigned long)s.u64Enter, (unsigned long)s.u64ClaimOk,
-            (unsigned long)s.u64ClaimReclaim,
-            (unsigned long)(s.u64Socket + s.u64Bind + s.u64Listen +
-                            s.u64Accept + s.u64Connect + s.u64Close +
-                            s.u64Send + s.u64Recv + s.u64TcpStats),
-            (unsigned long)(s.u64ExportRing + s.u64MapRing + s.u64Kick +
-                            s.u64AvailPush + s.u64UsedReap + s.u64RingState +
-                            s.u64MapDma + s.u64DescAlloc + s.u64UserAvail +
-                            s.u64BounceFill),
-            (unsigned long)(s.u64VirtioTx + s.u64VirtioRx + s.u64QueueInfo),
-            (unsigned long)s.u64SoftLog);
+            (unsigned long)s.u64ClaimReclaim, (unsigned long)u64SockEnter,
+            (unsigned long)u64RingEnter, (unsigned long)u64VirtioEnter,
+            (unsigned long)s.u64SoftLog, u32Wave);
 
     /* Grep: net_door: soft backend */
     kprintf("net_door: soft backend virtio=%u tx=%u rx=%u q_free_tx=%u "
             "q_free_rx=%u avail_p=%u user_p=%u tcp_accepts=%u "
             "tcp_segs=%u tcp_rtx=%u tcp_rx_b=%u tcp_tx_b=%u "
-            "tcp_tw=%u eth_arp=%u eth_udp=%u eth_icmp=%u\n",
+            "tcp_tw=%u eth_arp=%u eth_udp=%u eth_icmp=%u wave=%u\n",
             u32Ready, u32TxCnt, u32RxCnt, u32QFreeTx, u32QFreeRx, u32AvailP,
             u32UserP, net_tcp_accepts(), net_tcp_segments(),
             net_tcp_retransmits(), net_tcp_bytes_rx(), net_tcp_bytes_tx(),
             net_tcp_tw_reaps(), net_eth_arp_replies(), net_eth_udp_echoes(),
-            net_eth_icmp_echoes());
+            net_eth_icmp_echoes(), u32Wave);
 
     /*
      * Honesty line: soft inventory / interim stack ≠ product multi-server.
@@ -476,8 +546,18 @@ net_door_soft_inventory_log(void)
     kprintf("net_door: soft path claim=netstackd sock=tcp|lo "
             "ring=export|map|kick|state|avail|user "
             "reclaim=idempotent map_remap=soft_reclaim "
-            "virtio_absent=nodev_soft product_netstackd=1 wave=13 "
-            "(soft inventory; not bar3)\n");
+            "virtio_absent=nodev_soft product_netstackd=1 wave=%u "
+            "(soft inventory; not bar3)\n",
+            u32Wave);
+
+    /* Grep: net_door: soft deepen (Wave 15 stamp) */
+    kprintf("net_door: soft deepen wave=%u areas=%u init=%u owned=%u "
+            "enter=%lu sock=%lu ring=%lu virtio=%lu logs=%lu "
+            "ok=1 skip_hard=0\n",
+            u32Wave, u32Areas, g_fInit ? 1u : 0u, u32Owned,
+            (unsigned long)s.u64Enter, (unsigned long)u64SockEnter,
+            (unsigned long)u64RingEnter, (unsigned long)u64VirtioEnter,
+            (unsigned long)s.u64SoftLog);
 
     /*
      * Soft lamp: init surface is always soft-pass. Never hard-gates.
@@ -487,13 +567,14 @@ net_door_soft_inventory_log(void)
     fSoftPass = g_fInit ? 1 : 0;
     if (fSoftPass != 0) {
         kprintf("net_door: soft inventory PASS init=%u owned=%u "
-                "virtio=%u logs=%lu wave=13\n",
+                "virtio=%u logs=%lu areas=%u wave=%u\n",
                 g_fInit ? 1u : 0u, u32Owned, u32Ready,
-                (unsigned long)s.u64SoftLog);
-        kprintf("net_door: soft PASS wave=13\n");
+                (unsigned long)s.u64SoftLog, u32Areas, u32Wave);
+        kprintf("net_door: soft PASS wave=%u areas=%u\n", u32Wave, u32Areas);
     } else {
-        kprintf("net_door: soft FAIL init=0 "
-                "(soft inventory only; not product gate)\n");
+        kprintf("net_door: soft FAIL init=0 wave=%u "
+                "(soft inventory only; not product gate)\n",
+                u32Wave);
     }
 }
 
@@ -527,7 +608,9 @@ net_door_init(void)
     g_u64RingMapVa = 0;
     memset(&g_soft, 0, sizeof(g_soft));
     g_fSoftOnce = 0;
-    kprintf("net_door: init (claim+ring soft wave=13)\n");
+    kprintf("net_door: init (claim+ring soft wave=%u areas=%u)\n",
+            (unsigned)NET_DOOR_SOFT_DEEPEN_WAVE,
+            (unsigned)NET_DOOR_SOFT_DEEPEN_AREAS);
     /* Grep: net_door: soft (baseline inventory after init; zeros expected) */
     net_door_soft_inventory_log();
 }

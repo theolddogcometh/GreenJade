@@ -11,7 +11,7 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 15 exclusive deepen; this unit only):
  * greppable: "user: soft …" | "user_task: soft …"
  *   user: soft inventory …
  *   user: soft stats …
@@ -20,7 +20,8 @@
  *   user: soft enter …
  *   user: soft recheck …
  *   user: soft catalog …
- *   user: soft deepen wave=14 …
+ *   user: soft va …          (Wave 15: dual-window VA geometry)
+ *   user: soft deepen wave=15 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -60,8 +61,8 @@ extern char gj_protonrt_user_blob_end[];
 static int g_fUserMapped;
 static int g_fPersMapped;
 
-/* ---- Soft map / enter counters (grep: user: soft …) Wave 14 ----------- */
-#define GJ_USER_SOFT_WAVE 14u
+/* ---- Soft map / enter counters (grep: user: soft …) Wave 15 ----------- */
+#define GJ_USER_SOFT_WAVE 15u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -81,7 +82,7 @@ static size_t g_cbPersBlob;
 static u32    g_cRing3CodePages;
 static u32    g_cPersCodePages;
 
-/* Wave 14 deepen path tallies (diagnostics only; wrap OK). */
+/* Wave 15 deepen path tallies (diagnostics only; wrap OK). */
 static u32 g_u32SoftLayoutFailRing3;
 static u32 g_u32SoftLayoutFailPers;
 static u32 g_u32SoftAsEnsureFailRing3;
@@ -124,7 +125,7 @@ user_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable Wave 14 soft user_task inventory (product / smoke).
+ * Greppable Wave 15 soft user_task inventory (product / smoke).
  * Twin prefixes: user: soft … | user_task: soft …
  * Never hard-gates map/enter path. Soft ≠ bar3.
  *
@@ -211,6 +212,16 @@ user_soft_inventory(const char *szVia)
             (unsigned long)GJ_PERS_CODE_VA, (unsigned long)GJ_PERS_STACK_TOP,
             GJ_PERS_CODE_PAGES, (unsigned long)g_cbRing3Blob,
             (unsigned long)g_cbPersBlob, GJ_USER_SOFT_WAVE);
+
+    /* Grep: user: soft va (Wave 15 dual-window geometry) */
+    kprintf("user: soft va ring3_code=0x%lx ring3_stack=0x%lx "
+            "pers_code=0x%lx pers_stack=0x%lx dual=1 "
+            "ring3_live=%u pers_live=%u code_pages=%u stack_pages=%u "
+            "wave=%u\n",
+            (unsigned long)GJ_USER_CODE_VA, (unsigned long)GJ_USER_STACK_TOP,
+            (unsigned long)GJ_PERS_CODE_VA, (unsigned long)GJ_PERS_STACK_TOP,
+            u32Ring3Live, u32PersLive, g_cCodePages, g_cStackPages,
+            GJ_USER_SOFT_WAVE);
 
     /* Grep: user: soft path */
     kprintf("user: soft path claim=ring3,personality,enter "
@@ -1047,7 +1058,7 @@ u32
 user_task_stats_soft(void)
 {
     /*
-     * Wave 14: full greppable soft inventory dump (includes soft stats).
+     * Wave 15: full greppable soft inventory dump (includes soft stats).
      * Grep: user: soft | user_task: soft
      */
     user_soft_inventory("stats");

@@ -21,7 +21,7 @@
  * this tree. Candidate symbols that already live in user/libcgj (or the
  * shipped product TU) must not be redefined here.
  *
- * Soft surface (unwired; Wave 14 exclusive deepen):
+ * Soft surface (unwired; Wave 15 exclusive deepen):
  *   gj_so_batch1_export      — data (0x421); optional future resolve target
  *   gj_so_batch1_soft_stamp  — soft companion stamp ('B1s1')
  *   gj_so_batch1_init        — restores the marker + stamp
@@ -31,13 +31,15 @@
  *   gj_so_batch1_bucket      — hash % nbucket index helper
  *   gj_so_batch1_soft_get    — soft read of marker
  *   gj_so_batch1_soft_probe  — soft check + careful restore
+ *   gj_so_batch1_soft_wave   — Wave 15 stamp (15)
+ *   gj_so_batch1_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_SO_BATCH1_SOFT_MARKER
  * greppable: GJ_SO_BATCH1_SOFT_INIT
  * greppable: GJ_SO_BATCH1_SOFT_GET
  * greppable: GJ_SO_BATCH1_SOFT_PROBE
  * greppable: GJ_SO_BATCH1_SOFT_STAMP
- * greppable: libgj-so: soft batch1 wave=14
+ * greppable: libgj-so: soft batch1 wave=15
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -45,6 +47,13 @@
 /* Matches GJ_SO_BATCH1_EXPORT_VALUE in include/gj_so.h (soft section). */
 #define GJ_SO_BATCH1_EXPORT_VALUE  ((uint64_t)0x421)
 #define GJ_SO_BATCH1_STAMP_CANON   ((uint64_t)0x42317331ull) /* 'B1s1' */
+#define GJ_SO_BATCH1_SOFT_WAVE     15u
+
+/* greppable: libgj-so: soft batch1 wave=15 */
+static const char g_szSoBatch1SoftInventory[] =
+	"libgj-so: soft batch1 wave=15 areas=9 "
+	"export,stamp,init,id,hash,streq,bucket,get,probe "
+	"marker=0x421 stamp=B1s1 freestanding=1 bar3=0";
 
 /* greppable: GJ_SO_BATCH1_SOFT_MARKER */
 volatile uint64_t gj_so_batch1_export = GJ_SO_BATCH1_EXPORT_VALUE;
@@ -144,4 +153,18 @@ gj_so_batch1_soft_probe(void)
 		return 0;
 	}
 	return 1;
+}
+
+/* Cold soft inventory: Wave 15 stamp. Grep: libgj-so: soft batch1 wave= */
+unsigned
+gj_so_batch1_soft_wave(void)
+{
+	return (unsigned)GJ_SO_BATCH1_SOFT_WAVE;
+}
+
+/* Cold soft inventory line. Grep: libgj-so: soft batch1 */
+const char *
+gj_so_batch1_soft_inventory(void)
+{
+	return g_szSoBatch1SoftInventory;
 }

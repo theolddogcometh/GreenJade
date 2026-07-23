@@ -5,9 +5,9 @@
  * Freestanding string/memory helpers for libgj userspace.
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  *
- * Soft freestanding helpers inventory (Wave 14 exclusive deepen; greppable;
+ * Soft freestanding helpers inventory (Wave 15 exclusive deepen; greppable;
  * hot path clean):
- *   libgj: soft inventory helpers=42 groups=10 wave=14 areas=12
+ *   libgj: soft inventory helpers=42 groups=10 wave=15 areas=14
  *   libgj: soft length  gj_strlen gj_strnlen
  *   libgj: soft compare gj_strcmp gj_strncmp gj_strcasecmp gj_strncasecmp
  *   libgj: soft copy    gj_strcpy gj_strncpy gj_strcat gj_strncat gj_strlcpy gj_strlcat
@@ -21,13 +21,13 @@
  *   libgj: soft policy  freestanding pure_c no_heap no_locale no_errno ascii_only soft_null
  *   libgj: soft counts  none
  *   libgj: soft hot_path clean
- *   libgj: soft deepen  wave=14 areas=inventory,groups,names,policy,path,counts
+ *   libgj: soft deepen  wave=15 areas=inventory,groups,names,policy,path,counts,areas,accessors
  *   libgj: soft path    freestanding=1 pure_c=1 no_heap=1 counts=none bar3=0
  *
  * Call counts intentionally omitted: hot string/mem helpers stay freestanding
  * product-path clean with no counter traffic. Inventory is source + rodata
  * only (see gj_string_soft_inventory / gj_string_soft_helper_count /
- * gj_string_soft_wave / gj_string_soft_group_name).
+ * gj_string_soft_wave / gj_string_soft_group_name / gj_string_soft_area_name).
  * Diagnostics / agent honesty only — never a product bar3 claim.
  */
 #include <gj/string.h>
@@ -35,17 +35,19 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-/* Wave 14 exclusive soft deepen stamp (greppable wave=14). */
-#define LIBGJ_SOFT_WAVE   14u
-/* Fixed greppable area catalog (inventory..path). */
-#define LIBGJ_SOFT_AREAS  12u
+/* Wave 15 exclusive soft deepen stamp (greppable wave=15). */
+#define LIBGJ_SOFT_WAVE   15u
+/* Fixed greppable area catalog (inventory..accessors). */
+#define LIBGJ_SOFT_AREAS  14u
+/* Soft policy token count (freestanding..soft_null). */
+#define LIBGJ_SOFT_POLICY 7u
 
 /*
  * Product soft inventory blob (rodata). Never consulted by the hot helpers.
  * Grep: libgj: soft inventory
  */
 static const char g_szLibgjSoftInventory[] =
-    "libgj: soft inventory helpers=42 groups=10 wave=14 areas=12 "
+    "libgj: soft inventory helpers=42 groups=10 wave=15 areas=14 "
     "length=gj_strlen,gj_strnlen "
     "compare=gj_strcmp,gj_strncmp,gj_strcasecmp,gj_strncasecmp "
     "copy=gj_strcpy,gj_strncpy,gj_strcat,gj_strncat,gj_strlcpy,gj_strlcat "
@@ -57,20 +59,20 @@ static const char g_szLibgjSoftInventory[] =
     "io=gj_puts,gj_write,gj_read,gj_dlog "
     "format=gj_itoa,gj_utoa,gj_xtoa,gj_snprintf "
     "policy=freestanding,pure_c,no_heap,no_locale,no_errno,ascii_only,soft_null "
-    "counts=none hot_path=clean";
+    "counts=none hot_path=clean accessors=area,policy bar3=0";
 
 /*
- * Wave 14 soft deepen stamp (rodata companion).
+ * Wave 15 soft deepen stamp (rodata companion).
  * Grep: libgj: soft deepen
  */
 static const char g_szLibgjSoftDeepen[] =
-    "libgj: soft deepen wave=14 areas=12 "
+    "libgj: soft deepen wave=15 areas=14 "
     "inventory,groups,names,length,compare,copy,search,case,ctype,mem,"
-    "parse,io,format,policy,path,counts "
+    "parse,io,format,policy,path,counts,areas,accessors "
     "helpers=42 hot_path=clean counts=none bar3=0";
 
 /*
- * Wave 14 honesty path line (static route labels).
+ * Wave 15 honesty path line (static route labels).
  * Grep: libgj: soft path
  */
 static const char g_szLibgjSoftPath[] =
@@ -148,6 +150,38 @@ static const char *const g_apszLibgjSoftGroups[] = {
     "format",
 };
 
+/*
+ * Wave 15 greppable area catalog (logical inventory surfaces; cold only).
+ * Grep: libgj: soft areas=
+ */
+static const char *const g_apszLibgjSoftAreas[] = {
+    "inventory",
+    "groups",
+    "names",
+    "length",
+    "compare",
+    "copy",
+    "search",
+    "case",
+    "ctype",
+    "mem",
+    "parse",
+    "io",
+    "format",
+    "policy",
+};
+
+/* Soft policy tokens (ASCII freestanding contract labels). */
+static const char *const g_apszLibgjSoftPolicy[] = {
+    "freestanding",
+    "pure_c",
+    "no_heap",
+    "no_locale",
+    "no_errno",
+    "ascii_only",
+    "soft_null",
+};
+
 enum {
     LIBGJ_SOFT_HELPERS = 42,
     LIBGJ_SOFT_GROUPS  = 10,
@@ -175,7 +209,7 @@ gj_string_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 14). Grep: libgj: soft deepen
+ * Cold soft deepen stamp (Wave 15). Grep: libgj: soft deepen
  */
 const char *
 gj_string_soft_deepen(void)
@@ -193,7 +227,7 @@ gj_string_soft_path(void)
 }
 
 /*
- * Cold soft inventory: Wave stamp (14). Grep: libgj: soft wave=
+ * Cold soft inventory: Wave stamp (15). Grep: libgj: soft wave=
  */
 unsigned
 gj_string_soft_wave(void)
@@ -208,6 +242,41 @@ unsigned
 gj_string_soft_area_count(void)
 {
     return (unsigned)LIBGJ_SOFT_AREAS;
+}
+
+/*
+ * Cold soft inventory: area name by index (0..areas-1), or NULL.
+ * Grep: libgj: soft areas=
+ */
+const char *
+gj_string_soft_area_name(unsigned uArea)
+{
+    if (uArea >= (unsigned)LIBGJ_SOFT_AREAS) {
+        return NULL;
+    }
+    return g_apszLibgjSoftAreas[uArea];
+}
+
+/*
+ * Cold soft inventory: policy token count. Grep: libgj: soft policy
+ */
+unsigned
+gj_string_soft_policy_count(void)
+{
+    return (unsigned)LIBGJ_SOFT_POLICY;
+}
+
+/*
+ * Cold soft inventory: policy token by index, or NULL.
+ * Grep: libgj: soft policy
+ */
+const char *
+gj_string_soft_policy_name(unsigned uPolicy)
+{
+    if (uPolicy >= (unsigned)LIBGJ_SOFT_POLICY) {
+        return NULL;
+    }
+    return g_apszLibgjSoftPolicy[uPolicy];
 }
 
 /*

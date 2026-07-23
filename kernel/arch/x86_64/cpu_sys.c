@@ -28,11 +28,13 @@
  *   "cpu: syscall soft msr …"
  *   "cpu: syscall soft flags …"
  *   "cpu: syscall soft init …"
+ *   "cpu: syscall soft capacity …"  (Wave 15: MSR/selector geometry)
+ *   "cpu: syscall soft deepen …"    (Wave 15 stamp)
  *   "cpu: syscall soft verify PASS|FAIL|idle|armed"
  * Soft never hard-gates product; wrap-OK counters only. No bar3 claim.
  * greppable: cpu: syscall soft
  *
- * Wave 14 exclusive deepen (this unit only) — leftover x86 soft track
+ * Wave 15 exclusive deepen (this unit only) — leftover x86 soft track
  * after wave 13 gdt/idt/trap/timer/serial/x2apic. Extra greppable
  * surfaces + path tallies; product MSR program path unchanged.
  */
@@ -58,7 +60,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 14u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 15u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -77,7 +79,7 @@ static volatile u32 g_u32SoftVerifyBad;
 static volatile u32 g_u32SoftEnter64;
 static volatile u32 g_u32SoftEnter32;
 static volatile u32 g_u32SoftEnterBad;
-/* Wave 14 exclusive deepen — extra path tallies (file-local only). */
+/* Wave 15 exclusive deepen — extra path tallies (file-local only). */
 static volatile u32 g_u32SoftInvLogs;     /* soft inventory emit count */
 static volatile u32 g_u32SoftVerifyCall;  /* cpu_syscall_soft_verify entries */
 static volatile u32 g_u32SoftInfoGet;     /* cpu_syscall_soft_info_get entries */
@@ -98,7 +100,7 @@ static volatile u32 g_u32SoftCtrGet;      /* other counter-accessor samples */
 static struct gj_cpu_syscall_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
-/* Wave 14 soft expect subflags (last verify; inventory lamps). */
+/* Wave 15 soft expect subflags (last verify; inventory lamps). */
 static u8 g_u8SoftStarOk;
 static u8 g_u8SoftLstarOk;
 static u8 g_u8SoftCstarOk;
@@ -173,7 +175,7 @@ cpu_syscall_soft_note_program(u64 u64Star, u64 u64Lstar, u64 u64Cstar,
 
 /**
  * Soft: rdmsr verify against last program snapshot + expected layout.
- * Does not reprogram MSRs. Wave 14: records per-field expect subflags
+ * Does not reprogram MSRs. Wave 15: records per-field expect subflags
  * for greppable inventory (PASS aggregate unchanged — star/lstar/cstar/
  * sfmask/sce/kern_cs/user_base/sysret_cs).
  */
@@ -263,7 +265,7 @@ cpu_syscall_soft_verify_inner(void)
 /**
  * Soft SYSCALL inventory — greppable "cpu: syscall soft …".
  * Pure observability; never mutates MSRs or hard-gates product.
- * Wave 14 exclusive deepen splits program/star/lstar/cstar/sfmask/efer/
+ * Wave 15 exclusive deepen splits program/star/lstar/cstar/sfmask/efer/
  * enter/verify/expect/path/geom/msr/flags/init surfaces (prefix-stable).
  */
 static void
@@ -335,7 +337,7 @@ cpu_syscall_soft_inventory(void)
     /*
      * Grep: cpu: syscall soft inventory
      * Aggregated presence snapshot for product smoke / agent greps.
-     * Wave 14 stamps wave=14; existing keys remain prefix-stable.
+     * Wave 15 stamps wave=15; existing keys remain prefix-stable.
      */
     kprintf("cpu: syscall soft inventory wave=%u ready=%u live=%u "
             "sce=%u nxe=%u verify_ok=%u inits=%u inv_logs=%u "
@@ -474,6 +476,28 @@ cpu_syscall_soft_inventory(void)
             g_u32SoftStarGet, g_u32SoftLstarGet, g_u32SoftSfmaskGet,
             g_u32SoftEferGet, g_u32SoftInitsGet, g_u32SoftCtrGet);
 
+    /* Grep: cpu: syscall soft capacity (Wave 15 geometry) */
+    kprintf("cpu: syscall soft capacity star_kern=0x%x star_user=0x%x "
+            "user_cs32=0x%x user_cs64=0x%x user_ds=0x%x "
+            "sfmask=0x%lx rflags_if=0x%lx inv_logs=%u wave=%u\n",
+            (unsigned)GJ_CPU_SYSCALL_STAR_KERNEL_CS,
+            (unsigned)GJ_CPU_SYSCALL_STAR_USER_BASE,
+            (unsigned)GJ_CPU_SOFT_USER_CS32, (unsigned)GJ_CPU_SOFT_USER_CS64,
+            (unsigned)GJ_CPU_SOFT_USER_DS,
+            (unsigned long)SFMASK_DEFAULT,
+            (unsigned long)GJ_CPU_SOFT_RFLAGS_IF, g_u32SoftInvLogs,
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+    /* Grep: cpu: syscall soft deepen (Wave 15 stamp) */
+    kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
+            "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
+            "(Wave 15 exclusive; soft only; not bar3)\n",
+            (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
+            (unsigned)(g_fSyscallReady ? 1u : 0u),
+            (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,
+            g_u32SoftEnter64, g_u32SoftEnter32, g_u32SoftVerifyOk,
+            g_u32SoftInvLogs);
+
     /* Legacy / prefix-stable summary lines (pre-wave-14 greps). */
     kprintf("cpu: syscall soft inits=%u verify_ok=%u verify_bad=%u "
             "enter64=%u enter32=%u bad=%u\n",
@@ -568,7 +592,7 @@ cpu_syscall_init(void)
                 g_u32SoftInits);
     }
 
-    /* Wave 14: greppable "cpu: syscall soft …" inventory at BSP program. */
+    /* Wave 15: greppable "cpu: syscall soft …" inventory at BSP program. */
     cpu_syscall_soft_inventory();
 
     (void)EFER_LME;
@@ -792,12 +816,12 @@ cpu_syscall_soft_log(void)
 {
     /*
      * Greppable soft summary (product / smoke inventory):
-     *   cpu: syscall soft inventory wave=14 …
+     *   cpu: syscall soft inventory wave=15 …
      *   cpu: syscall soft inits=… verify_ok=… verify_bad=… enter64=… …
      *   cpu: syscall soft STAR=0x… LSTAR=0x… SFMASK=0x… EFER=0x… SCE=… NXE=…
      *   cpu: syscall soft decode kern_cs=0x… user_base=0x… (CS64=base+16)
      *   cpu: syscall soft program|star|lstar|cstar|sfmask|efer|enter|…
-     * Wave 14: full inventory via soft_inventory; re-verify once per log.
+     * Wave 15: full inventory via soft_inventory; re-verify once per log.
      */
     cpu_syscall_soft_inc(&g_u32SoftLogCall);
     if (g_fSoftSnapLive && g_fSyscallReady) {

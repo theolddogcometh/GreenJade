@@ -10,12 +10,13 @@
  *   - feature read/write helpers + soft negotiate ladder
  *   - queue soft size clamp, disable-before-setup, enable verify
  *
- * Soft transport inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft transport inventory (Wave 15 exclusive deepen; this unit only):
  *   - Scan catalog (found / kind tallies / modern setup)
  *   - Setup / reset / feature negotiate + soft ladder
  *   - Queue soft size clamp / enable verify / nomem
  *   - I/O path tallies (add/kick/poll/reap/driver_ok)
- *   - Wave 14 splits: reset|kind|poll|reap|last|modern|status|transport|deepen
+ *   - Wave 14 splits: reset|kind|poll|reap|last|modern|status|transport
+ *   - Wave 15 splits: add|bar|ratio|notify|ladder|caps|deepen
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  * Greppable twin prefixes (product / agent greps):
  *   "virtio-pci: soft …"
@@ -30,10 +31,12 @@
  *   virtio: q%u size=
  *   virtio: driver_ok
  *   virtio-pci: soft inventory|scan|setup|features|queue|io|path …
- *   virtio-pci: soft reset|kind|poll|reap|last|modern|status|transport|deepen
+ *   virtio-pci: soft reset|kind|poll|reap|last|modern|status|transport
+ *   virtio-pci: soft add|bar|ratio|notify|ladder|caps|deepen
  *   virtio-pci: soft PASS|NODEV|PARTIAL
  *   virtio: soft inventory|scan|setup|features|queue|io|path …
- *   virtio: soft reset|kind|poll|reap|last|modern|status|transport|deepen
+ *   virtio: soft reset|kind|poll|reap|last|modern|status|transport
+ *   virtio: soft add|bar|ratio|notify|ladder|caps|deepen
  *   virtio: soft PASS|NODEV|PARTIAL
  */
 #include <gj/config.h>
@@ -74,12 +77,12 @@
 static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
 
-/* Wave 14 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  14u
-#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 16u
+/* Wave 15 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  15u
+#define VIRTIO_PCI_SOFT_DEEPEN_AREAS 22u
 
 /*
- * Soft product inventory (Wave 14 exclusive deepen). Cumulative path tallies.
+ * Soft product inventory (Wave 15 exclusive deepen). Cumulative path tallies.
  * greppable: virtio-pci: soft … / virtio: soft …
  */
 static u32 g_u32SoftScanEnter;     /* virtio_pci_scan entries */
@@ -163,9 +166,10 @@ soft_inc(u32 *pCtr)
 
 /**
  * Greppable soft virtio-pci transport inventory (product / smoke).
- * Wave 14 deepen — twin prefixes so either agent grep works:
+ * Wave 15 deepen — twin prefixes so either agent grep works:
  *   virtio-pci: soft inventory|scan|setup|features|queue|io|path …
- *   virtio-pci: soft reset|kind|poll|reap|last|modern|status|transport|deepen
+ *   virtio-pci: soft reset|kind|poll|reap|last|modern|status|transport
+ *   virtio-pci: soft add|bar|ratio|notify|ladder|caps|deepen
  *   virtio-pci: soft PASS|NODEV|PARTIAL
  *   virtio: soft … (same catalog)
  * greppable: virtio-pci: soft
@@ -239,7 +243,7 @@ soft_inventory_log(void)
 
     /*
      * Primary prefix: virtio-pci: soft …
-     * Wave 14 deepen splits reset/kind/poll/reap/last/modern/status/…
+     * Wave 15 deepen splits add/bar/ratio/notify/ladder/caps + prior catalog.
      */
     /* Grep: virtio-pci: soft inventory */
     kprintf("virtio-pci: soft inventory found=%u modern=%u max_devs=%u "
@@ -348,6 +352,60 @@ soft_inventory_log(void)
             (unsigned)GJ_VIRTIO_PCI_VENDOR, GJ_VIRTIO_MAX_DEVS,
             GJ_VIRTQ_MAX_SIZE);
 
+    /* Grep: virtio-pci: soft add (Wave 15 chain breakdown) */
+    kprintf("virtio-pci: soft add n1=%u n1_fail=%u n2=%u n2_fail=%u "
+            "n3=%u n3_fail=%u ok_sum=%u fail_sum=%u last_n=%u\n",
+            g_u32SoftAdd, g_u32SoftAddFail, g_u32SoftAdd2, g_u32SoftAdd2Fail,
+            g_u32SoftAdd3, g_u32SoftAdd3Fail, u32AddOk, u32AddFail,
+            g_u32SoftLastAddN);
+
+    /* Grep: virtio-pci: soft bar (Wave 15 BAR/map honesty) */
+    kprintf("virtio-pci: soft bar map_fail=%u max_devs=%u found=%u "
+            "modern=%u known=%u unknown=%u\n",
+            g_u32SoftBarMapFail, GJ_VIRTIO_MAX_DEVS, u32Found, u32Modern,
+            u32Known, g_u32SoftKindUnknown);
+
+    /* Grep: virtio-pci: soft ratio (Wave 15 derived lamps; inventory only) */
+    kprintf("virtio-pci: soft ratio poll_hit_pct=%u poll_to_pct=%u "
+            "add_fail_pct=%u nego_fail_pct=%u q_clamp_pct=%u\n",
+            (g_u32SoftKick != 0u)
+                ? ((g_u32SoftPollHit * 100u) / g_u32SoftKick)
+                : 0u,
+            (g_u32SoftKick != 0u)
+                ? ((g_u32SoftPollTo * 100u) / g_u32SoftKick)
+                : 0u,
+            ((u32AddOk + u32AddFail) != 0u)
+                ? ((u32AddFail * 100u) / (u32AddOk + u32AddFail))
+                : 0u,
+            ((g_u32SoftNegoOk + g_u32SoftNegoFail) != 0u)
+                ? ((g_u32SoftNegoFail * 100u) /
+                   (g_u32SoftNegoOk + g_u32SoftNegoFail))
+                : 0u,
+            ((g_u32SoftQSetupOk + g_u32SoftQClamp) != 0u)
+                ? ((g_u32SoftQClamp * 100u) /
+                   (g_u32SoftQSetupOk + g_u32SoftQClamp))
+                : 0u);
+
+    /* Grep: virtio-pci: soft notify (Wave 15 live notify/isr/devcfg) */
+    kprintf("virtio-pci: soft notify live=%u isr=%u devcfg=%u "
+            "numq_sum=%u modern=%u isr_reads=%u\n",
+            u32Notify, u32Isr, u32DevCfg, u32NumQSum, u32Modern,
+            g_u32SoftIsr);
+
+    /* Grep: virtio-pci: soft ladder (Wave 15 soft negotiate ladder) */
+    kprintf("virtio-pci: soft ladder soft_ok=%u soft_fail=%u soft_inval=%u "
+            "soft_steps=%u nego_ok=%u nego_fail=%u feat_has=%u\n",
+            g_u32SoftSoftOk, g_u32SoftSoftFail, g_u32SoftSoftInval,
+            g_u32SoftSoftSteps, g_u32SoftNegoOk, g_u32SoftNegoFail,
+            g_u32SoftFeatHas);
+
+    /* Grep: virtio-pci: soft caps (Wave 15 modern cap honesty) */
+    kprintf("virtio-pci: soft caps common=1 notify=%u isr=%u devcfg=%u "
+            "pci_cfg=0 packed=0 msix=0 setup_nocap=%u setup_nocommon=%u "
+            "bar_map_fail=%u\n",
+            u32Notify, u32Isr, u32DevCfg, g_u32SoftSetupNocap,
+            g_u32SoftSetupNocommon, g_u32SoftBarMapFail);
+
     /* Grep: virtio-pci: soft path */
     kprintf("virtio-pci: soft path claim=pci_modern+vq "
             "transport=common_cfg+notify+isr setup=cap_walk "
@@ -355,7 +413,7 @@ soft_inventory_log(void)
             "wave=%u (soft inventory; not bar3)\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio-pci: soft deepen (Wave 14 stamp) */
+    /* Grep: virtio-pci: soft deepen (Wave 15 stamp) */
     kprintf("virtio-pci: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,
@@ -483,6 +541,60 @@ soft_inventory_log(void)
             (unsigned)GJ_VIRTIO_PCI_VENDOR, GJ_VIRTIO_MAX_DEVS,
             GJ_VIRTQ_MAX_SIZE);
 
+    /* Grep: virtio: soft add (Wave 15) */
+    kprintf("virtio: soft add n1=%u n1_fail=%u n2=%u n2_fail=%u "
+            "n3=%u n3_fail=%u ok_sum=%u fail_sum=%u last_n=%u\n",
+            g_u32SoftAdd, g_u32SoftAddFail, g_u32SoftAdd2, g_u32SoftAdd2Fail,
+            g_u32SoftAdd3, g_u32SoftAdd3Fail, u32AddOk, u32AddFail,
+            g_u32SoftLastAddN);
+
+    /* Grep: virtio: soft bar (Wave 15) */
+    kprintf("virtio: soft bar map_fail=%u max_devs=%u found=%u "
+            "modern=%u known=%u unknown=%u\n",
+            g_u32SoftBarMapFail, GJ_VIRTIO_MAX_DEVS, u32Found, u32Modern,
+            u32Known, g_u32SoftKindUnknown);
+
+    /* Grep: virtio: soft ratio (Wave 15) */
+    kprintf("virtio: soft ratio poll_hit_pct=%u poll_to_pct=%u "
+            "add_fail_pct=%u nego_fail_pct=%u q_clamp_pct=%u\n",
+            (g_u32SoftKick != 0u)
+                ? ((g_u32SoftPollHit * 100u) / g_u32SoftKick)
+                : 0u,
+            (g_u32SoftKick != 0u)
+                ? ((g_u32SoftPollTo * 100u) / g_u32SoftKick)
+                : 0u,
+            ((u32AddOk + u32AddFail) != 0u)
+                ? ((u32AddFail * 100u) / (u32AddOk + u32AddFail))
+                : 0u,
+            ((g_u32SoftNegoOk + g_u32SoftNegoFail) != 0u)
+                ? ((g_u32SoftNegoFail * 100u) /
+                   (g_u32SoftNegoOk + g_u32SoftNegoFail))
+                : 0u,
+            ((g_u32SoftQSetupOk + g_u32SoftQClamp) != 0u)
+                ? ((g_u32SoftQClamp * 100u) /
+                   (g_u32SoftQSetupOk + g_u32SoftQClamp))
+                : 0u);
+
+    /* Grep: virtio: soft notify (Wave 15) */
+    kprintf("virtio: soft notify live=%u isr=%u devcfg=%u "
+            "numq_sum=%u modern=%u isr_reads=%u\n",
+            u32Notify, u32Isr, u32DevCfg, u32NumQSum, u32Modern,
+            g_u32SoftIsr);
+
+    /* Grep: virtio: soft ladder (Wave 15) */
+    kprintf("virtio: soft ladder soft_ok=%u soft_fail=%u soft_inval=%u "
+            "soft_steps=%u nego_ok=%u nego_fail=%u feat_has=%u\n",
+            g_u32SoftSoftOk, g_u32SoftSoftFail, g_u32SoftSoftInval,
+            g_u32SoftSoftSteps, g_u32SoftNegoOk, g_u32SoftNegoFail,
+            g_u32SoftFeatHas);
+
+    /* Grep: virtio: soft caps (Wave 15) */
+    kprintf("virtio: soft caps common=1 notify=%u isr=%u devcfg=%u "
+            "pci_cfg=0 packed=0 msix=0 setup_nocap=%u setup_nocommon=%u "
+            "bar_map_fail=%u\n",
+            u32Notify, u32Isr, u32DevCfg, g_u32SoftSetupNocap,
+            g_u32SoftSetupNocommon, g_u32SoftBarMapFail);
+
     /* Grep: virtio: soft path */
     kprintf("virtio: soft path claim=pci_modern+vq "
             "transport=common_cfg+notify+isr setup=cap_walk "
@@ -490,7 +602,7 @@ soft_inventory_log(void)
             "wave=%u (soft inventory; not bar3)\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
 
-    /* Grep: virtio: soft deepen */
+    /* Grep: virtio: soft deepen (Wave 15 stamp) */
     kprintf("virtio: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,

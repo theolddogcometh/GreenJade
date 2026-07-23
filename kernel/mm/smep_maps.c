@@ -11,12 +11,12 @@
  *   - Post-harden residual-U audit → greppable soft PASS/FAIL
  *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
  *
- * Soft deepen (Wave 9 base; Wave 14 exclusive deepen): soft SMEP/map
+ * Soft deepen (Wave 9 base; Wave 15 exclusive deepen): soft SMEP/map
  * inventory + greppable "smep: soft …" logs (map U axes, leaf sizes,
  * CR4/CPUID, harden stats, honesty/path/deepen stamps).
  * Diagnostics only — never hard-gate boot; wrap OK.
  *
- * Wave 14 soft inventory deepen (prefix-stable; greppable: smep: soft):
+ * Wave 15 soft inventory deepen (prefix-stable; greppable: smep: soft):
  *   "smep: soft honesty …"    explicit non-claims (not full G-MAP product)
  *   "smep: soft inventory …"  stage + harden/audit soft pass surface
  *   "smep: soft map …"        leaf U axes + clear/walk residual snapshot
@@ -25,8 +25,9 @@
  *   "smep: soft enable …"     SMEP/SMAP enable/skip soft path catalog
  *   "smep: soft path …"       surface catalog + honesty open lamps
  *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
- *   "smep: soft deepen …"     wave=14 stamp + area count
+ *   "smep: soft deepen …"     wave=15 stamp + area count
  *   "smep: soft lamps …"      CR4/CPUID readiness lamps
+ *   "smep: soft band …"       Wave 15 user-band geometry
  * Honesty: soft inventory only — not product G-MAP complete; not bar3.
  *
  * greppable: smep: harden
@@ -70,18 +71,18 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define SMEP_SOFT_WAVE 14u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 15u
 
-/* Soft inventory greppable area count (honesty..lamps; deepen excluded). */
-#define SMEP_SOFT_AREAS 9u
+/* Soft inventory greppable area count (honesty..lamps+band; deepen excluded). */
+#define SMEP_SOFT_AREAS 10u
 
 static struct gj_smep_stats g_stats;
 static int                  g_fSmepOn;
 static int                  g_fSmapOn;
 
 /*
- * Soft map inventory axes (file-local; Wave 9 + Wave 14 exclusive).
+ * Soft map inventory axes (file-local; Wave 9 + Wave 15 exclusive).
  * Snapshotted over the last mutate harden walk; wrap OK; never hard-gate.
  * greppable: smep: soft
  */
@@ -97,7 +98,7 @@ static u64 g_u64SoftMapAlreadySuper; /* present !U (already supervisor) */
 static u64 g_u64SoftInvLogs;         /* smep_soft_inventory emissions */
 
 /*
- * Wave 14: enable-path soft tallies (file-local; diagnostics only).
+ * Wave 15: enable-path soft tallies (file-local; diagnostics only).
  * Separate from g_stats skip/on so inventory can show path attempts.
  */
 static u64 g_u64SoftEnableSmepOk;
@@ -329,7 +330,7 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
 }
 
 /**
- * Greppable soft SMEP/map inventory dump (product / smoke; Wave 14 deepen).
+ * Greppable soft SMEP/map inventory dump (product / smoke; Wave 15 deepen).
  * Prefix-stable markers (smep: soft …):
  *   smep: soft honesty    — explicit non-claims
  *   smep: soft inventory  — stage + harden/audit soft pass surface
@@ -339,7 +340,7 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
  *   smep: soft enable     — SMEP/SMAP enable/skip soft path
  *   smep: soft path       — surface catalog + honesty open lamps
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
- *   smep: soft deepen     — wave=14 stamp + area count
+ *   smep: soft deepen     — wave=15 stamp + area count
  *   smep: soft lamps      — CR4/CPUID readiness lamps
  *
  * Never allocates; safe from boot harden / enable paths.
@@ -509,13 +510,26 @@ smep_soft_inventory(const char *szWhere)
             (unsigned)SMEP_SOFT_WAVE);
     u32Areas++;
 
+    /* Grep: smep: soft band (Wave 15 user-band geometry) */
+    kprintf("smep: soft band user_base=0x%llx user_end=0x%llx "
+            "cr4_smep_bit=%d cr4_smap_bit=%d leaf=4k|2m|1g "
+            "u_kernel=%lu u_user=%lu u_straddle=%lu wave=%u\n",
+            (unsigned long long)GJ_USER_VA_BASE,
+            (unsigned long long)GJ_USER_VA_END,
+            fSmepBit, fSmapBit,
+            (unsigned long)g_u64SoftMapUKernelHalf,
+            (unsigned long)g_u64SoftMapUUserBand,
+            (unsigned long)g_u64SoftMapUStraddle,
+            (unsigned)SMEP_SOFT_WAVE);
+    u32Areas++;
+
     /*
      * Grep: smep: soft deepen wave
-     * areas tracks prior soft lines this emission (honesty..lamps).
+     * areas tracks prior soft lines this emission (honesty..lamps+band).
      */
     kprintf("smep: soft deepen wave=%u areas=%u via=%s logs=%lu "
             "catalog=%u residual_u=%lu "
-            "(Wave 14 exclusive; not product G-MAP; not bar3)\n",
+            "(Wave 15 exclusive; not product G-MAP; not bar3)\n",
             (unsigned)SMEP_SOFT_WAVE,
             (unsigned)u32Areas,
             szWhere,
@@ -954,7 +968,7 @@ smep_stats_reset(void)
     g_u64SoftEnableSmapSkip = 0;
     g_u64SoftHardenNull = 0;
     g_u64SoftLastRemain = 0;
-    /* Preserve inv log count across reset (emission lifetime) — Wave 14:
+    /* Preserve inv log count across reset (emission lifetime) — Wave 15:
      * match user_copy; do not zero g_u64SoftInvLogs so logs stay monotonic.
      * Prior Wave 9 zeroed it; deepen prefers lifetime logs like user_copy.
      */

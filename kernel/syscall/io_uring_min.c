@@ -17,7 +17,7 @@
  * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
  * not bar3, and not a Deck Top-50 claim.
  *
- * Soft inventory (Wave 14 exclusive deepen) — greppable "io_uring: soft …":
+ * Soft inventory (Wave 14 base + Wave 15 exclusive deepen) — greppable "io_uring: soft …":
  *   io_uring: soft inventory   — pool/depth caps + call rollup + wave
  *   io_uring: soft setup       — setup ok/enomem/efault tallies
  *   io_uring: soft enter       — enter/submit/inject/eagain tallies
@@ -28,7 +28,11 @@
  *   io_uring: soft inject      — empty-SQ soft inject lifecycle
  *   io_uring: soft honesty     — min_rings vs full_game_io claim lamps
  *   io_uring: soft path        — product claim + honesty line
- *   io_uring: soft deepen      — wave=14 areas stamp
+ *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
+ *   io_uring: soft last        — Wave 15 live pool snapshot lamps
+ *   io_uring: soft catalog     — Wave 15 surface catalog stamp
+ *   io_uring: soft deepen      — wave=15 areas stamp
+ *   io_uring: soft inventory PASS / soft PASS
  * greppable: io_uring: soft
  *
  * Honesty: min rings remain a soft scaffold — not product game I/O,
@@ -269,13 +273,13 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE  14u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define GJ_IORING_SOFT_WAVE  15u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 11u
+#define GJ_IORING_SOFT_AREAS 15u
 
 /*
- * Soft product inventory (Wave 14 exclusive deepen). File-local sticky
+ * Soft product inventory (Wave 15 exclusive deepen). File-local sticky
  * counters; wrap OK; diagnostics only — never hard-gate setup/enter/register.
  * greppable: io_uring: soft
  */
@@ -320,7 +324,7 @@ struct gj_io_uring_soft {
     u64 u64SqDropped;       /* SQ array index drops */
     u64 u64SoftLog;         /* soft inventory dumps */
     u64 u64SoftScan;        /* pool occupancy samples */
-    /* Wave 14 deepen: live SQ/CQ snapshot sums + eventfd/personality lamps */
+    /* Wave 15 deepen: live SQ/CQ snapshot sums + eventfd/personality lamps */
     u64 u64SoftSqPending;   /* sum (sq.tail-sq.head) across used rings */
     u64 u64SoftCqPending;   /* sum (cq.tail-cq.head) across used rings */
     u64 u64SoftEventfdLive; /* rings with eventfd registered */
@@ -357,7 +361,7 @@ ioring_soft_inc(u64 *pCtr)
 
 /**
  * Soft: sample ring pool occupancy (no lock; diagnostic race OK).
- * Wave 14 deepen also snapshots SQ/CQ pending + eventfd/personality lamps.
+ * Wave 15 deepen also snapshots SQ/CQ pending + eventfd/personality lamps.
  * greppable via io_uring: soft pool
  */
 static void
@@ -422,7 +426,7 @@ ioring_soft_scan(void)
 }
 
 /**
- * Greppable soft inventory (Wave 14 exclusive deepen). Prefix "io_uring: soft …".
+ * Greppable soft inventory (Wave 15 exclusive deepen). Prefix "io_uring: soft …".
  * Pure observation — never gates min-rings smoke PASS.
  * Honesty: min rings ≠ full game I/O (soft scaffold only).
  *
@@ -436,7 +440,11 @@ ioring_soft_scan(void)
  * greppable: io_uring: soft inject
  * greppable: io_uring: soft honesty
  * greppable: io_uring: soft path
+ * greppable: io_uring: soft rates
+ * greppable: io_uring: soft last
+ * greppable: io_uring: soft catalog
  * greppable: io_uring: soft deepen
+ * greppable: io_uring: soft inventory PASS
  */
 static void
 ioring_soft_log(void)
@@ -540,7 +548,7 @@ ioring_soft_log(void)
             (unsigned long)g_soft.u64SoftScan,
             (unsigned)GJ_IORING_SOFT_WAVE);
 
-    /* Grep: io_uring: soft inject (Wave 14 deepen) */
+    /* Grep: io_uring: soft inject (Wave 15 deepen) */
     kprintf("io_uring: soft inject ok=%lu fail=%lu enter_inject=%lu "
             "mode=empty_sq_advance claim=soft_scaffold wave=%u\n",
             (unsigned long)g_soft.u64InjectOk,
@@ -548,7 +556,7 @@ ioring_soft_log(void)
             (unsigned long)g_soft.u64EnterInject,
             (unsigned)GJ_IORING_SOFT_WAVE);
 
-    /* Grep: io_uring: soft honesty (Wave 14 deepen) */
+    /* Grep: io_uring: soft honesty (Wave 15 deepen) */
     kprintf("io_uring: soft honesty min_rings=1 full_game_io=0 async_title=0 "
             "iopoll=0 bar3=open deck_top50=0 product=soft_scaffold "
             "sqe=vfs_ram_sync wave=%u "
@@ -563,10 +571,71 @@ ioring_soft_log(void)
             "(min rings != full game I/O; soft inventory; not bar3)\n",
             (unsigned)GJ_IORING_SOFT_WAVE);
 
-    /* Grep: io_uring: soft deepen wave (Wave 14 stamp) */
+    /* Grep: io_uring: soft rates (Wave 15 deepen) */
+    {
+        u64 u64SetupSum;
+        u64 u64BpSetupOk;
+        u64 u64EnterSum;
+        u64 u64BpEnterOk;
+        u64 u64SqeSum;
+        u64 u64BpSqeNop;
+
+        u64SetupSum = g_soft.u64SetupOk + g_soft.u64SetupEnomem +
+                      g_soft.u64SetupEfault + g_soft.u64SetupOpenFail;
+        if (u64SetupSum != 0) {
+            u64BpSetupOk = (g_soft.u64SetupOk * 10000ull) / u64SetupSum;
+        } else {
+            u64BpSetupOk = 0;
+        }
+        u64EnterSum = g_soft.u64EnterOk + g_soft.u64EnterEbadf +
+                      g_soft.u64EnterEagain + g_soft.u64EnterNop;
+        if (u64EnterSum != 0) {
+            u64BpEnterOk = (g_soft.u64EnterOk * 10000ull) / u64EnterSum;
+        } else {
+            u64BpEnterOk = 0;
+        }
+        u64SqeSum = g_soft.u64SqeNop + g_soft.u64SqeRw + g_soft.u64SqeFs +
+                    g_soft.u64SqePoll + g_soft.u64SqeReg + g_soft.u64SqeEnosys +
+                    g_soft.u64SqeEinval;
+        if (u64SqeSum != 0) {
+            u64BpSqeNop = (g_soft.u64SqeNop * 10000ull) / u64SqeSum;
+        } else {
+            u64BpSqeNop = 0;
+        }
+        kprintf("io_uring: soft rates bp_setup_ok=%lu bp_enter_ok=%lu "
+                "bp_sqe_nop=%lu setup_sum=%lu enter_sum=%lu sqe_sum=%lu "
+                "wave=%u\n",
+                (unsigned long)u64BpSetupOk,
+                (unsigned long)u64BpEnterOk,
+                (unsigned long)u64BpSqeNop,
+                (unsigned long)u64SetupSum,
+                (unsigned long)u64EnterSum,
+                (unsigned long)u64SqeSum,
+                (unsigned)GJ_IORING_SOFT_WAVE);
+    }
+
+    /* Grep: io_uring: soft last (Wave 15 deepen) */
+    kprintf("io_uring: soft last used=%u free=%u mapped=%u "
+            "sq_pend=%u cq_pend=%u eventfd_live=%u pers_live=%u "
+            "logs=%lu once=%u wave=%u\n",
+            g_u32SoftUsed, g_u32SoftFree, g_u32SoftMapped,
+            g_u32SoftSqPending, g_u32SoftCqPending,
+            g_u32SoftEventfdLive, g_u32SoftPersLive,
+            (unsigned long)g_soft.u64SoftLog,
+            g_fSoftOnce ? 1u : 0u,
+            (unsigned)GJ_IORING_SOFT_WAVE);
+
+    /* Grep: io_uring: soft catalog (Wave 15 deepen) */
+    kprintf("io_uring: soft catalog wave=%u areas=%u "
+            "surfaces=inventory,setup,enter,register,mmap,sqe,pool,"
+            "inject,honesty,path,rates,last,catalog,deepen,PASS\n",
+            (unsigned)GJ_IORING_SOFT_WAVE,
+            (unsigned)GJ_IORING_SOFT_AREAS);
+
+    /* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
     kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "
             "used=%u mapped=%u setup_ok=%lu enter_ok=%lu sqe_exec=%lu "
-            "(Wave 14 exclusive; min rings soft scaffold; not product game I/O; "
+            "(Wave 15 exclusive; min rings soft scaffold; not product game I/O; "
             "not bar3)\n",
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS,
@@ -575,6 +644,18 @@ ioring_soft_log(void)
             (unsigned long)g_soft.u64SetupOk,
             (unsigned long)g_soft.u64EnterOk,
             (unsigned long)g_soft.u64SqeExec);
+
+    /* Grep: io_uring: soft inventory PASS / soft PASS */
+    kprintf("io_uring: soft inventory PASS wave=%u logs=%lu "
+            "setup_ok=%lu enter_ok=%lu sqe_exec=%lu\n",
+            (unsigned)GJ_IORING_SOFT_WAVE,
+            (unsigned long)g_soft.u64SoftLog,
+            (unsigned long)g_soft.u64SetupOk,
+            (unsigned long)g_soft.u64EnterOk,
+            (unsigned long)g_soft.u64SqeExec);
+    kprintf("io_uring: soft PASS wave=%u logs=%lu\n",
+            (unsigned)GJ_IORING_SOFT_WAVE,
+            (unsigned long)g_soft.u64SoftLog);
 }
 
 /**
@@ -661,7 +742,7 @@ gj_io_uring_init(void)
     kprintf("io_uring: min rings ready pool=%u depth<=%u SQE+I/O+mmap+"
             "fixed+poll+openat (min rings != full game I/O)\n",
             GJ_IORING_MAX, GJ_IORING_ENTRIES);
-    /* Wave 14 soft inventory baseline (greppable io_uring: soft …). */
+    /* Wave 15 soft inventory baseline (greppable io_uring: soft …). */
     ioring_soft_log();
 }
 

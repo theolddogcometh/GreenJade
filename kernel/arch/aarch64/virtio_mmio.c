@@ -16,7 +16,7 @@
  *        QueueReady stays 0 — no real DMA.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 11 base + Wave 14 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 15 exclusive deepen; this unit only —
  * greppable "aarch64: virtio soft …")
  * -------------------------------------------------------------------------
  * Soft scan: slot count + base/stride + magic/dev tallies after probe.
@@ -28,7 +28,7 @@
  * Soft path honesty: mmio=1 dma=0 ready0=1 neon=0 kick=0 features_ok=0
  *   driver_ok=0 — soft probe only; not product block/net I/O.
  *
- * Wave 14 deepen areas (multi-line, prefix-stable):
+ * Wave 15 deepen areas (multi-line, prefix-stable):
  *   inventory | slots | dev0 | feats | ring | status | used | gates |
  *   path | deepen
  * Status soft: ACK/DRIVER bit lamps + unarmed ready/pfn.
@@ -108,9 +108,9 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_SOFT_QNUM     8u
 #define VIRTIO_SOFT_ALIGN    4096u
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define VIRTIO_SOFT_WAVE   14u
-#define VIRTIO_SOFT_AREAS  10u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define VIRTIO_SOFT_WAVE   15u
+#define VIRTIO_SOFT_AREAS  12u
 
 /*
  * Guest-side soft split virtqueue layout (OASIS public shape).
@@ -437,7 +437,7 @@ virtio_soft_ring_layout_ok(void)
 }
 
 /*
- * Wave 11 base + Wave 14 soft inventory emission — greppable
+ * Wave 11 base + Wave 15 soft inventory emission — greppable
  * "aarch64: virtio soft …". Returns 1 if all soft gates held
  * (scan/layout/queue/desc/path/dma). Never hard-gates product bring-up;
  * serial only.
@@ -623,7 +623,8 @@ virtio_soft_inventory(const struct virtio_soft_snap *pSnap)
      * Honesty: soft MMIO probe only — not product block/net DMA path.
      */
     aarch64_uart_puts("aarch64: virtio soft path mmio=1 dma=0 ready0=1 neon=0 "
-                      "kick=0 features_ok=0 driver_ok=0 layout_ok=");
+                      "kick=0 features_ok=0 driver_ok=0 product_kernel=OPEN "
+                      "hard_gate=0 layout_ok=");
     aarch64_uart_put_hex((unsigned long)pSnap->u8LayoutOk);
     aarch64_uart_puts(" dma_unarmed=");
     aarch64_uart_put_hex((unsigned long)pSnap->u8DmaUnarmed);
@@ -639,12 +640,45 @@ virtio_soft_inventory(const struct virtio_soft_snap *pSnap)
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" (soft inventory; not bar3)\n");
 
+    /* Grep: aarch64: virtio soft surf — Wave 15 gate bit lamps */
+    aarch64_uart_puts("aarch64: virtio soft surf scan=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8ScanOk);
+    aarch64_uart_puts(" layout=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8LayoutOk);
+    aarch64_uart_puts(" queue=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8QueueOk);
+    aarch64_uart_puts(" desc=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8DescOk);
+    aarch64_uart_puts(" dma_unarmed=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8DmaUnarmed);
+    aarch64_uart_puts(" path=");
+    aarch64_uart_put_hex((unsigned long)pSnap->u8PathOk);
+    aarch64_uart_puts(" bits=");
+    aarch64_uart_put_hex((unsigned long)(
+        ((unsigned)pSnap->u8ScanOk << 0) |
+        ((unsigned)pSnap->u8LayoutOk << 1) |
+        ((unsigned)pSnap->u8QueueOk << 2) |
+        ((unsigned)pSnap->u8DescOk << 3) |
+        ((unsigned)pSnap->u8DmaUnarmed << 4) |
+        ((unsigned)pSnap->u8PathOk << 5)));
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+    aarch64_uart_puts("\n");
+
     /* Grep: aarch64: virtio soft deepen */
     aarch64_uart_puts("aarch64: virtio soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
-    aarch64_uart_puts(" areas=inventory,slots,dev0,feats,ring,status,used,"
-                      "gates,path,deepen unit=virtio_mmio.c only "
-                      "rate_limited=0\n");
+    aarch64_uart_puts(" areas=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_AREAS);
+    aarch64_uart_puts(" catalog=inventory,slots,dev0,feats,ring,status,"
+                      "used,gates,path,surf,honesty,deepen "
+                      "unit=virtio_mmio.c only rate_limited=0 soft_only=1\n");
+
+    /* Grep: aarch64: virtio soft honesty */
+    aarch64_uart_puts("aarch64: virtio soft honesty product_kernel=OPEN "
+                      "soft_only=1 no_dma=1 no_kick=1 no_bar3=1 wave=");
+    aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+    aarch64_uart_puts("\n");
 
     fOk = 0;
     if (pSnap->u8ScanOk != 0u && pSnap->u8LayoutOk != 0u &&

@@ -4,6 +4,10 @@
  *
  * storaged — host POSIX software-image smoke (A1 CI path).
  *
+ * Soft inventory (Wave 15 exclusive deepen — greppable "storaged: soft …"):
+ *   storaged: soft inventory … / soft deepen wave=15 …
+ *   multi_server=0 confine=0; soft ≠ product multi-server confine; not bar3.
+ *
  * Exercises door-shaped sector R/W against an in-process 32 KiB image so CI
  * can green without the kernel store door. The freestanding product path is
  * storaged_gj.c (CLAIM / soft door / sector smoke / UDX ring / RELEASE over
@@ -394,6 +398,15 @@ main(void)
     }
     cSoft++;
     printf("storaged: free soft ok soft_steps=%u\n", cSoft);
+
+    /* Grep: storaged: soft inventory (Wave 15 exclusive deepen) */
+    printf("storaged: soft inventory soft_steps=%u sectors=%u io=%u "
+           "wave=15 multi_server=0 confine=0\n",
+           cSoft, (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);
+    printf("storaged: soft deepen wave=15 areas=1 multi_server=0 "
+           "confine=0 bar3=0\n");
+    printf("storaged: soft honesty multi_server=0 confine=0 bar3=0 "
+           "exclusive=1 soft=1 wave=15\n");
 
     printf("storaged: door-shaped multi-lba ok sectors=%u io=%u\n",
            (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);

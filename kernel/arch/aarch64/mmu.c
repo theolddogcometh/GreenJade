@@ -55,13 +55,13 @@
  * soft-touch DRAM through Attr1 and soft-read a known MMIO FR word through
  * Attr0 (PL011 UART FR @ 0x09000018 — RO status; never writes DR).
  *
- * Soft MMU inventory (Wave 14 deepen; pure read of live TCR/TTBR after enable):
+ * Soft MMU inventory (Wave 15 deepen; pure read of live TCR/TTBR after enable):
  *   page size soft  — TCR_EL1.TG0 → 4 KiB expected (TG0=0b00)
  *   TTBR soft presence — TTBR0_EL1 BADDR non-zero / matches L1; TTBR1=0
  *   MAIR soft — Attr0 device / Attr1 normal pack match
  *   SCTLR soft lamps — M/C/I after enable
  *   L1 soft — valid block / attr / OA for [0] device + [1] normal
- * Soft deepen: area catalog + wave=14 stamp
+ * Soft deepen: area catalog + wave=15 stamp
  * Soft path honesty: identity scaffold only — product_kernel=OPEN
  * Greppable:
  *   aarch64: mmu PASS
@@ -71,9 +71,9 @@
  *   aarch64: mmu soft mair=… attr0=… attr1=… match=…
  *   aarch64: mmu soft sctlr=… m=… c=… i=…
  *   aarch64: mmu soft l1 d0_ok=… d1_ok=… map_ok=…
- *   aarch64: mmu soft inventory wave=14 …
- *   aarch64: mmu soft deepen wave=14 areas=…
- *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=14
+ *   aarch64: mmu soft inventory wave=15 …
+ *   aarch64: mmu soft deepen wave=15 areas=…
+ *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=15
  *   aarch64: mmu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: mmu soft PASS | FAIL
  *   aarch64: mmu soft SKIP (no page)
@@ -118,16 +118,16 @@ extern void *aarch64_pmm_alloc(void);
 #define MMU_SOFT_PAGE_16K  16384ul
 #define MMU_SOFT_PAGE_64K  65536ul
 
-/* Wave 14 soft inventory stamp (greppable wave=14). */
-#define MMU_SOFT_WAVE 14u
+/* Wave 15 soft inventory stamp (greppable wave=15). */
+#define MMU_SOFT_WAVE 15u
 
 /* Soft deepen area count: page,ttbr,mair,sctlr,l1,path,honesty. */
-#define MMU_SOFT_AREAS 7u
+#define MMU_SOFT_AREAS 9u
 
 /* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
 #define TTBR_BADDR_MASK (~0xffful)
 
-/* Soft inventory emit counter (Wave 14 stats). */
+/* Soft inventory emit counter (Wave 15 stats). */
 static unsigned g_cMmuSoftLogs;
 
 /* Block / table descriptors (stage-1) */
@@ -155,7 +155,7 @@ static unsigned g_cMmuSoftLogs;
  * Soft map self-touch pattern (identity Attr1 on virt).
  * Do NOT write fixed PA 0x40080000: the order-0 pool often covers that
  * address after __bss_end, and a freelist-node paint corrupts PMM walk
- * (Wave 14: soft touch uses the live L1 page instead — already allocated,
+ * (Wave 15: soft touch uses the live L1 page instead — already allocated,
  * identity-mapped normal WB, never freelist-linked while in use).
  */
 #define MMU_SOFT_DRAM_PAT  0x5a5a5a5a5a5a5a5aul
@@ -308,7 +308,7 @@ mmu_map_soft_observe(unsigned long *pL1)
 }
 
 /*
- * Soft MMU inventory deepen (Wave 14; non-fatal):
+ * Soft MMU inventory deepen (Wave 15; non-fatal):
  *   - page size soft: live TCR.TG0 → expected 4 KiB granule
  *   - TTBR soft presence: TTBR0 BADDR matches L1; TTBR1 cleared (TTBR0-only)
  *   - MAIR soft: Attr0 device / Attr1 normal pack
@@ -466,7 +466,7 @@ mmu_soft_inventory(unsigned long *pL1)
     aarch64_uart_put_hex(paL1);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: mmu soft mair — Wave 14 Attr pack. */
+    /* Grep: aarch64: mmu soft mair — Wave 15 Attr pack. */
     aarch64_uart_puts("aarch64: mmu soft mair=");
     aarch64_uart_put_hex(uMair);
     aarch64_uart_puts(" attr0=");
@@ -477,7 +477,7 @@ mmu_soft_inventory(unsigned long *pL1)
     aarch64_uart_put_hex(fMairOk != 0 ? 1ul : 0ul);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: mmu soft sctlr — Wave 14 M/C/I lamps. */
+    /* Grep: aarch64: mmu soft sctlr — Wave 15 M/C/I lamps. */
     aarch64_uart_puts("aarch64: mmu soft sctlr=");
     aarch64_uart_put_hex(uSctlr);
     aarch64_uart_puts(" m=");
@@ -490,7 +490,7 @@ mmu_soft_inventory(unsigned long *pL1)
     aarch64_uart_put_hex(fSctlrOk != 0 ? 1ul : 0ul);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: mmu soft l1 — Wave 14 descriptor lamps. */
+    /* Grep: aarch64: mmu soft l1 — Wave 15 descriptor lamps. */
     aarch64_uart_puts("aarch64: mmu soft l1 d0_ok=");
     aarch64_uart_put_hex(fD0Ok != 0 ? 1ul : 0ul);
     aarch64_uart_puts(" d1_ok=");
@@ -503,7 +503,7 @@ mmu_soft_inventory(unsigned long *pL1)
     aarch64_uart_put_hex(d1);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: mmu soft inventory — Wave 14 rollup. */
+    /* Grep: aarch64: mmu soft inventory — Wave 15 rollup. */
     aarch64_uart_puts("aarch64: mmu soft inventory wave=");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts(" page_ok=");
@@ -523,14 +523,39 @@ mmu_soft_inventory(unsigned long *pL1)
 
     /*
      * Grep: aarch64: mmu soft deepen
-     * Wave 14 area catalog — identity soft scaffold only.
+     * Wave 15 area catalog — identity soft scaffold only.
      */
     aarch64_uart_puts("aarch64: mmu soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_AREAS);
-    aarch64_uart_puts(" catalog=page,ttbr,mair,sctlr,l1,path,honesty logs=");
+    aarch64_uart_puts(" catalog=page,ttbr,mair,sctlr,l1,path,surf,honesty,"
+                      "deepen logs=");
     aarch64_uart_put_hex((unsigned long)g_cMmuSoftLogs);
+    aarch64_uart_puts("\n");
+
+    /* Grep: aarch64: mmu soft surf — Wave 15 identity gate lamps */
+    aarch64_uart_puts("aarch64: mmu soft surf page_ok=");
+    aarch64_uart_put_hex(fPageOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" ttbr_ok=");
+    aarch64_uart_put_hex((fTtbrPresent != 0 && fTtbrMatch != 0 &&
+                           fTtbr1Clear != 0) ? 1ul : 0ul);
+    aarch64_uart_puts(" mair_ok=");
+    aarch64_uart_put_hex(fMairOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" sctlr_ok=");
+    aarch64_uart_put_hex(fSctlrOk != 0 ? 1ul : 0ul);
+    aarch64_uart_puts(" l1_ok=");
+    aarch64_uart_put_hex((fD0Ok != 0 && fD1Ok != 0) ? 1ul : 0ul);
+    aarch64_uart_puts(" bits=");
+    aarch64_uart_put_hex((unsigned long)(
+        ((fPageOk != 0) ? 1u : 0u) |
+        (((fTtbrPresent != 0 && fTtbrMatch != 0 && fTtbr1Clear != 0)
+          ? 1u : 0u) << 1) |
+        (((fMairOk != 0) ? 1u : 0u) << 2) |
+        (((fSctlrOk != 0) ? 1u : 0u) << 3) |
+        (((fD0Ok != 0 && fD1Ok != 0) ? 1u : 0u) << 4)));
+    aarch64_uart_puts(" wave=");
+    aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
     /*

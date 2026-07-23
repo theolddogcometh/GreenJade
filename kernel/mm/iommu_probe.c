@@ -16,15 +16,20 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
  *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
  *   iommu: soft present    — DMAR/IVRS presence lamps
  *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
  *   iommu: soft window     — software BDF window table tallies
  *   iommu: soft enforce    — policy arm + deny counters (soft)
+ *   iommu: soft acpi       — RSDP/XSDT/RSDT/DMAR/IVRS scan tallies (W15)
+ *   iommu: soft busmaster  — allow/deny path tallies under enforce (W15)
+ *   iommu: soft peak       — peak windows / create peaks (W15)
  *   iommu: soft path       — honesty: always-on product IOMMU remains OPEN
  *   iommu: soft lamps      — composite soft lamps
- *   iommu: soft deepen     — wave=14 stamp + area count
+ *   iommu: soft honesty    — explicit non-claims catalog (W15)
+ *   iommu: soft stats      — rollup for agent greps (W15)
+ *   iommu: soft deepen     — wave=15 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close.
@@ -52,10 +57,10 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE  14u
-/* Fixed greppable categories for deepen stamp (inventory…OPEN). */
-#define IOMMU_SOFT_AREAS 10u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE  15u
+/* Fixed greppable categories for deepen stamp (inventory…OPEN + W15 axes). */
+#define IOMMU_SOFT_AREAS 15u
 
 static struct gj_iommu_info g_Info;
 static int g_fProbed;
@@ -88,7 +93,24 @@ static u32 g_cWinRevokeMiss;   /* revoke with no matching used slot */
 static u32 g_cWinRevokeBad;    /* revoke rejected (bad BDF) */
 static u32 g_cWinSoftInvLogs;  /* times soft inventory printed */
 static int g_fWinSoftInvOnce;  /* first-activity inventory emitted */
-static u32 g_cSoftInvLogs;     /* Wave 14 iommu: soft inventory dumps */
+static u32 g_cSoftInvLogs;     /* Wave 15 iommu: soft inventory dumps */
+
+/*
+ * Wave 15 soft scan / busmaster / peak tallies (diagnostics only; wrap OK).
+ * Never hard-gates; not product always-on IOMMU.
+ */
+static u32 g_cSoftRsdpSkip;    /* probe path: no RSDP */
+static u32 g_cSoftRsdpBad;     /* probe path: bad RSDP signature/map */
+static u32 g_cSoftXsdtHit;     /* XSDT walks accepted */
+static u32 g_cSoftRsdtHit;     /* RSDT walks accepted */
+static u32 g_cSoftDmarHit;     /* DMAR table signatures found */
+static u32 g_cSoftIvrsHit;     /* IVRS table signatures found */
+static u32 g_cSoftSdtEntries;  /* SDT entries examined */
+static u32 g_cSoftStructBreak; /* DMAR struct bounds break */
+static u32 g_cSoftBmAllow;     /* busmaster_ok allow under enforce */
+static u32 g_cSoftBmDeny;      /* busmaster_ok deny under enforce */
+static u32 g_cSoftBmOpen;      /* busmaster_ok open path (enforce off) */
+static u32 g_cSoftWinPeak;     /* peak live software windows */
 
 static void iommu_dmar_parse(u8 *pDmar, u32 u32MapMax);
 static void iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb);
@@ -96,6 +118,7 @@ static void iommu_soft_probe_handoff(void);
 static void iommu_window_cap_soft_inventory(void);
 static void iommu_window_cap_soft_maybe_once(void);
 static void iommu_soft_inventory_log(void);
+static void iommu_soft_note_win_peak(u32 cUsed);
 
 static int
 sig_n(const void *p, const char *sz, u32 cb)
@@ -212,8 +235,17 @@ iommu_window_cap_soft_maybe_once(void)
     iommu_window_cap_soft_inventory();
 }
 
+/** Wave 15: track peak live software window count (diagnostics only). */
+static void
+iommu_soft_note_win_peak(u32 cUsed)
+{
+    if (cUsed > g_cSoftWinPeak) {
+        g_cSoftWinPeak = cUsed;
+    }
+}
+
 /**
- * Wave 14 greppable soft inventory dump (prefix "iommu: soft …").
+ * Wave 15 greppable soft inventory dump (prefix "iommu: soft …").
  * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
  *
  * greppable: iommu: soft
@@ -222,8 +254,13 @@ iommu_window_cap_soft_maybe_once(void)
  * greppable: iommu: soft dmar
  * greppable: iommu: soft window
  * greppable: iommu: soft enforce
+ * greppable: iommu: soft acpi
+ * greppable: iommu: soft busmaster
+ * greppable: iommu: soft peak
  * greppable: iommu: soft path
  * greppable: iommu: soft lamps
+ * greppable: iommu: soft honesty
+ * greppable: iommu: soft stats
  * greppable: iommu: soft deepen
  * greppable: iommu: soft OPEN
  * greppable: iommu: soft PASS
@@ -233,6 +270,7 @@ iommu_soft_inventory_log(void)
 {
     u32 cUsed;
     u32 u32Denies;
+    u32 u32Structs;
     int fPresent;
     int fEnforce;
     u8 u8Vendor;
@@ -243,7 +281,9 @@ iommu_soft_inventory_log(void)
         g_cSoftInvLogs++;
     }
     cUsed = iommu_window_count();
+    iommu_soft_note_win_peak(cUsed);
     u32Denies = g_u32Denies;
+    u32Structs = g_cDrhd + g_cRmrr + g_cAtsr + g_cRhsa + g_cOther;
     fPresent = (g_Info.u8Present != 0) ? 1 : 0;
     fEnforce = g_fEnforce ? 1 : 0;
     u8Vendor = g_Info.u8Vendor;
@@ -297,6 +337,29 @@ iommu_soft_inventory_log(void)
             "(soft policy lamps; not product always-on IOMMU)\n",
             fEnforce, u32Denies, cUsed, (unsigned)IOMMU_SOFT_WAVE);
 
+    /* Grep: iommu: soft acpi (Wave 15 scan tallies) */
+    kprintf("iommu: soft acpi rsdp_skip=%u rsdp_bad=%u xsdt=%u rsdt=%u "
+            "dmar=%u ivrs=%u sdt_entries=%u struct_break=%u wave=%u "
+            "(ACPI soft scan; not product DMAR program)\n",
+            g_cSoftRsdpSkip, g_cSoftRsdpBad, g_cSoftXsdtHit, g_cSoftRsdtHit,
+            g_cSoftDmarHit, g_cSoftIvrsHit, g_cSoftSdtEntries,
+            g_cSoftStructBreak, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft busmaster (Wave 15 path tallies) */
+    kprintf("iommu: soft busmaster allow=%u deny=%u open_path=%u "
+            "denies_total=%u enforce=%d wave=%u "
+            "(soft path tallies; not product always-on deny)\n",
+            g_cSoftBmAllow, g_cSoftBmDeny, g_cSoftBmOpen, u32Denies,
+            fEnforce, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft peak (Wave 15 peaks) */
+    kprintf("iommu: soft peak windows=%u create_ok=%u update=%u "
+            "destroy=%u max_slots=%u wave=%u "
+            "(peak soft inventory; wrap OK)\n",
+            g_cSoftWinPeak, g_cWinCreateOk, g_cWinCreateUpdate,
+            g_cWinDestroy, (unsigned)GJ_IOMMU_MAX_WINDOWS,
+            (unsigned)IOMMU_SOFT_WAVE);
+
     /*
      * Honesty: always-on product IOMMU remains OPEN.
      * Soft deepen ≠ product always-on IOMMU claim.
@@ -313,13 +376,29 @@ iommu_soft_inventory_log(void)
     kprintf("iommu: soft lamps present=%d enforce=%d windows_live=%u "
             "denies=%u dmar_structs=%u probed=%d wave=%u "
             "(composite soft lamps)\n",
-            fPresent, fEnforce, cUsed, u32Denies,
-            g_cDrhd + g_cRmrr + g_cAtsr + g_cRhsa + g_cOther,
+            fPresent, fEnforce, cUsed, u32Denies, u32Structs,
             g_fProbed, (unsigned)IOMMU_SOFT_WAVE);
 
-    /* Grep: iommu: soft deepen wave (Wave 14 stamp) */
+    /* Grep: iommu: soft honesty (Wave 15 non-claims catalog) */
+    kprintf("iommu: soft honesty always_on_product=OPEN "
+            "no_open_bus_master_product=OPEN hw_first_revoke=OPEN "
+            "cap_typed_window=OPEN amd_vi_product=OPEN bar3=OPEN "
+            "inventory_only=1 soft_neq_product=1 wave=%u "
+            "(explicit non-claims; not product always-on IOMMU)\n",
+            (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft stats (Wave 15 rollup) */
+    kprintf("iommu: soft stats present=%d vendor=%s units=%u windows=%u "
+            "peak=%u denies=%u create_ok=%u destroy=%u "
+            "dmar_structs=%u bm_allow=%u bm_deny=%u logs=%u wave=%u "
+            "(rollup; not product close)\n",
+            fPresent, szVendor, u32Units, cUsed, g_cSoftWinPeak, u32Denies,
+            g_cWinCreateOk, g_cWinDestroy, u32Structs, g_cSoftBmAllow,
+            g_cSoftBmDeny, g_cSoftInvLogs, (unsigned)IOMMU_SOFT_WAVE);
+
+    /* Grep: iommu: soft deepen wave (Wave 15 stamp) */
     kprintf("iommu: soft deepen wave=%u areas=%u logs=%u "
-            "(Wave 14 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 15 exclusive; soft only; not product always-on IOMMU; "
             "not bar3)\n",
             (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
             g_cSoftInvLogs);
@@ -366,7 +445,7 @@ iommu_soft_probe_handoff(void)
      */
     iommu_window_cap_soft_inventory();
     /*
-     * Wave 14 exclusive soft inventory (greppable "iommu: soft …").
+     * Wave 15 exclusive soft inventory (greppable "iommu: soft …").
      * Soft deepen only; always-on product IOMMU remains OPEN.
      */
     iommu_soft_inventory_log();
@@ -408,12 +487,26 @@ iommu_probe(void)
     g_cWinSoftInvLogs = 0;
     g_fWinSoftInvOnce = 0;
     g_cSoftInvLogs = 0;
+    /* Wave 15 soft scan / busmaster / peak tallies */
+    g_cSoftRsdpSkip = 0;
+    g_cSoftRsdpBad = 0;
+    g_cSoftXsdtHit = 0;
+    g_cSoftRsdtHit = 0;
+    g_cSoftDmarHit = 0;
+    g_cSoftIvrsHit = 0;
+    g_cSoftSdtEntries = 0;
+    g_cSoftStructBreak = 0;
+    g_cSoftBmAllow = 0;
+    g_cSoftBmDeny = 0;
+    g_cSoftBmOpen = 0;
+    g_cSoftWinPeak = 0;
 
     pBi = boot_info_get();
     if (pBi != NULL) {
         u64RsdpPa = pBi->u64Rsdp;
     }
     if (u64RsdpPa == 0) {
+        g_cSoftRsdpSkip++;
         kprintf("iommu: probe skip (no RSDP)\n");
         kprintf("iommu: probe PASS\n");
         (void)iommu_vtd_smoke();
@@ -423,6 +516,7 @@ iommu_probe(void)
     pRsdp = (u8 *)pa_map(u64RsdpPa);
     /* RSDP signature is 8 bytes: "RSD PTR " */
     if (pRsdp == NULL || !sig_n(pRsdp, "RSD PTR ", 8u)) {
+        g_cSoftRsdpBad++;
         kprintf("iommu: probe bad RSDP pa=0x%lx\n",
                 (unsigned long)u64RsdpPa);
         kprintf("iommu: probe PASS\n");
@@ -442,6 +536,7 @@ iommu_probe(void)
         if (pXsdt != NULL && sig_n(pXsdt, "XSDT", 4u)) {
             u32Len = acpi_table_len(pXsdt, IOMMU_ACPI_HDR_MIN);
             if (u32Len != 0) {
+                g_cSoftXsdtHit++;
                 iommu_scan_sdt_entries(pXsdt, u32Len, 8u);
             } else {
                 kprintf("iommu: probe XSDT len reject\n");
@@ -453,6 +548,7 @@ iommu_probe(void)
         if (pRsdt != NULL && sig_n(pRsdt, "RSDT", 4u)) {
             u32Len = acpi_table_len(pRsdt, IOMMU_ACPI_HDR_MIN);
             if (u32Len != 0) {
+                g_cSoftRsdtHit++;
                 iommu_scan_sdt_entries(pRsdt, u32Len, 4u);
             } else {
                 kprintf("iommu: probe RSDT len reject\n");
@@ -512,6 +608,9 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
         if (u64Pa == 0) {
             continue;
         }
+        if (g_cSoftSdtEntries < 0xffffffffu) {
+            g_cSoftSdtEntries++;
+        }
         pT = (u8 *)pa_map(u64Pa);
         if (pT == NULL) {
             continue;
@@ -521,6 +620,9 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
             g_Info.u8Present = 1;
             g_Info.u8Vendor = GJ_IOMMU_VENDOR_INTEL;
             g_Info.u32Units++;
+            if (g_cSoftDmarHit < 0xffffffffu) {
+                g_cSoftDmarHit++;
+            }
             if (u32Tlen != 0) {
                 /* Host address width @36, flags @37 (public DMAR header) */
                 kprintf("iommu: DMAR haw=%u flags=0x%x len=%u\n",
@@ -531,6 +633,9 @@ iommu_scan_sdt_entries(u8 *pSdt, u32 u32Len, u32 u32EntryCb)
             g_Info.u8Present = 1;
             g_Info.u8Vendor = GJ_IOMMU_VENDOR_AMD;
             g_Info.u32Units++;
+            if (g_cSoftIvrsHit < 0xffffffffu) {
+                g_cSoftIvrsHit++;
+            }
         }
     }
 }
@@ -559,6 +664,9 @@ iommu_dmar_parse(u8 *pDmar, u32 u32MapMax)
 
         cStruct++;
         if (u16Slen < 4u || (u32)u32Off + (u32)u16Slen > u32MapMax) {
+            if (g_cSoftStructBreak < 0xffffffffu) {
+                g_cSoftStructBreak++;
+            }
             kprintf("iommu: DMAR struct bounds break off=%u slen=%u\n",
                     u32Off, (u32)u16Slen);
             break;
@@ -696,6 +804,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
             g_cWinCreateUpdate++;
             cUsed = iommu_window_count();
             g_Info.u32Windows = cUsed;
+            iommu_soft_note_win_peak(cUsed);
             /* Grep: iommu: window cap soft update */
             kprintf("iommu: window cap soft update %u:%u.%u pa=0x%lx "
                     "cb=0x%lx used=%u (create_window soft inventory)\n",
@@ -716,6 +825,7 @@ iommu_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb)
             g_cWinCreateOk++;
             cUsed = iommu_window_count();
             g_Info.u32Windows = cUsed;
+            iommu_soft_note_win_peak(cUsed);
             /* Grep: iommu: window cap soft grant */
             kprintf("iommu: window cap soft grant %u:%u.%u pa=0x%lx "
                     "cb=0x%lx used=%u (create_window soft; not cap object)\n",
@@ -787,21 +897,34 @@ iommu_busmaster_ok(u8 bus, u8 slot, u8 func)
     u32 iWin;
 
     if (!g_fEnforce) {
+        /* Wave 15: open path (enforce off) soft tally */
+        if (g_cSoftBmOpen < 0xffffffffu) {
+            g_cSoftBmOpen++;
+        }
         return 1;
     }
     if (!bdf_ok(bus, slot, func)) {
         g_u32Denies++;
         g_Info.u32Denies = g_u32Denies;
+        if (g_cSoftBmDeny < 0xffffffffu) {
+            g_cSoftBmDeny++;
+        }
         return 0;
     }
     for (iWin = 0; iWin < GJ_IOMMU_MAX_WINDOWS; iWin++) {
         if (g_aWin[iWin].u8Used && g_aWin[iWin].u8Bus == bus &&
             g_aWin[iWin].u8Slot == slot && g_aWin[iWin].u8Func == func) {
+            if (g_cSoftBmAllow < 0xffffffffu) {
+                g_cSoftBmAllow++;
+            }
             return 1;
         }
     }
     g_u32Denies++;
     g_Info.u32Denies = g_u32Denies;
+    if (g_cSoftBmDeny < 0xffffffffu) {
+        g_cSoftBmDeny++;
+    }
     return 0;
 }
 

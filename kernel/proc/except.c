@@ -12,10 +12,10 @@
  *   take:     soft claim pending; resume path separate (EXCEPT_TAG_FAULT)
  * One-slot port (product: queue / SEH chain). Pure C freestanding.
  *
- * Soft product inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 15 exclusive deepen; this unit only):
  *   - Register / unregister / deliver / take / drop / wait / resume tallies
  *   - Fail-closed + one-slot overwrite + wake budget diagnostics
- *   - Wave 14: rebind, wait-race self-wake, handler/count query, smoke, deepen
+ *   - Wave 15: rebind, wait-race self-wake, handler/count query, smoke, deepen
  *   Never hard-gates; wrap OK. Soft ≠ bar3.
  * Greppable prefix (product / agent greps):
  *   "except: soft …"
@@ -26,13 +26,13 @@
 #include <gj/string.h>
 #include <gj/thread.h>
 
-/* ---- soft product inventory (Wave 14; greppable "except: soft …") -------- */
+/* ---- soft product inventory (Wave 15; greppable "except: soft …") -------- */
 
 /*
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 14u
+#define GJ_EXCEPT_SOFT_WAVE 15u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -40,7 +40,7 @@ static u32 g_u32SoftRegBind;       /* thr!=0 live bind OK */
 static u32 g_u32SoftRegThr0;       /* thr==0 soft unregister */
 static u32 g_u32SoftRegDead;       /* bind refused (dead PCB) */
 static u32 g_u32SoftRegNull;       /* register pProc == NULL */
-static u32 g_u32SoftRegRebind;     /* thr!=0 while already live (W14) */
+static u32 g_u32SoftRegRebind;     /* thr!=0 while already live (W15) */
 static u32 g_u32SoftUnreg;         /* except_port_unregister entries */
 static u32 g_u32SoftDelEnter;      /* deliver entries */
 static u32 g_u32SoftDelOk;         /* posted pending + wake */
@@ -61,19 +61,19 @@ static u32 g_u32SoftWaitPending;   /* return because pending */
 static u32 g_u32SoftWaitNlive;     /* return because !live */
 static u32 g_u32SoftWaitBlock;     /* thread_block calls */
 static u32 g_u32SoftWaitNull;      /* wait pProc == NULL */
-static u32 g_u32SoftWaitRace;      /* post-block re-sample self-wake (W14) */
+static u32 g_u32SoftWaitRace;      /* post-block re-sample self-wake (W15) */
 static u32 g_u32SoftResumeEnter;   /* resume_fault entries */
 static u32 g_u32SoftResumeWake;    /* sum of thr woken (capped per call) */
 static u32 g_u32SoftResumeNull;    /* resume pProc == NULL */
-static u32 g_u32SoftResumeDefMax;  /* u32Max was 0 → defaulted to 1 (W14) */
+static u32 g_u32SoftResumeDefMax;  /* u32Max was 0 → defaulted to 1 (W15) */
 static u32 g_u32SoftQueryLive;     /* is_live queries */
 static u32 g_u32SoftQueryPend;     /* has_pending queries */
-static u32 g_u32SoftQueryHandler;  /* except_port_handler queries (W14) */
-static u32 g_u32SoftQueryCount;    /* except_port_count queries (W14) */
+static u32 g_u32SoftQueryHandler;  /* except_port_handler queries (W15) */
+static u32 g_u32SoftQueryCount;    /* except_port_count queries (W15) */
 static u32 g_u32SoftWakeCall;      /* except_port_soft_wake_handlers */
-static u32 g_u32SoftSmokeEnter;    /* except_port_smoke entries (W14) */
-static u32 g_u32SoftSmokePass;     /* smoke PASS (W14) */
-static u32 g_u32SoftSmokeFail;     /* smoke FAIL early outs (W14) */
+static u32 g_u32SoftSmokeEnter;    /* except_port_smoke entries (W15) */
+static u32 g_u32SoftSmokePass;     /* smoke PASS (W15) */
+static u32 g_u32SoftSmokeFail;     /* smoke FAIL early outs (W15) */
 static u32 g_u32SoftLogN;          /* soft inventory log emissions */
 static u8  g_fSoftInvOnce;         /* one-shot dump after activity */
 
@@ -92,7 +92,7 @@ except_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable soft exception-port inventory (product / smoke). Wave 14 deepen.
+ * Greppable soft exception-port inventory (product / smoke). Wave 15 deepen.
  *   except: soft inventory …
  *   except: soft register …
  *   except: soft deliver …
@@ -102,6 +102,7 @@ except_soft_inc(u32 *pCtr)
  *   except: soft resume …
  *   except: soft query …
  *   except: soft smoke …
+ *   except: soft capacity …  (Wave 15: wake_max/slot/tag lamps)
  *   except: soft deepen …
  *   except: soft path …
  * greppable: except: soft
@@ -159,6 +160,12 @@ soft_inventory_log(void)
     /* Grep: except: soft smoke */
     kprintf("except: soft smoke enter=%u pass=%u fail=%u\n",
             g_u32SoftSmokeEnter, g_u32SoftSmokePass, g_u32SoftSmokeFail);
+
+    /* Grep: except: soft capacity (Wave 15 geometry) */
+    kprintf("except: soft capacity wake_max=%u slot=1 tags=HANDLER+FAULT "
+            "overwrite=%u rebind=%u race=%u smoke_pass=%u wave=%u\n",
+            EXCEPT_SOFT_WAKE_MAX, g_u32SoftDelOverwrite, g_u32SoftRegRebind,
+            g_u32SoftWaitRace, g_u32SoftSmokePass, GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft path */
     kprintf("except: soft path one_slot=1 coalesce_overwrite=1 "
@@ -300,7 +307,7 @@ except_port_register(struct gj_process *pProc, u32 u32ThrId)
         return GJ_ERR_DEAD;
     }
 
-    /* Wave 14: rebind while already live (handler identity change). */
+    /* Wave 15: rebind while already live (handler identity change). */
     if (except_port_live_load(pProc)) {
         except_soft_inc(&g_u32SoftRegRebind);
     }
@@ -686,7 +693,7 @@ except_port_smoke(struct gj_process *pProc)
     }
 
     /*
-     * Wave 14 soft inventory rollup (greppable "except: soft …").
+     * Wave 15 soft inventory rollup (greppable "except: soft …").
      * Always emit full dump at smoke end so boot logs carry the catalog.
      */
     soft_inventory_log();

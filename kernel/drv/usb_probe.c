@@ -9,13 +9,20 @@
  * no IRQ, no transfer rings (HID parse later). No GPL source; public PCI
  * class codes + HC capability register layouts only.
  *
- * Wave 13 exclusive soft deepen (this unit only — greppable "usb: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "usb: soft …"):
  *   usb: soft inventory  — class 0C:03 tallies + BAR io/mem + identify ok
  *   usb: soft class      — PCI class/subclass inventory (public codes)
  *   usb: soft if         — prog-if tallies (uhci/ohci/ehci/xhci/other)
+ *   usb: soft pif        — prog-if constant map (HCL)
  *   usb: soft bar        — BAR0 io vs mem resolve tallies
+ *   usb: soft dual       — io vs mem path dual lamps
  *   usb: soft identify   — per-HC cap-head (HcRevision / CAPLENGTH / HCI VER)
+ *   usb: soft regs       — cap-head offset map (OHCI/EHCI/xHCI public)
+ *   usb: soft pci        — class 0C:03 inventory stamp
  *   usb: soft path       — honesty: probe/soft only; no claim / IRQ / rings
+ *   usb: soft honesty    — bar3/HID/rings non-claims
+ *   usb: soft deepen     — wave=15 areas stamp
+ *   usb: soft stats      — emission / scan tallies
  *   usb: soft inventory PASS|SKIP
  *   usb: soft PASS|SKIP
  *
@@ -34,6 +41,20 @@
 #define USB_PIF_OHCI 0x10u
 #define USB_PIF_EHCI 0x20u
 #define USB_PIF_XHCI 0x30u
+
+/* Wave 15 deepen area count (fixed greppable categories in inventory log). */
+#define USB_SOFT_DEEPEN_AREAS 13u
+#define USB_SOFT_DEEPEN_WAVE  15u
+
+/* Soft inventory emission tallies (wrap OK; never hard-gate). */
+static u32 g_u32SoftInvLogs;
+static u32 g_u32SoftProbeLogs;
+static u32 g_u32SoftFound;
+static u32 g_u32SoftIdentifyOk;
+static u32 g_u32SoftMapFail;
+static u32 g_u32SoftBarEmpty;
+static u32 g_u32SoftBarIo;
+static u32 g_u32SoftBarMem;
 
 static inline void
 outl(u16 u16Port, u32 u32Val)
@@ -119,7 +140,7 @@ usb_bar0_pa(u8 u8Bus, u8 u8Slot, u8 u8Func, u32 *pBarRaw, int *pfIo,
 
 /**
  * Soft identify MMIO HC capability head (OHCI/EHCI/xHCI). Read-only.
- * Wave 13: greppable "usb: soft identify …" / "usb: soft bar …".
+ * Wave 15: greppable "usb: soft identify …" / "usb: soft bar …".
  * Returns 1 on successful cap-head read, 0 on map fail.
  */
 static int
@@ -131,16 +152,16 @@ usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
     kprintf("usb: bar0 mem soft path PASS pa=0x%lx\n",
             (unsigned long)paBar);
     /* Grep: usb: soft bar */
-    kprintf("usb: soft bar kind=mem pa=0x%lx map=try soft PASS\n",
-            (unsigned long)paBar);
+    kprintf("usb: soft bar kind=mem pa=0x%lx map=try soft PASS wave=%u\n",
+            (unsigned long)paBar, (unsigned)USB_SOFT_DEEPEN_WAVE);
     stMap = vmm_map_device_uc((gj_paddr_t)paBar, 0x1000, &vaMap);
     if (stMap != GJ_OK) {
         kprintf("usb: bar0 map soft fail st=%d\n", (int)stMap);
         /* Grep: usb: soft identify / usb: soft bar */
-        kprintf("usb: soft bar kind=mem map=fail st=%d soft SKIP\n",
-                (int)stMap);
-        kprintf("usb: soft identify map soft SKIP st=%d pif=0x%x\n",
-                (int)stMap, (unsigned)u8Pif);
+        kprintf("usb: soft bar kind=mem map=fail st=%d soft SKIP wave=%u\n",
+                (int)stMap, (unsigned)USB_SOFT_DEEPEN_WAVE);
+        kprintf("usb: soft identify map soft SKIP st=%d pif=0x%x wave=%u\n",
+                (int)stMap, (unsigned)u8Pif, (unsigned)USB_SOFT_DEEPEN_WAVE);
         return 0;
     }
     {
@@ -151,8 +172,9 @@ usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
             /* HcRevision @ 0x00 */
             kprintf("usb: identify OHCI HcRevision=0x%x soft PASS\n", u32D0);
             /* Grep: usb: soft identify */
-            kprintf("usb: soft identify if=OHCI HcRevision=0x%x soft PASS\n",
-                    u32D0);
+            kprintf("usb: soft identify if=OHCI HcRevision=0x%x soft PASS "
+                    "wave=%u\n",
+                    u32D0, (unsigned)USB_SOFT_DEEPEN_WAVE);
         } else if (u8Pif == USB_PIF_EHCI || u8Pif == USB_PIF_XHCI) {
             /* CAPLENGTH @ byte0; HCIVERSION @ bytes 2–3 (public layout) */
             u8 u8CapLen = (u8)(u32D0 & 0xffu);
@@ -164,9 +186,9 @@ usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
                     (unsigned)u16HciVer);
             /* Grep: usb: soft identify */
             kprintf("usb: soft identify if=%s CAPLENGTH=%u HCIVERSION=0x%04x "
-                    "soft PASS\n",
+                    "soft PASS wave=%u\n",
                     usb_if_name(u8Pif), (unsigned)u8CapLen,
-                    (unsigned)u16HciVer);
+                    (unsigned)u16HciVer, (unsigned)USB_SOFT_DEEPEN_WAVE);
             if (u8Pif == USB_PIF_XHCI) {
                 u32 u32Hcs1 = pReg[1]; /* HCSPARAMS1 @ 0x04 */
                 u32 u32MaxSlots;
@@ -181,32 +203,27 @@ usb_soft_identify_mmio(u8 u8Pif, u64 paBar)
                         u32Hcs1);
                 /* Grep: usb: soft identify (xHCI params deepen) */
                 kprintf("usb: soft identify if=xHCI HCSPARAMS1=0x%x "
-                        "max_slots=%u max_intrs=%u max_ports=%u soft PASS\n",
-                        u32Hcs1, u32MaxSlots, u32MaxIntrs, u32MaxPorts);
+                        "max_slots=%u max_intrs=%u max_ports=%u soft PASS "
+                        "wave=%u\n",
+                        u32Hcs1, u32MaxSlots, u32MaxIntrs, u32MaxPorts,
+                        (unsigned)USB_SOFT_DEEPEN_WAVE);
             }
         } else {
             kprintf("usb: identify mmio d0=0x%x soft PASS\n", u32D0);
             /* Grep: usb: soft identify */
-            kprintf("usb: soft identify if=%s d0=0x%x soft PASS\n",
-                    usb_if_name(u8Pif), u32D0);
+            kprintf("usb: soft identify if=%s d0=0x%x soft PASS wave=%u\n",
+                    usb_if_name(u8Pif), u32D0, (unsigned)USB_SOFT_DEEPEN_WAVE);
         }
         /* Grep: usb: soft bar */
-        kprintf("usb: soft bar kind=mem map=ok pa=0x%lx soft PASS\n",
-                (unsigned long)paBar);
+        kprintf("usb: soft bar kind=mem map=ok pa=0x%lx soft PASS wave=%u\n",
+                (unsigned long)paBar, (unsigned)USB_SOFT_DEEPEN_WAVE);
     }
     return 1;
 }
 
 /**
- * Wave 13 greppable soft inventory dump (product / smoke).
+ * Wave 15 greppable soft inventory dump (product / smoke).
  * Prefix-stable "usb: soft …" — never hard-gates; kprintf only.
- *
- *   usb: soft inventory — class tallies + BAR + identify ok
- *   usb: soft class     — PCI 0C:03 public class codes
- *   usb: soft if        — prog-if tallies
- *   usb: soft bar       — BAR0 io/mem rollup
- *   usb: soft path      — product surface honesty (no HC claim)
- *   usb: soft PASS|SKIP / usb: soft inventory PASS|SKIP
  *
  * greppable: usb: soft
  */
@@ -216,10 +233,14 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                    u32 cIdentifyOk, u32 cMapFail, u32 cBarEmpty)
 {
     const char *szVerdict;
+    const char *szViaSafe;
     u32 cKnown;
+    u32 u8Ok;
+    u32 u8Skip;
 
-    if (szVia == NULL) {
-        szVia = "scan";
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "scan";
+    if (g_u32SoftInvLogs < 0xffffffffu) {
+        g_u32SoftInvLogs++;
     }
 
     cKnown = cUhci + cOhci + cEhci + cXhci;
@@ -231,8 +252,12 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
      */
     if (cFound > 0u) {
         szVerdict = "PASS";
+        u8Ok = 1u;
+        u8Skip = 0u;
     } else {
         szVerdict = "SKIP";
+        u8Ok = 0u;
+        u8Skip = 1u;
     }
 
     /*
@@ -243,21 +268,24 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
     kprintf("usb: soft inventory found=%u class=0C:03 uhci=%u ohci=%u "
             "ehci=%u xhci=%u other=%u bar_io=%u bar_mem=%u\n",
             cFound, cUhci, cOhci, cEhci, cXhci, cOther, cBarIo, cBarMem);
-    /* Wave 13 deepen — via + identify/map tallies on same soft inventory */
+    /* Wave 15 deepen — via + identify/map tallies on same soft inventory */
     kprintf("usb: soft inventory via=%s known=%u identify_ok=%u map_fail=%u "
-            "bar_empty=%u wave=13\n",
-            szVia, cKnown, cIdentifyOk, cMapFail, cBarEmpty);
+            "bar_empty=%u logs=%u wave=%u areas=%u\n",
+            szViaSafe, cKnown, cIdentifyOk, cMapFail, cBarEmpty,
+            (unsigned)g_u32SoftInvLogs, (unsigned)USB_SOFT_DEEPEN_WAVE,
+            (unsigned)USB_SOFT_DEEPEN_AREAS);
 
     /* Grep: usb: soft class (public PCI Code and ID Assignment) */
     kprintf("usb: soft class base=0x%02x sub=0x%02x tag=0C:03 found=%u "
-            "soft %s\n",
+            "soft %s wave=%u\n",
             (unsigned)USB_PCI_CLASS, (unsigned)USB_PCI_SUBCLASS, cFound,
-            szVerdict);
+            szVerdict, (unsigned)USB_SOFT_DEEPEN_WAVE);
 
     /* Grep: usb: soft if (prog-if tallies) */
     kprintf("usb: soft if uhci=%u ohci=%u ehci=%u xhci=%u other=%u "
-            "known=%u soft %s\n",
-            cUhci, cOhci, cEhci, cXhci, cOther, cKnown, szVerdict);
+            "known=%u soft %s wave=%u\n",
+            cUhci, cOhci, cEhci, cXhci, cOther, cKnown, szVerdict,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
     if (cXhci > 0u) {
         kprintf("usb: soft if xhci present c=%u soft PASS\n", cXhci);
     } else {
@@ -279,10 +307,18 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
         kprintf("usb: soft if uhci present c=0 soft SKIP\n");
     }
 
+    /* Grep: usb: soft pif — compile-time prog-if constant map (Wave 15) */
+    kprintf("usb: soft pif UHCI=0x%02x OHCI=0x%02x EHCI=0x%02x "
+            "xHCI=0x%02x soft PASS wave=%u\n",
+            (unsigned)USB_PIF_UHCI, (unsigned)USB_PIF_OHCI,
+            (unsigned)USB_PIF_EHCI, (unsigned)USB_PIF_XHCI,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
     /* Grep: usb: soft bar (rollup) */
     kprintf("usb: soft bar io=%u mem=%u empty=%u identify_ok=%u map_fail=%u "
-            "soft %s\n",
-            cBarIo, cBarMem, cBarEmpty, cIdentifyOk, cMapFail, szVerdict);
+            "soft %s wave=%u\n",
+            cBarIo, cBarMem, cBarEmpty, cIdentifyOk, cMapFail, szVerdict,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
     if (cBarIo > 0u) {
         kprintf("usb: soft bar io path c=%u soft PASS\n", cBarIo);
     } else {
@@ -294,20 +330,47 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
         kprintf("usb: soft bar mem path c=0 soft SKIP\n");
     }
 
+    /* Grep: usb: soft dual — io vs mem dual path lamps (Wave 15) */
+    kprintf("usb: soft dual io=%u mem=%u empty=%u io_only=%u mem_only=%u "
+            "mixed=%u soft %s wave=%u\n",
+            cBarIo, cBarMem, cBarEmpty,
+            (cBarIo > 0u && cBarMem == 0u) ? 1u : 0u,
+            (cBarMem > 0u && cBarIo == 0u) ? 1u : 0u,
+            (cBarIo > 0u && cBarMem > 0u) ? 1u : 0u, szVerdict,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
     /* Grep: usb: soft identify (scan rollup) */
     if (cIdentifyOk > 0u) {
-        kprintf("usb: soft identify scan ok=%u map_fail=%u soft PASS\n",
-                cIdentifyOk, cMapFail);
+        kprintf("usb: soft identify scan ok=%u map_fail=%u soft PASS "
+                "wave=%u\n",
+                cIdentifyOk, cMapFail, (unsigned)USB_SOFT_DEEPEN_WAVE);
     } else if (cBarIo > 0u && cBarMem == 0u) {
         /* UHCI I/O-only hosts: no MMIO cap-head; soft honesty, not fail */
-        kprintf("usb: soft identify scan ok=0 io_only=1 soft PASS\n");
+        kprintf("usb: soft identify scan ok=0 io_only=1 soft PASS wave=%u\n",
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
     } else if (cFound > 0u) {
         kprintf("usb: soft identify scan ok=0 map_fail=%u empty=%u soft "
-                "SKIP\n",
-                cMapFail, cBarEmpty);
+                "SKIP wave=%u\n",
+                cMapFail, cBarEmpty, (unsigned)USB_SOFT_DEEPEN_WAVE);
     } else {
-        kprintf("usb: soft identify scan none soft SKIP\n");
+        kprintf("usb: soft identify scan none soft SKIP wave=%u\n",
+                (unsigned)USB_SOFT_DEEPEN_WAVE);
     }
+
+    /*
+     * Grep: usb: soft regs — public cap-head offset map (Wave 15).
+     * Inventory only; not programmed. OHCI HcRevision @0; EHCI/xHCI
+     * CAPLENGTH @0 / HCIVERSION @2; xHCI HCSPARAMS1 @4.
+     */
+    kprintf("usb: soft regs OHCI_HcRevision=0x00 EHCI_CAPLENGTH=0x00 "
+            "EHCI_HCIVERSION=0x02 xHCI_HCSPARAMS1=0x04 soft PASS wave=%u\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft pci */
+    kprintf("usb: soft pci class=0x%02x subclass=0x%02x tag=0C:03 "
+            "serial_bus_usb=1 soft PASS wave=%u\n",
+            (unsigned)USB_PCI_CLASS, (unsigned)USB_PCI_SUBCLASS,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
 
     /*
      * Grep: usb: soft path
@@ -315,19 +378,48 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
      * claim=0 — no HC init, no IRQ, no transfer rings, no HID parse.
      */
     kprintf("usb: soft path claim=0 irq=0 rings=0 hid=0 hc_init=0 "
-            "map_uc=1 cap_head=1 bar0=1 class_scan=1 via=%s\n",
-            szVia);
+            "map_uc=1 cap_head=1 bar0=1 class_scan=1 via=%s wave=%u\n",
+            szViaSafe, (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: usb: soft honesty — Wave 15 non-claims (soft inventory only).
+     * Product HID/rings remain open; bar3 stays open.
+     */
+    kprintf("usb: soft honesty product_hc=0 hid_parse=0 transfer_rings=0 "
+            "bar3=open claim=0 irq_enable=0 wave=%u soft PASS\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
+
+    /* Grep: usb: soft deepen wave (Wave 15 stamp) */
+    kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
+            "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
+            (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,
+            szViaSafe, cFound, cXhci, cIdentifyOk, cMapFail, cBarEmpty, u8Ok,
+            u8Skip);
+
+    /* Grep: usb: soft stats */
+    kprintf("usb: soft stats inv_logs=%u probe_logs=%u found=%u "
+            "identify_ok=%u map_fail=%u bar_io=%u bar_mem=%u bar_empty=%u "
+            "wave=%u\n",
+            (unsigned)g_u32SoftInvLogs, (unsigned)g_u32SoftProbeLogs,
+            (unsigned)g_u32SoftFound, (unsigned)g_u32SoftIdentifyOk,
+            (unsigned)g_u32SoftMapFail, (unsigned)g_u32SoftBarIo,
+            (unsigned)g_u32SoftBarMem, (unsigned)g_u32SoftBarEmpty,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
 
     /* Grep: usb: soft inventory PASS|SKIP / usb: soft PASS|SKIP */
-    kprintf("usb: soft inventory %s via=%s found=%u xhci=%u\n", szVerdict,
-            szVia, cFound, cXhci);
-    kprintf("usb: soft %s via=%s found=%u identify_ok=%u bar_mem=%u\n",
-            szVerdict, szVia, cFound, cIdentifyOk, cBarMem);
+    kprintf("usb: soft inventory %s via=%s found=%u xhci=%u wave=%u "
+            "areas=%u\n",
+            szVerdict, szViaSafe, cFound, cXhci,
+            (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS);
+    kprintf("usb: soft %s via=%s found=%u identify_ok=%u bar_mem=%u "
+            "wave=%u\n",
+            szVerdict, szViaSafe, cFound, cIdentifyOk, cBarMem,
+            (unsigned)USB_SOFT_DEEPEN_WAVE);
 }
 
 /**
  * Greppable soft inventory once per scan. Class 0C:03 only; no HC claim.
- * Product line: "usb: soft inventory" (Wave 13 deepen via usb_soft_inventory).
+ * Product line: "usb: soft inventory" (Wave 15 deepen via usb_soft_inventory).
  */
 static void
 usb_soft_log(u32 cFound, u32 cUhci, u32 cOhci, u32 cEhci, u32 cXhci,
@@ -360,6 +452,10 @@ usb_probe_scan(void)
     u32 cIdentifyOk = 0;
     u32 cMapFail = 0;
     u32 cBarEmpty = 0;
+
+    if (g_u32SoftProbeLogs < 0xffffffffu) {
+        g_u32SoftProbeLogs++;
+    }
 
     for (u8Bus = 0; u8Bus < 8; u8Bus++) {
         for (u8Slot = 0; u8Slot < 32; u8Slot++) {
@@ -402,32 +498,55 @@ usb_probe_scan(void)
                         fIo != 0 ? "io" : (f64 != 0 ? "mem64" : "mem32"));
                 /* Grep: usb: soft identify (per-function PCI snapshot) */
                 kprintf("usb: soft identify bdf=%u:%u.%u if=%s "
-                        "id=%04x:%04x bar0=0x%x pa=0x%lx kind=%s soft PASS\n",
+                        "id=%04x:%04x bar0=0x%x pa=0x%lx kind=%s soft PASS "
+                        "wave=%u\n",
                         u8Bus, u8Slot, u8Func, usb_if_name(u8Pif), u16Vendor,
                         u16Device, u32BarRaw, (unsigned long)paBar,
-                        fIo != 0 ? "io" : (f64 != 0 ? "mem64" : "mem32"));
+                        fIo != 0 ? "io" : (f64 != 0 ? "mem64" : "mem32"),
+                        (unsigned)USB_SOFT_DEEPEN_WAVE);
                 if (fIo != 0) {
                     /* UHCI: I/O BAR only — no MMIO soft map */
                     kprintf("usb: bar0 io soft path PASS base=0x%lx\n",
                             (unsigned long)paBar);
                     /* Grep: usb: soft bar */
-                    kprintf("usb: soft bar kind=io base=0x%lx soft PASS\n",
-                            (unsigned long)paBar);
+                    kprintf("usb: soft bar kind=io base=0x%lx soft PASS "
+                            "wave=%u\n",
+                            (unsigned long)paBar,
+                            (unsigned)USB_SOFT_DEEPEN_WAVE);
                     cBarIo++;
+                    if (g_u32SoftBarIo < 0xffffffffu) {
+                        g_u32SoftBarIo++;
+                    }
                 } else if (paBar != 0) {
                     if (usb_soft_identify_mmio(u8Pif, paBar) != 0) {
                         cIdentifyOk++;
+                        if (g_u32SoftIdentifyOk < 0xffffffffu) {
+                            g_u32SoftIdentifyOk++;
+                        }
                     } else {
                         cMapFail++;
+                        if (g_u32SoftMapFail < 0xffffffffu) {
+                            g_u32SoftMapFail++;
+                        }
                     }
                     cBarMem++;
+                    if (g_u32SoftBarMem < 0xffffffffu) {
+                        g_u32SoftBarMem++;
+                    }
                 } else {
                     kprintf("usb: bar0 empty soft skip\n");
                     /* Grep: usb: soft bar */
-                    kprintf("usb: soft bar kind=empty soft SKIP\n");
+                    kprintf("usb: soft bar kind=empty soft SKIP wave=%u\n",
+                            (unsigned)USB_SOFT_DEEPEN_WAVE);
                     cBarEmpty++;
+                    if (g_u32SoftBarEmpty < 0xffffffffu) {
+                        g_u32SoftBarEmpty++;
+                    }
                 }
                 cFound++;
+                if (g_u32SoftFound < 0xffffffffu) {
+                    g_u32SoftFound++;
+                }
                 if (u8Pif == USB_PIF_UHCI) {
                     cUhci++;
                 } else if (u8Pif == USB_PIF_OHCI) {

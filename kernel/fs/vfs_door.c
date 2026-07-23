@@ -15,13 +15,14 @@
  *   no-op (0). Format/mount allowed when free (bring-up smokes) or claimed
  *   (product vfsd). Soft RAM disk when virtio-blk is absent.
  *
- * Soft door inventory (Wave 12 base; Wave 14 exclusive soft deepen):
+ * Soft door inventory (Wave 12 base; Wave 14 deepen; Wave 15 exclusive):
  *   - Live owned/mounted/files/fds/token; peaks for files + open door fds
  *   - Cumulative claim/reclaim/release + format/mount + name + fd ops
  *   - Soft deny tallies by errno shape (inval/busy/noent/nomem/io/…)
  *   - Backend sec_rw (ram|store), freemap alloc/free, auto format/mount
  *   - Byte transfer totals; soft once + STATS / claim_count / fd_count emit
  *   - Wave 14: per-op enter, last snapshot, multi-sec, catalog, PASS deepen
+ *   - Wave 15: ratio|headroom|surface|deepen (wave=15 areas=16)
  *   greppable: "vfs_door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  */
@@ -920,7 +921,7 @@ soft_inventory_log(void)
     /* Grep: vfs_door: soft inventory */
     kprintf("vfs_door: soft inventory ver=%u ram=%u calls=%u owned=%u "
             "token=0x%x mounted=%u files=%u fds=%u ok=%u fail=%u "
-            "logs=%u wave=14\n",
+            "logs=%u wave=15\n",
             VFS_VERSION, u32Ram, u32Calls, u32Owned, u32Token, u32Mounted,
             u32Files, u32Fds, u32Ok, u32Fail, u32Samples);
     /* Grep: vfs_door: soft claim */
@@ -976,7 +977,7 @@ soft_inventory_log(void)
      */
     /* Grep: vfs_door: soft total */
     kprintf("vfs_door: soft total ok=%u fail=%u calls=%u logs=%u "
-            "unknown_op=%u not_init=%u wave=14\n",
+            "unknown_op=%u not_init=%u wave=15\n",
             u32Ok, u32Fail, u32Calls, u32Samples, g_u32SoftUnknownOp,
             g_u32SoftNotInit);
     /* Grep: vfs_door: soft ops */
@@ -1010,14 +1011,53 @@ soft_inventory_log(void)
             u32Busy, u32ClaimInval, u32RelInval);
     /* Grep: vfs_door: soft catalog */
     kprintf("vfs_door: soft catalog ver=%u inodes=%u fd_max=%u file_max=%u "
-            "secs=%u data0=%u magic=0x%x sec=%u wave=14\n",
+            "secs=%u data0=%u magic=0x%x sec=%u wave=15\n",
             VFS_VERSION, INODE_MAX, VFS_FD_MAX, FILE_MAX_BYTES, VFS_RAM_SECS,
             LBA_DATA0, VFS_MAGIC, SEC);
 
     kprintf("vfs_door: soft path claim=vfsd format_mount=free_or_owned "
             "ramdisk_soft=%u store_prefer_blk=%u multi_client=1 "
-            "product_vfsd=1 wave=14 (soft inventory; not bar3)\n",
+            "product_vfsd=1 wave=15 (soft inventory; not bar3)\n",
             u32Ram, u32Blk != 0 ? 1u : 0u);
+
+    /*
+     * Wave 15 exclusive deepen (complementary; primary lines field-stable).
+     * greppable: vfs_door: soft ratio|headroom|surface|deepen
+     */
+    {
+        u32 u32OkBp = 0;
+        u32 u32FailBp = 0;
+        u32 u32FdHead = 0;
+        u32 u32FileHead = 0;
+        u32 u32Tot = u32Ok + u32Fail;
+
+        if (u32Tot != 0u) {
+            u32OkBp = (u32Ok * 10000u) / u32Tot;
+            u32FailBp = (u32Fail * 10000u) / u32Tot;
+        }
+        if ((u32)VFS_FD_MAX > u32Fds) {
+            u32FdHead = (u32)VFS_FD_MAX - u32Fds;
+        }
+        if ((u32)INODE_MAX > u32Files) {
+            u32FileHead = (u32)INODE_MAX - u32Files;
+        }
+        /* Grep: vfs_door: soft ratio */
+        kprintf("vfs_door: soft ratio ok_bp=%u fail_bp=%u files=%u fds=%u "
+                "owned=%u mounted=%u wave=15\n",
+                u32OkBp, u32FailBp, u32Files, u32Fds, u32Owned, u32Mounted);
+        /* Grep: vfs_door: soft headroom */
+        kprintf("vfs_door: soft headroom file_head=%u fd_head=%u "
+                "inodes=%u fd_max=%u wave=15\n",
+                u32FileHead, u32FdHead, (u32)INODE_MAX, (u32)VFS_FD_MAX);
+        /* Grep: vfs_door: soft surface */
+        kprintf("vfs_door: soft surface inventory,claim,layout,name,fd,fmt,"
+                "deny,peak,backend,bytes,total,ops,last,xfer,own,catalog,"
+                "ratio,headroom,deepen areas=16 wave=15\n");
+        /* Grep: vfs_door: soft deepen */
+        kprintf("vfs_door: soft deepen wave=15 areas=16 ver=%u calls=%u "
+                "ok=%u fail=%u logs=%u\n",
+                VFS_VERSION, u32Calls, u32Ok, u32Fail, u32Samples);
+    }
 
     /*
      * Soft lamp: init surface is always soft-pass; mounted is a stronger
@@ -1028,9 +1068,9 @@ soft_inventory_log(void)
     fSoftPass = g_fInit ? 1 : 0;
     if (fSoftPass != 0) {
         kprintf("vfs_door: soft inventory PASS ver=%u logs=%u "
-                "mounted=%u ram=%u blk=%u wave=14\n",
+                "mounted=%u ram=%u blk=%u wave=15\n",
                 VFS_VERSION, u32Samples, u32Mounted, u32Ram, u32Blk);
-        kprintf("vfs_door: soft PASS ver=%u wave=14\n", VFS_VERSION);
+        kprintf("vfs_door: soft PASS ver=%u wave=15\n", VFS_VERSION);
     } else {
         kprintf("vfs_door: soft FAIL init=0 "
                 "(soft inventory only; not product gate)\n");

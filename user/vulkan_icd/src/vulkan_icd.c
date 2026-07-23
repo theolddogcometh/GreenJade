@@ -9,10 +9,10 @@
  *   "vk: QueuePresentKHR", "vk: QueueSubmit", "vk_icd: negotiate"
  * Do not change those substrings without updating the smoke harness.
  *
- * Soft inventory (Wave 14 exclusive deepen; greppable; not bar3 GPU):
- *   vk_icd: soft inventory wave=14 negotiate=… present=… submit=… acquire=…
- *   vk_icd: soft deepen wave=14 areas=negotiate,instance,device,swapchain,
- *           acquire,present,submit,lookup,host,path,counts,features
+ * Soft inventory (Wave 15 exclusive deepen; greppable; not bar3 GPU):
+ *   vk_icd: soft inventory wave=15 negotiate=… present=… submit=… acquire=…
+ *   vk_icd: soft deepen wave=15 areas=negotiate,instance,device,swapchain,
+ *           acquire,present,submit,lookup,host,path,counts,features,note,crc
  *   vk_icd: soft path software_present|virtio_gpu bar3=0
  * Soft counters wrap OK; never hard-gate product returns.
  * greppable: "vk_icd: soft"
@@ -1015,12 +1015,12 @@ static uint32_t g_u32HostPresents;
 static uint32_t g_u32HostPresentCrc;
 
 /*
- * Wave 14 soft inventory counters (file-local; wrap OK; never hard-gate).
+ * Wave 15 soft inventory counters (file-local; wrap OK; never hard-gate).
  * Grep: vk_icd: soft
  */
-#define VK_ICD_SOFT_WAVE     14u
-#define VK_ICD_SOFT_AREAS    12u
-#define VK_ICD_SOFT_SURFACES 8u /* negotiate inst dev sc acquire present submit lookup */
+#define VK_ICD_SOFT_WAVE     15u
+#define VK_ICD_SOFT_AREAS    14u
+#define VK_ICD_SOFT_SURFACES 10u /* + note + crc over wave-14 core set */
 
 static volatile uint32_t g_u32SoftNegotiateN;
 static volatile uint32_t g_u32SoftCreateInstN;
@@ -1036,6 +1036,8 @@ static volatile uint32_t g_u32SoftLookupN;
 static volatile uint32_t g_u32SoftLookupHit;
 static volatile uint32_t g_u32SoftLookupMiss;
 static volatile uint32_t g_u32SoftInvN;
+static volatile uint32_t g_u32SoftDeepenN;
+static volatile uint32_t g_u32SoftPathN;
 
 static void
 vk_icd_soft_inc(volatile uint32_t *pCtr)
@@ -1046,21 +1048,21 @@ vk_icd_soft_inc(volatile uint32_t *pCtr)
 }
 
 /*
- * Soft inventory blob (Wave 14). Grep: vk_icd: soft inventory
+ * Soft inventory blob (Wave 15). Grep: vk_icd: soft inventory
  */
 static const char g_szVkIcdSoftInventory[] =
-    "vk_icd: soft inventory wave=14 surfaces=8 areas=12 "
+    "vk_icd: soft inventory wave=15 surfaces=10 areas=14 "
     "negotiate=1 instance=1 device=1 swapchain=1 acquire=1 present=1 "
-    "submit=1 lookup=1 host=1 path=1 counts=1 features=1 "
+    "submit=1 lookup=1 host=1 path=1 counts=1 features=1 note=1 crc=1 "
     "bar3=0 (soft inventory; not bar3)";
 
 /*
  * Grep: vk_icd: soft deepen
  */
 static const char g_szVkIcdSoftDeepen[] =
-    "vk_icd: soft deepen wave=14 areas=12 "
+    "vk_icd: soft deepen wave=15 areas=14 "
     "negotiate,instance,device,swapchain,acquire,present,submit,"
-    "lookup,host,path,counts,features "
+    "lookup,host,path,counts,features,note,crc "
     "software_present=1 bar3=0";
 
 /*
@@ -1075,6 +1077,23 @@ static const char g_szVkIcdSoftPath[] =
     "present=soft_fb_crc bar3=0 (soft inventory; not bar3)";
 #endif
 
+/* Soft area name catalog (Wave 15; cold only). */
+static const char *const g_apszVkIcdSoftAreas[] = {
+    "negotiate",
+    "instance",
+    "device",
+    "swapchain",
+    "acquire",
+    "present",
+    "submit",
+    "lookup",
+    "host",
+    "path",
+    "counts",
+    "features",
+    "note",
+    "crc",
+};
 static VkResult
 present_pixels(void *pPix, uint32_t w, uint32_t h, uint32_t stride)
 {
@@ -1158,6 +1177,7 @@ gj_vk_icd_loader_soft_inventory(void)
 const char *
 gj_vk_icd_loader_soft_deepen(void)
 {
+    vk_icd_soft_inc(&g_u32SoftDeepenN);
     return g_szVkIcdSoftDeepen;
 }
 
@@ -1167,11 +1187,12 @@ gj_vk_icd_loader_soft_deepen(void)
 const char *
 gj_vk_icd_loader_soft_path(void)
 {
+    vk_icd_soft_inc(&g_u32SoftPathN);
     return g_szVkIcdSoftPath;
 }
 
 /*
- * Soft wave stamp (14). Grep: vk_icd: soft wave=
+ * Soft wave stamp (15). Grep: vk_icd: soft wave=
  */
 uint32_t
 gj_vk_icd_loader_soft_wave(void)
@@ -1192,6 +1213,19 @@ uint32_t
 gj_vk_icd_loader_soft_area_count(void)
 {
     return (uint32_t)VK_ICD_SOFT_AREAS;
+}
+
+/*
+ * Soft area name by index (0..areas-1), or NULL.
+ * Grep: vk_icd: soft areas=
+ */
+const char *
+gj_vk_icd_loader_soft_area_name(uint32_t uArea)
+{
+    if (uArea >= (uint32_t)VK_ICD_SOFT_AREAS) {
+        return 0;
+    }
+    return g_apszVkIcdSoftAreas[uArea];
 }
 
 /*
@@ -1232,6 +1266,17 @@ gj_vk_icd_loader_soft_note_counts(uint32_t *pNegotiate, uint32_t *pPresent,
     (void)g_u32SoftPresentMiss;
     (void)g_u32SoftLookupHit;
     (void)g_u32SoftLookupMiss;
+    (void)g_u32SoftDeepenN;
+    (void)g_u32SoftPathN;
+}
+
+/*
+ * Soft host present CRC note (Wave 15 deepen). Grep: vk_icd: soft crc
+ */
+uint32_t
+gj_vk_icd_loader_soft_crc_note(void)
+{
+    return g_u32HostPresentCrc;
 }
 
 /* ---- Extension names advertised by this ICD ---- */

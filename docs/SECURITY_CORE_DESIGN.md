@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Security core design v1.7 |
-| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 13 honesty only |
+| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 13 historical · §14 Wave 15 honesty |
 | **Priority** | Security → Performance → Portability → Readability |
 | **Heritage default** | **Solaris / Sun** for concurrency, doors, DDI, turnstiles; **Apple** for VM objects/views, task ports, QoS, session ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)) |
 | **Heritage secondary** | IBM only when Solaris has no good analogue **and** it still matches GreenJade law |
 | **Companion** | [Architecture](GREENJADE_KERNEL_SPEC.md) · [Implementation](IMPLEMENTATION.md) · [Apple channel](APPLE_CHANNEL_REMAINING.md) |
-| **Honesty (Wave 13)** | Soft confine ≠ product multi-server; **no bar3 claim** (§13) |
+| **Honesty (Wave 15)** | Soft confine ≠ product multi-server; soft continuum toward **15700** ≠ product; lamps **0**; **no bar3 claim** (§13 historical · §14) |
 
 This document **picks one direction** for the gaps that matter most. Alternatives are noted only to record why they lost.
 
@@ -670,8 +670,46 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 - [TODO.md](TODO.md) — multi-server confine / `confine(promises)` / drop ambient open boxes  
 - [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) — production freezes (Accepted; product path separate)  
 
+
+
+## 14. Honesty bounds — Wave 15 restatement (2026-07-23)
+
+**Additive only (Wave 15 exclusive for this file).** Design decisions in §§0–12 stay **Accepted**. §13 Wave 13 soft-confine ledger stays historical. This section restates the product/bar3 bound under Wave 15 continuum honesty and does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Soft confine** | §13 greppable confine / promise surface — **not** product multi-server seal |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 15700**; honest scan may still report **makefile_max=15600** until parent wires — **not** product complete |
+| **Product lamps** | Soft bar3-ready / product-score stubs remain **0** by design |
+| **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**; out of scope to close here |
+
+**Hard stamp (Wave 15):** soft confine **≠** product multi-server. Soft continuum toward **15700** **≠** product complete and **≠** bar3. Product lamps remain **0**. **No bar3 claim** from this document. Matrix stays **NOT-TRIED × 50**.
+
+### 14.1 Explicit non-claims (Wave 15)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Security core design **Accepted**” | **Yes** — this document §§0–12 |
+| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in §13.1 |
+| “Soft continuum high-water advancing toward **15700** (scan may still be 15600)” | **Yes** — soft only; scan is source of truth |
+| “Soft confine = product multi-server closed” | **No** |
+| “Soft continuum / product lamps close product DoD” | **No** — lamps remain **0**; soft ≠ product complete |
+| “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
+| “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** |
+| Any **bar3** closed claim from security core design alone | **No** |
+
+**Bar3 remains OPEN** (client + matrix). Wave 15 honesty-only: **soft confine ≠ product multi-server; soft continuum ≠ product complete; no bar3 claim.**
+
+### 14.2 Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Wave 15 continuum toward 15700 soft stamp  
+- [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title rows (**NOT-TRIED × 50**)  
+- §13 above — Wave 13 soft confine ≠ product multi-server ledger  
+
 ---
 
 *Accepted security-first core design v1.7 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
-*§13 Wave 13 honesty (2026-07-23): soft confine ≠ product multi-server; **no bar3 claim**.*  
+*§13 Wave 13 honesty (historical): soft confine ≠ product multi-server; **no bar3 claim**.*  
+*§14 Wave 15 honesty (2026-07-23): soft confine ≠ product multi-server; continuum toward **15700** soft only (scan may still be **15600**); product lamps **0**; **soft ≠ product complete**; **no bar3 claim**.*  
 *Code: `kernel/include/gj/cap.h`, `kernel/cap/revoke.c`.*

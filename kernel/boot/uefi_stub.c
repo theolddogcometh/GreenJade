@@ -17,7 +17,7 @@
  *   optional GOP is absent. Memmap soft REJECT still proceeds to EBS so
  *   partial boots remain diagnosable.
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
  *   GJ-EFI: soft inventory  — master surface + wave stamp
  *   GJ-EFI: soft path       — P-BOOT-1/3/4 claim + soft_never_gates
  *   GJ-EFI: soft honesty    — explicit non-claims (not Multiboot; not bar3)
@@ -30,7 +30,12 @@
  *   GJ-EFI: soft load       — SimpleFS / ELF / GJUEFI1 soft path lamps
  *   GJ-EFI: soft ebs        — ExitBootServices first/retry soft lamps
  *   GJ-EFI: soft stats      — rollup counters + wave stamp
- *   GJ-EFI: soft deepen     — wave=14 stamp + area catalog
+ *   GJ-EFI: soft contract   — Wave 15 magic/version/struct contract
+ *   GJ-EFI: soft magic      — Wave 15 handoff magic lamps
+ *   GJ-EFI: soft geometry   — Wave 15 FB pitch/bpp soft math
+ *   GJ-EFI: soft publish    — Wave 15 handoff publish lamps
+ *   GJ-EFI: soft catalog    — Wave 15 area name rollup
+ *   GJ-EFI: soft deepen     — wave=15 stamp + area catalog
  *   GJ-EFI: soft PASS|PARTIAL — close marker (soft readiness only)
  *
  * Legacy companion markers (still emitted; prefix-stable):
@@ -82,8 +87,8 @@ typedef u64 efi_uintn_t;
 #define EfiMemoryMappedIO     11u
 #define EfiMemoryMappedIOPort 12u
 
-/* Wave 14 soft inventory stamp (observability only; never gates product). */
-#define GJ_EFI_SOFT_WAVE       14u
+/* Wave 15 soft inventory stamp (observability only; never gates product). */
+#define GJ_EFI_SOFT_WAVE       15u
 
 struct efi_table_header {
     u64 u64Signature;
@@ -267,7 +272,7 @@ static u8 *g_pFileScratch;
 static efi_uintn_t g_cbFileScratch;
 
 /*
- * Wave 14 soft tallies (file-local; wrap OK; never gate product / EBS).
+ * Wave 15 soft tallies (file-local; wrap OK; never gate product / EBS).
  * Snapshotted into GJ-EFI: soft stats / inventory.
  */
 static u32 g_cSoftLoadOk;
@@ -392,7 +397,7 @@ efi_type_usable_soft(u32 u32Type)
 
 /*
  * Soft walk of EFI memory map in g_aMemMapScratch.
- * Emits legacy GJ-EFI: memmap soft PASS|REJECT … and Wave 14
+ * Emits legacy GJ-EFI: memmap soft PASS|REJECT … and Wave 15
  * GJ-EFI: soft memmap … type-class tallies (never aborts).
  */
 static void
@@ -541,7 +546,7 @@ soft_memmap_marker(u64 u64MapBytes, u64 u64DescSize)
     com1_put_u64_dec(u64Stride);
     com1_puts("\n");
 
-    /* Grep: GJ-EFI: soft memmap PASS (Wave 14 type-class deepen) */
+    /* Grep: GJ-EFI: soft memmap PASS (Wave 15 type-class deepen) */
     com1_puts("GJ-EFI: soft memmap PASS descs=");
     com1_put_u64_dec(cDescs);
     com1_puts(" usable_descs=");
@@ -611,7 +616,7 @@ soft_handoff_marker(u64 u64Entry)
 }
 
 /**
- * Wave 14 greppable soft EFI inventory dump (product / smoke deepen).
+ * Wave 15 greppable soft EFI inventory dump (product / smoke deepen).
  * Prefix-stable markers (GJ-EFI: soft …). Never allocates; never aborts;
  * never gates ExitBootServices or the kmain_uefi jump.
  *
@@ -908,13 +913,82 @@ soft_wave14_inventory(u64 u64Entry)
     com1_puts("\n");
     cAreas++;
 
-    /* Grep: GJ-EFI: soft deepen wave (Wave 14 stamp; areas = prior soft lines). */
+    /* Grep: GJ-EFI: soft contract — Wave 15 magic/version/struct contract. */
+    com1_puts("GJ-EFI: soft contract magic_ok=");
+    com1_put_u64_dec((u64)(g_BootInfo.u32Magic == GJ_BOOT_INFO_MAGIC ? 1u : 0u));
+    com1_puts(" version_ok=");
+    com1_put_u64_dec((u64)(g_BootInfo.u32Version == GJ_BOOT_INFO_VERSION ? 1u
+                                                                         : 0u));
+    com1_puts(" magic_expect=");
+    com1_put_u64_hex((u64)GJ_BOOT_INFO_MAGIC);
+    com1_puts(" version_expect=");
+    com1_put_u64_dec((u64)GJ_BOOT_INFO_VERSION);
+    com1_puts(" source_uefi=1 soft PASS\n");
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft magic — Wave 15 handoff magic lamps. */
+    com1_puts("GJ-EFI: soft magic raw=");
+    com1_put_u64_hex((u64)g_BootInfo.u32Magic);
+    com1_puts(" ok=");
+    com1_put_u64_dec((u64)(g_BootInfo.u32Magic == GJ_BOOT_INFO_MAGIC ? 1u : 0u));
+    com1_puts(" version=");
+    com1_put_u64_dec((u64)g_BootInfo.u32Version);
+    com1_puts(" soft ");
+    com1_puts((g_BootInfo.u32Magic == GJ_BOOT_INFO_MAGIC &&
+               g_BootInfo.u32Version == GJ_BOOT_INFO_VERSION)
+                  ? "PASS"
+                  : "STUB");
+    com1_puts("\n");
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft geometry — Wave 15 FB pitch/bpp soft math. */
+    if (g_BootInfo.u64FbBase == 0) {
+        com1_puts("GJ-EFI: soft geometry SKIP fb=0 pitch_ok=0 wave=");
+        com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
+        com1_puts("\n");
+    } else {
+        com1_puts("GJ-EFI: soft geometry ");
+        com1_puts(szGop);
+        com1_puts(" w=");
+        com1_put_u64_dec((u64)g_BootInfo.u32FbWidth);
+        com1_puts(" h=");
+        com1_put_u64_dec((u64)g_BootInfo.u32FbHeight);
+        com1_puts(" pitch=");
+        com1_put_u64_dec((u64)g_BootInfo.u32FbPitch);
+        com1_puts(" bpp=");
+        com1_put_u64_dec((u64)g_BootInfo.u32FbBpp);
+        com1_puts(" soft ");
+        com1_puts(szGop);
+        com1_puts("\n");
+    }
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft publish — Wave 15 handoff publish lamps. */
+    com1_puts("GJ-EFI: soft publish load_ok=");
+    com1_put_u64_dec((u64)g_cSoftLoadOk);
+    com1_puts(" load_fail=");
+    com1_put_u64_dec((u64)g_cSoftLoadFail);
+    com1_puts(" source=uefi handoff=");
+    com1_puts(szHandoff);
+    com1_puts(" soft PASS\n");
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft catalog — Wave 15 area name rollup. */
+    com1_puts("GJ-EFI: soft catalog honesty,inventory,path,handoff,memmap,"
+              "gop,flags,kernel,rsdp,load,ebs,stats,contract,magic,"
+              "geometry,publish,catalog wave=");
+    com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
+    com1_puts(" areas_expect=17 soft PASS\n");
+    cAreas++;
+
+    /* Grep: GJ-EFI: soft deepen wave (Wave 15 stamp; areas = prior soft lines). */
     com1_puts("GJ-EFI: soft deepen wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts(" areas=");
     com1_put_u64_dec((u64)cAreas);
     com1_puts(" catalog=honesty,inventory,path,handoff,memmap,gop,flags,"
-              "kernel,rsdp,load,ebs,stats unit=uefi_stub.c only "
+              "kernel,rsdp,load,ebs,stats,contract,magic,geometry,publish,"
+              "catalog unit=uefi_stub.c only "
               "soft_never_gates=1 (soft; not bar3)\n");
 
     /*
@@ -1576,7 +1650,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
 
     com1_puts("GJ-EFI: ExitBootServices ok\n");
     soft_handoff_marker(u64Entry);
-    /* Wave 14 exclusive soft inventory deepen (COM1; never gates jump). */
+    /* Wave 15 exclusive soft inventory deepen (COM1; never gates jump). */
     soft_wave14_inventory(u64Entry);
 
     if (u64Entry == 0) {

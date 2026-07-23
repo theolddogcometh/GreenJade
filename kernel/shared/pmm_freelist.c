@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -19,13 +19,17 @@
  *   pmm_core: soft total     — total immutable across soft exercise
  *   pmm_core: soft restore   — free/total restored after selftest
  *   pmm_core: soft path      — surface catalog + product non-claims
- *   pmm_core: soft deepen    — wave=14 stamp + area count
+ *   pmm_core: soft geom      — Wave 15 page/span geometry
+ *   pmm_core: soft deepen    — wave=15 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
 #include <gj/klog.h>
 #include <gj/pmm_core.h>
 #include <gj/string.h>
+
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 15u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -36,7 +40,7 @@ static u64 g_u64Base;
 static u64 g_u64Limit;
 static unsigned g_cFree;
 static unsigned g_cTotal;
-/* Wave 14: soft inventory emission counter (observability only). */
+/* Wave 15: soft inventory emission counter (observability only). */
 static u32 g_cSoftInvLogs;
 
 void
@@ -131,7 +135,7 @@ soft_walk_free(void)
 }
 
 /*
- * Wave 14 greppable soft inventory dump (never hard-gates boot).
+ * Wave 15 greppable soft inventory dump (never hard-gates boot).
  * Safe after init; does not allocate. Prefix-stable: "pmm_core: soft …".
  * greppable: pmm_core: soft
  */
@@ -165,51 +169,67 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
      * greppable: pmm_core: soft honesty
      */
     kprintf("pmm_core: soft honesty order0=1 hierarchical=0 hhdm=0 "
-            "zones=0 product_tib=0 pmem3=OPEN wave=14 "
-            "(soft inventory only; not hierarchical pmm)\n");
+            "zones=0 product_tib=0 pmem3=OPEN wave=%u "
+            "(soft inventory only; not hierarchical pmm)\n",
+            (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft inventory */
     kprintf("pmm_core: soft inventory free=%u total=%u base=0x%lx "
             "limit=0x%lx page_size=%lu page_shift=%u head=%u "
-            "span=0x%lx logs=%u wave=14\n",
+            "span=0x%lx logs=%u wave=%u\n",
             cFreeSnap, cTotalSnap,
             (unsigned long)g_u64Base, (unsigned long)g_u64Limit,
             (unsigned long)GJ_PMM_CORE_PAGE_SIZE, u32PageShift,
-            u32Head, (unsigned long)u64Span, g_cSoftInvLogs);
+            u32Head, (unsigned long)u64Span, g_cSoftInvLogs,
+            (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft pool */
     kprintf("pmm_core: soft pool free=%u total=%u free_le_total=%u "
-            "head=%u span_pages=%u empty=%u wave=14\n",
+            "head=%u span_pages=%u empty=%u wave=%u\n",
             cFreeSnap, cTotalSnap, u32FreeLeTotal, u32Head,
             (cTotalSnap > 0u) ? cTotalSnap : 0u,
-            (cFreeSnap == 0u) ? 1u : 0u);
+            (cFreeSnap == 0u) ? 1u : 0u, (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft chain */
     kprintf("pmm_core: soft chain walk=%u free=%u match=%u "
-            "bound=%u wave=14\n",
+            "bound=%u wave=%u\n",
             cChain, cFreeSnap,
             (cChain == cFreeSnap) ? 1u : 0u,
-            cTotalSnap + 1u);
+            cTotalSnap + 1u, (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft path — surface catalog + non-claims */
     kprintf("pmm_core: soft path init=1 alloc=1 free=1 free_count=1 "
             "total_count=1 selftest=1 hierarchical=0 hhdm=0 "
-            "order_max=0 product_tib=0 wave=14\n");
+            "order_max=0 product_tib=0 wave=%u\n",
+            (unsigned)PMM_CORE_SOFT_WAVE);
+
+    /* Grep: pmm_core: soft geom (Wave 15 page/span geometry) */
+    kprintf("pmm_core: soft geom page_size=%lu page_shift=%u "
+            "span=0x%lx span_pages=%u base=0x%lx limit=0x%lx "
+            "node_bytes=%u wave=%u\n",
+            (unsigned long)GJ_PMM_CORE_PAGE_SIZE, u32PageShift,
+            (unsigned long)u64Span,
+            (cTotalSnap > 0u) ? cTotalSnap : 0u,
+            (unsigned long)g_u64Base, (unsigned long)g_u64Limit,
+            (unsigned)sizeof(struct pmm_core_node),
+            (unsigned)PMM_CORE_SOFT_WAVE);
 
     /* Grep: pmm_core: soft deepen */
-    kprintf("pmm_core: soft deepen wave=14 areas=%u free=%u total=%u "
+    kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",
-            cAreas, cFreeSnap, cTotalSnap, g_cSoftInvLogs);
+            (unsigned)PMM_CORE_SOFT_WAVE, cAreas, cFreeSnap, cTotalSnap,
+            g_cSoftInvLogs);
 
     /* Grep: pmm_core: soft inventory PASS|FAIL / pmm_core: soft PASS|FAIL */
-    kprintf("pmm_core: soft inventory %s free=%u total=%u wave=14\n",
-            szVerdict, cFreeSnap, cTotalSnap);
-    kprintf("pmm_core: soft %s free=%u total=%u areas=%u wave=14\n",
-            szVerdict, cFreeSnap, cTotalSnap, cAreas);
+    kprintf("pmm_core: soft inventory %s free=%u total=%u wave=%u\n",
+            szVerdict, cFreeSnap, cTotalSnap, (unsigned)PMM_CORE_SOFT_WAVE);
+    kprintf("pmm_core: soft %s free=%u total=%u areas=%u wave=%u\n",
+            szVerdict, cFreeSnap, cTotalSnap, cAreas,
+            (unsigned)PMM_CORE_SOFT_WAVE);
 }
 
 /*
- * Soft deepen Wave 14: reject path, alignment/range, free-count steps,
+ * Soft deepen Wave 15: reject path, alignment/range, free-count steps,
  * LIFO reuse + double LIFO, payload survive (node header scrub only),
  * freelist chain walk, total immutable, restore pool counts + inventory.
  * Returns 1 on PASS, 0 on soft FAIL. Does not drain the whole pool.
@@ -226,7 +246,7 @@ gj_pmm_core_selftest(void)
     unsigned cTotal0;
     unsigned cChain;
     unsigned cAreas;
-    u32 u32Surf; /* soft surface bit lamps (Wave 14) */
+    u32 u32Surf; /* soft surface bit lamps (Wave 15) */
     volatile u32 *pMark;
     volatile u32 *pMark2;
     int fOk;
@@ -271,7 +291,7 @@ gj_pmm_core_selftest(void)
     if (g_u64Base >= GJ_PMM_CORE_PAGE_SIZE) {
         gj_pmm_core_free(g_u64Base - GJ_PMM_CORE_PAGE_SIZE);
     }
-    /* Mid-page unaligned inside pool (Wave 14 reject deepen). */
+    /* Mid-page unaligned inside pool (Wave 15 reject deepen). */
     if (g_u64Limit > g_u64Base + 1ul) {
         gj_pmm_core_free(g_u64Base + 1ul);
         gj_pmm_core_free(g_u64Base + (GJ_PMM_CORE_PAGE_SIZE / 2ul));
@@ -408,7 +428,7 @@ gj_pmm_core_selftest(void)
     cAreas++; /* payload */
 
     /*
-     * Wave 14 double LIFO: free C (LIFO-B) then A; next two allocs must be
+     * Wave 15 double LIFO: free C (LIFO-B) then A; next two allocs must be
      * A then former-B (most recent free first). Stamp second payload mark.
      */
     pMark2 = (volatile u32 *)(void *)((gj_vaddr_t)paA + 128ul);
@@ -510,32 +530,40 @@ soft_out:
 
     /* Grep: per-surface soft PASS lamps (only surfaces that actually ran). */
     if ((u32Surf & SURF_REJECT) != 0u) {
-        kprintf("pmm_core: soft reject soft PASS wave=14\n");
+        kprintf("pmm_core: soft reject soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_ALIGN) != 0u) {
-        kprintf("pmm_core: soft align soft PASS wave=14\n");
+        kprintf("pmm_core: soft align soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_COUNTS) != 0u) {
-        kprintf("pmm_core: soft counts soft PASS wave=14\n");
+        kprintf("pmm_core: soft counts soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_LIFO) != 0u) {
-        kprintf("pmm_core: soft lifo soft PASS wave=14\n");
+        kprintf("pmm_core: soft lifo soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_DOUBLE) != 0u) {
-        kprintf("pmm_core: soft double soft PASS wave=14\n");
+        kprintf("pmm_core: soft double soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_PAYLOAD) != 0u) {
-        kprintf("pmm_core: soft payload soft PASS wave=14\n");
+        kprintf("pmm_core: soft payload soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_CHAIN) != 0u) {
-        kprintf("pmm_core: soft chain soft PASS wave=14\n");
+        kprintf("pmm_core: soft chain soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_TOTAL) != 0u) {
-        kprintf("pmm_core: soft total soft PASS wave=14\n");
+        kprintf("pmm_core: soft total soft PASS wave=%u\n",
+                (unsigned)PMM_CORE_SOFT_WAVE);
     }
     if ((u32Surf & SURF_RESTORE) != 0u) {
-        kprintf("pmm_core: soft restore soft PASS free=%u total=%u wave=14\n",
-                g_cFree, g_cTotal);
+        kprintf("pmm_core: soft restore soft PASS free=%u total=%u wave=%u\n",
+                g_cFree, g_cTotal, (unsigned)PMM_CORE_SOFT_WAVE);
     }
 
     return fOk;

@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14 base; Wave 15 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -25,7 +25,10 @@
  *   irq: soft notify    / irq_msix: soft notify     — Notification live snapshot
  *   irq: soft exercise  / irq_msix: soft exercise   — exercise tallies
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=14 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=15 areas stamp
+ *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
+ *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
+ *   irq: soft surface   / irq_msix: soft surface    — Wave 15 catalog
  *   irq: soft stats     / irq_msix: soft stats      — aggregate counters
  *   irq: soft inventory PASS / irq: soft PASS
  *   irq_msix: soft inventory PASS / irq_msix: soft PASS
@@ -53,8 +56,8 @@ static int g_fReady;
 static int g_fInHandler;
 
 /* Wave 14 deepen area count (fixed greppable categories in inventory log). */
-#define IRQ_MSIX_SOFT_DEEPEN_AREAS 12u
-#define IRQ_MSIX_SOFT_DEEPEN_WAVE  14u
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 15u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE  15u
 
 /*
  * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
@@ -256,7 +259,44 @@ irq_msix_soft_inventory_log(const char *szVia)
             "(soft inventory; not product gate)\n",
             szViaSafe, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
 
-    /* Grep: irq: soft deepen wave (Wave 14 stamp) */
+    /*
+     * Wave 15 exclusive deepen (complementary; never hard-gates).
+     * greppable: irq: soft ratio|headroom|surface
+     */
+    {
+        u32 u32PulseBp = 0;
+        u32 u32TableBp = 0;
+        u32 u32ExOkBp = 0;
+        u32 u32PathTot;
+
+        u32PathTot = u32Soft + u32Hw + u32Path + u32Tbl;
+        if (u32PathTot != 0u) {
+            u32PulseBp = (u32Path * 10000u) / u32PathTot;
+            u32TableBp = (u32Tbl * 10000u) / u32PathTot;
+        }
+        if ((g_u32SoftExerciseOk + g_u32SoftExerciseFail) != 0u) {
+            u32ExOkBp = (g_u32SoftExerciseOk * 10000u) /
+                        (g_u32SoftExerciseOk + g_u32SoftExerciseFail);
+        }
+        /* Grep: irq: soft ratio */
+        kprintf("irq: soft ratio pulse_bp=%u table_bp=%u ex_ok_bp=%u "
+                "soft=%u path=%u tbl=%u wave=%u\n",
+                u32PulseBp, u32TableBp, u32ExOkBp, u32Soft, u32Path, u32Tbl,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: irq: soft headroom */
+        kprintf("irq: soft headroom ready=%u live=%u exercise_ok=%u "
+                "exercise_fail=%u not_ready=%u wave=%u\n",
+                u32Ready, u32Live, g_u32SoftExerciseOk, g_u32SoftExerciseFail,
+                g_u32SoftExerciseNotReady, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        /* Grep: irq: soft surface */
+        kprintf("irq: soft surface inventory,inject,pulse,table,hw,badges,"
+                "vec,notify,exercise,path,ratio,headroom,deepen,stats "
+                "areas=%u wave=%u\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    }
+
+    /* Grep: irq: soft deepen wave (Wave 15 stamp) */
     kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
             "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,
@@ -369,6 +409,37 @@ irq_msix_soft_inventory_log(const char *szVia)
             "self_ipi=0 bar3=open dual=soft+idt_gate via=%s wave=%u "
             "(soft inventory; not product gate)\n",
             szViaSafe, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq_msix: soft ratio (Wave 15 twin) */
+    {
+        u32 u32PulseBp2 = 0;
+        u32 u32TableBp2 = 0;
+        u32 u32ExOkBp2 = 0;
+        u32 u32PathTot2;
+
+        u32PathTot2 = u32Soft + u32Hw + u32Path + u32Tbl;
+        if (u32PathTot2 != 0u) {
+            u32PulseBp2 = (u32Path * 10000u) / u32PathTot2;
+            u32TableBp2 = (u32Tbl * 10000u) / u32PathTot2;
+        }
+        if ((g_u32SoftExerciseOk + g_u32SoftExerciseFail) != 0u) {
+            u32ExOkBp2 = (g_u32SoftExerciseOk * 10000u) /
+                         (g_u32SoftExerciseOk + g_u32SoftExerciseFail);
+        }
+        kprintf("irq_msix: soft ratio pulse_bp=%u table_bp=%u ex_ok_bp=%u "
+                "soft=%u path=%u tbl=%u wave=%u\n",
+                u32PulseBp2, u32TableBp2, u32ExOkBp2, u32Soft, u32Path,
+                u32Tbl, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("irq_msix: soft headroom ready=%u live=%u exercise_ok=%u "
+                "exercise_fail=%u not_ready=%u wave=%u\n",
+                u32Ready, u32Live, g_u32SoftExerciseOk, g_u32SoftExerciseFail,
+                g_u32SoftExerciseNotReady, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+        kprintf("irq_msix: soft surface inventory,inject,pulse,table,hw,"
+                "badges,vec,notify,exercise,path,ratio,headroom,deepen,"
+                "stats areas=%u wave=%u\n",
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_AREAS,
+                (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+    }
 
     /* Grep: irq_msix: soft deepen */
     kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "

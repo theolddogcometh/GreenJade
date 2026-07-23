@@ -7,7 +7,7 @@
  * basereloc, soft-exec. CS32 int 0x80 smokes exercise mmap2 / path / vfs;
  * greppable "pe32: … PASS" markers stay stable.
  *
- * Soft inventory (Wave 11 base + Wave 14 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 15 exclusive deepen; this unit only —
  * greppable "pe32: soft …"):
  *   pe32: soft inventory   — capacity + pipeline catalog + log tallies
  *   pe32: soft parse       — parse/sections enter+ok snapshot
@@ -17,7 +17,7 @@
  *   pe32: soft int80       — CS32 int80 smoke surface catalog (not bar3)
  *   pe32: soft path        — honesty: kernel PE soft ≠ Steam/Proton titles
  *   pe32: soft inventory PASS / pe32: soft PASS
- * Wave 14 exclusive complementary surfaces (never reshape primary fields):
+ * Wave 15 exclusive complementary surfaces (never reshape primary fields):
  *   pe32: soft reject      — parse/sec/stage/map/validate/reloc/load fails
  *   pe32: soft format      — PE32/PE32+ + i386/amd64 accept tallies
  *   pe32: soft reloc       — ABSOLUTE/HIGHLOW/DIR64/HIGH/LOW/skip/delta0
@@ -25,7 +25,8 @@
  *   pe32: soft stats       — aggregate enter/ok/fail rollup + wave
  *   pe32: soft lamps       — pipeline readiness lamps (software only)
  *   pe32: soft smoke       — smoke/spawn/wow64/int80/vfs ok snapshot
- *   pe32: soft deepen      — wave=14 areas stamp
+ *   pe32: soft capacity    — Wave 15 max_sec/stage_cap/soft_va geometry
+ *   pe32: soft deepen      — wave=15 areas stamp
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -54,7 +55,7 @@
 #define OPT_PE32P  0x20bu
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define PE32_SOFT_WAVE 14u
+#define PE32_SOFT_WAVE 15u
 
 static u32
 rd32(const u8 *p)
@@ -71,7 +72,7 @@ rd16(const u8 *p)
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped off product return paths; never hard-gate behavior.
- * Wave 11 base + Wave 14 exclusive path deepen.
+ * Wave 11 base + Wave 15 exclusive path deepen.
  * greppable: pe32: soft …
  */
 struct pe32_soft_stats {
@@ -101,7 +102,7 @@ struct pe32_soft_stats {
     u64 u64Int80SmokeOk;
     u64 u64VfsLoadOk;
     u64 u64SoftLog;
-    /* Wave 14 exclusive reject / format / reloc / soft_va tallies. */
+    /* Wave 15 exclusive reject / format / reloc / soft_va tallies. */
     u64 u64ParseFail;
     u64 u64SecFail;
     u64 u64StageFail;
@@ -140,9 +141,9 @@ pe32_soft_inc(u64 *pCtr)
 }
 
 /**
- * Wave 14 soft inventory dump — greppable "pe32: soft …".
+ * Wave 15 soft inventory dump — greppable "pe32: soft …".
  * Snapshots live soft path state; never allocates; never hard-gates.
- * Primary Wave 11 field names stay stable; Wave 14 adds complementary lines.
+ * Primary Wave 11 field names stay stable; Wave 15 adds complementary lines.
  * szVia: caller tag (smoke / spawn / wow64 / int80 / vfs / anon).
  */
 static void
@@ -169,7 +170,7 @@ pe32_soft_inventory_log(const char *szVia)
     /*
      * Grep: pe32: soft inventory
      * Capacity + dual-format catalog (PE32 i386 + PE32+ amd64) + log count.
-     * Wave 14 appends wave= only — prior keys remain prefix-stable.
+     * Wave 15 appends wave= only — prior keys remain prefix-stable.
      */
     kprintf("pe32: soft inventory via=%s max_sec=%u stage_cap=0x8000 "
             "pe32=1 pe32p=1 i386=1 amd64=1 soft_exec=1 soft_reloc=1 "
@@ -246,7 +247,7 @@ pe32_soft_inventory_log(const char *szVia)
             szViaSafe, (unsigned)PE32_SOFT_WAVE);
 
     /*
-     * Wave 14 exclusive complementary sub-lines (never reshape primary).
+     * Wave 15 exclusive complementary sub-lines (never reshape primary).
      * Reject = sticky path fails + derived (enter-ok) when sticky is 0.
      */
     /* Grep: pe32: soft reject */
@@ -371,10 +372,20 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned long)g_soft.u64CompatOk,
             (unsigned long)g_soft.u64SoftIretqOk);
 
+    /* Grep: pe32: soft capacity (Wave 15 geometry) */
+    kprintf("pe32: soft capacity max_sec=%u stage_cap=0x8000 "
+            "soft_va=0x50000000 pe32=1 pe32p=1 i386=1 amd64=1 "
+            "parse_ok=%lu load_ok=%lu soft_exec_ok=%lu wave=%u\n",
+            (unsigned)GJ_PE32_MAX_SECTIONS,
+            (unsigned long)g_soft.u64ParseOk,
+            (unsigned long)g_soft.u64LoadOk,
+            (unsigned long)g_soft.u64SoftExecOk,
+            (unsigned)PE32_SOFT_WAVE);
+
     /* Grep: pe32: soft deepen */
     kprintf("pe32: soft deepen wave=%u areas="
             "inventory,parse,stage,load,exec,int80,path,"
-            "reject,format,reloc,soft_va,stats,lamps,smoke "
+            "reject,format,reloc,soft_va,stats,lamps,smoke,capacity "
             "unit=pe32.c only hard_gate=0 via=%s\n",
             (unsigned)PE32_SOFT_WAVE, szViaSafe);
 
@@ -505,7 +516,7 @@ pe32_parse(const void *pBuf, u32 cbLen, struct gj_pe32_info *pOut)
         return -1;
     }
     pOut->u32Ready = 1;
-    /* Wave 14: format accept tallies (pair-checked above). */
+    /* Wave 15: format accept tallies (pair-checked above). */
     if (pOut->u8IsPe32) {
         pe32_soft_inc(&g_soft.u64FmtPe32);
     } else {

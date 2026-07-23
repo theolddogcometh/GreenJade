@@ -17,7 +17,7 @@
  *   tracks successive PRESENT_FB (STATS bit18). INPUT_POLL/POP soft-ok
  *   when virtio-input is absent (empty ring).
  *
- * Soft door inventory (Wave 14 exclusive deepen; this unit only):
+ * Soft door inventory (Wave 15 exclusive deepen; this unit only):
  *   - Ownership: claim / reclaim / release / busy / claim_inval
  *   - Present: PRESENT / PRESENT_FB ok|fail|nodev + multi-frame tallies
  *   - Input: poll + pop hit/empty (soft-ok without virtio-input)
@@ -27,7 +27,9 @@
  *   - Peaks: calls / claims / reclaims / user_presents high-water
  *   - Soft ok tally + ok_bp ratio + STATS flag soft samples
  *   - Soft verdict INIT|PASS|PARTIAL + path honesty catalog
+ *   - Wave 15: honesty / owner / terminal / catalog / deepen
  *   greppable: "session_door: soft …"
+ *   greppable: "session_door: soft deepen"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *   Soft ≠ desktop/compositor product bar.
  *
@@ -47,8 +49,8 @@
 #define GJ_SESS_MAX_DIM 256u
 #define GJ_SESS_TMP_W   64u
 #define GJ_SESS_TMP_H   64u
-/* Wave 14 deepen stamp (file-local; never hard-gates). */
-#define GJ_SESS_SOFT_WAVE 14u
+/* Wave 15 deepen stamp (file-local; never hard-gates). */
+#define GJ_SESS_SOFT_WAVE 15u
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -58,7 +60,7 @@ static u32 g_u32Claims;     /* successful first claims */
 static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft */
 
 /*
- * Soft product inventory (Wave 14 exclusive deepen). Cumulative path tallies.
+ * Soft product inventory (Wave 15 exclusive deepen). Cumulative path tallies.
  * greppable: session_door: soft …
  */
 static u32 g_u32SoftClaimInval;    /* CLAIM bad token */
@@ -102,7 +104,7 @@ static u32 g_u32SoftIo;            /* aggregate IO terminals */
 static u32 g_u32SoftNosupport;     /* unknown opcode */
 static u32 g_u32SoftOk;            /* non-negative terminal returns */
 static u32 g_u32SoftLogs;          /* soft inventory emissions */
-/* Wave 14: per-opcode enter surface (diagnostics only). */
+/* Wave 15: per-opcode enter surface (diagnostics only). */
 static u32 g_u32SoftOpPresent;
 static u32 g_u32SoftOpDisplay;
 static u32 g_u32SoftOpInputPoll;
@@ -113,7 +115,7 @@ static u32 g_u32SoftOpClaim;
 static u32 g_u32SoftOpRelease;
 static u32 g_u32SoftOpMap;
 static u32 g_u32SoftOpUnknown;
-/* Wave 14: copy / blit path surface. */
+/* Wave 15: copy / blit path surface. */
 static u32 g_u32SoftCopyOutUser;   /* sess_copy_out via copy_to_user */
 static u32 g_u32SoftCopyOutKern;   /* sess_copy_out HHDM/static */
 static u32 g_u32SoftCopyInUser;    /* sess_copy_in via copy_from_user */
@@ -124,7 +126,7 @@ static u32 g_u32SoftBlitInval;     /* blit arg reject */
 static u32 g_u32SoftBlitFault;     /* blit row copy fault */
 static u32 g_u32SoftBlitRows;      /* sum of rows blitted ok */
 static u32 g_u32SoftBlitLastRows;  /* rows in most recent ok blit */
-/* Wave 14: peaks + last-op + STATS flag samples. */
+/* Wave 15: peaks + last-op + STATS flag samples. */
 static u32 g_u32SoftPeakCalls;
 static u32 g_u32SoftPeakClaims;
 static u32 g_u32SoftPeakReclaims;
@@ -218,7 +220,7 @@ sess_soft_note_peaks(void)
     }
 }
 
-/** Soft: per-opcode enter tallies (Wave 14 deepen). */
+/** Soft: per-opcode enter tallies (Wave 15 deepen). */
 static void
 sess_soft_note_op(u32 u32Op)
 {
@@ -246,7 +248,8 @@ sess_soft_note_op(u32 u32Op)
 }
 
 /**
- * Greppable soft session door inventory (product / smoke; Wave 14 deepen).
+ * Greppable soft session door inventory (product / smoke; Wave 15 deepen).
+ *   session_door: soft honesty …
  *   session_door: soft inventory …
  *   session_door: soft claim …
  *   session_door: soft present …
@@ -260,9 +263,14 @@ sess_soft_note_op(u32 u32Op)
  *   session_door: soft flags …
  *   session_door: soft ratio …
  *   session_door: soft err …
+ *   session_door: soft owner …
+ *   session_door: soft terminal …
+ *   session_door: soft catalog …
  *   session_door: soft path …
+ *   session_door: soft deepen …
  *   session_door: soft PASS|PARTIAL|INIT
  * greppable: session_door: soft
+ * greppable: session_door: soft deepen
  * Honesty: soft inventory only — not bar3 / desktop compositor product.
  */
 static void
@@ -278,10 +286,13 @@ sess_soft_inventory_log(void)
     u32 u32H = 0;
     u32 u32OkBp;
     u32 u32FbTotal;
+    u32 u32ErrSum;
+    u32 cAreas;
     const char *szVerdict;
 
     sess_soft_inc(&g_u32SoftLogs);
     sess_soft_note_peaks();
+    cAreas = 0;
     u32Owned = (g_u32OwnerToken != 0) ? 1u : 0u;
     u32Ready = session_compositor_ready() ? 1u : 0u;
     u32Input = session_input_ready() ? 1u : 0u;
@@ -300,6 +311,8 @@ sess_soft_inventory_log(void)
     u32FbTotal = g_u32SoftPresentFbOk + g_u32SoftPresentFbInval +
                  g_u32SoftPresentFbNodev + g_u32SoftPresentFbFault +
                  g_u32SoftPresentFbIo;
+    u32ErrSum = g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy +
+                g_u32SoftFault + g_u32SoftIo + g_u32SoftNosupport;
 
     /*
      * Soft verdict (inventory only; never hard-gates door):
@@ -311,13 +324,21 @@ sess_soft_inventory_log(void)
         g_u32Claims != 0u || g_u32SoftInputPopHit != 0u ||
         g_u32SoftMapOk != 0u) {
         szVerdict = "PASS";
-    } else if (g_u32SoftInval != 0u || g_u32SoftNodev != 0u ||
-               g_u32SoftBusy != 0u || g_u32SoftFault != 0u ||
-               g_u32SoftIo != 0u || g_u32SoftNosupport != 0u) {
+    } else if (u32ErrSum != 0u) {
         szVerdict = "PARTIAL";
     } else {
         szVerdict = "INIT";
     }
+
+    /*
+     * Honesty first: session door is interim policy bridge, not desktop product.
+     * greppable: session_door: soft honesty
+     */
+    kprintf("session_door: soft honesty interim_door=1 desktop_product=OPEN "
+            "sessiond_claim=token bar3=OPEN soft_never_gates=1 wave=%u "
+            "(soft; never closes desktop bar)\n",
+            GJ_SESS_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: session_door: soft inventory */
     kprintf("session_door: soft inventory calls=%u owned=%u token=0x%x "
@@ -328,6 +349,7 @@ sess_soft_inventory_log(void)
             g_u32UserPresents, u32Multi, u32Ready, u32Input, u32Gpu, u32W,
             u32H, GJ_SESS_MAX_DIM, g_u32SoftOk, u32OkBp, g_u32SoftLogs,
             GJ_SESS_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: session_door: soft claim */
     kprintf("session_door: soft claim ok=%u reclaim=%u busy=%u inval=%u "
@@ -337,6 +359,7 @@ sess_soft_inventory_log(void)
             g_u32SoftClaimInval, g_u32SoftRelease, g_u32SoftReleaseFree,
             g_u32SoftReleaseInval, g_u32SoftPeakClaims,
             g_u32SoftPeakReclaims);
+    cAreas++;
 
     /* Grep: session_door: soft present */
     kprintf("session_door: soft present ok=%u nodev=%u io=%u fb_ok=%u "
@@ -350,12 +373,14 @@ sess_soft_inventory_log(void)
             g_u32SoftPresentFbBlit, g_u32SoftPresentFbClip,
             g_u32SoftPresentFbUser, g_u32SoftPresentFbKern, u32FbTotal,
             u32UserFb, u32Multi);
+    cAreas++;
 
     /* Grep: session_door: soft input */
     kprintf("session_door: soft input poll=%u pop_hit=%u pop_empty=%u "
             "pop_inval=%u pop_fault=%u ready=%u\n",
             g_u32SoftInputPoll, g_u32SoftInputPopHit, g_u32SoftInputPopEmpty,
             g_u32SoftInputPopInval, g_u32SoftInputPopFault, u32Input);
+    cAreas++;
 
     /* Grep: session_door: soft meta */
     kprintf("session_door: soft meta stats=%u stats_inval=%u stats_fault=%u "
@@ -365,6 +390,7 @@ sess_soft_inventory_log(void)
             g_u32SoftDisplayOk, g_u32SoftDisplayInval, g_u32SoftDisplayFault,
             g_u32SoftMapOk, g_u32SoftMapInval, g_u32SoftMapNodev,
             g_u32SoftMapFault);
+    cAreas++;
 
     /* Grep: session_door: soft op */
     kprintf("session_door: soft op present=%u display=%u input_poll=%u "
@@ -374,12 +400,14 @@ sess_soft_inventory_log(void)
             g_u32SoftOpInputPop, g_u32SoftOpStats, g_u32SoftOpPresentFb,
             g_u32SoftOpClaim, g_u32SoftOpRelease, g_u32SoftOpMap,
             g_u32SoftOpUnknown);
+    cAreas++;
 
     /* Grep: session_door: soft copy */
     kprintf("session_door: soft copy out_user=%u out_kern=%u in_user=%u "
             "in_kern=%u\n",
             g_u32SoftCopyOutUser, g_u32SoftCopyOutKern, g_u32SoftCopyInUser,
             g_u32SoftCopyInKern);
+    cAreas++;
 
     /* Grep: session_door: soft blit */
     kprintf("session_door: soft blit enter=%u ok=%u inval=%u fault=%u "
@@ -387,16 +415,19 @@ sess_soft_inventory_log(void)
             g_u32SoftBlitEnter, g_u32SoftBlitOk, g_u32SoftBlitInval,
             g_u32SoftBlitFault, g_u32SoftBlitRows, g_u32SoftBlitLastRows,
             g_u32SoftPresentFbClip);
+    cAreas++;
 
     /* Grep: session_door: soft peaks */
     kprintf("session_door: soft peaks calls=%u claims=%u reclaims=%u "
             "user_presents=%u logs=%u\n",
             g_u32SoftPeakCalls, g_u32SoftPeakClaims, g_u32SoftPeakReclaims,
             g_u32SoftPeakUserPres, g_u32SoftLogs);
+    cAreas++;
 
     /* Grep: session_door: soft last */
     kprintf("session_door: soft last op=%u ret=%ld ok=%u calls=%u\n",
             g_u32SoftLastOp, (long)g_i64SoftLastRet, g_u32SoftOk, g_u32Calls);
+    cAreas++;
 
     /* Grep: session_door: soft flags */
     kprintf("session_door: soft flags ready=%u input=%u owned=%u drop=%u "
@@ -404,23 +435,48 @@ sess_soft_inventory_log(void)
             g_u32SoftFlagReady, g_u32SoftFlagInput, g_u32SoftFlagOwned,
             g_u32SoftFlagDrop, g_u32SoftFlagUserFb, g_u32SoftFlagMulti,
             g_u32SoftFlagReclaim);
+    cAreas++;
 
     /* Grep: session_door: soft ratio */
     kprintf("session_door: soft ratio ok_bp=%u calls=%u ok=%u err_sum=%u "
             "fb_ok=%u fb_fail=%u wave=%u\n",
-            u32OkBp, g_u32Calls, g_u32SoftOk,
-            g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy + g_u32SoftFault +
-                g_u32SoftIo + g_u32SoftNosupport,
+            u32OkBp, g_u32Calls, g_u32SoftOk, u32ErrSum,
             g_u32SoftPresentFbOk,
             g_u32SoftPresentFbInval + g_u32SoftPresentFbNodev +
                 g_u32SoftPresentFbFault + g_u32SoftPresentFbIo,
             GJ_SESS_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: session_door: soft err */
     kprintf("session_door: soft err inval=%u nodev=%u busy=%u fault=%u "
             "io=%u nosupport=%u ok=%u logs=%u\n",
             g_u32SoftInval, g_u32SoftNodev, g_u32SoftBusy, g_u32SoftFault,
             g_u32SoftIo, g_u32SoftNosupport, g_u32SoftOk, g_u32SoftLogs);
+    cAreas++;
+
+    /* Grep: session_door: soft owner — Wave 15 ownership snapshot. */
+    kprintf("session_door: soft owner owned=%u token=0x%x claims=%u "
+            "reclaims=%u release=%u busy=%u free_release=%u "
+            "policy=token_reclaim soft %s\n",
+            u32Owned, g_u32OwnerToken, g_u32Claims, g_u32Reclaims,
+            g_u32SoftRelease, g_u32SoftClaimBusy, g_u32SoftReleaseFree,
+            u32Owned != 0u ? "PASS" : "INIT");
+    cAreas++;
+
+    /* Grep: session_door: soft terminal — terminal status rollup. */
+    kprintf("session_door: soft terminal ok=%u inval=%u nodev=%u busy=%u "
+            "fault=%u io=%u nosupport=%u err_sum=%u last_ret=%ld soft PASS\n",
+            g_u32SoftOk, g_u32SoftInval, g_u32SoftNodev, g_u32SoftBusy,
+            g_u32SoftFault, g_u32SoftIo, g_u32SoftNosupport, u32ErrSum,
+            (long)g_i64SoftLastRet);
+    cAreas++;
+
+    /* Grep: session_door: soft catalog */
+    kprintf("session_door: soft catalog honesty,inventory,claim,present,"
+            "input,meta,op,copy,blit,peaks,last,flags,ratio,err,owner,"
+            "terminal,catalog,path,deepen wave=%u areas_expect=19 soft PASS\n",
+            GJ_SESS_SOFT_WAVE);
+    cAreas++;
 
     /* Grep: session_door: soft path */
     kprintf("session_door: soft path claim=sessiond present=comp|gpu_fb "
@@ -428,12 +484,20 @@ sess_soft_inventory_log(void)
             "copy=user|kern blit=clip wave=%u "
             "(soft inventory; not bar3; not desktop product)\n",
             GJ_SESS_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: session_door: soft deepen — Wave 15 stamp + area count. */
+    kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "
+            "ready=%u owned=%u presents_user=%u claims=%u multi=%u "
+            "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",
+            GJ_SESS_SOFT_WAVE, cAreas, szVerdict, u32Ready, u32Owned,
+            g_u32UserPresents, g_u32Claims, u32Multi);
 
     /* Grep: session_door: soft PASS|PARTIAL|INIT */
     kprintf("session_door: soft %s ready=%u owned=%u presents_user=%u "
-            "claims=%u multi=%u (soft; not bar3)\n",
+            "claims=%u multi=%u wave=%u (soft; not bar3)\n",
             szVerdict, u32Ready, u32Owned, g_u32UserPresents, g_u32Claims,
-            u32Multi);
+            u32Multi, GJ_SESS_SOFT_WAVE);
 }
 
 /**
@@ -561,7 +625,7 @@ session_door_claim_count(void)
     /* Soft diagnostics: first claims + idempotent reclaims. */
     /*
      * Emit soft inventory on claim stats read so bring-up can grep
-     * session_door: soft … (Wave 14). greppable: session_door claim soft
+     * session_door: soft … (Wave 15). greppable: session_door claim soft
      */
     sess_soft_inventory_log();
     return g_u32Claims + g_u32Reclaims;

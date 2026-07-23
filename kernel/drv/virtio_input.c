@@ -16,7 +16,7 @@
  *   virtio-input: event ring soft PASS
  *   virtio-input: abs/rel axes soft PASS
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only —
+ * Soft inventory (Wave 15 exclusive deepen; this unit only —
  * greppable "virtio-input: soft …"; never hard-gates; not bar3):
  *   virtio-input: soft inventory …
  *   virtio-input: soft pci …
@@ -34,7 +34,13 @@
  *   virtio-input: soft api …
  *   virtio-input: soft features …
  *   virtio-input: soft path …
- *   virtio-input: soft deepen wave=14 …
+ *   virtio-input: soft claim …       (Wave 15)
+ *   virtio-input: soft via …         (Wave 15)
+ *   virtio-input: soft ready …       (Wave 15)
+ *   virtio-input: soft types …       (Wave 15)
+ *   virtio-input: soft kicks …       (Wave 15)
+ *   virtio-input: soft honesty …     (Wave 15)
+ *   virtio-input: soft deepen wave=15 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -80,9 +86,9 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MIN 0
 #define VI_ABS_SOFT_MAX 32767
 
-/* Wave 14 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define VI_SOFT_WAVE  14u
-#define VI_SOFT_AREAS 19u
+/* Wave 15 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define VI_SOFT_WAVE  15u
+#define VI_SOFT_AREAS 25u
 
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
@@ -144,6 +150,8 @@ static u32 g_u32ApiEventCount; /* virtio_input_event_count enters */
 static u32 g_u32ApiPending;    /* virtio_input_pending enters */
 static u32 g_u32ApiRelReset;   /* virtio_input_rel_reset enters */
 static u32 g_u32ApiMiss;       /* public API not-ready / bad-arg rejects */
+/* Wave 15 sticky via (inventory only). */
+static const char *g_szLastVia;
 
 /* Forward: emit after probe / fail / activity / stats reads. */
 static void soft_inventory(const char *szVia);
@@ -462,10 +470,10 @@ cfg_r32(volatile u8 *pBase, u32 u32Off)
     return (i32)(*p);
 }
 
-/* ---- Soft inventory (Wave 14 exclusive deepen) --------------------------- */
+/* ---- Soft inventory (Wave 15 exclusive deepen) --------------------------- */
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-input: soft …" — never hard-gates; kprintf only.
  * Soft only — not bar3 / not product multi-device input close.
  *
@@ -502,6 +510,7 @@ soft_inventory(const char *szVia)
     u64 u64PaUsed;
 
     szViaSafe = (szVia != NULL) ? szVia : "path";
+    g_szLastVia = szViaSafe;
 
     if (g_u32SoftLogN < 0xffffffffu) {
         g_u32SoftLogN++;
@@ -686,7 +695,43 @@ soft_inventory(const char *szVia)
             "bar3=0 steam=0\n",
             u32Claim);
 
-    /* Grep: virtio-input: soft deepen wave (Wave 14 stamp) */
+    /* Grep: virtio-input: soft claim (Wave 15) */
+    kprintf("virtio-input: soft claim ready=%u claim=%u modern=%u "
+            "posted=%u events=%u caps=0x%x\n",
+            u32Ready, u32Claim, (unsigned)u8Modern, (unsigned)g_cPosted,
+            (unsigned)g_u32EventCount, (unsigned)g_u32Caps);
+
+    /* Grep: virtio-input: soft via (Wave 15) */
+    kprintf("virtio-input: soft via last=%s log_n=%u once=%u\n",
+            (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
+            g_fSoftOnce ? 1u : 0u);
+
+    /* Grep: virtio-input: soft ready (Wave 15) */
+    kprintf("virtio-input: soft ready live=%u posted=%u pending=%u "
+            "polls=%u hits=%u empty=%u dropped=%u\n",
+            u32Ready, (unsigned)g_cPosted, (unsigned)u32Pending, g_u32Polls,
+            g_u32PollHits, g_u32PollEmpty, (unsigned)g_u32Dropped);
+
+    /* Grep: virtio-input: soft types (Wave 15 EV class tallies) */
+    kprintf("virtio-input: soft types syn=%u key=%u rel=%u abs=%u "
+            "last_type=%u last_code=%u last_value=%d\n",
+            g_u32SynSeen, g_u32KeySeen, g_u32RelEvSeen, g_u32AbsEvSeen,
+            (unsigned)g_u16LastType, (unsigned)g_u16LastCode,
+            (int)g_i32LastValue);
+
+    /* Grep: virtio-input: soft kicks (Wave 15) */
+    kprintf("virtio-input: soft kicks n=%u post_fail=%u unknown_slot=%u "
+            "drain=%u pushed=%u burst_max=%u\n",
+            g_u32Kicks, g_u32PostFail, g_u32UnknownSlot, g_u32DrainCalls,
+            g_u32DrainPushed, g_u32DrainBurstMax);
+
+    /* Grep: virtio-input: soft honesty (Wave 15 non-claims) */
+    kprintf("virtio-input: soft honesty multi_slot=1 soft_ring=1 "
+            "soft_axes=1 status_q=0 multi_dev=0 bar3=0 steam=0 "
+            "product_input=0 soft_only=1 wave=%u areas=%u\n",
+            (unsigned)VI_SOFT_WAVE, (unsigned)VI_SOFT_AREAS);
+
+    /* Grep: virtio-input: soft deepen wave (Wave 15 stamp) */
     kprintf("virtio-input: soft deepen wave=%u areas=%u via=%s ready=%u "
             "events=%u polls=%u posted=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

@@ -10,7 +10,7 @@
  *   length: l / ll  (e.g. %ld %lu %lx %lld %llu %llx)
  *   optional 0-flag + decimal width (e.g. %04x %08lx %016llx)
  *
- * Soft kprintf inventory (Wave 9 exclusive; Wave 14 deepen; this unit only):
+ * Soft kprintf inventory (Wave 9 exclusive; Wave 15 deepen; this unit only):
  *   Lifetime conversion / flag / null-arg counters; never hard-gate format.
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
  *     kprintf: soft inventory …
@@ -19,8 +19,9 @@
  *     kprintf: soft null …
  *     kprintf: soft path …
  *     kprintf: soft stats …
- *     kprintf: soft deepen wave=14 …
- *     stdio_k: soft inventory|path|stats|deepen|fmt …
+ *     kprintf: soft deepen wave=15 …
+ *     kprintf: soft budget …     (Wave 15: log_max/areas/milestone lamps)
+ *     stdio_k: soft inventory|path|stats|deepen|fmt|budget …
  *   Emissions only at power-of-two call milestones, hard-capped at
  *   KPF_SOFT_LOG_MAX. Soft dump uses console_* + print_u64 only (no nested
  *   kprintf) so inventory never re-enters the formatter.
@@ -43,20 +44,20 @@ enum {
 enum { KPF_NUM_BUF = 80, KPF_WIDTH_MAX = 64 };
 
 /*
- * Soft inventory serial budget (Wave 9 / Wave 14). Absolute cap of greppable
+ * Soft inventory serial budget (Wave 9 / Wave 15). Absolute cap of greppable
  * dumps; milestones are power-of-two kprintf call counts (1,2,4,…).
  * greppable: kprintf: soft / stdio_k: soft
  */
 #define KPF_SOFT_LOG_MAX 8u
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define KPF_SOFT_WAVE 14u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define KPF_SOFT_WAVE 15u
 
 /*
  * Soft inventory area count (fixed greppable categories for deepen stamp):
- *   inventory | conv | flags | null | path | stats | deepen | stdio
+ *   inventory | conv | flags | null | path | stats | deepen | stdio | budget
  */
-#define KPF_SOFT_AREAS 8u
+#define KPF_SOFT_AREAS 9u
 
 /*
  * Soft product counters (wrap OK; diagnostics only).
@@ -196,7 +197,7 @@ kpf_soft_kv(const char *szKey, u64 u64Val)
 }
 
 /**
- * Greppable soft kprintf inventory (product / smoke; Wave 14 deepen).
+ * Greppable soft kprintf inventory (product / smoke; Wave 15 deepen).
  * Must not call kprintf — console_write + print_u64 only.
  *
  *   kprintf: soft inventory|conv|flags|null|path|stats|deepen …
@@ -300,7 +301,18 @@ kprintf_soft_log(void)
     kpf_soft_kv(" calls=", g_u64SoftCalls);
     kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
     kpf_soft_kv(" skip=", g_u64SoftSkip);
-    console_write(" (Wave 14 exclusive; soft only; not libc)\n");
+    console_write(" (Wave 15 exclusive; soft only; not libc)\n");
+
+    /* Grep: kprintf: soft budget (Wave 15 emission geometry) */
+    console_write("kprintf: soft budget");
+    kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" cap_skip=", g_u64SoftCapSkip);
+    kpf_soft_kv(" busy_skip=", g_u64SoftBusySkip);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write(" milestone=pow2\n");
 
     /* Grep: stdio_k: soft inventory */
     console_write("stdio_k: soft inventory");
@@ -340,7 +352,16 @@ kprintf_soft_log(void)
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
     kpf_soft_kv(" calls=", g_u64SoftCalls);
     kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    console_write(" (Wave 14 exclusive; soft only)\n");
+    console_write(" (Wave 15 exclusive; soft only)\n");
+
+    /* Grep: stdio_k: soft budget (Wave 15 twin) */
+    console_write("stdio_k: soft budget");
+    kpf_soft_kv(" log_max=", (u64)KPF_SOFT_LOG_MAX);
+    kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
+    kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
+    kpf_soft_kv(" last_mile=", g_u64SoftLastMile);
+    kpf_soft_kv(" wave=", (u64)KPF_SOFT_WAVE);
+    console_write(" milestone=pow2\n");
 
     /* Grep: stdio_k: soft (fmt surface) */
     console_write("stdio_k: soft");

@@ -6,13 +6,13 @@
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 15 exclusive deepen; this unit only; never hard-gates):
  * greppable: "elf: soft …" | "elf_load: soft …"
  *   elf: soft inventory …
  *   elf: soft probe …
  *   elf: soft load …
  *   elf: soft reloc …
- *   elf: soft reloc_kind …   (Wave 14: relative/tls/irel/copy/glob/jump/abs64)
+ *   elf: soft reloc_kind …   (Wave 15: relative/tls/irel/copy/glob/jump/abs64)
  *   elf: soft so …
  *   elf: soft needed …
  *   elf: soft resolve …
@@ -20,11 +20,13 @@
  *   elf: soft handoff …
  *   elf: soft interp …
  *   elf: soft path …
- *   elf: soft deepen wave=14 …
- *   elf: soft catalog …      (Wave 14 capacity honesty rollup)
+ *   elf: soft deepen wave=15 …
+ *   elf: soft catalog …      (Wave 15 capacity honesty rollup)
+ *   elf: soft bias …         (Wave 15: dyn/so bias + step geometry)
+ *   elf: soft capacity …     (Wave 15: so_max/img/needed/auxv lamps)
  *   elf: soft PASS|PARTIAL
  *   elf_load: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
- *             handoff|interp|path|deepen|catalog …
+ *             handoff|interp|path|deepen|catalog|bias|capacity …
  *   elf_load: soft PASS|PARTIAL
  * Diagnostics / smoke grep only — soft ≠ bar3; soft ≠ product DoD.
  */
@@ -90,7 +92,7 @@
 /*
  * Default ET_DYN load base when program vaddrs are low.
  * High canonical user VA away from PE 0x400000 / small smoke bases.
- * (Defined early so Wave 14 soft catalog can stamp the value.)
+ * (Defined early so Wave 15 soft catalog can stamp the value.)
  */
 #define GJ_ELF_DYN_BIAS 0x0000000070000000ull
 /* Per-SO load bias band (above main ET_DYN default at GJ_ELF_DYN_BIAS) */
@@ -131,10 +133,10 @@ static struct gj_elf_so g_aSo[GJ_ELF_SO_MAX];
 static u32              g_cSo;
 
 /*
- * Wave 14 soft inventory telemetry (never hard-gates product load path).
+ * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 14u
+#define GJ_ELF_SOFT_WAVE 15u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -148,12 +150,12 @@ static u32 g_u32SoftLoadFail;     /* load fail (header/AS/map/empty) */
 static u32 g_u32SoftLoadDyn;      /* successful ET_DYN loads */
 static u32 g_u32SoftLoadExec;     /* successful ET_EXEC loads */
 static u32 g_u32SoftLoadBiasReq;  /* non-zero bias request loads */
-static u32 g_u32SoftLoadBiasDef;  /* default GJ_ELF_DYN_BIAS applied (W14) */
+static u32 g_u32SoftLoadBiasDef;  /* default GJ_ELF_DYN_BIAS applied (W15) */
 static u32 g_u32SoftMapPages;     /* PT_LOAD segments mapped (lifetime) */
 static u32 g_u32SoftRelocOps;     /* reloc apply calls with cRel > 0 */
 static u32 g_u32SoftRelocHits;    /* sum of applied reloc counts */
 static u32 g_u32SoftSymHits;      /* sum of GLOB_DAT/JUMP_SLOT/64/COPY counts */
-/* Wave 14 per-type reloc tallies (soft inventory only). */
+/* Wave 15 per-type reloc tallies (soft inventory only). */
 static u32 g_u32SoftRelocRelative;
 static u32 g_u32SoftRelocTls;     /* DTPMOD + DTPOFF + TPOFF */
 static u32 g_u32SoftRelocIrel;
@@ -164,7 +166,7 @@ static u32 g_u32SoftRelocAbs64;   /* R_X86_64_64 */
 static u32 g_u32SoftSoMapOk;      /* DT_NEEDED SO map success */
 static u32 g_u32SoftSoMapFail;    /* SO map fail */
 static u32 g_u32SoftSoSkip;       /* non-ELF SO skip */
-static u32 g_u32SoftSoFull;       /* registry full (W14) */
+static u32 g_u32SoftSoFull;       /* registry full (W15) */
 static u32 g_u32SoftSoHash;       /* SOs with DT_HASH */
 static u32 g_u32SoftSoGnu;        /* SOs with DT_GNU_HASH */
 static u32 g_u32SoftNeededOk;     /* vfs resolve hit */
@@ -207,7 +209,7 @@ elf_soft_inc(u32 *pCtr)
 }
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Twin prefixes so either agent grep works:
  *   elf: soft inventory|probe|load|reloc|reloc_kind|so|needed|resolve|auxv|
  *        handoff|interp|path|deepen|catalog …
@@ -291,7 +293,7 @@ elf_soft_inventory(const char *szVia)
             g_u32SoftRelocOps, g_u32SoftRelocHits, g_u32SoftSymHits,
             GJ_ELF_SOFT_WAVE);
 
-    /* Grep: elf: soft reloc_kind (Wave 14 per-type rollup) */
+    /* Grep: elf: soft reloc_kind (Wave 15 per-type rollup) */
     kprintf("elf: soft reloc_kind relative=%u tls=%u irel=%u copy=%u "
             "glob=%u jump=%u abs64=%u sym_hits=%u\n",
             g_u32SoftRelocRelative, g_u32SoftRelocTls, g_u32SoftRelocIrel,
@@ -357,6 +359,22 @@ elf_soft_inventory(const char *szVia)
             (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
             (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
             GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft bias (Wave 15 geometry) */
+    kprintf("elf: soft bias dyn=0x%lx so_base=0x%lx so_step=0x%lx "
+            "bias_req=%u bias_def=%u wave=%u\n",
+            (unsigned long)GJ_ELF_DYN_BIAS,
+            (unsigned long)GJ_ELF_SO_BIAS_BASE,
+            (unsigned long)GJ_ELF_SO_BIAS_STEP,
+            g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf: soft capacity (Wave 15 lamps) */
+    kprintf("elf: soft capacity so_max=%u so_img=%u so_live=%u free_so=%u "
+            "needed_max=%u auxv_max=%u hash_live=%u gnu_live=%u wave=%u\n",
+            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
+            (cReg < GJ_ELF_SO_MAX) ? (GJ_ELF_SO_MAX - cReg) : 0u,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            cHashLive, cGnuLive, GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft PASS | PARTIAL */
     kprintf("elf: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "
@@ -462,6 +480,22 @@ elf_soft_inventory(const char *szVia)
             (unsigned long)GJ_ELF_DYN_BIAS, (unsigned long)GJ_LD_HANDOFF_VA,
             (unsigned long)GJ_LD_STACK_VA, (unsigned long)GJ_ELF_SO_BIAS_BASE,
             GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft bias (Wave 15 twin) */
+    kprintf("elf_load: soft bias dyn=0x%lx so_base=0x%lx so_step=0x%lx "
+            "bias_req=%u bias_def=%u wave=%u\n",
+            (unsigned long)GJ_ELF_DYN_BIAS,
+            (unsigned long)GJ_ELF_SO_BIAS_BASE,
+            (unsigned long)GJ_ELF_SO_BIAS_STEP,
+            g_u32SoftLoadBiasReq, g_u32SoftLoadBiasDef, GJ_ELF_SOFT_WAVE);
+
+    /* Grep: elf_load: soft capacity (Wave 15 twin) */
+    kprintf("elf_load: soft capacity so_max=%u so_img=%u so_live=%u free_so=%u "
+            "needed_max=%u auxv_max=%u hash_live=%u gnu_live=%u wave=%u\n",
+            (unsigned)GJ_ELF_SO_MAX, (unsigned)GJ_ELF_SO_IMG, cReg,
+            (cReg < GJ_ELF_SO_MAX) ? (GJ_ELF_SO_MAX - cReg) : 0u,
+            (unsigned)GJ_ELF_NEEDED_MAX, (unsigned)GJ_AUXV_MAX,
+            cHashLive, cGnuLive, GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft PASS | PARTIAL */
     kprintf("elf_load: soft %s via=%s load_ok=%u probe_ok=%u so=%u handoff=%u "

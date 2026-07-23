@@ -6,7 +6,7 @@
  * G-PTR-*: range must sit in product user window, be present, and U=1.
  * Soft deepen: write-intent (W|COW), page-chunk SMAP window, soft stats.
  *
- * Soft copy_from/to_user inventory (Wave 9 base; Wave 14 exclusive deepen):
+ * Soft copy_from/to_user inventory (Wave 9 base; Wave 15 exclusive deepen):
  *   - Cumulative from/to/load/store ok|fault|inval + byte totals
  *   - Soft peaks / last transfer sizes (diagnostics only; wrap OK)
  *   - SMAP STAC/CLAC + page-chunk counters
@@ -14,7 +14,7 @@
  *   - Zero-len early returns + pages/chunk peak soft
  *   greppable: "user_copy: soft …"
  *
- * Wave 14 soft inventory deepen (prefix-stable; greppable: user_copy: soft):
+ * Wave 15 soft inventory deepen (prefix-stable; greppable: user_copy: soft):
  *   "user_copy: soft honesty …"   explicit non-claims (not SEH / full SMAP)
  *   "user_copy: soft inventory …" rollup + wave stamp
  *   "user_copy: soft from_ok=…"   bulk from/to terminal status (legacy)
@@ -26,8 +26,9 @@
  *   "user_copy: soft zero …"      zero-length early-return soft tallies
  *   "user_copy: soft path …"      surface catalog + honesty open lamps
  *   "user_copy: soft stats …"     aggregate rollup
- *   "user_copy: soft deepen …"    wave=14 stamp + area count
+ *   "user_copy: soft deepen …"    wave=15 stamp + area count
  *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
+ *   "user_copy: soft window …"    Wave 15 user VA / max copy geometry
  * Honesty: soft inventory only — not product SEH / full SMAP claim; not bar3.
  */
 #include <gj/config.h>
@@ -43,17 +44,17 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define USER_COPY_SOFT_WAVE 14u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 15u
 
-/* Soft inventory greppable area count (honesty..lamps; deepen excluded). */
-#define USER_COPY_SOFT_AREAS 11u
+/* Soft inventory greppable area count (honesty..lamps+window; deepen excluded). */
+#define USER_COPY_SOFT_AREAS 12u
 
 static int                      g_fSmapOn;
 static struct gj_user_copy_stats g_stats;
 
 /*
- * Soft inventory extras (Wave 9 + Wave 14; file-local — not hard product gates).
+ * Soft inventory extras (Wave 9 + Wave 15; file-local — not hard product gates).
  * greppable: user_copy: soft
  */
 static u64 g_u64SoftPeakFrom;      /* max successful copy_from_user cb */
@@ -62,14 +63,14 @@ static u64 g_u64SoftLastFrom;      /* last successful copy_from_user cb */
 static u64 g_u64SoftLastTo;        /* last successful copy_to_user cb */
 static u64 g_u64SoftInventoryLogs; /* soft_inventory_log emissions */
 
-/* Wave 14: range-ok fail reason axes (soft; wrap OK). */
+/* Wave 15: range-ok fail reason axes (soft; wrap OK). */
 static u64 g_u64SoftRangeOversize;
 static u64 g_u64SoftRangeBelowBase;
 static u64 g_u64SoftRangeAboveEnd;
 static u64 g_u64SoftRangeOverflow;
 static u64 g_u64SoftRangeEndBeyond;
 
-/* Wave 14: map fail reason axes (soft; wrap OK). */
+/* Wave 15: map fail reason axes (soft; wrap OK). */
 static u64 g_u64SoftMapNotPresent;
 static u64 g_u64SoftMapNotUser;
 static u64 g_u64SoftMapWriteRo;    /* write intent, !W and !COW */
@@ -78,7 +79,7 @@ static u64 g_u64SoftMapWriteOk;    /* mapped_access write intent soft ok */
 static u64 g_u64SoftMapReadCall;   /* mapped_access read-intent calls */
 static u64 g_u64SoftMapWriteCall;  /* mapped_access write-intent calls */
 
-/* Wave 14: zero-length early returns + chunk/page soft peaks. */
+/* Wave 15: zero-length early returns + chunk/page soft peaks. */
 static u64 g_u64SoftZeroFrom;
 static u64 g_u64SoftZeroTo;
 static u64 g_u64SoftZeroLoad;      /* load/store never zero-cb; reserved */
@@ -93,7 +94,7 @@ static void user_copy_soft_note_to(size_t cb);
 static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
 
 /**
- * Greppable soft copy_from/to_user inventory (product / smoke; Wave 14 deepen).
+ * Greppable soft copy_from/to_user inventory (product / smoke; Wave 15 deepen).
  * Prefix-stable markers (user_copy: soft …):
  *   user_copy: soft honesty    — explicit non-claims
  *   user_copy: soft inventory  — rollup + wave
@@ -106,7 +107,7 @@ static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
  *   user_copy: soft zero       — zero-len early returns
  *   user_copy: soft path       — surface catalog + open lamps
  *   user_copy: soft stats      — aggregate rollup
- *   user_copy: soft deepen     — wave=14 stamp + areas
+ *   user_copy: soft deepen     — wave=15 stamp + areas
  *   user_copy: soft lamps      — SMAP readiness lamps
  *
  * Never allocates; safe from SMAP notify / stats get/reset.
@@ -346,6 +347,19 @@ user_copy_soft_inventory_log(void)
             (unsigned)USER_COPY_SOFT_WAVE);
     u32Areas++;
 
+    /* Grep: user_copy: soft window (Wave 15 geometry) */
+    kprintf("user_copy: soft window base=0x%llx end=0x%llx max=%llu "
+            "pte_p=1 pte_u=1 write=W|COW chunk=page_align "
+            "smap=%llu peak_from=%llu peak_to=%llu wave=%u\n",
+            (unsigned long long)GJ_USER_VA_BASE,
+            (unsigned long long)GJ_USER_VA_END,
+            (unsigned long long)GJ_USER_COPY_MAX,
+            (unsigned long long)u64SmapOn,
+            (unsigned long long)u64PeakFrom,
+            (unsigned long long)u64PeakTo,
+            (unsigned)USER_COPY_SOFT_WAVE);
+    u32Areas++;
+
     /*
      * Legacy geometry line (Wave 9 shape) kept greppable.
      * Grep: user_copy: soft base=
@@ -363,7 +377,7 @@ user_copy_soft_inventory_log(void)
      */
     kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
             "catalog=%u smap=%llu "
-            "(Wave 14 exclusive; not product SEH; not bar3)\n",
+            "(Wave 15 exclusive; not product SEH; not bar3)\n",
             (unsigned)USER_COPY_SOFT_WAVE,
             (unsigned)u32Areas,
             (unsigned long long)u64Logs,
@@ -402,7 +416,7 @@ user_copy_soft_note_to(size_t cb)
 }
 
 /**
- * Note page-chunk transfer soft peaks (Wave 14).
+ * Note page-chunk transfer soft peaks (Wave 15).
  * Pages estimate: ceil span of [src, src+cb) at page grain via chunk count.
  */
 static void

@@ -11,13 +11,17 @@
  * (no GPL HDA paste). Greppable: "hda: … PASS" (stream / CORB / multi /
  * soft BDL / soft LPIB / stream-id).
  *
- * Soft inventory (Wave 13 exclusive deepen; this unit only —
+ * Soft inventory (Wave 15 exclusive deepen; this unit only —
  * greppable "hda: soft …"):
  *   hda: soft inventory   — capacity + dual-path lamps + wave stamp
  *   hda: soft pci         — bus/slot/func + BAR0 / MMIO / shadow
  *   hda: soft gcap        — GCAP OSS/ISS/BSS/64OK + VMAJ/VMIN
+ *   hda: soft regs        — controller register offset map (public HDA)
+ *   hda: soft int         — INTCTL/INTSTS soft-read inventory
+ *   hda: soft wake        — WAKEEN/STATESTS soft-read inventory
  *   hda: soft stream      — multi-stream open/run/queue/play snapshot
  *   hda: soft stream0|1   — per-SD format/queue/play/gain/run lamps
+ *   hda: soft fmt         — stream format field inventory (ch/rate/bits)
  *   hda: soft corb        — CORB WP/RP/sent + DMA engine + HW lamp
  *   hda: soft rirb        — RIRB WP/RP/count + size
  *   hda: soft mixer       — master/stream gain + mixdown tallies
@@ -26,9 +30,12 @@
  *   hda: soft bdl         — per-stream soft BDL segs/kicks/IOC/LPIB
  *   hda: soft sd          — soft SD tag/fmt/CBL/LVI/run/seg cursor
  *   hda: soft dma         — HW CORB + SD0 DMA / soft-fallback lamps
+ *   hda: soft dual        — hw+soft dual-path lamps
+ *   hda: soft capacity    — ring/mix/stream/CORB/BDL capacity map
  *   hda: soft stats       — probe/smoke/inventory emission tallies
  *   hda: soft path        — honesty: kernel soft ≠ Steam/game audio
- *   hda: soft deepen      — wave=13 areas stamp
+ *   hda: soft honesty     — bar3/Steam/PipeWire non-claims
+ *   hda: soft deepen      — wave=15 areas stamp
  *   hda: soft inventory PASS / hda: soft PASS
  * Never hard-gates product paths; diagnostics / smoke grep only.
  */
@@ -140,15 +147,15 @@ static u32 g_u32StreamDmaStarts;
 static int hda_stream_dma_program(void);
 
 /*
- * Soft inventory emission tallies (Wave 13; wrap OK; never hard-gate).
+ * Soft inventory emission tallies (Wave 15; wrap OK; never hard-gate).
  * greppable: hda: soft
  */
 static u32 g_u32SoftInventoryLogs;
 static u32 g_u32SoftProbeLogs;
 static u32 g_u32SoftSmokeLogs;
-/* Wave 13 deepen area count (fixed greppable categories in inventory log). */
-#define HDA_SOFT_DEEPEN_AREAS 16u
-#define HDA_SOFT_DEEPEN_WAVE  13u
+/* Wave 15 deepen area count (fixed greppable categories in inventory log). */
+#define HDA_SOFT_DEEPEN_AREAS 22u
+#define HDA_SOFT_DEEPEN_WAVE  15u
 
 static void hda_soft_inventory_log(const char *szVia);
 
@@ -261,7 +268,7 @@ done:
     (void)g_u32Bus;
     (void)g_u32Slot;
     (void)g_u32Func;
-    /* Wave 13: greppable soft inventory after probe (BAR present or shadow). */
+    /* Wave 15: greppable soft inventory after probe (BAR present or shadow). */
     g_u32SoftProbeLogs++;
     hda_soft_inventory_log("probe");
 }
@@ -1962,7 +1969,7 @@ hda_codec_programmed(void)
 }
 
 /**
- * Wave 13 soft inventory dump — greppable "hda: soft …".
+ * Wave 15 soft inventory dump — greppable "hda: soft …".
  * Snapshots live soft path state; never allocates; never hard-gates.
  * szVia: caller tag (probe / stream_smoke / corb_bdl_smoke / multi_smoke).
  *
@@ -2000,12 +2007,17 @@ hda_soft_inventory_log(const char *szVia)
     u32 u32Bss;
     u32 u32Ok64;
     u32 u32Nsdo;
+    u32 u32Intctl;
+    u32 u32Intsts;
+    u32 u32Wakeen;
+    u32 u32Statests;
     u32 fMmio;
     u32 fHwCorb;
     u32 fStreamDma;
     u32 fPresent;
     u32 fCodecProg;
     u32 fShadow;
+    u32 fDualHwSoft;
     const char *szViaSafe;
     const char *szPathMode;
 
@@ -2053,6 +2065,10 @@ hda_soft_inventory_log(const char *szVia)
     u32Gctl = hda_reg_read(HDA_REG_GCTL);
     u32Vmaj = hda_reg_read(HDA_REG_VMAJ) & 0xffu;
     u32Vmin = hda_reg_read(HDA_REG_VMIN) & 0xffu;
+    u32Intctl = hda_reg_read(HDA_REG_INTCTL);
+    u32Intsts = hda_reg_read(HDA_REG_INTSTS);
+    u32Wakeen = hda_reg_read(HDA_REG_WAKEEN);
+    u32Statests = hda_reg_read(HDA_REG_STATESTS);
     /* Intel HDA GCAP: OSS[15:12] ISS[11:8] BSS[7:3] NSDO[1] 64OK[0]. */
     u32Oss = (u32Gcap >> 12) & 0x0fu;
     u32Iss = (u32Gcap >> 8) & 0x0fu;
@@ -2065,6 +2081,7 @@ hda_soft_inventory_log(const char *szVia)
     fPresent = (g_fPresent != 0) ? 1u : 0u;
     fCodecProg = (g_u32CodecProg != 0) ? 1u : 0u;
     fShadow = (g_pMmio == NULL) ? 1u : 0u;
+    fDualHwSoft = (fMmio != 0u) ? 1u : 0u;
     if (fMmio != 0u && fHwCorb != 0u) {
         szPathMode = "hw_corb+soft";
     } else if (fMmio != 0u) {
@@ -2076,7 +2093,7 @@ hda_soft_inventory_log(const char *szVia)
     /*
      * Grep: hda: soft inventory
      * Capacity + dual-path catalog (soft always; HW when BAR0 mapped).
-     * Wave 13: wave stamp + areas + path_mode.
+     * Wave 15: wave stamp + areas + path_mode.
      */
     kprintf("hda: soft inventory via=%s streams_max=%u ring=%u corb_ents=%u "
             "bdl_ents=%u mix_cap=%u present=%u mmio=%u hw_corb=%u "
@@ -2100,13 +2117,38 @@ hda_soft_inventory_log(const char *szVia)
             (unsigned)fShadow, (unsigned)u32Gctl, (unsigned)u32Gcap,
             szPathMode, (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft gcap (Wave 13: public HDA GCAP field inventory) */
+    /* Grep: hda: soft gcap (Wave 15: public HDA GCAP field inventory) */
     kprintf("hda: soft gcap raw=0x%x oss=%u iss=%u bss=%u nsdo=%u ok64=%u "
             "vmaj=%u vmin=%u gctl=0x%x crst=%u wave=%u\n",
             (unsigned)u32Gcap, (unsigned)u32Oss, (unsigned)u32Iss,
             (unsigned)u32Bss, (unsigned)u32Nsdo, (unsigned)u32Ok64,
             (unsigned)u32Vmaj, (unsigned)u32Vmin, (unsigned)u32Gctl,
             (unsigned)(u32Gctl & 1u), (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /*
+     * Grep: hda: soft regs — public Intel HDA controller offset map.
+     * Inventory only; values are byte offsets into BAR0.
+     */
+    kprintf("hda: soft regs GCAP=0x%x VMAJ=0x%x VMIN=0x%x GCTL=0x%x "
+            "WAKEEN=0x%x STATESTS=0x%x INTCTL=0x%x INTSTS=0x%x "
+            "CORBLBASE=0x%x RIRBLBASE=0x%x SD0=0x%x soft PASS wave=%u\n",
+            (unsigned)HDA_REG_GCAP, (unsigned)HDA_REG_VMAJ,
+            (unsigned)HDA_REG_VMIN, (unsigned)HDA_REG_GCTL,
+            (unsigned)HDA_REG_WAKEEN, (unsigned)HDA_REG_STATESTS,
+            (unsigned)HDA_REG_INTCTL, (unsigned)HDA_REG_INTSTS,
+            (unsigned)HDA_REG_CORBLBASE, (unsigned)HDA_REG_RIRBLBASE,
+            (unsigned)HDA_SD0_BASE, (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft int — INTCTL/INTSTS soft-read (Wave 15) */
+    kprintf("hda: soft int intctl=0x%x intsts=0x%x claim_irq=0 "
+            "soft PASS wave=%u\n",
+            (unsigned)u32Intctl, (unsigned)u32Intsts,
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft wake — WAKEEN/STATESTS soft-read (Wave 15) */
+    kprintf("hda: soft wake wakeen=0x%x statests=0x%x soft PASS wave=%u\n",
+            (unsigned)u32Wakeen, (unsigned)u32Statests,
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
     /* Grep: hda: soft stream */
     kprintf("hda: soft stream open=%u run=%u soft_run=%u queued=%u "
@@ -2120,10 +2162,10 @@ hda_soft_inventory_log(const char *szVia)
             (unsigned)g_u32Played, (unsigned)GJ_HDA_STREAMS_MAX,
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft stream0 (Wave 13 per-SD detail) */
+    /* Grep: hda: soft stream0 (Wave 15 per-SD detail) */
     kprintf("hda: soft stream0 open=%u run=%u ch=%u rate=%u bits=%u "
             "queued=%u played=%u underrun=%u written=%u gain=%u "
-            "tag=%u fmt=0x%x soft_run=%u\n",
+            "tag=%u fmt=0x%x soft_run=%u wave=%u\n",
             (unsigned)(g_aStr[0].fOpen ? 1 : 0),
             (unsigned)(g_aStr[0].fRunning ? 1 : 0),
             (unsigned)g_aStr[0].u32Channels, (unsigned)g_aStr[0].u32Rate,
@@ -2135,13 +2177,14 @@ hda_soft_inventory_log(const char *szVia)
                                        : g_aStr[0].u32Underruns),
             (unsigned)g_aStr[0].u32Written, (unsigned)g_aStr[0].u32Gain256,
             (unsigned)u32Tag0, (unsigned)u32Fmt0,
-            (unsigned)(g_aSoftSd[0].fRun ? 1 : 0));
+            (unsigned)(g_aSoftSd[0].fRun ? 1 : 0),
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft stream1 (Wave 13 per-SD detail) */
+    /* Grep: hda: soft stream1 (Wave 15 per-SD detail) */
     if (GJ_HDA_STREAMS_MAX > 1u) {
         kprintf("hda: soft stream1 open=%u run=%u ch=%u rate=%u bits=%u "
                 "queued=%u played=%u underrun=%u written=%u gain=%u "
-                "tag=%u fmt=0x%x soft_run=%u\n",
+                "tag=%u fmt=0x%x soft_run=%u wave=%u\n",
                 (unsigned)(g_aStr[1].fOpen ? 1 : 0),
                 (unsigned)(g_aStr[1].fRunning ? 1 : 0),
                 (unsigned)g_aStr[1].u32Channels, (unsigned)g_aStr[1].u32Rate,
@@ -2149,12 +2192,26 @@ hda_soft_inventory_log(const char *szVia)
                 (unsigned)g_aStr[1].u32Played, (unsigned)g_aStr[1].u32Underruns,
                 (unsigned)g_aStr[1].u32Written, (unsigned)g_aStr[1].u32Gain256,
                 (unsigned)u32Tag1, (unsigned)u32Fmt1,
-                (unsigned)(g_aSoftSd[1].fRun ? 1 : 0));
+                (unsigned)(g_aSoftSd[1].fRun ? 1 : 0),
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
     } else {
         kprintf("hda: soft stream1 open=0 run=0 ch=0 rate=0 bits=0 "
                 "queued=0 played=0 underrun=0 written=0 gain=0 "
-                "tag=0 fmt=0x0 soft_run=0\n");
+                "tag=0 fmt=0x0 soft_run=0 wave=%u\n",
+                (unsigned)HDA_SOFT_DEEPEN_WAVE);
     }
+
+    /* Grep: hda: soft fmt — stream format field inventory (Wave 15) */
+    kprintf("hda: soft fmt s0_ch=%u s0_rate=%u s0_bits=%u s0_fmt=0x%x "
+            "s1_ch=%u s1_rate=%u s1_bits=%u s1_fmt=0x%x "
+            "codec_fmt=0x%x soft PASS wave=%u\n",
+            (unsigned)g_aStr[0].u32Channels, (unsigned)g_aStr[0].u32Rate,
+            (unsigned)g_aStr[0].u32Bits, (unsigned)u32Fmt0,
+            (unsigned)((GJ_HDA_STREAMS_MAX > 1u) ? g_aStr[1].u32Channels : 0u),
+            (unsigned)((GJ_HDA_STREAMS_MAX > 1u) ? g_aStr[1].u32Rate : 0u),
+            (unsigned)((GJ_HDA_STREAMS_MAX > 1u) ? g_aStr[1].u32Bits : 0u),
+            (unsigned)u32Fmt1, (unsigned)g_u32StreamFmt,
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
     /* Grep: hda: soft corb */
     kprintf("hda: soft corb sent=%u rirb=%u dma_runs=%u wp=%u rp=%u "
@@ -2168,7 +2225,7 @@ hda_soft_inventory_log(const char *szVia)
             (unsigned)hda_reg_read(HDA_REG_CORBLBASE),
             (unsigned long)g_paCorbHw, (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft rirb (Wave 13) */
+    /* Grep: hda: soft rirb (Wave 15) */
     kprintf("hda: soft rirb count=%u wp=%u rp=%u size=%u ctl=0x%x "
             "sts=0x%x base_lo=0x%x pa_hw=0x%lx wave=%u\n",
             (unsigned)g_u32RirbCount, (unsigned)g_u32RirbWp,
@@ -2199,7 +2256,7 @@ hda_soft_inventory_log(const char *szVia)
             (unsigned)hda_codec_stream_channel(), (unsigned)g_u32StreamFmt,
             (unsigned)fCodecProg, (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft nid (Wave 13 soft graph inventory) */
+    /* Grep: hda: soft nid (Wave 15 soft graph inventory) */
     kprintf("hda: soft nid root=%u afg=%u dac=%u pin=%u "
             "graph=root->afg->dac->pin pin_out=0x%x pwr_d0=%u "
             "sid_tag=%u hits=%u wave=%u\n",
@@ -2225,7 +2282,7 @@ hda_soft_inventory_log(const char *szVia)
                                                  : 0u),
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft sd (Wave 13 stream-descriptor shadow) */
+    /* Grep: hda: soft sd (Wave 15 stream-descriptor shadow) */
     kprintf("hda: soft sd s0_n=%u s0_lvi=%u s0_cbl=%u s0_lpib=%u "
             "s0_tag=%u s0_fmt=0x%x s0_run=%u s0_kicks=%u s0_ioc=%u "
             "s1_n=%u s1_lvi=%u s1_cbl=%u s1_lpib=%u s1_tag=%u "
@@ -2243,7 +2300,7 @@ hda_soft_inventory_log(const char *szVia)
                                                  : 0u),
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft dma (Wave 13 HW vs soft lamps) */
+    /* Grep: hda: soft dma (Wave 15 HW vs soft lamps) */
     kprintf("hda: soft dma hw_corb=%u hw_prog=%u sd0_dma=%u sd0_starts=%u "
             "corb_pa=0x%lx rirb_pa=0x%lx bdl_pa=0x%lx pcm_pa=0x%lx "
             "fallback=%s wave=%u\n",
@@ -2254,7 +2311,21 @@ hda_soft_inventory_log(const char *szVia)
             (fStreamDma != 0u) ? "hw_sd0" : "soft_tick",
             (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft stats (Wave 13 emission tallies) */
+    /* Grep: hda: soft dual — hw+soft dual-path lamps (Wave 15) */
+    kprintf("hda: soft dual mmio=%u shadow=%u hw_corb=%u stream_dma=%u "
+            "dual_hw_soft=%u path_mode=%s soft PASS wave=%u\n",
+            (unsigned)fMmio, (unsigned)fShadow, (unsigned)fHwCorb,
+            (unsigned)fStreamDma, (unsigned)fDualHwSoft, szPathMode,
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft capacity — ring/mix/stream map (Wave 15) */
+    kprintf("hda: soft capacity streams_max=%u ring=%u corb_ents=%u "
+            "bdl_ents=%u mix_cap=%u soft PASS wave=%u\n",
+            (unsigned)GJ_HDA_STREAMS_MAX, (unsigned)HDA_RING_SIZE,
+            (unsigned)GJ_HDA_CORB_ENTRIES, (unsigned)GJ_HDA_BDL_ENTRIES,
+            (unsigned)GJ_HDA_MIX_BYTES, (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft stats (Wave 15 emission tallies) */
     kprintf("hda: soft stats inv_logs=%u probe_logs=%u smoke_logs=%u "
             "corb_sent=%u rirb=%u corb_dma=%u mix_bytes=%u "
             "mix_underrun=%u codec_hits=%u bdl_kicks=%u bdl_ioc=%u "
@@ -2276,7 +2347,16 @@ hda_soft_inventory_log(const char *szVia)
             "via=%s wave=%u (soft inventory; not bar3)\n",
             szPathMode, szViaSafe, (unsigned)HDA_SOFT_DEEPEN_WAVE);
 
-    /* Grep: hda: soft deepen wave (Wave 13 stamp) */
+    /*
+     * Grep: hda: soft honesty — Wave 15 non-claims (soft inventory only).
+     * Kernel soft multi-stream ≠ product audio stack / bar3.
+     */
+    kprintf("hda: soft honesty steam_audio=0 pipewire=0 game_pcm=0 "
+            "bar3=open product_codec=0 claim=kernel_soft wave=%u "
+            "soft PASS\n",
+            (unsigned)HDA_SOFT_DEEPEN_WAVE);
+
+    /* Grep: hda: soft deepen wave (Wave 15 stamp) */
     kprintf("hda: soft deepen wave=%u areas=%u via=%s present=%u mmio=%u "
             "hw_corb=%u stream_dma=%u codec_prog=%u open=%u run=%u "
             "ok=1 skip=0\n",
@@ -2582,7 +2662,7 @@ hda_multi_stream_smoke(void)
             "mix_underrun=%u\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE, (unsigned)HDA_SOFT_DEEPEN_AREAS,
             (unsigned)g_u32SoftCodecHits, hda_mixer_mix_underruns());
-    /* Wave 13: full soft inventory after multi-stream deepen smoke. */
+    /* Wave 15: full soft inventory after multi-stream deepen smoke. */
     g_u32SoftSmokeLogs++;
     hda_soft_inventory_log("multi_smoke");
     return 0;

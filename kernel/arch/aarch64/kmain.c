@@ -16,15 +16,16 @@
  * Soft phase counter: one tick per successful bring-up step; summary
  * line before the fixed "M0 OK" product bar.
  *
- * Soft inventory (Wave 14 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 15 exclusive deepen; this unit only — greppable
  * "aarch64: kmain soft …")
  * -------------------------------------------------------------------------
  * Soft inventory: rollup of phase / ok / fail lamps + live pmm/coop + wave.
  * Soft bringup: fixed-order scaffold steps (exceptions→virtio).
  * Soft shared: freestanding C + sched + pmm core soft outcomes.
  * Soft mem: PMM-backed multi-pattern probe outcome + free/total.
- * Soft stats: phase ratio + lamp sum + log tally (Wave 14).
- * Soft deepen: area catalog stamp (inventory,bringup,shared,mem,path,stats).
+ * Soft stats: phase ratio + lamp sum + log tally (Wave 15).
+ * Soft deepen: area catalog stamp (inventory,bringup,shared,mem,stats,path,surf,honesty).
+ * Soft surf: bringup/shared/mem lamp bits + ratio (Wave 15).
  * Soft path honesty: M0 scaffold only — not bar3 / Deck / continuum.
  * Soft honesty: aarch64 product kernel remains OPEN (soft scaffold only).
  *
@@ -37,16 +38,17 @@
  *   aarch64: shared pmm soft PASS | FAIL free=… total=…
  *   aarch64: mem probe soft pa=… free0=… free1=… pat=…
  *   aarch64: mem probe PASS | soft FAIL
- *   aarch64: kmain soft inventory wave=14 phases=… soft_ok=… soft_fail=…
+ *   aarch64: kmain soft inventory wave=15 phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=… logs=…
  *   aarch64: kmain soft bringup exceptions=… cpu=… psci=… gic=…
  *             timer=… pmm=… mmu=… coop=… svc=… virtio=…
  *   aarch64: kmain soft shared c=… sched=… pmm=…
  *   aarch64: kmain soft mem probe=… free=… total=…
  *   aarch64: kmain soft stats lamps=… bringup=… shared=… mem=… ratio=…
- *   aarch64: kmain soft deepen wave=14 areas=… logs=…
+ *   aarch64: kmain soft deepen wave=15 areas=… logs=…
+ *   aarch64: kmain soft surf bringup=… shared=… mem=… lamps=… bits=…
  *   aarch64: kmain soft path m0=1 bar3=0 deck=0 continuum=0 arch=aarch64
- *             product_kernel=OPEN wave=14
+ *             product_kernel=OPEN wave=15
  *   aarch64: kmain soft honesty product_kernel=OPEN soft_only=1 no_bar3=1
  *   aarch64: kmain soft PASS phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=…
@@ -74,11 +76,11 @@ void aarch64_psci_probe(void);
 #define KMAIN_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ul
 #define KMAIN_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aul
 
-/* Wave 14 soft inventory stamp (greppable wave=14). */
-#define KMAIN_SOFT_WAVE 14u
+/* Wave 15 soft inventory stamp (greppable wave=15). */
+#define KMAIN_SOFT_WAVE 15u
 
 /* Soft area count for deepen catalog (inventory+bringup+shared+mem+path+stats). */
-#define KMAIN_SOFT_AREAS 6u
+#define KMAIN_SOFT_AREAS 8u
 
 /* Soft observability (kmain-local; never gate product M0). */
 static u32 g_cSoftPhases;
@@ -87,7 +89,7 @@ static u32 g_cSoftFail;
 static u32 g_cSoftInvLogs; /* aarch64: kmain soft inventory emit count */
 
 /*
- * Soft area lamps (0/1; Wave 14 inventory). Scaffold steps that cannot
+ * Soft area lamps (0/1; Wave 15 inventory). Scaffold steps that cannot
  * return failure still record 1 after the call (product bring-up path).
  */
 static u8 g_u8SoftSharedC;
@@ -297,7 +299,7 @@ mem_probe(void)
 }
 
 /*
- * Wave 14 soft inventory emission — greppable "aarch64: kmain soft …".
+ * Wave 15 soft inventory emission — greppable "aarch64: kmain soft …".
  * Diagnostics only; never hard-gates M0. Returns 1 if soft_fail==0 and
  * all tracked soft lamps are set (shared + bring-up + mem).
  */
@@ -321,7 +323,7 @@ kmain_soft_inventory(void)
     cTotal = gj_pmm_core_total_count();
     u32CoopId = gj_coop_current_id();
 
-    /* Soft lamp sums (Wave 14 stats; pure C count, no floating point). */
+    /* Soft lamp sums (Wave 15 stats; pure C count, no floating point). */
     cBringup = (unsigned)g_u8SoftExc + (unsigned)g_u8SoftCpu +
                (unsigned)g_u8SoftPsci + (unsigned)g_u8SoftGic +
                (unsigned)g_u8SoftTimer + (unsigned)g_u8SoftPmmInit +
@@ -361,7 +363,7 @@ kmain_soft_inventory(void)
     kprintf("aarch64: kmain soft mem probe=%u free=%u total=%u\n",
             (unsigned)g_u8SoftMem, cFree, cTotal);
 
-    /* Grep: aarch64: kmain soft stats — Wave 14 lamp / ratio rollup. */
+    /* Grep: aarch64: kmain soft stats — Wave 15 lamp / ratio rollup. */
     kprintf("aarch64: kmain soft stats lamps=%u bringup=%u shared=%u "
             "mem=%u ratio=%u ok=%u fail=%u phases=%u logs=%u\n",
             cLamps, cBringup, cShared, (unsigned)g_u8SoftMem, uRatio,
@@ -370,13 +372,23 @@ kmain_soft_inventory(void)
 
     /*
      * Grep: aarch64: kmain soft deepen
-     * Wave 14 area catalog — soft scaffold only; not product kernel claim.
+     * Wave 15 area catalog — soft scaffold only; not product kernel claim.
      */
     kprintf("aarch64: kmain soft deepen wave=%u areas=%u "
-            "catalog=inventory,bringup,shared,mem,stats,path "
+            "catalog=inventory,bringup,shared,mem,stats,path,surf,honesty "
             "logs=%u soft_only=1\n",
             (unsigned)KMAIN_SOFT_WAVE, (unsigned)KMAIN_SOFT_AREAS,
             (unsigned)g_cSoftInvLogs);
+
+    /* Grep: aarch64: kmain soft surf — Wave 15 bringup/shared/mem lamps */
+    kprintf("aarch64: kmain soft surf bringup=%u shared=%u mem=%u "
+            "lamps=%u ratio=%u bits=0x%x wave=%u\n",
+            cBringup, cShared, (unsigned)g_u8SoftMem, cLamps, uRatio,
+            (unsigned)(((cBringup >= 10u) ? 1u : 0u) |
+                       (((cShared >= 3u) ? 1u : 0u) << 1) |
+                       (((unsigned)g_u8SoftMem) << 2) |
+                       (((g_cSoftFail == 0u) ? 1u : 0u) << 3)),
+            (unsigned)KMAIN_SOFT_WAVE);
 
     /*
      * Grep: aarch64: kmain soft path
@@ -483,7 +495,7 @@ aarch64_kmain(void)
     mem_probe();
 
     /*
-     * Wave 14 combined soft inventory under "aarch64: kmain soft …".
+     * Wave 15 combined soft inventory under "aarch64: kmain soft …".
      * Soft summary only — M0 OK remains the fixed product bar grepped by
      * make aarch64-smoke / run-aarch64.sh (exact "M0 OK").
      * Honesty: soft PASS ≠ aarch64 product kernel complete (remains OPEN).

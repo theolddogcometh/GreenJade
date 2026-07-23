@@ -30,7 +30,11 @@
  * Wave 14 exclusive deepen (this unit only — greppable "smp: soft …"):
  *   smp: soft deepen|verdict|handshake|online|sipi|x2|fail|ratio|path
  *   Additive rollups + basis-point ratios; Wave 9/12 primary lines stable.
- * Never hard-gates product; wrap-OK counters and kprintf only.
+ *
+ * Wave 15 exclusive soft deepen (this unit only — greppable "smp: soft …"):
+ *   smp: soft headroom|surface|deepen  — cap/MADT head + area catalog
+ *   Inventory deepen wave stamp → 15; areas → 12. Wave 9/12 primary lines
+ *   stay field-stable. Never hard-gates product; wrap-OK + kprintf only.
  */
 #include <gj/apic.h>
 #include <gj/config.h>
@@ -1306,7 +1310,7 @@ smp_bringup_soft_log(void)
         }
 
         /* Grep: smp: soft deepen */
-        kprintf("smp: soft deepen wave=14 areas=9 verdict=%s tried=%u "
+        kprintf("smp: soft deepen wave=15 areas=12 verdict=%s tried=%u "
                 "ok=%u timeout=%u skipped=%u online=%u cap=%u logs=%u\n",
                 szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,
@@ -1362,12 +1366,23 @@ smp_bringup_soft_log(void)
         /* Grep: smp: soft ratio */
         kprintf("smp: soft ratio ok_bp=%u to_bp=%u skip_bp=%u "
                 "sched_bp=%u tried=%u skipped=%u online=%u cap=%u "
-                "wave=14\n",
+                "wave=15\n",
                 u32OkBp, u32ToBp, u32SkipBp, u32SchedBp, stSoft.u32Tried,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap);
-        /* Grep: smp: soft path (Wave 14 honesty; Wave12 path retained) */
+        /* Grep: smp: soft headroom (Wave 15) */
+        kprintf("smp: soft headroom cap=%u madt=%u stack_slots=%u "
+                "static_max=%u online=%u cap_head=%u madt_head=%u "
+                "wave=15\n",
+                stSoft.u32Cap, g_Smp.u32NLocalApic, (u32)GJ_AP_STACK_SLOTS,
+                (u32)GJ_CPU_STATIC_MAX, stSoft.u32Online, u32CapHead,
+                u32MadtHead);
+        /* Grep: smp: soft surface (Wave 15 area catalog) */
+        kprintf("smp: soft surface deepen,verdict,handshake,online,sipi,"
+                "x2,fail,ratio,path,headroom,surface,PASS areas=12 "
+                "wave=15\n");
+        /* Grep: smp: soft path (Wave 15 honesty; Wave12 path retained) */
         kprintf("smp: soft path claim=MADT+INIT-SIPI+ap_run "
-                "phases=ENTRY..SCHED soft=Wave14 "
+                "phases=ENTRY..SCHED soft=Wave15 "
                 "(soft inventory; not bar3)\n");
     }
 

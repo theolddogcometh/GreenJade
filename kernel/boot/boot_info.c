@@ -12,7 +12,7 @@
  *   boot_info_soft_log     — greppable serial markers (post serial_init)
  *     includes soft Multiboot2 / tag inventory (P-BOOT-2 dev path)
  *
- * Wave 14 exclusive soft deepen — greppable prefix-stable "boot: soft …"
+ * Wave 15 exclusive soft deepen — greppable prefix-stable "boot: soft …"
  * (diagnostics only; never hard-gate product / ExitBootServices):
  *   boot: soft honesty       — explicit non-claims (soft never gates EBS)
  *   boot: soft inventory     — master surface + wave stamp
@@ -32,7 +32,11 @@
  *   boot: soft geometry      — FB pitch/bpp soft math
  *   boot: soft publish       — set_global source-class tallies
  *   boot: soft derive        — flag-derive path counters
- *   boot: soft deepen        — wave=14 stamp + area count
+ *   boot: soft magic         — Wave 15 magic/version lamps
+ *   boot: soft validate      — Wave 15 handoff validity classify
+ *   boot: soft identity      — Wave 15 identity-bridge note (separate unit)
+ *   boot: soft catalog       — Wave 15 area name rollup
+ *   boot: soft deepen        — wave=15 stamp + area count
  *   boot: soft mb2           — PASS|SKIP|REJECT|PARTIAL tag walk
  *   boot: soft mb2 tag       — per-class tag counts
  *   boot: soft mb2 mmap      — first mmap tag entry inventory
@@ -863,22 +867,23 @@ boot_info_soft_mb2_log(const struct gj_boot_info *pInfo)
             (unsigned)g_cSoftMb2InvCalls);
 }
 
-/* Wave 14 exclusive soft deepen stamp (this unit only). */
-#define BI_SOFT_WAVE 14u
+/* Wave 15 exclusive soft deepen stamp (this unit only). */
+#define BI_SOFT_WAVE 15u
 
 /*
- * Wave 14: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
- * plus honesty/contract/caps/fields/efi_mt/geometry/publish/derive/deepen).
+ * Wave 15: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
+ * plus honesty/contract/caps/fields/efi_mt/geometry/publish/derive/
+ * magic/validate/identity/catalog/deepen).
  * Complements legacy "boot: handoff soft" / "boot: memmap soft" / "boot: GOP soft".
  * greppable: boot: soft
  * Soft only: never hard-gates product / ExitBootServices.
  * Higher-half product move remains OPEN (identity bridge is separate unit).
  */
 static void
-boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
-                          const struct bi_soft_memmap_deep *pDeep,
-                          int fValid, int fGop,
-                          const char *szHandoff)
+boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
+                        const struct bi_soft_memmap_deep *pDeep,
+                        int fValid, int fGop,
+                        const char *szHandoff)
 {
     u32 u32Flags;
     u32 u32Source;
@@ -1089,7 +1094,7 @@ boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
     cAreas++;
 
     /*
-     * Grep: boot: soft caps — per GJ_BOOT_F_* soft PASS lamps (Wave 14).
+     * Grep: boot: soft caps — per GJ_BOOT_F_* soft PASS lamps (Wave 15).
      * Presence only; never claims product readiness beyond flag bits.
      */
     kprintf("boot: soft caps pop=%u memmap=%u soft %s\n",
@@ -1143,7 +1148,7 @@ boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
     }
     cAreas++;
 
-    /* Grep: boot: soft contract — magic/version/struct size (Wave 14). */
+    /* Grep: boot: soft contract — magic/version/struct size (Wave 15). */
     kprintf("boot: soft contract magic_ok=%u version_ok=%u "
             "magic_expect=0x%x version_expect=%u struct_bytes=%u "
             "src_unknown=%u src_mb2=%u src_uefi=%u soft %s\n",
@@ -1154,7 +1159,7 @@ boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
             (unsigned)GJ_BOOT_SRC_UEFI, fValid ? "PASS" : "STUB");
     cAreas++;
 
-    /* Grep: boot: soft fields — field presence lamps (Wave 14). */
+    /* Grep: boot: soft fields — field presence lamps (Wave 15). */
     kprintf("boot: soft fields map_ptr=%u map_bytes=%u desc_size=%u "
             "rsdp=%u fb=%u kernel_span=%u mb2_phys=%u flags=0x%x "
             "source=%u soft PASS\n",
@@ -1178,7 +1183,7 @@ boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
             (unsigned)GJ_BOOT_EFI_MT_ACPI_RECLAIM);
     cAreas++;
 
-    /* Grep: boot: soft geometry — FB pitch/bpp soft math (Wave 14). */
+    /* Grep: boot: soft geometry — FB pitch/bpp soft math (Wave 15). */
     if (pInfo == NULL || pInfo->u64FbBase == 0) {
         kprintf("boot: soft geometry SKIP fb=0 bpp_bytes=0 min_pitch=0 "
                 "pitch_ok=0\n");
@@ -1224,7 +1229,41 @@ boot_info_soft_wave14_log(const struct gj_boot_info *pInfo,
             (unsigned)g_cSoftClearCalls, (unsigned)BI_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: boot: soft deepen — Wave 14 stamp + area count. */
+    /* Grep: boot: soft magic — Wave 15 magic/version lamp surface. */
+    kprintf("boot: soft magic ok=%u version_ok=%u expect=0x%x "
+            "version=%u soft %s\n",
+            (unsigned)fMagicOk, (unsigned)fVersionOk,
+            (unsigned)GJ_BOOT_INFO_MAGIC, (unsigned)GJ_BOOT_INFO_VERSION,
+            (fMagicOk != 0u && fVersionOk != 0u) ? "PASS" : "STUB");
+    cAreas++;
+
+    /* Grep: boot: soft validate — Wave 15 handoff validity classify. */
+    kprintf("boot: soft validate handoff=%s magic_ok=%u version_ok=%u "
+            "valid=%d valid_ok=%u valid_fail=%u source=%u soft %s\n",
+            szHandoff, (unsigned)fMagicOk, (unsigned)fVersionOk, fValid,
+            (unsigned)g_cSoftValidOk, (unsigned)g_cSoftValidFail,
+            (unsigned)u32Source, fValid ? "PASS" : "STUB");
+    cAreas++;
+
+    /*
+     * Grep: boot: soft identity — bridge note only; install is identity_map.c.
+     * Never claims higher-half product from this unit.
+     */
+    kprintf("boot: soft identity bridge=separate unit=identity_map.c "
+            "cover_gib=4 higher_half_product=OPEN soft_note=1 wave=%u "
+            "soft PASS\n",
+            (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: boot: soft catalog — Wave 15 area name rollup. */
+    kprintf("boot: soft catalog honesty,inventory,path,handoff,memmap,gop,"
+            "flags,caps,source,kernel,rsdp,contract,fields,efi_mt,"
+            "geometry,publish,derive,stats,magic,validate,identity,"
+            "catalog,deepen wave=%u areas_expect=23 soft PASS\n",
+            (unsigned)BI_SOFT_WAVE);
+    cAreas++;
+
+    /* Grep: boot: soft deepen — Wave 15 stamp + area count. */
     kprintf("boot: soft deepen wave=%u areas=%u handoff=%s source=%u "
             "src=%s memmap=%s gop=%s magic_ok=%d cap_bits=%u "
             "higher_half_product=OPEN soft_never_gates=1\n",
@@ -1370,7 +1409,7 @@ boot_info_soft_log(const struct gj_boot_info *pInfo)
                 (unsigned)g_cSoftLogCalls);
         kprintf("boot_info: soft mb2 inventory SKIP present=0\n");
         /* Wave 14 deepen null path under boot: soft … */
-        boot_info_soft_wave14_log(NULL, NULL, 0, 0, "STUB");
+        boot_info_soft_wave_log(NULL, NULL, 0, 0, "STUB");
         kprintf("boot: soft mb2 path SKIP reason=null_info\n");
         return;
     }
@@ -1446,7 +1485,7 @@ boot_info_soft_log(const struct gj_boot_info *pInfo)
     }
 
     /* Wave 14 exclusive: deepen greppable boot: soft … surface. */
-    boot_info_soft_wave14_log(pInfo, &softDeep, fValid, fGop, szHandoff);
+    boot_info_soft_wave_log(pInfo, &softDeep, fValid, fGop, szHandoff);
 
     /* Soft Multiboot2 / tag inventory (P-BOOT-2; SKIP on UEFI product). */
     boot_info_soft_mb2_log(pInfo);

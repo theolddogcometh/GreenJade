@@ -2,10 +2,11 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * IDT load + gate install. Soft IDT inventory (Wave 13 exclusive deepen):
- * exception / int80 / IRQ install counters, last-gate snapshot,
- * present/DPL/type/layout/contract inventory, base-layout soft verify,
- * vector-band / type-exact / span / key-entry lamps, greppable product logs.
+ * IDT load + gate install. Soft IDT inventory (Wave 13 base + Wave 15
+ * exclusive complementary deepen): exception / int80 / IRQ install counters,
+ * last-gate snapshot, present/DPL/type/layout/contract inventory, base-layout
+ * soft verify, vector-band / type-exact / span / key-entry lamps, greppable
+ * product logs.
  *
  * Greppable soft inventory (prefix-stable; product / smoke):
  *   idt: soft inventory …
@@ -24,10 +25,19 @@
  *   idt: soft verify PASS|FAIL|idle|armed …
  *   idt: soft PASS|PARTIAL|idle …
  *
+ * Wave 15 exclusive complementary surfaces (never reshape primary fields):
+ *   idt: soft honesty …   — soft-only / non-claim catalog
+ *   idt: soft query …     — soft-API / accessor sample tallies
+ *   idt: soft expect …    — base product expect catalog
+ *   idt: soft ist …       — IST / selector / zero-pad lamps
+ *   idt: soft sel …       — kernel-CS contract + mismatch tally
+ *   idt: soft deepen …    — wave=15 areas stamp
+ *
  * Legacy greppable (kept for existing smoke):
  *   idt: gate soft …
  *
  * greppable: idt: soft
+ * greppable: idt: soft deepen
  * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Honesty: soft IDT inventory ≠ product multi-server / bar3 close.
@@ -69,8 +79,20 @@ static volatile u32 g_u32SoftVerifyOk;
 static volatile u32 g_u32SoftVerifyBad;
 static volatile u32 g_u32SoftInvLogs; /* times soft inventory printed */
 static volatile u32 g_u32SoftReinstall; /* present gate overwritten */
+/* Wave 15 exclusive complementary path tallies (file-local only). */
+static volatile u32 g_u32SoftReadyQ;     /* idt_ready samples */
+static volatile u32 g_u32SoftInvCall;    /* idt_gate_soft_inventory entries */
+static volatile u32 g_u32SoftVerifyCall; /* idt_gate_soft_verify entries */
+static volatile u32 g_u32SoftInfoGet;    /* idt_gate_soft_info_get entries */
+static volatile u32 g_u32SoftLogCall;    /* idt_gate_soft_log entries */
+static volatile u32 g_u32SoftCtrGet;     /* soft counter-accessor samples */
+static volatile u32 g_u32SoftLastGet;    /* last-vec/type/off accessor samples */
+static volatile u32 g_u32SoftSetGate;    /* idt_set_gate public entries */
 static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
+
+/* Soft inventory wave stamp (this unit exclusive deepen). */
+#define IDT_SOFT_WAVE 15u
 
 /*
  * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
@@ -510,8 +532,10 @@ idt_gate_soft_verify_inner(void)
 }
 
 /**
- * Wave 13 soft IDT inventory — greppable "idt: soft …" lines.
+ * Soft IDT inventory — greppable "idt: soft …" lines.
  * Pure observability; never changes gates or aborts boot.
+ * Wave 13 primary surfaces kept; Wave 15 adds complementary
+ * honesty/query/expect/ist/sel/deepen (prefix-stable).
  *
  * Grep markers:
  *   idt: soft inventory …
@@ -526,6 +550,12 @@ idt_gate_soft_verify_inner(void)
  *   idt: soft last …
  *   idt: soft stats …
  *   idt: soft path …
+ *   idt: soft honesty …
+ *   idt: soft query …
+ *   idt: soft expect …
+ *   idt: soft ist …
+ *   idt: soft sel …
+ *   idt: soft deepen …
  *   idt: soft verify PASS|FAIL|idle|armed …
  *   idt: soft PASS|PARTIAL|idle …
  */
@@ -533,18 +563,34 @@ static void
 idt_soft_inventory_print(void)
 {
     const char *szVerdict;
+    u32 u32BaseMatch;
+    u32 u32TypeBaseOk;
 
     if (g_fIdtReady) {
         (void)idt_gate_soft_inventory_inner();
     }
     g_u32SoftInvLogs++;
 
+    /* Soft base expect lamps (Wave 15 complementary; never hard-gate). */
+    u32BaseMatch =
+        (g_SoftSnap.u32Present >= 33u && g_u32SoftBandExc == 32u &&
+         g_u32SoftBandInt80 == 1u && g_u32SoftBpOk && g_u32SoftOfOk &&
+         g_u32SoftInt80Ok)
+            ? 1u
+            : 0u;
+    u32TypeBaseOk =
+        (g_u32SoftType8e >= 30u && g_u32SoftTypeEf >= 2u &&
+         g_u32SoftTypeEe >= 1u)
+            ? 1u
+            : 0u;
+
     /* Grep: idt: soft inventory */
-    kprintf("idt: soft inventory wave=13 inits=%u ap=%u install=%u "
+    kprintf("idt: soft inventory wave=%u inits=%u ap=%u install=%u "
             "exc=%u int80=%u irq=%u reject=%u reinstall=%u inv_logs=%u\n",
-            g_u32SoftInits, g_u32SoftApLoads, g_u32SoftInstalls,
-            g_u32SoftException, g_u32SoftInt80, g_u32SoftIrq,
-            g_u32SoftReject, g_u32SoftReinstall, g_u32SoftInvLogs);
+            (unsigned)IDT_SOFT_WAVE, g_u32SoftInits, g_u32SoftApLoads,
+            g_u32SoftInstalls, g_u32SoftException, g_u32SoftInt80,
+            g_u32SoftIrq, g_u32SoftReject, g_u32SoftReinstall,
+            g_u32SoftInvLogs);
 
     /* Grep: idt: soft present */
     kprintf("idt: soft present total=%u dpl0=%u dpl1=%u dpl2=%u dpl3=%u "
@@ -621,13 +667,13 @@ idt_soft_inventory_print(void)
             (unsigned)g_SoftSnap.u16LastSel,
             g_fSoftSnapLive ? 1u : 0u);
 
-    /* Grep: idt: soft stats — Wave 13 rollup */
-    kprintf("idt: soft stats wave=13 inits=%u ap=%u install=%u "
+    /* Grep: idt: soft stats — Wave 15 rollup */
+    kprintf("idt: soft stats wave=%u inits=%u ap=%u install=%u "
             "reject=%u reinstall=%u inv_logs=%u verify_ok=%u "
             "verify_bad=%u present=%u ready=%u\n",
-            g_u32SoftInits, g_u32SoftApLoads, g_u32SoftInstalls,
-            g_u32SoftReject, g_u32SoftReinstall, g_u32SoftInvLogs,
-            g_u32SoftVerifyOk, g_u32SoftVerifyBad,
+            (unsigned)IDT_SOFT_WAVE, g_u32SoftInits, g_u32SoftApLoads,
+            g_u32SoftInstalls, g_u32SoftReject, g_u32SoftReinstall,
+            g_u32SoftInvLogs, g_u32SoftVerifyOk, g_u32SoftVerifyBad,
             g_SoftSnap.u32Present, g_fIdtReady ? 1u : 0u);
 
     /*
@@ -635,8 +681,63 @@ idt_soft_inventory_print(void)
      * Honesty: soft IDT inventory ≠ product multi-server / bar3 close.
      */
     kprintf("idt: soft path claim=exc32+int80+dynamic_gates "
-            "base_verify=1 shared_idt=1 ap_lidt=1 wave=13 "
-            "bar3=open (soft inventory; not bar3)\n");
+            "base_verify=1 shared_idt=1 ap_lidt=1 wave=%u "
+            "bar3=open (soft inventory; not bar3)\n",
+            (unsigned)IDT_SOFT_WAVE);
+
+    /*
+     * ---- Wave 15 exclusive complementary surfaces (never reshape primary).
+     */
+
+    /* Grep: idt: soft honesty */
+    kprintf("idt: soft honesty claim=exc32+int80+dynamic_gates "
+            "bar3=0 multi_server=0 hard_gate=0 soft_only=1 "
+            "shared_idt=1 ap_lidt=1 unit=idt.c wave=%u "
+            "(soft inventory; not bar3)\n",
+            (unsigned)IDT_SOFT_WAVE);
+
+    /* Grep: idt: soft query — soft-API sample tallies */
+    kprintf("idt: soft query ready_q=%u inv_call=%u verify_call=%u "
+            "info_get=%u log_call=%u ctr_get=%u last_get=%u "
+            "set_gate=%u inv_logs=%u reject=%u reinstall=%u\n",
+            g_u32SoftReadyQ, g_u32SoftInvCall, g_u32SoftVerifyCall,
+            g_u32SoftInfoGet, g_u32SoftLogCall, g_u32SoftCtrGet,
+            g_u32SoftLastGet, g_u32SoftSetGate, g_u32SoftInvLogs,
+            g_u32SoftReject, g_u32SoftReinstall);
+
+    /* Grep: idt: soft expect — base product expect catalog */
+    kprintf("idt: soft expect slots=256 base_present=33 "
+            "exc=32 int80=1 type_8e=30 type_ef=2 type_ee=1 "
+            "bp_type=0xef of_type=0xef int80_type=0xee "
+            "cs=0x%x base_match=%u type_base_ok=%u wave=%u\n",
+            (unsigned)GJ_GDT_KERNEL_CS, u32BaseMatch, u32TypeBaseOk,
+            (unsigned)IDT_SOFT_WAVE);
+
+    /* Grep: idt: soft ist — IST / pad / zero-off lamps */
+    kprintf("idt: soft ist nonzero=%u zero_off=%u zero_pad_nz=%u "
+            "sel_mis=%u first_p=%u last_p=%u first_irq=%u "
+            "extra=%u absent=%u product_ist0=1\n",
+            g_u32SoftIstNonzero, g_u32SoftZeroOff, g_u32SoftZeroPadNz,
+            g_u32SoftSelMismatch, g_u32SoftFirstPresent,
+            g_u32SoftLastPresent, g_u32SoftFirstIrqVec,
+            g_u32SoftExtraBeyondBase, g_u32SoftAbsent);
+
+    /* Grep: idt: soft sel — kernel-CS contract surface */
+    kprintf("idt: soft sel expect_cs=0x%x mismatch=%u "
+            "last_sel=0x%x last_vec=%u last_type=0x%x "
+            "live=%u ready=%u\n",
+            (unsigned)GJ_GDT_KERNEL_CS, g_u32SoftSelMismatch,
+            (unsigned)g_SoftSnap.u16LastSel, g_SoftSnap.u32LastVec,
+            (unsigned)g_SoftSnap.u8LastType,
+            g_fSoftSnapLive ? 1u : 0u, g_fIdtReady ? 1u : 0u);
+
+    /* Grep: idt: soft deepen — Wave 15 stamp + area catalog */
+    kprintf("idt: soft deepen wave=%u areas="
+            "inventory,present,layout,contract,bands,type,span,"
+            "vectors,entry,last,stats,path,program,verify,"
+            "honesty,query,expect,ist,sel "
+            "unit=idt.c only hot_irq_kprintf=0\n",
+            (unsigned)IDT_SOFT_WAVE);
 
     if (!g_fIdtReady) {
         szVerdict = "idle";
@@ -650,10 +751,11 @@ idt_soft_inventory_print(void)
 
     /* Grep: idt: soft verify */
     kprintf("idt: soft verify %s ok=%u bad=%u present=%u bands_exc=%u "
-            "bands_int80=%u type_8e=%u type_ef=%u type_ee=%u\n",
+            "bands_int80=%u type_8e=%u type_ef=%u type_ee=%u wave=%u\n",
             szVerdict, g_u32SoftVerifyOk, g_u32SoftVerifyBad,
             g_SoftSnap.u32Present, g_u32SoftBandExc, g_u32SoftBandInt80,
-            g_u32SoftType8e, g_u32SoftTypeEf, g_u32SoftTypeEe);
+            g_u32SoftType8e, g_u32SoftTypeEf, g_u32SoftTypeEe,
+            (unsigned)IDT_SOFT_WAVE);
 
     /*
      * Soft identify outcome. Ready + base contract green → soft PASS.
@@ -661,18 +763,19 @@ idt_soft_inventory_print(void)
      */
     if (g_fIdtReady && g_u32SoftBpOk && g_u32SoftOfOk &&
         g_u32SoftInt80Ok && g_u32SoftExcPresent == 32u) {
-        kprintf("idt: soft PASS wave=13 present=%u type_8e=%u type_ef=%u "
-                "type_ee=%u extra=%u\n",
-                g_SoftSnap.u32Present, g_u32SoftType8e, g_u32SoftTypeEf,
-                g_u32SoftTypeEe, g_u32SoftExtraBeyondBase);
+        kprintf("idt: soft PASS wave=%u present=%u type_8e=%u type_ef=%u "
+                "type_ee=%u extra=%u base_match=%u\n",
+                (unsigned)IDT_SOFT_WAVE, g_SoftSnap.u32Present,
+                g_u32SoftType8e, g_u32SoftTypeEf, g_u32SoftTypeEe,
+                g_u32SoftExtraBeyondBase, u32BaseMatch);
     } else if (!g_fIdtReady) {
         kprintf("idt: soft idle (IDT not loaded)\n");
     } else {
         kprintf("idt: soft PARTIAL ready=%u exc_p=%u bp=%u of=%u "
-                "int80=%u first_abs_exc=%u\n",
+                "int80=%u first_abs_exc=%u wave=%u\n",
                 g_fIdtReady ? 1u : 0u, g_u32SoftExcPresent,
                 g_u32SoftBpOk, g_u32SoftOfOk, g_u32SoftInt80Ok,
-                g_u32SoftFirstAbsentExc);
+                g_u32SoftFirstAbsentExc, (unsigned)IDT_SOFT_WAVE);
     }
 }
 
@@ -696,6 +799,7 @@ idt_set(u32 u32Vec, void *pHandler, u8 u8Type)
 void
 idt_set_gate(u32 u32Vec, void *pHandler, u8 u8Type)
 {
+    g_u32SoftSetGate++;
     if (u32Vec >= 256 || pHandler == NULL) {
         g_u32SoftReject++;
         return;
@@ -742,11 +846,12 @@ idt_init(void)
 
     kprintf("idt: loaded 32 exception gates + int80\n");
 
-    /* Wave 13: greppable soft program line under idt: soft … */
-    kprintf("idt: soft program wave=13 installs=%u exc=%u int80=%u "
+    /* Wave 15: greppable soft program line under idt: soft … */
+    kprintf("idt: soft program wave=%u installs=%u exc=%u int80=%u "
             "last vec=%u type=0x%x\n",
-            g_u32SoftInstalls, g_u32SoftException, g_u32SoftInt80,
-            g_SoftSnap.u32LastVec, (unsigned)g_SoftSnap.u8LastType);
+            (unsigned)IDT_SOFT_WAVE, g_u32SoftInstalls, g_u32SoftException,
+            g_u32SoftInt80, g_SoftSnap.u32LastVec,
+            (unsigned)g_SoftSnap.u8LastType);
 
     /*
      * Legacy greppable (kept for existing smoke greps):
@@ -776,13 +881,14 @@ idt_init(void)
                 g_u32SoftInstalls);
     }
 
-    /* Full Wave 13 soft inventory at base load. */
+    /* Full Wave 15 soft inventory at base load. */
     idt_soft_inventory_print();
 }
 
 int
 idt_ready(void)
 {
+    g_u32SoftReadyQ++;
     return g_fIdtReady;
 }
 
@@ -801,90 +907,105 @@ idt_load_ap(void)
 u32
 idt_gate_soft_inits(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftInits;
 }
 
 u32
 idt_gate_soft_ap_loads(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftApLoads;
 }
 
 u32
 idt_gate_soft_installs(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftInstalls;
 }
 
 u32
 idt_gate_soft_exception(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftException;
 }
 
 u32
 idt_gate_soft_int80(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftInt80;
 }
 
 u32
 idt_gate_soft_irq(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftIrq;
 }
 
 u32
 idt_gate_soft_reject(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftReject;
 }
 
 u32
 idt_gate_soft_verify_ok(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftVerifyOk;
 }
 
 u32
 idt_gate_soft_verify_bad(void)
 {
+    g_u32SoftCtrGet++;
     return g_u32SoftVerifyBad;
 }
 
 u32
 idt_gate_soft_last_vec(void)
 {
+    g_u32SoftLastGet++;
     return g_SoftSnap.u32LastVec;
 }
 
 u8
 idt_gate_soft_last_type(void)
 {
+    g_u32SoftLastGet++;
     return g_SoftSnap.u8LastType;
 }
 
 u64
 idt_gate_soft_last_off(void)
 {
+    g_u32SoftLastGet++;
     return g_SoftSnap.u64LastOff;
 }
 
 u32
 idt_gate_soft_inventory(void)
 {
+    g_u32SoftInvCall++;
     return idt_gate_soft_inventory_inner();
 }
 
 int
 idt_gate_soft_verify(void)
 {
+    g_u32SoftVerifyCall++;
     return idt_gate_soft_verify_inner();
 }
 
 int
 idt_gate_soft_info_get(struct gj_idt_gate_soft *pOut)
 {
+    g_u32SoftInfoGet++;
     if (pOut == NULL) {
         return g_fIdtReady ? 1 : 0;
     }
@@ -904,9 +1025,10 @@ idt_gate_soft_log(void)
 {
     /*
      * Greppable soft summary (product / smoke inventory).
-     * Wave 13 primary prefix: idt: soft …
+     * Wave 15 primary prefix: idt: soft …
      * Legacy prefix kept:     idt: gate soft …
      */
+    g_u32SoftLogCall++;
     idt_soft_inventory_print();
 
     /* Legacy greppable lines (existing smoke greps). */

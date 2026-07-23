@@ -5,11 +5,12 @@
  * Linux hybrid Option C — kernel hot paths (clean-room pure C11).
  * Dual MIT OR Apache-2.0. No GPL source.
  *
- * Soft product inventory (Wave 11 base; Wave 14 exclusive deepen):
+ * Soft product inventory (Wave 11/14 base + Wave 15 exclusive deepen):
  *   - Group enter tallies (io/id/mem/time/futex/sched/sig/sock/info/proc)
  *   - Live task view snapshot (pid/tid/cred/brk/fs_base)
  *   - Handler catalog capacity (static product surface count)
  *   - Wave 14: groups catalog + deepen stamp + path/stats wave lamps
+ *   - Wave 15: rates / honesty / catalog / PASS complementary surfaces
  *   Never hard-gates; wrap OK; diagnostics only — does not alter i64Ret.
  * Greppable prefix-stable serial markers:
  *   linux: hot soft inventory …
@@ -18,7 +19,11 @@
  *   linux: hot soft live …
  *   linux: hot soft path …
  *   linux: hot soft stats …
+ *   linux: hot soft rates …
+ *   linux: hot soft honesty …
+ *   linux: hot soft catalog …
  *   linux: hot soft deepen …
+ *   linux: hot soft inventory PASS / soft PASS
  * greppable: "linux: hot soft"
  * greppable: linux: hot soft inventory
  * greppable: linux: hot soft path
@@ -63,7 +68,7 @@ static u64 g_u64ClearChildTid;
 static u64 g_u64MonoNsec; /* crude mono clock until TSC calibrate */
 
 /*
- * Soft inventory groups (Wave 11 base; Wave 14 deepen). Enter-only tallies —
+ * Soft inventory groups (Wave 11/14 base; Wave 15 deepen). Enter-only tallies —
  * never rewrite ret. greppable: linux: hot soft …
  */
 enum {
@@ -82,13 +87,13 @@ enum {
 
 /*
  * Static product surface: public gj_linux_hot_* entry count (catalog).
- * Wave 14 soft inventory stamp (file-local; never product gate).
+ * Wave 15 soft inventory stamp (file-local; never product gate).
  * Areas: inventory|groups|io|id|mem|time|futex|sched|sig|sock|info|proc|
- *        live|path|stats|deepen
+ *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE     14u
-#define GJ_LINUX_HOT_SOFT_AREAS    16u
+#define GJ_LINUX_HOT_SOFT_WAVE     15u
+#define GJ_LINUX_HOT_SOFT_AREAS    20u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -134,14 +139,18 @@ hot_soft_enter(u32 u32Grp, const struct gj_linux_regs *pRegs)
 }
 
 /**
- * Greppable soft Linux hot-path inventory (product / smoke; Wave 14 deepen).
+ * Greppable soft Linux hot-path inventory (product / smoke; Wave 15 deepen).
  *   linux: hot soft inventory …
  *   linux: hot soft groups …
  *   linux: hot soft io|id|mem|time|futex|sched|sig|sock|info|proc …
  *   linux: hot soft live …
  *   linux: hot soft path …
  *   linux: hot soft stats …
+ *   linux: hot soft rates …
+ *   linux: hot soft honesty …
+ *   linux: hot soft catalog …
  *   linux: hot soft deepen …
+ *   linux: hot soft inventory PASS / soft PASS
  * greppable: linux: hot soft
  * Honesty: soft inventory only — not product gate; not bar3.
  */
@@ -182,7 +191,7 @@ hot_soft_inventory_log(void)
             (unsigned long)s.u64LogN,
             u32HasProc, u32BrkLive, u32LiveCred, u32GroupsActive);
 
-    /* Grep: linux: hot soft groups (Wave 14 catalog) */
+    /* Grep: linux: hot soft groups (Wave 15 catalog) */
     kprintf("linux: hot soft groups n=%u active=%u "
             "names=io,id,mem,time,futex,sched,sig,sock,info,proc "
             "wave=%u\n",
@@ -299,15 +308,67 @@ hot_soft_inventory_log(void)
             (unsigned long)s.u64LogN,
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
+    /* Grep: linux: hot soft rates (Wave 15 deepen) */
+    {
+        u64 u64BpIo;
+        u64 u64BpMem;
+        u64 u64BpNull;
+
+        if (s.u64EnterTotal != 0) {
+            u64BpIo = (s.aEnter[HOT_SOFT_GRP_IO] * 10000ull) / s.u64EnterTotal;
+            u64BpMem = (s.aEnter[HOT_SOFT_GRP_MEM] * 10000ull) / s.u64EnterTotal;
+            u64BpNull = (s.u64NullRegs * 10000ull) / s.u64EnterTotal;
+        } else {
+            u64BpIo = 0;
+            u64BpMem = 0;
+            u64BpNull = 0;
+        }
+        kprintf("linux: hot soft rates bp_io=%lu bp_mem=%lu bp_null=%lu "
+                "enter=%lu grp_active=%u handlers=%u wave=%u\n",
+                (unsigned long)u64BpIo,
+                (unsigned long)u64BpMem,
+                (unsigned long)u64BpNull,
+                (unsigned long)s.u64EnterTotal,
+                u32GroupsActive,
+                (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
+                (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+    }
+
+    /* Grep: linux: hot soft honesty (Wave 15 deepen) */
+    kprintf("linux: hot soft honesty hybrid=OptionC open=1 bar3=0 "
+            "product_linux_abi=open soft_only=1 hot=kernel "
+            "wave=%u (soft inventory; never closes hybrid)\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+
+    /* Grep: linux: hot soft catalog (Wave 15 deepen) */
+    kprintf("linux: hot soft catalog wave=%u areas=%u handlers=%u "
+            "surfaces=inventory,groups,io,id,mem,time,futex,sched,sig,"
+            "sock,info,proc,live,path,stats,rates,honesty,catalog,"
+            "deepen,PASS\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
+            (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
+            (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS);
+
     /* Grep: linux: hot soft deepen wave */
     kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 14 exclusive; not bar3)\n",
+            "(Wave 15 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned)HOT_SOFT_GRP_N,
             (unsigned long)s.u64EnterTotal,
+            (unsigned long)s.u64LogN);
+
+    /* Grep: linux: hot soft inventory PASS / soft PASS */
+    kprintf("linux: hot soft inventory PASS wave=%u logs=%lu "
+            "enter=%lu handlers=%u\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
+            (unsigned long)s.u64LogN,
+            (unsigned long)s.u64EnterTotal,
+            (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS);
+    kprintf("linux: hot soft PASS wave=%u logs=%lu\n",
+            (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned long)s.u64LogN);
 }
 
@@ -336,7 +397,7 @@ gj_linux_set_current(struct gj_process *pProc, u32 u32Pid, u32 u32Tid)
     g_pLinuxProc = pProc;
     g_u32LinuxPid = u32Pid ? u32Pid : 1;
     g_u32LinuxTid = u32Tid ? u32Tid : g_u32LinuxPid;
-    /* Wave 14 soft: arm inventory on bind (bring-up smoke greps). */
+    /* Wave 15 soft: arm inventory on bind (bring-up smoke greps). */
     hot_soft_inc(&g_hotSoft.u64CtxSet);
     hot_soft_inventory_maybe_once();
 }

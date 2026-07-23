@@ -9,11 +9,12 @@
  *   q0 request — hdr (device-R) + data (R or W) + status (device-W)
  *                FLUSH: hdr + status only (no data)
  *
- * Product soft depth (Wave 14 exclusive deepen in this file):
+ * Product soft depth (Wave 15 exclusive deepen in this file):
  *   queue stats, multi-segment soft bounce (GJ_VIRTIO_BLK_SOFT_SEGS),
  *   FLUSH/sync serial depth-1, greppable soft inventory rollup,
  *   sticky last/error/api tallies, geometry + honesty path catalog.
- *   Wave 14 splits: bounce|sector|claim|xfer|bytes|ready|status|deepen|via
+ *   Wave 14 splits: bounce|sector|claim|xfer|bytes|ready|status|via
+ *   Wave 15 splits: probe|types|watermark|kick|door|oasis|deepen
  *
  * Greppable product markers (serial; prefix-stable "virtio-blk: soft …"):
  *   "virtio-blk: ready …"
@@ -36,6 +37,12 @@
  *   "virtio-blk: soft ready …"
  *   "virtio-blk: soft status …"
  *   "virtio-blk: soft via …"
+ *   "virtio-blk: soft probe …"
+ *   "virtio-blk: soft types …"
+ *   "virtio-blk: soft watermark …"
+ *   "virtio-blk: soft kick …"
+ *   "virtio-blk: soft door …"
+ *   "virtio-blk: soft oasis …"
  *   "virtio-blk: soft deepen …"
  *   "virtio-blk: soft PASS|NODEV|PARTIAL"
  *   "virtio-blk: soft inventory PASS|NODEV|PARTIAL"
@@ -62,9 +69,9 @@
 #define VIRTIO_BLK_POLL_SPINS 10000000u
 /* Soft FLUSH serial depth (one outstanding barrier on product path). */
 #define VIRTIO_BLK_FLUSH_DEPTH 1u
-/* Wave 14 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_BLK_SOFT_DEEPEN_WAVE  14u
-#define VIRTIO_BLK_SOFT_DEEPEN_AREAS 18u
+/* Wave 15 deepen stamp (greppable wave= / areas=). */
+#define VIRTIO_BLK_SOFT_DEEPEN_WAVE  15u
+#define VIRTIO_BLK_SOFT_DEEPEN_AREAS 24u
 
 /* Feature: capacity is always present in device config (first 8 bytes). */
 struct virtio_blk_config {
@@ -182,7 +189,7 @@ q_kick_counted(void)
 }
 
 /**
- * Greppable Wave 14 soft inventory dump (product / smoke).
+ * Greppable Wave 15 soft inventory dump (product / smoke).
  * Prefix-stable "virtio-blk: soft …" — never hard-gates; kprintf only.
  *
  *   virtio-blk: soft inventory  — ready + PCI + capacity + queue geometry
@@ -204,7 +211,13 @@ q_kick_counted(void)
  *   virtio-blk: soft ready      — probe/ready lamps (Wave 14)
  *   virtio-blk: soft status     — OASIS status-code tallies (Wave 14)
  *   virtio-blk: soft via        — sticky last inventory via (Wave 14)
- *   virtio-blk: soft deepen     — wave=14 areas stamp
+ *   virtio-blk: soft probe      — probe outcome lamps (Wave 15)
+ *   virtio-blk: soft types      — OASIS request type catalog (Wave 15)
+ *   virtio-blk: soft watermark  — free-desc watermark snapshot (Wave 15)
+ *   virtio-blk: soft kick       — desc kick tallies (Wave 15)
+ *   virtio-blk: soft door       — store_door surface honesty (Wave 15)
+ *   virtio-blk: soft oasis      — OASIS type+status constants (Wave 15)
+ *   virtio-blk: soft deepen     — wave=15 areas stamp
  *   virtio-blk: soft PASS|NODEV|PARTIAL
  *   virtio-blk: soft inventory PASS|NODEV|PARTIAL
  *
@@ -446,7 +459,52 @@ blk_soft_inventory(const char *szVia)
             (g_szLastVia != NULL) ? g_szLastVia : "path", g_u32SoftLogN,
             g_fSoftOnce ? 1u : 0u);
 
-    /* Grep: virtio-blk: soft deepen (Wave 14 stamp) */
+    /* Grep: virtio-blk: soft probe (Wave 15) */
+    kprintf("virtio-blk: soft probe ok=%u nodev=%u fail=%u ready=%u "
+            "claim=%u modern=%u cap_secs=%lu\n",
+            g_u32ProbeOk, g_u32ProbeNodev, g_u32ProbeFail, u32Ready, u32Claim,
+            (unsigned)u8Modern, (unsigned long)g_u64Capacity);
+
+    /* Grep: virtio-blk: soft types (Wave 15 OASIS request catalog) */
+    kprintf("virtio-blk: soft types t_in=%u t_out=%u t_flush=%u "
+            "read_ops=%u write_ops=%u flush_ops=%u flush_soft=%u "
+            "last_type=%u\n",
+            (unsigned)VIRTIO_BLK_T_IN, (unsigned)VIRTIO_BLK_T_OUT,
+            (unsigned)VIRTIO_BLK_T_FLUSH, g_u32ReadOps, g_u32WriteOps,
+            g_u32FlushCount, g_u32FlushSoft, g_u32LastType);
+
+    /* Grep: virtio-blk: soft watermark (Wave 15 free-desc snapshot) */
+    kprintf("virtio-blk: soft watermark free_now=%u free_min=%u "
+            "num_free=%u q_size=%u free_head=%u last_used=%u\n",
+            (unsigned)u16FreeNow, (unsigned)u16FreeMinDisp,
+            (unsigned)u16NumFree, (unsigned)u16QSize,
+            (unsigned)(g_fReady ? g_qReq.u16FreeHead : 0u),
+            (unsigned)u16LastUsed);
+
+    /* Grep: virtio-blk: soft kick (Wave 15) */
+    kprintf("virtio-blk: soft kick desc=%u api=%u io=%u flush=%u "
+            "multi_ops=%u single_ops=%u\n",
+            g_u32Kicks, g_u32KickApi, g_u32IoCount, g_u32FlushCount,
+            g_u32MultiSegOps, g_u32SingleSegOps);
+
+    /* Grep: virtio-blk: soft door (Wave 15 store_door honesty) */
+    kprintf("virtio-blk: soft door store=1 export_q=%u map_q=%u "
+            "kick_q=%u q_stats=%u claim=%u ready=%u bar3=0\n",
+            g_u32ExportQ, g_u32MapQ, g_u32KickApi, g_u32QStatsApi, u32Claim,
+            u32Ready);
+
+    /* Grep: virtio-blk: soft oasis (Wave 15 constants catalog) */
+    kprintf("virtio-blk: soft oasis s_ok=%u s_ioerr=%u s_unsup=%u "
+            "sector=%u soft_segs=%u flush_depth=%u q_req=%u "
+            "status_ok=%u status_unsup=%u status_ioerr=%u\n",
+            (unsigned)VIRTIO_BLK_S_OK, (unsigned)VIRTIO_BLK_S_IOERR,
+            (unsigned)VIRTIO_BLK_S_UNSUP, (unsigned)GJ_VIRTIO_BLK_SECTOR,
+            (unsigned)GJ_VIRTIO_BLK_SOFT_SEGS,
+            (unsigned)VIRTIO_BLK_FLUSH_DEPTH,
+            (unsigned)GJ_VIRTIO_BLK_Q_REQUEST, g_u32StatusOk, g_u32StatusUnsup,
+            g_u32StatusIoerr);
+
+    /* Grep: virtio-blk: soft deepen (Wave 15 stamp) */
     kprintf("virtio-blk: soft deepen wave=%u areas=%u ready=%u io=%u "
             "err=%u log_n=%u\n",
             (unsigned)VIRTIO_BLK_SOFT_DEEPEN_WAVE,

@@ -5,8 +5,8 @@ Freestanding ring-3 HDA stream client for GreenJade. Exercises
 
 **open → write PCM → start → tick → stats → underrun tick → close**, then a
 **deepened soft suite** that exercises multi-op, partial-tick, multi-write,
-soft underrun, mono format, reclaim re-OPEN, and reject probes (soft-skip on
-fail; never fails the live path).
+soft underrun, mono format, reclaim re-OPEN, reject, bits8, idle STATS,
+closed-ops, and zerotick probes (soft-skip on fail; never fails the live path).
 
 This is kernel-door smoke — not Steam audio, PipeWire, or game PCM.
 
@@ -48,7 +48,8 @@ Live smoke via `gj_hda_stream` / `GJ_SYS_HDA_STREAM` (stereo 48 kHz 16-bit LE;
 6. Empty-ring **TICK** → **STATS** with `u > 0` (underrun)
 7. **CLOSE**
 8. **Soft suite** — multi-op + partial-tick + multi-write + soft underrun +
-   mono + reclaim + reject (each soft-skip independent; never hard-fails)
+   mono + reclaim + reject + bits8 + idle + closed + zerotick
+   (each soft-skip independent; never hard-fails)
 
 ### Hard vs soft
 
@@ -119,7 +120,33 @@ hda_client-gj: soft mono PASS
 hda_client-gj: stats soft reclaim q=0 p=0 u=…
 hda_client-gj: soft reclaim PASS
 hda_client-gj: soft reject PASS
+hda_client-gj: soft bits8 PASS
+hda_client-gj: soft idle PASS
+hda_client-gj: soft closed PASS
+hda_client-gj: soft zerotick PASS
 hda_client-gj: soft suite PASS
+```
+
+Soft inventory (Wave 15 exclusive deepen; never gates live path):
+
+```text
+hda_client: soft suite ok=… skip=…
+hda_client: soft door open=… write=… start=… tick=… stats=… close=…
+hda_client: soft played=… underrun=… reject=… mono=… reclaim=…
+hda_client: soft inventory ok=… skip=… door_ok=… door_miss=… played=… wave=15 areas=15
+hda_client: soft steps multi=… partial=… multiwrite=… underrun=… mono=… reclaim=…
+             reject=… bits8=… idle=… closed=… zerotick=… bits=…
+hda_client: soft miss open=… write=… start=… tick=… stats=…
+hda_client: soft last q=… p=… u=… snaps=…
+hda_client: soft first q=… p=… u=… set=…
+hda_client: soft peak q=… p=… u=…
+hda_client: soft ops open=… write=… start=… tick=… stats=… close=…
+hda_client: soft format stereo=… mono=… bits8=…
+hda_client: soft ratio ok=… skip=… door_ok=… door_miss=…
+hda_client: soft deepen wave=15 areas=15 ok=… skip=… played=…
+hda_client: soft path open=stereo … (soft inventory; not bar3)
+hda_client: soft honesty not-bar3 not-pipewire not-product-audio soft-inventory-only wave=15
+hda-gj: soft suite|door|played|inventory|steps|miss|last|first|peak|ops|format|ratio|deepen|path|honesty …
 ```
 
 — or on soft sub-step failure (example):
@@ -146,6 +173,10 @@ hda_client-gj: soft suite soft-skip     (if every sub-step soft-skipped)
 | `soft mono PASS` | Mono 16-bit 48 kHz short path greened |
 | `soft reclaim PASS` | Re-OPEN while open reset queue/played |
 | `soft reject PASS` | Invalid OPEN (ch=0 / bits=24) rejected by door |
+| `soft bits8 PASS` | Stereo 8-bit 48 kHz short path greened |
+| `soft idle PASS` | OPEN→STATS empty ring `q=0 p=0` |
+| `soft closed PASS` | Post-CLOSE WRITE/START/TICK rejects observed |
+| `soft zerotick PASS` | TICK frames=0 returns 0; residual queue intact |
 | `… soft-skip` | That sub-step failed; live path still green |
 | `soft suite PASS` | ≥1 soft sub-step greened |
 | `soft suite soft-skip` | All soft sub-steps soft-skipped |
@@ -187,6 +218,10 @@ Local `#ifndef` aliases in `hda_gj.c` mirror those values for self-description.
 | mono | OPEN ch=1 bits=16, WRITE 64 B, TICK 32 | mono frame size |
 | reclaim | OPEN→WRITE→re-OPEN→STATS | `q=0 p=0` after re-OPEN |
 | reject | OPEN ch=0; OPEN bits=24 | both non-zero (INVAL) |
+| bits8 | OPEN ch=2 bits=8, WRITE 64 B, TICK 32 | stereo 8-bit frames |
+| idle | OPEN→STATS→CLOSE | empty `q=0 p=0` |
+| closed | post-CLOSE WRITE/START/TICK | WRITE 0, START fail, TICK 0 |
+| zerotick | armed + TICK frames=0 | played=0, residual queue |
 
 ## Build
 

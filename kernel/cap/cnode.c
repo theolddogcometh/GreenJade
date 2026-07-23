@@ -23,13 +23,31 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Wave 13 exclusive deepen (this file only): greppable "cap: cdt …"
- * surface — chain depth, soft empty-edge audit, pool churn, delete/
- * unlink/retarget coverage. Soft ≠ product empty-edge audit; bar3 OPEN.
+ * Soft inventory (Wave 15 exclusive deepen; this unit only):
+ *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
+ *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
+ *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
+ *   cap: cdt soft trylock    — enter/ok/busy (u32SoftLock; not product mutex)
+ *   cap: cdt soft install    — install enter/ok/fail + REPLY scaffold count
+ *   cap: cdt soft coverage   — mint|copy|move edge attempt/ok/miss
+ *   cap: cdt soft audit      — slots_left vs chain depth empty-edge gap
+ *   cap: cdt soft pool       — alloc/free/miss churn
+ *   cap: cdt soft type       — type catalog; REPLY scaffold-only honesty
+ *   cap: cdt soft path       — surface catalog + non-claims
+ *   cap: cdt soft deepen     — wave=15 areas stamp
+ *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
+ * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
+ * not full CDT mutex/turnstile product; bar3 OPEN.
+ * Grep: cap: cdt soft
  */
 #include <gj/cap.h>
 #include <gj/klog.h>
 #include <gj/types.h>
+
+/* Wave 15 deepen stamp (file-local; never hard-gates). */
+#define GJ_CDT_SOFT_WAVE  15u
+/* honesty|inventory|resolve|trylock|install|coverage|audit|pool|type|path|deepen|PASS */
+#define GJ_CDT_SOFT_AREAS 12u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -43,6 +61,41 @@ static void cdt_soft_empty_edge_audit(const struct gj_obj_hdr *pObj,
                                      u32 u32EdgeOk);
 static void cdt_soft_note_unlink(const struct gj_obj_hdr *pObj, u64 u64Slot,
                                 u32 u32Unlinked);
+static void cdt_soft_inventory_log(void);
+static void cdt_soft_inventory_maybe_once(void);
+static void cdt_soft_inc(u32 *pCtr);
+
+/*
+ * Wave 15 soft path tallies (file-local; wrap OK; never hard-gate).
+ * Placed early so resolve/trylock/install can instrument without forward
+ * static issues. Grep: cap: cdt soft resolve|trylock|install
+ */
+static u32 g_u32SoftResEnter;       /* gj_cap_resolve entries */
+static u32 g_u32SoftResOk;          /* resolve success */
+static u32 g_u32SoftResInval;       /* null/bounds/gen0 */
+static u32 g_u32SoftResNoent;       /* INVALID slot */
+static u32 g_u32SoftResStale;       /* gen mismatch / null obj */
+static u32 g_u32SoftResLiveFail;    /* LIVE+obj-gen fail-closed */
+static u32 g_u32SoftTryEnter;       /* gj_cnode_trylock entries */
+static u32 g_u32SoftTryOk;          /* CAS acquired soft lock */
+static u32 g_u32SoftTryBusy;        /* CAS busy (defer, not spin) */
+static u32 g_u32SoftTryNull;        /* null cnode */
+static u32 g_u32SoftUnlock;         /* gj_cnode_unlock releases */
+static u32 g_u32SoftInstEnter;      /* gj_cap_slot_install entries */
+static u32 g_u32SoftInstOk;         /* install success */
+static u32 g_u32SoftInstFail;       /* install reject (any arm) */
+static u32 g_u32SoftInstReplyType;  /* type==GJ_CAP_REPLY scaffold installs */
+static u32 g_u32SoftInvLogs;        /* soft inventory dump emissions */
+static u8  g_u8CdtSoftInvLogged;    /* once-marker for Wave 15 rollup */
+
+/** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
+static void
+cdt_soft_inc(u32 *pCtr)
+{
+    if (pCtr != NULL && *pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
 
 void
 gj_obj_hdr_init(struct gj_obj_hdr *pHdr)
@@ -91,22 +144,27 @@ gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots, u64 cSlots)
 /*
  * Soft CNode try-lock stub (R2). Atomic CAS on u32SoftLock until a real
  * mutex lands. Order for full impl: CNode → Object → Endpoint.
- * Grep: cap:cdt trylock
+ * Soft ≠ full CDT mutex product (turnstile sleep still OPEN).
+ * Grep: cap:cdt trylock / cap: cdt soft trylock
  */
 int
 gj_cnode_trylock(struct gj_cnode *pCnode)
 {
     u32 u32Expect;
 
+    cdt_soft_inc(&g_u32SoftTryEnter);
     if (pCnode == NULL) {
+        cdt_soft_inc(&g_u32SoftTryNull);
         return 0;
     }
     u32Expect = 0u;
     if (__atomic_compare_exchange_n(&pCnode->u32SoftLock, &u32Expect, 1u, 0,
                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        cdt_soft_inc(&g_u32SoftTryOk);
         return 1;
     }
     /* Busy — caller must defer edge (R2), not spin. */
+    cdt_soft_inc(&g_u32SoftTryBusy);
     return 0;
 }
 
@@ -117,6 +175,7 @@ gj_cnode_unlock(struct gj_cnode *pCnode)
         return;
     }
     __atomic_store_n(&pCnode->u32SoftLock, 0u, __ATOMIC_RELEASE);
+    cdt_soft_inc(&g_u32SoftUnlock);
 }
 
 /*
@@ -203,7 +262,7 @@ gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
     }
     /*
      * Soft unlink tally (delete/move/invalidate hygiene). Logging lives in
-     * cdt_soft_note_unlink so greppable lines sit with the Wave 13 pool
+     * cdt_soft_note_unlink so greppable lines sit with the Wave 15 pool
      * counters (file-static order). Grep: cap: cdt unlink
      */
     if (u32Unlinked > 0u) {
@@ -215,6 +274,8 @@ gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
  * Resolve Scheme A handle (u64Slot, u32SlotGen) against the process CNode.
  * Order matters: bounds/null → type/slot-gen → object LIVE+obj-gen (S2/S3).
  * Uncleared slots after revoke still fail here once the object is DEAD.
+ * Wave 15: soft resolve path tallies (never change fail-closed order).
+ * Grep: cap: cdt soft resolve
  */
 gj_status_t
 gj_cap_resolve(struct gj_cnode *pProcCnode, u64 u64Slot, u32 u32SlotGen,
@@ -224,39 +285,49 @@ gj_cap_resolve(struct gj_cnode *pProcCnode, u64 u64Slot, u32 u32SlotGen,
     struct gj_obj_hdr *pObj;
     gj_status_t st;
 
+    cdt_soft_inc(&g_u32SoftResEnter);
+
     if (pProcCnode == NULL || pOut == NULL || pProcCnode->pSlots == NULL) {
+        cdt_soft_inc(&g_u32SoftResInval);
         return GJ_ERR_INVAL;
     }
     if (pProcCnode->cSlots == 0) {
+        cdt_soft_inc(&g_u32SoftResInval);
         return GJ_ERR_INVAL;
     }
 
     /* Null handle encoding: gen == 0 */
     if (u32SlotGen == 0) {
+        cdt_soft_inc(&g_u32SoftResInval);
         return GJ_ERR_INVAL;
     }
 
     if (u64Slot >= pProcCnode->cSlots) {
+        cdt_soft_inc(&g_u32SoftResInval);
         return GJ_ERR_INVAL;
     }
 
     pSlot = &pProcCnode->pSlots[u64Slot];
 
     if (pSlot->u16Type == (u16)GJ_CAP_INVALID) {
+        cdt_soft_inc(&g_u32SoftResNoent);
         return GJ_ERR_NOENT;
     }
     if (pSlot->u32Gen != u32SlotGen) {
+        cdt_soft_inc(&g_u32SoftResStale);
         return GJ_ERR_STALE_CAP;
     }
 
     pObj = (struct gj_obj_hdr *)pSlot->pObj;
     /* Valid type with NULL obj is corrupt; fail closed, never success. */
     if (pObj == NULL) {
+        cdt_soft_inc(&g_u32SoftResStale);
         return GJ_ERR_STALE_CAP;
     }
 
     st = gj_obj_check_live(pObj, pSlot->u32ObjGen);
     if (st != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftResLiveFail);
         return st;
     }
 
@@ -264,6 +335,8 @@ gj_cap_resolve(struct gj_cnode *pProcCnode, u64 u64Slot, u32 u32SlotGen,
     pOut->pObj = pObj;
     pOut->u16Type = pSlot->u16Type;
     pOut->u16Rights = pSlot->u16Rights;
+    cdt_soft_inc(&g_u32SoftResOk);
+    cdt_soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -283,40 +356,50 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     u32 u32State;
     gj_status_t stQuota;
 
+    cdt_soft_inc(&g_u32SoftInstEnter);
+
     if (pCnode == NULL || pObj == NULL || pOutRef == NULL ||
         pCnode->pSlots == NULL) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_INVAL;
     }
     if (pCnode->cSlots == 0 || u64Slot >= pCnode->cSlots) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_INVAL;
     }
     if (u16Type == (u16)GJ_CAP_INVALID) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_INVAL;
     }
 
     u32State = pObj->u32State;
     if (u32State != (u32)GJ_OBJ_LIVE) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_DEAD;
     }
     u32ObjGen = pObj->u32Gen;
     /* Object gen 0 is never live; refuse mint that could alias null. */
     if (u32ObjGen == 0) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_INVAL;
     }
 
     /* Slot 0 ↔ ROOT_META only */
     if (u64Slot == GJ_CAP_SLOT_ROOT_META &&
         u16Type != (u16)GJ_CAP_ROOT_META) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_PERM;
     }
     if (u64Slot != GJ_CAP_SLOT_ROOT_META &&
         u16Type == (u16)GJ_CAP_ROOT_META) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_PERM;
     }
 
     pSlot = &pCnode->pSlots[u64Slot];
 
     if (pSlot->u16Type != (u16)GJ_CAP_INVALID) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_BUSY;
     }
 
@@ -325,11 +408,13 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
      * is not raced into a successful install (S1/S2).
      */
     if (pObj->u32State != (u32)GJ_OBJ_LIVE || pObj->u32Gen != u32ObjGen) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_DEAD;
     }
 
     /* Accounting: refuse wrap of derived-slot count (S4/S6). */
     if (pObj->u32SlotsLeft == 0xffffffffu) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return GJ_ERR_QUOTA;
     }
 
@@ -337,6 +422,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     /* Grep: cap:quota charge */
     stQuota = gj_cap_quota_slot_charge(pCnode->pQuotaAccount);
     if (stQuota != GJ_OK) {
+        cdt_soft_inc(&g_u32SoftInstFail);
         return stQuota;
     }
 
@@ -349,6 +435,15 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     pObj->u32SlotsLeft++;
 
     /*
+     * Soft: REPLY type may install as scaffold enum only.
+     * Soft ≠ GJ_CAP_REPLY product (no MIG ephemeral single-use CNode wire).
+     * Grep: cap: cdt soft install / cap: cdt soft type
+     */
+    if (u16Type == (u16)GJ_CAP_REPLY) {
+        cdt_soft_inc(&g_u32SoftInstReplyType);
+    }
+
+    /*
      * Soft CDT: mint/copy/move with edge pool call gj_cdt_edge_link() after.
      * Until edges exist, deferred revoke uses slots_left + known-CNode scan.
      * Soft slots_left / quota interaction tallies (install path).
@@ -357,6 +452,8 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     cdt_soft_tally_install(pCnode, pObj);
 
     *pOutRef = gj_cap_ref_make(u64Slot, pSlot->u32Gen);
+    cdt_soft_inc(&g_u32SoftInstOk);
+    cdt_soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -455,7 +552,7 @@ static u8 g_aCdtUsed[GJ_CDT_EDGE_POOL];
 static u32 g_u32CdtPoolUsed;   /* live edges checked out of pool */
 static u32 g_u32CdtPoolAllocOk;
 static u32 g_u32CdtPoolAllocMiss; /* pool exhaust */
-static u32 g_u32CdtPoolFreeOk;    /* edges returned to pool (Wave 13) */
+static u32 g_u32CdtPoolFreeOk;    /* edges returned to pool (Wave 15) */
 
 /*
  * Per-op soft CDT coverage (always attempt edge pool on mint/copy/move).
@@ -491,7 +588,7 @@ static u32 g_u32SoftMoveNet0;         /* move: charge+install then refund+inv */
 static u32 g_u32SoftDeleteRefund;     /* delete path explicit refund */
 
 /*
- * Wave 13: soft empty-edge audit (slots_left vs CDT chain depth).
+ * Wave 15: soft empty-edge audit (slots_left vs CDT chain depth).
  * Install without wire leaves slots_left > chain — soft gap, not product.
  * Grep: cap: cdt soft audit
  */
@@ -508,14 +605,6 @@ static u8 g_u8CdtSoftAuditLogged;     /* first soft empty-edge audit */
 static u8 g_u8CdtCoverageRollupLogged; /* first full mint|copy|move rollup */
 static u8 g_u8CdtPoolChurnLogged;     /* first pool free/alloc churn line */
 static u8 g_u8CdtUnlinkLogged;        /* first unlink coverage line */
-
-static void
-cdt_soft_inc(u32 *pCtr)
-{
-    if (pCtr != NULL && *pCtr < 0xffffffffu) {
-        (*pCtr)++;
-    }
-}
 
 static u32
 cdt_edge_pool_used(void)
@@ -694,31 +783,154 @@ cdt_soft_tally_log(void)
     kprintf("cap: cdt soft slots_left_inc=%u quota_ch_ok=%u "
             "quota_ch_fail=%u quota_ch_nop=%u quota_rf_ok=%u "
             "quota_rf_nop=%u move_net0=%u del_rf=%u "
-            "mint_ok=%u copy_ok=%u move_ok=%u pool_used=%u\n",
+            "mint_ok=%u copy_ok=%u move_ok=%u pool_used=%u wave=%u\n",
             g_u32SoftSlotsLeftInc, g_u32SoftQuotaChargeOk,
             g_u32SoftQuotaChargeFail, g_u32SoftQuotaChargeNop,
             g_u32SoftQuotaRefundOk, g_u32SoftQuotaRefundNop,
             g_u32SoftMoveNet0, g_u32SoftDeleteRefund,
             g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
-            cdt_edge_pool_used());
+            cdt_edge_pool_used(), GJ_CDT_SOFT_WAVE);
     /* Grep: cap: cdt soft coverage (mint|copy|move attempts / pool) */
     kprintf("cap: cdt soft coverage mint=%u/%u miss_m=%u copy=%u/%u "
             "miss_c=%u move=%u/%u miss_v=%u move_unlink=%u "
             "pool_alloc=%u pool_miss=%u pool_free=%u pool_sz=%u "
-            "mint_x=%u mint_loc=%u retarget=%u del_edge=%u unlink_ok=%u\n",
+            "mint_x=%u mint_loc=%u retarget=%u del_edge=%u unlink_ok=%u "
+            "wave=%u\n",
             g_u32CdtMintEdgeOk, g_u32CdtMintAttempt, g_u32CdtMintEdgeMiss,
             g_u32CdtCopyEdgeOk, g_u32CdtCopyAttempt, g_u32CdtCopyEdgeMiss,
             g_u32CdtMoveEdgeOk, g_u32CdtMoveAttempt, g_u32CdtMoveEdgeMiss,
             g_u32CdtMoveUnlink, g_u32CdtPoolAllocOk, g_u32CdtPoolAllocMiss,
             g_u32CdtPoolFreeOk, GJ_CDT_EDGE_POOL, g_u32CdtMintCross,
             g_u32CdtMintLocal, g_u32CdtMoveRetarget, g_u32CdtDeleteEdge,
-            g_u32CdtUnlinkOk);
+            g_u32CdtUnlinkOk, GJ_CDT_SOFT_WAVE);
     /* Grep: cap: cdt soft audit rollup */
     kprintf("cap: cdt soft audit match=%u mismatch=%u empty=%u "
-            "chain_max=%u chain_last=%u pool_used=%u soft_only\n",
+            "chain_max=%u chain_last=%u pool_used=%u soft_only wave=%u\n",
             g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch,
             g_u32CdtSoftAuditEmpty, g_u32CdtChainDepthMax,
-            g_u32CdtChainDepthAtOk, cdt_edge_pool_used());
+            g_u32CdtChainDepthAtOk, cdt_edge_pool_used(), GJ_CDT_SOFT_WAVE);
+}
+
+/**
+ * Wave 15 greppable soft inventory dump (never hard-gates product).
+ * Prefix-stable family: "cap: cdt soft …"
+ * Honesty: soft ≠ GJ_CAP_REPLY product / full CDT mutex product.
+ * Grep: cap: cdt soft inventory|resolve|trylock|install|type|path|deepen
+ */
+static void
+cdt_soft_inventory_log(void)
+{
+    cdt_soft_inc(&g_u32SoftInvLogs);
+
+    /*
+     * Grep: cap: cdt soft honesty
+     * Soft inventory only — not MIG REPLY CNode product, not product mutex.
+     */
+    kprintf("cap: cdt soft honesty reply_product=0 full_cdt_mutex=0 "
+            "soft_lock=u32SoftLock sleep_not_spin=1 bar3=0 "
+            "wave=%u (soft != GJ_CAP_REPLY product; soft != full CDT "
+            "mutex product; soft inventory only)\n",
+            GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft inventory */
+    kprintf("cap: cdt soft inventory pool_used=%u pool_sz=%u "
+            "alloc_ok=%u alloc_miss=%u free_ok=%u sl_inc=%u "
+            "q_ch_ok=%u q_ch_fail=%u q_ch_nop=%u q_rf_ok=%u q_rf_nop=%u "
+            "mint_ok=%u copy_ok=%u move_ok=%u chain_max=%u "
+            "log_n=%u wave=%u soft_partial\n",
+            cdt_edge_pool_used(), GJ_CDT_EDGE_POOL, g_u32CdtPoolAllocOk,
+            g_u32CdtPoolAllocMiss, g_u32CdtPoolFreeOk, g_u32SoftSlotsLeftInc,
+            g_u32SoftQuotaChargeOk, g_u32SoftQuotaChargeFail,
+            g_u32SoftQuotaChargeNop, g_u32SoftQuotaRefundOk,
+            g_u32SoftQuotaRefundNop, g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk,
+            g_u32CdtMoveEdgeOk, g_u32CdtChainDepthMax, g_u32SoftInvLogs,
+            GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft resolve */
+    kprintf("cap: cdt soft resolve enter=%u ok=%u inval=%u noent=%u "
+            "stale=%u live_fail=%u scheme_a=1 wave=%u\n",
+            g_u32SoftResEnter, g_u32SoftResOk, g_u32SoftResInval,
+            g_u32SoftResNoent, g_u32SoftResStale, g_u32SoftResLiveFail,
+            GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft trylock / cap:cdt trylock soft */
+    kprintf("cap: cdt soft trylock enter=%u ok=%u busy=%u null=%u "
+            "unlock=%u lock=u32SoftLock product_mutex=OPEN "
+            "sleep_not_spin=1 soft_partial wave=%u\n",
+            g_u32SoftTryEnter, g_u32SoftTryOk, g_u32SoftTryBusy,
+            g_u32SoftTryNull, g_u32SoftUnlock, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft install */
+    kprintf("cap: cdt soft install enter=%u ok=%u fail=%u "
+            "reply_type=%u reply_product=0 wave=%u "
+            "(REPLY scaffold count only; not GJ_CAP_REPLY product)\n",
+            g_u32SoftInstEnter, g_u32SoftInstOk, g_u32SoftInstFail,
+            g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft pool */
+    kprintf("cap: cdt soft pool used=%u sz=%u alloc_ok=%u miss=%u "
+            "free_ok=%u churn=%u wave=%u\n",
+            cdt_edge_pool_used(), GJ_CDT_EDGE_POOL, g_u32CdtPoolAllocOk,
+            g_u32CdtPoolAllocMiss, g_u32CdtPoolFreeOk,
+            (g_u32CdtPoolFreeOk > 0u && g_u32CdtPoolAllocOk > 0u) ? 1u : 0u,
+            GJ_CDT_SOFT_WAVE);
+
+    /*
+     * Grep: cap: cdt soft type
+     * Catalog of enum types; REPLY remains scaffold (door soft table, not
+     * CNode MIG product). Soft ≠ GJ_CAP_REPLY product.
+     */
+    kprintf("cap: cdt soft type invalid=1 cnode=1 thread=1 space=1 "
+            "process=1 endpoint=1 notification=1 reply_scaffold=1 "
+            "reply_product=0 irq=1 frame=1 untyped=1 page_table=1 "
+            "sched_ctx=1 memobj=1 root_meta=1 reply_inst=%u wave=%u "
+            "(soft type catalog; GJ_CAP_REPLY product OPEN)\n",
+            g_u32SoftInstReplyType, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft path */
+    kprintf("cap: cdt soft path resolve=1 install=1 mint=1 copy=1 move=1 "
+            "delete=1 trylock=soft_u32SoftLock quota=soft_hier "
+            "cdt_pool=%u empty_edge_audit=soft "
+            "reply_product=0 full_cdt_mutex=0 "
+            "wave=%u (soft inventory; not bar3; soft != GJ_CAP_REPLY "
+            "product; soft != full CDT mutex product)\n",
+            GJ_CDT_EDGE_POOL, GJ_CDT_SOFT_WAVE);
+
+    /* Grep: cap: cdt soft deepen wave (Wave 15 stamp) */
+    kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
+            "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "
+            "move_ok=%u log_n=%u ok=1 skip=0\n",
+            GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS, cdt_edge_pool_used(),
+            g_u32SoftResOk, g_u32SoftTryOk, g_u32SoftInstOk,
+            g_u32CdtMintEdgeOk, g_u32CdtCopyEdgeOk, g_u32CdtMoveEdgeOk,
+            g_u32SoftInvLogs);
+
+    /* Grep: cap: cdt soft inventory PASS / cap: cdt soft PASS */
+    kprintf("cap: cdt soft inventory PASS log_n=%u wave=%u areas=%u "
+            "reply_product=0 full_cdt_mutex=0\n",
+            g_u32SoftInvLogs, GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
+    kprintf("cap: cdt soft PASS wave=%u areas=%u\n",
+            GJ_CDT_SOFT_WAVE, GJ_CDT_SOFT_AREAS);
+}
+
+/**
+ * Emit Wave 15 soft inventory once after first meaningful CNode activity.
+ * Avoids spam; greppable surface lands on first install/resolve/wire.
+ */
+static void
+cdt_soft_inventory_maybe_once(void)
+{
+    if (g_u8CdtSoftInvLogged) {
+        return;
+    }
+    /* Need at least one install, resolve ok, or edge attempt. */
+    if (g_u32SoftInstOk == 0u && g_u32SoftResOk == 0u &&
+        g_u32CdtMintAttempt == 0u && g_u32CdtCopyAttempt == 0u &&
+        g_u32CdtMoveAttempt == 0u && g_u32SoftSlotsLeftInc == 0u) {
+        return;
+    }
+    g_u8CdtSoftInvLogged = 1;
+    cdt_soft_inventory_log();
 }
 
 /*
@@ -739,13 +951,15 @@ cdt_soft_coverage_rollup(void)
     /* Grep: cap: cdt mint|copy|move … coverage rollup */
     kprintf("cap: cdt soft coverage rollup mint=%u/%u copy=%u/%u "
             "move=%u/%u miss_tot=%u pool_used=%u chain_max=%u "
-            "audit_match=%u audit_mis=%u soft PASS (once)\n",
+            "audit_match=%u audit_mis=%u soft PASS wave=%u (once)\n",
             g_u32CdtMintEdgeOk, g_u32CdtMintAttempt, g_u32CdtCopyEdgeOk,
             g_u32CdtCopyAttempt, g_u32CdtMoveEdgeOk, g_u32CdtMoveAttempt,
             g_u32CdtMintEdgeMiss + g_u32CdtCopyEdgeMiss +
                 g_u32CdtMoveEdgeMiss,
             cdt_edge_pool_used(), g_u32CdtChainDepthMax,
-            g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch);
+            g_u32CdtSoftAuditMatch, g_u32CdtSoftAuditMismatch,
+            GJ_CDT_SOFT_WAVE);
+    cdt_soft_inventory_maybe_once();
 }
 
 static void
@@ -762,6 +976,8 @@ cdt_soft_tally_install(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj)
         g_u8CdtSoftTallyLogged = 1;
         cdt_soft_tally_log();
     }
+    /* Wave 15 soft inventory once (prefix "cap: cdt soft …"). */
+    cdt_soft_inventory_maybe_once();
 }
 
 /*
@@ -1210,16 +1426,17 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
         cdt_soft_inc(&g_u32SoftDeleteRefund); /* cap: cdt soft */
         /*
-         * Soft delete edge coverage (Wave 13 deepen).
+         * Soft delete edge coverage (Wave 15 deepen).
          * Grep: cap: cdt delete
          */
         kprintf("cap: cdt delete slot=%lu had_edge=%d chain_pre=%u "
                 "chain_after=%u slots_pre=%u pool_used=%u free=%u "
-                "del_edge=%u del_rf=%u\n",
+                "del_edge=%u del_rf=%u wave=%u\n",
                 (unsigned long)u64Slot, fHadEdge, u32ChainPre, u32ChainAfter,
                 u32SlotsPre, cdt_edge_pool_used(), g_u32CdtPoolFreeOk,
-                g_u32CdtDeleteEdge, g_u32SoftDeleteRefund);
+                g_u32CdtDeleteEdge, g_u32SoftDeleteRefund, GJ_CDT_SOFT_WAVE);
         gj_cap_slot_invalidate_locked(res.pSlot, res.pObj);
+        cdt_soft_inventory_maybe_once();
         return GJ_OK;
     }
 }

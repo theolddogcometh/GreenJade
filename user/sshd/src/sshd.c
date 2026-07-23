@@ -351,6 +351,14 @@ main(int argc, char **argv)
 	}
 	printf("sshd: authorized_keys soft PASS\n");
 
+	/* Grep: sshd: soft inventory (Wave 15 exclusive deepen; host smoke) */
+	printf("sshd: soft inventory authorized_keys=1 kexinit=soft wave=15 "
+	       "multi_server=0 confine=0\n");
+	printf("sshd: soft deepen wave=15 areas=1 multi_server=0 confine=0 "
+	       "bar3=0\n");
+	printf("sshd: soft honesty multi_server=0 confine=0 bar3=0 "
+	       "exclusive=1 soft=1 wave=15\n");
+
 	if (fListen) {
 		return run_listen_loop(nPort);
 	}

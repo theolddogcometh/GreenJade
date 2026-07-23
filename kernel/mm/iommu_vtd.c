@@ -11,7 +11,7 @@
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  *
- * Wave 14 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
+ * Wave 15 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
  *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
  *   vtd: soft tables     — root/context/SLPT identity construct
  *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
@@ -20,9 +20,15 @@
  *   vtd: soft domain     — soft DID pool + attach slots
  *   vtd: soft identity   — bring-up identity cover lamps
  *   vtd: soft product    — P-DMA-4 no-open-bus soft path
+ *   vtd: soft attach     — attach/rebind/detach/create tallies (W15)
+ *   vtd: soft feat       — expanded SOFT_FEAT bitmask lamps (W15)
+ *   vtd: soft qi         — QI invalidate product remains OPEN (W15)
+ *   vtd: soft root       — root/context present verify lamps (W15)
  *   vtd: soft path       — honesty: always-on product IOMMU remains OPEN
  *   vtd: soft lamps      — composite soft lamps
- *   vtd: soft deepen     — wave=14 stamp + area count
+ *   vtd: soft honesty    — explicit non-claims catalog (W15)
+ *   vtd: soft stats      — rollup for agent greps (W15)
+ *   vtd: soft deepen     — wave=15 stamp + area count
  *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
  *   vtd: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close.
@@ -86,10 +92,10 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
-/* Wave 14 soft inventory stamp (file-local; never product gate). */
-#define VTD_SOFT_WAVE  14u
-/* Fixed greppable categories for deepen stamp (inventory…OPEN). */
-#define VTD_SOFT_AREAS 12u
+/* Wave 15 soft inventory stamp (file-local; never product gate). */
+#define VTD_SOFT_WAVE  15u
+/* Fixed greppable categories for deepen stamp (inventory…OPEN + W15 axes). */
+#define VTD_SOFT_AREAS 18u
 
 /*
  * Product-default soft BDF (P-DMA-4 smoke). Kept off main enforce 0:2.0 and
@@ -149,10 +155,33 @@ static u32                    g_u32DomUsed;
 /* Product-default soft (P-DMA-4): local deny-path ticks while enforce armed */
 static u32 g_u32ProdSoftDeny;
 
-/* Wave 14 greppable soft inventory dump count (vtd: soft …) */
+/* Wave 15 greppable soft inventory dump count (vtd: soft …) */
 static u32 g_cSoftInvLogs;
 
+/*
+ * Wave 15 soft domain/attach/ops tallies (diagnostics only; wrap OK).
+ * Never hard-gates; not product always-on IOMMU / QI.
+ */
+static u32 g_cSoftDomCreate;   /* domain soft create ok */
+static u32 g_cSoftDomCreateFail; /* domain soft create fail/full */
+static u32 g_cSoftDomDestroy;  /* domain soft destroy ok */
+static u32 g_cSoftDomDestroyFail;
+static u32 g_cSoftAttOk;       /* domain attach new ok */
+static u32 g_cSoftAttRebind;   /* domain attach rebind */
+static u32 g_cSoftAttFail;     /* attach fail/full/bad */
+static u32 g_cSoftDetOk;       /* detach ok */
+static u32 g_cSoftDetMiss;     /* detach miss */
+static u32 g_cSoftCtxDidWrite; /* bus-0 context DID write attempts ok */
+static u32 g_cSoftCtxDidFail;  /* context DID write fail */
+static u32 g_cSoftAttPeak;     /* peak live attach slots */
+static u32 g_cSoftDomPeak;     /* peak soft domains used */
+static u32 g_cSoftRootPOk;     /* soft-verify root P seen */
+static u32 g_cSoftRootPClear;  /* soft-verify root P clear */
+static u32 g_cSoftCapMmioHit;  /* CAP loaded from MMIO */
+static u32 g_cSoftCapSynth;    /* CAP fell back to synthetic */
+
 static void vtd_soft_inventory_log(void);
+static void vtd_soft_note_att_peak(void);
 
 static void *
 vtd_virt(gj_paddr_t pa)
@@ -325,10 +354,16 @@ vtd_soft_cap_load(void)
     g_u64Ecap = VTD_SOFT_ECAP;
 
     if (g_u64Drhd == 0) {
+        if (g_cSoftCapSynth < 0xffffffffu) {
+            g_cSoftCapSynth++;
+        }
         return;
     }
     va = vtd_drhd_va();
     if (va == 0) {
+        if (g_cSoftCapSynth < 0xffffffffu) {
+            g_cSoftCapSynth++;
+        }
         kprintf("iommu: vtd CAP soft synthetic (DRHD map fail)\n");
         return;
     }
@@ -343,12 +378,18 @@ vtd_soft_cap_load(void)
      * Fall back to synthetic CAP so soft-probe still PASSes on QEMU.
      */
     if (u64Cap == 0 || u64Cap == ~0ull) {
+        if (g_cSoftCapSynth < 0xffffffffu) {
+            g_cSoftCapSynth++;
+        }
         kprintf("iommu: vtd CAP soft synthetic (DRHD non-responsive)\n");
         return;
     }
     g_u64Cap = u64Cap;
     g_u64Ecap = u64Ecap;
     g_fCapFromMmio = 1;
+    if (g_cSoftCapMmioHit < 0xffffffffu) {
+        g_cSoftCapMmioHit++;
+    }
     kprintf("iommu: vtd CAP=0x%lx ECAP=0x%lx (MMIO soft-read)\n",
             (unsigned long)g_u64Cap, (unsigned long)g_u64Ecap);
 }
@@ -371,8 +412,14 @@ vtd_soft_verify_tables(void)
         return 0;
     }
     if ((pRoot[0] & VTD_ROOT_P) == 0) {
+        if (g_cSoftRootPClear < 0xffffffffu) {
+            g_cSoftRootPClear++;
+        }
         kprintf("iommu: vtd soft-probe root P clear\n");
         return 0;
+    }
+    if (g_cSoftRootPOk < 0xffffffffu) {
+        g_cSoftRootPOk++;
     }
     for (u32Dev = 0; u32Dev < VTD_CTX_ENTRIES; u32Dev++) {
         if ((pCtx[u32Dev * 2u] & VTD_CTX_P) != 0) {
@@ -727,8 +774,28 @@ iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb, int *pCovered)
 
 /* ---- Soft probe ---- */
 
+/** Wave 15: peak live attach slots + domain used (diagnostics only). */
+static void
+vtd_soft_note_att_peak(void)
+{
+    u32 cAtt = 0;
+    u32 iAtt;
+
+    for (iAtt = 0; iAtt < VTD_SOFT_ATTACH_MAX; iAtt++) {
+        if (g_aAtt[iAtt].u8Used) {
+            cAtt++;
+        }
+    }
+    if (cAtt > g_cSoftAttPeak) {
+        g_cSoftAttPeak = cAtt;
+    }
+    if (g_u32DomUsed > g_cSoftDomPeak) {
+        g_cSoftDomPeak = g_u32DomUsed;
+    }
+}
+
 /**
- * Wave 14 greppable soft inventory dump (prefix "vtd: soft …").
+ * Wave 15 greppable soft inventory dump (prefix "vtd: soft …").
  * Diagnostics only — never hard-gates; never claims always-on product IOMMU.
  *
  * greppable: vtd: soft
@@ -740,8 +807,14 @@ iommu_vtd_window_grant(u8 bus, u8 slot, u8 func, u64 pa, u64 cb, int *pCovered)
  * greppable: vtd: soft domain
  * greppable: vtd: soft identity
  * greppable: vtd: soft product
+ * greppable: vtd: soft attach
+ * greppable: vtd: soft feat
+ * greppable: vtd: soft qi
+ * greppable: vtd: soft root
  * greppable: vtd: soft path
  * greppable: vtd: soft lamps
+ * greppable: vtd: soft honesty
+ * greppable: vtd: soft stats
  * greppable: vtd: soft deepen
  * greppable: vtd: soft OPEN
  * greppable: vtd: soft PASS
@@ -758,6 +831,8 @@ vtd_soft_inventory_log(void)
     int fIdHi;
     int fIdOut;
     int fCoveredSoft;
+    int fRootP;
+    u32 u32Feat;
     const char *szMode;
     const char *szCapSrc;
 
@@ -770,6 +845,7 @@ vtd_soft_inventory_log(void)
             cAtt++;
         }
     }
+    vtd_soft_note_att_peak();
 
     fReady = g_fVtdReady ? 1 : 0;
     fTe = g_fTeArmed ? 1 : 0;
@@ -786,6 +862,15 @@ vtd_soft_inventory_log(void)
     fIdHi = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT - VTD_2MIB, VTD_2MIB);
     fIdOut = iommu_vtd_identity_covers(VTD_IDENTITY_LIMIT, 0x1000);
     fCoveredSoft = (fIdLo && fIdHi && !fIdOut) ? 1 : 0;
+    fRootP = (g_cSoftRootPOk > 0 && g_cSoftRootPClear == 0) ? 1 : 0;
+    if (fReady && g_paRoot != 0) {
+        u64 *pRoot = (u64 *)vtd_virt(g_paRoot);
+
+        if (pRoot != NULL) {
+            fRootP = ((pRoot[0] & VTD_ROOT_P) != 0) ? 1 : 0;
+        }
+    }
+    u32Feat = g_Soft.u32Feat;
 
     /* Grep: vtd: soft inventory */
     kprintf("vtd: soft inventory ready=%d pages=%u ctx_dev=%u ctx_present=%u "
@@ -793,7 +878,7 @@ vtd_soft_inventory_log(void)
             "(soft inventory; not always-on product IOMMU; not bar3)\n",
             fReady, g_u32VtdPages, g_u32CtxDevices,
             g_Soft.u32CtxPresent, g_u32DomUsed,
-            (unsigned)GJ_IOMMU_DOMAIN_MAX, g_Soft.u32Feat, szMode,
+            (unsigned)GJ_IOMMU_DOMAIN_MAX, u32Feat, szMode,
             (unsigned long)g_u64Drhd, g_cSoftInvLogs,
             (unsigned)VTD_SOFT_WAVE);
 
@@ -807,13 +892,13 @@ vtd_soft_inventory_log(void)
 
     /* Grep: vtd: soft cap */
     kprintf("vtd: soft cap src=%s mmio=%d cap=0x%lx ecap=0x%lx "
-            "feat_cap_mmio=%u feat_cap_soft=%u wave=%u "
-            "(read-only soft; never programs GCMD here)\n",
+            "feat_cap_mmio=%u feat_cap_soft=%u mmio_hit=%u synth=%u "
+            "wave=%u (read-only soft; never programs GCMD here)\n",
             szCapSrc, g_fCapFromMmio ? 1 : 0, (unsigned long)g_u64Cap,
             (unsigned long)g_u64Ecap,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
-            (unsigned)VTD_SOFT_WAVE);
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
+            g_cSoftCapMmioHit, g_cSoftCapSynth, (unsigned)VTD_SOFT_WAVE);
 
     /* Grep: vtd: soft dmar */
     kprintf("vtd: soft dmar drhd=%u rmrr=%u atsr=%u rhsa=%u other=%u "
@@ -827,17 +912,18 @@ vtd_soft_inventory_log(void)
             "feat_te_soft=%u feat_te_hw=%u root=0x%lx wave=%u "
             "(soft-arm ≠ product always-on TE)\n",
             fTe, szMode, nMode,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
             (unsigned long)g_paRoot, (unsigned)VTD_SOFT_WAVE);
 
     /* Grep: vtd: soft domain */
     kprintf("vtd: soft domain used=%u max=%u attach_live=%u attach_max=%u "
-            "default0=%u feat_domain=%u wave=%u "
-            "(software DID pool; no QI invalidate product)\n",
+            "default0=%u feat_domain=%u create=%u destroy=%u peak=%u "
+            "wave=%u (software DID pool; no QI invalidate product)\n",
             g_u32DomUsed, (unsigned)GJ_IOMMU_DOMAIN_MAX, cAtt,
             (unsigned)VTD_SOFT_ATTACH_MAX, g_aDom[0].u8Used ? 1u : 0u,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
+            g_cSoftDomCreate, g_cSoftDomDestroy, g_cSoftDomPeak,
             (unsigned)VTD_SOFT_WAVE);
 
     /* Grep: vtd: soft identity */
@@ -846,7 +932,7 @@ vtd_soft_inventory_log(void)
             "(bring-up first 1GiB; not full address-space product)\n",
             (unsigned long)VTD_IDENTITY_LIMIT, fIdLo, fIdHi, fIdOut,
             fCoveredSoft,
-            (g_Soft.u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
             (unsigned)VTD_SOFT_WAVE);
 
     /* Grep: vtd: soft product (P-DMA-4 soft path tallies) */
@@ -858,6 +944,45 @@ vtd_soft_inventory_log(void)
             (unsigned)VTD_PROD_SOFT_SLOT, (unsigned)VTD_PROD_SOFT_FUNC,
             (unsigned)VTD_PROD_SOFT_BUS, (unsigned)VTD_PROD_DENY_SLOT,
             (unsigned)VTD_PROD_DENY_FUNC, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft attach (Wave 15 domain attach path) */
+    kprintf("vtd: soft attach ok=%u rebind=%u fail=%u detach_ok=%u "
+            "detach_miss=%u live=%u peak=%u ctx_did_ok=%u ctx_did_fail=%u "
+            "wave=%u (software attach; not QI/HW invalidate product)\n",
+            g_cSoftAttOk, g_cSoftAttRebind, g_cSoftAttFail, g_cSoftDetOk,
+            g_cSoftDetMiss, cAtt, g_cSoftAttPeak, g_cSoftCtxDidWrite,
+            g_cSoftCtxDidFail, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft feat (Wave 15 expanded feature lamps) */
+    kprintf("vtd: soft feat mask=0x%x tables=%u identity=%u drhd=%u "
+            "cap_mmio=%u cap_soft=%u te_soft=%u te_hw=%u domain=%u "
+            "wave=%u (SOFT_FEAT bits; soft only)\n",
+            u32Feat,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_TABLES) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_IDENTITY) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_DRHD) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_MMIO) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_CAP_SOFT) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_SOFT) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_TE_HW) ? 1u : 0u,
+            (u32Feat & GJ_IOMMU_SOFT_FEAT_DOMAIN) ? 1u : 0u,
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft qi (Wave 15 QI product OPEN honesty) */
+    kprintf("vtd: soft qi product=OPEN invalidate=OPEN "
+            "context_cache=OPEN iotlb=OPEN ecap=0x%lx wave=%u "
+            "(no QI product; soft deepen ≠ QI claim)\n",
+            (unsigned long)g_u64Ecap, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft root (Wave 15 root/context lamps) */
+    kprintf("vtd: soft root ready=%d root_p=%d root_pa=0x%lx "
+            "ctx_pa=0x%lx ctx_present=%u ctx_dev=%u "
+            "verify_ok=%u verify_clear=%u wave=%u "
+            "(RAM root; not HW RTADDR product default)\n",
+            fReady, fRootP, (unsigned long)g_paRoot,
+            (unsigned long)g_paContext, g_Soft.u32CtxPresent,
+            g_u32CtxDevices, g_cSoftRootPOk, g_cSoftRootPClear,
+            (unsigned)VTD_SOFT_WAVE);
 
     /*
      * Honesty: always-on product IOMMU remains OPEN.
@@ -873,15 +998,34 @@ vtd_soft_inventory_log(void)
 
     /* Grep: vtd: soft lamps */
     kprintf("vtd: soft lamps tables=%d te=%d cap_mmio=%d has_drhd=%d "
-            "identity=%d domain0=%d soft_probed=%d wave=%u "
+            "identity=%d domain0=%d soft_probed=%d root_p=%d wave=%u "
             "(composite soft lamps)\n",
             fReady, fTe, g_fCapFromMmio ? 1 : 0, (g_u64Drhd != 0) ? 1 : 0,
-            fCoveredSoft, g_aDom[0].u8Used ? 1 : 0, g_fSoftProbed,
+            fCoveredSoft, g_aDom[0].u8Used ? 1 : 0, g_fSoftProbed, fRootP,
             (unsigned)VTD_SOFT_WAVE);
 
-    /* Grep: vtd: soft deepen wave (Wave 14 stamp) */
+    /* Grep: vtd: soft honesty (Wave 15 non-claims catalog) */
+    kprintf("vtd: soft honesty always_on_product=OPEN "
+            "no_open_bus_master_product=OPEN hw_default_te=OPEN "
+            "qi_invalidate=OPEN full_as_identity=OPEN "
+            "amd_vi_product=OPEN bar3=OPEN inventory_only=1 "
+            "soft_neq_product=1 wave=%u "
+            "(explicit non-claims; not product always-on IOMMU)\n",
+            (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft stats (Wave 15 rollup) */
+    kprintf("vtd: soft stats ready=%d pages=%u ctx=%u dom=%u/%u "
+            "att_live=%u att_peak=%u create=%u attach=%u "
+            "prod_deny=%u feat=0x%x te=%s logs=%u wave=%u "
+            "(rollup; not product close)\n",
+            fReady, g_u32VtdPages, g_Soft.u32CtxPresent, g_u32DomUsed,
+            (unsigned)GJ_IOMMU_DOMAIN_MAX, cAtt, g_cSoftAttPeak,
+            g_cSoftDomCreate, g_cSoftAttOk, g_u32ProdSoftDeny, u32Feat,
+            szMode, g_cSoftInvLogs, (unsigned)VTD_SOFT_WAVE);
+
+    /* Grep: vtd: soft deepen wave (Wave 15 stamp) */
     kprintf("vtd: soft deepen wave=%u areas=%u logs=%u "
-            "(Wave 14 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 15 exclusive; soft only; not product always-on IOMMU; "
             "not bar3)\n",
             (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs);
 
@@ -1085,7 +1229,7 @@ iommu_vtd_soft_probe(void)
      */
     (void)vtd_product_default_soft();
     /*
-     * Wave 14 exclusive soft inventory (greppable "vtd: soft …").
+     * Wave 15 exclusive soft inventory (greppable "vtd: soft …").
      * Soft deepen only; always-on product IOMMU remains OPEN.
      */
     vtd_soft_inventory_log();
@@ -1139,10 +1283,17 @@ iommu_vtd_domain_create(void)
             g_aDom[iDom].u8Used = 1;
             g_aDom[iDom].u16Ref = 0;
             g_u32DomUsed++;
+            if (g_cSoftDomCreate < 0xffffffffu) {
+                g_cSoftDomCreate++;
+            }
+            vtd_soft_note_att_peak();
             kprintf("iommu: vtd domain soft create did=%u used=%u\n", iDom,
                     g_u32DomUsed);
             return iDom;
         }
+    }
+    if (g_cSoftDomCreateFail < 0xffffffffu) {
+        g_cSoftDomCreateFail++;
     }
     kprintf("iommu: vtd domain soft create FULL\n");
     return GJ_IOMMU_DOMAIN_INVALID;
@@ -1152,12 +1303,21 @@ int
 iommu_vtd_domain_destroy(u32 u32Did)
 {
     if (u32Did == 0 || u32Did >= GJ_IOMMU_DOMAIN_MAX) {
+        if (g_cSoftDomDestroyFail < 0xffffffffu) {
+            g_cSoftDomDestroyFail++;
+        }
         return -1;
     }
     if (!g_aDom[u32Did].u8Used) {
+        if (g_cSoftDomDestroyFail < 0xffffffffu) {
+            g_cSoftDomDestroyFail++;
+        }
         return -1;
     }
     if (g_aDom[u32Did].u16Ref != 0) {
+        if (g_cSoftDomDestroyFail < 0xffffffffu) {
+            g_cSoftDomDestroyFail++;
+        }
         kprintf("iommu: vtd domain soft destroy busy did=%u ref=%u\n", u32Did,
                 (u32)g_aDom[u32Did].u16Ref);
         return -1;
@@ -1166,6 +1326,9 @@ iommu_vtd_domain_destroy(u32 u32Did)
     g_aDom[u32Did].u16Ref = 0;
     if (g_u32DomUsed > 0) {
         g_u32DomUsed--;
+    }
+    if (g_cSoftDomDestroy < 0xffffffffu) {
+        g_cSoftDomDestroy++;
     }
     kprintf("iommu: vtd domain soft destroy did=%u used=%u\n", u32Did,
             g_u32DomUsed);
@@ -1179,9 +1342,15 @@ iommu_vtd_domain_attach(u32 u32Did, u8 bus, u8 slot, u8 func)
     u32 iFree = VTD_SOFT_ATTACH_MAX;
 
     if (u32Did >= GJ_IOMMU_DOMAIN_MAX || !g_aDom[u32Did].u8Used) {
+        if (g_cSoftAttFail < 0xffffffffu) {
+            g_cSoftAttFail++;
+        }
         return -1;
     }
     if (!vtd_bdf_ok(bus, slot, func)) {
+        if (g_cSoftAttFail < 0xffffffffu) {
+            g_cSoftAttFail++;
+        }
         return -1;
     }
     /* Update existing attach for BDF */
@@ -1201,9 +1370,20 @@ iommu_vtd_domain_attach(u32 u32Did, u8 bus, u8 slot, u8 func)
             if (g_aDom[u32Did].u16Ref < 0xffffu) {
                 g_aDom[u32Did].u16Ref++;
             }
-            if (vtd_ctx_set_did(bus, slot, func, u32Did) != 0 && bus == 0) {
+                    if (vtd_ctx_set_did(bus, slot, func, u32Did) != 0 && bus == 0) {
+                if (g_cSoftCtxDidFail < 0xffffffffu) {
+                    g_cSoftCtxDidFail++;
+                }
                 kprintf("iommu: vtd domain soft ctx DID write fail\n");
+            } else if (bus == 0 && g_fVtdReady) {
+                if (g_cSoftCtxDidWrite < 0xffffffffu) {
+                    g_cSoftCtxDidWrite++;
+                }
             }
+            if (g_cSoftAttRebind < 0xffffffffu) {
+                g_cSoftAttRebind++;
+            }
+            vtd_soft_note_att_peak();
             kprintf("iommu: vtd domain soft rebind %u:%u.%u did=%u\n", bus,
                     slot, func, u32Did);
             return 0;
@@ -1213,6 +1393,9 @@ iommu_vtd_domain_attach(u32 u32Did, u8 bus, u8 slot, u8 func)
         }
     }
     if (iFree >= VTD_SOFT_ATTACH_MAX) {
+        if (g_cSoftAttFail < 0xffffffffu) {
+            g_cSoftAttFail++;
+        }
         kprintf("iommu: vtd domain soft attach FULL\n");
         return -1;
     }
@@ -1225,8 +1408,19 @@ iommu_vtd_domain_attach(u32 u32Did, u8 bus, u8 slot, u8 func)
         g_aDom[u32Did].u16Ref++;
     }
     if (vtd_ctx_set_did(bus, slot, func, u32Did) != 0 && bus == 0) {
+        if (g_cSoftCtxDidFail < 0xffffffffu) {
+            g_cSoftCtxDidFail++;
+        }
         kprintf("iommu: vtd domain soft ctx DID write fail\n");
+    } else if (bus == 0 && g_fVtdReady) {
+        if (g_cSoftCtxDidWrite < 0xffffffffu) {
+            g_cSoftCtxDidWrite++;
+        }
     }
+    if (g_cSoftAttOk < 0xffffffffu) {
+        g_cSoftAttOk++;
+    }
+    vtd_soft_note_att_peak();
     kprintf("iommu: vtd domain soft attach %u:%u.%u did=%u ref=%u\n", bus, slot,
             func, u32Did, (u32)g_aDom[u32Did].u16Ref);
     return 0;
@@ -1238,6 +1432,9 @@ iommu_vtd_domain_detach(u8 bus, u8 slot, u8 func)
     u32 iAtt;
 
     if (!vtd_bdf_ok(bus, slot, func)) {
+        if (g_cSoftDetMiss < 0xffffffffu) {
+            g_cSoftDetMiss++;
+        }
         return -1;
     }
     for (iAtt = 0; iAtt < VTD_SOFT_ATTACH_MAX; iAtt++) {
@@ -1251,11 +1448,22 @@ iommu_vtd_domain_detach(u8 bus, u8 slot, u8 func)
             }
             memset(&g_aAtt[iAtt], 0, sizeof(g_aAtt[iAtt]));
             /* Rebind bus-0 context to default domain 0 */
-            (void)vtd_ctx_set_did(bus, slot, func, 0);
+            if (vtd_ctx_set_did(bus, slot, func, 0) == 0 && bus == 0 &&
+                g_fVtdReady) {
+                if (g_cSoftCtxDidWrite < 0xffffffffu) {
+                    g_cSoftCtxDidWrite++;
+                }
+            }
+            if (g_cSoftDetOk < 0xffffffffu) {
+                g_cSoftDetOk++;
+            }
             kprintf("iommu: vtd domain soft detach %u:%u.%u (was did=%u)\n",
                     bus, slot, func, u32Did);
             return 0;
         }
+    }
+    if (g_cSoftDetMiss < 0xffffffffu) {
+        g_cSoftDetMiss++;
     }
     return -1;
 }

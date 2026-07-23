@@ -1,0 +1,63 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch12835: JACK ok soft unit (off).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_jack_ok_u_12835(void);
+ *     - Always returns 0. Soft stub only; intentionally not a real
+ *       JACK server or client probe for the audio soft continuum.
+ *   uint32_t __gj_jack_ok_u_12835  (alias)
+ *   __libcgj_batch12835_marker = "libcgj-batch12835"
+ *
+ * Exclusive continuum CREATE-ONLY (12831-12840: audio soft id
+ * stubs — pipewire_ok_u_12831, wireplumber_ok_u_12832,
+ * pulse_compat_ok_u_12833, alsa_ok_u_12834, jack_ok_u_12835,
+ * audio_latency_ok_u_12836, bluetooth_audio_ok_u_12837,
+ * hdmi_audio_ok_u_12838, audio_soft_ready_u_12839, batch_id_12840).
+ * Unique surface only; no multi-def. Distinct from
+ * gj_jack_ok_u_12635 (batch12635), gj_jack_ok_u_12435 (batch12435),
+ * gj_jack_ok_u_10335 (batch10335), and gj_jack_ok_u_10235
+ * (batch10235). No parent wires. No __int128. No JACK implementation.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch12835_marker[] = "libcgj-batch12835";
+
+/* Soft JACK-ok lamp: always off (not a real JACK probe). */
+#define B12835_JACK_OK  0u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b12835_jack_ok(void)
+{
+	return B12835_JACK_OK;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_jack_ok_u_12835 - JACK ok soft unit flag.
+ *
+ * Always returns 0. Soft continuum stub; does not open a JACK client or
+ * call libc. No parent wires.
+ */
+uint32_t
+gj_jack_ok_u_12835(void)
+{
+	(void)NULL;
+	return b12835_jack_ok();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_jack_ok_u_12835(void)
+    __attribute__((alias("gj_jack_ok_u_12835")));

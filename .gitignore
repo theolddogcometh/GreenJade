@@ -1,0 +1,30 @@
+# Build outputs
+build/
+*.o
+*.elf
+*.a
+*.so
+*.so.*
+*.bin
+*.img
+*.iso
+
+# Local toolchains / fetched blobs (never commit)
+tools/
+*.rpm
+
+# Valve Steam proprietary tree (lab host fetch; never commit)
+build/steam-tree/
+build/steam-stage/
+build/hwtest-keys/
+
+# Editor / OS noise
+*~
+*.swp
+.DS_Store
+.vscode/
+.idea/
+
+# QEMU / OVMF local caches
+*.fd
+OVMF*.fd

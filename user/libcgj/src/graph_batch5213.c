@@ -1,0 +1,58 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch5213: pure-value local APIC Version reg offset (_u).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_apic_ver_reg_u(void);
+ *     - Return the xAPIC Local APIC Version register MMIO offset 0x30.
+ *   uint32_t __gj_apic_ver_reg_u  (alias)
+ *   __libcgj_batch5213_marker = "libcgj-batch5213"
+ *
+ * Exclusive continuum CREATE-ONLY (5211-5220: APIC unique —
+ * apic_base_default_u, apic_id_reg_u, apic_ver_reg_u, apic_eoi_reg_u,
+ * apic_svr_reg_u, apic_icr_lo_u, apic_icr_hi_u, apic_lvt_timer_u,
+ * apic_is_x2_u, batch_id_5220). Unique gj_apic_ver_reg_u surface only;
+ * no multi-def. No parent wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch5213_marker[] = "libcgj-batch5213";
+
+/* Local APIC Version register offset within the xAPIC MMIO window. */
+#define B5213_APIC_VER_REG  0x30u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b5213_ver_reg(void)
+{
+	return B5213_APIC_VER_REG;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_apic_ver_reg_u - report Local APIC Version register MMIO offset.
+ *
+ * Always returns 0x30. Soft compile-time register offset constant; does
+ * not touch MMIO. Self-contained; no parent wires.
+ */
+uint32_t
+gj_apic_ver_reg_u(void)
+{
+	(void)NULL;
+	return b5213_ver_reg();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_apic_ver_reg_u(void)
+    __attribute__((alias("gj_apic_ver_reg_u")));

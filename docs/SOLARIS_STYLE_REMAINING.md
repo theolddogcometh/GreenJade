@@ -1,0 +1,388 @@
+# GreenJade — Remaining Design Choices (Solaris-channel)
+
+| Field | Value |
+|-------|--------|
+| **Document** | Remaining decisions v1.2 |
+| **Status** | **Accepted** — Solaris-first judgment under GreenJade law |
+| **Persona** | “What would a Sun kernel engineer ship?” |
+| **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) |
+
+GreenJade law still wins: caps, security-first, pure C, dual MIT/Apache, no GPL, no ambient root.  
+Where Solaris had no caps, we keep **L4/seL4 mechanics** but **Solaris ergonomics and lifecycle**.
+
+**VM / task / session / QoS / futex / JIT:** deferred to **Apple channel** — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) (Accepted). Cookie, cluster, fault lock, W^X checks in §7 still apply.
+---
+
+## 0. Solaris engineering instincts used here
+
+1. **Simple names for apps** — FD-like handles; deep machinery in the kernel.  
+2. **Doors for control, bulk elsewhere** — sync RPC; rings for data.  
+3. **Process is the unit of authority** — shared CNode = shared “FD table.”  
+4. **DDI for devices** — attach/detach/quiesce; DMA via handles, not raw bus-master.  
+5. **Turnstiles + PI** — don’t starve interactive paths under sync IPC.  
+6. **Fail closed, then recover** — kill the bad actor; don’t hang the box.  
+7. **Ship a support matrix** — “desktop” is a product, not infinite drivers.  
+8. **Don’t put policy in the trap path** — registration on PCB; hot path stays dumb.
+
+---
+
+## 1. Untyped retype (P0)
+
+### Decision: **Two untyped classes + power-of-two size ladder (seL4-shaped, Solaris resource pools)**
+
+| Kind | Source | May retype to | Forbidden |
+|------|--------|---------------|-----------|
+| **RAM untyped** | Boot free list / HHDM | FRAME (4K), large FRAME (2M/1G where supported), CNODE backing, PAGE_TABLE, kernel objects that consume RAM | Device MMIO |
+| **Device untyped** | `devmgr` from UEFI/ACPI/PCI BARs | MMIO_FRAME (map device only), IOMMU window ingredients | **Never EXEC**; never anonymous RAM object |
+
+**Size ladder (RAM):** retype only into sizes `4K × 2^n` up to a cap (e.g. 2M/1G for large pages).  
+**Recycle:** destroy object → memory returns to **parent untyped** (or quota account), not a global free-for-all.  
+**Who retypes device untyped:** only holders of that untyped (bootstrap → `devmgr`).  
+**Who retypes RAM:** process quota + untyped cap with MINT/retype right.
+
+*Solaris voice:* treat untyped like **resource pools / kmem magazines at the authority layer** — explicit, accountable, no silent overcommit of kernel objects.
+
+---
+
+## 2. CDT + `slots_left` (P0)
+
+### Decision: **CDT child list on object; every install/copy/move is explicit**
+
+| Operation | CDT | `u32SlotsLeft` on object |
+|-----------|-----|---------------------------|
+| **Install / mint new binding** | Add child edge slot→object | `++` |
+| **Copy** (new slot, same object) | Add child edge | `++` |
+| **Move** (same process) | Relink edge; no net `++` | unchanged |
+| **IPC transfer copy** | Child in dest process | `++` on object |
+| **IPC transfer move** | Edge moves to dest | unchanged |
+| **Slot invalidate (S7)** | Unlink edge | `--` (not below 0) |
+
+**Quota:** each **occupied CNode slot** charges the process’s slot quota (Solaris: finite FD limits).  
+**CDT node memory:** charged to the **creating process’s** kernel-object quota (or small fixed slab per mint).
+
+*Solaris voice:* every name in the table costs something — no free infinite C-list.
+
+---
+
+## 3. IPC cap transfer under Scheme A (P0)
+
+### Decision: **Receiver allocates; reply carries new handles**
+
+```
+Call(payload, send_caps[0..K-1]):
+  sender must GRANT each sent cap
+  kernel:
+    for each cap:
+      alloc free slot in receiver process CNode (skip 0)
+      install copy or move
+      record new (slot, gen) for reply
+  if any alloc fails → whole Call fails (no partial installs); QUOTA/NOSPC
+  deliver message + list of new handles in reply/regs
+```
+
+| Rule | Detail |
+|------|--------|
+| Dest slot | **Kernel picks** free slot ≥ 1 (not caller-chosen) — avoids clobber races |
+| Partial failure | **All-or-nothing** |
+| Max K | Small (e.g. 4) — doors-scale, not SCM_RIGHTS flood |
+| Reply | `n_caps` + pairs `(slot, gen)` in message regs/buffer |
+
+*Solaris voice:* `door_call` with descriptors — server gets new FDs; doesn’t pick FD numbers.
+
+---
+
+## 4. Syscall ABI freeze sketch (P0)
+
+### Decision: **Stable numbers from M2; Scheme A always `(slot, gen)` first when a cap is named**
+
+**Normative sketch (includes Apple additions):** [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §5 — futex, vm_*, process_wait/kill, QoS.  
+Exact layouts: `kernel/include/gj/syscall.h` when frozen — **do not renumber after first userland**.
+
+*Solaris voice:* stable syscall surface; version if you must, don’t reshuffle.
+---
+
+## 5. CNode locking (P0)
+
+### Decision: **Per-process CNode mutex; resolve under RCU-later, lock for now**
+
+| Path | v1 | Later perf |
+|------|----|------------|
+| **Install / move / invalidate** | Hold **CNode lock** | same |
+| **Resolve** | Hold CNode lock **shared** or exclusive (v1: exclusive is fine) | Gen-checked lock-free read if needed |
+| **Order** | `CNode → Object → Endpoint` (never reverse); PMM below Object |
+
+*Solaris voice:* one `fdt` lock per process first; optimize the read path when profiles hurt.
+
+---
+
+## 6. Process / space / thread lifecycle (P0)
+
+### Decision: **Process owns space + CNode; threads are LWPs**
+
+```
+spawn:
+  1. create process object (quota)
+  2. create address space
+  3. create CNode (slots from untyped/pages)
+  4. bootstrap root meta slot 0
+  5. install initial cap bundle (from parent GRANT list)
+  6. create first thread (entry, stack)
+  7. on any failure: reverse tear down (§1.1 revoke)
+exit last thread / process_kill:
+  clear pager; revoke all CNode slots; destroy space; free process
+```
+
+| Rule | Detail |
+|------|--------|
+| Thread | Holds `pProc`; uses `pProc->pCnode` |
+| No per-thread CNode | Already decided |
+| `wait` | Parent holds process cap (typed, from spawn return — **kernel mint**, not root meta) |
+
+*Solaris voice:* process is the container; threads are LWPs; death cleans the FD table.
+
+---
+
+## 7. Pager map-into-client (P1) — **most secure map path** (normative)
+
+**Region/object model + page ownership:** [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1–2 (Accepted).  
+This section remains normative for **cookie, cluster, kernel-only PTE install, W^X, fail-closed**.
+
+### Decision summary
+
+| Item | Choice |
+|------|--------|
+| **Token** | **Kernel-only cookie** in the fault message — **not** a CNode cap type, not forgeable by userspace |
+| **Cluster** | **Multi-page fault cluster** (contiguous VA range), not only the single faulting page |
+| **Map security** | **Maximum practical:** least privilege, single-use, range-bound, verified by kernel |
+| **Page ownership after map** | **Memory object owns pages; client map is a view** (Apple §2). Anon object charged to process ledger. |
+| **Concurrency** | **One fault lock per address space** — serialize fault handling for that space |
+
+### 7.1 Kernel-only map cookie
+
+| Rule | Detail |
+|------|--------|
+| **M1** | Cookie is a large random/secret **kernel value** (or index into a kernel table keyed by secret). Userspace **cannot** mint or forge it. |
+| **M2** | Cookie appears **only** in the fault **Call** message from kernel → pager. Not installable into any CNode. |
+| **M3** | Pager returns cookie **unchanged** on reply with FRAME caps (or frame list); kernel validates cookie before any map. |
+| **M4** | Cookie is **single-use**: successful map, FAIL reply, timeout, process death, or space revoke ⇒ **invalidate cookie**. Replay ⇒ error. |
+| **M5** | Cookie is bound to: `{ space_id, memory_object_id, cluster_base, cluster_npages, access, faulting_thread, mono_deadline }`. Mismatch ⇒ reject. |
+
+*Not a cap type:* avoids CNode pollution, GRANT confusion, and transfer of map authority via IPC.
+
+### 7.2 Multi-page fault cluster
+
+| Rule | Detail |
+|------|--------|
+| **C1** | On fault at VA, kernel computes a **cluster**: page-aligned range covering the fault, optionally coalesced with adjacent not-present pages (same protection intent). |
+| **C2** | Cluster size **capped** (e.g. max N pages, default small like 16) — DoS/security bound. |
+| **C3** | Fault message carries **base VA + page count** (and access bits), not only one address. |
+| **C4** | Pager may supply **1..count** FRAMEs; kernel maps only within the cluster; unfilled pages stay faultable later. |
+| **C5** | Partial fill is OK if pager replies success with subset; remaining pages fault again (no ambient expand of cookie range). |
+
+### 7.3 Most secure map rules (kernel verifies everything)
+
+| Rule | Detail |
+|------|--------|
+| **S1** | Pager **never** receives ambient Map rights on the client space. |
+| **S2** | Only the **kernel** installs PTEs in the client, after validating cookie + FRAMEs. |
+| **S3** | FRAMEs must be LIVE, RAM FRAME (not device MMIO unless policy allows), rights ⊆ requested access; **no EXEC** unless fault access asked X and policy allows. |
+| **S4** | W^X: refuse WRITE\|EXEC together on client user maps (existing GreenJade policy). |
+| **S5** | After successful map: pages attach to the **memory object**; client holds a **view** (PTE). Pager does not keep Map into client AS. App-visible FRAME CNode slots are **optional** (usually hidden by libc). |
+| **S6** | Pager must not retain a mapping into the client AS. Shared file objects may remain mapped in other processes. |
+| **S7** | On FAIL/timeout: no PTE change; FRAMEs stay with pager/object path; cookie dead; faulting thread **killed** (v1). |
+
+### 7.4 Object owns pages; maps are views (Apple §2)
+
+| Before map | After successful map |
+|------------|----------------------|
+| FRAME held by pager path (GRANT to kernel) | Pages owned by **memory object**; client has **PTE view** |
+| Cookie authorizes map | Cookie **invalid** |
+| Client had hole at VA | Client has PTE; charge **object / process ledger** |
+
+Revoke of client space ⇒ drop views; object refcount may free pages.  
+Shared object: other processes’ views remain until their unmap.
+
+### 7.5 One fault lock per address space
+
+| Rule | Detail |
+|------|--------|
+| **L1** | Each `gj_space` (or process space) has **one fault lock**. |
+| **L2** | Page-fault path: acquire space fault lock → handle one cluster → release. |
+| **L3** | Concurrent faults in same space **serialize** (no parallel map races / double-fill). |
+| **L4** | Faults in **different** spaces may proceed in parallel. |
+| **L5** | Do not hold CNode lock across the whole pager Call (deadlock risk); copy needed state under locks, Call pager, then map under fault lock + space map lock per lock order. |
+| **L6** | Lock order (extend global ranks): … → **SpaceFault → SpaceMap → …** (document with CNode/Object; never hold SpaceFault while taking remote process CNode for unrelated ops). |
+
+### 7.6 End-to-end flow
+
+```
+fault in space S at VA
+  → acquire S.fault_lock (one per space)
+  → if another fault in progress on S: wait on fault CV or kill policy (v1: wait with mono timeout then kill)
+  → lookup region; memory object; pager = object.pager || default_pager; else kill
+  → build cluster [base, npages] within region; cookie bound to {S, object, cluster, …}
+  → Call pager (mono timeout) with fault_msg { base, npages, access, cookie }
+  → pager replies FAIL | OK + FRAME list (kernel-validated path)
+  → kernel: validate cookie; validate FRAMEs; map views into S; pages owned by object
+  → invalidate cookie; resume faulting thread or kill on fail/timeout
+  → release S.fault_lock
+```
+
+*Solaris voice:* segment filler gets a **bounded fault context**, not the process keys to the city; HW tables updated only by the kernel after checks.
+
+---
+
+## 8. Fault message + timeout (P1)
+
+### Decision: **Fixed message + kernel cookie; multi-page cluster fields**
+
+```c
+struct gj_fault_msg {
+    u64 u64ClusterBase;   /* page-aligned */
+    u32 u32NPages;        /* cluster size, >= 1, <= GJ_FAULT_CLUSTER_MAX */
+    u32 u32Access;        /* R/W/X */
+    u64 u64CookieLo;      /* kernel-only cookie (128-bit recommended) */
+    u64 u64CookieHi;
+    u32 u32Flags;
+    u32 u32Pad;
+};
+/* Reply: status; FRAME identity passed via kernel-validated path (see impl) */
+```
+
+| Policy | v1 default |
+|--------|------------|
+| Timeout | Short mono (e.g. 100ms–1s); **kill** faulting thread |
+| No pager | **Kill** |
+| Cookie reuse | **Reject** |
+| Cluster max | Compile-time cap (e.g. 16 pages) |
+
+---
+
+## 9. Pager endpoint lifecycle (P1)
+
+### Decision: **Refcount endpoint on set_pager; hook revoke**
+
+| Event | Action |
+|-------|--------|
+| `set_pager` | Resolve **ENDPOINT**; require **GRANT**; `ref++`; store PCB object pointer |
+| Endpoint DEAD/revoke | Clear PCB pager for all processes; in-flight cookies for that pager **invalidate** |
+| `clear_pager` | `ref--` |
+| User slot overwrite of ep name | PCB **object ref** remains until clear/death |
+
+**ENDPOINT only; GRANT required** (not NOTIFICATION / READ-only).
+
+---
+
+## 10. Nested Call / late reply / PI (P1)
+
+### Decision: **Solaris-practical limits**
+
+| Topic | Choice |
+|-------|--------|
+| **Max Call depth** | Small fixed (e.g. **8**); overflow → error |
+| **Late reply** | Discard; reply cap already invalid; no double resume |
+| **PI** | Turnstile PI along **one Call chain**; depth ≤ Call depth |
+| **Budget** | Soft-RT budget still applies; PI raises priority within budget rules (no infinite boost) |
+
+---
+
+## 11. Revoke queue overflow + epoch (P1)
+
+### Decision: **Never drop work; epoch = per-CPU quiescent**
+
+| Topic | Choice |
+|-------|--------|
+| Queue full | Grow from reserved reclaim pool **or** run **sync slot clear** under try-lock loop with sleep (not spin) for this object only |
+| Epoch | Each CPU notes idle/syscall boundary; reclaim when all CPUs have passed a generation counter (Solaris-like reaping, RCU-ish) |
+| Debug | Panic if deferred work stalled past N seconds |
+
+---
+
+## 12. IOMMU API (P2)
+
+### Decision: **DDI DMA window caps**
+
+```
+create_window(device, iova, frames[], rw) → window_cap
+  only with IOMMU authority from devmgr
+destroy/revoke window → disable HW first (§1.1 Phase A), then free
+```
+
+No IOMMU on production device class → **no bus-master** (already policy).
+
+---
+
+## 13. HCL / support tiers (P2)
+
+### Decision: **Ship tiers like Sun hardware compatibility**
+
+| Tier | Meaning |
+|------|---------|
+| **T0** | QEMU virtio + UEFI OVMF — CI must pass |
+| **T1** | Documented NVMe + AHCI + common USB HID |
+| **T2** | One SAS HBA family (clean-room) when docs allow |
+| **T3** | GPU accel opportunistic |
+
+“General-purpose desktop” **means T0–T1 first**; SAS is on the roadmap, not day-one infinite HBAs.
+
+---
+
+## 14. TCB inventory (P2)
+
+| Component | If compromised |
+|-----------|----------------|
+| Microkernel | Game over |
+| `init` (pre-seal) | Game over |
+| `init` (post-seal) | Limited to remaining caps |
+| `devmgr` | All devices / DMA |
+| Pager / `vfsd` | Memory + files of clients that use it |
+| `ns` | Service bind/connect |
+| Compositor | Input/display of its session |
+| App | Only its CNode/quota |
+
+*Solaris voice:* zones/doors reduce blast radius; still list what’s trusted.
+
+---
+
+## 15. `GJ_CAP_CNODE` in v1 (P2)
+
+### Decision: **Type reserved; no user nested CNodes in v1**
+
+Only process root CNode exists for apps. Nested CNodes = later server feature. Install of type CNODE from user → `NOSUPPORT` until then.
+
+---
+
+## 16. Spawn return: process cap
+
+### Decision: **Kernel mints a PROCESS typed cap (task port) into parent CNode on spawn success**
+
+Not derived from child’s root meta (kernel ops only). Parent `wait`/`kill` uses that handle.  
+**Rights matrix and self-port rules:** [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §3.
+
+---
+
+## 17. What I would *not* do (as a Sun person)
+
+| Avoid | Why |
+|-------|-----|
+| Full signal storm in kernel | Complexity; use notifications |
+| STREAMS in kernel | Wrong century for GreenJade net |
+| Ambient `fork` of whole CNode | Authority explosion |
+| Pager with permanent map-any on client | Instant confused deputy |
+| Infinite driver promises on day one | Sun always had an HCL |
+
+---
+
+## 18. Implementation order (Sun pragmatism)
+
+1. Process/space/thread + CNode lock + root meta bootstrap  
+2. Syscall table + cap mint/copy/move/identify  
+3. Untyped retype + FRAME map  
+4. IPC Call/Recv/Reply + transfer + PI  
+5. set_pager kernel ref + fault Call + single-use map token  
+6. virtio + then storage  
+7. UEFI + big PMM + SMP enablement in parallel once UP paths work  
+
+---
+
+*Channel Solaris: ship doors-scale IPC, process-scale names, DDI-scale devices, and an honest compatibility tier list — with L4 teeth for revoke and quotas.*

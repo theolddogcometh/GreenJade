@@ -1,0 +1,107 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch2147: min-width padded uint16_t decimal format.
+ *
+ * Surface (unique symbols):
+ *   int gj_format_u16_dec_w(uint16_t n, char *out, size_t cap, size_t width);
+ *     - Write the base-10 representation of n into out as a
+ *       NUL-terminated string, left-padded with spaces to at least
+ *       width characters (printf-style min field width). No leading
+ *       zeros except for n == 0. Returns characters written excluding
+ *       NUL on success, or -1 on error.
+ *   int __gj_format_u16_dec_w  (alias)
+ *   __libcgj_batch2147_marker = "libcgj-batch2147"
+ *
+ * Distinct from gj_format_u32_dec_w (batch2146) and gj_format_u64_dec_w
+ * (batch1536). Post-2140 parse exclusive wave (2141-2150).
+ *
+ * Clean-room freestanding pure C (integer/pointer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * float, no libc string calls. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch2147_marker[] = "libcgj-batch2147";
+
+/* UINT16_MAX needs 5 decimal digits; reverse buffer holds that. */
+#define B2147_MAX_DIGITS 5
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_format_u16_dec_w - decimal with minimum space-padded field width.
+ *
+ * Edge cases:
+ *   out == NULL or cap == 0 -> -1
+ *   width 0 -> natural digits only (same as unpadded)
+ *   natural digits longer than width -> no pad, full digits
+ *   result (max(digits, width) + NUL) does not fit -> -1
+ * Success: length excluding NUL.
+ *
+ * Examples:
+ *   42, width=5 -> "   42"
+ *   42, width=1 -> "42"
+ *   0,  width=3 -> "  0"
+ */
+int
+gj_format_u16_dec_w(uint16_t u16N, char *pOut, size_t cbCap, size_t cWidth)
+{
+	char aDig[B2147_MAX_DIGITS];
+	int nDig;
+	int iDig;
+	uint32_t uVal;
+	size_t cbField;
+	size_t cbNeed;
+	size_t iOut;
+	size_t iPad;
+
+	(void)NULL;
+
+	if (pOut == NULL || cbCap == 0u) {
+		return -1;
+	}
+
+	uVal = (uint32_t)u16N;
+	nDig = 0;
+	if (uVal == 0u) {
+		aDig[0] = '0';
+		nDig = 1;
+	} else {
+		while (uVal > 0u && nDig < B2147_MAX_DIGITS) {
+			aDig[nDig++] = (char)('0' + (int)(uVal % 10u));
+			uVal /= 10u;
+		}
+	}
+
+	cbField = (size_t)nDig;
+	if (cWidth > cbField) {
+		cbField = cWidth;
+	}
+	cbNeed = cbField + 1u;
+	if (cbCap < cbNeed) {
+		return -1;
+	}
+
+	iOut = 0u;
+	if (cWidth > (size_t)nDig) {
+		iPad = cWidth - (size_t)nDig;
+		while (iPad > 0u) {
+			pOut[iOut++] = ' ';
+			iPad--;
+		}
+	}
+	for (iDig = nDig; iDig > 0; iDig--) {
+		pOut[iOut++] = aDig[iDig - 1];
+	}
+	pOut[iOut] = '\0';
+	return (int)iOut;
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+int __gj_format_u16_dec_w(uint16_t u16N, char *pOut, size_t cbCap, size_t cWidth)
+    __attribute__((alias("gj_format_u16_dec_w")));

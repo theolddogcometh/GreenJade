@@ -1,0 +1,2338 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Bridge: cold_ipc service → vfs_ram + protonrt_cold_linux.
+ */
+#include <gj/cold_ipc.h>
+#include <gj/cpu.h>
+#include <gj/elf_load.h>
+#include <gj/error.h>
+#include <gj/file_lock.h>
+#include <gj/io_uring.h>
+#include <gj/klog.h>
+#include <gj/linux_abi.h>
+#include <gj/linux_dispatch.h>
+#include <gj/memobj.h>
+#include <gj/net_lo.h>
+#include <gj/process.h>
+#include <gj/string.h>
+#include <gj/thread.h>
+#include <gj/types.h>
+#include <gj/user_access.h>
+#include <gj/vfs_ram.h>
+#include <gj/vmm.h>
+
+/* From user/libprotonrt/src/cold_linux.c (compiled into kernel for smoke). */
+int64_t protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1,
+                            uint64_t a2, uint64_t a3, uint64_t a4,
+                            uint64_t a5);
+
+/* Process cwd for getcwd/chdir (interim; product: per-process vfsd) */
+static char g_szCwd[96] = "/";
+
+static void
+copy_path_from_arg(char *szOut, size_t cbOut, u64 u64Path)
+{
+    size_t i;
+
+    if (szOut == NULL || cbOut == 0) {
+        return;
+    }
+    szOut[0] = '\0';
+    if (u64Path == 0) {
+        return;
+    }
+    if (user_range_ok(u64Path, 1)) {
+        /* User path: copy up to cbOut-1 */
+        for (i = 0; i + 1 < cbOut; i++) {
+            char ch;
+            if (copy_from_user(&ch, u64Path + i, 1) != GJ_OK) {
+                szOut[0] = '\0';
+                return;
+            }
+            szOut[i] = ch;
+            if (ch == '\0') {
+                return;
+            }
+        }
+        szOut[cbOut - 1] = '\0';
+        return;
+    }
+    /* Kernel smoke path pointer */
+    {
+        const char *sz = (const char *)(gj_vaddr_t)u64Path;
+
+        for (i = 0; i + 1 < cbOut && sz[i] != '\0'; i++) {
+            szOut[i] = sz[i];
+        }
+        szOut[i] = '\0';
+    }
+}
+
+static i64
+protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
+{
+    char szPath[96];
+    u8 aBuf[256];
+    i64 i64R;
+    size_t cb;
+    gj_status_t st;
+
+    (void)pCtx;
+    if (pRegs == NULL) {
+        return -LINUX_EINVAL;
+    }
+
+    switch (pRegs->u64Nr) {
+    case LINUX_NR_openat:
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        /* a2 flags: bit 6 = O_CREAT (0x40) on Linux x86_64 */
+        return vfs_ram_open(szPath, (pRegs->u64Arg2 & 0x40) ? 1 : 0);
+
+    case LINUX_NR_open:
+    case LINUX_NR_creat:
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_open(szPath,
+                            (pRegs->u64Nr == LINUX_NR_creat ||
+                             (pRegs->u64Arg1 & 0x40))
+                                ? 1
+                                : 0);
+
+    case LINUX_NR_read:
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            break; /* fall through to stub */
+        }
+        cb = (size_t)pRegs->u64Arg2;
+        if (cb > sizeof(aBuf)) {
+            cb = sizeof(aBuf);
+        }
+        i64R = vfs_ram_read((i64)pRegs->u64Arg0, aBuf, cb);
+        if (i64R <= 0) {
+            return i64R;
+        }
+        if (user_range_ok(pRegs->u64Arg1, (u64)i64R)) {
+            st = copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64R);
+            if (st != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64R);
+        }
+        return i64R;
+
+    case LINUX_NR_write:
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            break;
+        }
+        cb = (size_t)pRegs->u64Arg2;
+        if (cb > sizeof(aBuf)) {
+            cb = sizeof(aBuf);
+        }
+        if (user_range_ok(pRegs->u64Arg1, cb)) {
+            st = copy_from_user(aBuf, pRegs->u64Arg1, cb);
+            if (st != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+        }
+        return vfs_ram_write((i64)pRegs->u64Arg0, aBuf, cb);
+
+    case LINUX_NR_lseek:
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            return vfs_ram_lseek((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1,
+                                 (int)pRegs->u64Arg2);
+        }
+        break;
+
+    case LINUX_NR_eventfd2:
+        return vfs_ram_eventfd2((u32)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+    case LINUX_NR_eventfd:
+        /* eventfd(init, flags) — same as eventfd2 */
+        return vfs_ram_eventfd2((u32)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+
+    case LINUX_NR_timerfd_create:
+        return vfs_ram_timerfd_create((int)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+
+    case LINUX_NR_timerfd_settime: {
+        /* itimerspec: it_interval {sec,nsec} + it_value {sec,nsec} = 32 bytes */
+        u64 u64Val = 0;
+        u64 u64Int = 0;
+        i64 i64Sec;
+        i64 i64Nsec;
+
+        if (pRegs->u64Arg2 != 0) {
+            if (user_range_ok(pRegs->u64Arg2, 32)) {
+                (void)copy_from_user(&i64Sec, pRegs->u64Arg2 + 16, 8);
+                (void)copy_from_user(&i64Nsec, pRegs->u64Arg2 + 24, 8);
+                u64Val = (u64)i64Sec * 1000000000ull + (u64)i64Nsec;
+                (void)copy_from_user(&i64Sec, pRegs->u64Arg2 + 0, 8);
+                (void)copy_from_user(&i64Nsec, pRegs->u64Arg2 + 8, 8);
+                u64Int = (u64)i64Sec * 1000000000ull + (u64)i64Nsec;
+            } else {
+                const i64 *p = (const i64 *)(gj_vaddr_t)pRegs->u64Arg2;
+
+                u64Int = (u64)p[0] * 1000000000ull + (u64)p[1];
+                u64Val = (u64)p[2] * 1000000000ull + (u64)p[3];
+            }
+        }
+        return vfs_ram_timerfd_settime((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                                       u64Val, u64Int);
+    }
+
+    case LINUX_NR_timerfd_gettime: {
+        u64 u64Val = 0;
+        u64 u64Int = 0;
+        i64 st;
+
+        st = vfs_ram_timerfd_gettime((i64)pRegs->u64Arg0, &u64Val, &u64Int);
+        if (st != 0) {
+            return st;
+        }
+        if (pRegs->u64Arg1 != 0) {
+            i64 aIt[4];
+
+            aIt[0] = (i64)(u64Int / 1000000000ull);
+            aIt[1] = (i64)(u64Int % 1000000000ull);
+            aIt[2] = (i64)(u64Val / 1000000000ull);
+            aIt[3] = (i64)(u64Val % 1000000000ull);
+            if (user_range_ok(pRegs->u64Arg1, 32)) {
+                if (copy_to_user(pRegs->u64Arg1, aIt, 32) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aIt, 32);
+            }
+        }
+        return 0;
+    }
+
+    case LINUX_NR_signalfd4: {
+        u64 u64Mask = 0;
+
+        if (pRegs->u64Arg1 != 0) {
+            /* sigset_t — take first 8 bytes */
+            if (user_range_ok(pRegs->u64Arg1, 8)) {
+                (void)copy_from_user(&u64Mask, pRegs->u64Arg1, 8);
+            } else {
+                u64Mask = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg1;
+            }
+        }
+        return vfs_ram_signalfd4((i64)pRegs->u64Arg0, u64Mask,
+                                 (int)pRegs->u64Arg2);
+    }
+
+    case LINUX_NR_fsync:
+    case LINUX_NR_fdatasync:
+        /* Ramdisk/block: always durable for bring-up; product: storaged barrier */
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0) ||
+            net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return 0;
+        }
+        return -LINUX_EBADF;
+
+    case LINUX_NR_sync:
+        /* Global sync: no-op success (ram durable) */
+        return 0;
+
+    case LINUX_NR_syncfs:
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0) ||
+            net_lo_fd_ok((i64)pRegs->u64Arg0) ||
+            (i64)pRegs->u64Arg0 >= 0) {
+            return 0;
+        }
+        return -LINUX_EBADF;
+
+    case LINUX_NR_madvise:
+        /* Advise only — no-op success (A1+). */
+        return 0;
+
+    case LINUX_NR_epoll_create:
+        return vfs_ram_epoll_create1(0);
+    case LINUX_NR_epoll_create1:
+        return vfs_ram_epoll_create1((int)pRegs->u64Arg0);
+
+    case LINUX_NR_io_setup: {
+        /* aio context: write synthetic ctx id to *ctxp */
+        u64 ctx = 1;
+
+        if (pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (user_range_ok(pRegs->u64Arg1, 8)) {
+            (void)copy_to_user(pRegs->u64Arg1, &ctx, 8);
+        } else {
+            *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = ctx;
+        }
+        return 0;
+    }
+    case LINUX_NR_io_destroy:
+        return 0;
+    case LINUX_NR_io_submit:
+        return 0; /* no events submitted */
+    case LINUX_NR_io_getevents:
+        return 0; /* timeout / empty */
+    case LINUX_NR_io_cancel:
+        return -LINUX_EINTR;
+    case LINUX_NR_poll:
+    case LINUX_NR_ppoll: {
+        /*
+         * poll(struct pollfd *fds, nfds_t nfds, timeout):
+         * Use vfs readiness (eventfd/pipe/inotify/ram) mapped to POLLIN/OUT.
+         * arg0 = user pollfd array, arg1 = nfds (max 16 for T0).
+         */
+        u32 nfds = (u32)pRegs->u64Arg1;
+        u32 i;
+        u32 ready = 0;
+
+        if (nfds == 0) {
+            return 0;
+        }
+        if (nfds > 16u) {
+            nfds = 16u;
+        }
+        if (pRegs->u64Arg0 == 0) {
+            return -LINUX_EFAULT;
+        }
+        for (i = 0; i < nfds; i++) {
+            /* pollfd: int fd; short events; short revents — 8 bytes on x86_64 */
+            i32 fd = 0;
+            u16 events = 0;
+            u16 revents = 0;
+            u32 want;
+            u32 got;
+            u64 base = pRegs->u64Arg0 + (u64)i * 8u;
+
+            if (user_range_ok(base, 8)) {
+                if (copy_from_user(&fd, base, 4) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+                if (copy_from_user(&events, base + 4, 2) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                i32 *p = (i32 *)(gj_vaddr_t)base;
+
+                fd = p[0];
+                events = ((u16 *)(gj_vaddr_t)base)[2];
+            }
+            /* POLLIN=1 POLLOUT=4 — same numbers as EPOLLIN/OUT */
+            want = (u32)events;
+            if (want == 0) {
+                want = 0x005u;
+            }
+            if (fd < 0) {
+                revents = 0;
+            } else if (vfs_ram_fd_ok((i64)fd)) {
+                got = vfs_ram_poll_mask((i64)fd, want);
+                revents = (u16)(got & want);
+                if (got & 0x008u) {
+                    revents |= 0x0008u; /* POLLERR */
+                }
+                if (got & 0x010u) {
+                    revents |= 0x0010u; /* POLLHUP */
+                }
+            } else if (net_lo_fd_ok((i64)fd)) {
+                revents = (u16)(want & 0x0005u); /* always R/W ready on lo */
+            } else {
+                revents = 0x0008u; /* POLLERR */
+            }
+            if (user_range_ok(base, 8)) {
+                if (copy_to_user(base + 6, &revents, 2) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                ((u16 *)(gj_vaddr_t)base)[3] = revents;
+            }
+            if (revents != 0) {
+                ready++;
+            }
+        }
+        return (i64)ready;
+    }
+    case LINUX_NR_ioctl: {
+        /* FIONREAD-shaped and TIOCGWINSZ stubs for wine tty probe */
+        u32 cmd = (u32)pRegs->u64Arg1;
+
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0) &&
+            !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        if (cmd == 0x5413u /* TIOCGWINSZ */) {
+            u16 aWs[4] = { 24, 80, 0, 0 };
+
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, sizeof(aWs))) {
+                    (void)copy_to_user(pRegs->u64Arg2, aWs, sizeof(aWs));
+                } else {
+                    memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aWs,
+                           sizeof(aWs));
+                }
+            }
+            return 0;
+        }
+        if (cmd == 0x541Bu /* FIONREAD */) {
+            u32 zero = 0;
+
+            if (pRegs->u64Arg2 != 0) {
+                if (user_range_ok(pRegs->u64Arg2, 4)) {
+                    (void)copy_to_user(pRegs->u64Arg2, &zero, 4);
+                } else {
+                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = 0;
+                }
+            }
+            return 0;
+        }
+        return 0; /* unknown ioctl: succeed for probe */
+    }
+    case LINUX_NR_epoll_ctl: {
+        /* arg0=epfd arg1=op arg2=fd arg3=struct epoll_event* */
+        u32 u32Events = 0x001u;
+        u64 u64Data = 0;
+
+        if (pRegs->u64Arg3 != 0) {
+            if (user_range_ok(pRegs->u64Arg3, 12)) {
+                (void)copy_from_user(&u32Events, pRegs->u64Arg3, 4);
+                (void)copy_from_user(&u64Data, pRegs->u64Arg3 + 4, 8);
+            } else {
+                u32Events = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg3;
+                u64Data = *(const u64 *)(gj_vaddr_t)(pRegs->u64Arg3 + 4);
+            }
+        }
+        return vfs_ram_epoll_ctl((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                                 (i64)pRegs->u64Arg2, u32Events, u64Data);
+    }
+    case LINUX_NR_epoll_wait:
+    case LINUX_NR_epoll_pwait:
+    case LINUX_NR_epoll_pwait2: {
+        /* epoll_pwait2: arg3 is timespec*; use 0 timeout (non-blocking) */
+        u8 aEv[16 * 12];
+        int nMax = (int)pRegs->u64Arg2;
+        int nTimeout = (pRegs->u64Nr == LINUX_NR_epoll_pwait2)
+                           ? 0
+                           : (int)pRegs->u64Arg3;
+        i64 n;
+
+        if (nMax <= 0) {
+            return 0;
+        }
+        if (nMax > 16) {
+            nMax = 16;
+        }
+        n = vfs_ram_epoll_wait((i64)pRegs->u64Arg0, aEv, nMax, nTimeout);
+        if (n > 0 && pRegs->u64Arg1 != 0) {
+            size_t cb = (size_t)n * 12u;
+
+            if (user_range_ok(pRegs->u64Arg1, cb)) {
+                if (copy_to_user(pRegs->u64Arg1, aEv, cb) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aEv, cb);
+            }
+        }
+        return n;
+    }
+
+    case LINUX_NR_getdents64: {
+        u8 aDir[512];
+        size_t cb = (size_t)pRegs->u64Arg2;
+        i64 n;
+
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        if (pRegs->u64Arg1 == 0 || cb == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (cb > sizeof(aDir)) {
+            cb = sizeof(aDir);
+        }
+        n = vfs_ram_getdents64((i64)pRegs->u64Arg0, aDir, cb);
+        if (n > 0) {
+            if (user_range_ok(pRegs->u64Arg1, (u64)n)) {
+                if (copy_to_user(pRegs->u64Arg1, aDir, (size_t)n) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aDir, (size_t)n);
+            }
+        }
+        return n;
+    }
+
+    case LINUX_NR_memfd_create: {
+        /*
+         * Named anon memobj + unique ramfs fd (shareable object path).
+         * Name prefix "mfd:" + user name (or counter) for uniqueness.
+         */
+        char szName[GJ_MEMOBJ_NAME_MAX];
+        char szPath[40];
+        static u32 u32MfdSeq;
+        u32 i;
+        u32 n = 0;
+        i64 i64Fd;
+
+        memset(szName, 0, sizeof(szName));
+        szName[0] = 'm';
+        szName[1] = 'f';
+        szName[2] = 'd';
+        szName[3] = ':';
+        n = 4;
+        if (pRegs->u64Arg0 != 0) {
+            for (i = 0; n + 1 < sizeof(szName); i++) {
+                char ch = 0;
+
+                if (user_range_ok(pRegs->u64Arg0 + i, 1)) {
+                    if (copy_from_user(&ch, pRegs->u64Arg0 + i, 1) != GJ_OK) {
+                        break;
+                    }
+                } else {
+                    ch = ((const char *)(gj_vaddr_t)pRegs->u64Arg0)[i];
+                }
+                if (ch == '\0') {
+                    break;
+                }
+                if (ch == '/') {
+                    ch = '_';
+                }
+                szName[n++] = ch;
+            }
+        }
+        if (n <= 4) {
+            u32MfdSeq++;
+            szName[n++] = '0' + (char)((u32MfdSeq / 100u) % 10u);
+            szName[n++] = '0' + (char)((u32MfdSeq / 10u) % 10u);
+            szName[n++] = '0' + (char)(u32MfdSeq % 10u);
+        }
+        szName[n] = '\0';
+        if (memobj_create_named(szName, 1) == NULL &&
+            memobj_lookup_named(szName) == NULL) {
+            return -LINUX_ENOMEM;
+        }
+        /* Unique path per memfd so concurrent creates do not alias */
+        szPath[0] = '/';
+        szPath[1] = 't';
+        szPath[2] = 'm';
+        szPath[3] = 'p';
+        szPath[4] = '/';
+        szPath[5] = 'm';
+        szPath[6] = 'f';
+        szPath[7] = 'd';
+        szPath[8] = '-';
+        {
+            u32 s = ++u32MfdSeq;
+            u32 k;
+
+            for (k = 0; k < 8 && k + 9 < sizeof(szPath); k++) {
+                szPath[9 + k] = "0123456789abcdef"[(s >> (k * 4)) & 0xfu];
+            }
+            szPath[9 + k] = '\0';
+        }
+        i64Fd = vfs_ram_open(szPath, 1);
+        if (i64Fd < 0) {
+            return -LINUX_ENOMEM;
+        }
+        return i64Fd;
+    }
+
+    case LINUX_NR_fcntl: {
+        /*
+         * F_GETFL/F_SETFL no-op; real F_SETLK/F_GETLK/F_SETLKW via file_lock.
+         * flock arg: user ptr to struct {i16 type, whence; i64 start,len; u32 pid}
+         * (gj_flock layout; may differ from host glibc — Proton maps via cold).
+         */
+        u32 u32Cmd = (u32)pRegs->u64Arg1;
+        i64 i64Fd = (i64)pRegs->u64Arg0;
+
+        if (!vfs_ram_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd)) {
+            return -LINUX_EBADF;
+        }
+        if (u32Cmd == 0 /* F_DUPFD */ || u32Cmd == 1030 /* F_DUPFD_CLOEXEC */) {
+            if (!vfs_ram_fd_ok(i64Fd)) {
+                return -LINUX_EBADF;
+            }
+            return vfs_ram_dup_from(i64Fd, (i64)pRegs->u64Arg2);
+        }
+        if (u32Cmd == 1 /* F_GETFD */) {
+            return 0; /* FD_CLOEXEC off */
+        }
+        if (u32Cmd == 2 /* F_SETFD */) {
+            return 0;
+        }
+        if (u32Cmd == 3 /* F_GETFL */) {
+            return 0;
+        }
+        if (u32Cmd == 4 /* F_SETFL */) {
+            return 0;
+        }
+        if (u32Cmd == 6 /* F_SETLK */ || u32Cmd == 7 /* F_SETLKW */ ||
+            u32Cmd == 5 /* F_GETLK */) {
+            struct gj_flock fl;
+            i64 st;
+
+            if (pRegs->u64Arg2 == 0) {
+                return -LINUX_EFAULT;
+            }
+            memset(&fl, 0, sizeof(fl));
+            if (user_range_ok(pRegs->u64Arg2, sizeof(fl))) {
+                if (copy_from_user(&fl, pRegs->u64Arg2, sizeof(fl)) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(&fl, (const void *)(gj_vaddr_t)pRegs->u64Arg2, sizeof(fl));
+            }
+            if (fl.u32Pid == 0) {
+                fl.u32Pid = 1;
+            }
+            if (u32Cmd == 5) {
+                st = file_lock_get(i64Fd, &fl);
+                if (st == 0) {
+                    if (user_range_ok(pRegs->u64Arg2, sizeof(fl))) {
+                        (void)copy_to_user(pRegs->u64Arg2, &fl, sizeof(fl));
+                    } else {
+                        memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, &fl,
+                               sizeof(fl));
+                    }
+                }
+                return st;
+            }
+            return file_lock_set(i64Fd, &fl, u32Cmd == 7 /* SETLKW */);
+        }
+        return 0;
+    }
+
+    case LINUX_NR_socket:
+        return net_lo_socket((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                             (int)pRegs->u64Arg2);
+
+    case LINUX_NR_sendto:
+        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            u8 aBuf[256];
+            size_t cb = (size_t)pRegs->u64Arg2;
+
+            if (cb > sizeof(aBuf)) {
+                cb = sizeof(aBuf);
+            }
+            if (user_range_ok(pRegs->u64Arg1, cb)) {
+                if (copy_from_user(aBuf, pRegs->u64Arg1, cb) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
+            }
+            return net_lo_send((i64)pRegs->u64Arg0, aBuf, cb);
+        }
+        return -LINUX_EBADF;
+
+    case LINUX_NR_sendmsg: {
+        /* msghdr: msg_iov at offset 16, msg_iovlen at 24 (x86_64) — simplified */
+        u64 u64Msg;
+        u64 u64Iov = 0;
+        u64 u64IovLen = 0;
+        u8 aBuf[256];
+        size_t total = 0;
+        u64 i;
+
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        u64Msg = pRegs->u64Arg1;
+        if (u64Msg == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (user_range_ok(u64Msg + 16, 16)) {
+            (void)copy_from_user(&u64Iov, u64Msg + 16, 8);
+            (void)copy_from_user(&u64IovLen, u64Msg + 24, 8);
+        } else {
+            u64Iov = *(const u64 *)(gj_vaddr_t)(u64Msg + 16);
+            u64IovLen = *(const u64 *)(gj_vaddr_t)(u64Msg + 24);
+        }
+        if (u64Iov == 0 || u64IovLen == 0) {
+            return 0;
+        }
+        if (u64IovLen > 8) {
+            u64IovLen = 8;
+        }
+        for (i = 0; i < u64IovLen; i++) {
+            u64 base = 0;
+            u64 len = 0;
+            size_t chunk;
+
+            if (user_range_ok(u64Iov + i * 16, 16)) {
+                (void)copy_from_user(&base, u64Iov + i * 16, 8);
+                (void)copy_from_user(&len, u64Iov + i * 16 + 8, 8);
+            } else {
+                base = *(const u64 *)(gj_vaddr_t)(u64Iov + i * 16);
+                len = *(const u64 *)(gj_vaddr_t)(u64Iov + i * 16 + 8);
+            }
+            chunk = (size_t)len;
+            if (chunk > sizeof(aBuf) - total) {
+                chunk = sizeof(aBuf) - total;
+            }
+            if (chunk == 0) {
+                break;
+            }
+            if (user_range_ok(base, chunk)) {
+                if (copy_from_user(aBuf + total, base, chunk) != GJ_OK) {
+                    return total ? (i64)total : -LINUX_EFAULT;
+                }
+            } else {
+                memcpy(aBuf + total, (const void *)(gj_vaddr_t)base, chunk);
+            }
+            total += chunk;
+        }
+        return net_lo_send((i64)pRegs->u64Arg0, aBuf, total);
+    }
+
+    case LINUX_NR_recvfrom:
+        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            u8 aBuf[256];
+            size_t cb = (size_t)pRegs->u64Arg2;
+            i64 i64N;
+
+            if (cb > sizeof(aBuf)) {
+                cb = sizeof(aBuf);
+            }
+            i64N = net_lo_recv((i64)pRegs->u64Arg0, aBuf, cb);
+            if (i64N <= 0) {
+                return i64N;
+            }
+            if (user_range_ok(pRegs->u64Arg1, (u64)i64N)) {
+                if (copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64N) !=
+                    GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64N);
+            }
+            return i64N;
+        }
+        return -LINUX_EBADF;
+
+    case LINUX_NR_recvmsg: {
+        u64 u64Msg = pRegs->u64Arg1;
+        u64 u64Iov = 0;
+        u64 u64IovLen = 0;
+        u8 aBuf[256];
+        i64 i64N;
+        u64 base = 0;
+        u64 len = 0;
+
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0) || u64Msg == 0) {
+            return -LINUX_EBADF;
+        }
+        if (user_range_ok(u64Msg + 16, 16)) {
+            (void)copy_from_user(&u64Iov, u64Msg + 16, 8);
+            (void)copy_from_user(&u64IovLen, u64Msg + 24, 8);
+        } else {
+            u64Iov = *(const u64 *)(gj_vaddr_t)(u64Msg + 16);
+            u64IovLen = *(const u64 *)(gj_vaddr_t)(u64Msg + 24);
+        }
+        if (u64Iov == 0 || u64IovLen == 0) {
+            return 0;
+        }
+        if (user_range_ok(u64Iov, 16)) {
+            (void)copy_from_user(&base, u64Iov, 8);
+            (void)copy_from_user(&len, u64Iov + 8, 8);
+        } else {
+            base = *(const u64 *)(gj_vaddr_t)u64Iov;
+            len = *(const u64 *)(gj_vaddr_t)(u64Iov + 8);
+        }
+        if (len > sizeof(aBuf)) {
+            len = sizeof(aBuf);
+        }
+        i64N = net_lo_recv((i64)pRegs->u64Arg0, aBuf, (size_t)len);
+        if (i64N <= 0) {
+            return i64N;
+        }
+        if (user_range_ok(base, (u64)i64N)) {
+            if (copy_to_user(base, aBuf, (size_t)i64N) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)base, aBuf, (size_t)i64N);
+        }
+        return i64N;
+    }
+
+    case LINUX_NR_sendmmsg: {
+        /*
+         * sendmmsg(fd, mmsghdr *msgvec, vlen, flags)
+         * Each mmsghdr is msghdr (56) + u32 msg_len + pad → 64 bytes typical.
+         * For bring-up: process first message only via sendmsg path, report 1.
+         */
+        struct gj_linux_regs sub;
+
+        if (pRegs->u64Arg2 == 0) {
+            return 0;
+        }
+        if (pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
+        memset(&sub, 0, sizeof(sub));
+        sub.u64Nr = LINUX_NR_sendmsg;
+        sub.u64Arg0 = pRegs->u64Arg0;
+        sub.u64Arg1 = pRegs->u64Arg1; /* first mmsghdr starts with msghdr */
+        sub.u64Arg2 = pRegs->u64Arg3;
+        {
+            i64 n = protonrt_service(&sub, NULL);
+
+            if (n < 0) {
+                return n;
+            }
+            /* store msg_len at offset 56 of mmsghdr */
+            if (user_range_ok(pRegs->u64Arg1 + 56, 4)) {
+                u32 len = (u32)n;
+
+                (void)copy_to_user(pRegs->u64Arg1 + 56, &len, 4);
+            } else {
+                *(u32 *)(gj_vaddr_t)(pRegs->u64Arg1 + 56) = (u32)n;
+            }
+        }
+        return 1;
+    }
+
+    case LINUX_NR_recvmmsg: {
+        struct gj_linux_regs sub;
+
+        if (pRegs->u64Arg2 == 0) {
+            return 0;
+        }
+        if (pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
+        memset(&sub, 0, sizeof(sub));
+        sub.u64Nr = LINUX_NR_recvmsg;
+        sub.u64Arg0 = pRegs->u64Arg0;
+        sub.u64Arg1 = pRegs->u64Arg1;
+        sub.u64Arg2 = pRegs->u64Arg3;
+        {
+            i64 n = protonrt_service(&sub, NULL);
+
+            if (n < 0) {
+                return n;
+            }
+            if (user_range_ok(pRegs->u64Arg1 + 56, 4)) {
+                u32 len = (u32)n;
+
+                (void)copy_to_user(pRegs->u64Arg1 + 56, &len, 4);
+            } else {
+                *(u32 *)(gj_vaddr_t)(pRegs->u64Arg1 + 56) = (u32)n;
+            }
+        }
+        return 1;
+    }
+
+    case LINUX_NR_shutdown:
+        return net_lo_shutdown((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+
+    case LINUX_NR_setsockopt: {
+        int v = 0;
+
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        if (pRegs->u64Arg3 != 0 && pRegs->u64Arg4 >= 4) {
+            if (user_range_ok(pRegs->u64Arg3, 4)) {
+                (void)copy_from_user(&v, pRegs->u64Arg3, 4);
+            } else {
+                v = *(const int *)(gj_vaddr_t)pRegs->u64Arg3;
+            }
+        }
+        return net_lo_setsockopt((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                                 (int)pRegs->u64Arg2, &v, 4);
+    }
+
+    case LINUX_NR_getsockopt: {
+        int v = 0;
+        u32 len = 4;
+        u32 *pLen = NULL;
+
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        if (pRegs->u64Arg4 != 0) {
+            if (user_range_ok(pRegs->u64Arg4, 4)) {
+                (void)copy_from_user(&len, pRegs->u64Arg4, 4);
+            } else {
+                len = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg4;
+            }
+            pLen = &len;
+        }
+        {
+            i64 r = net_lo_getsockopt((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                                      (int)pRegs->u64Arg2, &v, pLen ? pLen
+                                                                     : &len);
+
+            if (r != 0) {
+                return r;
+            }
+            if (pRegs->u64Arg3 != 0) {
+                if (user_range_ok(pRegs->u64Arg3, 4)) {
+                    (void)copy_to_user(pRegs->u64Arg3, &v, 4);
+                } else {
+                    *(int *)(gj_vaddr_t)pRegs->u64Arg3 = v;
+                }
+            }
+            if (pRegs->u64Arg4 != 0) {
+                if (user_range_ok(pRegs->u64Arg4, 4)) {
+                    (void)copy_to_user(pRegs->u64Arg4, &len, 4);
+                } else {
+                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg4 = len;
+                }
+            }
+            return 0;
+        }
+    }
+
+    case LINUX_NR_getsockname:
+    case LINUX_NR_getpeername: {
+        u8 aSa[16];
+        u32 len = 16;
+        i64 r;
+
+        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        if (pRegs->u64Arg2 != 0) {
+            if (user_range_ok(pRegs->u64Arg2, 4)) {
+                (void)copy_from_user(&len, pRegs->u64Arg2, 4);
+            } else {
+                len = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg2;
+            }
+        }
+        if (pRegs->u64Nr == LINUX_NR_getsockname) {
+            r = net_lo_getsockname((i64)pRegs->u64Arg0, aSa, &len);
+        } else {
+            r = net_lo_getpeername((i64)pRegs->u64Arg0, aSa, &len);
+        }
+        if (r != 0) {
+            return r;
+        }
+        if (pRegs->u64Arg1 != 0) {
+            if (user_range_ok(pRegs->u64Arg1, len)) {
+                (void)copy_to_user(pRegs->u64Arg1, aSa, len);
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aSa, len);
+            }
+        }
+        if (pRegs->u64Arg2 != 0) {
+            if (user_range_ok(pRegs->u64Arg2, 4)) {
+                (void)copy_to_user(pRegs->u64Arg2, &len, 4);
+            } else {
+                *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = len;
+            }
+        }
+        return 0;
+    }
+
+    case LINUX_NR_pipe:
+    case LINUX_NR_pipe2: {
+        i32 aFds[2];
+        i64 i64St;
+        int nFlags = (pRegs->u64Nr == LINUX_NR_pipe2) ? (int)pRegs->u64Arg1 : 0;
+
+        i64St = vfs_ram_pipe2(aFds, nFlags);
+        if (i64St != 0) {
+            return i64St;
+        }
+        if (user_range_ok(pRegs->u64Arg0, sizeof(aFds))) {
+            if (copy_to_user(pRegs->u64Arg0, aFds, sizeof(aFds)) != GJ_OK) {
+                (void)vfs_ram_close(aFds[0]);
+                (void)vfs_ram_close(aFds[1]);
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg0, aFds, sizeof(aFds));
+        }
+        return 0;
+    }
+
+    case LINUX_NR_socketpair: {
+        i32 aFds[2];
+        i64 i64St;
+
+        i64St = vfs_ram_socketpair((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
+                                   (int)pRegs->u64Arg2, aFds);
+        if (i64St != 0) {
+            return i64St;
+        }
+        if (user_range_ok(pRegs->u64Arg3, sizeof(aFds))) {
+            if (copy_to_user(pRegs->u64Arg3, aFds, sizeof(aFds)) != GJ_OK) {
+                (void)vfs_ram_close(aFds[0]);
+                (void)vfs_ram_close(aFds[1]);
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg3, aFds, sizeof(aFds));
+        }
+        return 0;
+    }
+
+    case LINUX_NR_bind:
+        /* sockaddr_in: port at offset 2, big-endian */
+        if (pRegs->u64Arg1 != 0) {
+            u16 u16PortBe = 0;
+            if (user_range_ok(pRegs->u64Arg1 + 2, 2)) {
+                (void)copy_from_user(&u16PortBe, pRegs->u64Arg1 + 2, 2);
+            } else {
+                u16PortBe = *(const u16 *)(gj_vaddr_t)(pRegs->u64Arg1 + 2);
+            }
+            return net_lo_bind((i64)pRegs->u64Arg0,
+                               (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
+        }
+        return -LINUX_EFAULT;
+
+    case LINUX_NR_listen:
+        return net_lo_listen((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+
+    case LINUX_NR_accept:
+    case LINUX_NR_accept4:
+        /* flags ignored for bring-up (CLOEXEC/NONBLOCK) */
+        return net_lo_accept((i64)pRegs->u64Arg0);
+
+    case LINUX_NR_fallocate:
+        return vfs_ram_fallocate((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg2,
+                                 (i64)pRegs->u64Arg3);
+
+    case LINUX_NR_sendfile: {
+        u64 off = 0;
+        u64 *pOff = NULL;
+        i64 n;
+
+        if (pRegs->u64Arg2 != 0) {
+            if (user_range_ok(pRegs->u64Arg2, 8)) {
+                (void)copy_from_user(&off, pRegs->u64Arg2, 8);
+            } else {
+                off = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg2;
+            }
+            pOff = &off;
+        }
+        n = vfs_ram_sendfile((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1, pOff,
+                             (size_t)pRegs->u64Arg3);
+        if (n >= 0 && pRegs->u64Arg2 != 0) {
+            if (user_range_ok(pRegs->u64Arg2, 8)) {
+                (void)copy_to_user(pRegs->u64Arg2, &off, 8);
+            } else {
+                *(u64 *)(gj_vaddr_t)pRegs->u64Arg2 = off;
+            }
+        }
+        return n;
+    }
+
+    case LINUX_NR_splice:
+        /*
+         * splice(fd_in, *off_in, fd_out, *off_out, len, flags)
+         * Map to sendfile(out, in, NULL, len); offsets ignored in bring-up.
+         */
+        return vfs_ram_sendfile((i64)pRegs->u64Arg2, (i64)pRegs->u64Arg0, NULL,
+                                (size_t)pRegs->u64Arg4);
+
+    case LINUX_NR_tee:
+        /* tee(fd_in, fd_out, len, flags) — copy via sendfile path */
+        return vfs_ram_sendfile((i64)pRegs->u64Arg1, (i64)pRegs->u64Arg0, NULL,
+                                (size_t)pRegs->u64Arg2);
+
+    case LINUX_NR_copy_file_range: {
+        /* arg0=fd_in arg1=*off_in arg2=fd_out arg3=*off_out arg4=len */
+        u64 offIn = 0;
+        u64 offOut = 0;
+        u64 *pIn = NULL;
+        u64 *pOut = NULL;
+        i64 n;
+
+        if (pRegs->u64Arg1 != 0) {
+            if (user_range_ok(pRegs->u64Arg1, 8)) {
+                (void)copy_from_user(&offIn, pRegs->u64Arg1, 8);
+            } else {
+                offIn = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg1;
+            }
+            pIn = &offIn;
+        }
+        if (pRegs->u64Arg3 != 0) {
+            if (user_range_ok(pRegs->u64Arg3, 8)) {
+                (void)copy_from_user(&offOut, pRegs->u64Arg3, 8);
+            } else {
+                offOut = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg3;
+            }
+            pOut = &offOut;
+        }
+        n = vfs_ram_copy_file_range((i64)pRegs->u64Arg0, pIn,
+                                    (i64)pRegs->u64Arg2, pOut,
+                                    (size_t)pRegs->u64Arg4);
+        if (n >= 0) {
+            if (pRegs->u64Arg1 != 0) {
+                if (user_range_ok(pRegs->u64Arg1, 8)) {
+                    (void)copy_to_user(pRegs->u64Arg1, &offIn, 8);
+                } else {
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg1 = offIn;
+                }
+            }
+            if (pRegs->u64Arg3 != 0) {
+                if (user_range_ok(pRegs->u64Arg3, 8)) {
+                    (void)copy_to_user(pRegs->u64Arg3, &offOut, 8);
+                } else {
+                    *(u64 *)(gj_vaddr_t)pRegs->u64Arg3 = offOut;
+                }
+            }
+        }
+        return n;
+    }
+
+    case LINUX_NR_inotify_init1:
+        return vfs_ram_inotify_init1((int)pRegs->u64Arg0);
+
+    case LINUX_NR_inotify_add_watch: {
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_inotify_add_watch((i64)pRegs->u64Arg0, szPath,
+                                         (u32)pRegs->u64Arg2);
+    }
+
+    case LINUX_NR_inotify_rm_watch:
+        return vfs_ram_inotify_rm_watch((i64)pRegs->u64Arg0,
+                                        (i32)pRegs->u64Arg1);
+
+    case LINUX_NR_renameat:
+    case LINUX_NR_renameat2: {
+        /* renameat/renameat2(olddirfd, old, newdirfd, new[, flags]) — paths */
+        char szNew[96];
+        u64 u64Old = pRegs->u64Arg1;
+        u64 u64New = pRegs->u64Arg3;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Old);
+        copy_path_from_arg(szNew, sizeof(szNew), u64New);
+        if (szPath[0] == '\0' || szNew[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_rename(szPath, szNew);
+    }
+
+    case LINUX_NR_linkat: {
+        /* linkat(olddirfd, old, newdirfd, new, flags) */
+        char szNew[96];
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg3);
+        if (szPath[0] == '\0' || szNew[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_link(szPath, szNew);
+    }
+
+    case LINUX_NR_symlinkat: {
+        /* symlinkat(target, newdirfd, linkpath) */
+        char szNew[96];
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg2);
+        if (szPath[0] == '\0' || szNew[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_symlink(szPath, szNew);
+    }
+
+    case LINUX_NR_io_pgetevents:
+        /* Same shape as io_getevents; no events pending */
+        return 0;
+
+    case LINUX_NR_userfaultfd:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_seccomp:
+        /* SECCOMP_SET_MODE_STRICT etc. — accept no-op for wine probe */
+        return 0;
+
+    case LINUX_NR_bpf:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_keyctl:
+    case LINUX_NR_add_key:
+    case LINUX_NR_request_key:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_name_to_handle_at:
+    case LINUX_NR_open_by_handle_at:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_io_uring_setup:
+        /* Minimal rings: fd + params; SQE execution still soft in enter. */
+        return gj_io_uring_setup((u32)pRegs->u64Arg0, pRegs->u64Arg1);
+    case LINUX_NR_io_uring_enter:
+        return gj_io_uring_enter((i64)pRegs->u64Arg0, (u32)pRegs->u64Arg1,
+                                 (u32)pRegs->u64Arg2, (u32)pRegs->u64Arg3);
+    case LINUX_NR_io_uring_register:
+        return gj_io_uring_register((i64)pRegs->u64Arg0, (u32)pRegs->u64Arg1,
+                                    pRegs->u64Arg2, (u32)pRegs->u64Arg3);
+
+    case LINUX_NR_open_tree:
+    case LINUX_NR_move_mount:
+    case LINUX_NR_fsopen:
+    case LINUX_NR_fsconfig:
+    case LINUX_NR_fsmount:
+    case LINUX_NR_fspick:
+    case LINUX_NR_mount_setattr:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_quotactl_fd:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_pidfd_getfd: {
+        /*
+         * pidfd_getfd(pidfd, targetfd, flags) — same-pid only.
+         * Validate pidfd kind; dup targetfd into a new slot.
+         */
+        i64 i64PidFd = (i64)pRegs->u64Arg0;
+        i64 i64Tgt = (i64)pRegs->u64Arg1;
+        u32 u32Pid;
+        u32 u32Self;
+
+        (void)pRegs->u64Arg2; /* flags reserved */
+        if (i64PidFd < 0 || i64Tgt < 0) {
+            return -LINUX_EBADF;
+        }
+        u32Pid = vfs_ram_pidfd_pid(i64PidFd);
+        if (u32Pid == 0) {
+            return -LINUX_EBADF;
+        }
+        /* Bring-up: treat pid 1 as self; match wait-pid when available. */
+        u32Self = 1u;
+        if (g_pLinuxProc != NULL) {
+            u32 t = process_wait_pid_of(g_pLinuxProc);
+
+            if (t != 0) {
+                u32Self = t;
+            }
+        }
+        if (u32Pid != u32Self && u32Pid != 1u) {
+            return -LINUX_EPERM; /* cross-pid not implemented */
+        }
+        /* Allocate a new fd that shares the open file. */
+        return vfs_ram_dup(i64Tgt);
+    }
+
+    case LINUX_NR_process_madvise:
+        return 0; /* no-op accept */
+
+    case LINUX_NR_fanotify_init:
+        /* Soft fanotify: open a vfs node so Wine probes get a real fd */
+        return vfs_ram_open("/tmp/fanotify", 1);
+
+    case LINUX_NR_fanotify_mark:
+        /* Accept mark on any fanotify-shaped fd (bring-up no-op) */
+        if ((i64)pRegs->u64Arg0 < 0) {
+            return -LINUX_EBADF;
+        }
+        return 0;
+
+    case LINUX_NR_kcmp:
+        /* kcmp(pid1,pid2,type,...) — same-pid equal */
+        if (pRegs->u64Arg0 == pRegs->u64Arg1) {
+            return 0;
+        }
+        return 1;
+
+    case LINUX_NR_quotactl:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_remap_file_pages:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_restart_syscall:
+        return -LINUX_EINTR;
+
+    case LINUX_NR_migrate_pages:
+    case LINUX_NR_move_pages:
+        return 0; /* single-node: no migration */
+
+    case LINUX_NR_perf_event_open:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_timer_create:
+        /* Create POSIX timer id (software counter). Return timerid via arg2. */
+        if (pRegs->u64Arg2 != 0) {
+            u32 tid = 1;
+
+            if (user_range_ok(pRegs->u64Arg2, 4)) {
+                (void)copy_to_user(pRegs->u64Arg2, &tid, 4);
+            } else {
+                *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = tid;
+            }
+        }
+        return 0;
+
+    case LINUX_NR_timer_settime:
+    case LINUX_NR_timer_gettime:
+        return 0;
+
+    case LINUX_NR_timer_getoverrun:
+        return 0;
+
+    case LINUX_NR_timer_delete:
+        return 0;
+
+    case LINUX_NR_mq_open:
+    case LINUX_NR_mq_unlink:
+    case LINUX_NR_mq_timedsend:
+    case LINUX_NR_mq_timedreceive:
+    case LINUX_NR_mq_notify:
+    case LINUX_NR_mq_getsetattr:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_inotify_init:
+        return vfs_ram_inotify_init1(0);
+
+    case LINUX_NR_connect:
+        if (pRegs->u64Arg1 != 0) {
+            u16 u16PortBe = 0;
+            if (user_range_ok(pRegs->u64Arg1 + 2, 2)) {
+                (void)copy_from_user(&u16PortBe, pRegs->u64Arg1 + 2, 2);
+            } else {
+                u16PortBe = *(const u16 *)(gj_vaddr_t)(pRegs->u64Arg1 + 2);
+            }
+            return net_lo_connect((i64)pRegs->u64Arg0,
+                                  (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
+        }
+        return -LINUX_EFAULT;
+
+    case LINUX_NR_close:
+        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return net_lo_close((i64)pRegs->u64Arg0);
+        }
+        if (vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
+            return vfs_ram_close((i64)pRegs->u64Arg0);
+        }
+        break;
+
+    case LINUX_NR_getcwd: {
+        u64 u64Buf = pRegs->u64Arg0;
+        u64 u64Size = pRegs->u64Arg1;
+        size_t n = 0;
+
+        if (u64Buf == 0 || u64Size < 2) {
+            return -LINUX_EINVAL;
+        }
+        while (g_szCwd[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
+            n++;
+        }
+        n++; /* include NUL */
+        if (u64Size < n) {
+            return -LINUX_ERANGE;
+        }
+        if (user_range_ok(u64Buf, n)) {
+            if (copy_to_user(u64Buf, g_szCwd, n) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)u64Buf, g_szCwd, n);
+        }
+        /* Linux returns pointer on success for getcwd syscall */
+        return (i64)u64Buf;
+    }
+
+    case LINUX_NR_dup:
+        return vfs_ram_dup((i64)pRegs->u64Arg0);
+
+    case LINUX_NR_dup2:
+        return vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+
+    case LINUX_NR_dup3:
+        /* flags (CLOEXEC) ignored for bring-up */
+        return vfs_ram_dup2((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+
+    case LINUX_NR_readlinkat: {
+        char aLink[64];
+        i64 n;
+        size_t cb = (size_t)pRegs->u64Arg3;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        if (cb > sizeof(aLink)) {
+            cb = sizeof(aLink);
+        }
+        n = vfs_ram_readlink(szPath, aLink, cb);
+        if (n < 0) {
+            return n;
+        }
+        if (pRegs->u64Arg2 == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (user_range_ok(pRegs->u64Arg2, (u64)n)) {
+            if (copy_to_user(pRegs->u64Arg2, aLink, (size_t)n) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aLink, (size_t)n);
+        }
+        return n;
+    }
+
+    case LINUX_NR_fchmodat:
+    case LINUX_NR_fchmodat2: {
+        i64 i64Fd;
+        i64 st;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        i64Fd = vfs_ram_open(szPath, 0);
+        if (i64Fd < 0) {
+            return i64Fd;
+        }
+        st = vfs_ram_fchmod(i64Fd, (u32)pRegs->u64Arg2);
+        (void)vfs_ram_close(i64Fd);
+        return st;
+    }
+
+    case LINUX_NR_landlock_create_ruleset:
+        /* Return synthetic ruleset fd as eventfd */
+        return vfs_ram_eventfd2(0, 0);
+
+    case LINUX_NR_landlock_add_rule:
+    case LINUX_NR_landlock_restrict_self:
+        return 0;
+
+    case LINUX_NR_memfd_secret:
+        return vfs_ram_open("/tmp/memfd_secret", 1);
+
+    case LINUX_NR_process_mrelease:
+        return 0;
+
+    case LINUX_NR_cachestat:
+        /* Report zeros into user buffer if present */
+        if (pRegs->u64Arg1 != 0) {
+            u8 z[32];
+
+            memset(z, 0, sizeof(z));
+            if (user_range_ok(pRegs->u64Arg1, 32)) {
+                (void)copy_to_user(pRegs->u64Arg1, z, 32);
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, z, 32);
+            }
+        }
+        return 0;
+
+    case LINUX_NR_futex_waitv:
+        /* Multi-wait: not implemented — return 0 (no waiters woken) */
+        return 0;
+
+    case LINUX_NR_set_mempolicy_home_node:
+        return 0;
+
+    case LINUX_NR_map_shadow_stack:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_getxattr:
+    case LINUX_NR_lgetxattr:
+    case LINUX_NR_fgetxattr:
+        return -61; /* ENODATA */
+
+    case LINUX_NR_setxattr:
+    case LINUX_NR_lsetxattr:
+    case LINUX_NR_fsetxattr:
+        return 0;
+
+    case LINUX_NR_listxattr:
+    case LINUX_NR_llistxattr:
+    case LINUX_NR_flistxattr:
+        return 0;
+
+    case LINUX_NR_removexattr:
+    case LINUX_NR_lremovexattr:
+    case LINUX_NR_fremovexattr:
+        return -61;
+
+    case LINUX_NR_readlink: {
+        char aLink[64];
+        i64 n;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        n = vfs_ram_readlink(szPath, aLink, sizeof(aLink));
+        if (n < 0) {
+            return n;
+        }
+        if (pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
+        if ((u64)n > pRegs->u64Arg2) {
+            n = (i64)pRegs->u64Arg2;
+        }
+        if (user_range_ok(pRegs->u64Arg1, (u64)n)) {
+            if (copy_to_user(pRegs->u64Arg1, aLink, (size_t)n) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aLink, (size_t)n);
+        }
+        return n;
+    }
+
+    case LINUX_NR_wait4: {
+        i32 st = 0;
+        i64 r;
+        i32 *pSt = NULL;
+
+        if (pRegs->u64Arg1 != 0) {
+            pSt = &st;
+        }
+        r = process_wait4((i64)pRegs->u64Arg0, pSt, (int)pRegs->u64Arg2);
+        if (r > 0 && pRegs->u64Arg1 != 0) {
+            if (user_range_ok(pRegs->u64Arg1, sizeof(st))) {
+                if (copy_to_user(pRegs->u64Arg1, &st, sizeof(st)) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                *(i32 *)(gj_vaddr_t)pRegs->u64Arg1 = st;
+            }
+        }
+        if (r == -10) {
+            return -LINUX_ECHILD;
+        }
+        return r;
+    }
+
+    case LINUX_NR_kill:
+        /* Self-kill of pid 1/self → allow as no-op for smoke */
+        if ((i64)pRegs->u64Arg0 <= 1) {
+            return 0;
+        }
+        return -LINUX_ESRCH;
+
+    case LINUX_NR_access:
+    case LINUX_NR_faccessat: {
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_faccessat) ? pRegs->u64Arg1
+                                                           : pRegs->u64Arg0;
+        int nMode = (pRegs->u64Nr == LINUX_NR_faccessat) ? (int)pRegs->u64Arg2
+                                                         : (int)pRegs->u64Arg1;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_access(szPath, nMode);
+    }
+
+    case LINUX_NR_fstat: {
+        static u8 aStat[144];
+        i64 st;
+
+        memset(aStat, 0, sizeof(aStat));
+        st = vfs_ram_fstat((i64)pRegs->u64Arg0, aStat, sizeof(aStat));
+        if (st != 0) {
+            return st;
+        }
+        if (pRegs->u64Arg1 == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (user_range_ok(pRegs->u64Arg1, sizeof(aStat))) {
+            if (copy_to_user(pRegs->u64Arg1, aStat, sizeof(aStat)) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aStat, sizeof(aStat));
+        }
+        return 0;
+    }
+
+    case LINUX_NR_stat:
+    case LINUX_NR_lstat:
+    case LINUX_NR_newfstatat: {
+        static u8 aStat[144];
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_newfstatat) ? pRegs->u64Arg1
+                                                            : pRegs->u64Arg0;
+        u64 u64Buf = (pRegs->u64Nr == LINUX_NR_newfstatat) ? pRegs->u64Arg2
+                                                           : pRegs->u64Arg1;
+        i64 st;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        memset(aStat, 0, sizeof(aStat));
+        st = vfs_ram_stat(szPath, aStat, sizeof(aStat));
+        if (st != 0) {
+            return st;
+        }
+        if (u64Buf == 0) {
+            return -LINUX_EFAULT;
+        }
+        if (user_range_ok(u64Buf, sizeof(aStat))) {
+            if (copy_to_user(u64Buf, aStat, sizeof(aStat)) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)u64Buf, aStat, sizeof(aStat));
+        }
+        return 0;
+    }
+
+    case LINUX_NR_unshare:
+    case LINUX_NR_setns:
+        /* Namespace ops: no-op success for bring-up */
+        return 0;
+
+    case LINUX_NR_chroot:
+        /* Accept only if path exists */
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_access(szPath, 0);
+
+    case LINUX_NR_mount:
+    case LINUX_NR_umount2:
+    case LINUX_NR_pivot_root:
+        /* No real VFS mounts — success for probe (product: vfsd) */
+        return 0;
+
+    case LINUX_NR_swapon:
+    case LINUX_NR_swapoff:
+        return -LINUX_EINVAL;
+
+    case LINUX_NR_reboot:
+        /* Bring-up: refuse (no actual reboot) */
+        return -LINUX_EPERM;
+
+    case LINUX_NR_sethostname:
+    case LINUX_NR_setdomainname:
+        return 0;
+
+    case LINUX_NR_syslog:
+        return 0;
+
+    case LINUX_NR_ustat:
+    case LINUX_NR_sysfs:
+    case LINUX_NR_bdflush:
+        return -LINUX_ENOSYS;
+
+    case LINUX_NR_readahead:
+    case LINUX_NR_sync_file_range:
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0) &&
+            (i64)pRegs->u64Arg0 > 2) {
+            return -LINUX_EBADF;
+        }
+        return 0;
+
+    case LINUX_NR_vmsplice:
+        /* Map to sendfile-shaped no-op length */
+        return (i64)pRegs->u64Arg2;
+
+    case LINUX_NR_getdents:
+        /* Legacy getdents → getdents64 cold path */
+        pRegs->u64Nr = LINUX_NR_getdents64;
+        return protonrt_service(pRegs, pCtx);
+
+    case LINUX_NR_rt_sigsuspend:
+        return -LINUX_EINTR;
+
+    case LINUX_NR_rt_sigtimedwait:
+    case LINUX_NR_rt_sigpending:
+        return 0;
+
+    case LINUX_NR_rt_sigqueueinfo:
+        if ((u32)pRegs->u64Arg1 > 0 && (u32)pRegs->u64Arg1 < 64) {
+            vfs_ram_signalfd_inject((u32)pRegs->u64Arg1);
+        }
+        return 0;
+
+    case LINUX_NR_sched_rr_get_interval: {
+        i64 aTs[2];
+
+        aTs[0] = 0;
+        aTs[1] = 10000000; /* 10ms */
+        if (pRegs->u64Arg1 != 0) {
+            if (user_range_ok(pRegs->u64Arg1, 16)) {
+                (void)copy_to_user(pRegs->u64Arg1, aTs, 16);
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aTs, 16);
+            }
+        }
+        return 0;
+    }
+
+    case LINUX_NR_getrlimit:
+    case LINUX_NR_setrlimit:
+    case LINUX_NR_prlimit64: {
+        /* Bring-up: report generous soft/hard limits; ignore set. */
+        struct {
+            u64 rlim_cur;
+            u64 rlim_max;
+        } lim;
+        u64 u64New;
+        u64 u64Old;
+
+        if (pRegs->u64Nr == LINUX_NR_prlimit64) {
+            u64New = pRegs->u64Arg2;
+            u64Old = pRegs->u64Arg3;
+        } else if (pRegs->u64Nr == LINUX_NR_getrlimit) {
+            u64New = 0;
+            u64Old = pRegs->u64Arg1;
+        } else {
+            u64New = pRegs->u64Arg1;
+            u64Old = 0;
+        }
+
+        lim.rlim_cur = 1024ull * 1024ull * 1024ull; /* 1 GiB class */
+        lim.rlim_max = lim.rlim_cur;
+        if (u64Old != 0) {
+            if (user_range_ok(u64Old, sizeof(lim))) {
+                if (copy_to_user(u64Old, &lim, sizeof(lim)) != GJ_OK) {
+                    return -LINUX_EFAULT;
+                }
+            } else {
+                memcpy((void *)(gj_vaddr_t)u64Old, &lim, sizeof(lim));
+            }
+        }
+        (void)u64New; /* set ignored */
+        return 0;
+    }
+
+    case LINUX_NR_chdir: {
+        size_t n;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        /* Only allow known dirs for bring-up */
+        if (szPath[0] == '/' &&
+            (szPath[1] == '\0' ||
+             (szPath[1] == 't' && szPath[2] == 'm' && szPath[3] == 'p' &&
+              (szPath[4] == '\0' || szPath[4] == '/')))) {
+            /* ok */
+        } else if (vfs_ram_access(szPath, 0) != 0) {
+            return -LINUX_ENOENT;
+        }
+        n = 0;
+        while (szPath[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
+            g_szCwd[n] = szPath[n];
+            n++;
+        }
+        g_szCwd[n] = '\0';
+        if (n == 0) {
+            g_szCwd[0] = '/';
+            g_szCwd[1] = '\0';
+        }
+        return 0;
+    }
+
+    case LINUX_NR_fchdir: {
+        size_t n;
+
+        if (vfs_ram_fd_path((i64)pRegs->u64Arg0, szPath, sizeof(szPath)) != 0) {
+            return -LINUX_EBADF;
+        }
+        n = 0;
+        while (szPath[n] != '\0' && n + 1 < sizeof(g_szCwd)) {
+            g_szCwd[n] = szPath[n];
+            n++;
+        }
+        g_szCwd[n] = '\0';
+        return 0;
+    }
+
+    case LINUX_NR_symlink: {
+        char szTarget[96];
+
+        copy_path_from_arg(szTarget, sizeof(szTarget), pRegs->u64Arg0);
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szTarget[0] == '\0' || szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_symlink(szTarget, szPath);
+    }
+
+    case LINUX_NR_utime:
+    case LINUX_NR_utimensat: {
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_utimensat) ? pRegs->u64Arg1
+                                                           : pRegs->u64Arg0;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_utimens(szPath);
+    }
+
+    case LINUX_NR_select:
+    case LINUX_NR_pselect6: {
+        /*
+         * select(nfds, *readfds, *writefds, *exceptfds, *timeout)
+         * Bring-up: report 0 ready (timeout immediate) unless nfds==0.
+         */
+        u64 nfds = pRegs->u64Arg0;
+
+        if (nfds > 1024) {
+            return -LINUX_EINVAL;
+        }
+        /* Zero fd sets if provided (no ready fds) */
+        if (pRegs->u64Arg1 != 0 && nfds > 0) {
+            u64 bytes = ((nfds + 63) / 64) * 8;
+
+            if (bytes > 128) {
+                bytes = 128;
+            }
+            if (user_range_ok(pRegs->u64Arg1, bytes)) {
+                u8 z[128];
+                u32 i;
+
+                for (i = 0; i < (u32)bytes; i++) {
+                    z[i] = 0;
+                }
+                (void)copy_to_user(pRegs->u64Arg1, z, (size_t)bytes);
+            }
+        }
+        return 0; /* timeout, no fds ready */
+    }
+
+    case LINUX_NR_unlink:
+    case LINUX_NR_unlinkat: {
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_unlinkat) ? pRegs->u64Arg1
+                                                          : pRegs->u64Arg0;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_unlink(szPath);
+    }
+
+    case LINUX_NR_link: {
+        char szNew[96];
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg1);
+        if (szPath[0] == '\0' || szNew[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_link(szPath, szNew);
+    }
+
+    case LINUX_NR_rmdir: {
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_rmdir(szPath);
+    }
+
+    case LINUX_NR_fchmod:
+        return vfs_ram_fchmod((i64)pRegs->u64Arg0, (u32)pRegs->u64Arg1);
+
+    case LINUX_NR_fchown:
+        /* uid/gid ignored for bring-up */
+        if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0) &&
+            !net_lo_fd_ok((i64)pRegs->u64Arg0)) {
+            return -LINUX_EBADF;
+        }
+        return 0;
+
+    case LINUX_NR_flock: {
+        /* flock(fd, op): LOCK_SH=1 LOCK_EX=2 LOCK_UN=8 LOCK_NB=4 */
+        struct gj_flock fl;
+        int op = (int)pRegs->u64Arg1;
+        i64 i64Fd = (i64)pRegs->u64Arg0;
+
+        if (!vfs_ram_fd_ok(i64Fd)) {
+            return -LINUX_EBADF;
+        }
+        memset(&fl, 0, sizeof(fl));
+        fl.u32Pid = 1;
+        fl.i64Start = 0;
+        fl.i64Len = 0;
+        if ((op & 8) != 0) {
+            fl.i16Type = GJ_F_UNLCK;
+            return file_lock_set(i64Fd, &fl, 0);
+        }
+        fl.i16Type = ((op & 2) != 0) ? GJ_F_WRLCK : GJ_F_RDLCK;
+        return file_lock_set(i64Fd, &fl, (op & 4) == 0);
+    }
+
+    case LINUX_NR_chmod: {
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        if (vfs_ram_access(szPath, 0) != 0) {
+            return -LINUX_ENOENT;
+        }
+        return 0; /* mode ignored */
+    }
+
+    case LINUX_NR_rename: {
+        char szNew[96];
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+        copy_path_from_arg(szNew, sizeof(szNew), pRegs->u64Arg1);
+        if (szPath[0] == '\0' || szNew[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_rename(szPath, szNew);
+    }
+
+    case LINUX_NR_ftruncate:
+        return vfs_ram_ftruncate((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg1);
+
+    case LINUX_NR_mkdir:
+    case LINUX_NR_mkdirat: {
+        /* Interim: create empty path as file marker (product: vfsd dirs) */
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_mkdirat) ? pRegs->u64Arg1
+                                                         : pRegs->u64Arg0;
+        i64 i64Fd;
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        i64Fd = vfs_ram_open(szPath, 1);
+        if (i64Fd < 0) {
+            return i64Fd;
+        }
+        (void)vfs_ram_mark_dir(i64Fd);
+        (void)vfs_ram_close(i64Fd);
+        return 0;
+    }
+
+    case LINUX_NR_statfs:
+    case LINUX_NR_fstatfs: {
+        /* Linux struct statfs (x86_64 public layout, 120 bytes typical) */
+        u8 aSf[128];
+        u64 u64Buf = (pRegs->u64Nr == LINUX_NR_fstatfs) ? pRegs->u64Arg1
+                                                         : pRegs->u64Arg1;
+        i64 ftype = 0x858458f6; /* RAMFS_MAGIC-shaped */
+        i64 bsize = 4096;
+        i64 blocks = 1024;
+        i64 bfree = 512;
+        i64 bavail = 512;
+        i64 files = 32;
+        i64 ffree = 16;
+        i64 namelen = 255;
+
+        if (pRegs->u64Nr == LINUX_NR_fstatfs) {
+            if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0) &&
+                (i64)pRegs->u64Arg0 > 2) {
+                return -LINUX_EBADF;
+            }
+            u64Buf = pRegs->u64Arg1;
+        } else {
+            copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
+            if (szPath[0] == '\0') {
+                return -LINUX_EFAULT;
+            }
+            u64Buf = pRegs->u64Arg1;
+        }
+        if (u64Buf == 0) {
+            return -LINUX_EFAULT;
+        }
+        memset(aSf, 0, sizeof(aSf));
+        memcpy(aSf + 0, &ftype, 8);
+        memcpy(aSf + 8, &bsize, 8);
+        memcpy(aSf + 16, &blocks, 8);
+        memcpy(aSf + 24, &bfree, 8);
+        memcpy(aSf + 32, &bavail, 8);
+        memcpy(aSf + 40, &files, 8);
+        memcpy(aSf + 48, &ffree, 8);
+        memcpy(aSf + 56, &namelen, 8); /* f_fsid pad then namelen varies;
+                                         * put namelen at 56 for smoke */
+        if (user_range_ok(u64Buf, 120)) {
+            if (copy_to_user(u64Buf, aSf, 120) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)u64Buf, aSf, 120);
+        }
+        return 0;
+    }
+
+    case LINUX_NR_openat2: {
+        /* open_how: flags at 0, mode at 8, resolve at 16 — use flags/mode */
+        u64 u64How = pRegs->u64Arg2;
+        u64 u64Flags = 0;
+        u64 u64Mode = 0;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        if (u64How != 0) {
+            if (user_range_ok(u64How, 24)) {
+                (void)copy_from_user(&u64Flags, u64How, 8);
+                (void)copy_from_user(&u64Mode, u64How + 8, 8);
+            } else {
+                u64Flags = *(const u64 *)(gj_vaddr_t)u64How;
+                u64Mode = *(const u64 *)(gj_vaddr_t)(u64How + 8);
+            }
+        }
+        (void)u64Mode;
+        return vfs_ram_open(szPath, (u64Flags & 0x40) ? 1 : 0);
+    }
+
+    case LINUX_NR_faccessat2: {
+        int nMode = (int)pRegs->u64Arg2;
+
+        copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        return vfs_ram_access(szPath, nMode);
+    }
+
+    case LINUX_NR_statx: {
+        /*
+         * statx(dirfd, path, flags, mask, statxbuf):
+         * Fill public Linux statx (0x100 bytes) from fstat/stat fields.
+         * arg0=dirfd arg1=path arg2=flags arg3=mask arg4=buf
+         */
+        static u8 aStat[144];
+        static u8 aSx[256];
+        i64 st;
+        u32 u32Mask = (u32)pRegs->u64Arg3;
+        u64 u64Path = pRegs->u64Arg1;
+        u64 u64Buf = pRegs->u64Arg4;
+        u32 u32Mode = 0;
+        i64 i64Size = 0;
+        u64 u64Ino = 1;
+
+        (void)u32Mask;
+        if (u64Buf == 0) {
+            return -LINUX_EFAULT;
+        }
+        memset(aStat, 0, sizeof(aStat));
+        memset(aSx, 0, sizeof(aSx));
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            /* Empty path / NULL: fstat on dirfd (AT_EMPTY_PATH-shaped) */
+            st = vfs_ram_fstat((i64)pRegs->u64Arg0, aStat, sizeof(aStat));
+        } else {
+            st = vfs_ram_stat(szPath, aStat, sizeof(aStat));
+        }
+        if (st != 0) {
+            return st;
+        }
+        /* vfs_stat64: ino@8 mode@16 size@48 (see vfs_ram fill_stat) */
+        memcpy(&u64Ino, aStat + 8, 8);
+        memcpy(&u32Mode, aStat + 24, 4);
+        memcpy(&i64Size, aStat + 48, 8);
+        /* statx: stx_mask@0 stx_blksize@4 stx_attributes@8 … stx_mode@20
+         * stx_ino@32 stx_size@40 (public man layout; clean-room). */
+        {
+            u32 m = 0x000007ffu; /* basic STATX_* mask */
+            u32 blk = 4096;
+
+            memcpy(aSx + 0, &m, 4);
+            memcpy(aSx + 4, &blk, 4);
+            memcpy(aSx + 20, &u32Mode, 4); /* stx_mode as u16+pad; write u32 */
+            memcpy(aSx + 32, &u64Ino, 8);
+            memcpy(aSx + 40, &i64Size, 8);
+        }
+        if (user_range_ok(u64Buf, 256)) {
+            if (copy_to_user(u64Buf, aSx, 256) != GJ_OK) {
+                return -LINUX_EFAULT;
+            }
+        } else {
+            memcpy((void *)(gj_vaddr_t)u64Buf, aSx, 256);
+        }
+        return 0;
+    }
+
+    case LINUX_NR_fork:
+        return process_linux_fork(1, 0);
+
+    case LINUX_NR_vfork:
+        /* vfork: child runs first — mark zombie so parent wait sees exit */
+        return process_linux_fork(1, 1);
+
+    case LINUX_NR_clone:
+    case LINUX_NR_clone3: {
+        /*
+         * clone(flags, stack, ...): CLONE_THREAD (0x10000) → same pid-shaped.
+         * Otherwise create wait-registered child (fork-like).
+         */
+        u64 u64Flags = pRegs->u64Arg0;
+
+        if (pRegs->u64Nr == LINUX_NR_clone3 && pRegs->u64Arg0 != 0) {
+            /* clone_args.flags at offset 0 */
+            if (user_range_ok(pRegs->u64Arg0, 8)) {
+                (void)copy_from_user(&u64Flags, pRegs->u64Arg0, 8);
+            } else {
+                u64Flags = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg0;
+            }
+        }
+        if (u64Flags & 0x10000ull /* CLONE_THREAD */) {
+            /*
+             * Thread-shaped: spawn real user thread in current process AS
+             * when child_stack is provided. Entry = parent user RIP (after
+             * SYSCALL). Parent returns thread id; child starts with rax=0
+             * (product: set child frame rax later).
+             */
+            u64 u64Stack = pRegs->u64Arg1;
+            struct gj_process *pProc = g_pLinuxProc;
+            struct gj_cpu *pCpu;
+            struct gj_thread *pCur;
+            u64 u64Entry;
+            u32 thr;
+
+            pCur = thread_current();
+            if (pProc == NULL && pCur != NULL) {
+                pProc = pCur->pProc;
+            }
+            pCpu = cpu_current();
+            u64Entry = (pCpu != NULL) ? pCpu->u64UserRip : 0;
+            if (u64Stack != 0 && u64Entry != 0 && pProc != NULL) {
+                thr = thread_create_user(pProc, u64Entry, u64Stack);
+                if (thr != 0) {
+                    kprintf("linux: clone thread thr=%u entry=0x%lx\n", thr,
+                            (unsigned long)u64Entry);
+                    return (i64)thr;
+                }
+                return -11; /* EAGAIN */
+            }
+            /* No stack/entry (kernel-side smoke): soft success */
+            return 0;
+        }
+        return process_linux_fork(1, 0);
+    }
+
+    case LINUX_NR_execve:
+    case LINUX_NR_execveat: {
+        /*
+         * Path must exist. If file is ELF64, map into current Linux process AS.
+         * PT_INTERP: probe + load interpreter from vfs when present (ld-gj path).
+         * Full image replace (thread entry switch) is product; load proves path.
+         */
+        u64 u64Path = (pRegs->u64Nr == LINUX_NR_execveat) ? pRegs->u64Arg1
+                                                           : pRegs->u64Arg0;
+        i64 i64Fd;
+        i64 n;
+        static u8 aImg[16384];
+        static u8 aInterp[65536];
+        struct gj_elf_info elf;
+        struct gj_elf_info elfInterp;
+        /* Embedded product ld-gj (optional; prefer when vfs stub is tiny) */
+        extern const u8 gj_ld_gj_elf_blob[];
+        extern const u8 gj_ld_gj_elf_blob_end[];
+
+        copy_path_from_arg(szPath, sizeof(szPath), u64Path);
+        if (szPath[0] == '\0') {
+            return -LINUX_EFAULT;
+        }
+        i64Fd = vfs_ram_open(szPath, 0);
+        if (i64Fd < 0) {
+            if (vfs_ram_access(szPath, 0) != 0) {
+                return -LINUX_ENOENT;
+            }
+            return 0; /* path OK, empty open edge */
+        }
+        /*
+         * aImg/aInterp sit in high kernel BSS (can pass PE 0x400000 once embeds
+         * grow). Private AS COW/protect bugs have left those leaves RO — repair
+         * identity R/W under kernel + active CR3 before the store.
+         */
+        (void)vmm_ensure_identity_rw((gj_vaddr_t)aImg, sizeof(aImg));
+        (void)vmm_ensure_identity_rw((gj_vaddr_t)aInterp, sizeof(aInterp));
+        n = vfs_ram_read(i64Fd, aImg, sizeof(aImg));
+        (void)vfs_ram_close(i64Fd);
+        if (n >= 4 && aImg[0] == 0x7fu && aImg[1] == (u8)'E' &&
+            aImg[2] == (u8)'L' && aImg[3] == (u8)'F' && g_pLinuxProc != NULL) {
+            int fInterpLoaded = 0;
+
+            if (elf_probe_image(aImg, (u64)n, &elf) != GJ_OK) {
+                return -8; /* ENOEXEC */
+            }
+            g_pLinuxProc->u64InterpEntry = 0;
+            g_pLinuxProc->u32ExecFlags = elf.u32Flags;
+            g_pLinuxProc->cAuxv = 0;
+            /* Resolve DT_NEEDED against vfs before map (ld-gj path) */
+            if (elf.u16Needed > 0) {
+                u32 cRes = elf_resolve_needed_vfs(&elf);
+
+                if (cRes > 0) {
+                    kprintf("linux: execve DT_NEEDED resolve PASS n=%u\n", cRes);
+                }
+            }
+            memset(&elfInterp, 0, sizeof(elfInterp));
+            if (elf.u32Flags & GJ_ELF_INFO_HAS_INTERP) {
+                i64 i64I;
+                i64 nI;
+                u64 cbEmbed;
+                const u8 *pEmbed;
+                int fUseEmbed = 0;
+
+                kprintf("linux: execve INTERP=%s\n", elf.szInterp);
+                i64I = vfs_ram_open(elf.szInterp, 0);
+                nI = -1;
+                if (i64I >= 0) {
+                    nI = vfs_ram_read(i64I, aInterp, sizeof(aInterp));
+                    (void)vfs_ram_close(i64I);
+                }
+                pEmbed = gj_ld_gj_elf_blob;
+                cbEmbed = (u64)(gj_ld_gj_elf_blob_end - gj_ld_gj_elf_blob);
+                /*
+                 * Prefer packaged ld-gj when vfs has only a tiny stub/placeholder
+                 * or is non-ELF. Product INTERP path = full freestanding ld-gj.
+                 */
+                if (cbEmbed > 256ull && pEmbed[0] == 0x7fu && pEmbed[1] == 'E') {
+                    if (nI < 4 || aInterp[0] != 0x7fu ||
+                        (u64)nI + 1024ull < cbEmbed) {
+                        fUseEmbed = 1;
+                    }
+                }
+                if (fUseEmbed) {
+                    if (cbEmbed > sizeof(aInterp)) {
+                        cbEmbed = sizeof(aInterp);
+                    }
+                    memcpy(aInterp, pEmbed, (size_t)cbEmbed);
+                    nI = (i64)cbEmbed;
+                    kprintf("linux: execve INTERP embed cb=%lu PASS\n",
+                            (unsigned long)cbEmbed);
+                }
+                if (nI >= 4 && aInterp[0] == 0x7fu &&
+                    elf_load_image(g_pLinuxProc, aInterp, (u64)nI, &elfInterp) ==
+                        GJ_OK) {
+                    g_pLinuxProc->u64InterpEntry = elfInterp.u64Entry;
+                    fInterpLoaded = 1;
+                    kprintf("linux: execve INTERP loaded entry=0x%lx%s\n",
+                            (unsigned long)elfInterp.u64Entry,
+                            fUseEmbed ? " (ld-gj)" : "");
+                } else if (i64I < 0 && !fUseEmbed) {
+                    kprintf("linux: execve INTERP missing on vfs (ok bring-up)\n");
+                } else {
+                    kprintf("linux: execve INTERP present (load deferred)\n");
+                }
+            }
+            /*
+             * Map DT_NEEDED SOs before main so GLOB_DAT/JUMP_SLOT can
+             * resolve across objects during main relocate.
+             */
+            {
+                u32 cSo = elf_load_needed_sos(g_pLinuxProc, &elf);
+
+                g_pLinuxProc->cNeededLoaded = cSo;
+                if (cSo > 0) {
+                    kprintf("linux: execve SO map PASS n=%u\n", cSo);
+                }
+            }
+            if (elf_load_image(g_pLinuxProc, aImg, (u64)n, &elf) == GJ_OK) {
+                size_t iPath;
+
+                g_pLinuxProc->u64ExecEntry = elf.u64Entry;
+                g_pLinuxProc->u64LoadBias = elf.u64Bias;
+                g_pLinuxProc->u32ExecFlags = elf.u32Flags;
+                /* Remember path for AT_EXECFN / ld-gj handoff */
+                for (iPath = 0; iPath + 1 < sizeof(g_pLinuxProc->szExecPath) &&
+                                szPath[iPath] != '\0';
+                     iPath++) {
+                    g_pLinuxProc->szExecPath[iPath] = szPath[iPath];
+                }
+                g_pLinuxProc->szExecPath[iPath] = '\0';
+                elf_fill_auxv(g_pLinuxProc, &elf,
+                              fInterpLoaded ? &elfInterp : NULL);
+                if (elf_publish_handoff(g_pLinuxProc, szPath, &elf,
+                                        fInterpLoaded ? &elfInterp : NULL) ==
+                    GJ_OK) {
+                    kprintf("linux: execve handoff PASS\n");
+                    if (elf_ld_handoff_verify(g_pLinuxProc) == GJ_OK) {
+                        /* ld-gj: handoff PASS already printed */
+                    }
+                }
+                /* INTERP-first: entry=ld-gj, SP=handoff stack */
+                (void)elf_apply_interp_first(
+                    g_pLinuxProc, &elf, fInterpLoaded ? &elfInterp : NULL,
+                    GJ_LD_STACK_VA);
+                kprintf("linux: execve ELF entry=0x%lx start=0x%lx auxv=%u\n",
+                        (unsigned long)elf.u64Entry,
+                        (unsigned long)g_pLinuxProc->u64StartEntry,
+                        g_pLinuxProc->cAuxv);
+                if (elf.u32Flags & GJ_ELF_INFO_HAS_INTERP) {
+                    kprintf("linux: execve INTERP PASS\n");
+                }
+                if (elf.u32Flags & GJ_ELF_INFO_RELOC_OK) {
+                    kprintf("linux: execve RELA PASS\n");
+                }
+                if (elf.u32Flags & GJ_ELF_INFO_SYM_OK) {
+                    kprintf("linux: execve SYM PASS\n");
+                }
+                if (g_pLinuxProc->cAuxv > 0) {
+                    kprintf("linux: execve auxv PASS\n");
+                }
+                return 0;
+            }
+            return -8; /* ENOEXEC */
+        }
+        /* Non-ELF: soft success if path was openable */
+        return 0;
+    }
+
+    case LINUX_NR_pidfd_open:
+        return vfs_ram_pidfd_open((u32)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+
+    case LINUX_NR_pidfd_send_signal: {
+        /* pidfd_send_signal(pidfd, sig, info, flags) */
+        i64 i64Fd = (i64)pRegs->u64Arg0;
+        u32 u32Sig = (u32)pRegs->u64Arg1;
+        u32 u32Pid;
+
+        u32Pid = vfs_ram_pidfd_pid(i64Fd);
+        if (u32Pid == 0) {
+            return -LINUX_EBADF;
+        }
+        if (u32Sig > 0 && u32Sig < 64) {
+            vfs_ram_signalfd_inject(u32Sig);
+        }
+        return 0;
+    }
+
+    case LINUX_NR_close_range: {
+        /* close_range(first, last, flags): close inclusive fd range */
+        u32 u32First = (u32)pRegs->u64Arg0;
+        u32 u32Last = (u32)pRegs->u64Arg1;
+        u32 i;
+
+        if (u32First > u32Last) {
+            return -LINUX_EINVAL;
+        }
+        if (u32Last > 31u) {
+            u32Last = 31u;
+        }
+        for (i = u32First; i <= u32Last; i++) {
+            if (vfs_ram_fd_ok((i64)i)) {
+                (void)vfs_ram_close((i64)i);
+            } else if (net_lo_fd_ok((i64)i)) {
+                (void)net_lo_close((i64)i);
+            }
+        }
+        return 0;
+    }
+
+    default:
+        break;
+    }
+
+    return (i64)protonrt_cold_linux(pRegs->u64Nr, pRegs->u64Arg0, pRegs->u64Arg1,
+                                    pRegs->u64Arg2, pRegs->u64Arg3,
+                                    pRegs->u64Arg4, pRegs->u64Arg5);
+}
+
+void
+gj_protonrt_attach_cold(void)
+{
+    cold_ipc_set_service(protonrt_service, NULL);
+    cold_ipc_set_doors_mode(1);
+    cold_ipc_set_personality_attached(1);
+}

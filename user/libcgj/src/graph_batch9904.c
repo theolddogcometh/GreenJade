@@ -1,0 +1,61 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch9904: continuum product deepen readiness score.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_continuum_product_deepen_score_9904(void);
+ *     - Returns the continuum product-deepen readiness score tag for
+ *       this continuum (always 9910). Soft compile-time product score;
+ *       not a live install checklist metric sample.
+ *   uint32_t __gj_continuum_product_deepen_score_9904  (alias)
+ *   __libcgj_batch9904_marker = "libcgj-batch9904"
+ *
+ * Exclusive continuum CREATE-ONLY (9901-9910: post-9900 continuum
+ * product deepen toward 10000). Unique
+ * gj_continuum_product_deepen_score_9904 surface only; no multi-def.
+ * Distinct from gj_continuum_product_deepen_score_9804,
+ * gj_product_score_9900 (batch9894), and
+ * gj_continuum_product_deepen_path_9903. No parent wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch9904_marker[] = "libcgj-batch9904";
+
+/* Continuum product deepen readiness score tag (wave end). */
+#define B9904_CPD_SCORE  9910u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b9904_score(void)
+{
+	return B9904_CPD_SCORE;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_continuum_product_deepen_score_9904 - CPD readiness score tag.
+ *
+ * Always returns 9910 (wave-end product deepen score tag). Soft
+ * pure-data only; does not walk filesystems. No parent wires.
+ */
+uint32_t
+gj_continuum_product_deepen_score_9904(void)
+{
+	(void)NULL;
+	return b9904_score();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_continuum_product_deepen_score_9904(void)
+    __attribute__((alias("gj_continuum_product_deepen_score_9904")));

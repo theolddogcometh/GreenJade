@@ -1,0 +1,69 @@
+Notes — continuum milestone 14500 soft host gates
+=================================================
+
+Scope: user/libcgj/tests/** only (CREATE-ONLY; Makefile not edited).
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c     static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c host dlopen product libc.so.6 soft KATs
+
+New CREATE-ONLY soft host probe:
+  - cgj_soft_milestone_14500.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 14500 marker surfaces (batches 14491–14500)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_14500           1          graph_batch14491.c
+gj_libcgj_green_14500          1          graph_batch14492.c
+gj_bar3_ready_14500            0          graph_batch14493.c  (bar3 open)
+gj_product_score_14500         0          graph_batch14494.c  (score open)
+gj_continuum_ready_14500       1          graph_batch14495.c
+gj_smoke_soft_14500            1          graph_batch14496.c
+gj_dyn_soft_14500              1          graph_batch14497.c
+gj_milestone_tag_14500         14500      graph_batch14498.c
+gj_continuum_wave_14500        14500      graph_batch14499.c
+gj_batch_id_14500              14500      graph_batch14500.c
+gj_graph_milestone_14500       14500      graph_batch14500.c
+__libcgj_batch14NNN_marker     string     matching batch TU
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Parent wiring (outside tests/ exclusive scope)
+----------------------------------------------
+1. CGJ_SRCS already lists graph_batch14491.c … graph_batch14500.c
+   (makefile_max=14500 parent wire).
+2. libc.map currently ends milestone globals at 14400; add 14500
+   symbols under GLIBC_2.2.5 global so dyn dlsym can resolve them.
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present.
+5. Soft gates only; bar3 remains open (gj_bar3_ready_14500 == 0).
+
+Manual run
+----------
+# Dyn soft (product SO; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_14500 \
+  user/libcgj/tests/cgj_soft_milestone_14500.c -ldl
+./build/cgj_soft_milestone_14500
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M14500_DIRECT \
+  -o build/cgj_soft_milestone_14500_direct \
+  user/libcgj/tests/cgj_soft_milestone_14500.c \
+  user/libcgj/src/graph_batch14491.c \
+  user/libcgj/src/graph_batch14492.c \
+  user/libcgj/src/graph_batch14493.c \
+  user/libcgj/src/graph_batch14494.c \
+  user/libcgj/src/graph_batch14495.c \
+  user/libcgj/src/graph_batch14496.c \
+  user/libcgj/src/graph_batch14497.c \
+  user/libcgj/src/graph_batch14498.c \
+  user/libcgj/src/graph_batch14499.c \
+  user/libcgj/src/graph_batch14500.c
+./build/cgj_soft_milestone_14500_direct

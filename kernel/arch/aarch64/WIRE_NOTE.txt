@@ -1,0 +1,31 @@
+Parent Makefile wiring note (do not edit top Makefile from aarch64-only work).
+
+Current AARCH64_OBJS (already in top Makefile) — keep as-is for freestanding
+smoke with existing .c/.S:
+
+  entry.o kmain.o exception.o exceptions.o uart_pl011.o gic.o timer.o
+  cpu_info.o pmm.o mmu.o svc.o virtio_mmio.o
+
+Optional NEW objects ready under kernel/arch/aarch64/ (add when desired):
+
+  $(BUILD)/aarch64/psci.o
+
+    Source: kernel/arch/aarch64/psci.c
+    Export: void aarch64_psci_probe(void);
+    Call site (optional, after cpu probe / before or after GIC):
+      aarch64_psci_probe();
+    Notes: soft PSCI_VERSION + FEATURES(CPU_ON_64) via SMC #0. Not linked by
+    default so freestanding AARCH64_CROSS smoke stays green without SMC path
+    risk. Greppable when invoked: "aarch64: psci soft".
+
+Serial hex helpers live in existing uart_pl011.o (no new object):
+
+  void aarch64_uart_put_hex(unsigned long v);
+  void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
+  void aarch64_uart_put_hex_dump(const void *p, unsigned cBytes);
+
+SVC Linux NR stub is inside svc.o (no new object):
+
+  long aarch64_linux_nr_stub(unsigned long u64Nr);
+
+kmain_stub.o is not in AARCH64_OBJS (product uses kmain.o).

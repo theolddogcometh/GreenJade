@@ -1,0 +1,64 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch11779: power soft continuum lamp (on).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_power_soft_ready_u_11779(void);
+ *     - Returns 1 (soft lamp only). Indicates the power soft-id stub
+ *       surfaces in this continuum are present; not power, TDP,
+ *       battery, thermal, fan, suspend, resume, or performance ok.
+ *   uint32_t __gj_power_soft_ready_u_11779  (alias)
+ *   __libcgj_batch11779_marker = "libcgj-batch11779"
+ *
+ * Exclusive continuum CREATE-ONLY (11771-11780: power soft all→0 —
+ * power_ok_u_11771, tdp_ok_u_11772, battery_ok_u_11773,
+ * thermal_ok_u_11774, fan_ok_u_11775, suspend_ok_u_11776,
+ * resume_ok_u_11777, performance_ok_u_11778, power_soft_ready_u_11779,
+ * batch_id_11780). Unique surface only; no multi-def. Power/TDP/
+ * battery/thermal/fan/suspend/resume/performance ok units remain 0. No
+ * parent wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch11779_marker[] = "libcgj-batch11779";
+
+/* Soft continuum lamp: surfaces present (soft ready only). */
+#define B11779_SOFT_READY  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b11779_soft_ready(void)
+{
+	return B11779_SOFT_READY;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_power_soft_ready_u_11779 - power soft continuum ready lamp.
+ *
+ * Always returns 1. Soft pure-data product tag that exclusive wave
+ * 11771-11780 surfaces are present. Does not claim power/TDP/battery/
+ * thermal/fan/suspend/resume/performance ok and does not call libc.
+ * No parent wires.
+ */
+uint32_t
+gj_power_soft_ready_u_11779(void)
+{
+	(void)NULL;
+	return b11779_soft_ready();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_power_soft_ready_u_11779(void)
+    __attribute__((alias("gj_power_soft_ready_u_11779")));

@@ -1,0 +1,3 @@
+RUN:
+cd /home/jay/Documents/knano && bash user/libcgj/src/.precompile_14231_14240.sh
+# Expected: 10x PASS graph_batch14231.c .. graph_batch14240.c ; SUMMARY pass=10 fail=0

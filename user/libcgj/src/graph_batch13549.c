@@ -1,0 +1,65 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch13549: soft dbus continuum ready.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_dbus_soft_ready_u_13549(void);
+ *     - Returns 1 (dbus soft id stub continuum ready). Pure-data
+ *       product tag that exclusive wave 13541-13550 surfaces are
+ *       present for the dbus soft path; not a hard D-Bus runtime
+ *       probe.
+ *   uint32_t __gj_dbus_soft_ready_u_13549  (alias)
+ *   __libcgj_batch13549_marker = "libcgj-batch13549"
+ *
+ * Exclusive continuum CREATE-ONLY (13541-13550: dbus soft id stubs —
+ * dbus_ok_u_13541, systemd_ok_u_13542, logind_ok_u_13543,
+ * journal_ok_u_13544, resolved_ok_u_13545, networkd_ok_u_13546,
+ * timedated_ok_u_13547, hostnamed_ok_u_13548,
+ * dbus_soft_ready_u_13549, batch_id_13550→13550). Unique surface only;
+ * no multi-def. Ok units remain 0. Distinct from
+ * gj_dbus_soft_ready_u_13349 / gj_dbus_soft_ready_u_13149 /
+ * gj_dbus_soft_ready_u_12949 / gj_dbus_soft_ready_u_12749. No parent
+ * wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch13549_marker[] = "libcgj-batch13549";
+
+/* Soft continuum-ready lamp for dbus soft id stubs wave. */
+#define B13549_DBUS_SOFT_READY  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b13549_soft_ready(void)
+{
+	return B13549_DBUS_SOFT_READY;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_dbus_soft_ready_u_13549 - dbus soft id continuum ready.
+ *
+ * Always returns 1. Soft pure-data product tag that the exclusive
+ * wave surfaces are present. Does not call libc. No parent wires.
+ */
+uint32_t
+gj_dbus_soft_ready_u_13549(void)
+{
+	(void)NULL;
+	return b13549_soft_ready();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_dbus_soft_ready_u_13549(void)
+    __attribute__((alias("gj_dbus_soft_ready_u_13549")));

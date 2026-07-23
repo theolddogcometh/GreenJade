@@ -1,0 +1,60 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch10565: https ok soft unit (not a probe).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_https_ok_u_10565(void);
+ *     - Always returns 0. Soft stub only; intentionally not a real
+ *       HTTPS/TLS fetch runtime probe for the net soft path.
+ *   uint32_t __gj_https_ok_u_10565  (alias)
+ *   __libcgj_batch10565_marker = "libcgj-batch10565"
+ *
+ * Exclusive continuum CREATE-ONLY (10561-10570: net soft id stubs —
+ * net_ok_u_10561, wifi_ok_u_10562, ethernet_ok_u_10563, dns_ok_u_10564,
+ * https_ok_u_10565, cdn_ok_u_10566, steam_net_ok_u_10567,
+ * offline_mode_ok_u_10568, net_soft_ready_u_10569, batch_id_10570).
+ * Unique surface only; no multi-def. Distinct from gj_https_ok_u_10066.
+ * No parent wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch10565_marker[] = "libcgj-batch10565";
+
+/* Soft https-ok lamp: always off (not a real runtime probe). */
+#define B10565_HTTPS_OK  0u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b10565_ok(void)
+{
+	return B10565_HTTPS_OK;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_https_ok_u_10565 - https ok soft unit flag.
+ *
+ * Always returns 0. Soft continuum stub; does not probe TLS/HTTPS
+ * endpoints or call libc. No parent wires.
+ */
+uint32_t
+gj_https_ok_u_10565(void)
+{
+	(void)NULL;
+	return b10565_ok();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_https_ok_u_10565(void)
+    __attribute__((alias("gj_https_ok_u_10565")));

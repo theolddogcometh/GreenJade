@@ -1,0 +1,59 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch9580: cmake soft id continuum + batch id.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_batch_id_9580(void);
+ *     - Returns the compile-time graph batch number for this TU (9580).
+ *   uint32_t __gj_batch_id_9580  (alias)
+ *   __libcgj_batch9580_marker = "libcgj-batch9580"
+ *
+ * Exclusive continuum CREATE-ONLY (9571-9580: cmake soft id stubs —
+ * cmake_ok_u_9571→0, cmake_config_ok_u_9572→0, cmake_build_ok_u_9573→0,
+ * cmake_test_ok_u_9574→0, cmake_install_ok_u_9575→0,
+ * cmake_generator_ok_u_9576, cmake_toolchain_ok_u_9577,
+ * cmake_preset_ok_u_9578, cmake_ready_u_9579, batch_id_9580).
+ * Unique surfaces only; no multi-def. Does NOT redefine gj_batch_id /
+ * gj_graph_milestone / prior batch_id_* symbols — avoid multi-def.
+ * No parent wires. No __int128. No cmake implementation.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch9580_marker[] = "libcgj-batch9580";
+
+#define B9580_BATCH_ID  9580u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b9580_id(void)
+{
+	return B9580_BATCH_ID;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_batch_id_9580 - report this TU's graph batch number.
+ *
+ * Always returns 9580.
+ */
+uint32_t
+gj_batch_id_9580(void)
+{
+	(void)NULL;
+	return b9580_id();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_batch_id_9580(void)
+    __attribute__((alias("gj_batch_id_9580")));

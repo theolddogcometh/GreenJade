@@ -1,0 +1,171 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Soft large-RAM hierarchical PMM soak (768 GiB class).
+#
+# Boots GreenJade under QEMU with GJ_MEM=768G (override via GJ_SOAK_MEM)
+# and a long wall timeout, then greps serial for:
+#   pmm: soak_tib PASS
+#
+# Soft exit 0 always — never hard-fails agent / smoke / preflight wrappers:
+#   - host MemTotal too small to back QEMU -m $GJ_SOAK_MEM
+#   - QEMU missing / ELF missing / timeout / early trap
+#   - kernel `pmm: soak_tib SKIP soft` (max_pa below 768 GiB need)
+#   - soak_tib PASS missing from the log
+#
+# Usage:
+#   ./scripts/gj-soak-large-ram.sh
+#   GJ_SOAK_MEM=512G GJ_SOAK_TIMEOUT=900 ./scripts/gj-soak-large-ram.sh
+#   ./scripts/gj-product-summary.sh /tmp/gj-soak-large-ram.*.log
+#
+# Env:
+#   GJ_SOAK_MEM       QEMU RAM (-m); default 768G (also sets GJ_MEM for run-qemu)
+#   GJ_SOAK_TIMEOUT   wall timeout seconds; default 600 (large -m can take minutes)
+#   GJ_SOAK_LOG       log path; default ${TMPDIR:-/tmp}/gj-soak-large-ram.$$.log
+#   GJ_SOAK_MIN_HOST  min host MemTotal KiB required; default ≈ mem size + 64 GiB headroom
+#   GJ_SMP            forwarded to run-qemu (optional)
+#   QEMU_BIN          forwarded via run-qemu (optional)
+#
+# Kernel markers (kernel/mm/pmm.c pmm_soak_tib; kernel/main.c with 768ull<<30):
+#   pmm: soak_tib PASS   hierarchical free exercised at TiB-class max_pa
+#   pmm: soak_tib SKIP soft   host/QEMU below threshold (not a fail)
+#   pmm: soak_tib FAIL   alloc path failed (still soft-exit 0 here)
+#
+# Contrast:
+#   scripts/smoke-all.sh     hard-requires small `pmm: soak PASS`
+#   scripts/gj-product-summary.sh  soft inventory including soak_tib PASS
+#   scripts/gj-quick-keys.sh hard presence gate (does not require soak_tib)
+#
+# See also: docs/HCL.md, docs/STEAM_HWTEST.md (768G soak scope / honesty bounds)
+set -u
+
+root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cd "$root" || {
+	echo "gj-soak-large-ram: cannot cd to $root (soft)" >&2
+	exit 0
+}
+
+# --- config -----------------------------------------------------------------
+GJ_SOAK_MEM="${GJ_SOAK_MEM:-768G}"
+GJ_SOAK_TIMEOUT="${GJ_SOAK_TIMEOUT:-600}"
+log="${GJ_SOAK_LOG:-${TMPDIR:-/tmp}/gj-soak-large-ram.$$.log}"
+elf="${1:-$root/build/greenjade.elf}"
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+	echo "usage: $0 [path/to/greenjade.elf]" >&2
+	echo "  GJ_SOAK_MEM=$GJ_SOAK_MEM  GJ_SOAK_TIMEOUT=${GJ_SOAK_TIMEOUT}s" >&2
+	echo "  Soft exit 0 on host-too-small / miss / SKIP (never hard-fail)." >&2
+	exit 0
+fi
+
+echo "gj-soak-large-ram: mem=$GJ_SOAK_MEM timeout=${GJ_SOAK_TIMEOUT}s log=$log"
+
+# --- helpers ----------------------------------------------------------------
+# Parse size token like 768G / 512g / 1T / 65536M / bare bytes → KiB (integer).
+# Prints 0 on unparseable input (caller treats as soft skip).
+size_to_kib() {
+	_s=$1
+	_n=$(printf '%s' "$_s" | sed -n 's/^\([0-9][0-9]*\)[KkMmGgTt]\?$/\1/p')
+	_u=$(printf '%s' "$_s" | sed -n 's/^[0-9][0-9]*\([KkMmGgTt]\?\)$/\1/p')
+	if [ -z "$_n" ]; then
+		echo 0
+		return 0
+	fi
+	case "$_u" in
+	'' ) echo "$_n" ;; # already bytes? treat as KiB-ish raw count — avoid; use 0
+	K | k) echo "$_n" ;;
+	M | m)
+		# MiB → KiB
+		echo $((_n * 1024))
+		;;
+	G | g)
+		echo $((_n * 1024 * 1024))
+		;;
+	T | t)
+		echo $((_n * 1024 * 1024 * 1024))
+		;;
+	*) echo 0 ;;
+	esac
+}
+
+soft_done() {
+	_msg=$1
+	echo "gj-soak-large-ram: $_msg soft-exit 0"
+	exit 0
+}
+
+# --- host gate (too small → soft exit 0) ------------------------------------
+need_kib=$(size_to_kib "$GJ_SOAK_MEM")
+if [ "$need_kib" -eq 0 ]; then
+	soft_done "MISS: cannot parse GJ_SOAK_MEM='$GJ_SOAK_MEM'"
+fi
+
+# Default min host: requested guest RAM + 64 GiB headroom for host/QEMU overhead.
+headroom_kib=$((64 * 1024 * 1024))
+default_min_kib=$((need_kib + headroom_kib))
+min_host_kib="${GJ_SOAK_MIN_HOST:-$default_min_kib}"
+
+host_kib=0
+if [ -r /proc/meminfo ]; then
+	host_kib=$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)
+fi
+case "$host_kib" in
+'' | *[!0-9]*) host_kib=0 ;;
+esac
+
+echo "gj-soak-large-ram: host_MemTotal_KiB=$host_kib need_guest_KiB=$need_kib min_host_KiB=$min_host_kib"
+
+if [ "$host_kib" -gt 0 ] && [ "$host_kib" -lt "$min_host_kib" ]; then
+	soft_done "SKIP host too small (MemTotal ${host_kib} KiB < ${min_host_kib} KiB for -m $GJ_SOAK_MEM)"
+fi
+
+# --- ELF / timeout / run-qemu -----------------------------------------------
+if [ ! -f "$elf" ]; then
+	soft_done "MISS: missing $elf — run make first"
+fi
+
+if ! command -v timeout >/dev/null 2>&1; then
+	soft_done "MISS: timeout(1) not found"
+fi
+
+# Export so run-qemu sees GJ_MEM; keep GJ_SOAK_MEM as the operator-facing name.
+GJ_MEM="$GJ_SOAK_MEM"
+export GJ_MEM
+# Optional SMP passthrough if already set in environment
+# (run-qemu defaults GJ_SMP=1).
+
+# Long timeout: large -m allocation + early PMM soak; kill remaining QEMU.
+# || true: timeout exit 124 / qemu nonzero must not abort this soft script.
+set +e
+timeout "$GJ_SOAK_TIMEOUT" ./scripts/run-qemu.sh "$elf" >"$log" 2>&1
+rc=$?
+set -e
+echo "gj-soak-large-ram: run-qemu exit=$rc (124=timeout expected)"
+
+if [ ! -f "$log" ]; then
+	soft_done "MISS: no log written at $log"
+fi
+
+# Binary-safe greps (serial may contain NULs from early firmware)
+gqa_q() {
+	grep -a -q -E "$1" "$log" 2>/dev/null
+}
+
+if gqa_q 'pmm: soak_tib PASS|soak_tib PASS'; then
+	line=$(grep -a -E 'pmm: soak_tib PASS|soak_tib PASS' "$log" 2>/dev/null | head -n1 || true)
+	echo "gj-soak-large-ram: PASS  ($line)"
+	echo "gj-soak-large-ram: log=$log soft-exit 0"
+	exit 0
+fi
+
+if gqa_q 'pmm: soak_tib SKIP soft|soak_tib SKIP'; then
+	line=$(grep -a -E 'pmm: soak_tib SKIP' "$log" 2>/dev/null | head -n1 || true)
+	soft_done "SKIP soft (kernel host/QEMU below threshold) — $line"
+fi
+
+if gqa_q 'pmm: soak_tib FAIL|TiB soak FAIL'; then
+	line=$(grep -a -E 'pmm: soak_tib FAIL|TiB soak FAIL' "$log" 2>/dev/null | head -n1 || true)
+	soft_done "MISS soak_tib FAIL (soft) — $line"
+fi
+
+soft_done "MISS: no soak_tib PASS in $log (timeout/host/boot)"

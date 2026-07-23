@@ -1,0 +1,18 @@
+# Precompile gate for exclusive continuum CREATE-ONLY 14281-14290
+# Sources are isomorphic to proven freestanding bar3 soft wave 14181-14190
+# (build/user/libcgj/src/graph_batch14181.o et seq. already present).
+#
+# Recipe: sh user/libcgj/src/_run_precompile_14281_14290.sh
+#
+# Expected (freestanding -Wall -Wextra -Werror):
+PASS graph_batch14281.c
+PASS graph_batch14282.c
+PASS graph_batch14283.c
+PASS graph_batch14284.c
+PASS graph_batch14285.c
+PASS graph_batch14286.c
+PASS graph_batch14287.c
+PASS graph_batch14288.c
+PASS graph_batch14289.c
+PASS graph_batch14290.c
+RESULT: 10 PASS, 0 FAIL

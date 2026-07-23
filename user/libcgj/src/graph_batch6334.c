@@ -1,0 +1,61 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch6334: frame pacing budget (us).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_fpq_budget_us_6334(void);
+ *     - Returns 16666 (approx. 1e6/60 us; full frame budget at 60 Hz).
+ *       Soft compile-time frame-pacing product stub.
+ *   uint32_t __gj_fpq_budget_us_6334  (alias)
+ *   __libcgj_batch6334_marker = "libcgj-batch6334"
+ *
+ * Exclusive continuum CREATE-ONLY (6331-6340: frame pacing quanta
+ * stubs — fpq_quantum_us_6331, fpq_quanta_per_frame_6332,
+ * fpq_target_fps_6333, fpq_budget_us_6334, fpq_slack_us_6335,
+ * fpq_catchup_max_6336, fpq_max_skip_6337, fpq_enabled_6338,
+ * fpq_ready_6339, batch_id_6340). Unique gj_fpq_budget_us_6334
+ * surface only; no multi-def. Pairs with gj_fpq_target_fps_6333.
+ * No parent wires. No __int128.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch6334_marker[] = "libcgj-batch6334";
+
+/* Frame budget (us) ≈ 1e6/60. */
+#define B6334_FPQ_BUDGET_US  16666u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b6334_fpq_budget_us(void)
+{
+	return B6334_FPQ_BUDGET_US;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_fpq_budget_us_6334 - report frame-pacing budget (us).
+ *
+ * Always returns 16666. Soft compile-time timing stub for vsync-style
+ * frame pacing quanta at 60 Hz. No parent wires.
+ */
+uint32_t
+gj_fpq_budget_us_6334(void)
+{
+	(void)NULL;
+	return b6334_fpq_budget_us();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_fpq_budget_us_6334(void)
+    __attribute__((alias("gj_fpq_budget_us_6334")));

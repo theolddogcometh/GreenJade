@@ -1,0 +1,55 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch11832: fcitx soft identity stub.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_fcitx_ok_u_11832(void);
+ *     - Returns 0 (soft: fcitx input method not ready at compile time).
+ *   uint32_t __gj_fcitx_ok_u_11832  (alias)
+ *   __libcgj_batch11832_marker = "libcgj-batch11832"
+ *
+ * Exclusive CREATE-ONLY wave 11831-11840 (ibus/fcitx soft id stubs).
+ * Unique gj_fcitx_ok_u_11832 surface only; no multi-def. No parent wires.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied. No __int128.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch11832_marker[] = "libcgj-batch11832";
+
+/* Soft fcitx ok lamp: not ready at compile time. */
+#define B11832_FCITX_OK  0u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b11832_ok(void)
+{
+	return B11832_FCITX_OK;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_fcitx_ok_u_11832 - soft fcitx input-method ok lamp.
+ *
+ * Always returns 0 (not ready at compile time). Does not probe fcitx
+ * daemon or call libc. No parent wires.
+ */
+uint32_t
+gj_fcitx_ok_u_11832(void)
+{
+	(void)NULL;
+	return b11832_ok();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_fcitx_ok_u_11832(void)
+    __attribute__((alias("gj_fcitx_ok_u_11832")));

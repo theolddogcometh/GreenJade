@@ -1,0 +1,7 @@
+RUN:
+cd /home/jay/Documents/knano && \
+CFLAGS="-std=c11 -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone -msse2 -Wall -Wextra -Werror -Iuser/libcgj/include -g -O2 -fPIC" && \
+OUT=/tmp/gj_precompile_14291_14300 && mkdir -p "$OUT" && \
+for n in 14291 14292 14293 14294 14295 14296 14297 14298 14299 14300; do
+  cc $CFLAGS -c -o "$OUT/graph_batch${n}.o" "user/libcgj/src/graph_batch${n}.c" && echo "PASS graph_batch${n}.c" || echo "FAIL graph_batch${n}.c"
+done

@@ -1,0 +1,60 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch12197: dyn smoke soft gate (wave 12200).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_dyn_soft_12200(void);
+ *     - Returns 1 (dyn-smoke soft lamp for the milestone 12200
+ *       continuum). Soft compile-time product status tag.
+ *   uint32_t __gj_dyn_soft_12200  (alias)
+ *   __libcgj_batch12197_marker = "libcgj-batch12197"
+ *
+ * Milestone 12200 exclusive continuum CREATE-ONLY (12191-12200). Unique
+ * gj_dyn_soft_12200 surface only; no multi-def. Distinct from
+ * gj_dyn_soft_12100 (batch12097), gj_dyn_soft_12000 (batch11997),
+ * gj_dyn_soft_11900 (batch11897), and gj_smoke_soft_12200
+ * (batch12196 soft PASS). No parent wires.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied. No __int128.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch12197_marker[] = "libcgj-batch12197";
+
+/* Dyn soft lamp for wave 12200 (always soft-ready). */
+#define B12197_DYN_SOFT  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b12197_soft(void)
+{
+	return B12197_DYN_SOFT;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_dyn_soft_12200 - report dyn soft lamp for wave 12200.
+ *
+ * Always returns 1 (soft-ready). Distinct from static smoke soft
+ * (batch12196) and paired dyn gates. Does not call libc. No parent
+ * wires.
+ */
+uint32_t
+gj_dyn_soft_12200(void)
+{
+	(void)NULL;
+	return b12197_soft();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+uint32_t __gj_dyn_soft_12200(void)
+    __attribute__((alias("gj_dyn_soft_12200")));

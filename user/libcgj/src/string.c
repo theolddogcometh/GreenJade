@@ -810,24 +810,22 @@ strverscmp(const char *szA, const char *szB)
                 za++;
                 zb++;
             }
-            /* equal numeric value: more leading zeros sorts first (glibc) */
+            /* Equal numeric value: longer zero-prefix sorts first (glibc). */
             {
-                size_t za0 = i;
-                size_t zb0 = i;
-                while (szA[za0] == '0') {
-                    za0++;
-                }
-                while (szB[zb0] == '0') {
-                    zb0++;
-                }
-                if (za0 != zb0) {
-                    /* more zeros → smaller (e.g. 000 vs 00) — actually glibc:
-                     * "000" < "00" because longer zero prefix with same value
-                     * ranks lower when compared via the digit-class path.
-                     * Use simple: advance past the run. */
+                size_t nZa = za - i;
+                size_t nZb = zb - i;
+
+                if (nZa != nZb) {
+                    return (nZa > nZb) ? -1 : 1;
                 }
             }
             i = ea;
+            /* Both sides advanced the same digit-run length only if ea-i
+             * matched; if one side had more trailing non-digits, continue
+             * from the longer end via ea/eb max. */
+            if (eb > ea) {
+                i = eb;
+            }
             continue;
         }
         if (ca != cb) {

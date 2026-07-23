@@ -853,6 +853,10 @@ Wired through `graph_batch14300.c` (makefile_max=14300). Soft gates; bar3 still 
 
 Wired through `graph_batch14400.c` (makefile_max=14400). Soft gates; bar3 still open.
 
-## Status note — 2026-07-23
+## Status note — 2026-07-23 (refresh)
 
-**makefile_max=14700** shipped (parent wire of CREATE-ONLY decades 14401–14700). Soft gates; bar3 still open. 768G soak shipped on tree.
+**Parallel soft waves:** continuum **makefile_max=14900** shipped (parent wire of CREATE-ONLY decades through `graph_batch14900.c`). Soft gates / host milestone probes only — not Steam client.
+
+**bar3 still open** (Steam client + Deck Top 50 title runs; matrix NOT-TRIED × 50). Soft surface `gj_bar3_ready_14900` remains 0.
+
+Also on tree (kernel/media soft, not bar3): 768G hierarchical soak; media Steam path wired; host soft check READY|SKELETON|MISSING.

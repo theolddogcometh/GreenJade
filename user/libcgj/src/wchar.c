@@ -3,6 +3,14 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Wide-char helpers, UTF-8 conversion, fwprintf subset (glibc-shaped).
+ * Not GNU glibc (public ABI surface only).
+ *
+ * greppable: CGJ_WCHAR_SOFT_WEOF
+ * greppable: CGJ_WCHAR_SOFT_UTF8
+ * greppable: CGJ_WCHAR_SOFT_ISW
+ *
+ * Soft deepen: WEOF-safe wide classifiers, stricter UTF-8 (no overlong /
+ * surrogate / out-of-range code points), identity tow* on WEOF.
  */
 #include <errno.h>
 #include <stdarg.h>
@@ -15,6 +23,14 @@
 /* Must match stdio.c flag bits */
 #define F_WMEMSTREAM 16
 #define F_MEMSTREAM  8
+
+/* True when wc is a classifiable wide scalar (not WEOF). */
+static int
+wchar_soft_is_scalar(wint_t wc)
+{
+    /* greppable: CGJ_WCHAR_SOFT_WEOF */
+    return wc != WEOF;
+}
 
 size_t
 wcslen(const wchar_t *sz)
@@ -336,6 +352,30 @@ mbsinit(const mbstate_t *pSt)
     return (pSt == NULL || pSt->__uCount == 0) ? 1 : 0;
 }
 
+/* Soft UTF-8 scalar validity: no overlong, no surrogates, <= U+10FFFF. */
+static int
+wchar_soft_utf8_ok(unsigned int uCp, unsigned int nBytes)
+{
+    /* greppable: CGJ_WCHAR_SOFT_UTF8 */
+    if (uCp > 0x10FFFFu) {
+        return 0;
+    }
+    /* UTF-16 surrogate half */
+    if (uCp >= 0xD800u && uCp <= 0xDFFFu) {
+        return 0;
+    }
+    if (nBytes == 2u && uCp < 0x80u) {
+        return 0; /* overlong */
+    }
+    if (nBytes == 3u && uCp < 0x800u) {
+        return 0;
+    }
+    if (nBytes == 4u && uCp < 0x10000u) {
+        return 0;
+    }
+    return 1;
+}
+
 size_t
 mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
 {
@@ -344,6 +384,7 @@ mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
     unsigned char c;
     unsigned int u;
     unsigned int need;
+    unsigned int nTotal;
 
     if (pS == NULL) {
         p->__uCount = 0;
@@ -361,15 +402,32 @@ mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
             }
             return (c == 0) ? 0 : 1;
         }
+        /* Reject bare continuation / illegal lead bytes soft. */
+        if ((c & 0xC0) == 0x80 || c >= 0xF8) {
+            errno = EILSEQ;
+            return (size_t)-1;
+        }
         if ((c & 0xE0) == 0xC0) {
             need = 1;
             u = c & 0x1F;
+            nTotal = 2;
+            if (c < 0xC2) {
+                /* overlong 2-byte lead (C0/C1) */
+                errno = EILSEQ;
+                return (size_t)-1;
+            }
         } else if ((c & 0xF0) == 0xE0) {
             need = 2;
             u = c & 0x0F;
+            nTotal = 3;
         } else if ((c & 0xF8) == 0xF0) {
             need = 3;
             u = c & 0x07;
+            nTotal = 4;
+            if (c > 0xF4) {
+                errno = EILSEQ;
+                return (size_t)-1;
+            }
         } else {
             errno = EILSEQ;
             return (size_t)-1;
@@ -388,6 +446,7 @@ mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
 
                 if ((cont & 0xC0) != 0x80) {
                     p->__uCount = 0;
+                    p->__uValue = 0;
                     errno = EILSEQ;
                     return (size_t)-1;
                 }
@@ -397,6 +456,12 @@ mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
             }
             if (p->__uCount != 0) {
                 return (size_t)-2;
+            }
+            if (!wchar_soft_utf8_ok(p->__uValue, nTotal)) {
+                p->__uCount = 0;
+                p->__uValue = 0;
+                errno = EILSEQ;
+                return (size_t)-1;
             }
             if (pWc != NULL) {
                 *pWc = (wchar_t)p->__uValue;
@@ -408,6 +473,7 @@ mbrtowc(wchar_t *pWc, const char *pS, size_t n, mbstate_t *pSt)
     /* Resume incomplete sequence — limited bring-up: treat as new */
     errno = EILSEQ;
     p->__uCount = 0;
+    p->__uValue = 0;
     return (size_t)-1;
 }
 
@@ -419,6 +485,11 @@ wcrtomb(char *pS, wchar_t wc, mbstate_t *pSt)
     if (pSt != NULL) {
         pSt->__uCount = 0;
         pSt->__uValue = 0;
+    }
+    /* Soft: reject surrogates and out-of-range before emit. */
+    if (u >= 0xD800u && u <= 0xDFFFu) {
+        errno = EILSEQ;
+        return (size_t)-1;
     }
     if (pS == NULL) {
         return 1; /* shift state reset length */
@@ -967,12 +1038,19 @@ wctob(wint_t wc)
 int
 iswdigit(wint_t wc)
 {
+    /* greppable: CGJ_WCHAR_SOFT_ISW */
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (wc >= L'0' && wc <= L'9') ? 1 : 0;
 }
 
 int
 iswalpha(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return ((wc >= L'A' && wc <= L'Z') || (wc >= L'a' && wc <= L'z')) ? 1 : 0;
 }
 
@@ -985,6 +1063,9 @@ iswalnum(wint_t wc)
 int
 iswspace(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (wc == L' ' || wc == L'\t' || wc == L'\n' || wc == L'\r' ||
             wc == L'\f' || wc == L'\v')
                ? 1
@@ -994,19 +1075,32 @@ iswspace(wint_t wc)
 int
 iswblank(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (wc == L' ' || wc == L'\t') ? 1 : 0;
 }
 
 int
 iswcntrl(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return ((wc >= 0 && wc < 0x20) || wc == 0x7F) ? 1 : 0;
 }
 
 int
 iswprint(wint_t wc)
 {
-    return (wc >= 0x20 && wc != 0x7F) ? 1 : 0;
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
+    /* Soft C locale: ASCII graphic + space; high scalars non-control. */
+    if (wc == 0x7F) {
+        return 0;
+    }
+    return (wc >= 0x20) ? 1 : 0;
 }
 
 int
@@ -1018,12 +1112,18 @@ iswgraph(wint_t wc)
 int
 iswlower(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (wc >= L'a' && wc <= L'z') ? 1 : 0;
 }
 
 int
 iswupper(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (wc >= L'A' && wc <= L'Z') ? 1 : 0;
 }
 
@@ -1036,6 +1136,9 @@ iswpunct(wint_t wc)
 int
 iswxdigit(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return 0;
+    }
     return (iswdigit(wc) || (wc >= L'a' && wc <= L'f') ||
             (wc >= L'A' && wc <= L'F'))
                ? 1
@@ -1045,6 +1148,9 @@ iswxdigit(wint_t wc)
 wint_t
 towlower(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return wc;
+    }
     if (wc >= L'A' && wc <= L'Z') {
         return wc + (L'a' - L'A');
     }
@@ -1054,6 +1160,9 @@ towlower(wint_t wc)
 wint_t
 towupper(wint_t wc)
 {
+    if (!wchar_soft_is_scalar(wc)) {
+        return wc;
+    }
     if (wc >= L'a' && wc <= L'z') {
         return wc - (L'a' - L'A');
     }

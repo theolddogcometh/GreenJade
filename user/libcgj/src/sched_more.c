@@ -3,10 +3,12 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * sched policy/param helpers, __sched_cpucount, process_vm_*,
- * clock_getcpuclockid (glibc-shaped bring-up). Not GNU glibc.
+ * clock_getcpuclockid (glibc-shaped). Not GNU glibc.
+ * Soft deepen: process CPU clock ids for other PIDs; popcount; VM null checks.
  */
 #include <errno.h>
 #include <sched.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/uio.h>
@@ -22,6 +24,11 @@
 #define NR_sched_rr_get_interval  148
 #define NR_process_vm_readv       310
 #define NR_process_vm_writev      311
+
+/* Linux private process CPU clock encoding (public kernel ABI). */
+#define GJ_CPUCLOCK_SCHED 2
+#define GJ_MAKE_PROCESS_CPUCLOCK(pid, clock) \
+    ((clockid_t)((~(unsigned long)(unsigned int)(pid) << 3) | (unsigned long)(clock)))
 
 static long
 sys6(long nr, long a0, long a1, long a2, long a3, long a4, long a5)
@@ -56,6 +63,10 @@ sched_setparam(pid_t pid, const struct sched_param *pParam)
         errno = EINVAL;
         return -1;
     }
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_sched_setparam, (long)pid,
                              (long)(uintptr_t)pParam, 0, 0, 0, 0));
 }
@@ -64,6 +75,10 @@ int
 sched_getparam(pid_t pid, struct sched_param *pParam)
 {
     if (pParam == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (pid < 0) {
         errno = EINVAL;
         return -1;
     }
@@ -78,6 +93,10 @@ sched_setscheduler(pid_t pid, int nPolicy, const struct sched_param *pParam)
         errno = EINVAL;
         return -1;
     }
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_sched_setscheduler, (long)pid, (long)nPolicy,
                              (long)(uintptr_t)pParam, 0, 0, 0));
 }
@@ -85,6 +104,10 @@ sched_setscheduler(pid_t pid, int nPolicy, const struct sched_param *pParam)
 int
 sched_getscheduler(pid_t pid)
 {
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_sched_getscheduler, (long)pid, 0, 0, 0, 0, 0));
 }
 
@@ -109,6 +132,10 @@ sched_rr_get_interval(pid_t pid, struct timespec *pTs)
         errno = EINVAL;
         return -1;
     }
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_sched_rr_get_interval, (long)pid,
                              (long)(uintptr_t)pTs, 0, 0, 0, 0));
 }
@@ -130,10 +157,14 @@ __sched_cpucount(size_t cbSet, const cpu_set_t *pSet)
     }
     for (i = 0; i < cWords; i++) {
         u = pSet->__bits[i];
+#if defined(__GNUC__) || defined(__clang__)
+        nCount += (int)__builtin_popcountl(u);
+#else
         while (u != 0UL) {
             nCount += (int)(u & 1UL);
             u >>= 1;
         }
+#endif
     }
     return nCount;
 }
@@ -145,6 +176,14 @@ process_vm_readv(pid_t pid, const struct iovec *pLocal, unsigned long cLocal,
 {
     long r;
 
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    if ((cLocal != 0 && pLocal == NULL) || (cRemote != 0 && pRemote == NULL)) {
+        errno = EFAULT;
+        return -1;
+    }
     r = sys6(NR_process_vm_readv, (long)pid, (long)(uintptr_t)pLocal,
              (long)cLocal, (long)(uintptr_t)pRemote, (long)cRemote,
              (long)uFlags);
@@ -162,6 +201,14 @@ process_vm_writev(pid_t pid, const struct iovec *pLocal, unsigned long cLocal,
 {
     long r;
 
+    if (pid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    if ((cLocal != 0 && pLocal == NULL) || (cRemote != 0 && pRemote == NULL)) {
+        errno = EFAULT;
+        return -1;
+    }
     r = sys6(NR_process_vm_writev, (long)pid, (long)(uintptr_t)pLocal,
              (long)cLocal, (long)(uintptr_t)pRemote, (long)cRemote,
              (long)uFlags);
@@ -175,15 +222,45 @@ process_vm_writev(pid_t pid, const struct iovec *pLocal, unsigned long cLocal,
 int
 clock_getcpuclockid(pid_t pid, clockid_t *pClk)
 {
+    clockid_t clk;
+    int nSaved;
+
     if (pClk == NULL) {
         errno = EINVAL;
         return -1;
     }
-    if (pid != 0 && pid != getpid()) {
-        /* Bring-up: only self process CPU clock */
-        errno = EPERM;
+    if (pid < 0) {
+        errno = EINVAL;
         return -1;
     }
-    *pClk = CLOCK_PROCESS_CPUTIME_ID;
+    if (pid == 0) {
+        pid = getpid();
+    }
+    /*
+     * Soft: prove the target is reachable (ESRCH) without requiring
+     * signal delivery permission for every call — kill(0) ok if EPERM.
+     */
+    nSaved = errno;
+    if (kill(pid, 0) != 0 && errno != EPERM) {
+        /* errno already ESRCH/EINVAL from kill */
+        return -1;
+    }
+    errno = nSaved;
+
+    if (pid == getpid()) {
+        *pClk = CLOCK_PROCESS_CPUTIME_ID;
+        return 0;
+    }
+    clk = GJ_MAKE_PROCESS_CPUCLOCK(pid, GJ_CPUCLOCK_SCHED);
+    /* Soft probe: clock_getres rejects bogus ids on capable kernels. */
+    {
+        struct timespec ts;
+
+        if (clock_getres(clk, &ts) != 0) {
+            /* Fallback closed if host rejects private clockids. */
+            return -1;
+        }
+    }
+    *pClk = clk;
     return 0;
 }

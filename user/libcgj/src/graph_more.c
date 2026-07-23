@@ -5,6 +5,14 @@
  * Additional glibc graph nodes: LFS aliases, underscored aliases, clone,
  * closefrom, clock, signal legacy, c16/c32, bindresvport, host id, etc.
  * Integer-only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_MORE_SOFT_CLOSEFROM
+ * greppable: CGJ_GRAPH_MORE_SOFT_C16
+ * greppable: CGJ_GRAPH_MORE_SOFT_BINDRESV
+ * greppable: CGJ_GRAPH_MORE_SOFT_MEMFROB
+ *
+ * Soft deepen: closefrom validate + fallback, BMP-only c16 with soft
+ * surrogate reject, bindresvport null sin, memfrob null-safe.
  */
 #include <dirent.h>
 #include <errno.h>
@@ -181,6 +189,7 @@ closefrom(int nLowfd)
 {
     int n;
 
+    /* greppable: CGJ_GRAPH_MORE_SOFT_CLOSEFROM */
     if (nLowfd < 0) {
         errno = EINVAL;
         return -1;
@@ -194,8 +203,11 @@ closefrom(int nLowfd)
         int fd;
         int nMax = getdtablesize();
 
-        if (nMax < 0) {
+        if (nMax < 0 || nMax > 65536) {
             nMax = 1024;
+        }
+        if (nLowfd >= nMax) {
+            return 0;
         }
         for (fd = nLowfd; fd < nMax; fd++) {
             (void)close(fd);
@@ -405,7 +417,12 @@ c32rtomb(char *pS, char32_t c32, mbstate_t *pSt)
 size_t
 c16rtomb(char *pS, char16_t c16, mbstate_t *pSt)
 {
-    /* BMP-only bring-up (no surrogate pairs) */
+    /* greppable: CGJ_GRAPH_MORE_SOFT_C16 */
+    /* BMP-only soft: reject lone surrogates (no pair state machine yet). */
+    if (c16 >= 0xD800u && c16 <= 0xDFFFu) {
+        errno = EILSEQ;
+        return (size_t)-1;
+    }
     return c32rtomb(pS, (char32_t)c16, pSt);
 }
 
@@ -432,6 +449,11 @@ mbrtoc16(char16_t *pC16, const char *pS, size_t n, mbstate_t *pSt)
 
     if (r == (size_t)-1 || r == (size_t)-2) {
         return r;
+    }
+    /* Soft BMP: code points above U+FFFF are EILSEQ (no surrogate emit). */
+    if (c32 > 0xFFFFu) {
+        errno = EILSEQ;
+        return (size_t)-1;
     }
     if (pC16 != NULL) {
         *pC16 = (char16_t)(c32 & 0xffffu);
@@ -518,17 +540,28 @@ int
 bindresvport(int nFd, struct sockaddr_in *pSin)
 {
     struct sockaddr_in sin;
+    struct sockaddr_in *pUse;
     int port;
 
+    /* greppable: CGJ_GRAPH_MORE_SOFT_BINDRESV */
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
     if (pSin == NULL) {
         memset(&sin, 0, sizeof(sin));
         sin.sin_family = AF_INET;
         sin.sin_addr.s_addr = htonl(INADDR_ANY);
-        pSin = &sin;
+        pUse = &sin;
+    } else {
+        pUse = pSin;
+        if (pUse->sin_family == 0) {
+            pUse->sin_family = AF_INET;
+        }
     }
     for (port = 600; port < 1024; port++) {
-        pSin->sin_port = htons((uint16_t)port);
-        if (bind(nFd, (struct sockaddr *)pSin, sizeof(*pSin)) == 0) {
+        pUse->sin_port = htons((uint16_t)port);
+        if (bind(nFd, (struct sockaddr *)pUse, sizeof(*pUse)) == 0) {
             return 0;
         }
         if (errno != EADDRINUSE) {
@@ -562,8 +595,9 @@ memfrob(void *p, size_t cb)
     unsigned char *q = (unsigned char *)p;
     size_t i;
 
-    if (p == NULL) {
-        return NULL;
+    /* greppable: CGJ_GRAPH_MORE_SOFT_MEMFROB */
+    if (p == NULL || cb == 0) {
+        return p;
     }
     for (i = 0; i < cb; i++) {
         q[i] ^= 42u;
@@ -581,8 +615,12 @@ strfry(char *sz)
         return NULL;
     }
     n = strlen(sz);
+    if (n < 2) {
+        return sz;
+    }
     for (i = 0; i + 1 < n; i++) {
-        size_t j = i + (size_t)(rand() % (int)(n - i));
+        size_t nRem = n - i;
+        size_t j = i + (size_t)(rand() % (int)nRem);
         char t = sz[i];
 
         sz[i] = sz[j];

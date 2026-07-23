@@ -42,7 +42,7 @@ Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 | **io_uring min rings** | **shipped PASS** | `io_uring: min rings ready`; setup/enter/register soft surface; **not** full SQE for games |
 | **768GiB hierarchical soak** | **PASS** | `GJ_MEM=768G` / `soak_tib`; product bar still **≥ 1 TiB** when host allows; **not** Steam |
 | **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke` (exceptions→virtio-mmio); separate arch tree; **not** Deck/x86 product path |
-| Continuum soft graph | **soft** | makefile decades; **not** client run |
+| Continuum soft graph | **soft** | parallel waves → **makefile_max=14900**; CREATE-ONLY soft gates only; **not** client run |
 
 ---
 

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * sigset helpers + sigprocmask + sigaction (bring-up kernel pass-through).
+ * sigset helpers + sigprocmask + sigaction (kernel pass-through, soft deepen).
  */
 #include <errno.h>
 #include <signal.h>
@@ -14,8 +14,11 @@
 #define SIGSET_NWORDS     16
 /* Linux kernel sigset is _NSIG/8 bytes (64 signals → 8); userspace is larger */
 #define KERNEL_SIGSET_SZ  8
+/* Userspace sigset supports up to 1024; kernel only honors first 64. */
+#define CGJ_SIG_MAX       1024
 
-/* Linux kernel sigaction layout (x86_64) */
+/* Linux kernel sigaction layout (x86_64): mask follows restorer; kernel
+ * only consumes KERNEL_SIGSET_SZ bytes of mask via the size argument. */
 struct kernel_sigaction {
     void          *ksa_handler;
     unsigned long  ksa_flags;
@@ -49,6 +52,12 @@ sys_ret(long r)
     return (int)r;
 }
 
+static int
+sig_valid(int nSig)
+{
+    return nSig >= 1 && nSig <= CGJ_SIG_MAX;
+}
+
 int
 sigemptyset(sigset_t *pSet)
 {
@@ -58,7 +67,7 @@ sigemptyset(sigset_t *pSet)
         errno = EINVAL;
         return -1;
     }
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < SIGSET_NWORDS; i++) {
         pSet->__val[i] = 0UL;
     }
     return 0;
@@ -73,7 +82,7 @@ sigfillset(sigset_t *pSet)
         errno = EINVAL;
         return -1;
     }
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < SIGSET_NWORDS; i++) {
         pSet->__val[i] = ~0UL;
     }
     return 0;
@@ -82,40 +91,64 @@ sigfillset(sigset_t *pSet)
 int
 sigaddset(sigset_t *pSet, int nSig)
 {
-    if (pSet == NULL || nSig < 1 || nSig > 1024) {
+    unsigned uBit;
+    size_t iWord;
+
+    if (pSet == NULL || !sig_valid(nSig)) {
         errno = EINVAL;
         return -1;
     }
-    pSet->__val[(nSig - 1) / (8 * (int)sizeof(unsigned long))] |=
-        1UL << ((unsigned)(nSig - 1) % (8 * sizeof(unsigned long)));
+    uBit = (unsigned)(nSig - 1);
+    iWord = uBit / (8u * (unsigned)sizeof(unsigned long));
+    if (iWord >= SIGSET_NWORDS) {
+        errno = EINVAL;
+        return -1;
+    }
+    pSet->__val[iWord] |=
+        1UL << (uBit % (8u * (unsigned)sizeof(unsigned long)));
     return 0;
 }
 
 int
 sigdelset(sigset_t *pSet, int nSig)
 {
-    if (pSet == NULL || nSig < 1 || nSig > 1024) {
+    unsigned uBit;
+    size_t iWord;
+
+    if (pSet == NULL || !sig_valid(nSig)) {
         errno = EINVAL;
         return -1;
     }
-    pSet->__val[(nSig - 1) / (8 * (int)sizeof(unsigned long))] &=
-        ~(1UL << ((unsigned)(nSig - 1) % (8 * sizeof(unsigned long))));
+    uBit = (unsigned)(nSig - 1);
+    iWord = uBit / (8u * (unsigned)sizeof(unsigned long));
+    if (iWord >= SIGSET_NWORDS) {
+        errno = EINVAL;
+        return -1;
+    }
+    pSet->__val[iWord] &=
+        ~(1UL << (uBit % (8u * (unsigned)sizeof(unsigned long))));
     return 0;
 }
 
 int
 sigismember(const sigset_t *pSet, int nSig)
 {
-    unsigned long bit;
+    unsigned uBit;
+    size_t iWord;
+    unsigned long uMask;
 
-    if (pSet == NULL || nSig < 1 || nSig > 1024) {
+    if (pSet == NULL || !sig_valid(nSig)) {
         errno = EINVAL;
         return -1;
     }
-    bit = 1UL << ((unsigned)(nSig - 1) % (8 * sizeof(unsigned long)));
-    return (pSet->__val[(nSig - 1) / (8 * (int)sizeof(unsigned long))] & bit)
-               ? 1
-               : 0;
+    uBit = (unsigned)(nSig - 1);
+    iWord = uBit / (8u * (unsigned)sizeof(unsigned long));
+    if (iWord >= SIGSET_NWORDS) {
+        errno = EINVAL;
+        return -1;
+    }
+    uMask = 1UL << (uBit % (8u * (unsigned)sizeof(unsigned long)));
+    return (pSet->__val[iWord] & uMask) ? 1 : 0;
 }
 
 int
@@ -123,6 +156,13 @@ sigprocmask(int nHow, const sigset_t *pSet, sigset_t *pOldset)
 {
     long r;
 
+    if (nHow != SIG_BLOCK && nHow != SIG_UNBLOCK && nHow != SIG_SETMASK) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (pSet == NULL && pOldset == NULL) {
+        return 0;
+    }
     r = sys6(NR_rt_sigprocmask, nHow, (long)(uintptr_t)pSet,
              (long)(uintptr_t)pOldset, KERNEL_SIGSET_SZ, 0, 0);
     return sys_ret(r);
@@ -136,7 +176,11 @@ sigaction(int nSig, const struct sigaction *pAct, struct sigaction *pOldact)
     long r;
     size_t i;
 
-    if (nSig < 1 || nSig == SIGKILL || nSig == SIGSTOP) {
+    if (nSig < 1 || nSig == SIGKILL || nSig == SIGSTOP || nSig > CGJ_SIG_MAX) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (pAct == NULL && pOldact == NULL) {
         errno = EINVAL;
         return -1;
     }
@@ -145,7 +189,8 @@ sigaction(int nSig, const struct sigaction *pAct, struct sigaction *pOldact)
     if (pAct != NULL) {
         ksa.ksa_handler = (void *)(uintptr_t)pAct->sa_handler;
         ksa.ksa_flags = (unsigned long)pAct->sa_flags;
-        ksa.ksa_restorer = NULL;
+        /* Pass restorer if caller set one; soft path has no default restorer. */
+        ksa.ksa_restorer = (void *)(uintptr_t)pAct->sa_restorer;
         for (i = 0; i < SIGSET_NWORDS; i++) {
             ksa.ksa_mask[i] = pAct->sa_mask.__val[i];
         }
@@ -159,7 +204,8 @@ sigaction(int nSig, const struct sigaction *pAct, struct sigaction *pOldact)
         memset(pOldact, 0, sizeof(*pOldact));
         pOldact->sa_handler = (sighandler_t)kold.ksa_handler;
         pOldact->sa_flags = (unsigned long)kold.ksa_flags;
-        for (i = 0; i < 16; i++) {
+        pOldact->sa_restorer = (void (*)(void))(uintptr_t)kold.ksa_restorer;
+        for (i = 0; i < SIGSET_NWORDS; i++) {
             pOldact->sa_mask.__val[i] = kold.ksa_mask[i];
         }
     }

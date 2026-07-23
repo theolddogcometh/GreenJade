@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <locale.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -100,41 +101,53 @@ digit_val(int c, int nBase)
     return c;
 }
 
-long
-strtol(const char *sz, char **ppEnd, int nBase)
+/*
+ * Shared prefix parse for strto*: skip space/sign, resolve base, leave
+ * *pp at first digit candidate. Returns 0 ok, -1 bad base (errno set).
+ */
+static int
+strto_prefix(const char *sz, char **ppEnd, int *pnBase, int *pfNeg,
+             const char **pp, int fAllowNeg)
 {
-    long v = 0;
-    int fNeg = 0;
-    int d;
+    int nBase;
     const char *p;
 
     if (sz == NULL) {
         if (ppEnd != NULL) {
             *ppEnd = NULL;
         }
-        return 0;
+        *pp = NULL;
+        return -1;
     }
     p = sz;
     while (isspace((unsigned char)*p)) {
         p++;
     }
+    *pfNeg = 0;
     if (*p == '-') {
-        fNeg = 1;
+        if (fAllowNeg) {
+            *pfNeg = 1;
+        } else {
+            *pfNeg = 1; /* strtoul: still accept '-', wrap as unsigned */
+        }
         p++;
     } else if (*p == '+') {
         p++;
     }
+    nBase = *pnBase;
     if (nBase == 0) {
-        if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        if (*p == '0' && (p[1] == 'x' || p[1] == 'X') &&
+            digit_val((unsigned char)p[2], 16) >= 0) {
             nBase = 16;
             p += 2;
         } else if (*p == '0') {
+            /* Octal: leave '0' for the digit loop so "0" counts as a digit. */
             nBase = 8;
-            p++;
         } else {
             nBase = 10;
         }
-    } else if (nBase == 16 && *p == '0' && (p[1] == 'x' || p[1] == 'X')) {
+    } else if (nBase == 16 && *p == '0' && (p[1] == 'x' || p[1] == 'X') &&
+               digit_val((unsigned char)p[2], 16) >= 0) {
         p += 2;
     }
     if (nBase < 2 || nBase > 36) {
@@ -142,170 +155,195 @@ strtol(const char *sz, char **ppEnd, int nBase)
         if (ppEnd != NULL) {
             *ppEnd = (char *)(uintptr_t)sz;
         }
-        return 0;
+        *pp = NULL;
+        return -1;
     }
-    while ((d = digit_val((unsigned char)*p, nBase)) >= 0) {
-        v = v * (long)nBase + d;
-        p++;
+    *pnBase = nBase;
+    *pp = p;
+    return 0;
+}
+
+static void
+strto_endptr(const char *sz, const char *p, int fAny, char **ppEnd)
+{
+    if (ppEnd == NULL) {
+        return;
     }
-    if (ppEnd != NULL) {
+    if (!fAny) {
+        const char *p0 = sz;
+
+        while (isspace((unsigned char)*p0)) {
+            p0++;
+        }
+        *ppEnd = (char *)(uintptr_t)p0;
+    } else {
         *ppEnd = (char *)(uintptr_t)p;
     }
-    return fNeg ? -v : v;
+}
+
+long
+strtol(const char *sz, char **ppEnd, int nBase)
+{
+    unsigned long u = 0;
+    int fNeg = 0;
+    int d;
+    int fAny = 0;
+    int fOver = 0;
+    const char *p;
+    unsigned long uLim;
+    unsigned long uBase;
+
+    if (strto_prefix(sz, ppEnd, &nBase, &fNeg, &p, 1) != 0) {
+        return 0;
+    }
+    uBase = (unsigned long)nBase;
+    /* Max magnitude: LONG_MAX, or LONG_MAX+1 when negative (LONG_MIN). */
+    uLim = (unsigned long)LONG_MAX + (fNeg ? 1UL : 0UL);
+    while ((d = digit_val((unsigned char)*p, nBase)) >= 0) {
+        fAny = 1;
+        if (!fOver) {
+            if (u > uLim / uBase ||
+                (u == uLim / uBase && (unsigned long)d > uLim % uBase)) {
+                fOver = 1;
+                u = uLim;
+            } else {
+                u = u * uBase + (unsigned long)d;
+            }
+        }
+        p++;
+    }
+    strto_endptr(sz, p, fAny, ppEnd);
+    if (fOver) {
+        errno = ERANGE;
+        return fNeg ? LONG_MIN : LONG_MAX;
+    }
+    if (fNeg) {
+        if (u == (unsigned long)LONG_MAX + 1UL) {
+            return LONG_MIN;
+        }
+        return -(long)u;
+    }
+    return (long)u;
 }
 
 unsigned long
 strtoul(const char *sz, char **ppEnd, int nBase)
 {
-    unsigned long v = 0;
+    unsigned long u = 0;
+    int fNeg = 0;
     int d;
+    int fAny = 0;
+    int fOver = 0;
     const char *p;
+    unsigned long uBase;
 
-    if (sz == NULL) {
-        if (ppEnd != NULL) {
-            *ppEnd = NULL;
-        }
+    if (strto_prefix(sz, ppEnd, &nBase, &fNeg, &p, 1) != 0) {
         return 0;
     }
-    p = sz;
-    while (isspace((unsigned char)*p)) {
-        p++;
-    }
-    if (*p == '+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == '0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
-        errno = EINVAL;
-        if (ppEnd != NULL) {
-            *ppEnd = (char *)(uintptr_t)sz;
-        }
-        return 0;
-    }
+    uBase = (unsigned long)nBase;
     while ((d = digit_val((unsigned char)*p, nBase)) >= 0) {
-        v = v * (unsigned long)nBase + (unsigned long)d;
+        fAny = 1;
+        if (!fOver) {
+            if (u > ULONG_MAX / uBase ||
+                (u == ULONG_MAX / uBase &&
+                 (unsigned long)d > ULONG_MAX % uBase)) {
+                fOver = 1;
+                u = ULONG_MAX;
+            } else {
+                u = u * uBase + (unsigned long)d;
+            }
+        }
         p++;
     }
-    if (ppEnd != NULL) {
-        *ppEnd = (char *)(uintptr_t)p;
+    strto_endptr(sz, p, fAny, ppEnd);
+    if (fOver) {
+        errno = ERANGE;
+        return ULONG_MAX;
     }
-    return v;
+    /* POSIX: leading '-' yields negated unsigned magnitude. */
+    return fNeg ? (0UL - u) : u;
 }
 
 long long
 strtoll(const char *sz, char **ppEnd, int nBase)
 {
-    long long v = 0;
+    unsigned long long u = 0;
     int fNeg = 0;
     int d;
+    int fAny = 0;
+    int fOver = 0;
     const char *p;
+    unsigned long long uLim;
+    unsigned long long uBase;
 
-    if (sz == NULL) {
-        if (ppEnd != NULL) {
-            *ppEnd = NULL;
-        }
+    if (strto_prefix(sz, ppEnd, &nBase, &fNeg, &p, 1) != 0) {
         return 0;
     }
-    p = sz;
-    while (isspace((unsigned char)*p)) {
-        p++;
-    }
-    if (*p == '-') {
-        fNeg = 1;
-        p++;
-    } else if (*p == '+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == '0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
-        errno = EINVAL;
-        if (ppEnd != NULL) {
-            *ppEnd = (char *)(uintptr_t)sz;
-        }
-        return 0;
-    }
+    uBase = (unsigned long long)nBase;
+    uLim = (unsigned long long)LLONG_MAX + (fNeg ? 1ULL : 0ULL);
     while ((d = digit_val((unsigned char)*p, nBase)) >= 0) {
-        v = v * (long long)nBase + d;
+        fAny = 1;
+        if (!fOver) {
+            if (u > uLim / uBase ||
+                (u == uLim / uBase &&
+                 (unsigned long long)d > uLim % uBase)) {
+                fOver = 1;
+                u = uLim;
+            } else {
+                u = u * uBase + (unsigned long long)d;
+            }
+        }
         p++;
     }
-    if (ppEnd != NULL) {
-        *ppEnd = (char *)(uintptr_t)p;
+    strto_endptr(sz, p, fAny, ppEnd);
+    if (fOver) {
+        errno = ERANGE;
+        return fNeg ? LLONG_MIN : LLONG_MAX;
     }
-    return fNeg ? -v : v;
+    if (fNeg) {
+        if (u == (unsigned long long)LLONG_MAX + 1ULL) {
+            return LLONG_MIN;
+        }
+        return -(long long)u;
+    }
+    return (long long)u;
 }
 
 unsigned long long
 strtoull(const char *sz, char **ppEnd, int nBase)
 {
-    unsigned long long v = 0;
+    unsigned long long u = 0;
+    int fNeg = 0;
     int d;
+    int fAny = 0;
+    int fOver = 0;
     const char *p;
+    unsigned long long uBase;
 
-    if (sz == NULL) {
-        if (ppEnd != NULL) {
-            *ppEnd = NULL;
-        }
+    if (strto_prefix(sz, ppEnd, &nBase, &fNeg, &p, 1) != 0) {
         return 0;
     }
-    p = sz;
-    while (isspace((unsigned char)*p)) {
-        p++;
-    }
-    if (*p == '+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == '0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == '0' && (p[1] == 'x' || p[1] == 'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
-        errno = EINVAL;
-        if (ppEnd != NULL) {
-            *ppEnd = (char *)(uintptr_t)sz;
-        }
-        return 0;
-    }
+    uBase = (unsigned long long)nBase;
     while ((d = digit_val((unsigned char)*p, nBase)) >= 0) {
-        v = v * (unsigned long long)nBase + (unsigned long long)d;
+        fAny = 1;
+        if (!fOver) {
+            if (u > ULLONG_MAX / uBase ||
+                (u == ULLONG_MAX / uBase &&
+                 (unsigned long long)d > ULLONG_MAX % uBase)) {
+                fOver = 1;
+                u = ULLONG_MAX;
+            } else {
+                u = u * uBase + (unsigned long long)d;
+            }
+        }
         p++;
     }
-    if (ppEnd != NULL) {
-        *ppEnd = (char *)(uintptr_t)p;
+    strto_endptr(sz, p, fAny, ppEnd);
+    if (fOver) {
+        errno = ERANGE;
+        return ULLONG_MAX;
     }
-    return v;
+    return fNeg ? (0ULL - u) : u;
 }
 
 /* Process environment (glibc-shaped). Seeded from aux stack by __libc_start_main. */
@@ -593,19 +631,31 @@ void
 qsort(void *pBase, size_t n, size_t cb,
       int (*pfnCmp)(const void *, const void *))
 {
-    size_t i, j;
+    size_t i;
+    size_t j;
+    size_t gap;
     unsigned char *p = (unsigned char *)pBase;
 
     if (pBase == NULL || pfnCmp == NULL || cb == 0 || n < 2) {
         return;
     }
-    /* Simple insertion sort (bring-up; correct, not fast) */
-    for (i = 1; i < n; i++) {
-        j = i;
-        while (j > 0 && pfnCmp(p + (j - 1) * cb, p + j * cb) > 0) {
-            qsort_swap(p + (j - 1) * cb, p + j * cb, cb);
-            j--;
+    /*
+     * Shellsort (Hibbard gaps): pure-C, in-place, O(n^{3/2}) soft deepen
+     * of the prior insertion-only bring-up path. API unchanged.
+     */
+    for (gap = 1; gap < n / 3; gap = gap * 3 + 1) {
+        /* grow */
+    }
+    while (gap > 0) {
+        for (i = gap; i < n; i++) {
+            j = i;
+            while (j >= gap &&
+                   pfnCmp(p + (j - gap) * cb, p + j * cb) > 0) {
+                qsort_swap(p + (j - gap) * cb, p + j * cb, cb);
+                j -= gap;
+            }
         }
+        gap /= 3;
     }
 }
 

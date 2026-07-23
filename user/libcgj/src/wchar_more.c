@@ -4,6 +4,13 @@
  *
  * Additional wide-string helpers (wcsstr, wcsnlen, casecmp, spn/cspn).
  * Note: wcsncmp/wcsncat live in wchar.c — do not duplicate here.
+ *
+ * greppable: CGJ_WCHAR_MORE_SOFT_NULL
+ * greppable: CGJ_WCHAR_MORE_SOFT_CASECMP
+ * greppable: CGJ_WCHAR_MORE_SOFT_SPN
+ *
+ * Soft deepen: null-safe length/span, casecmp stops on first NUL, empty
+ * needle is haystack start (POSIX).
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -16,7 +23,8 @@ wcsnlen(const wchar_t *sz, size_t cMax)
 {
     size_t n = 0;
 
-    if (sz == NULL) {
+    /* greppable: CGJ_WCHAR_MORE_SOFT_NULL */
+    if (sz == NULL || cMax == 0) {
         return 0;
     }
     while (n < cMax && sz[n] != 0) {
@@ -38,7 +46,11 @@ wcsstr(const wchar_t *szHay, const wchar_t *szNeedle)
     if (nNeedle == 0) {
         return (wchar_t *)(uintptr_t)szHay;
     }
+    /* Soft: first-char filter before full ncmp. */
     for (i = 0; szHay[i] != 0; i++) {
+        if (szHay[i] != szNeedle[0]) {
+            continue;
+        }
         if (wcsncmp(szHay + i, szNeedle, nNeedle) == 0) {
             return (wchar_t *)(uintptr_t)(szHay + i);
         }
@@ -51,7 +63,11 @@ wcsspn(const wchar_t *sz, const wchar_t *szAccept)
 {
     size_t i;
 
-    if (sz == NULL || szAccept == NULL) {
+    /* greppable: CGJ_WCHAR_MORE_SOFT_SPN */
+    if (sz == NULL) {
+        return 0;
+    }
+    if (szAccept == NULL || szAccept[0] == 0) {
         return 0;
     }
     for (i = 0; sz[i] != 0; i++) {
@@ -70,7 +86,7 @@ wcscspn(const wchar_t *sz, const wchar_t *szReject)
     if (sz == NULL) {
         return 0;
     }
-    if (szReject == NULL) {
+    if (szReject == NULL || szReject[0] == 0) {
         return wcslen(sz);
     }
     for (i = 0; sz[i] != 0; i++) {
@@ -86,7 +102,7 @@ wcspbrk(const wchar_t *sz, const wchar_t *szAccept)
 {
     size_t i;
 
-    if (sz == NULL || szAccept == NULL) {
+    if (sz == NULL || szAccept == NULL || szAccept[0] == 0) {
         return NULL;
     }
     for (i = 0; sz[i] != 0; i++) {
@@ -104,14 +120,18 @@ wcscasecmp(const wchar_t *a, const wchar_t *b)
     wint_t ca;
     wint_t cb;
 
+    /* greppable: CGJ_WCHAR_MORE_SOFT_CASECMP */
     if (a == NULL || b == NULL) {
         return (a == b) ? 0 : (a == NULL ? -1 : 1);
     }
     for (i = 0;; i++) {
         ca = towlower((wint_t)a[i]);
         cb = towlower((wint_t)b[i]);
-        if (ca != cb || ca == 0) {
-            return (int)ca - (int)cb;
+        if (ca != cb) {
+            return (ca < cb) ? -1 : 1;
+        }
+        if (a[i] == 0) {
+            return 0;
         }
     }
 }
@@ -132,8 +152,11 @@ wcsncasecmp(const wchar_t *a, const wchar_t *b, size_t c)
     for (i = 0; i < c; i++) {
         ca = towlower((wint_t)a[i]);
         cb = towlower((wint_t)b[i]);
-        if (ca != cb || ca == 0) {
-            return (int)ca - (int)cb;
+        if (ca != cb) {
+            return (ca < cb) ? -1 : 1;
+        }
+        if (a[i] == 0) {
+            return 0;
         }
     }
     return 0;

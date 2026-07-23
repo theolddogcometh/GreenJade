@@ -3,7 +3,8 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * shadow password — freestanding in-memory table + line parse.
- * Seeds a synthetic "root" entry for desktop soft auth path.
+ * Soft deepen: seed root+nobody; optional /etc/shadow load; putspent
+ * upserts table; sgetspent field validation.
  */
 #include <errno.h>
 #include <shadow.h>
@@ -12,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SP_MAX 8
+#define SP_MAX  32
 #define SP_LINE 256
 
 struct sp_ent {
@@ -28,6 +29,112 @@ static int g_iCursor;
 static int g_fLocked;
 
 static void
+sp_seed(const char *szName, const char *szPw)
+{
+	int i;
+
+	for (i = 0; i < SP_MAX; i++) {
+		if (!g_aTab[i].used) {
+			size_t n0;
+			size_t n1;
+
+			memset(&g_aTab[i], 0, sizeof(g_aTab[i]));
+			g_aTab[i].used = 1;
+			n0 = strlen(szName);
+			n1 = strlen(szPw);
+			if (n0 >= sizeof(g_aTab[i].namp)) {
+				n0 = sizeof(g_aTab[i].namp) - 1;
+			}
+			if (n1 >= sizeof(g_aTab[i].pwdp)) {
+				n1 = sizeof(g_aTab[i].pwdp) - 1;
+			}
+			memcpy(g_aTab[i].namp, szName, n0);
+			g_aTab[i].namp[n0] = '\0';
+			memcpy(g_aTab[i].pwdp, szPw, n1);
+			g_aTab[i].pwdp[n1] = '\0';
+			g_aTab[i].sp.sp_namp = g_aTab[i].namp;
+			g_aTab[i].sp.sp_pwdp = g_aTab[i].pwdp;
+			g_aTab[i].sp.sp_lstchg = -1;
+			g_aTab[i].sp.sp_min = -1;
+			g_aTab[i].sp.sp_max = -1;
+			g_aTab[i].sp.sp_warn = -1;
+			g_aTab[i].sp.sp_inact = -1;
+			g_aTab[i].sp.sp_expire = -1;
+			g_aTab[i].sp.sp_flag = 0;
+			return;
+		}
+	}
+}
+
+static int
+sp_upsert(const struct spwd *pSp)
+{
+	int i;
+	int nFree = -1;
+	size_t n0;
+	size_t n1;
+
+	if (pSp == NULL || pSp->sp_namp == NULL || pSp->sp_pwdp == NULL) {
+		return -1;
+	}
+	for (i = 0; i < SP_MAX; i++) {
+		if (g_aTab[i].used &&
+		    strcmp(g_aTab[i].namp, pSp->sp_namp) == 0) {
+			nFree = i;
+			break;
+		}
+		if (!g_aTab[i].used && nFree < 0) {
+			nFree = i;
+		}
+	}
+	if (nFree < 0) {
+		return -1;
+	}
+	n0 = strlen(pSp->sp_namp);
+	n1 = strlen(pSp->sp_pwdp);
+	if (n0 >= sizeof(g_aTab[nFree].namp)) {
+		n0 = sizeof(g_aTab[nFree].namp) - 1;
+	}
+	if (n1 >= sizeof(g_aTab[nFree].pwdp)) {
+		n1 = sizeof(g_aTab[nFree].pwdp) - 1;
+	}
+	memset(&g_aTab[nFree], 0, sizeof(g_aTab[nFree]));
+	g_aTab[nFree].used = 1;
+	memcpy(g_aTab[nFree].namp, pSp->sp_namp, n0);
+	g_aTab[nFree].namp[n0] = '\0';
+	memcpy(g_aTab[nFree].pwdp, pSp->sp_pwdp, n1);
+	g_aTab[nFree].pwdp[n1] = '\0';
+	g_aTab[nFree].sp = *pSp;
+	g_aTab[nFree].sp.sp_namp = g_aTab[nFree].namp;
+	g_aTab[nFree].sp.sp_pwdp = g_aTab[nFree].pwdp;
+	return 0;
+}
+
+static void
+sp_load_file(const char *szPath)
+{
+	FILE *pF;
+	char aLine[SP_LINE];
+
+	pF = fopen(szPath, "r");
+	if (pF == NULL) {
+		return;
+	}
+	while (fgets(aLine, (int)sizeof(aLine), pF) != NULL) {
+		struct spwd *p;
+
+		if (aLine[0] == '#' || aLine[0] == '\n' || aLine[0] == '\0') {
+			continue;
+		}
+		p = sgetspent(aLine);
+		if (p != NULL) {
+			(void)sp_upsert(p);
+		}
+	}
+	(void)fclose(pF);
+}
+
+static void
 sp_init(void)
 {
 	if (g_fInit) {
@@ -35,20 +142,12 @@ sp_init(void)
 	}
 	g_fInit = 1;
 	memset(g_aTab, 0, sizeof(g_aTab));
-	/* Synthetic root — empty password field means "no password set". */
-	g_aTab[0].used = 1;
-	memcpy(g_aTab[0].namp, "root", 5);
-	g_aTab[0].pwdp[0] = '*';
-	g_aTab[0].pwdp[1] = '\0';
-	g_aTab[0].sp.sp_namp = g_aTab[0].namp;
-	g_aTab[0].sp.sp_pwdp = g_aTab[0].pwdp;
-	g_aTab[0].sp.sp_lstchg = -1;
-	g_aTab[0].sp.sp_min = -1;
-	g_aTab[0].sp.sp_max = -1;
-	g_aTab[0].sp.sp_warn = -1;
-	g_aTab[0].sp.sp_inact = -1;
-	g_aTab[0].sp.sp_expire = -1;
-	g_aTab[0].sp.sp_flag = 0;
+	/* Synthetic root — locked password field. */
+	sp_seed("root", "*");
+	/* Soft nobody for desktop multi-user soft path. */
+	sp_seed("nobody", "!");
+	/* Optional host /etc/shadow overlay (best-effort). */
+	sp_load_file("/etc/shadow");
 	g_iCursor = 0;
 }
 
@@ -117,6 +216,8 @@ putspent(const struct spwd *pSp, FILE *pF)
 		errno = EINVAL;
 		return -1;
 	}
+	/* Soft: keep in-memory table in sync with written line. */
+	(void)sp_upsert(pSp);
 	if (fprintf(pF, "%s:%s:%ld:%ld:%ld:%ld:%ld:%ld:%lu\n", pSp->sp_namp,
 		    pSp->sp_pwdp, pSp->sp_lstchg, pSp->sp_min, pSp->sp_max,
 		    pSp->sp_warn, pSp->sp_inact, pSp->sp_expire,
@@ -165,6 +266,11 @@ sgetspent(const char *szLine)
 		aLine[i] = szLine[i];
 	}
 	aLine[i] = '\0';
+	/* Soft: skip comments / empty */
+	if (aLine[0] == '\0' || aLine[0] == '#') {
+		errno = EINVAL;
+		return NULL;
+	}
 	p = aLine;
 	fields[n++] = p;
 	while (*p != '\0' && n < 9) {
@@ -224,10 +330,15 @@ fgetspent(FILE *pF)
 		errno = EINVAL;
 		return NULL;
 	}
-	if (fgets(aLine, (int)sizeof(aLine), pF) == NULL) {
-		return NULL;
+	for (;;) {
+		if (fgets(aLine, (int)sizeof(aLine), pF) == NULL) {
+			return NULL;
+		}
+		if (aLine[0] == '#' || aLine[0] == '\n' || aLine[0] == '\0') {
+			continue;
+		}
+		return sgetspent(aLine);
 	}
-	return sgetspent(aLine);
 }
 
 int

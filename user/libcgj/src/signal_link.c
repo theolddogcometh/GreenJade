@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * sigwait/sigpending/sigsuspend + pthread_kill/pthread_sigmask.
+ * sigwait/sigpending/sigsuspend + pthread_kill/pthread_sigmask (soft deepen).
  */
 #include <errno.h>
 #include <pthread.h>
@@ -71,6 +71,7 @@ sigsuspend(const sigset_t *pSet)
     }
     r = sys6(NR_rt_sigsuspend, (long)(uintptr_t)pSet, KERNEL_SIGSET_SZ, 0, 0, 0,
              0);
+    /* Always returns -1 with EINTR when a signal is delivered. */
     return sys_ret(r);
 }
 
@@ -109,13 +110,19 @@ sigwaitinfo(const sigset_t *pSet, siginfo_t *pInfo)
         errno = EINVAL;
         return -1;
     }
-    r = sys6(NR_rt_sigtimedwait, (long)(uintptr_t)pSet, (long)(uintptr_t)pInfo,
-             0, KERNEL_SIGSET_SZ, 0, 0);
-    if (r < 0 && r > -4096) {
-        errno = (int)(-r);
-        return -1;
+    for (;;) {
+        r = sys6(NR_rt_sigtimedwait, (long)(uintptr_t)pSet,
+                 (long)(uintptr_t)pInfo, 0, KERNEL_SIGSET_SZ, 0, 0);
+        if (r < 0 && r > -4096) {
+            if ((int)(-r) == EINTR) {
+                /* Soft: restart like many libcs for non-timeout wait. */
+                continue;
+            }
+            errno = (int)(-r);
+            return -1;
+        }
+        return (int)r;
     }
-    return (int)r;
 }
 
 int
@@ -128,6 +135,7 @@ sigtimedwait(const sigset_t *pSet, siginfo_t *pInfo,
         errno = EINVAL;
         return -1;
     }
+    /* Do not swallow EINTR — timed wait must surface interrupt. */
     r = sys6(NR_rt_sigtimedwait, (long)(uintptr_t)pSet, (long)(uintptr_t)pInfo,
              (long)(uintptr_t)pTimeout, KERNEL_SIGSET_SZ, 0, 0);
     if (r < 0 && r > -4096) {
@@ -140,6 +148,7 @@ sigtimedwait(const sigset_t *pSet, siginfo_t *pInfo,
 int
 pthread_sigmask(int nHow, const sigset_t *pSet, sigset_t *pOld)
 {
+    /* Thread mask is process-thread local under Linux rt_sigprocmask. */
     return sigprocmask(nHow, pSet, pOld);
 }
 
@@ -149,10 +158,17 @@ pthread_kill(pthread_t tid, int nSig)
     long pid;
     long r;
 
+    /* nSig == 0 is a valid existence probe. */
     if (nSig < 0) {
         return EINVAL;
     }
+    if (tid == 0) {
+        return ESRCH;
+    }
     pid = sys6(NR_getpid, 0, 0, 0, 0, 0, 0);
+    if (pid < 0 && pid > -4096) {
+        return (int)(-pid);
+    }
     r = sys6(NR_tgkill, pid, (long)tid, nSig, 0, 0, 0);
     if (r < 0 && r > -4096) {
         return (int)(-r);
@@ -166,6 +182,10 @@ tgkill(int nTgid, int nTid, int nSig)
     long r;
 
     if (nSig < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (nTgid <= 0 || nTid <= 0) {
         errno = EINVAL;
         return -1;
     }

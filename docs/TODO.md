@@ -469,7 +469,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 - [x] **A2:** PE32 int80 brk with real page maps (`pe32: int80 brk PASS`)
 - [x] **A2:** PE32 int80 access/mkdir/rename/unlink via vfs (`pe32: int80 access PASS`)
 - [ ] **Real-hardware install path / bar3** (UEFI boot, storage, display, input, net sufficient for Steam client — ESP image ready; full userspace/Steam still open)
-- [x] **io_uring min rings + SQE I/O** — setup/enter/register + package mmap + SQE READ/WRITE/FSYNC/CLOSE/READV/WRITEV (`linux: io_uring min rings PASS`, `linux: io_uring mmap PASS`, `linux: io_uring SQE I/O PASS`); deeper opcodes still soft
+- [x] **io_uring min rings + SQE I/O** — setup/enter/register + package mmap + SQE READ/WRITE/FSYNC/CLOSE/READV/WRITEV (`linux: io_uring min rings PASS`, `linux: io_uring mmap PASS`, `linux: io_uring SQE I/O PASS`, `linux: io_uring register depth PASS`, `linux: io_uring more opcodes PASS`); game/title I/O still open
 - [x] **A2 partial:** ELF PT_INTERP probe + ET_DYN load bias (`elf: PT_INTERP probe PASS`)
 - [x] **A2 partial:** execve INTERP load path (`linux: execve INTERP PASS`, `linux: dynlink path PASS`)
 - [x] **A2 partial:** `ld-gj` freestanding dynlinker scaffold → `lib/ld-gj.so.1` on rootfs + ESP
@@ -560,7 +560,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 7. [ ] **Bar3:** real-hw install + Steam client + Deck Top 50 title matrix
 8. [ ] **True 1 TiB soak** when host allows (`-m 1280G`; 768 GiB soak already PASS)
 9. [ ] Full multi-server security / `confine` + drop ambient authority
-10. [x] `io_uring` min rings + SQE I/O PASS (deeper opcodes still soft)
+10. [x] `io_uring` min rings + SQE I/O + register depth/more opcodes soft PASS (game/title I/O still open)
 11. [x] `aarch64` product-shaped scaffold (shared C string/stdio/pmm/sched + PSCI; UEFI PE still open)
 
 ---
@@ -569,6 +569,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 | Date | Note |
 |------|------|
+| 2026-07-23 | **Parallel waves 1–4 soft shipped** (kernel/media/graph only): wave2 `hda_client: live spawn PASS`; wave3 hierarchical **768 GiB** `soak_tib` **PASS on host**; continuum **makefile_max=14900** (`graph_batch14900.c` + soft decades); io_uring soft surface greppable (`linux: io_uring min rings/mmap/SQE I/O/register depth/more opcodes PASS`); aarch64 scaffold greppable (`aarch64: shared C kernel PASS`, `psci PASS`). **Not** bar3 / true 1 TiB soak / Deck Top 50 title runs (matrix still NOT-TRIED×50). **bar3 still open**. |
 | 2026-07-23 | **TODO reconcile (parallel deepen):** flip stale M2 boxes with greppable PASSes — `cap: mint/copy/move+cdt PASS`, `cap: quota exhaust PASS`, `door: timeout/peer path PASS`, `door: mid-call peer death PASS`; plus AS-on-schedule, notify, futex A0, named memobj A0, CapJit/except port, timer R7 revoke. Note io_uring SQE I/O + aarch64 shared C/PSCI already in tree. Keep open: bar3, 1 TiB soak, confine multi-server, CDT try-lock product, REPLY/FRAME caps, IPC 100k. **bar3 still open**. |
 | 2026-07-23 | **mmap + shared mm/sched + PSCI:** io_uring SQ/CQ package mmap (`linux: io_uring mmap PASS` + SQE fill without inject); shared `pmm_freelist`+`sched_coop` on aarch64; PSCI HVC/SMC with fault recovery (`psci PASS conduit=hvc`). **bar3 still open**. |
 | 2026-07-23 | **SQE I/O + shared aarch64 C:** io_uring full SQE path (READ/WRITE/FSYNC/CLOSE/READV/WRITEV via vfs_ram; inject+CQE); greppable `linux: io_uring SQE I/O PASS`. aarch64 links shared `string.c`+`stdio_k.c` via `console_*` (`aarch64: shared C kernel PASS`). **bar3 still open**. |

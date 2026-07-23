@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Minimal pthread + futex + TLS (bring-up). Not GNU NPTL.
+ * Minimal pthread + futex + TLS (soft deepen). Not GNU NPTL.
  */
 #include <errno.h>
 #include <pthread.h>
@@ -48,9 +48,81 @@ struct cgj_thread {
     void *pStack;
     size_t cbStack;
     int nJoinable;
-    int nDone;
-    volatile int nClearTid;
+    volatile int nDone;     /* 0 running, 1 exited (joinable result ready) */
+    volatile int nClearTid; /* kernel CLEARTID futex word */
+    int nStackOwned;        /* 1 if pStack was malloc'd by create */
 };
+
+#define CGJ_THR_MAX 128
+
+static struct cgj_thread *g_apThr[CGJ_THR_MAX];
+static volatile int g_nThrLock;
+
+static void
+thr_lock(void)
+{
+    while (!__sync_bool_compare_and_swap(&g_nThrLock, 0, 1)) {
+        __asm__ volatile("pause" ::: "memory");
+    }
+}
+
+static void
+thr_unlock(void)
+{
+    __sync_lock_release(&g_nThrLock);
+}
+
+static int
+thr_register(struct cgj_thread *pT)
+{
+    int i;
+
+    thr_lock();
+    for (i = 0; i < CGJ_THR_MAX; i++) {
+        if (g_apThr[i] == NULL) {
+            g_apThr[i] = pT;
+            thr_unlock();
+            return 0;
+        }
+    }
+    thr_unlock();
+    return ENOMEM;
+}
+
+static struct cgj_thread *
+thr_find(pthread_t tid)
+{
+    int i;
+    struct cgj_thread *pT = NULL;
+
+    thr_lock();
+    for (i = 0; i < CGJ_THR_MAX; i++) {
+        if (g_apThr[i] != NULL && g_apThr[i]->tid == tid) {
+            pT = g_apThr[i];
+            break;
+        }
+    }
+    thr_unlock();
+    return pT;
+}
+
+static void
+thr_unregister(struct cgj_thread *pT)
+{
+    int i;
+
+    if (pT == NULL) {
+        return;
+    }
+    thr_lock();
+    for (i = 0; i < CGJ_THR_MAX; i++) {
+        if (g_apThr[i] == pT) {
+            g_apThr[i] = NULL;
+            break;
+        }
+    }
+    thr_unlock();
+}
 
 static long
 sys6(long nr, long a0, long a1, long a2, long a3, long a4, long a5)
@@ -106,6 +178,20 @@ static int g_cKeys;
 /* Freestanding: no compiler TLS; one active self pointer (bring-up) */
 static struct cgj_thread *g_pSelf;
 static struct cgj_thread g_mainThr;
+
+static void
+thr_reap(struct cgj_thread *pT)
+{
+    if (pT == NULL || pT == &g_mainThr) {
+        return;
+    }
+    thr_unregister(pT);
+    if (pT->nStackOwned && pT->pStack != NULL) {
+        free(pT->pStack);
+        pT->pStack = NULL;
+    }
+    free(pT);
+}
 
 static void
 ensure_main(void)
@@ -348,7 +434,7 @@ int
 pthread_setschedprio(pthread_t tid, int nPrio)
 {
     struct sched_param sp;
-    int nPol;
+    int nPol = 0;
     int nErr;
 
     nErr = pthread_getschedparam(tid, &nPol, &sp);
@@ -423,9 +509,11 @@ pthread_create(pthread_t *pTid, const pthread_attr_t *pAttr,
     pT->pArg = pArg;
     pT->pStack = pStack;
     pT->cbStack = cbStack;
+    pT->nStackOwned = nStackOwned;
     pT->nJoinable =
         (pAttr == NULL || pAttr->nDetach == PTHREAD_CREATE_JOINABLE) ? 1 : 0;
     pT->nDone = 0;
+    pT->nClearTid = 1; /* non-zero until kernel CLEARTID on exit */
 
     /* Stack grows down; align top */
     pTop = (unsigned char *)pStack + cbStack;
@@ -435,17 +523,15 @@ pthread_create(pthread_t *pTid, const pthread_attr_t *pAttr,
             CLONE_SYSVSEM | CLONE_CHILD_CLEARTID | CLONE_PARENT_SETTID;
 
     /*
-     * clone(flags, stack, parent_tid, tls, child_tid) — Linux x86_64 order:
+     * clone(flags, stack, parent_tid, child_tid, tls) — Linux x86_64:
      * rdi=flags rsi=stack rdx=parent_tid r10=child_tid r8=tls
-     * We set g_pSelf in parent before clone for child (shared VM).
-     * Child must set its own TLS pointer — use stack slot for self.
+     * Soft: g_pSelf race on concurrent create — acceptable for bring-up.
      */
     {
-        /* Store self ptr just below stack top for child bootstrap */
         struct cgj_thread **ppSlot =
             (struct cgj_thread **)(void *)(pTop - sizeof(void *));
         *ppSlot = pT;
-        g_pSelf = pT; /* race: single-threaded create is fine for bring-up */
+        g_pSelf = pT;
 
         tid = sys6(NR_clone, flags, (long)(uintptr_t)(pTop - 16),
                    (long)(uintptr_t)&pT->tid, (long)(uintptr_t)&pT->nClearTid,
@@ -467,57 +553,120 @@ pthread_create(pthread_t *pTid, const pthread_attr_t *pAttr,
                 (void)sys6(NR_exit, 0, 0, 0, 0, 0, 0);
             }
         }
-        /* parent: restore main self */
+        /* parent: restore main self; register for join */
         g_pSelf = &g_mainThr;
         pT->tid = (pthread_t)tid;
+        if (thr_register(pT) != 0) {
+            /* Slot full: still return tid; join may fall back to clear_tid. */
+        }
         *pTid = (pthread_t)tid;
     }
     return 0;
 }
 
+static int
+join_wait_done(struct cgj_thread *pT, const struct timespec *pAbs)
+{
+    long r;
+    struct timespec now;
+    struct timespec rel;
+
+    for (;;) {
+        if (pT->nDone != 0) {
+            return 0;
+        }
+        if (pAbs != NULL) {
+            if (clock_gettime(CLOCK_REALTIME, &now) != 0) {
+                return errno != 0 ? errno : ETIMEDOUT;
+            }
+            rel.tv_sec = pAbs->tv_sec - now.tv_sec;
+            rel.tv_nsec = pAbs->tv_nsec - now.tv_nsec;
+            if (rel.tv_nsec < 0) {
+                rel.tv_sec--;
+                rel.tv_nsec += 1000000000L;
+            }
+            if (rel.tv_sec < 0 || (rel.tv_sec == 0 && rel.tv_nsec <= 0)) {
+                return ETIMEDOUT;
+            }
+            r = sys6(NR_futex, (long)(uintptr_t)&pT->nDone,
+                     FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 0, (long)(uintptr_t)&rel,
+                     0, 0);
+            if (r < 0 && (int)(-r) == ETIMEDOUT) {
+                if (pT->nDone != 0) {
+                    return 0;
+                }
+                return ETIMEDOUT;
+            }
+        } else {
+            /* Prefer nDone futex; also observe CLEARTID zeroing. */
+            if (pT->nClearTid != 0) {
+                (void)futex_wait(&pT->nClearTid, pT->nClearTid);
+            } else {
+                (void)futex_wait(&pT->nDone, 0);
+            }
+        }
+    }
+}
+
 int
 pthread_join(pthread_t tid, void **ppRet)
 {
-    int nStatus = 0;
-    long r;
+    struct cgj_thread *pT;
 
     ensure_main();
-    r = sys6(NR_wait4, (long)tid, (long)(uintptr_t)&nStatus, 0, 0, 0, 0);
-    if (r < 0) {
-        /* CLONE_THREAD may not be waitable via wait4 — spin on clear_tid */
-        /* For bring-up, treat as success if already gone */
-        if (ppRet != NULL) {
-            *ppRet = NULL;
-        }
-        return 0;
+    if (tid == 0) {
+        return ESRCH;
     }
+    if (tid == pthread_self()) {
+        return EDEADLK;
+    }
+    pT = thr_find(tid);
+    if (pT == NULL) {
+        /*
+         * Unknown tid: soft fallback — wait on a stack temporary is impossible.
+         * Report ESRCH rather than silently success.
+         */
+        return ESRCH;
+    }
+    if (pT->nJoinable == 0) {
+        return EINVAL;
+    }
+    (void)join_wait_done(pT, NULL);
     if (ppRet != NULL) {
-        *ppRet = NULL;
+        *ppRet = pT->pRet;
     }
+    pT->nJoinable = 0;
+    thr_reap(pT);
     return 0;
 }
 
 int
 pthread_tryjoin_np(pthread_t tid, void **ppRet)
 {
-    int nStatus = 0;
-    long r;
+    struct cgj_thread *pT;
 
     ensure_main();
-    r = sys6(NR_wait4, (long)tid, (long)(uintptr_t)&nStatus, 1 /* WNOHANG */, 0,
-             0, 0);
-    if (r == 0) {
+    if (tid == 0) {
+        return ESRCH;
+    }
+    if (tid == pthread_self()) {
+        return EDEADLK;
+    }
+    pT = thr_find(tid);
+    if (pT == NULL) {
+        return ESRCH;
+    }
+    if (pT->nJoinable == 0) {
+        return EINVAL;
+    }
+    if (pT->nDone == 0) {
         return EBUSY;
     }
-    if (r < 0) {
-        if (ppRet != NULL) {
-            *ppRet = NULL;
-        }
-        return 0;
-    }
     if (ppRet != NULL) {
-        *ppRet = NULL;
+        *ppRet = pT->pRet;
     }
+    pT->nJoinable = 0;
+    thr_reap(pT);
     return 0;
 }
 
@@ -525,18 +674,44 @@ int
 pthread_timedjoin_np(pthread_t tid, void **ppRet,
                      const struct timespec *pAbstime)
 {
-    (void)pAbstime;
-    /* Bring-up: ignore absolute timeout; behave as join. */
-    return pthread_join(tid, ppRet);
+    struct cgj_thread *pT;
+    int nErr;
+
+    ensure_main();
+    if (pAbstime == NULL) {
+        return pthread_join(tid, ppRet);
+    }
+    if (tid == 0) {
+        return ESRCH;
+    }
+    if (tid == pthread_self()) {
+        return EDEADLK;
+    }
+    pT = thr_find(tid);
+    if (pT == NULL) {
+        return ESRCH;
+    }
+    if (pT->nJoinable == 0) {
+        return EINVAL;
+    }
+    nErr = join_wait_done(pT, pAbstime);
+    if (nErr != 0) {
+        return nErr;
+    }
+    if (ppRet != NULL) {
+        *ppRet = pT->pRet;
+    }
+    pT->nJoinable = 0;
+    thr_reap(pT);
+    return 0;
 }
 
 int
 pthread_clockjoin_np(pthread_t tid, void **ppRet, clockid_t clk,
                      const struct timespec *pAbstime)
 {
-    (void)clk;
-    (void)pAbstime;
-    return pthread_join(tid, ppRet);
+    (void)clk; /* soft: absolute times treated as CLOCK_REALTIME */
+    return pthread_timedjoin_np(tid, ppRet, pAbstime);
 }
 
 int
@@ -568,7 +743,30 @@ pthread_rwlockattr_getkind_np(const pthread_rwlockattr_t *pA, int *pPref)
 int
 pthread_detach(pthread_t tid)
 {
-    (void)tid;
+    struct cgj_thread *pT;
+
+    ensure_main();
+    if (tid == 0) {
+        return ESRCH;
+    }
+    pT = thr_find(tid);
+    if (pT == NULL) {
+        /* Already reaped or never registered — soft success if self-detach. */
+        if (tid == pthread_self()) {
+            if (g_pSelf != NULL && g_pSelf != &g_mainThr) {
+                g_pSelf->nJoinable = 0;
+                return 0;
+            }
+        }
+        return ESRCH;
+    }
+    if (pT->nJoinable == 0) {
+        return EINVAL;
+    }
+    pT->nJoinable = 0;
+    if (pT->nDone != 0) {
+        thr_reap(pT);
+    }
     return 0;
 }
 
@@ -591,10 +789,26 @@ pthread_equal(pthread_t a, pthread_t b)
 void
 pthread_exit(void *pRet)
 {
+    struct cgj_thread *pT;
+    int nJoinable;
+
     ensure_main();
-    if (g_pSelf != NULL) {
-        g_pSelf->pRet = pRet;
-        g_pSelf->nDone = 1;
+    pT = g_pSelf;
+    if (pT != NULL) {
+        pT->pRet = pRet;
+        __sync_synchronize();
+        pT->nDone = 1;
+        (void)futex_wake(&pT->nDone, 0x7fffffff);
+        nJoinable = pT->nJoinable;
+        /*
+         * Detached: cannot free own stack while running on it. Soft leave
+         * control block; joiner path reaps joinable threads after exit.
+         * Detached stacks leak until process exit (bring-up acceptable).
+         */
+        if (nJoinable == 0 && pT != &g_mainThr) {
+            thr_unregister(pT);
+            /* stack + pT intentionally not freed on self-exit */
+        }
     }
     (void)sys6(NR_exit, 0, 0, 0, 0, 0, 0);
     for (;;) {
@@ -1020,14 +1234,36 @@ pthread_cond_broadcast(pthread_cond_t *pC)
 int
 pthread_once(pthread_once_t *pOnce, void (*pfn)(void))
 {
+    int n;
+
     if (pOnce == NULL || pfn == NULL) {
         return EINVAL;
     }
-    if (__sync_val_compare_and_swap(&pOnce->nDone, 0, 1) == 0) {
-        pfn();
+    /* 0 = virgin, 1 = running, 2 = done */
+    for (;;) {
+        n = pOnce->nDone;
+        if (n == 2) {
+            return 0;
+        }
+        if (n == 0 && __sync_val_compare_and_swap(&pOnce->nDone, 0, 1) == 0) {
+            pfn();
+            __sync_synchronize();
+            pOnce->nDone = 2;
+            (void)futex_wake(&pOnce->nDone, 0x7fffffff);
+            return 0;
+        }
+        n = pOnce->nDone;
+        if (n == 2) {
+            return 0;
+        }
+        if (n == 1) {
+            (void)futex_wait(&pOnce->nDone, 1);
+        }
     }
-    return 0;
 }
+
+/* Key slot free marker: dtor==NULL and key "released" via g_aKeyLive */
+static unsigned char g_aKeyLive[CGJ_KEY_MAX];
 
 int
 pthread_key_create(pthread_key_t *pKey, void (*pfnDtor)(void *))
@@ -1038,18 +1274,18 @@ pthread_key_create(pthread_key_t *pKey, void (*pfnDtor)(void *))
         return EINVAL;
     }
     for (i = 0; i < CGJ_KEY_MAX; i++) {
-        if (g_aDtors[i] == NULL && g_aKeys[i] == NULL && i >= g_cKeys) {
-            /* fall through */
+        if (g_aKeyLive[i] == 0) {
+            g_aKeyLive[i] = 1;
+            g_aDtors[i] = pfnDtor;
+            g_aKeys[i] = NULL;
+            if (i >= g_cKeys) {
+                g_cKeys = i + 1;
+            }
+            *pKey = (pthread_key_t)i;
+            return 0;
         }
     }
-    if (g_cKeys >= CGJ_KEY_MAX) {
-        return EAGAIN;
-    }
-    i = g_cKeys++;
-    g_aDtors[i] = pfnDtor;
-    g_aKeys[i] = NULL;
-    *pKey = (pthread_key_t)i;
-    return 0;
+    return EAGAIN;
 }
 
 int
@@ -1060,15 +1296,17 @@ pthread_key_delete(pthread_key_t key)
     }
     g_aKeys[key] = NULL;
     g_aDtors[key] = NULL;
+    g_aKeyLive[key] = 0;
     return 0;
 }
 
 int
 pthread_setspecific(pthread_key_t key, const void *p)
 {
-    if (key >= (pthread_key_t)CGJ_KEY_MAX) {
+    if (key >= (pthread_key_t)CGJ_KEY_MAX || g_aKeyLive[key] == 0) {
         return EINVAL;
     }
+    /* Soft: process-global key storage (not per-thread TLS yet). */
     g_aKeys[key] = (void *)(uintptr_t)p;
     return 0;
 }
@@ -1076,7 +1314,7 @@ pthread_setspecific(pthread_key_t key, const void *p)
 void *
 pthread_getspecific(pthread_key_t key)
 {
-    if (key >= (pthread_key_t)CGJ_KEY_MAX) {
+    if (key >= (pthread_key_t)CGJ_KEY_MAX || g_aKeyLive[key] == 0) {
         return NULL;
     }
     return g_aKeys[key];

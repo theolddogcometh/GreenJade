@@ -47,8 +47,11 @@ strerror_r(int nErr, char *szBuf, size_t cb)
     size_t i;
 
     sz = strerror(nErr);
+    if (sz == NULL) {
+        sz = "Unknown error";
+    }
     if (szBuf == NULL || cb == 0) {
-        return (char *)sz;
+        return (char *)(uintptr_t)sz;
     }
     n = strlen(sz);
     if (n >= cb) {
@@ -65,56 +68,77 @@ int
 ffs(int n)
 {
     unsigned u;
-    int i;
 
     if (n == 0) {
         return 0;
     }
     u = (unsigned)n;
-    for (i = 1; i <= 32; i++) {
-        if (u & 1u) {
-            return i;
+#if defined(__GNUC__) || defined(__clang__)
+    return 1 + (int)__builtin_ctz(u);
+#else
+    {
+        int i;
+
+        for (i = 1; i <= 32; i++) {
+            if (u & 1u) {
+                return i;
+            }
+            u >>= 1;
         }
-        u >>= 1;
+        return 0;
     }
-    return 0;
+#endif
 }
 
 int
 ffsl(long n)
 {
     unsigned long u;
-    int i;
-    int nBits = (int)(sizeof(long) * 8);
 
     if (n == 0) {
         return 0;
     }
     u = (unsigned long)n;
-    for (i = 1; i <= nBits; i++) {
-        if (u & 1UL) {
-            return i;
+#if defined(__GNUC__) || defined(__clang__)
+    return 1 + (int)__builtin_ctzl(u);
+#else
+    {
+        int i;
+        int nBits = (int)(sizeof(long) * 8);
+
+        for (i = 1; i <= nBits; i++) {
+            if (u & 1UL) {
+                return i;
+            }
+            u >>= 1;
         }
-        u >>= 1;
+        return 0;
     }
-    return 0;
+#endif
 }
 
 int
 ffsll(long long n)
 {
     unsigned long long u;
-    int i;
 
     if (n == 0) {
         return 0;
     }
     u = (unsigned long long)n;
-    for (i = 1; i <= 64; i++) {
-        if (u & 1ULL) {
-            return i;
+#if defined(__GNUC__) || defined(__clang__)
+    return 1 + (int)__builtin_ctzll(u);
+#else
+    {
+        int i;
+
+        for (i = 1; i <= 64; i++) {
+            if (u & 1ULL) {
+                return i;
+            }
+            u >>= 1;
         }
-        u >>= 1;
+        return 0;
     }
-    return 0;
+#endif
 }

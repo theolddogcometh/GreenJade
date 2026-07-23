@@ -6,6 +6,7 @@
  * openat2, mlock2, pkey_*, swapon/swapoff, quotactl, process_madvise,
  * userfaultfd, seccomp, getdents64, prlimit64.
  * Clean-room public ABI — no GPL source. Integer/pointer only (no SSE).
+ * Soft deepen: fexecve /proc fallback; null/size guards; clone hardening.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -22,6 +23,7 @@
 #define NR_clone           56
 #define NR_vfork           58
 #define NR_exit            60
+#define NR_execve          59
 #define NR_swapon          167
 #define NR_swapoff         168
 #define NR_quotactl        179
@@ -71,6 +73,28 @@ sys_ret(long r)
     return r;
 }
 
+/* Soft decimal for /proc/self/fd/N path (no libc sprintf). */
+static int
+gj_u32_dec(char *p, unsigned int u)
+{
+    char aTmp[10];
+    int n = 0;
+    int i;
+
+    if (u == 0) {
+        p[0] = '0';
+        return 1;
+    }
+    while (u > 0 && n < (int)sizeof(aTmp)) {
+        aTmp[n++] = (char)('0' + (u % 10u));
+        u /= 10u;
+    }
+    for (i = 0; i < n; i++) {
+        p[i] = aTmp[n - 1 - i];
+    }
+    return n;
+}
+
 pid_t
 vfork(void)
 {
@@ -105,6 +129,11 @@ clone(int (*fn)(void *), void *pStack, int nFlags, void *pArg, ...)
         __builtin_va_end(ap);
 
         if (pStack == NULL) {
+            errno = EINVAL;
+            return -1;
+        }
+        /* Need room for two pointer slots below aligned stack top. */
+        if ((uintptr_t)pStack < 32u) {
             errno = EINVAL;
             return -1;
         }
@@ -154,20 +183,58 @@ int
 fexecve(int nFd, char *const aArgv[], char *const aEnvp[])
 {
     int r;
+    char aPath[64];
+    int n;
+    int i;
+
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (aArgv == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
 
     r = (int)sys_ret(sys6(NR_execveat, nFd, (long)(uintptr_t)"",
                           (long)(uintptr_t)aArgv, (long)(uintptr_t)aEnvp,
                           AT_EMPTY_PATH, 0));
-    if (r < 0 && errno == ENOSYS) {
-        /* no fallback without /proc */
-        errno = ENOSYS;
+    if (r >= 0) {
+        return r; /* not reached on success */
     }
+    /* Soft fallback: /proc/self/fd/N when execveat unavailable or empty-path. */
+    if (errno != ENOSYS && errno != EINVAL && errno != EBADF) {
+        return r;
+    }
+
+    /* Build "/proc/self/fd/<nFd>" without sprintf. */
+    {
+        static const char szPref[] = "/proc/self/fd/";
+        char *p = aPath;
+
+        for (i = 0; szPref[i] != '\0'; i++) {
+            *p++ = szPref[i];
+        }
+        n = gj_u32_dec(p, (unsigned int)nFd);
+        p[n] = '\0';
+    }
+    r = (int)sys_ret(sys6(NR_execve, (long)(uintptr_t)aPath,
+                          (long)(uintptr_t)aArgv, (long)(uintptr_t)aEnvp, 0, 0,
+                          0));
     return r;
 }
 
 int
 openat2(int nDfd, const char *szPath, const struct open_how *pHow, size_t cb)
 {
+    if (szPath == NULL || pHow == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (cb == 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_openat2, nDfd, (long)(uintptr_t)szPath,
                              (long)(uintptr_t)pHow, (long)cb, 0, 0));
 }
@@ -175,6 +242,10 @@ openat2(int nDfd, const char *szPath, const struct open_how *pHow, size_t cb)
 int
 mlock2(const void *pAddr, size_t cb, unsigned int uFlags)
 {
+    if (pAddr == NULL && cb != 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_mlock2, (long)(uintptr_t)pAddr, (long)cb,
                              (long)uFlags, 0, 0, 0));
 }
@@ -189,12 +260,20 @@ pkey_alloc(unsigned int uFlags, unsigned int uAccessRights)
 int
 pkey_free(int nPkey)
 {
+    if (nPkey < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_pkey_free, nPkey, 0, 0, 0, 0, 0));
 }
 
 int
 pkey_mprotect(void *pAddr, size_t cb, int nProt, int nPkey)
 {
+    if (pAddr == NULL && cb != 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_pkey_mprotect, (long)(uintptr_t)pAddr, (long)cb,
                              nProt, nPkey, 0, 0));
 }
@@ -202,6 +281,10 @@ pkey_mprotect(void *pAddr, size_t cb, int nProt, int nPkey)
 int
 swapon(const char *szPath, int nFlags)
 {
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_swapon, (long)(uintptr_t)szPath, nFlags, 0, 0,
                              0, 0));
 }
@@ -209,6 +292,10 @@ swapon(const char *szPath, int nFlags)
 int
 swapoff(const char *szPath)
 {
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_swapoff, (long)(uintptr_t)szPath, 0, 0, 0, 0,
                              0));
 }
@@ -224,6 +311,14 @@ ssize_t
 process_madvise(int nPidfd, const struct iovec *pIov, size_t nVlen, int nAdvice,
                 unsigned int uFlags)
 {
+    if (nPidfd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (nVlen != 0 && pIov == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (ssize_t)sys_ret(sys6(NR_process_madvise, nPidfd,
                                  (long)(uintptr_t)pIov, (long)nVlen, nAdvice,
                                  (long)uFlags, 0));
@@ -245,6 +340,14 @@ seccomp(unsigned int uOp, unsigned int uFlags, void *pArgs)
 ssize_t
 getdents64(int nFd, void *pDirp, size_t cb)
 {
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pDirp == NULL && cb != 0) {
+        errno = EFAULT;
+        return -1;
+    }
     return (ssize_t)sys_ret(sys6(NR_getdents64, nFd, (long)(uintptr_t)pDirp,
                                 (long)cb, 0, 0, 0));
 }
@@ -253,6 +356,10 @@ int
 prlimit64(pid_t nPid, int nResource, const struct rlimit *pNew,
           struct rlimit *pOld)
 {
+    if (nPid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_prlimit64, nPid, nResource,
                              (long)(uintptr_t)pNew, (long)(uintptr_t)pOld, 0,
                              0));

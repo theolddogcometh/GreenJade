@@ -5,6 +5,7 @@
  * Additional thin Linux x86_64 SYSCALL wrappers for libcgj (desktop path).
  * Clean-room public ABI only — no GPL source.
  * (sched/process_vm live in sched_more.c — do not duplicate here.)
+ * Soft deepen: faccessat2 fallback; null/arg guards; close_range order check.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -77,6 +78,10 @@ sys_ret(long r)
 int
 capget(cap_user_header_t pHdr, cap_user_data_t pData)
 {
+    if (pHdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_capget, (long)(uintptr_t)pHdr,
                              (long)(uintptr_t)pData, 0, 0, 0, 0));
 }
@@ -84,6 +89,10 @@ capget(cap_user_header_t pHdr, cap_user_data_t pData)
 int
 capset(cap_user_header_t pHdr, const cap_user_data_t pData)
 {
+    if (pHdr == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_capset, (long)(uintptr_t)pHdr,
                              (long)(uintptr_t)pData, 0, 0, 0, 0));
 }
@@ -94,6 +103,10 @@ int
 execveat(int nDfd, const char *szPath, char *const aArgv[],
          char *const aEnvp[], int nFlags)
 {
+    if (szPath == NULL || aArgv == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_execveat, nDfd, (long)(uintptr_t)szPath,
                              (long)(uintptr_t)aArgv, (long)(uintptr_t)aEnvp,
                              nFlags, 0));
@@ -102,6 +115,10 @@ execveat(int nDfd, const char *szPath, char *const aArgv[],
 int
 close_range(unsigned uFirst, unsigned uLast, int nFlags)
 {
+    if (uFirst > uLast) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_close_range, (long)uFirst, (long)uLast, nFlags,
                              0, 0, 0));
 }
@@ -111,9 +128,14 @@ fchmodat2(int nDfd, const char *szPath, mode_t mode, int nFlags)
 {
     long r;
 
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     r = sys6(NR_fchmodat2, nDfd, (long)(uintptr_t)szPath, (long)mode, nFlags,
              0, 0);
     if (r == -ENOSYS) {
+        /* Soft: fall back to fchmodat (flags may be partially honored). */
         return fchmodat(nDfd, szPath, mode, nFlags);
     }
     return (int)sys_ret(r);
@@ -122,15 +144,29 @@ fchmodat2(int nDfd, const char *szPath, mode_t mode, int nFlags)
 int
 faccessat2(int nDfd, const char *szPath, int nMode, int nFlags)
 {
-    return (int)sys_ret(sys6(NR_faccessat2, nDfd, (long)(uintptr_t)szPath,
-                             nMode, nFlags, 0, 0));
+    long r;
+
+    if (szPath == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    r = sys6(NR_faccessat2, nDfd, (long)(uintptr_t)szPath, nMode, nFlags, 0,
+             0);
+    if (r == -ENOSYS) {
+        /*
+         * Soft fallback: plain faccessat. AT_EACCESS / AT_SYMLINK_NOFOLLOW
+         * may not be fully honored on older kernels — best-effort.
+         */
+        return faccessat(nDfd, szPath, nMode, nFlags);
+    }
+    return (int)sys_ret(r);
 }
 
 int
 statx(int nDfd, const char *szPath, int nFlags, unsigned uMask,
       struct statx *pStx)
 {
-    if (pStx == NULL) {
+    if (szPath == NULL || pStx == NULL) {
         errno = EFAULT;
         return -1;
     }
@@ -142,6 +178,10 @@ int
 name_to_handle_at(int nDfd, const char *szPath, struct file_handle *pHandle,
                   int *pMountId, int nFlags)
 {
+    if (szPath == NULL || pHandle == NULL || pMountId == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_name_to_handle_at, nDfd,
                              (long)(uintptr_t)szPath, (long)(uintptr_t)pHandle,
                              (long)(uintptr_t)pMountId, nFlags, 0));
@@ -150,6 +190,14 @@ name_to_handle_at(int nDfd, const char *szPath, struct file_handle *pHandle,
 int
 open_by_handle_at(int nMountFd, struct file_handle *pHandle, int nFlags)
 {
+    if (pHandle == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (nMountFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_open_by_handle_at, nMountFd,
                              (long)(uintptr_t)pHandle, nFlags, 0, 0, 0));
 }
@@ -160,6 +208,10 @@ int
 mount(const char *szSource, const char *szTarget, const char *szFstype,
       unsigned long uFlags, const void *pData)
 {
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_mount, (long)(uintptr_t)szSource,
                              (long)(uintptr_t)szTarget,
                              (long)(uintptr_t)szFstype, (long)uFlags,
@@ -175,6 +227,10 @@ umount(const char *szTarget)
 int
 umount2(const char *szTarget, int nFlags)
 {
+    if (szTarget == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_umount2, (long)(uintptr_t)szTarget, nFlags, 0,
                              0, 0, 0));
 }
@@ -182,6 +238,10 @@ umount2(const char *szTarget, int nFlags)
 int
 pivot_root(const char *szNew, const char *szOld)
 {
+    if (szNew == NULL || szOld == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_pivot_root, (long)(uintptr_t)szNew,
                              (long)(uintptr_t)szOld, 0, 0, 0, 0));
 }

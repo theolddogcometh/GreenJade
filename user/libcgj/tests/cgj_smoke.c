@@ -5805,6 +5805,105 @@ cgj_smoke_body(int argc, char **argv, char **envp)
         }
     }
 
+    /*
+     * Continuum decade soft lamps (weak until linked from libcgj.a;
+     * skip if missing, hard-check when present). Key lamps only for
+     * milestones 14500 / 14600 / 14700 / 14800 / 14900. bar3 and
+     * product_score still open (0). Full decade probes:
+     * cgj_soft_milestone_*.c
+     */
+    {
+        typedef uint32_t (*u32_fn)(void);
+        struct soft_u32_kat {
+            u32_fn pfn;
+            uint32_t u32Expect;
+        };
+
+        extern uint32_t gj_shell_green_14500(void) __attribute__((weak));
+        extern uint32_t gj_bar3_ready_14500(void) __attribute__((weak));
+        extern uint32_t gj_smoke_soft_14500(void) __attribute__((weak));
+        extern uint32_t gj_milestone_tag_14500(void) __attribute__((weak));
+        extern uint32_t gj_batch_id_14500(void) __attribute__((weak));
+        extern uint32_t gj_graph_milestone_14500(void) __attribute__((weak));
+
+        extern uint32_t gj_shell_green_14600(void) __attribute__((weak));
+        extern uint32_t gj_bar3_ready_14600(void) __attribute__((weak));
+        extern uint32_t gj_smoke_soft_14600(void) __attribute__((weak));
+        extern uint32_t gj_milestone_tag_14600(void) __attribute__((weak));
+        extern uint32_t gj_batch_id_14600(void) __attribute__((weak));
+        extern uint32_t gj_graph_milestone_14600(void) __attribute__((weak));
+
+        extern uint32_t gj_shell_green_14700(void) __attribute__((weak));
+        extern uint32_t gj_bar3_ready_14700(void) __attribute__((weak));
+        extern uint32_t gj_smoke_soft_14700(void) __attribute__((weak));
+        extern uint32_t gj_milestone_tag_14700(void) __attribute__((weak));
+        extern uint32_t gj_batch_id_14700(void) __attribute__((weak));
+        extern uint32_t gj_graph_milestone_14700(void) __attribute__((weak));
+
+        extern uint32_t gj_shell_green_14800(void) __attribute__((weak));
+        extern uint32_t gj_bar3_ready_14800(void) __attribute__((weak));
+        extern uint32_t gj_smoke_soft_14800(void) __attribute__((weak));
+        extern uint32_t gj_milestone_tag_14800(void) __attribute__((weak));
+        extern uint32_t gj_batch_id_14800(void) __attribute__((weak));
+        extern uint32_t gj_graph_milestone_14800(void) __attribute__((weak));
+
+        extern uint32_t gj_shell_green_14900(void) __attribute__((weak));
+        extern uint32_t gj_bar3_ready_14900(void) __attribute__((weak));
+        extern uint32_t gj_smoke_soft_14900(void) __attribute__((weak));
+        extern uint32_t gj_milestone_tag_14900(void) __attribute__((weak));
+        extern uint32_t gj_batch_id_14900(void) __attribute__((weak));
+        extern uint32_t gj_graph_milestone_14900(void) __attribute__((weak));
+
+        const struct soft_u32_kat kLamps[] = {
+            { gj_shell_green_14500, 1u },
+            { gj_bar3_ready_14500, 0u },
+            { gj_smoke_soft_14500, 1u },
+            { gj_milestone_tag_14500, 14500u },
+            { gj_batch_id_14500, 14500u },
+            { gj_graph_milestone_14500, 14500u },
+
+            { gj_shell_green_14600, 1u },
+            { gj_bar3_ready_14600, 0u },
+            { gj_smoke_soft_14600, 1u },
+            { gj_milestone_tag_14600, 14600u },
+            { gj_batch_id_14600, 14600u },
+            { gj_graph_milestone_14600, 14600u },
+
+            { gj_shell_green_14700, 1u },
+            { gj_bar3_ready_14700, 0u },
+            { gj_smoke_soft_14700, 1u },
+            { gj_milestone_tag_14700, 14700u },
+            { gj_batch_id_14700, 14700u },
+            { gj_graph_milestone_14700, 14700u },
+
+            { gj_shell_green_14800, 1u },
+            { gj_bar3_ready_14800, 0u },
+            { gj_smoke_soft_14800, 1u },
+            { gj_milestone_tag_14800, 14800u },
+            { gj_batch_id_14800, 14800u },
+            { gj_graph_milestone_14800, 14800u },
+
+            { gj_shell_green_14900, 1u },
+            { gj_bar3_ready_14900, 0u },
+            { gj_smoke_soft_14900, 1u },
+            { gj_milestone_tag_14900, 14900u },
+            { gj_batch_id_14900, 14900u },
+            { gj_graph_milestone_14900, 14900u },
+        };
+        size_t iLamp;
+
+        for (iLamp = 0;
+             iLamp < sizeof(kLamps) / sizeof(kLamps[0]);
+             iLamp++) {
+            if (kLamps[iLamp].pfn == NULL) {
+                continue; /* soft-skip until linked */
+            }
+            if (kLamps[iLamp].pfn() != kLamps[iLamp].u32Expect) {
+                return 811;
+            }
+        }
+    }
+
     printf("libcgj: smoke PASS pid=%d uname=%s self=%lu\n", (int)getpid(),
            un.sysname, (unsigned long)pthread_self());
     return 0;

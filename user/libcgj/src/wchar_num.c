@@ -3,8 +3,16 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Wide numeric conversion, wcstok, and wcsftime (over strftime).
+ *
+ * greppable: CGJ_WCHAR_NUM_SOFT_ERANGE
+ * greppable: CGJ_WCHAR_NUM_SOFT_NOCONV
+ * greppable: CGJ_WCHAR_NUM_SOFT_ENDPTR
+ *
+ * Soft deepen: ERANGE on overflow, no-conversion endptr stays at nptr,
+ * optional leading '-' on unsigned (wrap), empty digit after base prefix.
  */
 #include <errno.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
@@ -41,21 +49,26 @@ skip_wspace(const wchar_t **pp)
     *pp = p;
 }
 
-long
-wcstol(const wchar_t *sz, wchar_t **ppEnd, int nBase)
+/*
+ * Shared soft parse: *pp advances; returns 0 ok, -1 no conversion, 1 overflow.
+ * pStart is nptr for no-conversion endptr restore.
+ */
+static int
+wcstox_soft_u(const wchar_t **pp, const wchar_t *pStart, int nBase,
+              unsigned long long *pOut, int *pfNeg)
 {
-    long v = 0;
-    int fNeg = 0;
-    int d;
     const wchar_t *p;
+    const wchar_t *pDigits;
+    unsigned long long v = 0;
+    int fNeg = 0;
+    int fAny = 0;
+    int d;
+    unsigned long long uLim;
+    unsigned long long uCut;
+    int nCutDigit;
 
-    if (sz == NULL) {
-        if (ppEnd != NULL) {
-            *ppEnd = NULL;
-        }
-        return 0;
-    }
-    p = sz;
+    (void)pStart;
+    p = *pp;
     skip_wspace(&p);
     if (*p == L'-') {
         fNeg = 1;
@@ -64,41 +77,133 @@ wcstol(const wchar_t *sz, wchar_t **ppEnd, int nBase)
         p++;
     }
     if (nBase == 0) {
-        if (*p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
+        if (*p == L'0' && (p[1] == L'x' || p[1] == L'X') &&
+            wdigit_val(p[2], 16) >= 0) {
             nBase = 16;
             p += 2;
         } else if (*p == L'0') {
             nBase = 8;
+            /* consume leading 0 as a digit soft */
+            fAny = 1;
             p++;
+            pDigits = p;
+            while ((d = wdigit_val(*p, 8)) >= 0) {
+                fAny = 1;
+                if (v > (ULLONG_MAX / 8ull) ||
+                    (v == (ULLONG_MAX / 8ull) && (unsigned)d > (ULLONG_MAX % 8ull))) {
+                    *pfNeg = fNeg;
+                    *pOut = ULLONG_MAX;
+                    while (wdigit_val(*p, 8) >= 0) {
+                        p++;
+                    }
+                    *pp = p;
+                    return 1;
+                }
+                v = v * 8ull + (unsigned long long)d;
+                p++;
+            }
+            *pfNeg = fNeg;
+            *pOut = v;
+            *pp = p;
+            return fAny ? 0 : -1;
         } else {
             nBase = 10;
         }
-    } else if (nBase == 16 && *p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
+    } else if (nBase == 16 && *p == L'0' && (p[1] == L'x' || p[1] == L'X') &&
+               wdigit_val(p[2], 16) >= 0) {
         p += 2;
     }
     if (nBase < 2 || nBase > 36) {
+        return -2; /* EINVAL */
+    }
+    pDigits = p;
+    uLim = ULLONG_MAX;
+    uCut = uLim / (unsigned long long)nBase;
+    nCutDigit = (int)(uLim % (unsigned long long)nBase);
+    while ((d = wdigit_val(*p, nBase)) >= 0) {
+        fAny = 1;
+        if (v > uCut || (v == uCut && d > nCutDigit)) {
+            /* greppable: CGJ_WCHAR_NUM_SOFT_ERANGE */
+            while (wdigit_val(*p, nBase) >= 0) {
+                p++;
+            }
+            *pfNeg = fNeg;
+            *pOut = ULLONG_MAX;
+            *pp = p;
+            return 1;
+        }
+        v = v * (unsigned long long)nBase + (unsigned long long)d;
+        p++;
+    }
+    (void)pDigits;
+    *pfNeg = fNeg;
+    *pOut = v;
+    *pp = p;
+    return fAny ? 0 : -1;
+}
+
+long
+wcstol(const wchar_t *sz, wchar_t **ppEnd, int nBase)
+{
+    const wchar_t *p;
+    unsigned long long u;
+    int fNeg = 0;
+    int nSt;
+
+    if (sz == NULL) {
+        if (ppEnd != NULL) {
+            *ppEnd = NULL;
+        }
+        return 0;
+    }
+    p = sz;
+    nSt = wcstox_soft_u(&p, sz, nBase, &u, &fNeg);
+    if (nSt == -2) {
         errno = EINVAL;
+        if (ppEnd != NULL) {
+            /* greppable: CGJ_WCHAR_NUM_SOFT_ENDPTR */
+            *ppEnd = (wchar_t *)(uintptr_t)sz;
+        }
+        return 0;
+    }
+    if (nSt < 0) {
+        /* greppable: CGJ_WCHAR_NUM_SOFT_NOCONV */
         if (ppEnd != NULL) {
             *ppEnd = (wchar_t *)(uintptr_t)sz;
         }
         return 0;
     }
-    while ((d = wdigit_val(*p, nBase)) >= 0) {
-        v = v * (long)nBase + d;
-        p++;
-    }
     if (ppEnd != NULL) {
         *ppEnd = (wchar_t *)(uintptr_t)p;
     }
-    return fNeg ? -v : v;
+    if (nSt > 0) {
+        errno = ERANGE;
+        return fNeg ? LONG_MIN : LONG_MAX;
+    }
+    if (fNeg) {
+        if (u > (unsigned long long)LONG_MAX + 1ull) {
+            errno = ERANGE;
+            return LONG_MIN;
+        }
+        if (u == (unsigned long long)LONG_MAX + 1ull) {
+            return LONG_MIN;
+        }
+        return -(long)u;
+    }
+    if (u > (unsigned long long)LONG_MAX) {
+        errno = ERANGE;
+        return LONG_MAX;
+    }
+    return (long)u;
 }
 
 unsigned long
 wcstoul(const wchar_t *sz, wchar_t **ppEnd, int nBase)
 {
-    unsigned long v = 0;
-    int d;
     const wchar_t *p;
+    unsigned long long u;
+    int fNeg = 0;
+    int nSt;
 
     if (sz == NULL) {
         if (ppEnd != NULL) {
@@ -107,47 +212,41 @@ wcstoul(const wchar_t *sz, wchar_t **ppEnd, int nBase)
         return 0;
     }
     p = sz;
-    skip_wspace(&p);
-    if (*p == L'+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == L'0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
+    nSt = wcstox_soft_u(&p, sz, nBase, &u, &fNeg);
+    if (nSt == -2) {
         errno = EINVAL;
         if (ppEnd != NULL) {
             *ppEnd = (wchar_t *)(uintptr_t)sz;
         }
         return 0;
     }
-    while ((d = wdigit_val(*p, nBase)) >= 0) {
-        v = v * (unsigned long)nBase + (unsigned long)d;
-        p++;
+    if (nSt < 0) {
+        if (ppEnd != NULL) {
+            *ppEnd = (wchar_t *)(uintptr_t)sz;
+        }
+        return 0;
     }
     if (ppEnd != NULL) {
         *ppEnd = (wchar_t *)(uintptr_t)p;
     }
-    return v;
+    if (nSt > 0 || u > (unsigned long long)ULONG_MAX) {
+        errno = ERANGE;
+        return ULONG_MAX;
+    }
+    if (fNeg) {
+        /* POSIX: convert then negate in unsigned domain. */
+        return (unsigned long)(0ul - (unsigned long)u);
+    }
+    return (unsigned long)u;
 }
 
 long long
 wcstoll(const wchar_t *sz, wchar_t **ppEnd, int nBase)
 {
-    long long v = 0;
-    int fNeg = 0;
-    int d;
     const wchar_t *p;
+    unsigned long long u;
+    int fNeg = 0;
+    int nSt;
 
     if (sz == NULL) {
         if (ppEnd != NULL) {
@@ -156,49 +255,51 @@ wcstoll(const wchar_t *sz, wchar_t **ppEnd, int nBase)
         return 0;
     }
     p = sz;
-    skip_wspace(&p);
-    if (*p == L'-') {
-        fNeg = 1;
-        p++;
-    } else if (*p == L'+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == L'0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
+    nSt = wcstox_soft_u(&p, sz, nBase, &u, &fNeg);
+    if (nSt == -2) {
         errno = EINVAL;
         if (ppEnd != NULL) {
             *ppEnd = (wchar_t *)(uintptr_t)sz;
         }
         return 0;
     }
-    while ((d = wdigit_val(*p, nBase)) >= 0) {
-        v = v * (long long)nBase + d;
-        p++;
+    if (nSt < 0) {
+        if (ppEnd != NULL) {
+            *ppEnd = (wchar_t *)(uintptr_t)sz;
+        }
+        return 0;
     }
     if (ppEnd != NULL) {
         *ppEnd = (wchar_t *)(uintptr_t)p;
     }
-    return fNeg ? -v : v;
+    if (nSt > 0) {
+        errno = ERANGE;
+        return fNeg ? LLONG_MIN : LLONG_MAX;
+    }
+    if (fNeg) {
+        if (u > (unsigned long long)LLONG_MAX + 1ull) {
+            errno = ERANGE;
+            return LLONG_MIN;
+        }
+        if (u == (unsigned long long)LLONG_MAX + 1ull) {
+            return LLONG_MIN;
+        }
+        return -(long long)u;
+    }
+    if (u > (unsigned long long)LLONG_MAX) {
+        errno = ERANGE;
+        return LLONG_MAX;
+    }
+    return (long long)u;
 }
 
 unsigned long long
 wcstoull(const wchar_t *sz, wchar_t **ppEnd, int nBase)
 {
-    unsigned long long v = 0;
-    int d;
     const wchar_t *p;
+    unsigned long long u;
+    int fNeg = 0;
+    int nSt;
 
     if (sz == NULL) {
         if (ppEnd != NULL) {
@@ -207,38 +308,31 @@ wcstoull(const wchar_t *sz, wchar_t **ppEnd, int nBase)
         return 0;
     }
     p = sz;
-    skip_wspace(&p);
-    if (*p == L'+') {
-        p++;
-    }
-    if (nBase == 0) {
-        if (*p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-            nBase = 16;
-            p += 2;
-        } else if (*p == L'0') {
-            nBase = 8;
-            p++;
-        } else {
-            nBase = 10;
-        }
-    } else if (nBase == 16 && *p == L'0' && (p[1] == L'x' || p[1] == L'X')) {
-        p += 2;
-    }
-    if (nBase < 2 || nBase > 36) {
+    nSt = wcstox_soft_u(&p, sz, nBase, &u, &fNeg);
+    if (nSt == -2) {
         errno = EINVAL;
         if (ppEnd != NULL) {
             *ppEnd = (wchar_t *)(uintptr_t)sz;
         }
         return 0;
     }
-    while ((d = wdigit_val(*p, nBase)) >= 0) {
-        v = v * (unsigned long long)nBase + (unsigned long long)d;
-        p++;
+    if (nSt < 0) {
+        if (ppEnd != NULL) {
+            *ppEnd = (wchar_t *)(uintptr_t)sz;
+        }
+        return 0;
     }
     if (ppEnd != NULL) {
         *ppEnd = (wchar_t *)(uintptr_t)p;
     }
-    return v;
+    if (nSt > 0) {
+        errno = ERANGE;
+        return ULLONG_MAX;
+    }
+    if (fNeg) {
+        return 0ull - u;
+    }
+    return u;
 }
 
 wchar_t *

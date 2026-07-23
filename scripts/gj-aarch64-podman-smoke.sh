@@ -23,7 +23,15 @@
 #
 # Soft marker report (does not hard-fail on missing markers). Exit 1 only when
 # podman/ELF/image bootstrap is unusable. Makefile aarch64-smoke greps M0 OK
-# on bare-metal path; this helper is optional container fallback.
+# on bare-metal path (scripts/run-aarch64.sh); this helper is optional
+# container fallback with the same soft deepen surface.
+#
+# Soft markers (guest UART; fixed-string grep substrings — trailing fields OK):
+#   hard bring-up: exceptions/cpu/GIC/timer/pmm/mmu/svc/virtio-mmio/mem probe
+#   soft deepen:   shared C, cpu/uart/psci/GIC SPI/timer tick/pmm multi/map,
+#                  sched, shared pmm, svc NR/getpid, virtio queue/desc ring,
+#                  kmain phase summary
+# Product bar: M0 OK (PASS summary when present; soft SKIP/FAIL note if not)
 #
 # See also: scripts/run-aarch64.sh, kernel/arch/aarch64/README.md
 set -euo pipefail
@@ -36,13 +44,30 @@ TIMEOUT_S="${GJ_AARCH64_TIMEOUT:-15}"
 LOG="${GJ_AARCH64_LOG:-}"
 MOUNT_MODE="${GJ_PODMAN_Z:-ro,Z}"
 
+# Keep M0 OK last among product bars. Soft markers are deepen-only (soft
+# report); fixed-string match so "… PASS foo=…" lines still count as hits.
+# Stay aligned with scripts/run-aarch64.sh MARKERS.
 MARKERS=(
+	"aarch64: shared C kernel PASS"
+	"aarch64: shared C soft PASS"
 	"aarch64: exceptions PASS"
 	"aarch64: cpu PASS"
+	"aarch64: cpu soft PASS"
+	"aarch64: uart soft PASS"
+	"aarch64: uart hex soft PASS"
+	"aarch64: psci PASS"
+	"aarch64: psci features soft PASS"
 	"aarch64: GIC PASS"
+	"aarch64: GIC SPI soft PASS"
 	"aarch64: timer PASS"
+	"aarch64: timer tick soft PASS"
 	"aarch64: pmm PASS"
+	"aarch64: pmm multi soft PASS"
+	"aarch64: pmm soft PASS"
 	"aarch64: mmu PASS"
+	"aarch64: mmu map soft PASS"
+	"aarch64: shared sched PASS"
+	"aarch64: shared pmm soft PASS"
 	"aarch64: svc PASS"
 	"aarch64: svc NR dispatch deepen PASS"
 	"aarch64: svc getpid soft PASS"
@@ -50,6 +75,7 @@ MARKERS=(
 	"aarch64: virtio-mmio queue soft PASS"
 	"aarch64: virtio-mmio desc ring soft PASS"
 	"aarch64: mem probe PASS"
+	"aarch64: kmain soft PASS"
 	"M0 OK"
 )
 
@@ -57,6 +83,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 	echo "usage: $0 [path/to/greenjade-aarch64.elf]" >&2
 	echo "  Runs qemu-system-aarch64 inside podman with -v \$ROOT:/work:${MOUNT_MODE}" >&2
 	echo "  PODMAN_IMAGE=$PODMAN_IMAGE  timeout=${TIMEOUT_S}s" >&2
+	echo "  Soft marker report (same surface as run-aarch64.sh); hard-fail only on bootstrap." >&2
 	exit 0
 fi
 
@@ -129,6 +156,9 @@ if [[ -n "$LOG" ]]; then
 	echo "gj-aarch64-podman-smoke: log=$LOG"
 fi
 
+# Soft report (aligned with run-aarch64.sh). Never hard-fail on soft misses;
+# product callers that need the bar grep M0 OK on serial (make aarch64-smoke
+# uses the bare-metal helper).
 hit=0
 miss=0
 for marker in "${MARKERS[@]}"; do

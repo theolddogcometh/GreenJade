@@ -3,8 +3,9 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * search.h — binary tree, hash table, linear search, insque/remque.
- * Clean-room; not GNU glibc.
+ * Clean-room soft fill; not GNU glibc.
  */
+#include <errno.h>
 #include <search.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -25,7 +26,7 @@ tsearch(const void *pKey, void **ppRoot, int (*pfnCmp)(const void *, const void 
     struct tnode *pNew;
     int c;
 
-    if (ppRoot == NULL || pfnCmp == NULL) {
+    if (ppRoot == NULL || pfnCmp == NULL || pKey == NULL) {
         return NULL;
     }
     pp = (struct tnode **)ppRoot;
@@ -57,7 +58,7 @@ tfind(const void *pKey, void *const *ppRoot,
 {
     struct tnode *p;
 
-    if (ppRoot == NULL || pfnCmp == NULL) {
+    if (ppRoot == NULL || pfnCmp == NULL || pKey == NULL) {
         return NULL;
     }
     p = *(struct tnode *const *)ppRoot;
@@ -89,18 +90,21 @@ void *
 tdelete(const void *pKey, void **ppRoot, int (*pfnCmp)(const void *, const void *))
 {
     struct tnode **pp;
+    struct tnode **ppParent;
     struct tnode *p;
     int c;
 
-    if (ppRoot == NULL || pfnCmp == NULL) {
+    if (ppRoot == NULL || pfnCmp == NULL || pKey == NULL) {
         return NULL;
     }
     pp = (struct tnode **)ppRoot;
+    ppParent = NULL;
     while (*pp != NULL) {
         c = pfnCmp(pKey, (*pp)->pKey);
         if (c == 0) {
             break;
         }
+        ppParent = pp;
         if (c < 0) {
             pp = &(*pp)->pLeft;
         } else {
@@ -122,13 +126,12 @@ tdelete(const void *pKey, void **ppRoot, int (*pfnCmp)(const void *, const void 
         pMin->pRight = p->pRight;
         *pp = pMin;
     }
-    /* Return parent pointer shape is underspecified; return key ptr. */
-    {
-        void *pKeyRet = p->pKey;
-
-        free(p);
-        return pKeyRet;
+    free(p);
+    /* POSIX: return pointer to parent node (or root if deleted was root). */
+    if (ppParent != NULL) {
+        return *ppParent;
     }
+    return *ppRoot;
 }
 
 static void
@@ -201,89 +204,171 @@ tdestroy(void *pRoot, void (*pfnFree)(void *p))
 
 /* ---- hash table (hsearch family) ---------------------------------------- */
 
-#define H_MAX 128
+#define H_DEFAULT 128
+#define H_MAX     4096
 
-static ENTRY g_aHash[H_MAX];
-static size_t g_nHash;
-static size_t g_nHashCap;
+struct htab {
+    ENTRY *paSlot;
+    size_t cCap;
+    size_t cUsed;
+};
 
-int
-hcreate(size_t nElem)
+/* Global non-reentrant table. */
+static struct htab g_ht;
+
+/* Full reentrant object (header only forward-declares the type). */
+struct hsearch_data {
+    struct htab tab;
+};
+
+static size_t
+hash_key(const char *sz, size_t cCap)
 {
+    size_t h = 5381u;
+    const unsigned char *p = (const unsigned char *)sz;
+
+    if (sz == NULL || cCap == 0) {
+        return 0;
+    }
+    while (*p != '\0') {
+        h = ((h << 5) + h) + *p;
+        p++;
+    }
+    return h % cCap;
+}
+
+static int
+htab_create(struct htab *pTab, size_t nElem)
+{
+    size_t cCap;
     size_t i;
 
-    (void)nElem;
-    for (i = 0; i < H_MAX; i++) {
-        g_aHash[i].key = NULL;
-        g_aHash[i].data = NULL;
+    if (pTab == NULL) {
+        return 0;
     }
-    g_nHash = 0;
-    g_nHashCap = H_MAX;
+    if (pTab->paSlot != NULL) {
+        /* Already created — POSIX says hcreate fails if called twice. */
+        errno = ENOMEM;
+        return 0;
+    }
+    cCap = nElem < 16 ? 16 : nElem;
+    if (cCap > H_MAX) {
+        cCap = H_MAX;
+    }
+    /* Load factor soft: 2x slots. */
+    if (cCap < H_MAX / 2) {
+        cCap *= 2;
+    }
+    pTab->paSlot = (ENTRY *)calloc(cCap, sizeof(ENTRY));
+    if (pTab->paSlot == NULL) {
+        return 0;
+    }
+    pTab->cCap = cCap;
+    pTab->cUsed = 0;
+    for (i = 0; i < cCap; i++) {
+        pTab->paSlot[i].key = NULL;
+        pTab->paSlot[i].data = NULL;
+    }
     return 1;
 }
 
-void
-hdestroy(void)
+static void
+htab_destroy(struct htab *pTab)
 {
-    size_t i;
-
-    for (i = 0; i < H_MAX; i++) {
-        g_aHash[i].key = NULL;
-        g_aHash[i].data = NULL;
+    if (pTab == NULL) {
+        return;
     }
-    g_nHash = 0;
+    free(pTab->paSlot);
+    pTab->paSlot = NULL;
+    pTab->cCap = 0;
+    pTab->cUsed = 0;
 }
 
-ENTRY *
-hsearch(ENTRY item, ACTION action)
+static ENTRY *
+htab_search(struct htab *pTab, ENTRY item, ACTION action)
 {
+    size_t i0;
     size_t i;
     size_t free_i = (size_t)-1;
 
-    if (g_nHashCap == 0) {
-        if (!hcreate(H_MAX)) {
-            return NULL;
-        }
+    if (pTab == NULL || pTab->paSlot == NULL || pTab->cCap == 0) {
+        return NULL;
     }
-    for (i = 0; i < H_MAX; i++) {
-        if (g_aHash[i].key == NULL) {
+    if (item.key == NULL) {
+        return NULL;
+    }
+    i0 = hash_key(item.key, pTab->cCap);
+    for (i = 0; i < pTab->cCap; i++) {
+        size_t idx = (i0 + i) % pTab->cCap;
+
+        if (pTab->paSlot[idx].key == NULL) {
             if (free_i == (size_t)-1) {
-                free_i = i;
+                free_i = idx;
             }
-            continue;
+            break;
         }
-        if (strcmp(g_aHash[i].key, item.key) == 0) {
-            return &g_aHash[i];
+        if (strcmp(pTab->paSlot[idx].key, item.key) == 0) {
+            return &pTab->paSlot[idx];
         }
     }
     if (action == FIND) {
         return NULL;
     }
-    if (free_i == (size_t)-1 || g_nHash >= H_MAX) {
+    if (free_i == (size_t)-1 || pTab->cUsed >= pTab->cCap) {
         return NULL;
     }
-    g_aHash[free_i] = item;
-    g_nHash++;
-    return &g_aHash[free_i];
+    pTab->paSlot[free_i] = item;
+    pTab->cUsed++;
+    return &pTab->paSlot[free_i];
 }
 
-/* Reentrant stubs share one table (bring-up). */
-struct hsearch_data {
-    int nDummy;
-};
+int
+hcreate(size_t nElem)
+{
+    if (nElem == 0) {
+        nElem = H_DEFAULT;
+    }
+    return htab_create(&g_ht, nElem);
+}
+
+void
+hdestroy(void)
+{
+    htab_destroy(&g_ht);
+}
+
+ENTRY *
+hsearch(ENTRY item, ACTION action)
+{
+    if (g_ht.paSlot == NULL) {
+        if (!hcreate(H_DEFAULT)) {
+            return NULL;
+        }
+    }
+    return htab_search(&g_ht, item, action);
+}
 
 int
 hcreate_r(size_t nElem, struct hsearch_data *pHtab)
 {
-    (void)pHtab;
-    return hcreate(nElem);
+    if (pHtab == NULL) {
+        errno = EINVAL;
+        return 0;
+    }
+    memset(pHtab, 0, sizeof(*pHtab));
+    if (nElem == 0) {
+        nElem = H_DEFAULT;
+    }
+    return htab_create(&pHtab->tab, nElem);
 }
 
 void
 hdestroy_r(struct hsearch_data *pHtab)
 {
-    (void)pHtab;
-    hdestroy();
+    if (pHtab == NULL) {
+        return;
+    }
+    htab_destroy(&pHtab->tab);
 }
 
 int
@@ -291,8 +376,22 @@ hsearch_r(ENTRY item, ACTION action, ENTRY **ppRet, struct hsearch_data *pHtab)
 {
     ENTRY *p;
 
-    (void)pHtab;
-    p = hsearch(item, action);
+    if (pHtab == NULL) {
+        errno = EINVAL;
+        if (ppRet != NULL) {
+            *ppRet = NULL;
+        }
+        return 0;
+    }
+    if (pHtab->tab.paSlot == NULL) {
+        if (!htab_create(&pHtab->tab, H_DEFAULT)) {
+            if (ppRet != NULL) {
+                *ppRet = NULL;
+            }
+            return 0;
+        }
+    }
+    p = htab_search(&pHtab->tab, item, action);
     if (ppRet != NULL) {
         *ppRet = p;
     }
@@ -331,7 +430,8 @@ lsearch(const void *pKey, void *pBase, size_t *pNmemb, size_t cb,
     if (pFound != NULL) {
         return pFound;
     }
-    if (pBase == NULL || pNmemb == NULL || cb == 0) {
+    if (pKey == NULL || pBase == NULL || pNmemb == NULL || cb == 0 ||
+        pfnCmp == NULL) {
         return NULL;
     }
     p = (unsigned char *)pBase;

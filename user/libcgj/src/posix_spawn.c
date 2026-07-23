@@ -3,6 +3,8 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Minimal working posix_spawn / posix_spawnp + attr / file_actions.
+ * Soft deepen: apply SETPGROUP/SETSID/RESETIDS/sigmask/sigdef/sched,
+ * closefrom via close_range, addtcsetpgrp_np, USEVFORK when safe.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -20,7 +22,8 @@ enum {
     GJ_SPAWN_ACT_OPEN      = 3,
     GJ_SPAWN_ACT_CHDIR     = 4,
     GJ_SPAWN_ACT_FCHDIR    = 5,
-    GJ_SPAWN_ACT_CLOSEFROM = 6
+    GJ_SPAWN_ACT_CLOSEFROM = 6,
+    GJ_SPAWN_ACT_TCSETPGRP = 7
 };
 
 struct gj_spawn_act {
@@ -119,13 +122,143 @@ apply_file_actions(const posix_spawn_file_actions_t *pFileActions)
                 _exit(127);
             }
         } else if (pA->nKind == GJ_SPAWN_ACT_CLOSEFROM) {
-            int fd;
+            /* Prefer close_range; soft loop fallback for older kernels. */
+            if (close_range((unsigned)pA->nFd, ~0U, 0) != 0) {
+                int fd;
 
-            for (fd = pA->nFd; fd < 1024; fd++) {
-                (void)close(fd);
+                for (fd = pA->nFd; fd < 1024; fd++) {
+                    (void)close(fd);
+                }
+            }
+        } else if (pA->nKind == GJ_SPAWN_ACT_TCSETPGRP) {
+            if (tcsetpgrp(pA->nFd, getpgrp()) != 0) {
+                _exit(127);
             }
         }
     }
+}
+
+static void
+apply_spawn_attr(const posix_spawnattr_t *pAttr)
+{
+    short nFlags;
+
+    if (pAttr == NULL) {
+        return;
+    }
+    nFlags = pAttr->__flags;
+
+    if ((nFlags & POSIX_SPAWN_SETSID) != 0) {
+        if (setsid() < 0) {
+            _exit(127);
+        }
+    }
+    if ((nFlags & POSIX_SPAWN_SETPGROUP) != 0) {
+        if (setpgid(0, pAttr->__pgrp) != 0) {
+            _exit(127);
+        }
+    }
+    if ((nFlags & POSIX_SPAWN_RESETIDS) != 0) {
+        if (setgid(getgid()) != 0 || setuid(getuid()) != 0) {
+            _exit(127);
+        }
+    }
+    if ((nFlags & POSIX_SPAWN_SETSIGDEF) != 0) {
+        int nSig;
+
+        for (nSig = 1; nSig < 64; nSig++) {
+            if (sigismember(&pAttr->__sd, nSig) > 0) {
+                struct sigaction sa;
+
+                memset(&sa, 0, sizeof(sa));
+                sa.sa_handler = SIG_DFL;
+                (void)sigemptyset(&sa.sa_mask);
+                sa.sa_flags = 0;
+                (void)sigaction(nSig, &sa, NULL);
+            }
+        }
+    }
+    if ((nFlags & POSIX_SPAWN_SETSIGMASK) != 0) {
+        (void)sigprocmask(SIG_SETMASK, &pAttr->__ss, NULL);
+    }
+    if ((nFlags & POSIX_SPAWN_SETSCHEDULER) != 0) {
+        if (sched_setscheduler(0, pAttr->__policy, &pAttr->__sp) != 0) {
+            _exit(127);
+        }
+    } else if ((nFlags & POSIX_SPAWN_SETSCHEDPARAM) != 0) {
+        if (sched_setparam(0, &pAttr->__sp) != 0) {
+            _exit(127);
+        }
+    }
+}
+
+static int
+path_search_exec(const char *szPath, char *const aArgv[], char *const pEnv[])
+{
+    const char *szPathEnv;
+    char aTry[512];
+    const char *p;
+    const char *pColon;
+    size_t nFile;
+    int fSawEacces = 0;
+    int nSaved = ENOENT;
+
+    if (strchr(szPath, '/') != NULL) {
+        (void)execve(szPath, aArgv, pEnv);
+        return -1;
+    }
+
+    szPathEnv = getenv("PATH");
+    if (szPathEnv == NULL || szPathEnv[0] == '\0') {
+        szPathEnv = "/bin:/usr/bin";
+    }
+    nFile = strlen(szPath);
+    p = szPathEnv;
+    for (;;) {
+        size_t nDir;
+        size_t i;
+
+        pColon = strchr(p, ':');
+        nDir = pColon ? (size_t)(pColon - p) : strlen(p);
+        if (nDir == 0) {
+            /* empty component → cwd */
+            if (2 + nFile + 1 <= sizeof(aTry)) {
+                aTry[0] = '.';
+                aTry[1] = '/';
+                for (i = 0; i < nFile; i++) {
+                    aTry[2 + i] = szPath[i];
+                }
+                aTry[2 + nFile] = '\0';
+                (void)execve(aTry, aArgv, pEnv);
+                if (errno == EACCES) {
+                    fSawEacces = 1;
+                } else if (errno != ENOENT && errno != ENOTDIR) {
+                    nSaved = errno;
+                }
+            }
+        } else if (nDir + 1 + nFile + 1 <= sizeof(aTry)) {
+            for (i = 0; i < nDir; i++) {
+                aTry[i] = p[i];
+            }
+            aTry[nDir] = '/';
+            for (i = 0; i < nFile; i++) {
+                aTry[nDir + 1 + i] = szPath[i];
+            }
+            aTry[nDir + 1 + nFile] = '\0';
+            (void)execve(aTry, aArgv, pEnv);
+            if (errno == EACCES) {
+                fSawEacces = 1;
+            } else if (errno != ENOENT && errno != ENOTDIR) {
+                nSaved = errno;
+            }
+        }
+        if (pColon == NULL) {
+            break;
+        }
+        p = pColon + 1;
+    }
+    errno = fSawEacces ? EACCES : nSaved;
+    return -1;
 }
 
 static int
@@ -144,65 +277,21 @@ do_spawn(pid_t *pPid, const char *szPath,
     }
     pEnv = aEnvp != NULL ? aEnvp : environ;
 
+    /*
+     * Soft: always fork. POSIX_SPAWN_USEVFORK is accepted on the attr word
+     * but not used here — child applies attrs/file-actions before exec,
+     * which is unsafe under true vfork (shared address space).
+     */
     pid = fork();
     if (pid < 0) {
         return errno;
     }
     if (pid == 0) {
         /* Child */
-        if (pAttr != NULL) {
-            if ((pAttr->__flags & POSIX_SPAWN_SETPGROUP) != 0) {
-                /* setpgid not yet in surface — ignore bring-up */
-                (void)pAttr->__pgrp;
-            }
-            if ((pAttr->__flags & POSIX_SPAWN_SETSIGMASK) != 0) {
-                (void)sigprocmask(SIG_SETMASK, &pAttr->__ss, NULL);
-            }
-        }
+        apply_spawn_attr(pAttr);
         apply_file_actions(pFileActions);
         if (fPathSearch) {
-            /* Absolute or relative with slash: direct exec */
-            if (strchr(szPath, '/') != NULL) {
-                (void)execve(szPath, aArgv, pEnv);
-            } else {
-                const char *szPathEnv = getenv("PATH");
-                char aTry[512];
-                const char *p;
-                const char *pColon;
-
-                if (szPathEnv == NULL) {
-                    szPathEnv = "/bin:/usr/bin";
-                }
-                p = szPathEnv;
-                for (;;) {
-                    size_t nDir;
-                    size_t nFile;
-                    size_t i;
-
-                    pColon = strchr(p, ':');
-                    nDir = pColon ? (size_t)(pColon - p) : strlen(p);
-                    nFile = strlen(szPath);
-                    if (nDir + 1 + nFile + 1 <= sizeof(aTry)) {
-                        for (i = 0; i < nDir; i++) {
-                            aTry[i] = p[i];
-                        }
-                        if (nDir == 0) {
-                            aTry[0] = '.';
-                            nDir = 1;
-                        }
-                        aTry[nDir] = '/';
-                        for (i = 0; i < nFile; i++) {
-                            aTry[nDir + 1 + i] = szPath[i];
-                        }
-                        aTry[nDir + 1 + nFile] = '\0';
-                        (void)execve(aTry, aArgv, pEnv);
-                    }
-                    if (pColon == NULL) {
-                        break;
-                    }
-                    p = pColon + 1;
-                }
-            }
+            (void)path_search_exec(szPath, aArgv, pEnv);
         } else {
             (void)execve(szPath, aArgv, pEnv);
         }
@@ -258,6 +347,7 @@ posix_spawnattr_setflags(posix_spawnattr_t *pAttr, short nFlags)
     if (pAttr == NULL) {
         return EINVAL;
     }
+    /* Soft: accept known flag bits; ignore unknown for forward-compat. */
     pAttr->__flags = nFlags;
     return 0;
 }
@@ -414,7 +504,7 @@ posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *pFa, int nFd)
 {
     struct gj_spawn_fa *pInner;
 
-    if (pFa == NULL || pFa->__actions == NULL) {
+    if (pFa == NULL || pFa->__actions == NULL || nFd < 0) {
         return EINVAL;
     }
     pInner = (struct gj_spawn_fa *)pFa->__actions;
@@ -435,7 +525,7 @@ posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *pFa, int nFd,
 {
     struct gj_spawn_fa *pInner;
 
-    if (pFa == NULL || pFa->__actions == NULL) {
+    if (pFa == NULL || pFa->__actions == NULL || nFd < 0 || nNewfd < 0) {
         return EINVAL;
     }
     pInner = (struct gj_spawn_fa *)pFa->__actions;
@@ -458,7 +548,7 @@ posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *pFa, int nFd,
     struct gj_spawn_fa *pInner;
     char *szDup;
 
-    if (pFa == NULL || pFa->__actions == NULL || szPath == NULL) {
+    if (pFa == NULL || pFa->__actions == NULL || szPath == NULL || nFd < 0) {
         return EINVAL;
     }
     pInner = (struct gj_spawn_fa *)pFa->__actions;
@@ -509,7 +599,7 @@ posix_spawn_file_actions_addfchdir_np(posix_spawn_file_actions_t *pFa, int nFd)
 {
     struct gj_spawn_fa *pInner;
 
-    if (pFa == NULL || pFa->__actions == NULL) {
+    if (pFa == NULL || pFa->__actions == NULL || nFd < 0) {
         return EINVAL;
     }
     pInner = (struct gj_spawn_fa *)pFa->__actions;
@@ -530,7 +620,7 @@ posix_spawn_file_actions_addclosefrom_np(posix_spawn_file_actions_t *pFa,
 {
     struct gj_spawn_fa *pInner;
 
-    if (pFa == NULL || pFa->__actions == NULL) {
+    if (pFa == NULL || pFa->__actions == NULL || nFrom < 0) {
         return EINVAL;
     }
     pInner = (struct gj_spawn_fa *)pFa->__actions;
@@ -539,6 +629,27 @@ posix_spawn_file_actions_addclosefrom_np(posix_spawn_file_actions_t *pFa,
     }
     pInner->pActs[pInner->cUsed].nKind = GJ_SPAWN_ACT_CLOSEFROM;
     pInner->pActs[pInner->cUsed].nFd = nFrom;
+    pInner->pActs[pInner->cUsed].szPath = NULL;
+    pInner->cUsed++;
+    pFa->__used = pInner->cUsed;
+    return 0;
+}
+
+int
+posix_spawn_file_actions_addtcsetpgrp_np(posix_spawn_file_actions_t *pFa,
+                                         int nFd)
+{
+    struct gj_spawn_fa *pInner;
+
+    if (pFa == NULL || pFa->__actions == NULL || nFd < 0) {
+        return EINVAL;
+    }
+    pInner = (struct gj_spawn_fa *)pFa->__actions;
+    if (fa_grow(pInner) != 0) {
+        return errno;
+    }
+    pInner->pActs[pInner->cUsed].nKind = GJ_SPAWN_ACT_TCSETPGRP;
+    pInner->pActs[pInner->cUsed].nFd = nFd;
     pInner->pActs[pInner->cUsed].szPath = NULL;
     pInner->cUsed++;
     pFa->__used = pInner->cUsed;

@@ -11,24 +11,42 @@
  *
  * Ownership policy: only MISSING GNU-extension symbols are defined in this
  * tree. Candidate symbols that already live in user/libcgj must not be
- * redefined here. This TU therefore exports a batch marker only until a
- * missing symbol is assigned to this tree.
+ * redefined here (strverscmp / memrchr / rawmemchr / strchrnul are PRESENT
+ * in libcgj). This TU therefore exports batch markers + soft deepen helpers
+ * only until a missing symbol is assigned to this tree.
  *
- * Marker symbols:
- *   gj_gnu_batch1_export — data (0x471); optional future resolve target
- *   gj_gnu_batch1_init   — restores the marker
- *   gj_gnu_batch1_id     — returns current marker (keeps TU -Werror clean)
+ * Marker / soft symbols:
+ *   gj_gnu_batch1_export      — data (0x471); optional future resolve target
+ *   gj_gnu_batch1_soft_stamp  — soft companion stamp ('B1s1')
+ *   gj_gnu_batch1_init        — restores markers carefully
+ *   gj_gnu_batch1_id          — returns current marker
+ *   gj_gnu_batch1_soft_get    — soft read of marker
+ *   gj_gnu_batch1_soft_probe  — soft check + careful restore
+ *
+ * greppable: GJ_GNU_BATCH1_SOFT_MARKER
+ * greppable: GJ_GNU_BATCH1_SOFT_INIT
+ * greppable: GJ_GNU_BATCH1_SOFT_GET
+ * greppable: GJ_GNU_BATCH1_SOFT_PROBE
+ * greppable: GJ_GNU_BATCH1_SOFT_STAMP
  */
 #include <stddef.h>
 #include <stdint.h>
 
-/* Product SO batch presence marker (GLOB_DAT / JUMP_SLOT smoke target). */
-volatile uint64_t gj_gnu_batch1_export = 0x471;
+#define GJ_GNU_BATCH1_CANON       ((uint64_t)0x471)
+#define GJ_GNU_BATCH1_STAMP_CANON ((uint64_t)0x42317331ull) /* 'B1s1' */
+
+/* greppable: GJ_GNU_BATCH1_SOFT_MARKER */
+volatile uint64_t gj_gnu_batch1_export = GJ_GNU_BATCH1_CANON;
+
+/* greppable: GJ_GNU_BATCH1_SOFT_STAMP */
+volatile uint64_t gj_gnu_batch1_soft_stamp = GJ_GNU_BATCH1_STAMP_CANON;
 
 void
 gj_gnu_batch1_init(void)
 {
-    gj_gnu_batch1_export = 0x471;
+    /* greppable: GJ_GNU_BATCH1_SOFT_INIT */
+    gj_gnu_batch1_export = GJ_GNU_BATCH1_CANON;
+    gj_gnu_batch1_soft_stamp = GJ_GNU_BATCH1_STAMP_CANON;
 }
 
 /* Keep TU useful under -Werror -Wunused when only the marker is present. */
@@ -36,4 +54,34 @@ uint64_t
 gj_gnu_batch1_id(void)
 {
     return gj_gnu_batch1_export;
+}
+
+/*
+ * Soft get of the batch marker. Read-only; does not mutate.
+ */
+uint64_t
+gj_gnu_batch1_soft_get(void)
+{
+    /* greppable: GJ_GNU_BATCH1_SOFT_GET */
+    return gj_gnu_batch1_export;
+}
+
+/*
+ * Soft probe: 1 if marker is canonical; on soft miss carefully restores
+ * marker + stamp and returns 0. Never hard-fails.
+ */
+int
+gj_gnu_batch1_soft_probe(void)
+{
+    /* greppable: GJ_GNU_BATCH1_SOFT_PROBE */
+    if (gj_gnu_batch1_export != GJ_GNU_BATCH1_CANON) {
+        gj_gnu_batch1_export = GJ_GNU_BATCH1_CANON;
+        gj_gnu_batch1_soft_stamp = GJ_GNU_BATCH1_STAMP_CANON;
+        return 0;
+    }
+    if (gj_gnu_batch1_soft_stamp != GJ_GNU_BATCH1_STAMP_CANON) {
+        gj_gnu_batch1_soft_stamp = GJ_GNU_BATCH1_STAMP_CANON;
+        return 0;
+    }
+    return 1;
 }

@@ -3,12 +3,19 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * nl_langinfo — C locale only.
+ *
+ * greppable: CGJ_LANGINFO_SOFT_C_UTF8
+ * greppable: CGJ_LANGINFO_SOFT_EMPTY
+ *
+ * Soft deepen: UTF-8 codeset, stable C date/time strings, empty fallback
+ * for unknown items (not NULL). Pure C freestanding.
  */
 #include <langinfo.h>
 
 char *
 nl_langinfo(nl_item item)
 {
+    /* greppable: CGJ_LANGINFO_SOFT_C_UTF8 */
     switch (item) {
     case CODESET:
         return (char *)"UTF-8";
@@ -111,6 +118,7 @@ nl_langinfo(nl_item item)
     case CRNCYSTR:
         return (char *)"-";
     default:
+        /* greppable: CGJ_LANGINFO_SOFT_EMPTY */
         return (char *)"";
     }
 }

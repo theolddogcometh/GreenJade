@@ -3071,6 +3071,15 @@ gethostname(char *szName, size_t cb)
     }
     n = strlen(un.nodename);
     if (n + 1 > cb) {
+        /* Soft: fill what fits, still report ENAMETOOLONG. */
+        if (cb > 0) {
+            size_t cCopy = cb - 1;
+            if (cCopy > n) {
+                cCopy = n;
+            }
+            memcpy(szName, un.nodename, cCopy);
+            szName[cCopy] = '\0';
+        }
         errno = ENAMETOOLONG;
         return -1;
     }
@@ -3078,14 +3087,23 @@ gethostname(char *szName, size_t cb)
     return 0;
 }
 
+#define NR_sethostname 170
+
 int
 sethostname(const char *szName, size_t cb)
 {
-    /* Bring-up: no persistent hostname; report success for empty/no-op shape */
-    (void)szName;
-    (void)cb;
-    errno = EPERM;
-    return -1;
+    /* Soft deepen: real sethostname SYSCALL (CAP_SYS_ADMIN / privilege). */
+    if (szName == NULL && cb != 0) {
+        errno = EFAULT;
+        return -1;
+    }
+    /* Linux utsname nodename max is __NEW_UTS_LEN (64). */
+    if (cb > 64) {
+        errno = EINVAL;
+        return -1;
+    }
+    return (int)sys_ret(sys6(NR_sethostname, (long)(uintptr_t)szName, (long)cb,
+                             0, 0, 0, 0));
 }
 
 #define NR_sched_yield        24
@@ -3172,19 +3190,60 @@ sched_getcpu(void)
     return (int)uCpu;
 }
 
+#ifndef NR_adjtimex
+#define NR_adjtimex 159
+#endif
+
 int
 adjtime(const struct timeval *pDelta, struct timeval *pOldDelta)
 {
-    if (pOldDelta != NULL) {
-        pOldDelta->tv_sec = 0;
-        pOldDelta->tv_usec = 0;
-    }
+    struct timex tx;
+    long r;
+    long off;
+
+    memset(&tx, 0, sizeof(tx));
     if (pDelta == NULL) {
+        /* Query remaining adjustment via single-shot read mode. */
+        tx.modes = ADJ_OFFSET_SS_READ;
+        r = sys6(NR_adjtimex, (long)(uintptr_t)&tx, 0, 0, 0, 0, 0);
+        if (r < 0 && r > -4096) {
+            errno = (int)(-r);
+            if (pOldDelta != NULL) {
+                pOldDelta->tv_sec = 0;
+                pOldDelta->tv_usec = 0;
+            }
+            return -1;
+        }
+        if (pOldDelta != NULL) {
+            off = tx.offset;
+            /* timex.offset is usec (ADJ_OFFSET_SINGLESHOT shape). */
+            pOldDelta->tv_sec = off / 1000000L;
+            pOldDelta->tv_usec = off % 1000000L;
+            if (pOldDelta->tv_usec < 0) {
+                pOldDelta->tv_sec -= 1;
+                pOldDelta->tv_usec += 1000000L;
+            }
+        }
         return 0;
     }
-    /* Bring-up: adjusting wall clock usually needs CAP_SYS_TIME */
-    errno = EPERM;
-    return -1;
+    off = (long)pDelta->tv_sec * 1000000L + (long)pDelta->tv_usec;
+    tx.modes = ADJ_OFFSET_SINGLESHOT;
+    tx.offset = off;
+    r = sys6(NR_adjtimex, (long)(uintptr_t)&tx, 0, 0, 0, 0, 0);
+    if (r < 0 && r > -4096) {
+        errno = (int)(-r);
+        return -1;
+    }
+    if (pOldDelta != NULL) {
+        off = tx.offset;
+        pOldDelta->tv_sec = off / 1000000L;
+        pOldDelta->tv_usec = off % 1000000L;
+        if (pOldDelta->tv_usec < 0) {
+            pOldDelta->tv_sec -= 1;
+            pOldDelta->tv_usec += 1000000L;
+        }
+    }
+    return 0;
 }
 
 int
@@ -3326,7 +3385,9 @@ klogctl(int nType, char *szBuf, int nLen)
                              0, 0));
 }
 
+#ifndef NR_adjtimex
 #define NR_adjtimex      159
+#endif
 #define NR_clock_adjtime 305
 #define NR_acct          163
 

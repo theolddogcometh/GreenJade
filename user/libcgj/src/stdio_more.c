@@ -15,27 +15,61 @@
 int
 vdprintf(int nFd, const char *szFmt, va_list ap)
 {
-    char aBuf[1024];
+    char aStack[1024];
+    char *pBuf = aStack;
+    char *pHeap = NULL;
     int n;
+    int nNeed;
     ssize_t w;
+    size_t cbWrote = 0;
+    va_list ap2;
 
     if (szFmt == NULL) {
         errno = EINVAL;
         return -1;
     }
-    n = vsnprintf(aBuf, sizeof(aBuf), szFmt, ap);
+    va_copy(ap2, ap);
+    n = vsnprintf(aStack, sizeof(aStack), szFmt, ap);
     if (n < 0) {
+        va_end(ap2);
         return -1;
     }
-    if (n >= (int)sizeof(aBuf)) {
-        /* truncated: still write what we have */
-        n = (int)sizeof(aBuf) - 1;
+    if (n >= (int)sizeof(aStack)) {
+        /* Soft deepen: heap-expand when the stack scratch truncates. */
+        nNeed = n + 1;
+        pHeap = (char *)malloc((size_t)nNeed);
+        if (pHeap == NULL) {
+            /* Fall back: write truncated stack buffer. */
+            n = (int)sizeof(aStack) - 1;
+            va_end(ap2);
+        } else {
+            n = vsnprintf(pHeap, (size_t)nNeed, szFmt, ap2);
+            va_end(ap2);
+            if (n < 0) {
+                free(pHeap);
+                return -1;
+            }
+            pBuf = pHeap;
+        }
+    } else {
+        va_end(ap2);
     }
-    w = write(nFd, aBuf, (size_t)n);
-    if (w < 0) {
-        return -1;
+    while (cbWrote < (size_t)n) {
+        w = write(nFd, pBuf + cbWrote, (size_t)n - cbWrote);
+        if (w < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            free(pHeap);
+            return -1;
+        }
+        if (w == 0) {
+            break;
+        }
+        cbWrote += (size_t)w;
     }
-    return (int)w;
+    free(pHeap);
+    return (int)cbWrote;
 }
 
 int
@@ -207,6 +241,7 @@ mkostemp(char *szTemplate, int nFlags)
     int i;
     size_t n;
     char *pX;
+    int fl;
 
     if (szTemplate == NULL) {
         errno = EINVAL;
@@ -232,10 +267,25 @@ mkostemp(char *szTemplate, int nFlags)
     if ((nFlags & O_CLOEXEC) != 0) {
         (void)fcntl(nFd, F_SETFD, FD_CLOEXEC);
     }
-    if ((nFlags & O_APPEND) != 0) {
-        int fl = fcntl(nFd, F_GETFL);
-        if (fl >= 0) {
-            (void)fcntl(nFd, F_SETFL, fl | O_APPEND);
+    fl = fcntl(nFd, F_GETFL);
+    if (fl >= 0) {
+        int nAdd = 0;
+
+        if ((nFlags & O_APPEND) != 0) {
+            nAdd |= O_APPEND;
+        }
+#ifdef O_SYNC
+        if ((nFlags & O_SYNC) != 0) {
+            nAdd |= O_SYNC;
+        }
+#endif
+#ifdef O_DSYNC
+        if ((nFlags & O_DSYNC) != 0) {
+            nAdd |= O_DSYNC;
+        }
+#endif
+        if (nAdd != 0) {
+            (void)fcntl(nFd, F_SETFL, fl | nAdd);
         }
     }
     return nFd;

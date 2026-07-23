@@ -835,8 +835,8 @@ No “must match Linux by importing Linux.”
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid`
 - Residual **#UD** closed
-- Continuum **makefile_max=14500**
-- **bar3** open (Steam client / Deck Top 50 title runs)
+- Parallel soft waves: continuum **makefile_max=14900** (CREATE-ONLY soft graph only — not client run)
+- **bar3 still open** (Steam client / Deck Top 50 title runs; matrix NOT-TRIED × 50)
 
 ---
 

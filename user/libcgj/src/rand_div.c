@@ -3,6 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * rand/random, div family, reallocarray/memalign, get_current_dir_name.
+ * Soft fill: LCG random; zero-divisor soft guards.
  */
 #include <errno.h>
 #include <stdint.h>
@@ -16,7 +17,7 @@ static unsigned long g_uRand = 1UL;
 void
 srand(unsigned int uSeed)
 {
-    g_uRand = uSeed;
+    g_uRand = (unsigned long)uSeed;
 }
 
 int
@@ -34,19 +35,19 @@ rand_r(unsigned int *pSeed)
     if (pSeed == NULL) {
         return 0;
     }
-    u = *pSeed;
+    u = (unsigned long)(*pSeed);
     u = u * 1103515245UL + 12345UL;
     *pSeed = (unsigned int)u;
     return (int)((u / 65536UL) % 32768UL);
 }
 
-/* BSD random(3) — same LCG for bring-up */
+/* BSD random(3) — same LCG for soft fill (not full 31-bit poly). */
 static unsigned long g_uRandom = 1UL;
 
 void
 srandom(unsigned int uSeed)
 {
-    g_uRandom = uSeed ? uSeed : 1UL;
+    g_uRandom = uSeed ? (unsigned long)uSeed : 1UL;
 }
 
 long
@@ -56,7 +57,6 @@ random(void)
     return (long)((g_uRandom >> 16) & 0x7fffffffUL);
 }
 
-/* BSD random_r / initstate family (bring-up LCG; not full 31-bit poly). */
 struct random_data {
     int32_t *fptr;
     int32_t *rptr;
@@ -110,8 +110,8 @@ initstate(unsigned int uSeed, char *szState, size_t n)
     g_pStateBuf = szState;
     (void)memset(szState, 0, n);
     *(int32_t *)(void *)szState = (int32_t)(uSeed ? uSeed : 1u);
-    g_uRandom = uSeed ? uSeed : 1UL;
-    return pOld;
+    g_uRandom = uSeed ? (unsigned long)uSeed : 1UL;
+    return pOld != NULL ? pOld : szState;
 }
 
 char *
@@ -166,6 +166,18 @@ div(int nNumer, int nDenom)
 {
     div_t r;
 
+    if (nDenom == 0) {
+        r.quot = 0;
+        r.rem = nNumer;
+        return r;
+    }
+    /* Soft: avoid INT_MIN / -1 overflow trap on two's complement. */
+    if (nNumer == (int)(((unsigned int)1) << (sizeof(int) * 8 - 1)) &&
+        nDenom == -1) {
+        r.quot = nNumer;
+        r.rem = 0;
+        return r;
+    }
     r.quot = nNumer / nDenom;
     r.rem = nNumer % nDenom;
     return r;
@@ -176,6 +188,17 @@ ldiv(long nNumer, long nDenom)
 {
     ldiv_t r;
 
+    if (nDenom == 0) {
+        r.quot = 0;
+        r.rem = nNumer;
+        return r;
+    }
+    if (nNumer == (long)(((unsigned long)1) << (sizeof(long) * 8 - 1)) &&
+        nDenom == -1L) {
+        r.quot = nNumer;
+        r.rem = 0;
+        return r;
+    }
     r.quot = nNumer / nDenom;
     r.rem = nNumer % nDenom;
     return r;
@@ -186,6 +209,17 @@ lldiv(long long nNumer, long long nDenom)
 {
     lldiv_t r;
 
+    if (nDenom == 0) {
+        r.quot = 0;
+        r.rem = nNumer;
+        return r;
+    }
+    if (nNumer == (long long)(((unsigned long long)1) << 63) &&
+        nDenom == -1LL) {
+        r.quot = nNumer;
+        r.rem = 0;
+        return r;
+    }
     r.quot = nNumer / nDenom;
     r.rem = nNumer % nDenom;
     return r;
@@ -207,28 +241,55 @@ reallocarray(void *p, size_t n, size_t cb)
 void *
 memalign(size_t uAlign, size_t cb)
 {
+    if (uAlign == 0 || (uAlign & (uAlign - 1)) != 0) {
+        errno = EINVAL;
+        return NULL;
+    }
     return aligned_alloc(uAlign, cb);
 }
 
 void *
 valloc(size_t cb)
 {
-    return memalign((size_t)getpagesize(), cb);
+    size_t uPage = (size_t)getpagesize();
+
+    if (uPage == 0) {
+        uPage = 4096;
+    }
+    return memalign(uPage, cb);
 }
 
 char *
 get_current_dir_name(void)
 {
-    char aBuf[4096];
+    size_t cb = 256;
     char *p;
 
-    if (getcwd(aBuf, sizeof(aBuf)) == NULL) {
-        return NULL;
+    for (;;) {
+        p = (char *)malloc(cb);
+        if (p == NULL) {
+            return NULL;
+        }
+        if (getcwd(p, cb) != NULL) {
+            return p;
+        }
+        {
+            int nErr = errno;
+
+            free(p);
+            if (nErr != ERANGE) {
+                errno = nErr;
+                return NULL;
+            }
+        }
+        if (cb > (size_t)-1 / 2) {
+            errno = ENOMEM;
+            return NULL;
+        }
+        cb *= 2;
+        if (cb > 1024u * 1024u) {
+            errno = ENAMETOOLONG;
+            return NULL;
+        }
     }
-    p = (char *)malloc(strlen(aBuf) + 1);
-    if (p == NULL) {
-        return NULL;
-    }
-    memcpy(p, aBuf, strlen(aBuf) + 1);
-    return p;
 }

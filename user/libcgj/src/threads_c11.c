@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * C11 <threads.h> over clean-room pthread. Integer-only time paths.
+ * C11 <threads.h> over clean-room pthread. Soft deepen. Integer-only time.
  */
 #include <errno.h>
 #include <pthread.h>
@@ -48,26 +48,19 @@ map_pthread_err(int e)
 void
 call_once(once_flag *pFlag, void (*pfn)(void))
 {
-    /* once_flag.p holds pthread_once_t-shaped int state */
-    static pthread_mutex_t g_onceMu = PTHREAD_MUTEX_INITIALIZER;
-    volatile int *pState;
+    /*
+     * once_flag.p is storage for a pthread_once_t-shaped int state:
+     * 0 virgin / 1 running / 2 done — via pthread_once when aligned.
+     */
+    pthread_once_t *pOnce;
 
     if (pFlag == NULL || pfn == NULL) {
         return;
     }
-    pState = (volatile int *)&pFlag->p;
-    if (*pState == 2) {
-        return;
-    }
-    (void)pthread_mutex_lock(&g_onceMu);
-    if (*pState == 0) {
-        *pState = 1;
-        (void)pthread_mutex_unlock(&g_onceMu);
-        pfn();
-        (void)pthread_mutex_lock(&g_onceMu);
-        *pState = 2;
-    }
-    (void)pthread_mutex_unlock(&g_onceMu);
+    /* Soft: require once_flag to hold a pthread_once_t in .p's storage.
+     * ONCE_FLAG_INIT is {0}; treat address of p as once control. */
+    pOnce = (pthread_once_t *)(void *)&pFlag->p;
+    (void)pthread_once(pOnce, pfn);
 }
 
 int
@@ -80,12 +73,24 @@ mtx_init(mtx_t *pMtx, int nType)
     if (pMtx == NULL) {
         return thrd_error;
     }
+    /* mtx_plain | mtx_timed | mtx_recursive — timed is a capability flag */
+    if ((nType & ~(mtx_plain | mtx_timed | mtx_recursive)) != 0 &&
+        nType != mtx_plain && nType != mtx_timed && nType != mtx_recursive &&
+        nType != (mtx_plain | mtx_timed) &&
+        nType != (mtx_recursive | mtx_timed) &&
+        nType != (mtx_plain | mtx_recursive) &&
+        nType != (mtx_plain | mtx_recursive | mtx_timed)) {
+        /* Accept common OR combinations only; reject unknown bits soft. */
+        if (nType & ~(mtx_plain | mtx_timed | mtx_recursive)) {
+            return thrd_error;
+        }
+    }
     p = (struct cgj_mtx *)malloc(sizeof(*p));
     if (p == NULL) {
         return thrd_nomem;
     }
     (void)pthread_mutexattr_init(&a);
-    if (nType & mtx_recursive) {
+    if ((nType & mtx_recursive) != 0) {
         (void)pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
     }
     e = pthread_mutex_init(&p->m, &a);
@@ -142,6 +147,9 @@ mtx_timedlock(mtx_t *pMtx, const struct timespec *pAbs)
     struct cgj_mtx *p;
 
     if (pMtx == NULL || pMtx->p == NULL || pAbs == NULL) {
+        return thrd_error;
+    }
+    if (pAbs->tv_nsec < 0 || pAbs->tv_nsec >= 1000000000L) {
         return thrd_error;
     }
     p = (struct cgj_mtx *)pMtx->p;
@@ -244,6 +252,9 @@ cnd_timedwait(cnd_t *pCnd, mtx_t *pMtx, const struct timespec *pAbs)
         pAbs == NULL) {
         return thrd_error;
     }
+    if (pAbs->tv_nsec < 0 || pAbs->tv_nsec >= 1000000000L) {
+        return thrd_error;
+    }
     pc = (struct cgj_cnd *)pCnd->p;
     pm = (struct cgj_mtx *)pMtx->p;
     return map_pthread_err(pthread_cond_timedwait(&pc->c, &pm->m, pAbs));
@@ -290,7 +301,7 @@ thrd_create(thrd_t *pThr, thrd_start_t pfn, void *pArg)
 int
 thrd_equal(thrd_t a, thrd_t b)
 {
-    return a == b;
+    return a == b ? 1 : 0;
 }
 
 thrd_t
@@ -302,7 +313,22 @@ thrd_current(void)
 int
 thrd_sleep(const struct timespec *pReq, struct timespec *pRem)
 {
-    return nanosleep(pReq, pRem);
+    int n;
+
+    if (pReq == NULL) {
+        return -2; /* C11: negative if not EINTR */
+    }
+    if (pReq->tv_nsec < 0 || pReq->tv_nsec >= 1000000000L) {
+        return -2;
+    }
+    n = nanosleep(pReq, pRem);
+    if (n == 0) {
+        return 0;
+    }
+    if (errno == EINTR) {
+        return -1; /* remaining in *pRem if provided */
+    }
+    return -2;
 }
 
 void

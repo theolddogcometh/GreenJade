@@ -4,6 +4,14 @@
  *
  * Desktop glibc graph nodes: inttypes, qsort_r, _Exit, group_member, getwd,
  * a64l/l64a. Integer-only (no SSE doubles).
+ *
+ * greppable: CGJ_GRAPH_STDLIB_SOFT_IMAXDIV
+ * greppable: CGJ_GRAPH_STDLIB_SOFT_QSORT_R
+ * greppable: CGJ_GRAPH_STDLIB_SOFT_A64L
+ * greppable: CGJ_GRAPH_STDLIB_SOFT_GROUP
+ *
+ * Soft deepen: imaxdiv zero-denom guard, insertion qsort_r with byte
+ * swap helper, a64l stop on bad digit, group_member soft egid/gid first.
  */
 #include <errno.h>
 #include <inttypes.h>
@@ -22,7 +30,14 @@ _Exit(int nCode)
 intmax_t
 imaxabs(intmax_t n)
 {
-    return (n < 0) ? -n : n;
+    /* Soft: keep INTMAX_MIN as-is (negation undefined); match many libc. */
+    if (n < 0) {
+        if (n == INTMAX_MIN) {
+            return n;
+        }
+        return -n;
+    }
+    return n;
 }
 
 imaxdiv_t
@@ -30,6 +45,18 @@ imaxdiv(intmax_t nNumer, intmax_t nDenom)
 {
     imaxdiv_t r;
 
+    /* greppable: CGJ_GRAPH_STDLIB_SOFT_IMAXDIV */
+    if (nDenom == 0) {
+        r.quot = 0;
+        r.rem = 0;
+        return r;
+    }
+    /* Soft: avoid INTMAX_MIN / -1 overflow trap. */
+    if (nNumer == INTMAX_MIN && nDenom == (intmax_t)-1) {
+        r.quot = INTMAX_MIN;
+        r.rem = 0;
+        return r;
+    }
     r.quot = nNumer / nDenom;
     r.rem = nNumer % nDenom;
     return r;
@@ -54,6 +81,7 @@ group_member(gid_t gid)
     int n;
     int i;
 
+    /* greppable: CGJ_GRAPH_STDLIB_SOFT_GROUP */
     if (gid == getegid() || gid == getgid()) {
         return 1;
     }
@@ -81,6 +109,19 @@ getwd(char *szBuf)
 }
 
 /* GNU qsort_r: comparator gets caller cookie as third arg. */
+static void
+qsort_r_soft_swap(unsigned char *pA, unsigned char *pB, size_t cb)
+{
+    size_t k;
+
+    for (k = 0; k < cb; k++) {
+        unsigned char t = pA[k];
+
+        pA[k] = pB[k];
+        pB[k] = t;
+    }
+}
+
 void
 qsort_r(void *pBase, size_t n, size_t cb,
         int (*pfnCmp)(const void *, const void *, void *), void *pArg)
@@ -88,19 +129,16 @@ qsort_r(void *pBase, size_t n, size_t cb,
     size_t i, j;
     unsigned char *p = (unsigned char *)pBase;
 
+    /* greppable: CGJ_GRAPH_STDLIB_SOFT_QSORT_R */
     if (pBase == NULL || pfnCmp == NULL || cb == 0 || n < 2) {
         return;
     }
+    /* Soft insertion sort — stable-ish, no recursion (freestanding stack). */
     for (i = 1; i < n; i++) {
         j = i;
         while (j > 0 &&
                pfnCmp(p + (j - 1) * cb, p + j * cb, pArg) > 0) {
-            size_t k;
-            for (k = 0; k < cb; k++) {
-                unsigned char t = p[(j - 1) * cb + k];
-                p[(j - 1) * cb + k] = p[j * cb + k];
-                p[j * cb + k] = t;
-            }
+            qsort_r_soft_swap(p + (j - 1) * cb, p + j * cb, cb);
             j--;
         }
     }
@@ -146,7 +184,8 @@ a64l(const char *sz)
     long v = 0;
     int i;
 
-    if (sz == NULL) {
+    /* greppable: CGJ_GRAPH_STDLIB_SOFT_A64L */
+    if (sz == NULL || sz[0] == '\0') {
         return 0;
     }
     for (i = 0; i < 6 && sz[i] != '\0'; i++) {
@@ -167,6 +206,10 @@ l64a(long n)
     unsigned long u;
     int i;
 
+    if (n == 0) {
+        aBuf[0] = '\0';
+        return aBuf;
+    }
     u = (unsigned long)n;
     for (i = 0; i < 6; i++) {
         aBuf[i] = a64_char((int)(u & 63u));

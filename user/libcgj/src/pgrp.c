@@ -3,6 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Process-group / session helpers + tcgetpgrp / tcsetpgrp / tcgetsid.
+ * Soft deepen: real setdomainname SYSCALL; fd/arg validation.
  */
 #include <errno.h>
 #include <stdint.h>
@@ -13,11 +14,12 @@
 #include <termios.h>
 #include <unistd.h>
 
-#define NR_setpgid 109
-#define NR_getpgrp 111
-#define NR_getpgid 121
-#define NR_getsid  124
-#define NR_chroot  161
+#define NR_setpgid       109
+#define NR_getpgrp       111
+#define NR_getpgid       121
+#define NR_getsid        124
+#define NR_chroot        161
+#define NR_setdomainname 171
 
 #ifndef TIOCGPGRP
 #define TIOCGPGRP 0x540F
@@ -27,6 +29,11 @@
 #endif
 #ifndef TIOCGSID
 #define TIOCGSID 0x5429
+#endif
+
+/* Linux utsname domainname cap (public ABI) */
+#ifndef __NEW_UTS_LEN
+#define __NEW_UTS_LEN 64
 #endif
 
 static long
@@ -58,6 +65,10 @@ sys_ret(long r)
 pid_t
 getpgid(pid_t pid)
 {
+    if (pid < 0) {
+        errno = EINVAL;
+        return (pid_t)-1;
+    }
     return (pid_t)sys_ret(sys6(NR_getpgid, (long)pid, 0, 0, 0, 0, 0));
 }
 
@@ -68,6 +79,7 @@ getpgrp(void)
 
     r = sys6(NR_getpgrp, 0, 0, 0, 0, 0, 0);
     if (r < 0 && r > -4096) {
+        /* Soft fallback: getpgid(0) if getpgrp NR missing/odd host. */
         return getpgid(0);
     }
     return (pid_t)r;
@@ -76,6 +88,10 @@ getpgrp(void)
 int
 setpgid(pid_t pid, pid_t pgid)
 {
+    if (pid < 0 || pgid < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return (int)sys_ret(sys6(NR_setpgid, (long)pid, (long)pgid, 0, 0, 0, 0));
 }
 
@@ -88,6 +104,10 @@ setpgrp(void)
 pid_t
 getsid(pid_t pid)
 {
+    if (pid < 0) {
+        errno = EINVAL;
+        return (pid_t)-1;
+    }
     return (pid_t)sys_ret(sys6(NR_getsid, (long)pid, 0, 0, 0, 0, 0));
 }
 
@@ -95,7 +115,11 @@ int
 chroot(const char *szPath)
 {
     if (szPath == NULL) {
-        errno = EINVAL;
+        errno = EFAULT;
+        return -1;
+    }
+    if (szPath[0] == '\0') {
+        errno = ENOENT;
         return -1;
     }
     return (int)sys_ret(sys6(NR_chroot, (long)(uintptr_t)szPath, 0, 0, 0, 0, 0));
@@ -107,6 +131,10 @@ tcgetpgrp(int nFd)
     pid_t pgid = 0;
     int n;
 
+    if (nFd < 0) {
+        errno = EBADF;
+        return (pid_t)-1;
+    }
     n = ioctl(nFd, TIOCGPGRP, &pgid);
     if (n < 0) {
         return (pid_t)-1;
@@ -117,6 +145,14 @@ tcgetpgrp(int nFd)
 int
 tcsetpgrp(int nFd, pid_t pgrp)
 {
+    if (nFd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    if (pgrp < 0) {
+        errno = EINVAL;
+        return -1;
+    }
     return ioctl(nFd, TIOCSPGRP, &pgrp);
 }
 
@@ -126,6 +162,10 @@ tcgetsid(int nFd)
     pid_t sid = 0;
     int n;
 
+    if (nFd < 0) {
+        errno = EBADF;
+        return (pid_t)-1;
+    }
     n = ioctl(nFd, TIOCGSID, &sid);
     if (n < 0) {
         return (pid_t)-1;
@@ -148,6 +188,14 @@ getdomainname(char *szName, size_t cb)
     }
     n = strlen(un.domainname);
     if (n + 1 > cb) {
+        /* Soft: truncate into buffer when possible (glibc often does). */
+        if (cb == 1) {
+            szName[0] = '\0';
+            errno = ENAMETOOLONG;
+            return -1;
+        }
+        memcpy(szName, un.domainname, cb - 1);
+        szName[cb - 1] = '\0';
         errno = ENAMETOOLONG;
         return -1;
     }
@@ -158,8 +206,14 @@ getdomainname(char *szName, size_t cb)
 int
 setdomainname(const char *szName, size_t cb)
 {
-    (void)szName;
-    (void)cb;
-    errno = EPERM;
-    return -1;
+    if (szName == NULL && cb != 0) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (cb > (size_t)__NEW_UTS_LEN) {
+        errno = EINVAL;
+        return -1;
+    }
+    return (int)sys_ret(sys6(NR_setdomainname, (long)(uintptr_t)szName,
+                             (long)cb, 0, 0, 0, 0));
 }

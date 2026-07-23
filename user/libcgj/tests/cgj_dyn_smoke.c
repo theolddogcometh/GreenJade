@@ -12,6 +12,7 @@
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1686,6 +1687,105 @@ main(void)
                 fprintf(stderr, "libcgj: dyn gj_bset_set/test KAT fail\n");
                 (void)dlclose(h);
                 return 116;
+            }
+        }
+    }
+    /*
+     * Continuum decade soft lamps (dlsym; skip if missing, hard fail if
+     * present but wrong). Covers milestones 14500 / 14600 / 14700 /
+     * 14800 / 14900. bar3_ready and product_score remain open (0).
+     * Full decade probes live in cgj_soft_milestone_*.c; this block is a
+     * careful host-smoke fold of the key lamps only.
+     */
+    {
+        typedef uint32_t (*u32_fn)(void);
+        struct soft_u32_kat {
+            const char *szName;
+            uint32_t u32Expect;
+        };
+        static const struct soft_u32_kat kLamps[] = {
+            /* 14500 */
+            { "gj_shell_green_14500", 1u },
+            { "gj_libcgj_green_14500", 1u },
+            { "gj_bar3_ready_14500", 0u },
+            { "gj_product_score_14500", 0u },
+            { "gj_continuum_ready_14500", 1u },
+            { "gj_smoke_soft_14500", 1u },
+            { "gj_dyn_soft_14500", 1u },
+            { "gj_milestone_tag_14500", 14500u },
+            { "gj_continuum_wave_14500", 14500u },
+            { "gj_batch_id_14500", 14500u },
+            { "gj_graph_milestone_14500", 14500u },
+            /* 14600 */
+            { "gj_shell_green_14600", 1u },
+            { "gj_libcgj_green_14600", 1u },
+            { "gj_bar3_ready_14600", 0u },
+            { "gj_product_score_14600", 0u },
+            { "gj_continuum_ready_14600", 1u },
+            { "gj_smoke_soft_14600", 1u },
+            { "gj_dyn_soft_14600", 1u },
+            { "gj_milestone_tag_14600", 14600u },
+            { "gj_continuum_wave_14600", 14600u },
+            { "gj_batch_id_14600", 14600u },
+            { "gj_graph_milestone_14600", 14600u },
+            /* 14700 (gap filled; batch TUs landed) */
+            { "gj_shell_green_14700", 1u },
+            { "gj_libcgj_green_14700", 1u },
+            { "gj_bar3_ready_14700", 0u },
+            { "gj_product_score_14700", 0u },
+            { "gj_continuum_ready_14700", 1u },
+            { "gj_smoke_soft_14700", 1u },
+            { "gj_dyn_soft_14700", 1u },
+            { "gj_milestone_tag_14700", 14700u },
+            { "gj_continuum_wave_14700", 14700u },
+            { "gj_batch_id_14700", 14700u },
+            { "gj_graph_milestone_14700", 14700u },
+            /* 14800 */
+            { "gj_shell_green_14800", 1u },
+            { "gj_libcgj_green_14800", 1u },
+            { "gj_bar3_ready_14800", 0u },
+            { "gj_product_score_14800", 0u },
+            { "gj_continuum_ready_14800", 1u },
+            { "gj_smoke_soft_14800", 1u },
+            { "gj_dyn_soft_14800", 1u },
+            { "gj_milestone_tag_14800", 14800u },
+            { "gj_continuum_wave_14800", 14800u },
+            { "gj_batch_id_14800", 14800u },
+            { "gj_graph_milestone_14800", 14800u },
+            /* 14900 */
+            { "gj_shell_green_14900", 1u },
+            { "gj_libcgj_green_14900", 1u },
+            { "gj_bar3_ready_14900", 0u },
+            { "gj_product_score_14900", 0u },
+            { "gj_continuum_ready_14900", 1u },
+            { "gj_smoke_soft_14900", 1u },
+            { "gj_dyn_soft_14900", 1u },
+            { "gj_milestone_tag_14900", 14900u },
+            { "gj_continuum_wave_14900", 14900u },
+            { "gj_batch_id_14900", 14900u },
+            { "gj_graph_milestone_14900", 14900u },
+        };
+        size_t iLamp;
+
+        for (iLamp = 0;
+             iLamp < sizeof(kLamps) / sizeof(kLamps[0]);
+             iLamp++) {
+            u32_fn pfn;
+            uint32_t u32Got;
+
+            pfn = (u32_fn)dlsym(h, kLamps[iLamp].szName);
+            if (pfn == NULL) {
+                continue; /* soft-skip unexported / not yet mapped */
+            }
+            u32Got = pfn();
+            if (u32Got != kLamps[iLamp].u32Expect) {
+                fprintf(stderr,
+                        "libcgj: dyn soft decade %s KAT fail "
+                        "got=%u expect=%u\n",
+                        kLamps[iLamp].szName, (unsigned)u32Got,
+                        (unsigned)kLamps[iLamp].u32Expect);
+                (void)dlclose(h);
+                return 117;
             }
         }
     }

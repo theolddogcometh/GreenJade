@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * POSIX semaphores — process-private and process-shared (futex).
- * Named: sem_open via shm_open + mmap. Not GNU glibc.
+ * Named: sem_open via shm_open + mmap. Soft deepen. Not GNU glibc.
  */
 #include <errno.h>
 #include <fcntl.h>
@@ -20,7 +20,9 @@
 #define FUTEX_WAKE 1
 #define FUTEX_PRIVATE_FLAG 128
 
-#define CGJ_SEM_MAGIC 0x53454d31 /* 'SEM1' */
+#define CGJ_SEM_MAGIC   0x53454d31 /* 'SEM1' */
+#define CGJ_SEM_INITING 0x53454d30 /* 'SEM0' — open init in progress */
+#define CGJ_SEM_MAX     0x7fffffff
 
 static long
 sys6(long nr, long a0, long a1, long a2, long a3, long a4, long a5)
@@ -75,14 +77,15 @@ sem_init(sem_t *pSem, int nPshared, unsigned uValue)
         errno = EINVAL;
         return -1;
     }
-    if (uValue > 0x7fffffffU) {
+    if (uValue > (unsigned)CGJ_SEM_MAX) {
         errno = EINVAL;
         return -1;
     }
     pSem->nValue = (int)uValue;
     pSem->nPshared = (nPshared != 0) ? 1 : 0;
-    pSem->nMagic = CGJ_SEM_MAGIC;
     pSem->nPad = 0;
+    __sync_synchronize();
+    pSem->nMagic = CGJ_SEM_MAGIC;
     return 0;
 }
 
@@ -94,7 +97,10 @@ sem_destroy(sem_t *pSem)
         return -1;
     }
     pSem->nMagic = 0;
+    __sync_synchronize();
     pSem->nValue = 0;
+    /* Wake any waiters so they re-check magic / value. */
+    (void)futex_op_wake(pSem, 0x7fffffff);
     return 0;
 }
 
@@ -130,6 +136,10 @@ sem_wait(sem_t *pSem)
         return -1;
     }
     for (;;) {
+        if (!sem_ok(pSem)) {
+            errno = EINVAL;
+            return -1;
+        }
         nCur = pSem->nValue;
         if (nCur > 0) {
             if (__sync_bool_compare_and_swap(&pSem->nValue, nCur, nCur - 1)) {
@@ -138,8 +148,12 @@ sem_wait(sem_t *pSem)
             continue;
         }
         r = futex_op_wait(pSem, 0, NULL);
+        /* EAGAIN (-11): value changed; EINTR (-4): retry. */
         if (r < 0 && r != -11 && r != -4) {
-            (void)r;
+            if (r > -4096) {
+                errno = (int)(-r);
+                return -1;
+            }
         }
     }
 }
@@ -156,7 +170,15 @@ sem_timedwait(sem_t *pSem, const struct timespec *pAbs)
         errno = EINVAL;
         return -1;
     }
+    if (pAbs->tv_nsec < 0 || pAbs->tv_nsec >= 1000000000L) {
+        errno = EINVAL;
+        return -1;
+    }
     for (;;) {
+        if (!sem_ok(pSem)) {
+            errno = EINVAL;
+            return -1;
+        }
         nCur = pSem->nValue;
         if (nCur > 0) {
             if (__sync_bool_compare_and_swap(&pSem->nValue, nCur, nCur - 1)) {
@@ -182,6 +204,7 @@ sem_timedwait(sem_t *pSem, const struct timespec *pAbs)
             errno = ETIMEDOUT;
             return -1;
         }
+        /* EINTR / EAGAIN: loop and re-check absolute time. */
         (void)r;
     }
 }
@@ -190,6 +213,7 @@ int
 sem_post(sem_t *pSem)
 {
     int nCur;
+    int nNew;
 
     if (!sem_ok(pSem)) {
         errno = EINVAL;
@@ -197,12 +221,16 @@ sem_post(sem_t *pSem)
     }
     for (;;) {
         nCur = pSem->nValue;
-        if (nCur >= 0x7fffffff) {
+        if (nCur >= CGJ_SEM_MAX) {
             errno = EOVERFLOW;
             return -1;
         }
-        if (__sync_bool_compare_and_swap(&pSem->nValue, nCur, nCur + 1)) {
-            (void)futex_op_wake(pSem, 1);
+        nNew = nCur + 1;
+        if (__sync_bool_compare_and_swap(&pSem->nValue, nCur, nNew)) {
+            /* Wake only if someone may be waiting (was zero or below). */
+            if (nCur <= 0) {
+                (void)futex_op_wake(pSem, 1);
+            }
             return 0;
         }
     }
@@ -211,11 +239,15 @@ sem_post(sem_t *pSem)
 int
 sem_getvalue(sem_t *pSem, int *pSval)
 {
+    int n;
+
     if (!sem_ok(pSem) || pSval == NULL) {
         errno = EINVAL;
         return -1;
     }
-    *pSval = pSem->nValue;
+    n = pSem->nValue;
+    /* POSIX: negative means waiters; soft stores only ≥0, report as-is. */
+    *pSval = n;
     return 0;
 }
 
@@ -240,14 +272,16 @@ sem_open(const char *szName, int nFlags, ...)
         mode = (mode_t)va_arg(ap, unsigned); /* mode_t may promote */
         uValue = va_arg(ap, unsigned);
         va_end(ap);
+        if (uValue > (unsigned)CGJ_SEM_MAX) {
+            errno = EINVAL;
+            return SEM_FAILED;
+        }
     }
 
     nFd = shm_open(szName, nFlags | O_RDWR, mode);
     if (nFd < 0 && (nFlags & O_CREAT) != 0 && errno == ENOENT) {
         nFd = shm_open(szName, nFlags | O_RDWR | O_CREAT, mode);
         nCreated = 1;
-    } else if (nFd >= 0 && (nFlags & O_CREAT) != 0 && (nFlags & O_EXCL) != 0) {
-        /* already exists with O_EXCL — shm_open should have failed; treat ok */
     }
     if (nFd < 0) {
         return SEM_FAILED;
@@ -260,11 +294,11 @@ sem_open(const char *szName, int nFlags, ...)
         }
         nCreated = 1;
     } else if ((nFlags & O_CREAT) != 0) {
-        if (ftruncate(nFd, (off_t)sizeof(sem_t)) != 0 && errno != EINVAL) {
-            /* ignore if already sized */
-        }
         if (fstat(nFd, &st) == 0 && st.st_size == 0) {
-            (void)ftruncate(nFd, (off_t)sizeof(sem_t));
+            if (ftruncate(nFd, (off_t)sizeof(sem_t)) != 0) {
+                (void)close(nFd);
+                return SEM_FAILED;
+            }
             nCreated = 1;
         }
     }
@@ -276,10 +310,34 @@ sem_open(const char *szName, int nFlags, ...)
         return SEM_FAILED;
     }
 
+    /*
+     * Soft race guard: only one creator installs magic. Others spin until
+     * SEM1 is visible.
+     */
     if (nCreated || !sem_ok(pMap)) {
-        if (sem_init(pMap, 1, uValue) != 0) {
-            (void)munmap(pMap, sizeof(sem_t));
-            return SEM_FAILED;
+        int nPrev = __sync_val_compare_and_swap(&pMap->nMagic, 0, CGJ_SEM_INITING);
+
+        if (nPrev == 0) {
+            pMap->nValue = (int)uValue;
+            pMap->nPshared = 1;
+            pMap->nPad = 0;
+            __sync_synchronize();
+            pMap->nMagic = CGJ_SEM_MAGIC;
+        } else if (nPrev == CGJ_SEM_MAGIC) {
+            /* already live */
+        } else {
+            int iSpin;
+
+            for (iSpin = 0; iSpin < 100000 && !sem_ok(pMap); iSpin++) {
+                __asm__ volatile("pause" ::: "memory");
+            }
+            if (!sem_ok(pMap)) {
+                /* Stale INITING or corrupt — last-ditch reinit. */
+                if (sem_init(pMap, 1, uValue) != 0) {
+                    (void)munmap(pMap, sizeof(sem_t));
+                    return SEM_FAILED;
+                }
+            }
         }
     }
     return pMap;
@@ -301,5 +359,9 @@ sem_close(sem_t *pSem)
 int
 sem_unlink(const char *szName)
 {
+    if (szName == NULL || szName[0] == '\0') {
+        errno = EINVAL;
+        return -1;
+    }
     return shm_unlink(szName);
 }

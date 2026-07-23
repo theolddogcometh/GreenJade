@@ -2,10 +2,17 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * Clean-room inet_pton / inet_ntop / helpers (IPv4; IPv6 basic).
+ * Clean-room inet_pton / inet_ntop / helpers (IPv4; IPv6 soft).
+ * Not GNU glibc.
+ *
+ * greppable: CGJ_INET_SOFT_ATON_ABBREV
+ * greppable: CGJ_INET_SOFT_V6_COMPRESS
+ * greppable: CGJ_INET_SOFT_V4MAPPED
+ *
+ * Soft deepen: BSD-style abbreviated IPv4 forms, IPv6 longest-run :: in
+ * ntop, IPv4-embedded tails and mapped addresses in pton. Pure C, no DNS.
  */
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -16,7 +23,7 @@ struct gj_in6 {
 };
 
 static int
-parse_dec_octet(const char **pp, unsigned *pVal)
+parse_dec_u(const char **pp, unsigned *pVal, unsigned uMax, int nMaxDig)
 {
     const char *p = *pp;
     unsigned v = 0;
@@ -25,12 +32,17 @@ parse_dec_octet(const char **pp, unsigned *pVal)
     if (p == NULL || *p < '0' || *p > '9') {
         return -1;
     }
-    while (*p >= '0' && *p <= '9' && n < 3) {
-        v = v * 10u + (unsigned)(*p - '0');
+    while (*p >= '0' && *p <= '9' && n < nMaxDig) {
+        unsigned d = (unsigned)(*p - '0');
+
+        if (v > (uMax - d) / 10u) {
+            return -1;
+        }
+        v = v * 10u + d;
         p++;
         n++;
     }
-    if (n == 0 || v > 255u) {
+    if (n == 0 || v > uMax) {
         return -1;
     }
     *pVal = v;
@@ -38,32 +50,62 @@ parse_dec_octet(const char **pp, unsigned *pVal)
     return 0;
 }
 
+/*
+ * greppable: CGJ_INET_SOFT_ATON_ABBREV
+ * a | a.b | a.b.c | a.b.c.d  (host-order classful-style assemble).
+ */
 int
 inet_aton(const char *sz, struct in_addr *pAddr)
 {
     const char *p;
     unsigned a[4];
-    int i;
+    int cParts = 0;
+    uint32_t uHost;
 
     if (sz == NULL || pAddr == NULL) {
         return 0;
     }
     p = sz;
-    for (i = 0; i < 4; i++) {
-        if (parse_dec_octet(&p, &a[i]) != 0) {
+    for (;;) {
+        if (cParts >= 4) {
             return 0;
         }
-        if (i < 3) {
-            if (*p != '.') {
-                return 0;
-            }
-            p++;
+        if (parse_dec_u(&p, &a[cParts], 0xffffffffu, 10) != 0) {
+            return 0;
+        }
+        cParts++;
+        if (*p == '\0') {
+            break;
+        }
+        if (*p != '.') {
+            return 0;
+        }
+        p++;
+        if (*p == '\0') {
+            return 0; /* trailing dot */
         }
     }
-    if (*p != '\0') {
-        return 0;
+
+    if (cParts == 1) {
+        /* greppable: CGJ_INET_SOFT_ATON_ABBREV */
+        uHost = a[0];
+    } else if (cParts == 2) {
+        if (a[0] > 0xffu || a[1] > 0xffffffu) {
+            return 0;
+        }
+        uHost = (a[0] << 24) | a[1];
+    } else if (cParts == 3) {
+        if (a[0] > 0xffu || a[1] > 0xffu || a[2] > 0xffffu) {
+            return 0;
+        }
+        uHost = (a[0] << 24) | (a[1] << 16) | a[2];
+    } else {
+        if (a[0] > 0xffu || a[1] > 0xffu || a[2] > 0xffu || a[3] > 0xffu) {
+            return 0;
+        }
+        uHost = (a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3];
     }
-    pAddr->s_addr = htonl((a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3]);
+    pAddr->s_addr = htonl(uHost);
     return 1;
 }
 
@@ -83,18 +125,14 @@ inet_ntoa(struct in_addr in)
 {
     static char aBuf[16];
     uint32_t v = ntohl(in.s_addr);
-    unsigned o0 = (v >> 24) & 0xffu;
-    unsigned o1 = (v >> 16) & 0xffu;
-    unsigned o2 = (v >> 8) & 0xffu;
-    unsigned o3 = v & 0xffu;
-    char *p = aBuf;
     unsigned parts[4];
+    char *p = aBuf;
     int i;
 
-    parts[0] = o0;
-    parts[1] = o1;
-    parts[2] = o2;
-    parts[3] = o3;
+    parts[0] = (v >> 24) & 0xffu;
+    parts[1] = (v >> 16) & 0xffu;
+    parts[2] = (v >> 8) & 0xffu;
+    parts[3] = v & 0xffu;
     for (i = 0; i < 4; i++) {
         char t[4];
         int n = 0;
@@ -107,7 +145,6 @@ inet_ntoa(struct in_addr in)
                 t[n++] = (char)('0' + (x % 10u));
                 x /= 10u;
             }
-            /* reverse digits */
             {
                 int a = 0;
                 int b = n - 1;
@@ -147,7 +184,7 @@ hex_val(int c)
     return -1;
 }
 
-/* Minimal IPv6: full form with optional :: compression */
+/* Minimal IPv6: full form, :: compression, optional IPv4 tail. */
 static int
 pton6(const char *sz, struct gj_in6 *pOut)
 {
@@ -156,16 +193,20 @@ pton6(const char *sz, struct gj_in6 *pOut)
     int nCompress = -1;
     const char *p = sz;
     int i;
+    int fV4Tail = 0;
 
     memset(aWord, 0, sizeof(aWord));
     if (p[0] == ':' && p[1] == ':') {
         nCompress = 0;
         p += 2;
+    } else if (p[0] == ':') {
+        return 0; /* lone leading colon without second */
     }
     while (*p != '\0' && nWords < 8) {
         unsigned v = 0;
         int nDig = 0;
         int d;
+        const char *pSave;
 
         if (*p == ':') {
             if (nCompress >= 0) {
@@ -178,6 +219,42 @@ pton6(const char *sz, struct gj_in6 *pOut)
             }
             continue;
         }
+
+        /* greppable: CGJ_INET_SOFT_V4MAPPED — dotted IPv4 tail */
+        pSave = p;
+        if (nWords <= 6) {
+            const char *q = p;
+            int fDot = 0;
+
+            while (*q != '\0' && *q != ':') {
+                if (*q == '.') {
+                    fDot = 1;
+                    break;
+                }
+                q++;
+            }
+            if (fDot) {
+                struct in_addr a4;
+
+                if (inet_aton(p, &a4) == 0) {
+                    return 0;
+                }
+                {
+                    uint32_t u = ntohl(a4.s_addr);
+
+                    aWord[nWords++] = (uint16_t)((u >> 16) & 0xffffu);
+                    if (nWords >= 8) {
+                        return 0;
+                    }
+                    aWord[nWords++] = (uint16_t)(u & 0xffffu);
+                }
+                fV4Tail = 1;
+                p = p + strlen(p);
+                break;
+            }
+        }
+        (void)pSave;
+
         while ((d = hex_val((unsigned char)*p)) >= 0 && nDig < 4) {
             v = (v << 4) | (unsigned)d;
             p++;
@@ -208,6 +285,12 @@ pton6(const char *sz, struct gj_in6 *pOut)
         if (nZ < 0) {
             return 0;
         }
+        if (nZ == 0 && !(fV4Tail && nCompress == nWords)) {
+            /* :: with no room only OK if empty expand already full */
+            if (nWords != 8) {
+                return 0;
+            }
+        }
         memmove(&aWord[nCompress + nZ], &aWord[nCompress],
                 (size_t)nTail * sizeof(uint16_t));
         memset(&aWord[nCompress], 0, (size_t)nZ * sizeof(uint16_t));
@@ -236,6 +319,21 @@ inet_pton(int nAf, const char *szSrc, void *pDst)
         if (inet_aton(szSrc, &a) == 0) {
             return 0;
         }
+        /* Soft: full a.b.c.d only for pton (POSIX); abbreviated still via aton */
+        {
+            const char *p = szSrc;
+            int cDot = 0;
+
+            while (*p != '\0') {
+                if (*p == '.') {
+                    cDot++;
+                }
+                p++;
+            }
+            if (cDot != 3) {
+                return 0;
+            }
+        }
         memcpy(pDst, &a, sizeof(a));
         return 1;
     }
@@ -253,7 +351,7 @@ inet_pton(int nAf, const char *szSrc, void *pDst)
 }
 
 static size_t
-fmt_u16(char *p, uint16_t v)
+fmt_u16_hex(char *p, uint16_t v)
 {
     char t[4];
     int n = 0;
@@ -273,6 +371,66 @@ fmt_u16(char *p, uint16_t v)
         p[i] = t[n - 1 - (int)i];
     }
     return (size_t)n;
+}
+
+/* greppable: CGJ_INET_SOFT_V6_COMPRESS */
+static void
+ntop6(const uint8_t *b, char *aTmp)
+{
+    uint16_t aWord[8];
+    int i;
+    int iBest = -1;
+    int nBest = 0;
+    int iRun = -1;
+    int nRun = 0;
+    char *p = aTmp;
+
+    for (i = 0; i < 8; i++) {
+        aWord[i] = (uint16_t)((b[i * 2] << 8) | b[i * 2 + 1]);
+    }
+    /* longest zero run (≥2 words) — first wins on ties (RFC 5952) */
+    for (i = 0; i < 8; i++) {
+        if (aWord[i] == 0) {
+            if (iRun < 0) {
+                iRun = i;
+                nRun = 1;
+            } else {
+                nRun++;
+            }
+        } else {
+            if (nRun > nBest) {
+                nBest = nRun;
+                iBest = iRun;
+            }
+            iRun = -1;
+            nRun = 0;
+        }
+    }
+    if (nRun > nBest) {
+        nBest = nRun;
+        iBest = iRun;
+    }
+    if (nBest < 2) {
+        iBest = -1;
+    }
+
+    i = 0;
+    while (i < 8) {
+        if (i == iBest) {
+            *p++ = ':';
+            i += nBest;
+            if (i >= 8) {
+                *p++ = ':';
+            }
+            continue;
+        }
+        if (i > 0) {
+            *p++ = ':';
+        }
+        p += fmt_u16_hex(p, aWord[i]);
+        i++;
+    }
+    *p = '\0';
 }
 
 const char *
@@ -298,18 +456,8 @@ inet_ntop(int nAf, const void *pSrc, char *szDst, size_t cbDst)
     if (nAf == AF_INET6) {
         const uint8_t *b = (const uint8_t *)pSrc;
         char aTmp[48];
-        char *p = aTmp;
-        int i;
 
-        for (i = 0; i < 8; i++) {
-            uint16_t w = (uint16_t)((b[i * 2] << 8) | b[i * 2 + 1]);
-
-            p += fmt_u16(p, w);
-            if (i < 7) {
-                *p++ = ':';
-            }
-        }
-        *p = '\0';
+        ntop6(b, aTmp);
         if (strlen(aTmp) + 1 > cbDst) {
             errno = ENOSPC;
             return NULL;

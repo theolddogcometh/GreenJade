@@ -37,11 +37,9 @@ Soft rule: missing → skip; present but wrong → hard fail.
 
 makefile_max=14700
 ------------------
-Pattern does NOT exist yet:
-  - No graph_batch14691.c … graph_batch14700.c
-  - No gj_*_14700 continuum soft lamps
-  - Decade 14601–14700 pending parent wire (see docs/GLIBC_COMPAT.md)
-No soft probe / NOTES for 14700 until those CREATE-ONLY batch TUs land.
+CREATE-ONLY batch TUs graph_batch14691.c … graph_batch14700.c have landed.
+Soft host probe: cgj_soft_milestone_14700.c + NOTES_milestone_14700.txt
+(see that NOTES for lamps, manual build, and parent wiring).
 
 Parent wiring (outside tests/ exclusive scope)
 ----------------------------------------------

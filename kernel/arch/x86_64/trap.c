@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    20u
+#define TRAP_SOFT_WAVE    21u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -615,20 +615,35 @@ trap_soft_inventory_log(void)
             "(retlane catalog; Soft≠product)\n",
             (unsigned)TRAP_SOFT_WAVE);
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: trap: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: trap: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("trap: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
             "never_blocks_m0=1 wave=%u "
             "(retbound honesty; Soft≠product; not bar3)\n",
             (unsigned)TRAP_SOFT_WAVE);
-    /* Grep: trap: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: trap: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("trap: soft retseal exclusive=1 soft_ne_product=1 "
             "product_kernel=OPEN bar3=0 wave=%u "
             "(retseal stamp; Soft≠product)\n",
             (unsigned)TRAP_SOFT_WAVE);
+            /*
+             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: trap: soft retpulse — Wave 21 return-pulse honesty */
+            kprintf("trap: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retpulse honesty; Soft≠product; not bar3)\n",
+                    (unsigned)TRAP_SOFT_WAVE);
+            /* Grep: trap: soft retmark — Wave 21 exclusive mark stamp */
+            kprintf("trap: soft retmark exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retmark stamp; Soft≠product)\n",
+                    (unsigned)TRAP_SOFT_WAVE);
     kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"

@@ -18,7 +18,7 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 20 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 21 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
@@ -42,7 +42,7 @@
  *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
  *   notify: soft return selftest — Wave 19 terminal return surface
  *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=20 areas stamp
+ *   notify: soft deepen            — wave=21 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -76,10 +76,10 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 20 exclusive soft deepen stamp (greppable wave=20). */
-#define NOTIFY_SOFT_DEEPEN_WAVE  20u
+/* Wave 21 exclusive soft deepen stamp (greppable wave=21). */
+#define NOTIFY_SOFT_DEEPEN_WAVE  21u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define NOTIFY_SOFT_DEEPEN_AREAS 32u
+#define NOTIFY_SOFT_DEEPEN_AREAS 34u
 
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
@@ -848,7 +848,7 @@ notify_soft_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
 
-    /* Grep: notify: soft deepen wave (Wave 20 stamp) */
+    /* Grep: notify: soft deepen wave (Wave 21 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -865,20 +865,35 @@ notify_soft_log(void)
             "(retlane catalog; Soft≠product)\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: notify: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: notify: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("notify: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
             "never_blocks_m0=1 wave=%u "
             "(retbound honesty; Soft≠product; not bar3)\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-    /* Grep: notify: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: notify: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("notify: soft retseal exclusive=1 soft_ne_product=1 "
             "product_kernel=OPEN bar3=0 wave=%u "
             "(retseal stamp; Soft≠product)\n",
             (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: notify: soft retpulse — Wave 21 return-pulse honesty */
+            kprintf("notify: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retpulse honesty; Soft≠product; not bar3)\n",
+                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+            /* Grep: notify: soft retmark — Wave 21 exclusive mark stamp */
+            kprintf("notify: soft retmark exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retmark stamp; Soft≠product)\n",
+                    (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
     kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
             "wait_enter=%lu multi_calls=%lu msix_init=%lu "
             "ret_wait_bits=%lu ret_wait_zero=%lu ret_inst_ok=%lu "

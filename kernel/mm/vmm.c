@@ -10,7 +10,7 @@
  * pmm_release_high after success (main.c) for hierarchical free on large
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
- * Soft VMM inventory (Wave 20 exclusive deepen; Wave 10/13 base):
+ * Soft VMM inventory (Wave 21 exclusive deepen; Wave 10/13 base):
  *   - Live AS / COW table / HHDM / device UC / ensure_id snaps
  *   - Cumulative create/destroy/break/share/table + map/clone rejects
  *   - Peaks / layout / path honesty / soft PASS lamp
@@ -100,7 +100,7 @@ static u32               g_cEnsureIdCall;
 static u32               g_cEnsureIdFix;
 
 /*
- * Soft product inventory (Wave 20 exclusive deepen; extends Wave 13).
+ * Soft product inventory (Wave 21 exclusive deepen; extends Wave 13).
  * Cumulative unless noted live/peak. Diagnostics only — never hard-gate
  * product AS/COW/HHDM. greppable: vmm: soft
  */
@@ -177,9 +177,9 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE           20u
+#define GJ_VMM_SOFT_WAVE           21u
 /* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS          32u
+#define GJ_VMM_SOFT_AREAS          34u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -557,7 +557,7 @@ higher_half_soft_inventory(void)
 }
 
 /**
- * Greppable soft VMM inventory (product / smoke; Wave 20 exclusive deepen).
+ * Greppable soft VMM inventory (product / smoke; Wave 21 exclusive deepen).
  *   vmm: soft honesty …
  *   vmm: soft inventory …
  *   vmm: soft as …
@@ -586,7 +586,7 @@ higher_half_soft_inventory(void)
  *   vmm: soft retmap     — Wave 19 return-surface map
  *   vmm: soft return selftest — Wave 19 terminal return surface
  *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=20 …
+ *   vmm: soft deepen wave=21 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -893,7 +893,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /*
-     * Grep: vmm: soft deepen wave (Wave 20 stamp; areas = prior soft lines).
+     * Grep: vmm: soft deepen wave (Wave 21 stamp; areas = prior soft lines).
      */
     /*
      * ---- Wave 18 complementary surfaces (kept) (never reshape primary).
@@ -925,24 +925,39 @@ soft_inventory_log(void)
             "(retlane catalog; Soft≠product)\n",
             (unsigned)GJ_VMM_SOFT_WAVE);
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: vmm: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: vmm: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("vmm: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
             "never_blocks_m0=1 wave=%u "
             "(retbound honesty; Soft≠product; not bar3)\n",
             (unsigned)GJ_VMM_SOFT_WAVE);
-    /* Grep: vmm: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: vmm: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("vmm: soft retseal exclusive=1 soft_ne_product=1 "
             "product_kernel=OPEN bar3=0 wave=%u "
             "(retseal stamp; Soft≠product)\n",
             (unsigned)GJ_VMM_SOFT_WAVE);
+            /*
+             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: vmm: soft retpulse — Wave 21 return-pulse honesty */
+            kprintf("vmm: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retpulse honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_VMM_SOFT_WAVE);
+            /* Grep: vmm: soft retmark — Wave 21 exclusive mark stamp */
+            kprintf("vmm: soft retmark exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retmark stamp; Soft≠product)\n",
+                    (unsigned)GJ_VMM_SOFT_WAVE);
     kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
             "product_tib=0 bar3=OPEN "
-            "(Wave 20 exclusive; soft only; not product; not bar3; "
+            "(Wave 21 exclusive; soft only; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)GJ_VMM_SOFT_WAVE, cAreas,
             (unsigned)GJ_VMM_SOFT_AREAS, g_cSoftInvLogs, fHhdm, fTemplate,

@@ -16,7 +16,7 @@
  * Soft phase counter: one tick per successful bring-up step; summary
  * line before the fixed "M0 OK" product bar.
  *
- * Soft inventory (Wave 20 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 21 exclusive deepen; this unit only — greppable
  * "aarch64: kmain soft …")
  * -------------------------------------------------------------------------
  * Soft inventory: rollup of phase / ok / fail lamps + live pmm/coop + wave.
@@ -39,19 +39,19 @@
  *   aarch64: shared pmm soft PASS | FAIL free=… total=…
  *   aarch64: mem probe soft pa=… free0=… free1=… pat=…
  *   aarch64: mem probe PASS | soft FAIL
- *   aarch64: kmain soft inventory wave=20 phases=… soft_ok=… soft_fail=…
+ *   aarch64: kmain soft inventory wave=21 phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=… logs=…
  *   aarch64: kmain soft bringup exceptions=… cpu=… psci=… gic=…
  *             timer=… pmm=… mmu=… coop=… svc=… virtio=…
  *   aarch64: kmain soft shared c=… sched=… pmm=…
  *   aarch64: kmain soft mem probe=… free=… total=…
  *   aarch64: kmain soft stats lamps=… bringup=… shared=… mem=… ratio=…
- *   aarch64: kmain soft deepen wave=20 areas=… logs=…
+ *   aarch64: kmain soft deepen wave=21 areas=… logs=…
  *   aarch64: kmain soft surf bringup=… shared=… mem=… lamps=… bits=…
  *   aarch64: kmain soft return inv_ret=… soft_ok=… soft_fail=…
- *             product_kernel=OPEN wave=20
+ *             product_kernel=OPEN wave=21
  *   aarch64: kmain soft path m0=1 bar3=0 deck=0 continuum=0 arch=aarch64
- *             product_kernel=OPEN wave=20
+ *             product_kernel=OPEN wave=21
  *   aarch64: kmain soft honesty product_kernel=OPEN soft_only=1 no_bar3=1
  *   aarch64: kmain soft PASS phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=…
@@ -79,11 +79,11 @@ void aarch64_psci_probe(void);
 #define KMAIN_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ul
 #define KMAIN_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aul
 
-/* Wave 20 soft inventory stamp (greppable wave=20). */
-#define KMAIN_SOFT_WAVE 20u
+/* Wave 21 soft inventory stamp (greppable wave=21). */
+#define KMAIN_SOFT_WAVE 21u
 
 /* Soft area count for deepen catalog (inventory+bringup+shared+mem+path+stats). */
-#define KMAIN_SOFT_AREAS 15u
+#define KMAIN_SOFT_AREAS 17u
 
 /* Soft observability (kmain-local; never gate product M0). */
 static u32 g_cSoftPhases;
@@ -393,20 +393,35 @@ kmain_soft_inventory(void)
             "(retlane catalog; Soft≠product)\n",
             (unsigned)KMAIN_SOFT_WAVE);
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: aarch64: kmain: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: aarch64: kmain: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("aarch64: kmain: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
             "never_blocks_m0=1 wave=%u "
             "(retbound honesty; Soft≠product; not bar3)\n",
             (unsigned)KMAIN_SOFT_WAVE);
-    /* Grep: aarch64: kmain: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: aarch64: kmain: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("aarch64: kmain: soft retseal exclusive=1 soft_ne_product=1 "
             "product_kernel=OPEN bar3=0 wave=%u "
             "(retseal stamp; Soft≠product)\n",
             (unsigned)KMAIN_SOFT_WAVE);
+            /*
+             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: aarch64: kmain: soft retpulse — Wave 21 return-pulse honesty */
+            kprintf("aarch64: kmain: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retpulse honesty; Soft≠product; not bar3)\n",
+                    (unsigned)KMAIN_SOFT_WAVE);
+            /* Grep: aarch64: kmain: soft retmark — Wave 21 exclusive mark stamp */
+            kprintf("aarch64: kmain: soft retmark exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retmark stamp; Soft≠product)\n",
+                    (unsigned)KMAIN_SOFT_WAVE);
     kprintf("aarch64: kmain soft deepen wave=%u areas=%u "
             "catalog=inventory,bringup,shared,mem,stats,path,surf,return,honesty,exclusive,open "
             "logs=%u soft_only=1\n",
@@ -442,7 +457,7 @@ kmain_soft_inventory(void)
             (unsigned)KMAIN_SOFT_WAVE);
 
     /*
-     * Grep: aarch64: kmain soft exclusive — Wave 20 exclusive deepen.
+     * Grep: aarch64: kmain soft exclusive — Wave 21 exclusive deepen.
      * Soft inventory ≠ product multi-server confine / product kernel.
      */
     kprintf("aarch64: kmain soft exclusive wave=%u multi_server=0 confine=0 "

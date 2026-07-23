@@ -19,7 +19,7 @@
  *     kprintf: soft null …
  *     kprintf: soft path …
  *     kprintf: soft stats …
- *     kprintf: soft deepen wave=20 …
+ *     kprintf: soft deepen wave=21 …
  *     kprintf: soft budget …     (log_max/areas/milestone lamps)
  *     kprintf: soft honesty|surfaces|catalog|note|return|retmap …  (Wave 19)
  *     stdio_k: soft inventory|path|stats|deepen|fmt|budget|honesty|
@@ -52,8 +52,8 @@ enum { KPF_NUM_BUF = 80, KPF_WIDTH_MAX = 64 };
  */
 #define KPF_SOFT_LOG_MAX 8u
 
-/* Wave 20 soft inventory stamp (file-local; never product gate). */
-#define KPF_SOFT_WAVE 20u
+/* Wave 21 soft inventory stamp (file-local; never product gate). */
+#define KPF_SOFT_WAVE 21u
 
 /*
  * Soft inventory area count (fixed greppable categories for deepen stamp):
@@ -61,7 +61,7 @@ enum { KPF_NUM_BUF = 80, KPF_WIDTH_MAX = 64 };
  *   budget | honesty | surfaces | catalog | note | return | retmap |
  *   retclass | retlane
  */
-#define KPF_SOFT_AREAS 20u
+#define KPF_SOFT_AREAS 22u
 
 /*
  * Soft product counters (wrap OK; diagnostics only).
@@ -314,20 +314,35 @@ kprintf_soft_log(void)
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retlane catalog; Soft!=product)\n");
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft!=product; not bar3.
      */
-    /* Grep: kprintf: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: kprintf: soft retbound — Wave 20 return-bound honesty (kept) */
     console_write("kprintf: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
                   "never_blocks_m0=1 wave=");
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retbound honesty; Soft!=product; not bar3)\n");
-    /* Grep: kprintf: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: kprintf: soft retseal — Wave 20 seal stamp (kept) */
     console_write("kprintf: soft retseal exclusive=1 soft_ne_product=1 "
                   "product_kernel=OPEN bar3=0 wave=");
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retseal stamp; Soft!=product)\n");
+    /*
+     * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft!=product; not bar3.
+     */
+    /* Grep: kprintf: soft retpulse — Wave 21 return-pulse honesty */
+    console_write("kprintf: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                  "never_blocks_m0=1 wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (retpulse honesty; Soft!=product; not bar3)\n");
+    /* Grep: kprintf: soft retmark — Wave 21 exclusive mark stamp */
+    console_write("kprintf: soft retmark exclusive=1 soft_ne_product=1 "
+                  "product_kernel=OPEN bar3=0 wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (retmark stamp; Soft!=product)\n");
 
     /* Grep: kprintf: soft deepen wave */
     console_write("kprintf: soft deepen wave=");
@@ -336,7 +351,7 @@ kprintf_soft_log(void)
     kpf_soft_kv(" calls=", g_u64SoftCalls);
     kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
     kpf_soft_kv(" skip=", g_u64SoftSkip);
-    console_write(" (Wave 20 exclusive; soft only; not libc)\n");
+    console_write(" (Wave 21 exclusive; soft only; not libc)\n");
 
     /* Grep: kprintf: soft budget (emission geometry) */
     console_write("kprintf: soft budget");
@@ -372,7 +387,7 @@ kprintf_soft_log(void)
                   "deepen,stdio,budget,honesty,surfaces,catalog,note,return,retmap\n");
 
     /* Grep: kprintf: soft note (Wave 20 deepen) */
-    console_write("kprintf: soft note milestone=wave20 exclusive=1 "
+    console_write("kprintf: soft note milestone=wave21 exclusive=1 "
                   "soft_only=1 reenter_safe=1 cap=");
     print_u64((u64)KPF_SOFT_LOG_MAX, 10u, 0, ' ');
     console_write(" wave=");
@@ -439,20 +454,35 @@ kprintf_soft_log(void)
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retlane catalog; Soft!=product)\n");
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft!=product; not bar3.
      */
-    /* Grep: stdio_k: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: stdio_k: soft retbound — Wave 20 return-bound honesty (kept) */
     console_write("stdio_k: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
                   "never_blocks_m0=1 wave=");
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retbound honesty; Soft!=product; not bar3)\n");
-    /* Grep: stdio_k: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: stdio_k: soft retseal — Wave 20 seal stamp (kept) */
     console_write("stdio_k: soft retseal exclusive=1 soft_ne_product=1 "
                   "product_kernel=OPEN bar3=0 wave=");
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write(" (retseal stamp; Soft!=product)\n");
+    /*
+     * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+     * Return surfaces only — soft inventory; never hard-gates product paths.
+     * Soft!=product; not bar3.
+     */
+    /* Grep: stdio_k: soft retpulse — Wave 21 return-pulse honesty */
+    console_write("stdio_k: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                  "never_blocks_m0=1 wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (retpulse honesty; Soft!=product; not bar3)\n");
+    /* Grep: stdio_k: soft retmark — Wave 21 exclusive mark stamp */
+    console_write("stdio_k: soft retmark exclusive=1 soft_ne_product=1 "
+                  "product_kernel=OPEN bar3=0 wave=");
+    print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
+    console_write(" (retmark stamp; Soft!=product)\n");
 
     /* Grep: stdio_k: soft deepen */
     console_write("stdio_k: soft deepen wave=");
@@ -460,7 +490,7 @@ kprintf_soft_log(void)
     kpf_soft_kv(" areas=", (u64)KPF_SOFT_AREAS);
     kpf_soft_kv(" calls=", g_u64SoftCalls);
     kpf_soft_kv(" logs=", (u64)g_u32SoftLogged);
-    console_write(" (Wave 20 exclusive; soft only)\n");
+    console_write(" (Wave 21 exclusive; soft only)\n");
 
     /* Grep: stdio_k: soft budget (twin) */
     console_write("stdio_k: soft budget");
@@ -493,7 +523,7 @@ kprintf_soft_log(void)
                   "honesty,surfaces,catalog,note,return,retmap,fmt\n");
 
     /* Grep: stdio_k: soft note (Wave 19 twin) */
-    console_write("stdio_k: soft note milestone=wave20 exclusive=1 "
+    console_write("stdio_k: soft note milestone=wave21 exclusive=1 "
                   "soft_only=1 wave=");
     print_u64((u64)KPF_SOFT_WAVE, 10u, 0, ' ');
     console_write("\n");

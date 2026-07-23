@@ -99,8 +99,8 @@ static u8                    g_aTxPack[2048] __attribute__((aligned(16)));
 #define GJ_NET_BOUNCE_N 8u
 #define GJ_NET_BOUNCE_SZ 2048u
 /* Wave 20 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_NET_SOFT_DEEPEN_WAVE  20u
-#define VIRTIO_NET_SOFT_DEEPEN_AREAS 38u
+#define VIRTIO_NET_SOFT_DEEPEN_WAVE  21u
+#define VIRTIO_NET_SOFT_DEEPEN_AREAS 40u
 static u8                    g_aBounce[GJ_NET_BOUNCE_N][GJ_NET_BOUNCE_SZ]
     __attribute__((aligned(16)));
 static u8                    g_aBounceUsed[GJ_NET_BOUNCE_N];
@@ -283,7 +283,7 @@ net_q_note_free(void)
  *   virtio-net: soft oasis      — feature-bit constant catalog (Wave 15)
  *   virtio-net: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-net: soft retcode    — Wave 19 retcode catalog
- *   virtio-net: soft deepen     — wave=20 areas stamp
+ *   virtio-net: soft deepen     — wave=21 areas stamp
  *   virtio-net: soft PASS|NODEV|PARTIAL
  *
  * greppable: virtio-net: soft
@@ -687,20 +687,35 @@ virtio_net_soft_inventory(const char *szVia)
             "(retlane catalog; Soft≠product)\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
     /*
-     * ---- Wave 20 exclusive complementary surfaces (never reshape primary).
+     * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
      * Soft≠product; not bar3.
      */
-    /* Grep: virtio-net: soft retbound — Wave 20 return-bound honesty */
+    /* Grep: virtio-net: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("virtio-net: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
             "never_blocks_m0=1 wave=%u "
             "(retbound honesty; Soft≠product; not bar3)\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
-    /* Grep: virtio-net: soft retseal — Wave 20 exclusive seal stamp */
+    /* Grep: virtio-net: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("virtio-net: soft retseal exclusive=1 soft_ne_product=1 "
             "product_kernel=OPEN bar3=0 wave=%u "
             "(retseal stamp; Soft≠product)\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 21 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+            */
+            /* Grep: virtio-net: soft retpulse — Wave 21 return-pulse honesty */
+            kprintf("virtio-net: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retpulse honesty; Soft≠product; not bar3)\n",
+                    (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
+            /* Grep: virtio-net: soft retmark — Wave 21 exclusive mark stamp */
+            kprintf("virtio-net: soft retmark exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retmark stamp; Soft≠product)\n",
+                    (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE);
     kprintf("virtio-net: soft deepen wave=%u areas=%u ready=%u tx=%u "
             "rx=%u log_n=%u\n",
             (unsigned)VIRTIO_NET_SOFT_DEEPEN_WAVE,

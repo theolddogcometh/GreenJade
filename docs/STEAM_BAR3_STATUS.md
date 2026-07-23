@@ -3,21 +3,21 @@
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-07-23 |
-| **Wave** | GreenJade Wave 20 (honesty refresh) |
+| **Wave** | GreenJade Wave 21 (honesty refresh) |
 | **Bar3** | **OPEN** |
 | **Deck Top 50** | **NOT-TRIED × 50** (no title PASS) |
 | **Soft inventory** | **READY** (host media only — `./scripts/steam-bar3-check.sh`) |
-| **Soft continuum** | **≠ bar3** (CREATE-ONLY graph wire; high-water **advancing toward 16200** parent wires; honest scan may still report **makefile_max=16000** until parent wires; not client run) |
+| **Soft continuum** | **≠ bar3** (CREATE-ONLY graph wire; high-water **advancing toward 16300** parent wires; honest scan may still report **makefile_max=16200** until parent wires; not client run) |
 | **Product lamps** | **0** (soft ≠ product complete) |
 | **Companion** | [STEAM_HWTEST.md](STEAM_HWTEST.md) · [HCL.md](HCL.md) · [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) |
 
 **Bar3** = real-DUT path where Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`.  
 Media prep, kernel smokes, and continuum soft gates are **not** bar3 completion.
 
-**Soft stamp (2026-07-23 / Wave 20):** host media **READY** (`build/steam-stage/steam/STATUS`, tree/stage/rootfs hits agree). Continuum soft high-water **advancing toward 16200** (parent wires) — **soft only**. Honest `makefile_max` is a Makefile scan (verify `./scripts/gj-continuum-makefile-snippet.sh --max`); **do not hardcode false 16100** if scan still reports prior tip (**16000**).  
+**Soft stamp (2026-07-23 / Wave 21):** host media **READY** (`build/steam-stage/steam/STATUS`, tree/stage/rootfs hits agree). Continuum soft high-water **advancing toward 16300** (parent wires) — **soft only**. Honest `makefile_max` is a Makefile scan (verify `./scripts/gj-continuum-makefile-snippet.sh --max`); **do not hardcode false 16300** if scan still reports prior tip (**16200**).  
 **Prior tips (historical):** Wave 18 toward 16000 / soft high-water 16000 when wired; Wave 17 toward 15900; Wave 16 toward 15800; Wave 15 toward 15700; Wave 14 toward 15600; Wave 13 soft high-water 15500.  
 **Hard stamp:** bar3 is **OPEN**. Matrix remains **NOT-TRIED: 50**. Product lamps **0**. No title PASS invented from host scripts.  
-**Media READY ≠ client run ≠ Top-50.** Soft continuum (toward **16100**, prior tip **16000**, parallel waves) **≠ bar3**. **Soft ≠ product complete.**
+**Media READY ≠ client run ≠ Top-50.** Soft continuum (toward **16300**, prior tip **16200**, parallel waves) **≠ bar3**. **Soft ≠ product complete.**
 
 ---
 
@@ -78,7 +78,7 @@ Soft inventory (agent honesty) includes: file counts (capped), launcher kind, bo
 | **io_uring min rings** | **shipped PASS** | `io_uring: min rings ready`; setup/enter/register soft surface; **not** full SQE for games |
 | **768GiB hierarchical soak** | **PASS** | `GJ_MEM=768G` / `soak_tib`; product bar still **≥ 1 TiB** when host allows; **not** Steam |
 | **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke` (exceptions→virtio-mmio); separate arch tree; **not** Deck/x86 product path |
-| Continuum soft graph | **soft** | parallel waves → high-water **advancing toward 16200** (parent wires; honest scan may still be **16000**); CREATE-ONLY soft gates only; product lamps **0**; **soft continuum ≠ bar3**; **soft ≠ product complete**; **not** client run |
+| Continuum soft graph | **soft** | parallel waves → high-water **advancing toward 16300** (parent wires; honest scan may still be **16200**); CREATE-ONLY soft gates only; product lamps **0**; **soft continuum ≠ bar3**; **soft ≠ product complete**; **not** client run |
 
 ---
 

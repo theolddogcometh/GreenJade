@@ -8,16 +8,19 @@
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
  *
  * Soft product paths (this file only; not product-complete; no bar3):
- *   Apple §13 bootstrap seal checklist — greppable:
+ *   Apple §13 bootstrap seal checklist — greppable (Wave 13 deepen):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     enumerates root meta, ambient drop lamps, pager empty, promises
- *   G-PROC-5 death tallies — greppable process: death …
- *     pager clear, fault_lock force, CNode wipe, AS destroy
+ *     process: bootstrap seal soft deepen wave=13 …
+ *     enumerates root meta, ambient drop, pager empty, promises, plus soft
+ *     Apple s13 open lamps: retype / irq_bind_any / root_untyped / sticky
+ *   G-PROC-5 death tallies — greppable process: death … (Wave 13 deepen):
+ *     pager clear, fault_lock force, CNode wipe, AS destroy, exc clear,
+ *     scrub (confine/jit), seal_note (death ≠ product seal), deepen tallies
  *   Soft confine exposes PCB u32Confined / u32Promises (ambient drop lamps)
  *
  * Honesty: seal checklist is soft inventory only — not product multi-server
- * seal, not Apple §13 closed, not bar3.
+ * seal, not Apple §13 closed, not bar3. Death cleanup ≠ bootstrap seal product.
  * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md §13 ·
  * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/SECURITY_CORE_DESIGN.md §13
  */
@@ -83,17 +86,36 @@ gj_process_set_jit(struct gj_process *pProc, int fEnable)
 }
 
 /*
- * Soft Apple §13 bootstrap seal checklist (process.c only).
- * Enumerates PCB lamps: root meta, ambient/confine, pager empty, promises.
+ * Soft Apple §13 bootstrap seal checklist (process.c only; Wave 13 deepen).
+ * Enumerates PCB lamps: root meta, ambient/confine, pager empty, promises,
+ * plus soft open inventory for Apple s13 product seal items (all 0 until
+ * product retype/IRQ/untyped seal exists — honesty inventory only).
  * One-way soft lamp is inventory only — does NOT seal retype/IRQ/untyped.
  * Grep: process: bootstrap seal soft | process: seal checklist
  * Honesty: not product-complete; no bar3.
  */
 static u32 g_u32SealChecklistLogs;
 static u32 g_u32BootstrapSealSoftLamp; /* 0 open, 1 soft-attempted once */
+static u64 g_u64SealEmits;             /* total checklist emit attempts */
+static u64 g_u64SealViaRootMeta;
+static u64 g_u64SealViaConfine;
+static u64 g_u64SealViaDeath;          /* death seal_note path */
+static u64 g_u64SealViaOther;
+static u64 g_u64SealRateLimited;       /* skipped by log budget */
+static u32 g_u32SealDeathFullLogs;     /* full checklist emits via=death */
+/*
+ * Soft Apple s13 product-seal lamps (Wave 13 inventory). Stay 0 until a real
+ * post-bootstrap seal drops privileged retype / broad IRQ / root untyped.
+ * Grep: process: bootstrap seal soft lamps | process: seal checklist s13
+ */
+static u32 g_u32SealProductRetype;     /* 0 = open (not product-sealed) */
+static u32 g_u32SealProductIrqBind;    /* 0 = open */
+static u32 g_u32SealProductRootUntyped; /* 0 = open */
+static u32 g_u32SealProductStickyNs;   /* 0 = open (sticky bootstrap ns) */
 #define GJ_SEAL_SOFT_LOG_MAX 8u
+#define GJ_SEAL_SOFT_WAVE 13u
 
-/* Soft G-PROC-5 death tallies (grep: process: death). */
+/* Soft G-PROC-5 death tallies (grep: process: death). Wave 13 deepen. */
 static u64 g_u64DeathTotal;
 static u64 g_u64DeathPagerClear;
 static u64 g_u64DeathFaultForce;
@@ -102,6 +124,49 @@ static u64 g_u64DeathCnodeSlots;
 static u64 g_u64DeathAsDestroyOk;
 static u64 g_u64DeathAsDestroyFail;
 static u64 g_u64DeathAsSkip;
+static u64 g_u64DeathIdempotent;       /* second-call early exit */
+static u64 g_u64DeathWaitChild;        /* wait-registered wipe path */
+static u64 g_u64DeathLongLived;        /* boot/init skip wipe */
+static u64 g_u64DeathRegions;          /* region views dropped */
+static u64 g_u64DeathReparent;         /* children reparented to init */
+static u64 g_u64DeathExcClear;         /* exception port cleared */
+static u64 g_u64DeathConfineScrub;     /* confine/promises scrub */
+static u64 g_u64DeathJitScrub;         /* CapJit cache scrub */
+
+/*
+ * Soft CNode occupancy count (const; inventory only for seal checklist).
+ * Counts non-INVALID slots; does not lock (snapshot may race — soft OK).
+ */
+static u32
+process_seal_cnode_live_slots(const struct gj_process *pProc)
+{
+    u64 u64Slot;
+    u32 u32Live = 0;
+
+    if (pProc == NULL || pProc->pCnode == NULL || pProc->pCnode->pSlots == NULL) {
+        return 0;
+    }
+    for (u64Slot = 0; u64Slot < pProc->pCnode->cSlots; u64Slot++) {
+        if (pProc->pCnode->pSlots[u64Slot].u16Type != (u16)GJ_CAP_INVALID) {
+            u32Live++;
+        }
+    }
+    return u32Live;
+}
+
+static void
+process_seal_via_tally(const char *szViaSafe)
+{
+    if (strcmp(szViaSafe, "root_meta") == 0) {
+        g_u64SealViaRootMeta++;
+    } else if (strcmp(szViaSafe, "confine") == 0) {
+        g_u64SealViaConfine++;
+    } else if (strcmp(szViaSafe, "death") == 0) {
+        g_u64SealViaDeath++;
+    } else {
+        g_u64SealViaOther++;
+    }
+}
 
 static void
 process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
@@ -109,24 +174,45 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
     int fRootMeta;
     int fPagerEmpty;
     int fAmbient;
+    int fRootMetaNotFactory;
     u32 u32Confined;
     u32 u32Promises;
+    u32 u32CnodeLive;
+    u32 u32CnodeSlots;
+    u32 u32HadJit;
     const char *szViaSafe;
 
     if (pProc == NULL) {
         return;
     }
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    g_u64SealEmits++;
+    process_seal_via_tally(szViaSafe);
     /*
      * Rate-limit root_meta installs (many PE smokes); always emit on
      * confine (ambient authority drop is the soft seal edge).
+     * Death: allow a small full-checklist budget (Wave 13 seal_note always
+     * prints separately; full dump only first GJ_SEAL_SOFT_LOG_MAX deaths).
      */
-    if (strcmp(szViaSafe, "confine") != 0 &&
-        g_u32SealChecklistLogs >= GJ_SEAL_SOFT_LOG_MAX) {
+    if (strcmp(szViaSafe, "death") == 0) {
+        if (g_u32SealDeathFullLogs >= GJ_SEAL_SOFT_LOG_MAX) {
+            g_u64SealRateLimited++;
+            return;
+        }
+        g_u32SealDeathFullLogs++;
+    } else if (strcmp(szViaSafe, "confine") != 0 &&
+               g_u32SealChecklistLogs >= GJ_SEAL_SOFT_LOG_MAX) {
+        g_u64SealRateLimited++;
         return;
     }
     g_u32SealChecklistLogs++;
     fRootMeta = (pProc->pRootMeta != NULL) ? 1 : 0;
+    /*
+     * Design K1–K6: root meta is kernel ops only — never a factory for
+     * transferable PROCESS/CNODE. Soft lamp always 1 (policy intent);
+     * product seal of retype/IRQ/untyped remains open (0 below).
+     */
+    fRootMetaNotFactory = 1;
     /*
      * Const path: gen!=0 and LIVE when pPagerEpObj known.
      * Empty gen ⇒ pager empty (expected post-init before set_pager).
@@ -141,6 +227,9 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
     u32Confined = pProc->u32Confined;
     u32Promises = pProc->u32Promises;
     fAmbient = (u32Confined == 0u) ? 1 : 0;
+    u32CnodeLive = process_seal_cnode_live_slots(pProc);
+    u32CnodeSlots = (pProc->pCnode != NULL) ? (u32)pProc->pCnode->cSlots : 0u;
+    u32HadJit = pProc->u32Jit;
 
     /* Grep: process: bootstrap seal soft */
     kprintf("process: bootstrap seal soft via=%s logs=%u lamp=%u "
@@ -161,6 +250,53 @@ process_seal_checklist_soft(const struct gj_process *pProc, const char *szVia)
             "pager_empty=%u promises=0x%x soft\n",
             fRootMeta, fPagerEmpty, u32Promises);
 
+    /*
+     * Wave 13: CNode + root-meta-not-factory inventory (soft snapshot).
+     * Grep: process: seal checklist cnode | process: seal checklist factory
+     */
+    kprintf("process: seal checklist cnode live=%u slots=%u "
+            "root_meta_not_factory=%u soft\n",
+            u32CnodeLive, u32CnodeSlots, fRootMetaNotFactory);
+    kprintf("process: seal checklist factory root_meta_not_factory=%u "
+            "jit_cache=%u soft\n",
+            fRootMetaNotFactory, u32HadJit);
+
+    /*
+     * Wave 13: Apple s13 product-seal item lamps (all 0 = open honesty).
+     * Grep: process: bootstrap seal soft lamps | process: seal checklist s13
+     * Does NOT perform product retype/IRQ/untyped seal.
+     */
+    kprintf("process: bootstrap seal soft lamps retype=%u irq_bind=%u "
+            "root_untyped=%u sticky_bootstrap=%u one_way=%u soft "
+            "(Apple s13 open)\n",
+            g_u32SealProductRetype, g_u32SealProductIrqBind,
+            g_u32SealProductRootUntyped, g_u32SealProductStickyNs,
+            g_u32BootstrapSealSoftLamp);
+    kprintf("process: seal checklist s13 retype_seal=%u irq_seal=%u "
+            "untyped_seal=%u sticky=%u one_way=%u soft\n",
+            g_u32SealProductRetype, g_u32SealProductIrqBind,
+            g_u32SealProductRootUntyped, g_u32SealProductStickyNs,
+            g_u32BootstrapSealSoftLamp);
+
+    /*
+     * Wave 13 deepen stamp + emit tallies.
+     * Grep: process: bootstrap seal soft deepen | process: bootstrap seal soft tallies
+     */
+    kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
+            "logs=%u emits=%llu rate_limited=%llu "
+            "(not product-complete; no bar3)\n",
+            GJ_SEAL_SOFT_WAVE, szViaSafe, g_u32SealChecklistLogs,
+            (unsigned long long)g_u64SealEmits,
+            (unsigned long long)g_u64SealRateLimited);
+    kprintf("process: bootstrap seal soft tallies via_root_meta=%llu "
+            "via_confine=%llu via_death=%llu via_other=%llu "
+            "lamp=%u soft\n",
+            (unsigned long long)g_u64SealViaRootMeta,
+            (unsigned long long)g_u64SealViaConfine,
+            (unsigned long long)g_u64SealViaDeath,
+            (unsigned long long)g_u64SealViaOther,
+            g_u32BootstrapSealSoftLamp);
+
     /* Honesty: not product multi-server seal; Apple s13 remains open. */
     kprintf("process: bootstrap seal soft not product-complete "
             "(Apple s13 open; no bar3)\n");
@@ -180,6 +316,15 @@ process_bootstrap_seal_soft_try(struct gj_process *pProc, const char *szVia)
         g_u32BootstrapSealSoftLamp = 1u;
         kprintf("process: bootstrap seal soft one-way lamp=1 "
                 "(soft only; not product-complete; no bar3)\n");
+        /*
+         * Wave 13: one-way flip honesty — product s13 lamps stay 0.
+         * Grep: process: bootstrap seal soft one-way | process: bootstrap seal soft lamps
+         */
+        kprintf("process: bootstrap seal soft one-way product_retype=%u "
+                "product_irq=%u product_untyped=%u product_sticky=%u "
+                "soft (still open; no bar3)\n",
+                g_u32SealProductRetype, g_u32SealProductIrqBind,
+                g_u32SealProductRootUntyped, g_u32SealProductStickyNs);
     }
     process_seal_checklist_soft(pProc, szVia);
 }
@@ -854,6 +999,9 @@ process_death_cnode_wipe(struct gj_process *pProc)
 static void
 process_death_scrub_exec(struct gj_process *pProc)
 {
+    u32 u32HadConfine;
+    u32 u32HadJit;
+
     if (pProc == NULL) {
         return;
     }
@@ -874,8 +1022,21 @@ process_death_scrub_exec(struct gj_process *pProc)
      * recycled wait-table slot cannot inherit ambient-drop state.
      * Grep: process: death confine_scrub
      */
+    u32HadConfine = pProc->u32Confined;
     pProc->u32Confined = 0;
     pProc->u32Promises = 0;
+    g_u64DeathConfineScrub++;
+    /*
+     * Wave 13: also scrub CapJit cache so recycled PCB cannot inherit JIT.
+     * Authority source is GJ_RIGHT_JIT on task cap; cache must not stick.
+     * Grep: process: death jit_scrub
+     */
+    u32HadJit = pProc->u32Jit;
+    pProc->u32Jit = 0;
+    g_u64DeathJitScrub++;
+    kprintf("process: death jit_scrub had=%u now=0 soft (G-PROC-5)\n",
+            u32HadJit);
+    (void)u32HadConfine;
 }
 
 void
@@ -891,9 +1052,12 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     u32 u32RegionsDropped = 0;
     u32 u32FaultWasBusy = 0;
     u32 u32HadPager = 0;
+    u32 u32HadExc = 0;
     u32 u32AsOk = 0;
     u32 u32AsFail = 0;
     u32 u32AsSkip = 0;
+    u32 u32WasConfined = 0;
+    u32 u32WasJit = 0;
     int fWaitChild;
 
     if (pProc == NULL) {
@@ -901,12 +1065,19 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     }
     /* Idempotent: second death only re-notes zombie code */
     if (!pProc->u32Alive && pProc->u64Cr3 == 0 && !gj_process_has_pager(pProc)) {
+        g_u64DeathIdempotent++;
+        /* Grep: process: death idempotent */
+        kprintf("process: death idempotent re-note exit=%u soft "
+                "(G-PROC-5)\n",
+                u32ExitCode);
         process_wait_note_exit(pProc, u32ExitCode);
         return;
     }
 
     g_u64DeathTotal++;
     u32SelfPid = process_wait_pid_of(pProc);
+    u32WasConfined = pProc->u32Confined;
+    u32WasJit = pProc->u32Jit;
     pProc->u32ExitCode = u32ExitCode;
     pProc->u32Alive = 0;
 
@@ -919,6 +1090,10 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             u32HadPager);
 
     /* Drop exception port (handler thr may already be gone) */
+    u32HadExc = (pProc->excPort.u8Live != 0u || pProc->excPort.u8Pending != 0u ||
+                 pProc->excPort.u32HandlerThr != 0u)
+                    ? 1u
+                    : 0u;
     pProc->excPort.u8Live = 0;
     pProc->excPort.u8Pending = 0;
     pProc->excPort.u32HandlerThr = 0;
@@ -927,6 +1102,9 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     pProc->excPort.u64Error = 0;
     pProc->excPort.u64Rip = 0;
     pProc->excPort.u64Cr2 = 0;
+    g_u64DeathExcClear++;
+    /* Grep: process: death exc_clear */
+    kprintf("process: death exc_clear had=%u soft (G-PROC-5)\n", u32HadExc);
 
     /*
      * Soft: force-clear fault serialization so death cannot leave AS locked.
@@ -949,6 +1127,10 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             u32RegionsDropped++;
         }
     }
+    g_u64DeathRegions += (u64)u32RegionsDropped;
+    /* Grep: process: death regions */
+    kprintf("process: death regions dropped=%u soft (G-PROC-5)\n",
+            u32RegionsDropped);
 
     /*
      * Soft G-PROC-5: reparent unreaped children to init before we become a
@@ -958,6 +1140,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     if (u32SelfPid != 0) {
         u32Reparented = process_wait_reparent(u32SelfPid, 1u);
     }
+    g_u64DeathReparent += (u64)u32Reparented;
 
     fWaitChild = process_is_wait_child(pProc);
     /*
@@ -966,6 +1149,7 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
      * Grep: process: death cnode_wipe | process: cnode_clear
      */
     if (fWaitChild) {
+        g_u64DeathWaitChild++;
         u32Cleared = process_death_cnode_wipe(pProc);
         g_u64DeathCnodeWipe++;
         g_u64DeathCnodeSlots += (u64)u32Cleared;
@@ -977,8 +1161,11 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
                 u32Cleared);
         kprintf("process: cnode_clear slots=%u PASS\n", u32Cleared);
         process_death_scrub_exec(pProc);
-        kprintf("process: death confine_scrub confined=0 promises=0 soft\n");
+        kprintf("process: death confine_scrub confined=0 promises=0 "
+                "was_confined=%u was_jit=%u soft\n",
+                u32WasConfined, u32WasJit);
     } else {
+        g_u64DeathLongLived++;
         /* Long-lived PCB: leave CNode; still note skip for tallies. */
         kprintf("process: death cnode_wipe slots=0 wait_child=0 skip soft "
                 "(G-PROC-5)\n");
@@ -1046,6 +1233,21 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     pProc->pParent = NULL;
 
     /*
+     * Wave 13: death ≠ Apple §13 bootstrap seal product.
+     * Cleanup revokes grants for this PCB; does not seal privileged retype /
+     * broad IRQ / root untyped. Soft seal_note + optional checklist.
+     * Grep: process: death seal_note | process: bootstrap seal soft
+     */
+    kprintf("process: death seal_note soft lamp=%u product_seal=0 "
+            "retype=%u irq=%u untyped=%u sticky=%u "
+            "(death cleanup != Apple s13 seal; no bar3)\n",
+            g_u32BootstrapSealSoftLamp, g_u32SealProductRetype,
+            g_u32SealProductIrqBind, g_u32SealProductRootUntyped,
+            g_u32SealProductStickyNs);
+    /* Rate-limited full checklist via=death (seal_note above always emits). */
+    process_seal_checklist_soft(pProc, "death");
+
+    /*
      * Aggregate G-PROC-5 death tallies (soft product observability).
      * Grep: process: death exit= | process: death tallies
      */
@@ -1060,6 +1262,23 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
             (unsigned long long)g_u64DeathAsDestroyOk,
             (unsigned long long)g_u64DeathAsDestroyFail,
             (unsigned long long)g_u64DeathAsSkip);
+    /*
+     * Wave 13 deepen tallies (extra axes; wrap OK).
+     * Grep: process: death deepen | process: death tallies deepen
+     */
+    kprintf("process: death deepen wave=%u tallies wait_child=%llu "
+            "long_lived=%llu idempotent=%llu regions=%llu reparent=%llu "
+            "exc_clear=%llu confine_scrub=%llu jit_scrub=%llu soft "
+            "(G-PROC-5; no bar3)\n",
+            GJ_SEAL_SOFT_WAVE,
+            (unsigned long long)g_u64DeathWaitChild,
+            (unsigned long long)g_u64DeathLongLived,
+            (unsigned long long)g_u64DeathIdempotent,
+            (unsigned long long)g_u64DeathRegions,
+            (unsigned long long)g_u64DeathReparent,
+            (unsigned long long)g_u64DeathExcClear,
+            (unsigned long long)g_u64DeathConfineScrub,
+            (unsigned long long)g_u64DeathJitScrub);
     kprintf("process: death exit=%u reparent=%u regions=%u "
             "cnode_slots=%u as_ok=%u as_fail=%u as_skip=%u "
             "wait_child=%d soft (G-PROC-5)\n",

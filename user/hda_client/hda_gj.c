@@ -9,9 +9,11 @@
  * soft underrun + mono format + reclaim re-OPEN + reject probe). Soft
  * steps never hard-fail the live path.
  *
- * Soft inventory (Wave 9 exclusive deepen):
+ * Soft inventory (Wave 13 exclusive deepen):
  *   - Cumulative soft sub-step ok/skip; door open/write/start/tick/stats
  *   - Soft played-byte sum; underrun / reject / mono / reclaim lamps
+ *   - Per-step lamps (multi/partial/multiwrite/…), miss rollup, last STATS
+ *   - inventory / steps / miss / last / deepen / path greppable lines
  *   greppable: "hda_client: soft …"
  *   greppable: "hda-gj: soft …"
  * Diagnostics only — never gates live path PASS.
@@ -41,7 +43,15 @@
  *   hda_client: soft suite ok=… skip=…
  *   hda_client: soft door open=… write=… start=… tick=… stats=… close=…
  *   hda_client: soft played=… underrun=… reject=… mono=… reclaim=…
- *   hda-gj: soft suite|door|played twin inventory lines
+ *   hda_client: soft inventory ok=… skip=… door_ok=… door_miss=… played=…
+ *                wave=13 areas=…
+ *   hda_client: soft steps multi=… partial=… multiwrite=… underrun=…
+ *                mono=… reclaim=… reject=… bits=…
+ *   hda_client: soft miss open=… write=… start=… tick=… stats=…
+ *   hda_client: soft last q=… p=… u=… snaps=…
+ *   hda_client: soft deepen wave=13 areas=… ok=… skip=… played=…
+ *   hda_client: soft path open=stereo write=pcm … (soft; not bar3)
+ *   hda-gj: soft suite|door|played|inventory|steps|miss|last|deepen twins
  *
  * Fail lines: hda_client-gj: <tag> fail ret=<n>
  *
@@ -95,6 +105,19 @@
 #define HDA_SOFT_MONO_FRAMES 32u
 #define HDA_SOFT_MONO_BYTES  (HDA_SOFT_MONO_FRAMES * HDA_MONO_BYTES_PER_FRAME)
 
+/* Wave stamp + inventory area count (Wave 13 exclusive deepen). */
+#define HDA_SOFT_WAVE   13u
+#define HDA_SOFT_AREAS  9u   /* suite door played inventory steps miss last deepen path */
+
+/* Soft suite sub-step bits (Wave 13 greppable steps line). */
+#define SOFT_S_MULTI      (1u << 0)
+#define SOFT_S_PARTIAL    (1u << 1)
+#define SOFT_S_MULTIWRITE (1u << 2)
+#define SOFT_S_UNDERRUN   (1u << 3)
+#define SOFT_S_MONO       (1u << 4)
+#define SOFT_S_RECLAIM    (1u << 5)
+#define SOFT_S_REJECT     (1u << 6)
+
 /* STATS u32[3] slots — match kernel {queued, played, underruns}. */
 enum {
     HDA_ST_QUEUED    = 0,
@@ -104,9 +127,8 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 9 exclusive). Cumulative for this process.
- * greppable: hda_client: soft …
- * greppable: hda-gj: soft …
+ * Soft product inventory (Wave 13 exclusive deepen). Cumulative for this
+ * process. greppable: hda_client: soft … / hda-gj: soft …
  * Never hard-gates live path.
  */
 static unsigned g_cSoftOk;         /* soft sub-steps greened */
@@ -127,6 +149,13 @@ static unsigned g_cSoftUnderrun;   /* soft underrun sub-step PASS */
 static unsigned g_cSoftReject;     /* soft reject sub-step PASS */
 static unsigned g_cSoftMono;       /* soft mono sub-step PASS */
 static unsigned g_cSoftReclaim;    /* soft reclaim sub-step PASS */
+/* Wave 13 per-step lamps + last STATS snapshot. */
+static unsigned g_cSoftMulti;      /* soft multi-op PASS */
+static unsigned g_cSoftPartial;    /* soft partial-tick PASS */
+static unsigned g_cSoftMultiWrite; /* soft multi-write PASS */
+static unsigned g_uSoftStepBits;   /* SOFT_S_* mask of greened sub-steps */
+static unsigned g_aSoftLast[HDA_ST_COUNT]; /* last successful soft STATS */
+static unsigned g_cSoftStatsSnap;  /* successful soft STATS snapshots */
 
 static void
 msg(const char *sz)
@@ -314,6 +343,10 @@ soft_stats(const char *tag, unsigned *aSt)
         return n;
     }
     g_cSoftStatsOk++;
+    g_cSoftStatsSnap++;
+    g_aSoftLast[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
+    g_aSoftLast[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
+    g_aSoftLast[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
     msg_stats(tag, aSt);
     return 0;
 }
@@ -364,16 +397,24 @@ soft_note_step(int fOk)
 }
 
 /*
- * Greppable soft inventory (Wave 9). Twin prefixes for product/agent greps:
- *   hda_client: soft suite|door|played …
- *   hda-gj: soft suite|door|played …
+ * Greppable soft inventory (Wave 13 exclusive deepen).
+ * Twin prefixes for product/agent greps:
+ *   hda_client: soft suite|door|played|inventory|steps|miss|last|deepen|path …
+ *   hda-gj: soft suite|door|played|inventory|steps|miss|last|deepen …
  * Pure observation — always soft; does not gate live path.
  */
 static void
 soft_inventory_log(void)
 {
-    char aLine[160];
+    char aLine[192];
     unsigned o;
+    unsigned cDoorOk;
+    unsigned cDoorMiss;
+
+    cDoorOk = g_cSoftOpenOk + g_cSoftWriteOk + g_cSoftStartOk +
+              g_cSoftTickOk + g_cSoftStatsOk;
+    cDoorMiss = g_cSoftOpenMiss + g_cSoftWriteMiss + g_cSoftStartMiss +
+                g_cSoftTickMiss + g_cSoftStatsMiss;
 
     /* Grep: hda_client: soft suite */
     o = 0;
@@ -434,6 +475,105 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
+    /* Grep: hda_client: soft inventory (Wave 13 rollup) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft inventory ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_miss=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorMiss);
+    append_s(aLine, sizeof(aLine), &o, " played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
+    append_s(aLine, sizeof(aLine), &o, " wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft steps (Wave 13 per-sub-step lamps) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft steps multi=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMulti);
+    append_s(aLine, sizeof(aLine), &o, " partial=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPartial);
+    append_s(aLine, sizeof(aLine), &o, " multiwrite=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMultiWrite);
+    append_s(aLine, sizeof(aLine), &o, " underrun=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftUnderrun);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
+    append_s(aLine, sizeof(aLine), &o, " reject=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStepBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft miss (Wave 13 door miss rollup) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft miss open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenMiss);
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftWriteMiss);
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStartMiss);
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftTickMiss);
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsMiss);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft last (Wave 13 last STATS snapshot) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft last q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, " snaps=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsSnap);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: hda_client: soft deepen (Wave 13 stamp) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda_client: soft deepen wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, " ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: hda_client: soft path
+     * Static route labels for agent greps (not live counters).
+     */
+    msg("hda_client: soft path open=stereo write=pcm start=arm "
+        "tick=frames stats=qpu mono=ch1 reclaim=reopen reject=inval "
+        "(soft inventory; not bar3)\n");
+
     /* Twin prefix: hda-gj: soft … (agent-friendly alias) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda-gj: soft suite ok=");
@@ -472,6 +612,92 @@ soft_inventory_log(void)
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
     append_s(aLine, sizeof(aLine), &o, " reclaim=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft inventory ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_miss=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cDoorMiss);
+    append_s(aLine, sizeof(aLine), &o, " played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
+    append_s(aLine, sizeof(aLine), &o, " wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft steps multi=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMulti);
+    append_s(aLine, sizeof(aLine), &o, " partial=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPartial);
+    append_s(aLine, sizeof(aLine), &o, " multiwrite=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMultiWrite);
+    append_s(aLine, sizeof(aLine), &o, " underrun=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftUnderrun);
+    append_s(aLine, sizeof(aLine), &o, " mono=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMono);
+    append_s(aLine, sizeof(aLine), &o, " reclaim=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReclaim);
+    append_s(aLine, sizeof(aLine), &o, " reject=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftReject);
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStepBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft miss open=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOpenMiss);
+    append_s(aLine, sizeof(aLine), &o, " write=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftWriteMiss);
+    append_s(aLine, sizeof(aLine), &o, " start=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStartMiss);
+    append_s(aLine, sizeof(aLine), &o, " tick=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftTickMiss);
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsMiss);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft last q=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_QUEUED]);
+    append_s(aLine, sizeof(aLine), &o, " p=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_PLAYED]);
+    append_s(aLine, sizeof(aLine), &o, " u=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)g_aSoftLast[HDA_ST_UNDERRUNS]);
+    append_s(aLine, sizeof(aLine), &o, " snaps=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStatsSnap);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "hda-gj: soft deepen wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, " areas=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_AREAS);
+    append_s(aLine, sizeof(aLine), &o, " ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSkip);
+    append_s(aLine, sizeof(aLine), &o, " played=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftPlayed);
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
@@ -529,6 +755,8 @@ soft_multi_op_stats(void)
     (void)soft_stats("soft", aSt);
 
     soft_close();
+    g_cSoftMulti++;
+    g_uSoftStepBits |= SOFT_S_MULTI;
     msg("hda_client-gj: soft multi-op PASS\n");
     return 1;
 }
@@ -615,6 +843,8 @@ soft_partial_tick(void)
     }
 
     soft_close();
+    g_cSoftPartial++;
+    g_uSoftStepBits |= SOFT_S_PARTIAL;
     msg("hda_client-gj: soft partial-tick PASS\n");
     return 1;
 }
@@ -698,6 +928,8 @@ soft_multi_write(void)
     }
 
     soft_close();
+    g_cSoftMultiWrite++;
+    g_uSoftStepBits |= SOFT_S_MULTIWRITE;
     msg("hda_client-gj: soft multi-write PASS\n");
     return 1;
 }
@@ -761,6 +993,7 @@ soft_underrun_cycle(void)
 
     soft_close();
     g_cSoftUnderrun++;
+    g_uSoftStepBits |= SOFT_S_UNDERRUN;
     msg("hda_client-gj: soft underrun PASS\n");
     return 1;
 }
@@ -823,6 +1056,7 @@ soft_mono_format(void)
     (void)soft_stats("soft mono", aSt);
     soft_close();
     g_cSoftMono++;
+    g_uSoftStepBits |= SOFT_S_MONO;
     msg("hda_client-gj: soft mono PASS\n");
     return 1;
 }
@@ -875,6 +1109,7 @@ soft_reclaim_reopen(void)
 
     soft_close();
     g_cSoftReclaim++;
+    g_uSoftStepBits |= SOFT_S_RECLAIM;
     msg("hda_client-gj: soft reclaim PASS\n");
     return 1;
 }
@@ -912,6 +1147,7 @@ soft_reject_inval(void)
     g_cSoftOpenMiss++;
 
     g_cSoftReject++;
+    g_uSoftStepBits |= SOFT_S_REJECT;
     msg("hda_client-gj: soft reject PASS\n");
     return 1;
 }
@@ -957,7 +1193,7 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 9 soft inventory — greppable hda_client: soft / hda-gj: soft. */
+    /* Wave 13 soft inventory — greppable hda_client: soft / hda-gj: soft. */
     soft_inventory_log();
 
     if (cOk > 0u) {

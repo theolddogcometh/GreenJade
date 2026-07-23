@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Security core design v1.7 |
-| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 10 honesty only |
+| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 13 honesty only |
 | **Priority** | Security → Performance → Portability → Readability |
 | **Heritage default** | **Solaris / Sun** for concurrency, doors, DDI, turnstiles; **Apple** for VM objects/views, task ports, QoS, session ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)) |
 | **Heritage secondary** | IBM only when Solaris has no good analogue **and** it still matches GreenJade law |
 | **Companion** | [Architecture](GREENJADE_KERNEL_SPEC.md) · [Implementation](IMPLEMENTATION.md) · [Apple channel](APPLE_CHANNEL_REMAINING.md) |
-| **Honesty (Wave 10)** | Soft confine ≠ product multi-server; **no bar3 claim** (§13) |
+| **Honesty (Wave 13)** | Soft confine ≠ product multi-server; **no bar3 claim** (§13) |
 
 This document **picks one direction** for the gaps that matter most. Alternatives are noted only to record why they lost.
 
@@ -604,9 +604,9 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 ---
 
-## 13. Honesty bounds — soft confine vs product multi-server (Wave 10 · 2026-07-23)
+## 13. Honesty bounds — soft confine vs product multi-server (Wave 13 · 2026-07-23)
 
-**Additive only.** Design decisions in §§0–12 stay **Accepted**. This section is an honesty ledger: what is greppable **soft confine** (and related soft security surface) on the tree vs what remains **product multi-server** open. It does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks, and it does **not** close any product bar.
+**Additive only (Wave 13 exclusive for this file).** Design decisions in §§0–12 stay **Accepted**. This section is a Wave 13 honesty ledger: what is greppable **soft confine** (and related soft security surface) on the tree vs what remains **product multi-server** open. It does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 10 §13 ledger text is superseded here as the same honesty formula under Wave 13 exclusive ownership of this file.
 
 | Term | Meaning in this document |
 |------|--------------------------|
@@ -614,6 +614,8 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 | **Soft confine** | Partial / greppable confine or promise gates (e.g. process bitmask on some ambient-style Linux paths); OpenBSD-shaped *intent* in §OpenBSD features — **not** product seal |
 | **Product multi-server** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal; finite per-server authority as in §8 — **open** |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+**Hard stamp (Wave 13):** soft confine **≠** product multi-server. Soft greppable confine/promise bits do **not** ship sealed multi-server product. **No bar3 claim** from this document.
 
 ### 13.1 Soft confine (honest bound — may claim soft only)
 
@@ -626,7 +628,8 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 | **Bootstrap / init soft** | Root untyped + root CNode + init path; quota-split *policy* in design | Post-bootstrap **seal** product (§1 seal rule); ambient retype gone for all untrusted |
 | **Production freezes text** | §9.10 / [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) **Accepted** decisions | Every freeze row product-hard on DUT |
 
-**Hard rule:** soft greppable `PASS` lines, soft confine bits, live embeds, and design **Accepted** are **bring-up / agent honesty**, not “security product shipped” and not “multi-server confine done.”
+**Hard rule:** soft greppable `PASS` lines, soft confine bits, live embeds, and design **Accepted** are **bring-up / agent honesty**, not “security product shipped” and not “multi-server confine done.”  
+**Wave 13 formula:** **soft confine ≠ product multi-server.**
 
 ### 13.2 Product multi-server — **open**
 
@@ -644,7 +647,7 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 Soft confine and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement with bootstrap seal and least-privilege caps only. Product multi-server stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9).
 
-### 13.3 Explicit non-claims (Wave 10)
+### 13.3 Explicit non-claims (Wave 13)
 
 | Claim | Allowed? |
 |-------|----------|
@@ -657,7 +660,7 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 | “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
 | Any **bar3** closed claim from security core design alone | **No** |
 
-**Bar3 remains OPEN** (client + matrix). This Wave 10 edit is honesty-only: **soft confine ≠ product multi-server; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
+**Bar3 remains OPEN** (client + matrix). This Wave 13 edit is honesty-only: **soft confine ≠ product multi-server; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
 
 ### 13.4 Related honesty surfaces
 
@@ -670,5 +673,5 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 ---
 
 *Accepted security-first core design v1.7 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
-*§13 Wave 10 honesty (2026-07-23): soft confine ≠ product multi-server; **no bar3 claim**.*  
+*§13 Wave 13 honesty (2026-07-23): soft confine ≠ product multi-server; **no bar3 claim**.*  
 *Code: `kernel/include/gj/cap.h`, `kernel/cap/revoke.c`.*

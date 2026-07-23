@@ -22,19 +22,24 @@
  *   later reply into a freed slot — reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
  *
- * Soft door call inventory (Wave 9 exclusive deepen):
- *   - Call path: enter / claim / reply / eio / etimedout / enosys / slot_wait
- *   - Recv path: enter / ok / peer_dead / inval / block
- *   - Reply path: enter / ok / stale / not_ready
- *   - Abort / cancel / thr_exit soft notes + cold product snapshot
+ * Soft door call inventory (Wave 13 exclusive deepen — this unit only):
+ *   - inventory / call / recv / reply / lifecycle / cold / err / path / PASS
+ *   - Call: enter / claim / reply / eio / etimedout / enosys / slot_wait /
+ *     client_wait
+ *   - Recv: enter / ok / peer_dead / inval / block
+ *   - Reply: enter / ok / stale / not_ready (+ single-use cross-link)
+ *   - Lifecycle: abort / cancel / thr_exit / thr_cli / thr_srv / install
+ *   - Cold product snapshot + badge transfer grant/move/fail
  *   greppable: "door: soft …"
- *   Never hard-gates; diagnostics only (wrap OK).
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3 / MIG product.
  *
- * Soft ephemeral single-use REPLY (Call path deepen — not full MIG product):
+ * Soft ephemeral single-use REPLY (Wave 13 deepen — not full MIG product):
  *   On slot claim, kernel mints a soft REPLY right bound to the door flight.
  *   First door_reply consumes it; second use fails (stale / second_fail).
  *   Timeout / peer death / thr-exit / init invalidates the soft right.
- *   greppable: "door: reply single-use …" / "door: REPLY soft …"
+ *   Deepen: create new|rebind, fallback allow, inval reason split, live peak.
+ *   greppable: "door: reply single-use …" / "door: REPLY soft …" /
+ *              "door: soft reply_su …"
  *   Honesty: not full MIG REPLY until CNode install of GJ_CAP_REPLY; no bar3.
  *
  * Soft badge / cap-transfer deepen (server-authoritative badge path):
@@ -62,9 +67,9 @@ static int            g_fColdInited;
 static u8             g_fReplySoftSelfcheck; /* cold-init self-check once */
 
 /*
- * Soft product inventory (Wave 9). Cumulative path tallies across all doors
- * that enter this module. Live/product counters remain per-door (door_stats).
- * greppable: door: soft …
+ * Soft product inventory (Wave 13 exclusive). Cumulative path tallies across
+ * all doors that enter this module. Live/product counters remain per-door
+ * (door_stats). greppable: door: soft …
  */
 static u64 g_u64SoftCallEnter;     /* door_call_timeout entries */
 static u64 g_u64SoftCallClaim;     /* single-flight slot claims */
@@ -81,7 +86,7 @@ static u64 g_u64SoftRecvInval;     /* INVAL terminal */
 static u64 g_u64SoftRecvBlock;     /* server tag-1 block entries */
 static u64 g_u64SoftReplyEnter;    /* door_reply entries */
 static u64 g_u64SoftReplyOk;       /* reply posted + client woken */
-static u64 g_u64SoftReplyStale;    /* pClient==NULL drop */
+static u64 g_u64SoftReplyStale;    /* pClient==NULL drop / second-use */
 static u64 g_u64SoftReplyNotReady; /* null / !ready drop */
 static u64 g_u64SoftAbort;         /* door_abort_waiters */
 static u64 g_u64SoftCancel;        /* door_cancel_inflight */
@@ -94,26 +99,42 @@ static u64 g_u64SoftLogN;          /* inventory log emissions */
 static u8  g_fSoftOnce;            /* one-shot after first call activity */
 
 /*
- * Soft ephemeral single-use REPLY rights (Call path).
+ * Soft ephemeral single-use REPLY rights (Call path; Wave 13 deepen).
  * File-static table — no CNode install, no GJ_CAP_REPLY product binding.
- * greppable: door: reply single-use … / door: REPLY soft …
+ * greppable: door: reply single-use … / door: REPLY soft … /
+ *            door: soft reply_su …
  */
 #define DOOR_REPLY_SOFT_SLOTS 8u
 
+/* Soft REPLY invalidate reason (Wave 13 reason split; diagnostics only). */
+#define DOOR_SU_INVAL_CANCEL 1u /* cancel_inflight (timeout / mid peer) */
+#define DOOR_SU_INVAL_ABORT  2u /* abort_waiters / mark_dead */
+#define DOOR_SU_INVAL_THR    3u /* thr-exit cleared client slot */
+#define DOOR_SU_INVAL_INIT   4u /* door_init / selfcheck teardown */
+
 struct door_reply_soft {
-    struct gj_door *pDoor;     /* door flight owner; NULL = free slot */
-    u32             u32Gen;    /* non-zero while slot ever used */
-    u32             u32Live;   /* 1 = usable single-use right */
+    struct gj_door *pDoor;       /* door flight owner; NULL = free slot */
+    u32             u32Gen;      /* non-zero while slot ever used */
+    u32             u32Live;     /* 1 = usable single-use right */
     u32             u32Consumed; /* 1 after first successful consume */
 };
 
 static struct door_reply_soft g_aReplySoft[DOOR_REPLY_SOFT_SLOTS];
-static u32 g_u32ReplySoftGen;      /* monotonic gen mint (wrap OK) */
-static u64 g_u64ReplySuCreate;     /* soft REPLY created on claim */
-static u64 g_u64ReplySuConsume;    /* first door_reply consume ok */
-static u64 g_u64ReplySuSecondFail; /* second use rejected */
-static u64 g_u64ReplySuInval;      /* timeout / peer / thr-exit / init */
-static u64 g_u64ReplySuDrop;       /* create failed (table full / null) */
+static u32 g_u32ReplySoftGen;        /* monotonic gen mint (wrap OK) */
+static u64 g_u64ReplySuCreate;       /* soft REPLY created on claim (total) */
+static u64 g_u64ReplySuCreateNew;    /* bound free table slot */
+static u64 g_u64ReplySuCreateRebind; /* rebind existing door entry */
+static u64 g_u64ReplySuConsume;      /* first door_reply consume ok */
+static u64 g_u64ReplySuSecondFail;   /* second use rejected */
+static u64 g_u64ReplySuInval;        /* aggregate inval (any reason) */
+static u64 g_u64ReplySuInvalCancel;  /* DOOR_SU_INVAL_CANCEL */
+static u64 g_u64ReplySuInvalAbort;   /* DOOR_SU_INVAL_ABORT */
+static u64 g_u64ReplySuInvalThr;     /* DOOR_SU_INVAL_THR */
+static u64 g_u64ReplySuInvalInit;    /* DOOR_SU_INVAL_INIT */
+static u64 g_u64ReplySuDrop;         /* create failed (table full / null) */
+static u64 g_u64ReplySuFallback;     /* try_consume missing slot → allow */
+static u32 g_u32ReplySuLivePeak;     /* high-water live soft REPLY rights */
+static u8  g_fReplySoftSelfPass;     /* cold self-check create/consume/2nd */
 
 /*
  * Soft badge transfer path counters (server badge → client last-badge).
@@ -132,8 +153,10 @@ static void door_soft_maybe_once(void);
 static void door_snapshot_last_badge(struct gj_door *pDoor);
 static void door_reply_soft_create(struct gj_door *pDoor);
 static int  door_reply_soft_try_consume(struct gj_door *pDoor);
-static void door_reply_soft_invalidate(struct gj_door *pDoor);
+static void door_reply_soft_invalidate(struct gj_door *pDoor, u32 u32Why);
 static u32  door_reply_soft_live_count(void);
+static u32  door_reply_soft_bound_count(void);
+static void door_reply_soft_note_live_peak(void);
 static void door_reply_soft_selfcheck(void);
 
 /** Soft: bump path tally (u64 wrap is fine for telemetry). */
@@ -166,24 +189,73 @@ door_reply_soft_find(struct gj_door *pDoor)
     return NULL;
 }
 
+/** Count soft REPLY rights currently live (diagnostics). */
+static u32
+door_reply_soft_live_count(void)
+{
+    u32 iSlot;
+    u32 u32Live;
+
+    u32Live = 0;
+    for (iSlot = 0; iSlot < DOOR_REPLY_SOFT_SLOTS; iSlot++) {
+        if (g_aReplySoft[iSlot].pDoor != NULL &&
+            g_aReplySoft[iSlot].u32Live != 0u) {
+            u32Live++;
+        }
+    }
+    return u32Live;
+}
+
+/** Count soft REPLY table entries bound to a door (live or spent). */
+static u32
+door_reply_soft_bound_count(void)
+{
+    u32 iSlot;
+    u32 u32Bound;
+
+    u32Bound = 0;
+    for (iSlot = 0; iSlot < DOOR_REPLY_SOFT_SLOTS; iSlot++) {
+        if (g_aReplySoft[iSlot].pDoor != NULL) {
+            u32Bound++;
+        }
+    }
+    return u32Bound;
+}
+
+/** Soft: note high-water live single-use REPLY rights. */
+static void
+door_reply_soft_note_live_peak(void)
+{
+    u32 u32Live;
+
+    u32Live = door_reply_soft_live_count();
+    if (u32Live > g_u32ReplySuLivePeak) {
+        g_u32ReplySuLivePeak = u32Live;
+    }
+}
+
 /**
  * Soft REPLY create on Call claim (ephemeral single-use right).
  * Re-binds an existing slot for this door, else takes a free slot.
  * Table-full → drop counter only; product Call still proceeds (no hard-break).
- * greppable path: door: reply single-use create
+ * greppable path: door: reply single-use create / door: soft reply_su
  */
 static void
 door_reply_soft_create(struct gj_door *pDoor)
 {
     struct door_reply_soft *pSlot;
     u32                     iSlot;
+    int                     fRebind;
 
     if (pDoor == NULL) {
         door_soft_inc(&g_u64ReplySuDrop);
         return;
     }
+    fRebind = 0;
     pSlot = door_reply_soft_find(pDoor);
-    if (pSlot == NULL) {
+    if (pSlot != NULL) {
+        fRebind = 1;
+    } else {
         for (iSlot = 0; iSlot < DOOR_REPLY_SOFT_SLOTS; iSlot++) {
             if (g_aReplySoft[iSlot].pDoor == NULL) {
                 pSlot = &g_aReplySoft[iSlot];
@@ -204,12 +276,19 @@ door_reply_soft_create(struct gj_door *pDoor)
     pSlot->u32Live = 1u;
     pSlot->u32Consumed = 0u;
     door_soft_inc(&g_u64ReplySuCreate);
+    if (fRebind != 0) {
+        door_soft_inc(&g_u64ReplySuCreateRebind);
+    } else {
+        door_soft_inc(&g_u64ReplySuCreateNew);
+    }
+    door_reply_soft_note_live_peak();
 }
 
 /**
  * Soft REPLY consume-once for door_reply.
  * Returns 1 if reply may proceed, 0 if single-use already spent / dead.
  * Missing table entry → allow (fallback; create drop must not hard-break).
+ * greppable: door: reply single-use consume / second_fail
  */
 static int
 door_reply_soft_try_consume(struct gj_door *pDoor)
@@ -218,7 +297,9 @@ door_reply_soft_try_consume(struct gj_door *pDoor)
 
     pSlot = door_reply_soft_find(pDoor);
     if (pSlot == NULL) {
-        return 1; /* no soft tracking — product path continues */
+        /* No soft tracking — product path continues (table-full create drop). */
+        door_soft_inc(&g_u64ReplySuFallback);
+        return 1;
     }
     if (pSlot->u32Live == 0u || pSlot->u32Consumed != 0u) {
         door_soft_inc(&g_u64ReplySuSecondFail);
@@ -235,9 +316,10 @@ door_reply_soft_try_consume(struct gj_door *pDoor)
  * Leaves slot bound so a late second door_reply still second-fails while
  * pClient might race; freed only when create rebinds or door is re-inited
  * after full release (pDoor cleared when fully idle).
+ * u32Why: DOOR_SU_INVAL_* reason (Wave 13 split).
  */
 static void
-door_reply_soft_invalidate(struct gj_door *pDoor)
+door_reply_soft_invalidate(struct gj_door *pDoor, u32 u32Why)
 {
     struct door_reply_soft *pSlot;
 
@@ -248,26 +330,18 @@ door_reply_soft_invalidate(struct gj_door *pDoor)
     if (pSlot->u32Live != 0u || pSlot->u32Consumed != 0u ||
         pSlot->u32Gen != 0u) {
         door_soft_inc(&g_u64ReplySuInval);
+        if (u32Why == DOOR_SU_INVAL_CANCEL) {
+            door_soft_inc(&g_u64ReplySuInvalCancel);
+        } else if (u32Why == DOOR_SU_INVAL_ABORT) {
+            door_soft_inc(&g_u64ReplySuInvalAbort);
+        } else if (u32Why == DOOR_SU_INVAL_THR) {
+            door_soft_inc(&g_u64ReplySuInvalThr);
+        } else if (u32Why == DOOR_SU_INVAL_INIT) {
+            door_soft_inc(&g_u64ReplySuInvalInit);
+        }
     }
     pSlot->u32Live = 0u;
     pSlot->u32Consumed = 1u; /* treat as spent so second use fails */
-}
-
-/** Count soft REPLY rights currently live (diagnostics). */
-static u32
-door_reply_soft_live_count(void)
-{
-    u32 iSlot;
-    u32 u32Live;
-
-    u32Live = 0;
-    for (iSlot = 0; iSlot < DOOR_REPLY_SOFT_SLOTS; iSlot++) {
-        if (g_aReplySoft[iSlot].pDoor != NULL &&
-            g_aReplySoft[iSlot].u32Live != 0u) {
-            u32Live++;
-        }
-    }
-    return u32Live;
 }
 
 /**
@@ -286,6 +360,7 @@ door_reply_soft_selfcheck(void)
     u32                   u32ConsumeOk;
     u32                   u32SecondFail;
     u32                   u32Gen;
+    u32                   u32New0;
     i64                   i64First;
     u64                   u64C0;
     u64                   u64S0;
@@ -299,6 +374,7 @@ door_reply_soft_selfcheck(void)
     door_set_badge(&g_doorSu, 0x5e17u);
 
     /* Create soft REPLY as Call claim would. */
+    u32New0 = (u32)g_u64ReplySuCreateNew;
     door_reply_soft_create(&g_doorSu);
     pSlot = door_reply_soft_find(&g_doorSu);
     u32CreateOk = (pSlot != NULL && pSlot->u32Live != 0u) ? 1u : 0u;
@@ -342,22 +418,29 @@ door_reply_soft_selfcheck(void)
     /* Grep: door: reply single-use */
     kprintf("door: reply single-use create=%u consume=%u second_fail=%u "
             "create_n=%lu consume_n=%lu second_fail_n=%lu inval_n=%lu "
-            "drop_n=%lu\n",
+            "drop_n=%lu new_n=%lu rebind_n=%lu fallback_n=%lu wave=13\n",
             u32CreateOk, u32ConsumeOk, u32SecondFail,
             (unsigned long)g_u64ReplySuCreate,
             (unsigned long)g_u64ReplySuConsume,
             (unsigned long)g_u64ReplySuSecondFail,
             (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuDrop);
+            (unsigned long)g_u64ReplySuDrop,
+            (unsigned long)g_u64ReplySuCreateNew,
+            (unsigned long)g_u64ReplySuCreateRebind,
+            (unsigned long)g_u64ReplySuFallback);
 
     /* Grep: door: REPLY soft — honesty: not full MIG / no CNode install */
-    kprintf("door: REPLY soft gen=%u live_slots=%u slots_max=%u "
-            "honesty=no_cnode_mig_product no_bar3=1\n",
-            u32Gen, door_reply_soft_live_count(),
-            (unsigned)DOOR_REPLY_SOFT_SLOTS);
+    kprintf("door: REPLY soft gen=%u live_slots=%u bound=%u slots_max=%u "
+            "live_peak=%u new_create=%u honesty=no_cnode_mig_product "
+            "no_bar3=1 wave=13\n",
+            u32Gen, door_reply_soft_live_count(), door_reply_soft_bound_count(),
+            (unsigned)DOOR_REPLY_SOFT_SLOTS, g_u32ReplySuLivePeak,
+            (g_u64ReplySuCreateNew > (u64)u32New0) ? 1u : 0u);
 
     if (u32CreateOk != 0u && u32ConsumeOk != 0u && u32SecondFail != 0u) {
-        kprintf("door: reply single-use soft PASS\n");
+        g_fReplySoftSelfPass = 1;
+        /* Grep: door: reply single-use soft PASS */
+        kprintf("door: reply single-use soft PASS wave=13\n");
     }
 
     /*
@@ -368,13 +451,13 @@ door_reply_soft_selfcheck(void)
     door_snapshot_last_badge(&g_doorSu);
     door_set_badge(NULL, 0); /* fail arm */
     kprintf("door: badge transfer grant=%lu move=%lu fail=%lu "
-            "(soft path; install/mint PASS remains main.c)\n",
+            "(soft path; install/mint PASS remains main.c) wave=13\n",
             (unsigned long)g_u64BadgeXferGrant,
             (unsigned long)g_u64BadgeXferMove,
             (unsigned long)g_u64BadgeXferFail);
 
     /* Release scratch; do not mark_dead (avoids abort noise on cold init). */
-    door_reply_soft_invalidate(&g_doorSu);
+    door_reply_soft_invalidate(&g_doorSu, DOOR_SU_INVAL_INIT);
     pSlot = door_reply_soft_find(&g_doorSu);
     if (pSlot != NULL) {
         pSlot->pDoor = NULL;
@@ -386,18 +469,21 @@ door_reply_soft_selfcheck(void)
 }
 
 /**
- * Greppable soft door call inventory (product / smoke).
- *   door: soft call enter=… claim=… reply=… eio=… etimedout=… enosys=…
- *        slot_wait=… client_wait=…
- *   door: soft recv enter=… ok=… peer_dead=… inval=… block=…
- *   door: soft reply enter=… ok=… stale=… not_ready=…
- *   door: soft abort=… cancel=… thr_exit=… thr_cli=… thr_srv=…
- *        install_ok=… install_fail=… log_n=…
- *   door: soft cold ready=… live=… peer_dead=… calls=… replies=…
- *        aborts=… timeouts=… badge=0x… last_badge=0x… mask=0x…
- *   door: reply single-use create=… consume=… second_fail=… …
- *   door: REPLY soft live_slots=… honesty=…
- *   door: badge transfer grant=… move=… fail=…
+ * Greppable soft door call inventory (Wave 13 exclusive; product / smoke).
+ * Prefix-stable markers (door: soft …):
+ *   door: soft inventory  — rollup enter/claim/reply + logs + wave
+ *   door: soft call       — call path terminal arms + wait tallies
+ *   door: soft recv       — recv path ok / peer_dead / inval / block
+ *   door: soft reply      — reply enter/ok/stale/not_ready
+ *   door: soft lifecycle  — abort/cancel/thr_exit/install
+ *   door: soft cold       — cold personality / caller door snapshot
+ *   door: soft reply_su   — ephemeral single-use REPLY tallies
+ *   door: soft err        — call eio/etimedout/enosys + reply rejects
+ *   door: soft path       — honesty: soft inventory ≠ bar3 / MIG product
+ *   door: soft inventory PASS / door: soft PASS
+ * Companion (not door: soft … prefix):
+ *   door: reply single-use … / door: REPLY soft … / door: badge transfer …
+ * Never hard-gates; diagnostics only.
  * greppable: door: soft / door: reply single-use / door: REPLY soft /
  *            door: badge transfer
  */
@@ -410,52 +496,19 @@ door_soft_inventory_log(const struct gj_door *pDoor)
     u32                   u32PeerDead;
     u32                   u32Badge;
     u32                   u32LastBadge;
+    u32                   u32SuLive;
+    u32                   u32SuBound;
     u64                   u64Calls;
     u64                   u64Replies;
     u64                   u64Aborts;
     u64                   u64Timeouts;
     u64                   u64Mask;
+    int                   fSoftPass;
 
     door_soft_inc(&g_u64SoftLogN);
 
-    /* Grep: door: soft call */
-    kprintf("door: soft call enter=%lu claim=%lu reply=%lu eio=%lu "
-            "etimedout=%lu enosys=%lu slot_wait=%lu client_wait=%lu\n",
-            (unsigned long)g_u64SoftCallEnter,
-            (unsigned long)g_u64SoftCallClaim,
-            (unsigned long)g_u64SoftCallReply,
-            (unsigned long)g_u64SoftCallEio,
-            (unsigned long)g_u64SoftCallEtimedout,
-            (unsigned long)g_u64SoftCallEnosys,
-            (unsigned long)g_u64SoftCallSlotWait,
-            (unsigned long)g_u64SoftCallClientWait);
-
-    /* Grep: door: soft recv */
-    kprintf("door: soft recv enter=%lu ok=%lu peer_dead=%lu inval=%lu "
-            "block=%lu\n",
-            (unsigned long)g_u64SoftRecvEnter,
-            (unsigned long)g_u64SoftRecvOk,
-            (unsigned long)g_u64SoftRecvPeerDead,
-            (unsigned long)g_u64SoftRecvInval,
-            (unsigned long)g_u64SoftRecvBlock);
-
-    /* Grep: door: soft reply */
-    kprintf("door: soft reply enter=%lu ok=%lu stale=%lu not_ready=%lu\n",
-            (unsigned long)g_u64SoftReplyEnter,
-            (unsigned long)g_u64SoftReplyOk,
-            (unsigned long)g_u64SoftReplyStale,
-            (unsigned long)g_u64SoftReplyNotReady);
-
-    /* Grep: door: soft abort / cancel / thr_exit / install */
-    kprintf("door: soft abort=%lu cancel=%lu thr_exit=%lu thr_cli=%lu "
-            "thr_srv=%lu install_ok=%lu install_fail=%lu log_n=%lu\n",
-            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
-            (unsigned long)g_u64SoftThrExit,
-            (unsigned long)g_u64SoftThrExitClient,
-            (unsigned long)g_u64SoftThrExitServer,
-            (unsigned long)g_u64SoftInstallOk,
-            (unsigned long)g_u64SoftInstallFail,
-            (unsigned long)g_u64SoftLogN);
+    u32SuLive = door_reply_soft_live_count();
+    u32SuBound = door_reply_soft_bound_count();
 
     /*
      * Snapshot optional door (caller) else cold personality when inited.
@@ -489,35 +542,186 @@ door_soft_inventory_log(const struct gj_door *pDoor)
         u64Mask = 0;
     }
 
+    /* Grep: door: soft inventory */
+    kprintf("door: soft inventory cold_init=%u ready=%u live=%u "
+            "call_enter=%lu claim=%lu reply_ok=%lu recv_ok=%lu "
+            "reply_su_create=%lu reply_su_consume=%lu "
+            "reply_su_second=%lu logs=%u wave=13\n",
+            g_fColdInited ? 1u : 0u, u32Ready, u32Live,
+            (unsigned long)g_u64SoftCallEnter,
+            (unsigned long)g_u64SoftCallClaim,
+            (unsigned long)g_u64SoftCallReply,
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64ReplySuCreate,
+            (unsigned long)g_u64ReplySuConsume,
+            (unsigned long)g_u64ReplySuSecondFail,
+            (unsigned)g_u64SoftLogN);
+
+    /* Grep: door: soft call */
+    kprintf("door: soft call enter=%lu claim=%lu reply=%lu eio=%lu "
+            "etimedout=%lu enosys=%lu slot_wait=%lu client_wait=%lu\n",
+            (unsigned long)g_u64SoftCallEnter,
+            (unsigned long)g_u64SoftCallClaim,
+            (unsigned long)g_u64SoftCallReply,
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
+            (unsigned long)g_u64SoftCallSlotWait,
+            (unsigned long)g_u64SoftCallClientWait);
+
+    /* Grep: door: soft recv */
+    kprintf("door: soft recv enter=%lu ok=%lu peer_dead=%lu inval=%lu "
+            "block=%lu\n",
+            (unsigned long)g_u64SoftRecvEnter,
+            (unsigned long)g_u64SoftRecvOk,
+            (unsigned long)g_u64SoftRecvPeerDead,
+            (unsigned long)g_u64SoftRecvInval,
+            (unsigned long)g_u64SoftRecvBlock);
+
+    /* Grep: door: soft reply */
+    kprintf("door: soft reply enter=%lu ok=%lu stale=%lu not_ready=%lu "
+            "su_consume=%lu su_second_fail=%lu\n",
+            (unsigned long)g_u64SoftReplyEnter,
+            (unsigned long)g_u64SoftReplyOk,
+            (unsigned long)g_u64SoftReplyStale,
+            (unsigned long)g_u64SoftReplyNotReady,
+            (unsigned long)g_u64ReplySuConsume,
+            (unsigned long)g_u64ReplySuSecondFail);
+
+    /* Grep: door: soft lifecycle (abort / cancel / thr_exit / install) */
+    kprintf("door: soft lifecycle abort=%lu cancel=%lu thr_exit=%lu "
+            "thr_cli=%lu thr_srv=%lu install_ok=%lu install_fail=%lu "
+            "log_n=%lu\n",
+            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
+            (unsigned long)g_u64SoftThrExit,
+            (unsigned long)g_u64SoftThrExitClient,
+            (unsigned long)g_u64SoftThrExitServer,
+            (unsigned long)g_u64SoftInstallOk,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftLogN);
+
+    /*
+     * Legacy single-line shape retained under door: soft abort=… so older
+     * greps for thr_exit / install without "lifecycle" still match.
+     * Grep: door: soft abort=
+     */
+    kprintf("door: soft abort=%lu cancel=%lu thr_exit=%lu thr_cli=%lu "
+            "thr_srv=%lu install_ok=%lu install_fail=%lu log_n=%lu\n",
+            (unsigned long)g_u64SoftAbort, (unsigned long)g_u64SoftCancel,
+            (unsigned long)g_u64SoftThrExit,
+            (unsigned long)g_u64SoftThrExitClient,
+            (unsigned long)g_u64SoftThrExitServer,
+            (unsigned long)g_u64SoftInstallOk,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64SoftLogN);
+
     /* Grep: door: soft cold */
     kprintf("door: soft cold ready=%u live=%u peer_dead=%u calls=%lu "
             "replies=%lu aborts=%lu timeouts=%lu badge=0x%x last_badge=0x%x "
-            "mask=0x%lx\n",
+            "mask=0x%lx wave=13\n",
             u32Ready, u32Live, u32PeerDead, (unsigned long)u64Calls,
             (unsigned long)u64Replies, (unsigned long)u64Aborts,
             (unsigned long)u64Timeouts, u32Badge, u32LastBadge,
             (unsigned long)u64Mask);
 
-    /* Grep: door: reply single-use (soft REPLY tallies) */
+    /*
+     * Soft REPLY single-use under door: soft … so a single "door: soft"
+     * grep also hits the ephemeral right surface (Wave 13).
+     * Grep: door: soft reply_su
+     */
+    kprintf("door: soft reply_su create=%lu new=%lu rebind=%lu "
+            "consume=%lu second_fail=%lu inval=%lu drop=%lu fallback=%lu "
+            "live=%u bound=%u peak=%u gen_hi=%u self_pass=%u wave=13\n",
+            (unsigned long)g_u64ReplySuCreate,
+            (unsigned long)g_u64ReplySuCreateNew,
+            (unsigned long)g_u64ReplySuCreateRebind,
+            (unsigned long)g_u64ReplySuConsume,
+            (unsigned long)g_u64ReplySuSecondFail,
+            (unsigned long)g_u64ReplySuInval,
+            (unsigned long)g_u64ReplySuDrop,
+            (unsigned long)g_u64ReplySuFallback, u32SuLive, u32SuBound,
+            g_u32ReplySuLivePeak, g_u32ReplySoftGen,
+            g_fReplySoftSelfPass ? 1u : 0u);
+
+    /* Grep: door: soft err */
+    kprintf("door: soft err eio=%lu etimedout=%lu enosys=%lu "
+            "recv_peer_dead=%lu recv_inval=%lu reply_stale=%lu "
+            "reply_not_ready=%lu install_fail=%lu su_second=%lu "
+            "su_drop=%lu\n",
+            (unsigned long)g_u64SoftCallEio,
+            (unsigned long)g_u64SoftCallEtimedout,
+            (unsigned long)g_u64SoftCallEnosys,
+            (unsigned long)g_u64SoftRecvPeerDead,
+            (unsigned long)g_u64SoftRecvInval,
+            (unsigned long)g_u64SoftReplyStale,
+            (unsigned long)g_u64SoftReplyNotReady,
+            (unsigned long)g_u64SoftInstallFail,
+            (unsigned long)g_u64ReplySuSecondFail,
+            (unsigned long)g_u64ReplySuDrop);
+
+    /*
+     * Honesty line: soft inventory / soft REPLY ≠ CNode MIG REPLY / bar3.
+     * Grep: door: soft path
+     */
+    kprintf("door: soft path single_flight=1 reply=soft_ephemeral "
+            "cnode_mig_reply=0 badge=server_auth cold=endpoint "
+            "cap_transfer_small_k=0 self_pass=%u "
+            "(soft inventory; not bar3) wave=13\n",
+            g_fReplySoftSelfPass ? 1u : 0u);
+
+    /* Grep: door: reply single-use (soft REPLY tallies; companion prefix) */
     kprintf("door: reply single-use create=%lu consume=%lu second_fail=%lu "
-            "inval=%lu drop=%lu\n",
+            "inval=%lu drop=%lu new=%lu rebind=%lu fallback=%lu "
+            "inval_cancel=%lu inval_abort=%lu inval_thr=%lu inval_init=%lu "
+            "wave=13\n",
             (unsigned long)g_u64ReplySuCreate,
             (unsigned long)g_u64ReplySuConsume,
             (unsigned long)g_u64ReplySuSecondFail,
             (unsigned long)g_u64ReplySuInval,
-            (unsigned long)g_u64ReplySuDrop);
+            (unsigned long)g_u64ReplySuDrop,
+            (unsigned long)g_u64ReplySuCreateNew,
+            (unsigned long)g_u64ReplySuCreateRebind,
+            (unsigned long)g_u64ReplySuFallback,
+            (unsigned long)g_u64ReplySuInvalCancel,
+            (unsigned long)g_u64ReplySuInvalAbort,
+            (unsigned long)g_u64ReplySuInvalThr,
+            (unsigned long)g_u64ReplySuInvalInit);
 
     /* Grep: door: REPLY soft — honesty bounds */
-    kprintf("door: REPLY soft live_slots=%u slots_max=%u gen_hi=%u "
-            "honesty=no_cnode_mig_product no_bar3=1\n",
-            door_reply_soft_live_count(), (unsigned)DOOR_REPLY_SOFT_SLOTS,
-            g_u32ReplySoftGen);
+    kprintf("door: REPLY soft live_slots=%u bound=%u slots_max=%u "
+            "gen_hi=%u live_peak=%u self_pass=%u "
+            "honesty=no_cnode_mig_product no_bar3=1 wave=13\n",
+            u32SuLive, u32SuBound, (unsigned)DOOR_REPLY_SOFT_SLOTS,
+            g_u32ReplySoftGen, g_u32ReplySuLivePeak,
+            g_fReplySoftSelfPass ? 1u : 0u);
 
     /* Grep: door: badge transfer (grant/move/fail counters) */
-    kprintf("door: badge transfer grant=%lu move=%lu fail=%lu\n",
+    kprintf("door: badge transfer grant=%lu move=%lu fail=%lu wave=13\n",
             (unsigned long)g_u64BadgeXferGrant,
             (unsigned long)g_u64BadgeXferMove,
             (unsigned long)g_u64BadgeXferFail);
+
+    /*
+     * Soft lamp: cold personality ready + self-check PASS. Never hard-gates.
+     * Grep: door: soft inventory PASS | door: soft PASS
+     * Grep: door: soft FAIL
+     */
+    fSoftPass = (g_fColdInited != 0 && u32Ready != 0 &&
+                 g_fReplySoftSelfPass != 0)
+                    ? 1
+                    : 0;
+    if (fSoftPass != 0) {
+        kprintf("door: soft inventory PASS ready=%u live=%u "
+                "logs=%lu su_self_pass=1 wave=13\n",
+                u32Ready, u32Live, (unsigned long)g_u64SoftLogN);
+        kprintf("door: soft PASS wave=13 logs=%lu\n",
+                (unsigned long)g_u64SoftLogN);
+    } else {
+        kprintf("door: soft FAIL cold_init=%u ready=%u su_self_pass=%u "
+                "(soft inventory only; not product gate) wave=13\n",
+                g_fColdInited ? 1u : 0u, u32Ready,
+                g_fReplySoftSelfPass ? 1u : 0u);
+    }
 }
 
 /**
@@ -587,7 +791,7 @@ door_cancel_inflight(struct gj_door *pDoor, struct gj_thread *pCur)
      */
     pDoor->u32HasReq = 0;
     pDoor->u32HasReply = 0;
-    door_reply_soft_invalidate(pDoor);
+    door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_CANCEL);
     door_release_client_slot(pDoor, pCur);
     /* Nudge server so a blocked recv re-evaluates after cancel. */
     (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
@@ -600,7 +804,7 @@ door_init(struct gj_door *pDoor)
         return;
     }
     /* Drop any soft REPLY bound to a prior life of this object address. */
-    door_reply_soft_invalidate(pDoor);
+    door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_INIT);
     {
         struct door_reply_soft *pSlot = door_reply_soft_find(pDoor);
 
@@ -633,7 +837,7 @@ door_cold_init(void)
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
     /* Soft REPLY single-use self-check (private scratch door; honesty only). */
     door_reply_soft_selfcheck();
-    /* Grep: door: soft (baseline inventory after cold init) */
+    /* Grep: door: soft (baseline inventory after cold init; wave=13) */
     door_soft_inventory_log(&g_doorCold);
 }
 
@@ -667,8 +871,8 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
     }
     /*
      * Emit soft inventory on stats read so bring-up smoke also greps
-     * door: soft call/recv/reply lines (mirrors file_lock_count).
-     * greppable: door: soft
+     * door: soft call/recv/reply/reply_su lines (Wave 13; mirrors
+     * file_lock_count). greppable: door: soft
      */
     door_soft_inventory_log(pDoor);
 }
@@ -734,7 +938,7 @@ door_abort_waiters(struct gj_door *pDoor)
      * observing HasReply (or !door_live).
      * Invalidate soft REPLY so a late door_reply cannot double-complete.
      */
-    door_reply_soft_invalidate(pDoor);
+    door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_ABORT);
     if (pDoor->pClient != NULL) {
         pDoor->i64Reply = -(i64)LINUX_EIO;
         pDoor->u32HasReply = 1;
@@ -786,7 +990,7 @@ door_on_thread_exit(struct gj_thread *pThr)
         pDoor->u32HasReply = 0;
         pDoor->i64Reply = -(i64)LINUX_EIO;
         pDoor->u64Aborts++;
-        door_reply_soft_invalidate(pDoor);
+        door_reply_soft_invalidate(pDoor, DOOR_SU_INVAL_THR);
         (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);

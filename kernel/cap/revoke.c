@@ -19,8 +19,20 @@
  *   linked, try siblings, soft-retry a bounded number of re-walks, then
  *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
  *
+ * Soft inventory (Wave 13 exclusive deepen; this unit only):
+ *   - Phase A begin path: ok / dead / busy / again / null / queue full
+ *   - Deferred queue: push / drop / pending samples / cursor / full
+ *   - CDT walk batch: enter / clear / busy / stale / visit / pass / retry
+ *   - R2 soft: trylock busy, soft retries, outer deferred push, defer log
+ *   - Process deferred: scan / hygiene / empty-edge soft gap / budget
+ *   - Reclaim: ready / busy / ok / null; slots_left / pin / ref gates
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product mutex.
+ *   Soft ≠ bar3. Product CNode turnstile still OPEN.
+ *
  * Grep: cap:cdt deferred / cap:cdt walk / cap:quota soft
  * Grep: cap: revoke try-lock / cap:cdt R2 soft / cap:cdt trylock
+ * Grep: cap: revoke soft  (Wave 13 deepen surface)
+ * Grep: cap: revoke …     (begin|walk|deferred|reclaim|r2|try-lock|queue)
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -35,6 +47,9 @@
  * yields to the deferred driver (timer/idle) — sleep-not-spin.
  */
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
+
+/* Wave 13 deepen stamp (file-local; never hard-gates). */
+#define GJ_REVOKE_SOFT_WAVE 13u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -53,6 +68,8 @@ static u8                    g_u8CdtTrylockLogged;
 static u8                    g_u8RevokeTrylockLogged;
 /* Soft once-marker: R2 soft defer while edges remain (cap:cdt R2 soft). */
 static u8                    g_u8CdtR2SoftLogged;
+/* Soft once-marker: Wave 13 multi-line inventory dump. */
+static u8                    g_u8RevokeSoftInvLogged;
 
 /*
  * R2 observability counters (lifetime, process-wide soft stats).
@@ -64,6 +81,226 @@ static u8                    g_u8CdtR2SoftLogged;
 static u32 g_u32R2SpinsAvoided;
 static u32 g_u32R2Retries;
 static u32 g_u32R2SlotsCleared;
+
+/*
+ * Wave 13 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
+ * Grep: cap: revoke soft
+ */
+static u32 g_u32SoftBeginEnter;     /* gj_obj_revoke_begin entries */
+static u32 g_u32SoftBeginOk;        /* Phase A success → queued */
+static u32 g_u32SoftBeginNull;      /* pObj == NULL */
+static u32 g_u32SoftBeginDead;      /* concurrent revoke → DEAD/REVOKING */
+static u32 g_u32SoftBeginBusy;      /* CAS fail other state */
+static u32 g_u32SoftBeginAgain;     /* queue full after DEAD (R7 retry) */
+static u32 g_u32SoftQPush;          /* revoke_q_push accepted (new or dup) */
+static u32 g_u32SoftQPushNew;       /* new queue slot taken */
+static u32 g_u32SoftQPushDup;       /* already queued */
+static u32 g_u32SoftQPushFull;      /* no free slot */
+static u32 g_u32SoftQDrop;          /* revoke_q_drop */
+static u32 g_u32SoftQPendingSample; /* gj_revoke_deferred_pending samples */
+static u32 g_u32SoftQPendingPeak;   /* peak active pending observed */
+static u32 g_u32SoftWalkEnter;      /* gj_revoke_cdt_walk_batch entries */
+static u32 g_u32SoftWalkNop;        /* null/zero-budget walk early out */
+static u32 g_u32SoftWalkPass;       /* primary + soft-retry pass count */
+static u32 g_u32SoftWalkBusyEdge;   /* edges left linked due to trylock */
+static u32 g_u32SoftWalkStale;      /* stale/bad edges unlinked */
+static u32 g_u32SoftWalkVisit;      /* edge visits (all passes) */
+static u32 g_u32SoftWalkCleanPass;  /* passes with zero busy */
+static u32 g_u32SoftWalkBudgetHit;  /* cleared hit u32MaxSlots */
+static u32 g_u32SoftWalkVisitCap;   /* hit visit cap */
+static u32 g_u32SoftR2OuterPush;    /* deferred outer second-batch push */
+static u32 g_u32SoftR2DeferLog;     /* R2 soft defer once-log emissions */
+static u32 g_u32SoftR2TrylockLog;   /* trylock busy once-log emissions */
+static u32 g_u32SoftR2WalkLog;      /* try-lock walk summary emissions */
+static u32 g_u32SoftDefEnter;       /* gj_revoke_process_deferred entries */
+static u32 g_u32SoftDefNop;         /* zero budget / empty queue */
+static u32 g_u32SoftDefScan;        /* queue ents examined */
+static u32 g_u32SoftDefActive;      /* active DEAD objs scanned */
+static u32 g_u32SoftDefWalkCall;    /* cdt_walk_batch calls from deferred */
+static u32 g_u32SoftDefEmptyEdge;   /* empty-edge soft gap hits */
+static u32 g_u32SoftDefHygieneDone; /* slots_left==0 && no edges (skip) */
+static u32 g_u32SoftDefStaleQ;      /* drop non-DEAD / null queue ent */
+static u32 g_u32SoftDefEdgeRemain;  /* keep queued with edges after walk */
+static u32 g_u32SoftInvClear;       /* gj_cap_slot_invalidate_locked clears */
+static u32 g_u32SoftInvSkip;        /* invalidate early-out (null/invalid) */
+static u32 g_u32SoftInvWrongObj;    /* slot points at different object */
+static u32 g_u32SoftInvQuotaNull;   /* refund via NULL soft path */
+static u32 g_u32SoftReclaimReady;   /* gj_obj_reclaim_ready == 1 */
+static u32 g_u32SoftReclaimNot;     /* reclaim_ready == 0 */
+static u32 g_u32SoftReclaimOk;      /* gj_obj_reclaim success */
+static u32 g_u32SoftReclaimBusy;    /* reclaim not ready */
+static u32 g_u32SoftReclaimNull;    /* reclaim null arg */
+static u32 g_u32SoftReclaimGateSlot;/* not ready: slots_left */
+static u32 g_u32SoftReclaimGateCdt; /* not ready: pCdtHead */
+static u32 g_u32SoftReclaimGateRef; /* not ready: ref */
+static u32 g_u32SoftReclaimGatePin; /* not ready: pin */
+static u32 g_u32SoftReclaimGateSt;  /* not ready: state != DEAD */
+static u32 g_u32SoftLogN;           /* soft inventory dump emissions */
+
+static void soft_inc(u32 *pCtr);
+static void soft_note_pending_peak(u32 u32Pending);
+static void soft_revoke_inventory_log(void);
+static void soft_revoke_inventory_maybe_once(void);
+
+/** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/** Soft: track peak deferred-queue occupancy. */
+static void
+soft_note_pending_peak(u32 u32Pending)
+{
+    if (u32Pending > g_u32SoftQPendingPeak) {
+        g_u32SoftQPendingPeak = u32Pending;
+    }
+}
+
+/**
+ * Greppable soft revoke inventory (Wave 13 deepen).
+ * Prefix family (keep stable for smokes / tooling):
+ *   cap: revoke soft inventory|begin|queue|walk|r2|deferred|reclaim|path|…
+ *   cap: revoke try-lock soft …
+ *   cap:cdt R2 soft inventory|…
+ * Grep: cap: revoke soft
+ * Grep: cap: revoke try-lock
+ * Grep: cap:cdt R2 soft
+ */
+static void
+soft_revoke_inventory_log(void)
+{
+    u32 u32Pending;
+    u32 u32Limit;
+    u32 iEnt;
+    u32 u32Active;
+
+    soft_inc(&g_u32SoftLogN);
+
+    /* Live queue snapshot (diagnostics only). */
+    u32Active = 0;
+    u32Limit = g_u32RevokeQLen;
+    if (u32Limit > GJ_REVOKE_Q_MAX) {
+        u32Limit = GJ_REVOKE_Q_MAX;
+    }
+    for (iEnt = 0; iEnt < u32Limit; iEnt++) {
+        if (g_aRevokeQ[iEnt].u8Active) {
+            u32Active++;
+        }
+    }
+    u32Pending = u32Active;
+    soft_note_pending_peak(u32Pending);
+
+    /*
+     * Primary Wave 13 deepen lines under "cap: revoke soft …".
+     * Honesty: soft u32SoftLock only — product try-lock still partial.
+     */
+    /* Grep: cap: revoke soft inventory */
+    kprintf("cap: revoke soft inventory q_max=%u r2_retry_max=%u "
+            "pending=%u peak=%u q_len=%u cursor=%u "
+            "spins_avoided=%u retries=%u slots_cleared=%u "
+            "log_n=%u wave=%u soft_partial\n",
+            GJ_REVOKE_Q_MAX, GJ_REVOKE_R2_SOFT_RETRY_MAX, u32Pending,
+            g_u32SoftQPendingPeak, g_u32RevokeQLen, g_u32RevokeQCursor,
+            g_u32R2SpinsAvoided, g_u32R2Retries, g_u32R2SlotsCleared,
+            g_u32SoftLogN, GJ_REVOKE_SOFT_WAVE);
+
+    /* Grep: cap: revoke soft begin */
+    kprintf("cap: revoke soft begin enter=%u ok=%u null=%u dead=%u "
+            "busy=%u again=%u queue_full=%u\n",
+            g_u32SoftBeginEnter, g_u32SoftBeginOk, g_u32SoftBeginNull,
+            g_u32SoftBeginDead, g_u32SoftBeginBusy, g_u32SoftBeginAgain,
+            g_u32SoftQPushFull);
+
+    /* Grep: cap: revoke soft queue */
+    kprintf("cap: revoke soft queue push=%u new=%u dup=%u full=%u drop=%u "
+            "pending_sample=%u peak=%u live=%u cursor=%u q_max=%u\n",
+            g_u32SoftQPush, g_u32SoftQPushNew, g_u32SoftQPushDup,
+            g_u32SoftQPushFull, g_u32SoftQDrop, g_u32SoftQPendingSample,
+            g_u32SoftQPendingPeak, u32Pending, g_u32RevokeQCursor,
+            GJ_REVOKE_Q_MAX);
+
+    /* Grep: cap: revoke soft walk */
+    kprintf("cap: revoke soft walk enter=%u nop=%u pass=%u busy_edge=%u "
+            "stale=%u visit=%u clean_pass=%u budget_hit=%u visit_cap=%u "
+            "inv_clear=%u inv_skip=%u inv_wrong=%u inv_qnull=%u\n",
+            g_u32SoftWalkEnter, g_u32SoftWalkNop, g_u32SoftWalkPass,
+            g_u32SoftWalkBusyEdge, g_u32SoftWalkStale, g_u32SoftWalkVisit,
+            g_u32SoftWalkCleanPass, g_u32SoftWalkBudgetHit,
+            g_u32SoftWalkVisitCap, g_u32SoftInvClear, g_u32SoftInvSkip,
+            g_u32SoftInvWrongObj, g_u32SoftInvQuotaNull);
+
+    /* Grep: cap: revoke soft r2 / cap: revoke try-lock soft */
+    kprintf("cap: revoke soft r2 spins_avoided=%u retries=%u "
+            "slots_cleared=%u outer_push=%u trylock_log=%u walk_log=%u "
+            "defer_log=%u sleep_not_spin=1 soft_lock=u32SoftLock "
+            "product_mutex=OPEN soft_partial\n",
+            g_u32R2SpinsAvoided, g_u32R2Retries, g_u32R2SlotsCleared,
+            g_u32SoftR2OuterPush, g_u32SoftR2TrylockLog, g_u32SoftR2WalkLog,
+            g_u32SoftR2DeferLog);
+    kprintf("cap: revoke try-lock soft spins_avoided=%u retries=%u "
+            "slots_cleared=%u busy_edge=%u outer_push=%u "
+            "soft_partial wave=%u (inventory)\n",
+            g_u32R2SpinsAvoided, g_u32R2Retries, g_u32R2SlotsCleared,
+            g_u32SoftWalkBusyEdge, g_u32SoftR2OuterPush, GJ_REVOKE_SOFT_WAVE);
+
+    /* Grep: cap:cdt R2 soft inventory */
+    kprintf("cap:cdt R2 soft inventory spins_avoided=%u retries=%u "
+            "slots_cleared=%u busy_edge=%u outer_push=%u defer_log=%u "
+            "trylock_log=%u sleep_not_spin=1 product_mutex=OPEN "
+            "soft_partial wave=%u\n",
+            g_u32R2SpinsAvoided, g_u32R2Retries, g_u32R2SlotsCleared,
+            g_u32SoftWalkBusyEdge, g_u32SoftR2OuterPush, g_u32SoftR2DeferLog,
+            g_u32SoftR2TrylockLog, GJ_REVOKE_SOFT_WAVE);
+
+    /* Grep: cap: revoke soft deferred */
+    kprintf("cap: revoke soft deferred enter=%u nop=%u scan=%u active=%u "
+            "walk_call=%u empty_edge=%u hygiene_done=%u stale_q=%u "
+            "edge_remain=%u\n",
+            g_u32SoftDefEnter, g_u32SoftDefNop, g_u32SoftDefScan,
+            g_u32SoftDefActive, g_u32SoftDefWalkCall, g_u32SoftDefEmptyEdge,
+            g_u32SoftDefHygieneDone, g_u32SoftDefStaleQ,
+            g_u32SoftDefEdgeRemain);
+
+    /* Grep: cap: revoke soft reclaim */
+    kprintf("cap: revoke soft reclaim ready=%u not=%u ok=%u busy=%u null=%u "
+            "gate_st=%u gate_slot=%u gate_cdt=%u gate_ref=%u gate_pin=%u\n",
+            g_u32SoftReclaimReady, g_u32SoftReclaimNot, g_u32SoftReclaimOk,
+            g_u32SoftReclaimBusy, g_u32SoftReclaimNull, g_u32SoftReclaimGateSt,
+            g_u32SoftReclaimGateSlot, g_u32SoftReclaimGateCdt,
+            g_u32SoftReclaimGateRef, g_u32SoftReclaimGatePin);
+
+    /* Grep: cap: revoke soft path */
+    kprintf("cap: revoke soft path phase_a=DEAD_gen_first phase_ap=cdt_walk "
+            "r2=trylock_defer r7=timer_idle_redrive phase_c=reclaim "
+            "lock=soft_u32SoftLock product=PARTIAL wave=%u\n",
+            GJ_REVOKE_SOFT_WAVE);
+}
+
+/**
+ * Emit Wave 13 soft inventory once after first meaningful revoke activity.
+ * Avoids timer-tick spam; re-log is not required for greppable surface.
+ */
+static void
+soft_revoke_inventory_maybe_once(void)
+{
+    if (g_u8RevokeSoftInvLogged) {
+        return;
+    }
+    /* Need at least one begin, walk, or deferred tick with work. */
+    if (g_u32SoftBeginEnter == 0 && g_u32SoftWalkEnter == 0 &&
+        g_u32SoftDefEnter == 0) {
+        return;
+    }
+    g_u8RevokeSoftInvLogged = 1;
+    soft_revoke_inventory_log();
+}
 
 /*
  * Enqueue once per object. Scan for duplicates before taking a free slot so
@@ -82,6 +319,8 @@ revoke_q_push(struct gj_obj_hdr *pObj)
     for (iEnt = 0; iEnt < GJ_REVOKE_Q_MAX; iEnt++) {
         if (g_aRevokeQ[iEnt].u8Active) {
             if (g_aRevokeQ[iEnt].pObj == pObj) {
+                soft_inc(&g_u32SoftQPush);
+                soft_inc(&g_u32SoftQPushDup);
                 return 0; /* already queued */
             }
         } else if (u32Free == GJ_REVOKE_Q_MAX) {
@@ -90,6 +329,7 @@ revoke_q_push(struct gj_obj_hdr *pObj)
     }
 
     if (u32Free >= GJ_REVOKE_Q_MAX) {
+        soft_inc(&g_u32SoftQPushFull);
         return -1;
     }
 
@@ -98,6 +338,9 @@ revoke_q_push(struct gj_obj_hdr *pObj)
     if (u32Free >= g_u32RevokeQLen) {
         g_u32RevokeQLen = u32Free + 1;
     }
+    soft_inc(&g_u32SoftQPush);
+    soft_inc(&g_u32SoftQPushNew);
+    soft_note_pending_peak(gj_revoke_deferred_pending());
     return 0;
 }
 
@@ -112,6 +355,7 @@ revoke_q_drop(u32 iEnt)
     }
     g_aRevokeQ[iEnt].u8Active = 0;
     g_aRevokeQ[iEnt].pObj = NULL;
+    soft_inc(&g_u32SoftQDrop);
 
     if (g_u32RevokeQLen == 0) {
         return;
@@ -133,6 +377,8 @@ gj_revoke_deferred_pending(void)
     u32 u32Pending = 0;
     u32 u32Limit;
 
+    soft_inc(&g_u32SoftQPendingSample);
+
     u32Limit = g_u32RevokeQLen;
     if (u32Limit > GJ_REVOKE_Q_MAX) {
         u32Limit = GJ_REVOKE_Q_MAX;
@@ -142,6 +388,7 @@ gj_revoke_deferred_pending(void)
             u32Pending++;
         }
     }
+    soft_note_pending_peak(u32Pending);
     return u32Pending;
 }
 
@@ -156,7 +403,10 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
     u32 u32New;
     u32 u32Cur;
 
+    soft_inc(&g_u32SoftBeginEnter);
+
     if (pObj == NULL) {
+        soft_inc(&g_u32SoftBeginNull);
         return GJ_ERR_INVAL;
     }
 
@@ -169,8 +419,15 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
         u32Cur = __atomic_load_n(&pObj->u32State, __ATOMIC_ACQUIRE);
         if (u32Cur == (u32)GJ_OBJ_DEAD ||
             u32Cur == (u32)GJ_OBJ_REVOKING) {
+            soft_inc(&g_u32SoftBeginDead);
+            /* Grep: cap: revoke soft begin dead */
+            if (g_u32SoftBeginDead == 1u) {
+                kprintf("cap: revoke soft begin concurrent dead/revoking "
+                        "soft (once)\n");
+            }
             return GJ_ERR_DEAD;
         }
+        soft_inc(&g_u32SoftBeginBusy);
         return GJ_ERR_BUSY;
     }
 
@@ -188,12 +445,26 @@ gj_obj_revoke_begin(struct gj_obj_hdr *pObj)
 
     /* Queue mandatory slot hygiene (S4) + later reclaim (S6, R9). */
     if (revoke_q_push(pObj) != 0) {
+        soft_inc(&g_u32SoftBeginAgain);
         /* Grep: revoke: deferred / cap:cdt deferred */
         kprintf("cap:cdt deferred queue full\n");
+        /* Grep: cap: revoke soft begin again */
+        kprintf("cap: revoke soft begin again queue_full spins_avoided=%u "
+                "retries=%u soft_partial\n",
+                g_u32R2SpinsAvoided, g_u32R2Retries);
         /* Object is still DEAD — secure; hygiene must be retried (R7). */
+        soft_revoke_inventory_maybe_once();
         return GJ_ERR_AGAIN;
     }
 
+    soft_inc(&g_u32SoftBeginOk);
+    /* Grep: cap: revoke soft begin ok */
+    if (g_u32SoftBeginOk == 1u) {
+        kprintf("cap: revoke soft begin ok dead_gen_first queued=1 "
+                "pending=%u wave=%u soft\n",
+                gj_revoke_deferred_pending(), GJ_REVOKE_SOFT_WAVE);
+    }
+    soft_revoke_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -213,15 +484,18 @@ gj_cap_slot_invalidate_locked(struct gj_cap_slot *pSlot, struct gj_obj_hdr *pObj
     void *pAccount = NULL;
 
     if (pSlot == NULL) {
+        soft_inc(&g_u32SoftInvSkip);
         return;
     }
     if (pSlot->u16Type == (u16)GJ_CAP_INVALID) {
+        soft_inc(&g_u32SoftInvSkip);
         return;
     }
 
     if (pObj != NULL) {
         if (pSlot->pObj != (void *)pObj) {
             /* Wrong object (or already cleared); leave slot alone. */
+            soft_inc(&g_u32SoftInvWrongObj);
             return;
         }
         /* One less outstanding derived slot (S4/S6). Saturate at zero. */
@@ -242,10 +516,12 @@ gj_cap_slot_invalidate_locked(struct gj_cap_slot *pSlot, struct gj_obj_hdr *pObj
      * Walk batch refunds explicitly when edge->pCnode is known.
      * Grep: cap:quota soft
      */
+    soft_inc(&g_u32SoftInvQuotaNull);
     (void)gj_cap_quota_slot_refund(pAccount);
 
     /* S7: type INVALID, slot gen++, clear ptr + obj gen */
     gj_cap_slot_invalidate(pSlot);
+    soft_inc(&g_u32SoftInvClear);
 }
 
 /*
@@ -276,7 +552,10 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
     /* Bound visits so a long list under lock contention cannot spin. */
     const u32 u32VisitCap = u32MaxSlots * 4u + 8u;
 
+    soft_inc(&g_u32SoftWalkEnter);
+
     if (pObj == NULL || u32MaxSlots == 0) {
+        soft_inc(&g_u32SoftWalkNop);
         return 0;
     }
 
@@ -294,6 +573,8 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
         struct gj_cdt_edge *pNext;
         u32 u32BusyThisPass = 0;
 
+        soft_inc(&g_u32SoftWalkPass);
+
         if (pObj->pCdtHead == NULL) {
             break;
         }
@@ -308,6 +589,12 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
              * Grep: cap:cdt R2 soft
              */
             g_u32R2Retries++;
+            /* Grep: cap: revoke soft r2 retry */
+            if (g_u32R2Retries == 1u) {
+                kprintf("cap: revoke soft r2 retry pass=%u spins_avoided=%u "
+                        "soft_partial (once)\n",
+                        u32Pass, g_u32R2SpinsAvoided);
+            }
         }
 
         pEdge = pObj->pCdtHead;
@@ -318,6 +605,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
             int fUnlink = 0;
 
             u32Visited++;
+            soft_inc(&g_u32SoftWalkVisit);
             pNext = pEdge->pNext;
             pCnode = pEdge->pCnode;
             u64Slot = pEdge->u64Slot;
@@ -327,6 +615,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
                 /* Stale edge — drop. Grep: cap:cdt stale */
                 fUnlink = 1;
                 u32Stale++;
+                soft_inc(&g_u32SoftWalkStale);
             } else if (!gj_cnode_trylock(pCnode)) {
                 /*
                  * R2: CNode busy — leave edge linked, try siblings, soft
@@ -335,9 +624,15 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
                  */
                 u32BusyThisPass++;
                 g_u32R2SpinsAvoided++;
+                soft_inc(&g_u32SoftWalkBusyEdge);
                 if (!g_u8CdtTrylockLogged) {
                     g_u8CdtTrylockLogged = 1;
+                    soft_inc(&g_u32SoftR2TrylockLog);
                     kprintf("cap:cdt trylock busy (once)\n");
+                    /* Grep: cap: revoke try-lock busy */
+                    kprintf("cap: revoke try-lock busy spins_avoided=%u "
+                            "pass=%u sleep_not_spin soft_partial (once)\n",
+                            g_u32R2SpinsAvoided, u32Pass);
                 }
                 pEdge = pNext;
                 continue;
@@ -362,6 +657,7 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
                     /* Slot already cleared or retargeted — drop edge. */
                     fUnlink = 1;
                     u32Stale++;
+                    soft_inc(&g_u32SoftWalkStale);
                 }
                 gj_cnode_unlock(pCnode);
             }
@@ -375,9 +671,17 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
         u32Busy = u32BusyThisPass;
         if (u32BusyThisPass == 0) {
             /* Clean pass — no soft-retry needed. */
+            soft_inc(&g_u32SoftWalkCleanPass);
             break;
         }
         /* Busy edges remain: soft-retry next pass, or exit at max. */
+    }
+
+    if (u32Cleared >= u32MaxSlots && u32MaxSlots > 0) {
+        soft_inc(&g_u32SoftWalkBudgetHit);
+    }
+    if (u32Visited >= u32VisitCap) {
+        soft_inc(&g_u32SoftWalkVisitCap);
     }
 
     /*
@@ -388,13 +692,21 @@ gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots)
     if (!g_u8RevokeTrylockLogged &&
         (u32Cleared > 0 || g_u32R2SpinsAvoided > 0 || u32Stale > 0)) {
         g_u8RevokeTrylockLogged = 1;
+        soft_inc(&g_u32SoftR2WalkLog);
         kprintf("cap: revoke try-lock walk cleared=%u spins_avoided=%u "
                 "retries=%u slots_cleared=%u busy_left=%u "
                 "soft_partial (once)\n",
                 u32Cleared, g_u32R2SpinsAvoided, g_u32R2Retries,
                 g_u32R2SlotsCleared, u32Busy);
+        /* Grep: cap: revoke soft walk summary */
+        kprintf("cap: revoke soft walk summary cleared=%u stale=%u "
+                "visited=%u passes=%u busy_left=%u visit_cap=%u "
+                "wave=%u soft_partial\n",
+                u32Cleared, u32Stale, u32Visited, g_u32SoftWalkPass, u32Busy,
+                u32VisitCap, GJ_REVOKE_SOFT_WAVE);
     }
 
+    soft_revoke_inventory_maybe_once();
     return u32Cleared;
 }
 
@@ -423,7 +735,10 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
     u32 iEnt;
     u32 u32Start;
 
+    soft_inc(&g_u32SoftDefEnter);
+
     if (u32MaxSlots == 0) {
+        soft_inc(&g_u32SoftDefNop);
         return 0;
     }
 
@@ -433,6 +748,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         u32Limit = GJ_REVOKE_Q_MAX;
     }
     if (u32Limit == 0) {
+        soft_inc(&g_u32SoftDefNop);
         return 0;
     }
 
@@ -447,12 +763,14 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         u32 u32Budget;
 
         iEnt = (u32Start + u32Scanned) % u32Limit;
+        soft_inc(&g_u32SoftDefScan);
 
         if (!g_aRevokeQ[iEnt].u8Active) {
             continue;
         }
         pObj = g_aRevokeQ[iEnt].pObj;
         if (pObj == NULL) {
+            soft_inc(&g_u32SoftDefStaleQ);
             revoke_q_drop(iEnt);
             continue;
         }
@@ -460,12 +778,16 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
         u32State = __atomic_load_n(&pObj->u32State, __ATOMIC_ACQUIRE);
         if (u32State != (u32)GJ_OBJ_DEAD) {
             /* Stale queue entry (reclaimed or never completed Phase A). */
+            soft_inc(&g_u32SoftDefStaleQ);
             revoke_q_drop(iEnt);
             continue;
         }
 
+        soft_inc(&g_u32SoftDefActive);
+
         /* Hygiene done for this object — leave queued for reclaim drain. */
         if (pObj->u32SlotsLeft == 0 && pObj->pCdtHead == NULL) {
+            soft_inc(&g_u32SoftDefHygieneDone);
             continue;
         }
 
@@ -478,6 +800,7 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
          * Grep: cap:cdt walk / cap: revoke try-lock
          */
         if (pObj->pCdtHead != NULL) {
+            soft_inc(&g_u32SoftDefWalkCall);
             u32Batch = gj_revoke_cdt_walk_batch(pObj, u32Budget);
             u32Cleared += u32Batch;
 
@@ -491,22 +814,33 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
                 u32 u32Push;
 
                 u32Budget = u32MaxSlots - u32Cleared;
+                soft_inc(&g_u32SoftDefWalkCall);
+                soft_inc(&g_u32SoftR2OuterPush);
                 u32Push = gj_revoke_cdt_walk_batch(pObj, u32Budget);
                 if (u32Push > 0) {
                     g_u32R2Retries++; /* outer deferred soft push */
                 }
                 u32Cleared += u32Push;
+                /* Grep: cap: revoke soft r2 outer */
+                if (g_u32SoftR2OuterPush == 1u) {
+                    kprintf("cap: revoke soft r2 outer push cleared=%u "
+                            "spins_avoided=%u sleep_not_spin soft_partial "
+                            "(once)\n",
+                            u32Push, g_u32R2SpinsAvoided);
+                }
             }
 
             /* Advance cursor past this ent so next call rotates fairly. */
             g_u32RevokeQCursor = (iEnt + 1u) % u32Limit;
 
             if (pObj->u32SlotsLeft == 0 && pObj->pCdtHead == NULL) {
+                soft_inc(&g_u32SoftDefHygieneDone);
                 continue;
             }
 
             /* Edges remain (budget or try-lock busy) — keep queued (R7). */
             if (pObj->pCdtHead != NULL) {
+                soft_inc(&g_u32SoftDefEdgeRemain);
                 /*
                  * Soft R2 defer: edges still linked after try-lock walks.
                  * Product mutex still missing — partial R2.
@@ -514,11 +848,18 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
                  */
                 if (!g_u8CdtR2SoftLogged) {
                     g_u8CdtR2SoftLogged = 1;
+                    soft_inc(&g_u32SoftR2DeferLog);
                     kprintf("cap:cdt R2 soft defer edges remain "
                             "spins_avoided=%u retries=%u slots_cleared=%u "
                             "soft_partial (once)\n",
                             g_u32R2SpinsAvoided, g_u32R2Retries,
                             g_u32R2SlotsCleared);
+                    /* Grep: cap: revoke soft r2 defer */
+                    kprintf("cap: revoke soft r2 defer edges_remain=1 "
+                            "outer_push=%u busy_edge=%u wave=%u "
+                            "soft_partial (once)\n",
+                            g_u32SoftR2OuterPush, g_u32SoftWalkBusyEdge,
+                            GJ_REVOKE_SOFT_WAVE);
                 }
                 continue;
             }
@@ -532,14 +873,21 @@ gj_revoke_process_deferred(u32 u32MaxSlots)
          * Grep: cap:cdt soft
          */
         if (pObj->u32SlotsLeft > 0 && pObj->pCdtHead == NULL) {
+            soft_inc(&g_u32SoftDefEmptyEdge);
             if (!g_u8CdtSoftLogged) {
                 g_u8CdtSoftLogged = 1;
                 kprintf("cap:cdt soft empty edges slots_left>0 (once)\n");
+                /* Grep: cap: revoke soft empty-edge */
+                kprintf("cap: revoke soft empty-edge slots_left=%u "
+                        "pending=%u wave=%u soft\n",
+                        pObj->u32SlotsLeft, gj_revoke_deferred_pending(),
+                        GJ_REVOKE_SOFT_WAVE);
             }
             g_u32RevokeQCursor = (iEnt + 1u) % u32Limit;
         }
     }
 
+    soft_revoke_inventory_maybe_once();
     return u32Cleared;
 }
 
@@ -547,25 +895,38 @@ int
 gj_obj_reclaim_ready(const struct gj_obj_hdr *pObj)
 {
     if (pObj == NULL) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGateSt);
         return 0;
     }
     if (__atomic_load_n(&pObj->u32State, __ATOMIC_ACQUIRE) !=
         (u32)GJ_OBJ_DEAD) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGateSt);
         return 0;
     }
     /* S6/R9: all derived slots invalidated, no kernel refs or pins */
     if (pObj->u32SlotsLeft != 0) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGateSlot);
         return 0;
     }
     if (pObj->pCdtHead != NULL) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGateCdt);
         return 0; /* soft CDT still has edges — walk must finish */
     }
     if (pObj->u32Ref != 0) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGateRef);
         return 0;
     }
     if (pObj->u32Pin != 0) {
+        soft_inc(&g_u32SoftReclaimNot);
+        soft_inc(&g_u32SoftReclaimGatePin);
         return 0;
     }
+    soft_inc(&g_u32SoftReclaimReady);
     return 1;
 }
 
@@ -575,9 +936,18 @@ gj_obj_reclaim(struct gj_obj_hdr *pObj)
     u32 iEnt;
 
     if (pObj == NULL) {
+        soft_inc(&g_u32SoftReclaimNull);
         return GJ_ERR_INVAL;
     }
     if (!gj_obj_reclaim_ready(pObj)) {
+        soft_inc(&g_u32SoftReclaimBusy);
+        /* Grep: cap: revoke soft reclaim busy */
+        if (g_u32SoftReclaimBusy == 1u) {
+            kprintf("cap: revoke soft reclaim busy gate_slot=%u gate_cdt=%u "
+                    "gate_ref=%u gate_pin=%u soft (once)\n",
+                    g_u32SoftReclaimGateSlot, g_u32SoftReclaimGateCdt,
+                    g_u32SoftReclaimGateRef, g_u32SoftReclaimGatePin);
+        }
         return GJ_ERR_BUSY;
     }
 
@@ -587,5 +957,12 @@ gj_obj_reclaim(struct gj_obj_hdr *pObj)
             revoke_q_drop(iEnt);
         }
     }
+    soft_inc(&g_u32SoftReclaimOk);
+    /* Grep: cap: revoke soft reclaim ok */
+    if (g_u32SoftReclaimOk == 1u) {
+        kprintf("cap: revoke soft reclaim ok wave=%u soft\n",
+                GJ_REVOKE_SOFT_WAVE);
+    }
+    soft_revoke_inventory_maybe_once();
     return GJ_OK;
 }

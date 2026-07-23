@@ -10,7 +10,7 @@
  * First few ICR writes are rate-limited to serial (greppable).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 10) — greppable "x2apic: soft …"
+ * Soft inventory (Wave 13 exclusive deepen) — greppable "x2apic: soft …"
  * -------------------------------------------------------------------------
  * Pure observation; never hard-gates IPI delivery. Counters wrap OK.
  * Prefix-stable product / smoke markers (agent greps):
@@ -21,6 +21,16 @@
  *   x2apic: soft last        — last dest/mode/vec/val snapshot
  *   x2apic: soft bringup     — PASS|idle|active INIT/SIPI verdict
  *   x2apic: soft eoi         — EOI MSR soft count (when mode on)
+ *   x2apic: soft msr         — ICR/self/EOI/APIC_BASE MSR catalog
+ *   x2apic: soft slots       — per-CPU enable table occupancy
+ *   x2apic: soft probe       — detect path tallies
+ *   x2apic: soft enable      — enable ok/fail/already/reason tallies
+ *   x2apic: soft ipi         — fixed/raw/self entry tallies
+ *   x2apic: soft self        — self-IPI MSR surface
+ *   x2apic: soft modes       — delivery-mode decode rollup + catalog
+ *   x2apic: soft query       — soft API accessor sample tallies
+ *   x2apic: soft path        — honesty: soft inventory ≠ bar3 / product
+ *   x2apic: soft PASS|FAIL|idle — soft lamp (never hard-gates)
  *
  * Legacy ICR soft lines kept: "x2apic: icr soft …" (bring-up continuity).
  * greppable: x2apic: soft
@@ -66,18 +76,34 @@ static volatile u8  g_u8IcrLastVec;
 static volatile u32 g_u32IcrSoftLogged;
 
 /*
- * Wave 10 soft path counters (sticky; wrap OK; never hard-gate).
+ * Wave 13 soft path counters (sticky; wrap OK; never hard-gate).
  * greppable: x2apic: soft stats
+ * greppable: x2apic: soft
  */
 static volatile u64 g_u64SoftProbe;
+static volatile u64 g_u64SoftProbeSupp;
+static volatile u64 g_u64SoftProbeUnsupp;
 static volatile u64 g_u64SoftEnableOk;
 static volatile u64 g_u64SoftEnableFail;
 static volatile u64 g_u64SoftEnableAlready;
+static volatile u64 g_u64SoftEnableFailUnsupp;
+static volatile u64 g_u64SoftEnableFailApic;
+static volatile u64 g_u64SoftEnableFailMsr;
 static volatile u64 g_u64SoftEoi;
 static volatile u64 g_u64SoftIpiFixed;
 static volatile u64 g_u64SoftIpiRaw;
 static volatile u64 g_u64SoftSelfIpi;
 static volatile u64 g_u64SoftInventoryLog;
+static volatile u64 g_u64SoftModeLowpri;
+static volatile u64 g_u64SoftModeSmi;
+static volatile u64 g_u64SoftModeNmi;
+static volatile u64 g_u64SoftModeExtint;
+static volatile u64 g_u64SoftEnabledQuery;
+static volatile u64 g_u64SoftSupportedQuery;
+static volatile u64 g_u64SoftIcrQuery;
+static volatile u64 g_u64SoftLogApi;
+static volatile u64 g_u64SoftPeakEnabledSlots;
+static volatile u8  g_fSoftInvOnce;
 
 static u64
 rdmsr(u32 u32Msr)
@@ -111,6 +137,18 @@ x2apic_soft_enabled_slots(void)
         }
     }
     return cEn;
+}
+
+/**
+ * Soft: note peak enabled-slot occupancy (wrap-safe peak).
+ * Pure observation — never changes enable table.
+ */
+static void
+x2apic_soft_note_enabled_peak(u32 cEn)
+{
+    if ((u64)cEn > g_u64SoftPeakEnabledSlots) {
+        g_u64SoftPeakEnabledSlots = (u64)cEn;
+    }
 }
 
 /**
@@ -150,6 +188,18 @@ x2apic_icr_soft_note(u64 u64Icr, int fSelf)
         g_u64IcrInit++;
     } else if (u8Mode == GJ_X2APIC_ICR_MODE_STARTUP) {
         g_u64IcrSipi++;
+    } else if (u8Mode == GJ_X2APIC_ICR_MODE_LOWPRI) {
+        g_u64SoftModeLowpri++;
+        g_u64IcrOther++;
+    } else if (u8Mode == GJ_X2APIC_ICR_MODE_SMI) {
+        g_u64SoftModeSmi++;
+        g_u64IcrOther++;
+    } else if (u8Mode == GJ_X2APIC_ICR_MODE_NMI) {
+        g_u64SoftModeNmi++;
+        g_u64IcrOther++;
+    } else if (u8Mode == GJ_X2APIC_ICR_MODE_EXTINT) {
+        g_u64SoftModeExtint++;
+        g_u64IcrOther++;
     } else {
         g_u64IcrOther++;
     }
@@ -163,7 +213,7 @@ x2apic_icr_soft_note(u64 u64Icr, int fSelf)
                 "val=0x%lx\n",
                 u32N + 1u, u32Dest, (unsigned)u8Mode, (unsigned)u8Vec,
                 (unsigned long)u64Icr);
-        /* Wave 10: x2apic: soft … */
+        /* Wave 13: x2apic: soft … */
         kprintf("x2apic: soft icr write n=%u dest=%u mode=%u vec=%u "
                 "val=0x%lx\n",
                 u32N + 1u, u32Dest, (unsigned)u8Mode, (unsigned)u8Vec,
@@ -172,7 +222,7 @@ x2apic_icr_soft_note(u64 u64Icr, int fSelf)
 }
 
 /**
- * Wave 10 soft inventory — greppable "x2apic: soft …" rollup.
+ * Wave 13 soft inventory — greppable "x2apic: soft …" rollup.
  * Safe anytime; pure observation; no heap; no hard-gate.
  * greppable: x2apic: soft inventory
  * greppable: x2apic: soft stats
@@ -180,18 +230,33 @@ x2apic_icr_soft_note(u64 u64Icr, int fSelf)
  * greppable: x2apic: soft icr
  * greppable: x2apic: soft last
  * greppable: x2apic: soft bringup
+ * greppable: x2apic: soft eoi
+ * greppable: x2apic: soft msr
+ * greppable: x2apic: soft slots
+ * greppable: x2apic: soft probe
+ * greppable: x2apic: soft enable
+ * greppable: x2apic: soft ipi
+ * greppable: x2apic: soft self
+ * greppable: x2apic: soft modes
+ * greppable: x2apic: soft query
+ * greppable: x2apic: soft path
+ * greppable: x2apic: soft PASS
  */
 static void
 x2apic_soft_inventory(void)
 {
     u32 u32Slot = cpu_id();
     u32 cEn;
+    u32 cFree;
     int fSupp;
     int fEn;
     u64 u64Base = 0;
     u32 fX2Bit = 0;
     u32 fGlobEn = 0;
+    u32 u32Bitmap = 0;
+    u32 iSlot;
     const char *szBringup;
+    const char *szLamp;
 
     g_u64SoftInventoryLog++;
 
@@ -199,8 +264,19 @@ x2apic_soft_inventory(void)
         u32Slot = 0;
     }
     cEn = x2apic_soft_enabled_slots();
+    x2apic_soft_note_enabled_peak(cEn);
+    cFree = (cEn < X2APIC_SOFT_CPU_SLOTS)
+                ? (X2APIC_SOFT_CPU_SLOTS - cEn)
+                : 0u;
     fSupp = (g_fSupported > 0) ? 1 : 0;
     fEn = (g_aEnabled[u32Slot] != 0) ? 1 : 0;
+
+    /* Soft enable-slot bitmap (low 16 bits; one lamp per CPU slot). */
+    for (iSlot = 0; iSlot < X2APIC_SOFT_CPU_SLOTS; iSlot++) {
+        if (g_aEnabled[iSlot] != 0) {
+            u32Bitmap |= (1u << iSlot);
+        }
+    }
 
     /* Live IA32_APIC_BASE peek only when mode is on (else may be pre-apic). */
     if (fEn) {
@@ -209,25 +285,56 @@ x2apic_soft_inventory(void)
         fGlobEn = (u64Base & APIC_BASE_ENABLE) ? 1u : 0u;
     }
 
+    if (g_u64IcrInit != 0 || g_u64IcrSipi != 0) {
+        szBringup = "PASS";
+    } else if (g_u64IcrWrites == 0 && g_u64IcrSelf == 0) {
+        szBringup = "idle";
+    } else {
+        szBringup = "active";
+    }
+
+    /*
+     * Soft lamp (never hard-gates): PASS when feature supported and at
+     * least one slot enabled; idle when never probed; FAIL when probe
+     * saw unsupported or enable_fail without any ok.
+     */
+    if (fSupp != 0 && cEn > 0) {
+        szLamp = "PASS";
+    } else if (g_u64SoftProbe == 0 && g_u64SoftEnableOk == 0 &&
+               g_u64SoftEnableFail == 0) {
+        szLamp = "idle";
+    } else if (fSupp == 0 && g_fSupported >= 0) {
+        szLamp = "FAIL";
+    } else if (g_u64SoftEnableFail != 0 && g_u64SoftEnableOk == 0) {
+        szLamp = "FAIL";
+    } else {
+        szLamp = "idle";
+    }
+
     /*
      * Catalog: fixed surface (MSRs, delivery modes, slots) so scripts can
      * grep product depth without parsing C. P-IRQ-1 / P-SMP-3 product path.
+     * Wave 13 deepen splits msr/slots/probe/enable/ipi/self/modes/query/path.
      */
     /* Grep: x2apic: soft inventory */
     kprintf("x2apic: soft inventory slots=%u msr_icr=0x%x msr_self=0x%x "
             "msr_eoi=0x%x msr_apic_base=0x%x x2bit=10 glob_en_bit=11 "
             "modes=fixed,lowpri,smi,nmi,init,startup,extint "
             "cpuid_leaf1_ecx21=1 p_irq1=1 p_smp3=1 "
-            "rate_log_max=%u wave=10\n",
+            "rate_log_max=%u enabled_slots=%u peak_slots=%lu "
+            "log_n=%lu wave=13\n",
             (unsigned)X2APIC_SOFT_CPU_SLOTS,
             (unsigned)X2APIC_MSR_ICR, (unsigned)X2APIC_MSR_SELF_IPI,
             (unsigned)X2APIC_MSR_EOI, (unsigned)IA32_APIC_BASE_MSR,
-            (unsigned)X2APIC_ICR_SOFT_LOG_MAX);
+            (unsigned)X2APIC_ICR_SOFT_LOG_MAX, cEn,
+            (unsigned long)g_u64SoftPeakEnabledSlots,
+            (unsigned long)g_u64SoftInventoryLog);
 
     /* Grep: x2apic: soft stats */
     kprintf("x2apic: soft stats probe=%lu enable_ok=%lu enable_fail=%lu "
             "enable_already=%lu eoi=%lu ipi_fixed=%lu ipi_raw=%lu "
-            "self_ipi=%lu inv_log=%lu icr_rate_logged=%u\n",
+            "self_ipi=%lu inv_log=%lu icr_rate_logged=%u "
+            "query=%lu log_api=%lu wave=13\n",
             (unsigned long)g_u64SoftProbe,
             (unsigned long)g_u64SoftEnableOk,
             (unsigned long)g_u64SoftEnableFail,
@@ -237,33 +344,32 @@ x2apic_soft_inventory(void)
             (unsigned long)g_u64SoftIpiRaw,
             (unsigned long)g_u64SoftSelfIpi,
             (unsigned long)g_u64SoftInventoryLog,
-            (unsigned)g_u32IcrSoftLogged);
+            (unsigned)g_u32IcrSoftLogged,
+            (unsigned long)g_u64SoftIcrQuery,
+            (unsigned long)g_u64SoftLogApi);
 
     /* Grep: x2apic: soft mode */
     kprintf("x2apic: soft mode supported=%d enabled=%d cpu=%u "
-            "enabled_slots=%u apic_base=0x%lx x2bit=%u glob_en=%u\n",
-            fSupp, fEn, u32Slot, cEn,
-            (unsigned long)u64Base, fX2Bit, fGlobEn);
+            "enabled_slots=%u free_slots=%u apic_base=0x%lx x2bit=%u "
+            "glob_en=%u peak_slots=%lu\n",
+            fSupp, fEn, u32Slot, cEn, cFree,
+            (unsigned long)u64Base, fX2Bit, fGlobEn,
+            (unsigned long)g_u64SoftPeakEnabledSlots);
 
     /* Grep: x2apic: soft icr */
     kprintf("x2apic: soft icr writes=%lu fixed=%lu init=%lu sipi=%lu "
-            "self=%lu other=%lu\n",
+            "self=%lu other=%lu rate_logged=%u rate_max=%u\n",
             (unsigned long)g_u64IcrWrites, (unsigned long)g_u64IcrFixed,
             (unsigned long)g_u64IcrInit, (unsigned long)g_u64IcrSipi,
-            (unsigned long)g_u64IcrSelf, (unsigned long)g_u64IcrOther);
+            (unsigned long)g_u64IcrSelf, (unsigned long)g_u64IcrOther,
+            (unsigned)g_u32IcrSoftLogged,
+            (unsigned)X2APIC_ICR_SOFT_LOG_MAX);
 
     /* Grep: x2apic: soft last */
     kprintf("x2apic: soft last dest=%u mode=%u vec=%u val=0x%lx\n",
             g_u32IcrLastDest, (unsigned)g_u8IcrLastMode,
             (unsigned)g_u8IcrLastVec, (unsigned long)g_u64IcrLast);
 
-    if (g_u64IcrInit != 0 || g_u64IcrSipi != 0) {
-        szBringup = "PASS";
-    } else if (g_u64IcrWrites == 0 && g_u64IcrSelf == 0) {
-        szBringup = "idle";
-    } else {
-        szBringup = "active";
-    }
     /* Grep: x2apic: soft bringup */
     kprintf("x2apic: soft bringup %s init=%lu sipi=%lu writes=%lu "
             "self=%lu fixed=%lu other=%lu enabled_slots=%u\n",
@@ -276,6 +382,124 @@ x2apic_soft_inventory(void)
     /* Grep: x2apic: soft eoi */
     kprintf("x2apic: soft eoi count=%lu (msr=0x%x when mode on)\n",
             (unsigned long)g_u64SoftEoi, (unsigned)X2APIC_MSR_EOI);
+
+    /* Grep: x2apic: soft msr — fixed MSR surface (Wave 13 deepen) */
+    kprintf("x2apic: soft msr icr=0x%x self_ipi=0x%x eoi=0x%x "
+            "apic_base=0x%x x2bit=10 glob_en_bit=11 "
+            "cpuid_leaf=1 ecx_bit=21 apic_base_live=0x%lx "
+            "x2bit_live=%u glob_en_live=%u\n",
+            (unsigned)X2APIC_MSR_ICR, (unsigned)X2APIC_MSR_SELF_IPI,
+            (unsigned)X2APIC_MSR_EOI, (unsigned)IA32_APIC_BASE_MSR,
+            (unsigned long)u64Base, fX2Bit, fGlobEn);
+
+    /* Grep: x2apic: soft slots — per-CPU enable occupancy */
+    kprintf("x2apic: soft slots max=%u used=%u free=%u peak=%lu "
+            "bitmap=0x%x cpu=%u this_en=%d\n",
+            (unsigned)X2APIC_SOFT_CPU_SLOTS, cEn, cFree,
+            (unsigned long)g_u64SoftPeakEnabledSlots, u32Bitmap,
+            u32Slot, fEn);
+
+    /* Grep: x2apic: soft probe — detect path tallies */
+    kprintf("x2apic: soft probe enter=%lu supp=%lu unsupp=%lu "
+            "supported=%d last_cpu=%u enable=after_smp\n",
+            (unsigned long)g_u64SoftProbe,
+            (unsigned long)g_u64SoftProbeSupp,
+            (unsigned long)g_u64SoftProbeUnsupp,
+            fSupp, u32Slot);
+
+    /* Grep: x2apic: soft enable — enable path reason split */
+    kprintf("x2apic: soft enable ok=%lu fail=%lu already=%lu "
+            "fail_unsupp=%lu fail_apic=%lu fail_msr=%lu "
+            "enabled_slots=%u peak_slots=%lu\n",
+            (unsigned long)g_u64SoftEnableOk,
+            (unsigned long)g_u64SoftEnableFail,
+            (unsigned long)g_u64SoftEnableAlready,
+            (unsigned long)g_u64SoftEnableFailUnsupp,
+            (unsigned long)g_u64SoftEnableFailApic,
+            (unsigned long)g_u64SoftEnableFailMsr,
+            cEn, (unsigned long)g_u64SoftPeakEnabledSlots);
+
+    /* Grep: x2apic: soft ipi — fixed/raw entry tallies */
+    kprintf("x2apic: soft ipi fixed=%lu raw=%lu self=%lu "
+            "icr_writes=%lu icr_fixed=%lu path=msr_0x830\n",
+            (unsigned long)g_u64SoftIpiFixed,
+            (unsigned long)g_u64SoftIpiRaw,
+            (unsigned long)g_u64SoftSelfIpi,
+            (unsigned long)g_u64IcrWrites,
+            (unsigned long)g_u64IcrFixed);
+
+    /* Grep: x2apic: soft self — self-IPI MSR surface */
+    kprintf("x2apic: soft self count=%lu msr=0x%x last_vec=%u "
+            "last_dest=0 path=self_ipi_vector_only\n",
+            (unsigned long)g_u64IcrSelf, (unsigned)X2APIC_MSR_SELF_IPI,
+            (unsigned)g_u8IcrLastVec);
+
+    /* Grep: x2apic: soft modes — delivery-mode decode rollup */
+    kprintf("x2apic: soft modes fixed=%lu lowpri=%lu smi=%lu nmi=%lu "
+            "init=%lu sipi=%lu extint=%lu other=%lu "
+            "catalog=fixed,lowpri,smi,nmi,init,startup,extint\n",
+            (unsigned long)g_u64IcrFixed,
+            (unsigned long)g_u64SoftModeLowpri,
+            (unsigned long)g_u64SoftModeSmi,
+            (unsigned long)g_u64SoftModeNmi,
+            (unsigned long)g_u64IcrInit,
+            (unsigned long)g_u64IcrSipi,
+            (unsigned long)g_u64SoftModeExtint,
+            (unsigned long)g_u64IcrOther);
+
+    /* Grep: x2apic: soft query — soft API accessor samples */
+    kprintf("x2apic: soft query enabled=%lu supported=%lu icr_api=%lu "
+            "log_api=%lu inv_log=%lu\n",
+            (unsigned long)g_u64SoftEnabledQuery,
+            (unsigned long)g_u64SoftSupportedQuery,
+            (unsigned long)g_u64SoftIcrQuery,
+            (unsigned long)g_u64SoftLogApi,
+            (unsigned long)g_u64SoftInventoryLog);
+
+    /* Grep: x2apic: soft path — honesty / product claim bounds */
+    kprintf("x2apic: soft path claim=msr_icr+self_ipi+eoi "
+            "dest=32bit_apic_id cpuid_ecx21=1 p_irq1=1 p_smp3=1 "
+            "mmio_icr=0 hard_gate=0 rate_log_max=%u slots=%u "
+            "wave=13 (soft inventory; not bar3)\n",
+            (unsigned)X2APIC_ICR_SOFT_LOG_MAX,
+            (unsigned)X2APIC_SOFT_CPU_SLOTS);
+
+    /* Grep: x2apic: soft PASS | FAIL | idle */
+    kprintf("x2apic: soft %s supported=%d enabled_slots=%u "
+            "enable_ok=%lu enable_fail=%lu bringup=%s wave=13\n",
+            szLamp, fSupp, cEn,
+            (unsigned long)g_u64SoftEnableOk,
+            (unsigned long)g_u64SoftEnableFail,
+            szBringup);
+    if (szLamp[0] == 'P') {
+        /* Grep: x2apic: soft PASS */
+        kprintf("x2apic: soft PASS\n");
+    } else if (szLamp[0] == 'F') {
+        /* Grep: x2apic: soft FAIL */
+        kprintf("x2apic: soft FAIL\n");
+    } else {
+        /* Grep: x2apic: soft idle */
+        kprintf("x2apic: soft idle\n");
+    }
+}
+
+/**
+ * After first product enable/IPI/EOI activity, print soft inventory once
+ * (mirrors futex/input_hub soft-stats-once). Diagnostics only.
+ */
+static void
+x2apic_soft_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u64SoftEnableOk == 0 && g_u64SoftEnableFail == 0 &&
+        g_u64SoftIpiFixed == 0 && g_u64SoftIpiRaw == 0 &&
+        g_u64SoftSelfIpi == 0 && g_u64SoftEoi == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    x2apic_soft_inventory();
 }
 
 int
@@ -285,6 +509,8 @@ x2apic_supported(void)
     u32 u32Ebx;
     u32 u32Ecx;
     u32 u32Edx;
+
+    g_u64SoftSupportedQuery++;
 
     if (g_fSupported >= 0) {
         return g_fSupported;
@@ -311,6 +537,8 @@ x2apic_enabled(void)
 {
     u32 u32Slot = cpu_id();
 
+    g_u64SoftEnabledQuery++;
+
     if (u32Slot >= X2APIC_SOFT_CPU_SLOTS) {
         u32Slot = 0;
     }
@@ -322,12 +550,19 @@ x2apic_enable(void)
 {
     u64 u64Base;
     u32 u32Slot = cpu_id();
+    u32 cEn;
 
     if (!x2apic_supported()) {
         g_u64SoftEnableFail++;
+        g_u64SoftEnableFailUnsupp++;
         /* Grep: x2apic: soft mode (enable reject) */
         kprintf("x2apic: soft mode enable FAIL reason=unsupported cpu=%u\n",
                 u32Slot);
+        /* Grep: x2apic: soft enable */
+        kprintf("x2apic: soft enable FAIL reason=unsupported cpu=%u "
+                "fail_unsupp=%lu\n",
+                u32Slot, (unsigned long)g_u64SoftEnableFailUnsupp);
+        x2apic_soft_maybe_once();
         return -1;
     }
     if (u32Slot >= X2APIC_SOFT_CPU_SLOTS) {
@@ -335,12 +570,20 @@ x2apic_enable(void)
     }
     if (g_aEnabled[u32Slot]) {
         g_u64SoftEnableAlready++;
+        /* Grep: x2apic: soft enable */
+        kprintf("x2apic: soft enable already cpu=%u enabled_slots=%u\n",
+                u32Slot, x2apic_soft_enabled_slots());
         return 0;
     }
     if (!apic_ready()) {
         g_u64SoftEnableFail++;
+        g_u64SoftEnableFailApic++;
         kprintf("x2apic: soft mode enable FAIL reason=apic_not_ready "
                 "cpu=%u\n", u32Slot);
+        kprintf("x2apic: soft enable FAIL reason=apic_not_ready cpu=%u "
+                "fail_apic=%lu\n",
+                u32Slot, (unsigned long)g_u64SoftEnableFailApic);
+        x2apic_soft_maybe_once();
         return -1;
     }
 
@@ -353,13 +596,21 @@ x2apic_enable(void)
     u64Base = rdmsr(IA32_APIC_BASE_MSR);
     if ((u64Base & APIC_BASE_X2APIC) == 0) {
         g_u64SoftEnableFail++;
+        g_u64SoftEnableFailMsr++;
         kprintf("x2apic: enable failed cpu=%u\n", u32Slot);
         kprintf("x2apic: soft mode enable FAIL reason=msr_reject cpu=%u "
                 "apic_base=0x%lx\n", u32Slot, (unsigned long)u64Base);
+        kprintf("x2apic: soft enable FAIL reason=msr_reject cpu=%u "
+                "apic_base=0x%lx fail_msr=%lu\n",
+                u32Slot, (unsigned long)u64Base,
+                (unsigned long)g_u64SoftEnableFailMsr);
+        x2apic_soft_maybe_once();
         return -1;
     }
     g_aEnabled[u32Slot] = 1;
     g_u64SoftEnableOk++;
+    cEn = x2apic_soft_enabled_slots();
+    x2apic_soft_note_enabled_peak(cEn);
     kprintf("x2apic: mode enabled cpu=%u\n", u32Slot);
     /* Soft: ICR path is live on this CPU (MSR 0x830). */
     kprintf("x2apic: icr soft ready cpu=%u writes=%lu\n", u32Slot,
@@ -367,9 +618,14 @@ x2apic_enable(void)
     /* Grep: x2apic: soft mode */
     kprintf("x2apic: soft mode enable PASS cpu=%u apic_base=0x%lx "
             "enabled_slots=%u writes=%lu\n",
-            u32Slot, (unsigned long)u64Base,
-            x2apic_soft_enabled_slots(),
+            u32Slot, (unsigned long)u64Base, cEn,
             (unsigned long)g_u64IcrWrites);
+    /* Grep: x2apic: soft enable */
+    kprintf("x2apic: soft enable PASS cpu=%u apic_base=0x%lx "
+            "enabled_slots=%u peak_slots=%lu\n",
+            u32Slot, (unsigned long)u64Base, cEn,
+            (unsigned long)g_u64SoftPeakEnabledSlots);
+    x2apic_soft_maybe_once();
     return 0;
 }
 
@@ -379,6 +635,7 @@ x2apic_send_ipi_raw(u64 u64Icr)
     g_u64SoftIpiRaw++;
     x2apic_icr_soft_note(u64Icr, 0);
     wrmsr(X2APIC_MSR_ICR, u64Icr);
+    x2apic_soft_maybe_once();
 }
 
 void
@@ -400,6 +657,7 @@ x2apic_send_self_ipi(u8 u8Vector)
     g_u64SoftSelfIpi++;
     x2apic_icr_soft_note((u64)u8Vector, 1);
     wrmsr(X2APIC_MSR_SELF_IPI, (u64)u8Vector);
+    x2apic_soft_maybe_once();
 }
 
 void
@@ -407,6 +665,7 @@ x2apic_eoi(void)
 {
     g_u64SoftEoi++;
     wrmsr(X2APIC_MSR_EOI, 0);
+    x2apic_soft_maybe_once();
 }
 
 void
@@ -415,15 +674,27 @@ x2apic_probe(void)
     int f = x2apic_supported();
 
     g_u64SoftProbe++;
+    if (f != 0) {
+        g_u64SoftProbeSupp++;
+    } else {
+        g_u64SoftProbeUnsupp++;
+    }
 
     /* Detect only — enable after timer calibrate + AP bring-up (safer order). */
     kprintf("x2apic: supported=%d (enable after SMP)\n", f);
     kprintf("x2apic: icr soft counters armed (writes=0 until mode+ICR)\n");
     /* Grep: x2apic: soft mode (probe) */
     kprintf("x2apic: soft mode probe supported=%d cpu=%u "
-            "enable=after_smp wave=10\n",
+            "enable=after_smp wave=13\n",
             f, cpu_id());
-    /* Wave 10 soft inventory at detect (idle ICR expected). */
+    /* Grep: x2apic: soft probe */
+    kprintf("x2apic: soft probe supported=%d cpu=%u enter=%lu "
+            "supp=%lu unsupp=%lu wave=13\n",
+            f, cpu_id(),
+            (unsigned long)g_u64SoftProbe,
+            (unsigned long)g_u64SoftProbeSupp,
+            (unsigned long)g_u64SoftProbeUnsupp);
+    /* Wave 13 soft inventory at detect (idle ICR expected). */
     x2apic_soft_inventory();
 }
 
@@ -432,66 +703,78 @@ x2apic_probe(void)
 u64
 x2apic_icr_soft_writes(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrWrites;
 }
 
 u64
 x2apic_icr_soft_fixed(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrFixed;
 }
 
 u64
 x2apic_icr_soft_init(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrInit;
 }
 
 u64
 x2apic_icr_soft_sipi(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrSipi;
 }
 
 u64
 x2apic_icr_soft_self(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrSelf;
 }
 
 u64
 x2apic_icr_soft_other(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrOther;
 }
 
 u64
 x2apic_icr_soft_last(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u64IcrLast;
 }
 
 u32
 x2apic_icr_soft_last_dest(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u32IcrLastDest;
 }
 
 u8
 x2apic_icr_soft_last_mode(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u8IcrLastMode;
 }
 
 u8
 x2apic_icr_soft_last_vector(void)
 {
+    g_u64SoftIcrQuery++;
     return g_u8IcrLastVec;
 }
 
 void
 x2apic_icr_soft_log(void)
 {
+    g_u64SoftLogApi++;
+
     /*
      * Legacy greppable soft summary (product / smoke inventory):
      *   x2apic: icr soft writes=… fixed=… init=… sipi=… self=… other=…
@@ -515,6 +798,6 @@ x2apic_icr_soft_log(void)
         kprintf("x2apic: icr soft active (no INIT/SIPI — fixed/self only)\n");
     }
 
-    /* Wave 10: full soft inventory under greppable "x2apic: soft …". */
+    /* Wave 13: full soft inventory under greppable "x2apic: soft …". */
     x2apic_soft_inventory();
 }

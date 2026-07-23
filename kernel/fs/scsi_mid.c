@@ -9,6 +9,13 @@
  * CDB helpers fill gj_scsi_cdb; scsi_mid_submit prefers virtio-scsi when
  * ready, else a software LUN (soft path) so door / store CAP / smokes work
  * without an HBA. Product remains userspace mid + real host.
+ *
+ * Soft inventory (Wave 13 exclusive deepen — this unit only):
+ *   - Submit enter / ok / fail; per-op ok tallies; transport path lamps
+ *   - Virtio-fail → soft LUN sticky fallback remains product critical path
+ *     (INQUIRY / door smokes) — inventory never mutates that arm
+ *   greppable: "scsi_mid: soft …"
+ *   Never hard-gates; diagnostics / smoke grep only (wrap OK).
  */
 #include <gj/klog.h>
 #include <gj/scsi_mid.h>
@@ -22,6 +29,41 @@ static u32 g_u32IoOk;
 static u32 g_u32IoFail;
 
 /*
+ * Soft product inventory (Wave 13 exclusive). Cumulative path tallies.
+ * greppable: scsi_mid: soft …
+ */
+static u32 g_u32SoftEnter;       /* scsi_mid_submit entries past null-guard */
+static u32 g_u32SoftOk;          /* submit returned 0 */
+static u32 g_u32SoftFail;        /* submit returned -1 */
+static u32 g_u32SoftOpTur;       /* TEST UNIT READY ok */
+static u32 g_u32SoftOpSense;     /* REQUEST SENSE ok */
+static u32 g_u32SoftOpInq;       /* INQUIRY ok */
+static u32 g_u32SoftOpMode;      /* MODE SENSE(6) ok */
+static u32 g_u32SoftOpReadCap;   /* READ CAPACITY(10) ok */
+static u32 g_u32SoftOpRead10;    /* READ(10) ok */
+static u32 g_u32SoftOpWrite10;   /* WRITE(10) ok */
+static u32 g_u32SoftOpSync;      /* SYNCHRONIZE CACHE ok */
+static u32 g_u32SoftOpOther;     /* other opcode ok */
+static u32 g_u32SoftViaVirtio;   /* completed on virtio path */
+static u32 g_u32SoftViaSoft;     /* completed on direct soft LUN */
+static u32 g_u32SoftViaFallback; /* virtio fail → soft LUN success */
+static u32 g_u32SoftVirtioTry;   /* virtio_scsi_submit attempts */
+static u32 g_u32SoftVirtioFail;  /* virtio_scsi_submit non-zero */
+static u32 g_u32SoftPreferArm;   /* sticky prefer soft armed */
+static u32 g_u32SoftDenyNull;    /* pReq == NULL while inited */
+static u32 g_u32SoftDenyNotInit; /* !g_fInited */
+static u32 g_u32SoftDenyNullData;/* cbData > 0 && pData == NULL */
+static u32 g_u32SoftDenyCdbLen;  /* bad CDB length */
+static u32 g_u32SoftDenyCdbExp;  /* known-opcode length mismatch */
+static u32 g_u32SoftDenyNoPath;  /* neither virtio nor soft */
+static u32 g_u32SoftSoftCheck;   /* soft_submit returned CHECK / -1 */
+static u32 g_u32SoftInitCalls;   /* scsi_mid_init entries */
+static u32 g_u32SoftReadyCalls;  /* scsi_mid_ready entries */
+static u32 g_u32SoftActiveCalls; /* scsi_mid_soft_active entries */
+static u32 g_u32SoftInvSamples;  /* soft inventory dump count */
+static u8  g_fSoftOnce;          /* one-shot after first submit activity */
+
+/*
  * Soft LUN: tiny direct-access disk for interim bring-up (product=userspace).
  * Geometry: GJ_SCSI_SOFT_SECTORS × GJ_SCSI_SOFT_SEC_SIZE.
  */
@@ -29,6 +71,11 @@ static u8 g_aSoftDisk[GJ_SCSI_SOFT_SECTORS][GJ_SCSI_SOFT_SEC_SIZE]
     __attribute__((aligned(16)));
 static u8 g_aSoftUnitSense[GJ_SCSI_SENSE_MAX];
 static u8 g_u8SoftUnitSenseLen;
+
+static void soft_inc(u32 *pCtr);
+static void soft_inventory_log(const char *szVia);
+static void soft_maybe_once(void);
+static void soft_note_op_ok(u8 u8Op);
 
 /* ---- CDB builders ------------------------------------------------------- */
 
@@ -492,6 +539,172 @@ soft_submit(struct gj_scsi_request *pReq)
     }
 }
 
+/* ---- Soft inventory (Wave 13 exclusive) --------------------------------- */
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/** Soft: classify successful opcode for greppable per-op lamps. */
+static void
+soft_note_op_ok(u8 u8Op)
+{
+    switch (u8Op) {
+    case GJ_SCSI_OP_TEST_UNIT:
+        soft_inc(&g_u32SoftOpTur);
+        break;
+    case GJ_SCSI_OP_REQUEST_SENSE:
+        soft_inc(&g_u32SoftOpSense);
+        break;
+    case GJ_SCSI_OP_INQUIRY:
+        soft_inc(&g_u32SoftOpInq);
+        break;
+    case GJ_SCSI_OP_MODE_SENSE_6:
+        soft_inc(&g_u32SoftOpMode);
+        break;
+    case GJ_SCSI_OP_READ_CAPACITY_10:
+        soft_inc(&g_u32SoftOpReadCap);
+        break;
+    case GJ_SCSI_OP_READ_10:
+        soft_inc(&g_u32SoftOpRead10);
+        break;
+    case GJ_SCSI_OP_WRITE_10:
+        soft_inc(&g_u32SoftOpWrite10);
+        break;
+    case GJ_SCSI_OP_SYNCHRONIZE_CACHE:
+        soft_inc(&g_u32SoftOpSync);
+        break;
+    default:
+        soft_inc(&g_u32SoftOpOther);
+        break;
+    }
+}
+
+/**
+ * Greppable soft scsi_mid inventory (Wave 13 exclusive; product / smoke).
+ * Prefix-stable markers (scsi_mid: soft …):
+ *   scsi_mid: soft inventory  — enter/ok/fail + mid lamps + log_n
+ *   scsi_mid: soft op         — per-op ok tallies
+ *   scsi_mid: soft transport  — virtio/soft/fallback path lamps
+ *   scsi_mid: soft deny       — soft reject reason catalog
+ *   scsi_mid: soft geometry   — soft LUN geometry
+ *   scsi_mid: soft path       — honesty: kernel mid ≠ product scsi_mid
+ *   scsi_mid: soft inventory PASS / scsi_mid: soft PASS
+ *
+ * Never hard-gates; does not change virtio→soft INQUIRY fallback.
+ * greppable: scsi_mid: soft
+ */
+static void
+soft_inventory_log(const char *szVia)
+{
+    const char *szViaSafe;
+    u32         u32Ready;
+    u32         u32SoftAct;
+    u32         u32Virtio;
+    u32         u32Prefer;
+    int         fSoftPass;
+
+    soft_inc(&g_u32SoftInvSamples);
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
+    u32Virtio = virtio_scsi_ready() ? 1u : 0u;
+    u32Prefer = g_fVirtioSoftPrefer ? 1u : 0u;
+    u32Ready = (g_fInited && (u32Virtio != 0 || g_fSoft)) ? 1u : 0u;
+    /* Match scsi_mid_soft_active(): soft armed and virtio not ready. */
+    u32SoftAct = (g_fInited && g_fSoft && u32Virtio == 0) ? 1u : 0u;
+
+    /* Grep: scsi_mid: soft inventory */
+    kprintf("scsi_mid: soft inventory via=%s wave=13 enter=%u ok=%u fail=%u "
+            "ios=%u fails=%u mid_ready=%u soft_lun=%u soft_armed=%u "
+            "virtio=%u prefer_soft=%u stats_ready=%u stats_active=%u "
+            "inits=%u logs=%u product=userspace_scsi_mid\n",
+            szViaSafe, g_u32SoftEnter, g_u32SoftOk, g_u32SoftFail, g_u32IoOk,
+            g_u32IoFail, u32Ready, u32SoftAct, g_fSoft ? 1 : 0, u32Virtio,
+            u32Prefer, g_u32SoftReadyCalls, g_u32SoftActiveCalls,
+            g_u32SoftInitCalls, g_u32SoftInvSamples);
+
+    /* Grep: scsi_mid: soft op */
+    kprintf("scsi_mid: soft op tur=%u sense=%u inq=%u mode=%u readcap=%u "
+            "read10=%u write10=%u sync=%u other=%u\n",
+            g_u32SoftOpTur, g_u32SoftOpSense, g_u32SoftOpInq, g_u32SoftOpMode,
+            g_u32SoftOpReadCap, g_u32SoftOpRead10, g_u32SoftOpWrite10,
+            g_u32SoftOpSync, g_u32SoftOpOther);
+
+    /* Grep: scsi_mid: soft transport */
+    kprintf("scsi_mid: soft transport virtio_try=%u virtio_fail=%u "
+            "via_virtio=%u via_soft=%u via_fallback=%u prefer_arm=%u "
+            "prefer_sticky=%u soft_check=%u\n",
+            g_u32SoftVirtioTry, g_u32SoftVirtioFail, g_u32SoftViaVirtio,
+            g_u32SoftViaSoft, g_u32SoftViaFallback, g_u32SoftPreferArm,
+            u32Prefer, g_u32SoftSoftCheck);
+
+    /* Grep: scsi_mid: soft deny */
+    kprintf("scsi_mid: soft deny null_req=%u not_init=%u null_data=%u "
+            "cdb_len=%u cdb_exp=%u no_path=%u soft_check=%u fail_total=%u\n",
+            g_u32SoftDenyNull, g_u32SoftDenyNotInit, g_u32SoftDenyNullData,
+            g_u32SoftDenyCdbLen, g_u32SoftDenyCdbExp, g_u32SoftDenyNoPath,
+            g_u32SoftSoftCheck, g_u32SoftFail);
+
+    /* Grep: scsi_mid: soft geometry */
+    kprintf("scsi_mid: soft geometry sectors=%u sec_size=%u bytes=%u "
+            "sense_max=%u cdb_max=%u\n",
+            (unsigned)GJ_SCSI_SOFT_SECTORS, (unsigned)GJ_SCSI_SOFT_SEC_SIZE,
+            (unsigned)(GJ_SCSI_SOFT_SECTORS * GJ_SCSI_SOFT_SEC_SIZE),
+            (unsigned)GJ_SCSI_SENSE_MAX, (unsigned)GJ_SCSI_CDB_MAX);
+
+    /*
+     * Honesty line: kernel mid is interim only.
+     * Grep: scsi_mid: soft path
+     */
+    kprintf("scsi_mid: soft path claim=kernel_mid_interim "
+            "product_userspace_scsi_mid=1 virtio_preferred=1 "
+            "soft_lun_fallback=1 sticky_prefer_soft=1 "
+            "inquiry_soft_fallback=1 via=%s "
+            "(soft inventory; not bar3)\n",
+            szViaSafe);
+
+    /*
+     * Soft lamp only — mid ready (soft LUN or virtio). Never hard-gates.
+     * Grep: scsi_mid: soft inventory PASS | scsi_mid: soft PASS
+     * Grep: scsi_mid: soft FAIL
+     */
+    fSoftPass = (u32Ready != 0) ? 1 : 0;
+    if (fSoftPass != 0) {
+        kprintf("scsi_mid: soft inventory PASS via=%s logs=%u "
+                "mid_ready=%u soft_lun=%u virtio=%u prefer_soft=%u\n",
+                szViaSafe, g_u32SoftInvSamples, u32Ready, u32SoftAct,
+                u32Virtio, u32Prefer);
+        kprintf("scsi_mid: soft PASS via=%s\n", szViaSafe);
+    } else {
+        kprintf("scsi_mid: soft FAIL via=%s mid_ready=0 "
+                "(soft inventory only; not product gate)\n",
+                szViaSafe);
+    }
+}
+
+/**
+ * After first product submit activity, print soft inventory once
+ * (mirrors door/futex soft-stats-once). Safe from submit return paths.
+ * Does not touch virtio→soft fallback control flow.
+ */
+static void
+soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_u32SoftEnter == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    soft_inventory_log("once");
+}
+
 /* ---- Mid public surface ------------------------------------------------- */
 
 void
@@ -502,6 +715,37 @@ scsi_mid_init(void)
     g_fVirtioSoftPrefer = 0;
     g_u32IoOk = 0;
     g_u32IoFail = 0;
+    /* Soft inventory tallies reset with mid (bring-up re-init safe). */
+    g_u32SoftEnter = 0;
+    g_u32SoftOk = 0;
+    g_u32SoftFail = 0;
+    g_u32SoftOpTur = 0;
+    g_u32SoftOpSense = 0;
+    g_u32SoftOpInq = 0;
+    g_u32SoftOpMode = 0;
+    g_u32SoftOpReadCap = 0;
+    g_u32SoftOpRead10 = 0;
+    g_u32SoftOpWrite10 = 0;
+    g_u32SoftOpSync = 0;
+    g_u32SoftOpOther = 0;
+    g_u32SoftViaVirtio = 0;
+    g_u32SoftViaSoft = 0;
+    g_u32SoftViaFallback = 0;
+    g_u32SoftVirtioTry = 0;
+    g_u32SoftVirtioFail = 0;
+    g_u32SoftPreferArm = 0;
+    g_u32SoftDenyNull = 0;
+    g_u32SoftDenyNotInit = 0;
+    g_u32SoftDenyNullData = 0;
+    g_u32SoftDenyCdbLen = 0;
+    g_u32SoftDenyCdbExp = 0;
+    g_u32SoftDenyNoPath = 0;
+    g_u32SoftSoftCheck = 0;
+    g_u32SoftReadyCalls = 0;
+    g_u32SoftActiveCalls = 0;
+    g_u32SoftInvSamples = 0;
+    g_fSoftOnce = 0;
+    soft_inc(&g_u32SoftInitCalls);
     memset(g_aSoftDisk, 0, sizeof(g_aSoftDisk));
     soft_sense_clear();
     /* virtio_scsi may still be probing; ready() reflects transport|soft. */
@@ -509,17 +753,26 @@ scsi_mid_init(void)
             "secs=%u (product=userspace)\n",
             virtio_scsi_ready() ? 1 : 0, g_fSoft ? 1 : 0,
             GJ_SCSI_SOFT_SECTORS);
+    /* Wave 13 soft inventory baseline (greppable scsi_mid: soft …). */
+    soft_inventory_log("init");
 }
 
 int
 scsi_mid_ready(void)
 {
+    soft_inc(&g_u32SoftReadyCalls);
     return g_fInited && (virtio_scsi_ready() || g_fSoft);
 }
 
 int
 scsi_mid_soft_active(void)
 {
+    soft_inc(&g_u32SoftActiveCalls);
+    /*
+     * Historical semantics: soft LUN armed and virtio not ready.
+     * Sticky prefer-soft still reports soft_active=0 when virtio is ready
+     * (submit uses soft via prefer flag; lamp stays "transport present").
+     */
     return g_fInited && g_fSoft && !virtio_scsi_ready();
 }
 
@@ -562,27 +815,48 @@ scsi_mid_submit(struct gj_scsi_request *pReq)
 {
     int nSt;
     u8 u8Expect;
+    u8 u8Op;
+    int fViaVirtio;
+    int fViaFallback;
 
     if (!g_fInited || pReq == NULL) {
         if (g_fInited) {
             g_u32IoFail++;
+            soft_inc(&g_u32SoftDenyNull);
+            soft_inc(&g_u32SoftFail);
+        } else {
+            soft_inc(&g_u32SoftDenyNotInit);
         }
         return -1;
     }
+    soft_inc(&g_u32SoftEnter);
+    u8Op = pReq->cdb.aCdb[0];
+    fViaVirtio = 0;
+    fViaFallback = 0;
+
     /* Require data buffer when transfer length is non-zero. */
     if (pReq->cbData > 0 && pReq->pData == NULL) {
         g_u32IoFail++;
+        soft_inc(&g_u32SoftDenyNullData);
+        soft_inc(&g_u32SoftFail);
+        soft_maybe_once();
         return -1;
     }
     /* Defensive CDB length: 0 or > max is never a legal transport CDB. */
     if (pReq->cdb.u8CdbLen == 0 || pReq->cdb.u8CdbLen > GJ_SCSI_CDB_MAX) {
         g_u32IoFail++;
+        soft_inc(&g_u32SoftDenyCdbLen);
+        soft_inc(&g_u32SoftFail);
+        soft_maybe_once();
         return -1;
     }
     /* Soft length check for known opcodes (raw / future ops skip). */
-    u8Expect = cdb_expected_len(pReq->cdb.aCdb[0]);
+    u8Expect = cdb_expected_len(u8Op);
     if (u8Expect != 0 && pReq->cdb.u8CdbLen != u8Expect) {
         g_u32IoFail++;
+        soft_inc(&g_u32SoftDenyCdbExp);
+        soft_inc(&g_u32SoftFail);
+        soft_maybe_once();
         return -1;
     }
     /* Default timeout annotation (transport may ignore; product mid owns policy). */
@@ -590,7 +864,14 @@ scsi_mid_submit(struct gj_scsi_request *pReq)
         pReq->u32TimeoutMs = 5000;
     }
 
+    /*
+     * Transport preference unchanged (Wave 13 inventory is observe-only):
+     *   1) virtio-scsi when ready and sticky prefer-soft not armed
+     *   2) on virtio fail + soft armed → soft LUN (INQUIRY smoke path)
+     *   3) else direct soft LUN
+     */
     if (virtio_scsi_ready() && !g_fVirtioSoftPrefer) {
+        soft_inc(&g_u32SoftVirtioTry);
         nSt = virtio_scsi_submit(pReq);
         /*
          * Transport ready but I/O timed out (common on some QEMU/KVM
@@ -599,25 +880,53 @@ scsi_mid_submit(struct gj_scsi_request *pReq)
          * fail so multi-op smokes do not burn 20M poll spins each time.
          */
         if (nSt != 0 && g_fSoft) {
+            soft_inc(&g_u32SoftVirtioFail);
+            if (g_fVirtioSoftPrefer == 0) {
+                soft_inc(&g_u32SoftPreferArm);
+            }
             g_fVirtioSoftPrefer = 1;
             nSt = soft_submit(pReq);
             if (nSt == 0) {
+                fViaFallback = 1;
                 kprintf("scsi_mid: virtio fail → soft LUN ok op=0x%x "
                         "(prefer soft)\n",
-                        (unsigned)pReq->cdb.aCdb[0]);
+                        (unsigned)u8Op);
+            } else {
+                soft_inc(&g_u32SoftSoftCheck);
             }
+        } else if (nSt != 0) {
+            soft_inc(&g_u32SoftVirtioFail);
+        } else {
+            fViaVirtio = 1;
         }
     } else if (g_fSoft) {
         nSt = soft_submit(pReq);
+        if (nSt != 0) {
+            soft_inc(&g_u32SoftSoftCheck);
+        }
     } else {
         g_u32IoFail++;
+        soft_inc(&g_u32SoftDenyNoPath);
+        soft_inc(&g_u32SoftFail);
+        soft_maybe_once();
         return -1;
     }
 
     if (nSt == 0) {
         g_u32IoOk++;
+        soft_inc(&g_u32SoftOk);
+        soft_note_op_ok(u8Op);
+        if (fViaFallback != 0) {
+            soft_inc(&g_u32SoftViaFallback);
+        } else if (fViaVirtio != 0) {
+            soft_inc(&g_u32SoftViaVirtio);
+        } else {
+            soft_inc(&g_u32SoftViaSoft);
+        }
     } else {
         g_u32IoFail++;
+        soft_inc(&g_u32SoftFail);
     }
+    soft_maybe_once();
     return nSt;
 }

@@ -2,26 +2,35 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * IDT load + gate install. Soft IDT inventory (Wave 10 exclusive):
+ * IDT load + gate install. Soft IDT inventory (Wave 13 exclusive deepen):
  * exception / int80 / IRQ install counters, last-gate snapshot,
  * present/DPL/type/layout/contract inventory, base-layout soft verify,
- * greppable product logs.
+ * vector-band / type-exact / span / key-entry lamps, greppable product logs.
  *
  * Greppable soft inventory (prefix-stable; product / smoke):
  *   idt: soft inventory …
  *   idt: soft present …
  *   idt: soft layout …
  *   idt: soft contract …
+ *   idt: soft bands …
+ *   idt: soft type …
+ *   idt: soft span …
+ *   idt: soft vectors …
+ *   idt: soft entry …
  *   idt: soft last …
+ *   idt: soft stats …
+ *   idt: soft path …
  *   idt: soft program …
- *   idt: soft verify PASS|FAIL|idle …
- *   idt: soft PASS
+ *   idt: soft verify PASS|FAIL|idle|armed …
+ *   idt: soft PASS|PARTIAL|idle …
  *
  * Legacy greppable (kept for existing smoke):
  *   idt: gate soft …
  *
  * greppable: idt: soft
  * Pure C11 freestanding; dual-licensed MIT OR Apache-2.0.
+ * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
+ * Honesty: soft IDT inventory ≠ product multi-server / bar3 close.
  */
 #include <gj/gdt.h>
 #include <gj/idt.h>
@@ -59,11 +68,12 @@ static volatile u32 g_u32SoftReject;
 static volatile u32 g_u32SoftVerifyOk;
 static volatile u32 g_u32SoftVerifyBad;
 static volatile u32 g_u32SoftInvLogs; /* times soft inventory printed */
+static volatile u32 g_u32SoftReinstall; /* present gate overwritten */
 static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 /*
- * Wave 10 deepen lamps (file-local; refresh with inventory walk).
+ * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
  * Not part of the public struct — idt.h stays untouched this wave.
  */
 static u32 g_u32SoftExcPresent;   /* present among vectors 0..31 */
@@ -78,6 +88,42 @@ static u32 g_u32SoftOfOk;         /* vec4 = 0xEF contract lamp */
 static u32 g_u32SoftInt80Ok;      /* vec128 = 0xEE + CS contract lamp */
 static u32 g_u32SoftExcDpl0Int;   /* 0..31 present DPL0 interrupt-style */
 static u32 g_u32SoftExcDpl3Trap;  /* 0..31 present DPL3 trap-style */
+
+/*
+ * Wave 13 exclusive deepen lamps (file-local; inventory walk only).
+ * Bands: present counts by product-meaningful vector ranges.
+ * Type-exact: full attribute byte tallies (0x8E / 0xEF / 0xEE / other).
+ * Span: first/last present + absent free slots.
+ * Key-entry samples: type/off for vec0 / #BP / #OF / #PF / int80.
+ */
+static u32 g_u32SoftBandExc;      /* present 0..31 */
+static u32 g_u32SoftBandPic;      /* present 32..47 (legacy PIC window) */
+static u32 g_u32SoftBandLapic;    /* present 48..63 (timer/IPI window) */
+static u32 g_u32SoftBandMid;      /* present 64..127 */
+static u32 g_u32SoftBandInt80;    /* present 128 (0 or 1) */
+static u32 g_u32SoftBandHigh;     /* present 129..255 */
+static u32 g_u32SoftAbsent;       /* 256 - present */
+static u32 g_u32SoftType8e;       /* present type byte == 0x8E */
+static u32 g_u32SoftTypeEf;       /* present type byte == 0xEF */
+static u32 g_u32SoftTypeEe;       /* present type byte == 0xEE */
+static u32 g_u32SoftTypeOther;    /* present other type bytes */
+static u32 g_u32SoftTypeNibbleO;  /* present type nibble neither E nor F */
+static u32 g_u32SoftZeroPadNz;    /* present + reserved u32Zero != 0 */
+static u32 g_u32SoftFirstPresent; /* lowest present vector (or 256) */
+static u32 g_u32SoftLastPresent;  /* highest present vector (or 0) */
+static u32 g_u32SoftFirstAbsentExc; /* lowest absent in 0..31 (or 32) */
+static u32 g_u32SoftFirstIrqVec;  /* lowest present >=32 except 128 (or 256) */
+static u32 g_u32SoftExtraBeyondBase; /* present beyond base 33 (32+int80) */
+static u32 g_u32SoftVec0Type;     /* raw type byte at vec 0 (0 if absent) */
+static u32 g_u32SoftVec3Type;     /* raw type byte at vec 3 */
+static u32 g_u32SoftVec4Type;     /* raw type byte at vec 4 */
+static u32 g_u32SoftVec14Type;    /* raw type byte at vec 14 (#PF) */
+static u32 g_u32SoftVec128Type;   /* raw type byte at vec 128 */
+static u64 g_u64SoftVec0Off;
+static u64 g_u64SoftVec3Off;
+static u64 g_u64SoftVec4Off;
+static u64 g_u64SoftVec14Off;
+static u64 g_u64SoftVec128Off;
 
 /* Generated stubs */
 extern void isr_stub_0(void);
@@ -124,6 +170,12 @@ idt_gate_soft_note(u32 u32Vec, u64 u64Off, u8 u8Type, u8 u8Ist)
     u8 u8Dpl;
     u8 u8TypeNibble;
 
+    /* Soft reinstall lamp: overwriting an already-present gate. */
+    if (u32Vec < 256u &&
+        (g_aIdt[u32Vec].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) {
+        g_u32SoftReinstall++;
+    }
+
     g_u32SoftInstalls++;
     if (u32Vec < 32u) {
         g_u32SoftException++;
@@ -160,8 +212,8 @@ idt_soft_entry_off(const struct idt_entry *pEnt)
 }
 
 /**
- * Soft: walk live IDT and tally present / DPL / type / contract lamps.
- * Updates g_SoftSnap public fields + Wave 10 deepen lamps.
+ * Soft: walk live IDT and tally present / DPL / type / contract / band lamps.
+ * Updates g_SoftSnap public fields + Wave 10/13 deepen lamps.
  */
 static u32
 idt_gate_soft_inventory_inner(void)
@@ -184,6 +236,23 @@ idt_gate_soft_inventory_inner(void)
     u32 u32BpOk = 0;
     u32 u32OfOk = 0;
     u32 u32Int80Ok = 0;
+    /* Wave 13 deepen locals */
+    u32 u32BandExc = 0;
+    u32 u32BandPic = 0;
+    u32 u32BandLapic = 0;
+    u32 u32BandMid = 0;
+    u32 u32BandInt80 = 0;
+    u32 u32BandHigh = 0;
+    u32 u32Type8e = 0;
+    u32 u32TypeEf = 0;
+    u32 u32TypeEe = 0;
+    u32 u32TypeOther = 0;
+    u32 u32TypeNibbleO = 0;
+    u32 u32ZeroPadNz = 0;
+    u32 u32FirstPresent = 256u;
+    u32 u32LastPresent = 0;
+    u32 u32FirstAbsentExc = 32u;
+    u32 u32FirstIrqVec = 256u;
 
     for (i = 0; i < 256u; i++) {
         u8 u8Type = g_aIdt[i].u8Type;
@@ -192,9 +261,17 @@ idt_gate_soft_inventory_inner(void)
         u64 u64Off;
 
         if ((u8Type & GJ_IDT_SOFT_ATTR_P) == 0) {
+            if (i < 32u && u32FirstAbsentExc == 32u) {
+                u32FirstAbsentExc = i;
+            }
             continue;
         }
         u32Present++;
+        if (u32FirstPresent == 256u) {
+            u32FirstPresent = i;
+        }
+        u32LastPresent = i;
+
         u8Dpl = (u8)((u8Type & GJ_IDT_SOFT_ATTR_DPL_MASK) >>
                      GJ_IDT_SOFT_ATTR_DPL_SHIFT);
         if (u8Dpl == 0) {
@@ -211,6 +288,17 @@ idt_gate_soft_inventory_inner(void)
             u32IntStyle++;
         } else if (u8TypeNibble == GJ_IDT_SOFT_TYPE_TRAP_GATE) {
             u32TrapStyle++;
+        } else {
+            u32TypeNibbleO++;
+        }
+        if (u8Type == 0x8Eu) {
+            u32Type8e++;
+        } else if (u8Type == 0xEFu) {
+            u32TypeEf++;
+        } else if (u8Type == 0xEEu) {
+            u32TypeEe++;
+        } else {
+            u32TypeOther++;
         }
         if (g_aIdt[i].u8Ist != 0) {
             u32IstNonzero++;
@@ -218,12 +306,17 @@ idt_gate_soft_inventory_inner(void)
         if (g_aIdt[i].u16Sel != (u16)GJ_GDT_KERNEL_CS) {
             u32SelMismatch++;
         }
+        if (g_aIdt[i].u32Zero != 0) {
+            u32ZeroPadNz++;
+        }
         u64Off = idt_soft_entry_off(&g_aIdt[i]);
         if (u64Off == 0) {
             u32ZeroOff++;
         }
 
+        /* Vector-range bands (Wave 13). */
         if (i < 32u) {
+            u32BandExc++;
             u32ExcPresent++;
             if (u8Dpl == 0 &&
                 u8TypeNibble == GJ_IDT_SOFT_TYPE_INT_GATE) {
@@ -233,9 +326,29 @@ idt_gate_soft_inventory_inner(void)
                 u8TypeNibble == GJ_IDT_SOFT_TYPE_TRAP_GATE) {
                 u32ExcDpl3Trap++;
             }
-        }
-        if (i == 128u) {
+        } else if (i < 48u) {
+            u32BandPic++;
+            if (u32FirstIrqVec == 256u) {
+                u32FirstIrqVec = i;
+            }
+        } else if (i < 64u) {
+            u32BandLapic++;
+            if (u32FirstIrqVec == 256u) {
+                u32FirstIrqVec = i;
+            }
+        } else if (i < 128u) {
+            u32BandMid++;
+            if (u32FirstIrqVec == 256u) {
+                u32FirstIrqVec = i;
+            }
+        } else if (i == 128u) {
+            u32BandInt80 = 1;
             u32Int80Present = 1;
+        } else {
+            u32BandHigh++;
+            if (u32FirstIrqVec == 256u) {
+                u32FirstIrqVec = i;
+            }
         }
     }
 
@@ -277,6 +390,50 @@ idt_gate_soft_inventory_inner(void)
     g_u32SoftInt80Ok = u32Int80Ok;
     g_u32SoftExcDpl0Int = u32ExcDpl0Int;
     g_u32SoftExcDpl3Trap = u32ExcDpl3Trap;
+
+    /* Wave 13 deepen lamps. */
+    g_u32SoftBandExc = u32BandExc;
+    g_u32SoftBandPic = u32BandPic;
+    g_u32SoftBandLapic = u32BandLapic;
+    g_u32SoftBandMid = u32BandMid;
+    g_u32SoftBandInt80 = u32BandInt80;
+    g_u32SoftBandHigh = u32BandHigh;
+    g_u32SoftAbsent = 256u - u32Present;
+    g_u32SoftType8e = u32Type8e;
+    g_u32SoftTypeEf = u32TypeEf;
+    g_u32SoftTypeEe = u32TypeEe;
+    g_u32SoftTypeOther = u32TypeOther;
+    g_u32SoftTypeNibbleO = u32TypeNibbleO;
+    g_u32SoftZeroPadNz = u32ZeroPadNz;
+    g_u32SoftFirstPresent = u32FirstPresent;
+    g_u32SoftLastPresent = u32LastPresent;
+    g_u32SoftFirstAbsentExc = u32FirstAbsentExc;
+    g_u32SoftFirstIrqVec = u32FirstIrqVec;
+    /* Base product layout is 33 present (32 exceptions + int80). */
+    g_u32SoftExtraBeyondBase =
+        (u32Present > 33u) ? (u32Present - 33u) : 0u;
+
+    /* Key-entry soft samples (type + offset; 0 type when absent). */
+    g_u32SoftVec0Type =
+        ((g_aIdt[0].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) ?
+        (u32)g_aIdt[0].u8Type : 0u;
+    g_u32SoftVec3Type =
+        ((g_aIdt[3].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) ?
+        (u32)g_aIdt[3].u8Type : 0u;
+    g_u32SoftVec4Type =
+        ((g_aIdt[4].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) ?
+        (u32)g_aIdt[4].u8Type : 0u;
+    g_u32SoftVec14Type =
+        ((g_aIdt[14].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) ?
+        (u32)g_aIdt[14].u8Type : 0u;
+    g_u32SoftVec128Type =
+        ((g_aIdt[128].u8Type & GJ_IDT_SOFT_ATTR_P) != 0) ?
+        (u32)g_aIdt[128].u8Type : 0u;
+    g_u64SoftVec0Off = idt_soft_entry_off(&g_aIdt[0]);
+    g_u64SoftVec3Off = idt_soft_entry_off(&g_aIdt[3]);
+    g_u64SoftVec4Off = idt_soft_entry_off(&g_aIdt[4]);
+    g_u64SoftVec14Off = idt_soft_entry_off(&g_aIdt[14]);
+    g_u64SoftVec128Off = idt_soft_entry_off(&g_aIdt[128]);
 
     return u32Present;
 }
@@ -353,7 +510,7 @@ idt_gate_soft_verify_inner(void)
 }
 
 /**
- * Wave 10 soft IDT inventory — greppable "idt: soft …" lines.
+ * Wave 13 soft IDT inventory — greppable "idt: soft …" lines.
  * Pure observability; never changes gates or aborts boot.
  *
  * Grep markers:
@@ -361,9 +518,16 @@ idt_gate_soft_verify_inner(void)
  *   idt: soft present …
  *   idt: soft layout …
  *   idt: soft contract …
+ *   idt: soft bands …
+ *   idt: soft type …
+ *   idt: soft span …
+ *   idt: soft vectors …
+ *   idt: soft entry …
  *   idt: soft last …
- *   idt: soft verify PASS|FAIL|idle …
- *   idt: soft PASS
+ *   idt: soft stats …
+ *   idt: soft path …
+ *   idt: soft verify PASS|FAIL|idle|armed …
+ *   idt: soft PASS|PARTIAL|idle …
  */
 static void
 idt_soft_inventory_print(void)
@@ -376,28 +540,28 @@ idt_soft_inventory_print(void)
     g_u32SoftInvLogs++;
 
     /* Grep: idt: soft inventory */
-    kprintf("idt: soft inventory inits=%u ap=%u install=%u exc=%u "
-            "int80=%u irq=%u reject=%u inv_logs=%u\n",
+    kprintf("idt: soft inventory wave=13 inits=%u ap=%u install=%u "
+            "exc=%u int80=%u irq=%u reject=%u reinstall=%u inv_logs=%u\n",
             g_u32SoftInits, g_u32SoftApLoads, g_u32SoftInstalls,
             g_u32SoftException, g_u32SoftInt80, g_u32SoftIrq,
-            g_u32SoftReject, g_u32SoftInvLogs);
+            g_u32SoftReject, g_u32SoftReinstall, g_u32SoftInvLogs);
 
     /* Grep: idt: soft present */
     kprintf("idt: soft present total=%u dpl0=%u dpl1=%u dpl2=%u dpl3=%u "
-            "int=%u trap=%u exc_p=%u int80_p=%u\n",
+            "int=%u trap=%u exc_p=%u int80_p=%u absent=%u\n",
             g_SoftSnap.u32Present, g_SoftSnap.u32Dpl0, g_u32SoftDpl1,
             g_u32SoftDpl2, g_SoftSnap.u32Dpl3, g_SoftSnap.u32IntStyle,
             g_SoftSnap.u32TrapStyle, g_u32SoftExcPresent,
-            g_u32SoftInt80Present);
+            g_u32SoftInt80Present, g_u32SoftAbsent);
 
     /* Grep: idt: soft layout */
     kprintf("idt: soft layout limit=%u base=0x%lx ready=%u slots=256 "
-            "ist_nz=%u sel_mis=%u zero_off=%u cs=0x%x\n",
+            "ist_nz=%u sel_mis=%u zero_off=%u zero_pad_nz=%u cs=0x%x\n",
             (unsigned)g_IdtPtr.u16Limit,
             (unsigned long)g_IdtPtr.u64Base,
             g_fIdtReady ? 1u : 0u,
             g_u32SoftIstNonzero, g_u32SoftSelMismatch, g_u32SoftZeroOff,
-            (unsigned)GJ_GDT_KERNEL_CS);
+            g_u32SoftZeroPadNz, (unsigned)GJ_GDT_KERNEL_CS);
 
     /* Grep: idt: soft contract */
     kprintf("idt: soft contract bp=%u of=%u int80=%u base_ready=%u "
@@ -406,6 +570,46 @@ idt_soft_inventory_print(void)
             g_u32SoftBpOk, g_u32SoftOfOk, g_u32SoftInt80Ok,
             (unsigned)g_SoftSnap.u8BaseReady, g_u32SoftExcDpl0Int,
             g_u32SoftExcDpl3Trap, g_u32SoftVerifyOk, g_u32SoftVerifyBad);
+
+    /* Grep: idt: soft bands — Wave 13 vector-range present tallies */
+    kprintf("idt: soft bands exc=%u pic=%u lapic=%u mid=%u int80=%u "
+            "high=%u extra=%u (ranges 0-31/32-47/48-63/64-127/128/"
+            "129-255)\n",
+            g_u32SoftBandExc, g_u32SoftBandPic, g_u32SoftBandLapic,
+            g_u32SoftBandMid, g_u32SoftBandInt80, g_u32SoftBandHigh,
+            g_u32SoftExtraBeyondBase);
+
+    /* Grep: idt: soft type — exact attribute-byte tallies */
+    kprintf("idt: soft type 8e=%u ef=%u ee=%u other=%u nibble_o=%u "
+            "int_style=%u trap_style=%u (expect base 8e=30 ef=2 ee=1)\n",
+            g_u32SoftType8e, g_u32SoftTypeEf, g_u32SoftTypeEe,
+            g_u32SoftTypeOther, g_u32SoftTypeNibbleO,
+            g_SoftSnap.u32IntStyle, g_SoftSnap.u32TrapStyle);
+
+    /* Grep: idt: soft span — first/last present + free */
+    kprintf("idt: soft span first_p=%u last_p=%u first_abs_exc=%u "
+            "first_irq=%u absent=%u present=%u base_expect=33\n",
+            g_u32SoftFirstPresent, g_u32SoftLastPresent,
+            g_u32SoftFirstAbsentExc, g_u32SoftFirstIrqVec,
+            g_u32SoftAbsent, g_SoftSnap.u32Present);
+
+    /* Grep: idt: soft vectors — key vector contract lamps */
+    kprintf("idt: soft vectors v0=0x%x bp3=0x%x of4=0x%x pf14=0x%x "
+            "int80=0x%x bp_ok=%u of_ok=%u int80_ok=%u first_irq=%u\n",
+            g_u32SoftVec0Type, g_u32SoftVec3Type, g_u32SoftVec4Type,
+            g_u32SoftVec14Type, g_u32SoftVec128Type,
+            g_u32SoftBpOk, g_u32SoftOfOk, g_u32SoftInt80Ok,
+            g_u32SoftFirstIrqVec);
+
+    /* Grep: idt: soft entry — key entry offset samples */
+    kprintf("idt: soft entry v0_off=0x%lx bp_off=0x%lx of_off=0x%lx "
+            "pf_off=0x%lx int80_off=0x%lx last_off=0x%lx\n",
+            (unsigned long)g_u64SoftVec0Off,
+            (unsigned long)g_u64SoftVec3Off,
+            (unsigned long)g_u64SoftVec4Off,
+            (unsigned long)g_u64SoftVec14Off,
+            (unsigned long)g_u64SoftVec128Off,
+            (unsigned long)g_SoftSnap.u64LastOff);
 
     /* Grep: idt: soft last */
     kprintf("idt: soft last vec=%u type=0x%x dpl=%u trap=%u ist=%u "
@@ -416,6 +620,23 @@ idt_soft_inventory_print(void)
             (unsigned long)g_SoftSnap.u64LastOff,
             (unsigned)g_SoftSnap.u16LastSel,
             g_fSoftSnapLive ? 1u : 0u);
+
+    /* Grep: idt: soft stats — Wave 13 rollup */
+    kprintf("idt: soft stats wave=13 inits=%u ap=%u install=%u "
+            "reject=%u reinstall=%u inv_logs=%u verify_ok=%u "
+            "verify_bad=%u present=%u ready=%u\n",
+            g_u32SoftInits, g_u32SoftApLoads, g_u32SoftInstalls,
+            g_u32SoftReject, g_u32SoftReinstall, g_u32SoftInvLogs,
+            g_u32SoftVerifyOk, g_u32SoftVerifyBad,
+            g_SoftSnap.u32Present, g_fIdtReady ? 1u : 0u);
+
+    /*
+     * Grep: idt: soft path
+     * Honesty: soft IDT inventory ≠ product multi-server / bar3 close.
+     */
+    kprintf("idt: soft path claim=exc32+int80+dynamic_gates "
+            "base_verify=1 shared_idt=1 ap_lidt=1 wave=13 "
+            "bar3=open (soft inventory; not bar3)\n");
 
     if (!g_fIdtReady) {
         szVerdict = "idle";
@@ -428,9 +649,11 @@ idt_soft_inventory_print(void)
     }
 
     /* Grep: idt: soft verify */
-    kprintf("idt: soft verify %s ok=%u bad=%u present=%u\n",
+    kprintf("idt: soft verify %s ok=%u bad=%u present=%u bands_exc=%u "
+            "bands_int80=%u type_8e=%u type_ef=%u type_ee=%u\n",
             szVerdict, g_u32SoftVerifyOk, g_u32SoftVerifyBad,
-            g_SoftSnap.u32Present);
+            g_SoftSnap.u32Present, g_u32SoftBandExc, g_u32SoftBandInt80,
+            g_u32SoftType8e, g_u32SoftTypeEf, g_u32SoftTypeEe);
 
     /*
      * Soft identify outcome. Ready + base contract green → soft PASS.
@@ -438,14 +661,18 @@ idt_soft_inventory_print(void)
      */
     if (g_fIdtReady && g_u32SoftBpOk && g_u32SoftOfOk &&
         g_u32SoftInt80Ok && g_u32SoftExcPresent == 32u) {
-        kprintf("idt: soft PASS\n");
+        kprintf("idt: soft PASS wave=13 present=%u type_8e=%u type_ef=%u "
+                "type_ee=%u extra=%u\n",
+                g_SoftSnap.u32Present, g_u32SoftType8e, g_u32SoftTypeEf,
+                g_u32SoftTypeEe, g_u32SoftExtraBeyondBase);
     } else if (!g_fIdtReady) {
         kprintf("idt: soft idle (IDT not loaded)\n");
     } else {
         kprintf("idt: soft PARTIAL ready=%u exc_p=%u bp=%u of=%u "
-                "int80=%u\n",
+                "int80=%u first_abs_exc=%u\n",
                 g_fIdtReady ? 1u : 0u, g_u32SoftExcPresent,
-                g_u32SoftBpOk, g_u32SoftOfOk, g_u32SoftInt80Ok);
+                g_u32SoftBpOk, g_u32SoftOfOk, g_u32SoftInt80Ok,
+                g_u32SoftFirstAbsentExc);
     }
 }
 
@@ -454,6 +681,9 @@ idt_set(u32 u32Vec, void *pHandler, u8 u8Type)
 {
     u64 u64Off = (u64)(gj_vaddr_t)pHandler;
 
+    /* Soft reinstall note before overwrite (reads prior P bit). */
+    idt_gate_soft_note(u32Vec, u64Off, u8Type, 0);
+
     g_aIdt[u32Vec].u16OffLo = (u16)(u64Off & 0xffff);
     g_aIdt[u32Vec].u16Sel = (u16)GJ_GDT_KERNEL_CS;
     g_aIdt[u32Vec].u8Ist = 0;
@@ -461,8 +691,6 @@ idt_set(u32 u32Vec, void *pHandler, u8 u8Type)
     g_aIdt[u32Vec].u16OffMid = (u16)((u64Off >> 16) & 0xffff);
     g_aIdt[u32Vec].u32OffHi = (u32)((u64Off >> 32) & 0xffffffffu);
     g_aIdt[u32Vec].u32Zero = 0;
-
-    idt_gate_soft_note(u32Vec, u64Off, u8Type, 0);
 }
 
 void
@@ -514,8 +742,8 @@ idt_init(void)
 
     kprintf("idt: loaded 32 exception gates + int80\n");
 
-    /* Wave 10: greppable soft program line under idt: soft … */
-    kprintf("idt: soft program installs=%u exc=%u int80=%u "
+    /* Wave 13: greppable soft program line under idt: soft … */
+    kprintf("idt: soft program wave=13 installs=%u exc=%u int80=%u "
             "last vec=%u type=0x%x\n",
             g_u32SoftInstalls, g_u32SoftException, g_u32SoftInt80,
             g_SoftSnap.u32LastVec, (unsigned)g_SoftSnap.u8LastType);
@@ -531,10 +759,11 @@ idt_init(void)
 
     if (idt_gate_soft_verify_inner()) {
         kprintf("idt: soft verify PASS present=%u dpl0=%u dpl3=%u "
-                "int=%u trap=%u\n",
+                "int=%u trap=%u type_8e=%u type_ef=%u type_ee=%u\n",
                 g_SoftSnap.u32Present, g_SoftSnap.u32Dpl0,
                 g_SoftSnap.u32Dpl3, g_SoftSnap.u32IntStyle,
-                g_SoftSnap.u32TrapStyle);
+                g_SoftSnap.u32TrapStyle, g_u32SoftType8e,
+                g_u32SoftTypeEf, g_u32SoftTypeEe);
         kprintf("idt: gate soft verify PASS present=%u dpl0=%u dpl3=%u "
                 "int=%u trap=%u\n",
                 g_SoftSnap.u32Present, g_SoftSnap.u32Dpl0,
@@ -547,7 +776,7 @@ idt_init(void)
                 g_u32SoftInstalls);
     }
 
-    /* Full Wave 10 soft inventory at base load. */
+    /* Full Wave 13 soft inventory at base load. */
     idt_soft_inventory_print();
 }
 
@@ -675,7 +904,7 @@ idt_gate_soft_log(void)
 {
     /*
      * Greppable soft summary (product / smoke inventory).
-     * Wave 10 primary prefix: idt: soft …
+     * Wave 13 primary prefix: idt: soft …
      * Legacy prefix kept:     idt: gate soft …
      */
     idt_soft_inventory_print();

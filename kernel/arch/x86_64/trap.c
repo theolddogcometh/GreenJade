@@ -8,8 +8,9 @@
  * Soft deepen: greppable #PF COW path logs + trap soft stats (trap.h).
  * Keep vmm "COW break" strings untouched; except_port_deliver path unchanged.
  *
- * Soft trap inventory (Wave 10 exclusive; this unit only):
+ * Soft trap inventory (Wave 13 exclusive deepen; this unit only):
  *   Lifetime classify / #PF COW / PE32 / except-or-kill tallies (gj_trap_stats).
+ *   File-local resume/halt/last-frame/rate lamps (never hard-gate).
  *   Greppable prefix-stable serial markers (rate-limited; never flood):
  *     trap: soft inventory …
  *     trap: soft class …
@@ -17,9 +18,16 @@
  *     trap: soft pe32 …
  *     trap: soft outcome …
  *     trap: soft stats …
+ *     trap: soft limit …
+ *     trap: soft last …
+ *     trap: soft resume …
+ *     trap: soft halt …
+ *     trap: soft rate …
+ *     trap: soft path …
+ *     trap: soft deepen …
  *   Emissions only at power-of-two trap_dispatch milestones, hard-capped at
  *   TRAP_SOFT_LOG_MAX. Explicit trap_stats_soft() always dumps (smoke path).
- *   Never hard-gates product policy. Pure C.
+ *   Never hard-gates product policy. Pure C. Soft ≠ bar3.
  * Grep: trap: soft · trap: #PF soft
  */
 #include <gj/config.h>
@@ -182,16 +190,28 @@ static const char *const g_aszExc[] = {
 static struct gj_trap_stats g_trapStats;
 
 /*
- * Soft inventory serial budget (Wave 10). Absolute cap of greppable dumps;
+ * Soft inventory serial budget (Wave 13). Absolute cap of greppable dumps;
  * milestones are power-of-two non-null trap_dispatch entries (1,2,4,…).
  * greppable: trap: soft
  */
-#define TRAP_SOFT_LOG_MAX 8u
+#define TRAP_SOFT_LOG_MAX 12u
+#define TRAP_SOFT_WAVE    13u
 
-static u32 g_u32SoftLogged;    /* greppable dump emissions */
-static u64 g_u64SoftSkip;      /* soft log suppressed (cap / not force) */
-static u32 g_u32SoftLastVec;   /* last classified vector (soft lamp) */
-static u32 g_u32SoftLastUser;  /* last ring (1=user 0=kernel) */
+static u32 g_u32SoftLogged;      /* greppable dump emissions */
+static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
+static u64 g_u64SoftQuiet;       /* non-milestone dispatches (silent) */
+static u64 g_u64SoftForce;       /* trap_stats_soft / null-frame force dumps */
+static u32 g_u32SoftLastVec;     /* last classified vector (soft lamp) */
+static u32 g_u32SoftLastUser;    /* last ring (1=user 0=kernel) */
+static u64 g_u64SoftLastErr;     /* last frame error code */
+static u64 g_u64SoftLastRip;     /* last frame RIP */
+static u64 g_u64SoftLastCr2;     /* last #PF CR2 (0 if not #PF) */
+static u64 g_u64SoftLastCs;      /* last frame CS */
+static u64 g_u64SoftMileLast;    /* last milestone total that logged */
+static u64 g_u64SoftPe32Resume;  /* PE32 int 0x80 returned to user */
+static u64 g_u64SoftPe32Death;   /* PE32 #BP / exit / exit_group death */
+static u64 g_u64SoftHaltKern;    /* kernel-fault halt path entered */
+static u64 g_u64SoftHaltNull;    /* null-frame halt path entered */
 
 static void trap_soft_inventory_log(void);
 static void trap_soft_maybe_log(void);
@@ -205,14 +225,21 @@ read_cr2(void)
 }
 
 /**
- * Greppable soft trap inventory (product / smoke).
+ * Greppable soft trap inventory (product / smoke) — Wave 13 deepen.
  * Prefix-stable markers (trap: soft …):
- *   trap: soft inventory  — totals + rate-limit lamps
+ *   trap: soft inventory  — totals + rate-limit lamps + wave stamp
  *   trap: soft class      — user/kernel + vector class
  *   trap: soft pf         — #PF COW pipeline
- *   trap: soft pe32       — CS32 #BP / int 0x80 smokes
+ *   trap: soft pe32       — CS32 #BP / int 0x80 smokes + resume/death
  *   trap: soft outcome    — except port vs kill fallthrough
  *   trap: soft stats      — aggregate one-liner (legacy smoke)
+ *   trap: soft limit      — hard cap / power-of-two policy lamps
+ *   trap: soft last       — last frame lamps (vec/user/err/rip/cr2/cs)
+ *   trap: soft resume     — COW ok + PE32 int80 return
+ *   trap: soft halt       — kernel / null frame halt entries
+ *   trap: soft rate       — milestone / quiet / force / skip rollup
+ *   trap: soft path       — product claim + honesty
+ *   trap: soft deepen     — Wave 13 stamp line
  *
  * Never allocates; never hard-gates. Diagnostics only (wrap OK).
  * greppable: trap: soft
@@ -220,64 +247,85 @@ read_cr2(void)
 static void
 trap_soft_inventory_log(void)
 {
+    u32 u32AtCap;
+    u32 u32Room;
+
     if (g_u32SoftLogged < 0xffffffffu) {
         g_u32SoftLogged++;
     }
+    u32AtCap = (g_u32SoftLogged >= TRAP_SOFT_LOG_MAX) ? 1u : 0u;
+    u32Room = (g_u32SoftLogged < TRAP_SOFT_LOG_MAX)
+                  ? (TRAP_SOFT_LOG_MAX - g_u32SoftLogged)
+                  : 0u;
 
     /* Grep: trap: soft inventory */
     kprintf("trap: soft inventory total=%lu user=%lu kern=%lu null=%lu "
-            "logs=%u skip=%lu max=%u last_vec=%u last_user=%u "
-            "wave=10\n",
+            "logs=%u skip=%lu quiet=%lu force=%lu max=%u "
+            "last_vec=%u last_user=%u wave=%u\n",
             (unsigned long)g_trapStats.u64Total,
             (unsigned long)g_trapStats.u64User,
             (unsigned long)g_trapStats.u64Kernel,
             (unsigned long)g_trapStats.u64NullFrame,
             g_u32SoftLogged,
             (unsigned long)g_u64SoftSkip,
+            (unsigned long)g_u64SoftQuiet,
+            (unsigned long)g_u64SoftForce,
             (unsigned)TRAP_SOFT_LOG_MAX,
             g_u32SoftLastVec,
-            g_u32SoftLastUser);
+            g_u32SoftLastUser,
+            (unsigned)TRAP_SOFT_WAVE);
 
     /* Grep: trap: soft class */
     kprintf("trap: soft class vec32=%lu vec_hi=%lu user=%lu kern=%lu "
-            "null=%lu\n",
+            "null=%lu last_vec=%u last_user=%u\n",
             (unsigned long)g_trapStats.u64VecLt32,
             (unsigned long)g_trapStats.u64VecGe32,
             (unsigned long)g_trapStats.u64User,
             (unsigned long)g_trapStats.u64Kernel,
-            (unsigned long)g_trapStats.u64NullFrame);
+            (unsigned long)g_trapStats.u64NullFrame,
+            g_u32SoftLastVec,
+            g_u32SoftLastUser);
 
     /* Grep: trap: soft pf */
     kprintf("trap: soft pf user=%lu cow_cand=%lu cow_cr3=%lu cow_ok=%lu "
-            "cow_miss=%lu cow_skip=%lu "
+            "cow_miss=%lu cow_skip=%lu last_cr2=0x%lx "
             "pipe=pf_user>cow_cand>(cr3)>ok|miss skip=non_p_w\n",
             (unsigned long)g_trapStats.u64PfUser,
             (unsigned long)g_trapStats.u64PfCowCand,
             (unsigned long)g_trapStats.u64PfCowCr3Sw,
             (unsigned long)g_trapStats.u64PfCowOk,
             (unsigned long)g_trapStats.u64PfCowMiss,
-            (unsigned long)g_trapStats.u64PfCowSkip);
+            (unsigned long)g_trapStats.u64PfCowSkip,
+            (unsigned long)g_u64SoftLastCr2);
 
     /* Grep: trap: soft pe32 */
-    kprintf("trap: soft pe32 bp=%lu int80=%lu cs32=GJ_GDT_USER_CS32 "
-            "paths=int3,int80\n",
+    kprintf("trap: soft pe32 bp=%lu int80=%lu resume=%lu death=%lu "
+            "hw_hits=%u int80_calls=%u last_nr=%u "
+            "cs32=GJ_GDT_USER_CS32 paths=int3,int80\n",
             (unsigned long)g_trapStats.u64Pe32Bp,
-            (unsigned long)g_trapStats.u64Pe32Int80);
+            (unsigned long)g_trapStats.u64Pe32Int80,
+            (unsigned long)g_u64SoftPe32Resume,
+            (unsigned long)g_u64SoftPe32Death,
+            g_u32Pe32HwEnterHits,
+            g_u32Pe32Int80Calls,
+            g_u32Pe32Int80LastNr);
 
     /* Grep: trap: soft outcome */
     kprintf("trap: soft outcome except_ok=%lu except_miss=%lu kill=%lu "
-            "null_halt=%lu kern_halt=1 resume=cow_ok|pe32_int80\n",
+            "null_halt=%lu kern_halt=%lu "
+            "resume=cow_ok|pe32_int80 death=pe32_bp|exit\n",
             (unsigned long)g_trapStats.u64ExceptDeliver,
             (unsigned long)g_trapStats.u64ExceptMiss,
             (unsigned long)g_trapStats.u64Kill,
-            (unsigned long)g_trapStats.u64NullFrame);
+            (unsigned long)g_u64SoftHaltNull,
+            (unsigned long)g_u64SoftHaltKern);
 
     /* Grep: trap: soft stats */
     kprintf("trap: soft stats total=%lu user=%lu kern=%lu null=%lu "
             "vec32=%lu vec_hi=%lu pe32_bp=%lu pe32_int80=%lu "
             "pf_user=%lu cow_cand=%lu cow_cr3=%lu cow_ok=%lu cow_miss=%lu "
             "cow_skip=%lu except_ok=%lu except_miss=%lu kill=%lu "
-            "logs=%u skip=%lu\n",
+            "logs=%u skip=%lu quiet=%lu force=%lu wave=%u\n",
             (unsigned long)g_trapStats.u64Total,
             (unsigned long)g_trapStats.u64User,
             (unsigned long)g_trapStats.u64Kernel,
@@ -296,13 +344,81 @@ trap_soft_inventory_log(void)
             (unsigned long)g_trapStats.u64ExceptMiss,
             (unsigned long)g_trapStats.u64Kill,
             g_u32SoftLogged,
-            (unsigned long)g_u64SoftSkip);
+            (unsigned long)g_u64SoftSkip,
+            (unsigned long)g_u64SoftQuiet,
+            (unsigned long)g_u64SoftForce,
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft limit */
+    kprintf("trap: soft limit max=%u logs=%u room=%u at_cap=%u "
+            "policy=pow2_milestone+hard_cap skip=%lu quiet=%lu "
+            "force=%lu wave=%u\n",
+            (unsigned)TRAP_SOFT_LOG_MAX,
+            g_u32SoftLogged,
+            u32Room,
+            u32AtCap,
+            (unsigned long)g_u64SoftSkip,
+            (unsigned long)g_u64SoftQuiet,
+            (unsigned long)g_u64SoftForce,
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft last */
+    kprintf("trap: soft last vec=%u user=%u err=0x%lx rip=0x%lx "
+            "cr2=0x%lx cs=0x%lx mile=%lu\n",
+            g_u32SoftLastVec,
+            g_u32SoftLastUser,
+            (unsigned long)g_u64SoftLastErr,
+            (unsigned long)g_u64SoftLastRip,
+            (unsigned long)g_u64SoftLastCr2,
+            (unsigned long)g_u64SoftLastCs,
+            (unsigned long)g_u64SoftMileLast);
+
+    /* Grep: trap: soft resume */
+    kprintf("trap: soft resume cow_ok=%lu pe32_int80=%lu "
+            "pe32_death=%lu except_block=%lu "
+            "paths=cow_break|int80_ret|except_port\n",
+            (unsigned long)g_trapStats.u64PfCowOk,
+            (unsigned long)g_u64SoftPe32Resume,
+            (unsigned long)g_u64SoftPe32Death,
+            (unsigned long)g_trapStats.u64ExceptDeliver);
+
+    /* Grep: trap: soft halt */
+    kprintf("trap: soft halt kern=%lu null=%lu "
+            "policy=cli_hlt kernel_fault_or_null_frame=1\n",
+            (unsigned long)g_u64SoftHaltKern,
+            (unsigned long)g_u64SoftHaltNull);
+
+    /* Grep: trap: soft rate */
+    kprintf("trap: soft rate total=%lu mile_last=%lu logs=%u "
+            "skip=%lu quiet=%lu force=%lu max=%u "
+            "policy=pow2(1,2,4,...) hard_cap=%u\n",
+            (unsigned long)g_trapStats.u64Total,
+            (unsigned long)g_u64SoftMileLast,
+            g_u32SoftLogged,
+            (unsigned long)g_u64SoftSkip,
+            (unsigned long)g_u64SoftQuiet,
+            (unsigned long)g_u64SoftForce,
+            (unsigned)TRAP_SOFT_LOG_MAX,
+            (unsigned)TRAP_SOFT_LOG_MAX);
+
+    /* Grep: trap: soft path */
+    kprintf("trap: soft path classify=user|kern|vec "
+            "pe32=cs32_bp|int80 pf=cow_p_w except=port|kill "
+            "rate=pow2+cap wave=%u (soft inventory; not bar3)\n",
+            (unsigned)TRAP_SOFT_WAVE);
+
+    /* Grep: trap: soft deepen */
+    kprintf("trap: soft deepen wave=%u areas="
+            "inventory,class,pf,pe32,outcome,stats,"
+            "limit,last,resume,halt,rate,path "
+            "unit=trap.c only rate_limited=1\n",
+            (unsigned)TRAP_SOFT_WAVE);
 }
 
 /**
  * Rate-limit soft inventory: power-of-two dispatch milestones, hard-capped.
  * Never floods serial. Soft skip tallies only suppressed milestones (cap);
- * non-milestone dispatches are silent without a skip bump.
+ * non-milestone dispatches bump quiet (Wave 13 lamp) without serial.
  * greppable: trap: soft
  */
 static void
@@ -313,6 +429,7 @@ trap_soft_maybe_log(void)
     u64N = g_trapStats.u64Total;
     /* Milestone: first entry and subsequent powers of two only. */
     if (u64N == 0ull || (u64N & (u64N - 1ull)) != 0ull) {
+        g_u64SoftQuiet++;
         return;
     }
 
@@ -321,6 +438,7 @@ trap_soft_maybe_log(void)
         return;
     }
 
+    g_u64SoftMileLast = u64N;
     trap_soft_inventory_log();
 }
 
@@ -349,6 +467,7 @@ trap_stats_soft(void)
      * increments logs so skip/max lamps stay honest).
      * greppable: trap: soft
      */
+    g_u64SoftForce++;
     trap_soft_inventory_log();
     return g_trapStats.u64Total;
 }
@@ -364,6 +483,12 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         g_trapStats.u64NullFrame++;
         g_u32SoftLastVec = 0xffffffffu;
         g_u32SoftLastUser = 0;
+        g_u64SoftLastErr = 0;
+        g_u64SoftLastRip = 0;
+        g_u64SoftLastCr2 = 0;
+        g_u64SoftLastCs = 0;
+        g_u64SoftHaltNull++;
+        g_u64SoftForce++;
         /* Grep: trap: soft (null frame inventory before halt) */
         trap_soft_inventory_log();
         kprintf("trap: null frame\n");
@@ -389,8 +514,16 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     }
     g_u32SoftLastVec = u32Vec;
     g_u32SoftLastUser = fUser ? 1u : 0u;
+    g_u64SoftLastErr = pFrame->u64Error;
+    g_u64SoftLastRip = pFrame->u64Rip;
+    g_u64SoftLastCs = pFrame->u64Cs;
+    if (u32Vec == 14u) {
+        g_u64SoftLastCr2 = read_cr2();
+    } else {
+        g_u64SoftLastCr2 = 0;
+    }
 
-    /* Wave 10: rate-limited greppable trap: soft … inventory. */
+    /* Wave 13: rate-limited greppable trap: soft … inventory. */
     trap_soft_maybe_log();
 
     /* Suppress banner noise for expected PE32 paths (int3 / int 0x80) */
@@ -418,6 +551,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     }
 
     if (!fUser) {
+        g_u64SoftHaltKern++;
         kprintf("trap: kernel fault — halt\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");
@@ -433,6 +567,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         g_u32Pe32HwEnterCs = (u32)pFrame->u64Cs;
         g_u32Pe32HwEnterHits++;
         g_trapStats.u64Pe32Bp++;
+        g_u64SoftPe32Death++;
         kprintf("pe32: hw enter PASS cs=0x%lx rip=0x%lx hits=%u\n",
                 (unsigned long)pFrame->u64Cs,
                 (unsigned long)pFrame->u64Rip,
@@ -479,6 +614,7 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         case 252u: /* exit_group */
             g_u32Pe32Int80Exits++;
             g_u32Pe32Int80LastCode = u32A0;
+            g_u64SoftPe32Death++;
             kprintf("pe32: int80 exit PASS code=%u hits=%u\n", u32A0,
                     g_u32Pe32Int80Exits);
             if (pThr != NULL && pThr->pProc != NULL) {
@@ -2441,6 +2577,8 @@ trap_dispatch(struct gj_trap_frame *pFrame)
         if (i64Ret < 0) {
             pFrame->u64Rax = (u64)(i64)i64Ret;
         }
+        /* Soft: PE32 int 0x80 returned to user (Wave 13 resume lamp). */
+        g_u64SoftPe32Resume++;
         return;
     }
 

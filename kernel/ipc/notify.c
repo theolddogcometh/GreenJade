@@ -18,10 +18,21 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Greppable prefix-stable serial markers (notify: soft …):
+ * Wave 13 exclusive deepen — greppable prefix-stable serial markers
+ * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
  *   notify: soft wait inventory    — wait/poll/CAS/block catalog + counters
+ *   notify: soft pulse             — path tallies (hit/dead split/wake/…)
+ *   notify: soft wait              — path tallies (enter/hit/park/… splits)
+ *   notify: soft multi             — multi-wake call/sum/zero/peak surface
+ *   notify: soft badge             — pending/last/zero_coalesce/bits soft
+ *   notify: soft install           — install ok + fail splits
+ *   notify: soft abort             — abort + wake + nowaiter
+ *   notify: soft mark_dead         — mark_dead + ready/revoke surface
+ *   notify: soft msix              — global MSI-X bind / live snapshot
+ *   notify: soft query             — accessor sample tallies
+ *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
  *   notify: soft pulse dead        — pulse dropped (null/not ready/DEAD)
@@ -33,10 +44,12 @@
  *   notify: soft wait dead         — object DEAD during wait
  *   notify: soft wait cas retry    — lost CAS race with concurrent pulse
  *   notify: soft wait self wake    — post-block self soft multi-wake
+ *   notify: soft multi wake        — soft multi-wake invocation
  *   notify: soft abort             — abort soft multi-wake (no badge)
  *   notify: soft mark_dead         — mark_dead + abort path
  *   notify: soft install ok        — cap install success
  *   notify: soft install fail      — cap install rejected
+ * greppable: notify: soft
  */
 #include <gj/cap.h>
 #include <gj/error.h>
@@ -53,34 +66,70 @@ static int              g_fMsixInited;
  * Soft path sticky counters (wrap OK; diagnostics only).
  * Bumped on product return paths; never hard-gate behavior.
  * Pulse path is IRQ-callable → atomic RMW only (no kprintf).
+ * Wave 13 deepen: pulse/wait splits + multi + badge + install + query +
+ * msix + path surfaces.
  * greppable: notify: soft stats
+ * greppable: notify: soft
  */
 struct notify_soft_stats {
     u64 u64Init;             /* notify_init calls */
     u64 u64PulseHit;         /* pulse on live ready object */
-    u64 u64PulseDead;        /* pulse dropped */
+    u64 u64PulseDead;        /* pulse dropped (any reason) */
+    u64 u64PulseDeadNull;    /* pulse dropped: pN == NULL */
+    u64 u64PulseDeadReady;   /* pulse dropped: !u32Ready */
+    u64 u64PulseDeadState;   /* pulse dropped: not LIVE */
     u64 u64PulseZeroCoalesce;/* badge 0 → bit 0 */
     u64 u64PulseWake;        /* soft multi-wake from pulse */
     u64 u64PulseNoWaiter;    /* pulse with no waiter registered */
+    u64 u64PulseEnter;       /* notify_pulse entries */
     u64 u64SignalAlias;      /* notify_signal → pulse */
     u64 u64WaitEnter;        /* notify_wait entries */
     u64 u64WaitHit;          /* CAS-clear matched bits */
     u64 u64WaitPark;         /* thread_block + schedule */
     u64 u64WaitPollMiss;     /* non-block / no thr miss */
     u64 u64WaitDead;         /* object DEAD during wait */
+    u64 u64WaitDeadEnter;    /* DEAD on first live check */
+    u64 u64WaitDeadLoop;     /* DEAD mid-loop after register */
     u64 u64WaitCasRetry;     /* lost CAS race */
     u64 u64WaitSelfWake;     /* post-block self multi-wake */
     u64 u64WaitMaskAny;      /* mask==0 → ~0ull */
+    u64 u64WaitBlock;        /* fBlock != 0 entries */
+    u64 u64WaitNoblock;      /* fBlock == 0 entries */
+    u64 u64WaitRegister;     /* first soft multi-waiter register */
+    u64 u64WaitNoThr;        /* block requested but pCur == NULL */
+    u64 u64WaitLoop;         /* wait loop iterations (soft) */
     u64 u64Poll;             /* notify_poll entries */
     u64 u64Abort;            /* notify_abort_waiter */
     u64 u64AbortWake;        /* abort issued multi-wake */
+    u64 u64AbortNoWaiter;    /* abort with no waiter */
     u64 u64MarkDead;         /* notify_mark_dead */
+    u64 u64MarkDeadRevoke;   /* mark_dead took revoke_begin path */
+    u64 u64MarkDeadForce;    /* mark_dead forced DEAD store */
     u64 u64InstallOk;        /* notify_install success */
-    u64 u64InstallFail;      /* notify_install rejected */
+    u64 u64InstallFail;      /* notify_install rejected (any) */
+    u64 u64InstallFailNull;  /* install: null args / no cnode */
+    u64 u64InstallFailDead;  /* install: object not live */
+    u64 u64InstallFailCap;   /* install: cap_alloc_install fail */
+    u64 u64InstallDefaultRights; /* install used default rights */
     u64 u64MultiWakeCalls;   /* notify_soft_multi_wake invocations */
     u64 u64MultiWakeSum;     /* sum of thread_wake return counts */
+    u64 u64MultiWakeZero;    /* multi-wake returned 0 woken */
+    u64 u64MultiWakeNull;    /* multi-wake pN == NULL */
+    u64 u64MultiWakePeak;    /* peak cWoken observed (soft) */
+    u64 u64WaitersPeak;      /* peak u32Waiters observed (soft) */
+    u64 u64BadgeBitsSum;     /* sum of pulse badge popcount (soft) */
+    u64 u64BadgeLastOr;      /* OR of all last badges (soft) */
+    u64 u64QuerySignals;     /* notify_signals samples */
+    u64 u64QueryPending;     /* notify_pending samples */
+    u64 u64QueryLastBadge;   /* notify_last_badge samples */
+    u64 u64QueryWaiters;     /* notify_waiters samples */
+    u64 u64QueryIsLive;      /* notify_is_live samples */
+    u64 u64QueryIsLiveYes;   /* notify_is_live returned live */
+    u64 u64QueryIsLiveNo;    /* notify_is_live returned not live */
     u64 u64SoftLog;          /* times soft inventory printed */
     u64 u64MsixInit;         /* notify_msix_init calls */
+    u64 u64MsixInitSkip;     /* msix_init early return (already ready) */
+    u64 u64MsixGlobal;       /* notify_msix_global samples */
 };
 
 static struct notify_soft_stats g_soft;
@@ -108,18 +157,153 @@ notify_soft_add(u64 *pCtr, u64 u64N)
 }
 
 /**
- * Greppable soft pulse/wait inventory + aggregate stats.
+ * Soft: popcount of a badge word (diagnostics only; pure C, no builtins
+ * required beyond portable shifts).
+ */
+static u32
+notify_soft_popcount64(u64 u64V)
+{
+    u32 cBits = 0;
+
+    while (u64V != 0) {
+        cBits += (u32)(u64V & 1ull);
+        u64V >>= 1;
+    }
+    return cBits;
+}
+
+/**
+ * Soft: note multi-wake result (calls / sum / zero / peak).
+ * IRQ-safe (atomics only).
+ */
+static void
+notify_soft_note_wake(u32 cWoken)
+{
+    u64 u64Peak;
+
+    if (cWoken == 0) {
+        notify_soft_inc(&g_soft.u64MultiWakeZero);
+        return;
+    }
+    notify_soft_add(&g_soft.u64MultiWakeSum, (u64)cWoken);
+    u64Peak = __atomic_load_n(&g_soft.u64MultiWakePeak, __ATOMIC_RELAXED);
+    while ((u64)cWoken > u64Peak) {
+        if (__atomic_compare_exchange_n(&g_soft.u64MultiWakePeak, &u64Peak,
+                                        (u64)cWoken, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            break;
+        }
+    }
+}
+
+/**
+ * Soft: note soft multi-waiter count peak (IRQ/wait safe).
+ */
+static void
+notify_soft_note_waiters(u32 cWaiters)
+{
+    u64 u64Peak;
+
+    u64Peak = __atomic_load_n(&g_soft.u64WaitersPeak, __ATOMIC_RELAXED);
+    while ((u64)cWaiters > u64Peak) {
+        if (__atomic_compare_exchange_n(&g_soft.u64WaitersPeak, &u64Peak,
+                                        (u64)cWaiters, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            break;
+        }
+    }
+}
+
+/**
+ * Soft: snapshot MSI-X global object for greppable msix/badge lines.
+ * Diagnostic race OK (no hard lock).
+ */
+static void
+notify_soft_msix_snap(u32 *pReady, u32 *pLive, u32 *pSignals, u64 *pPending,
+                      u64 *pLast, u32 *pWaiters, u32 *pHasWaiter)
+{
+    u32 u32Ready = 0;
+    u32 u32Live = 0;
+    u32 u32Signals = 0;
+    u64 u64Pending = 0;
+    u64 u64Last = 0;
+    u32 u32Waiters = 0;
+    u32 u32Has = 0;
+
+    if (g_fMsixInited) {
+        u32Ready = g_msixNotify.u32Ready ? 1u : 0u;
+        u32Live = (__atomic_load_n(&g_msixNotify.hdr.u32State,
+                                   __ATOMIC_ACQUIRE) ==
+                   (u32)GJ_OBJ_LIVE)
+                      ? 1u
+                      : 0u;
+        u32Signals =
+            __atomic_load_n(&g_msixNotify.u32Signals, __ATOMIC_ACQUIRE);
+        u64Pending =
+            __atomic_load_n(&g_msixNotify.u64Pending, __ATOMIC_ACQUIRE);
+        u64Last =
+            __atomic_load_n(&g_msixNotify.u64LastBadge, __ATOMIC_ACQUIRE);
+        u32Waiters =
+            __atomic_load_n(&g_msixNotify.u32Waiters, __ATOMIC_ACQUIRE);
+        if (g_msixNotify.pWaiter != NULL || u32Waiters > 0u) {
+            u32Has = 1u;
+        }
+    }
+    if (pReady != NULL) {
+        *pReady = u32Ready;
+    }
+    if (pLive != NULL) {
+        *pLive = u32Live;
+    }
+    if (pSignals != NULL) {
+        *pSignals = u32Signals;
+    }
+    if (pPending != NULL) {
+        *pPending = u64Pending;
+    }
+    if (pLast != NULL) {
+        *pLast = u64Last;
+    }
+    if (pWaiters != NULL) {
+        *pWaiters = u32Waiters;
+    }
+    if (pHasWaiter != NULL) {
+        *pHasWaiter = u32Has;
+    }
+}
+
+/**
+ * Greppable soft pulse/wait inventory + Wave 13 deepen surfaces.
  * Called from notify_msix_init and once after first wait activity.
  * Never allocates; not for hard-IRQ (kprintf only from product paths).
  * greppable: notify: soft inventory
  * greppable: notify: soft pulse inventory
  * greppable: notify: soft wait inventory
+ * greppable: notify: soft pulse
+ * greppable: notify: soft wait
+ * greppable: notify: soft multi
+ * greppable: notify: soft badge
+ * greppable: notify: soft install
+ * greppable: notify: soft abort
+ * greppable: notify: soft mark_dead
+ * greppable: notify: soft msix
+ * greppable: notify: soft query
+ * greppable: notify: soft path
  * greppable: notify: soft stats
  */
 static void
 notify_soft_log(void)
 {
     struct notify_soft_stats s;
+    u32                      u32Ready;
+    u32                      u32Live;
+    u32                      u32Signals;
+    u64                      u64Pending;
+    u64                      u64Last;
+    u32                      u32Waiters;
+    u32                      u32HasWaiter;
+    u32                      u32PendBits;
+    u32                      u32LastBits;
 
     notify_soft_inc(&g_soft.u64SoftLog);
 
@@ -132,12 +316,20 @@ notify_soft_log(void)
         __atomic_load_n(&g_soft.u64PulseHit, __ATOMIC_RELAXED);
     s.u64PulseDead =
         __atomic_load_n(&g_soft.u64PulseDead, __ATOMIC_RELAXED);
+    s.u64PulseDeadNull =
+        __atomic_load_n(&g_soft.u64PulseDeadNull, __ATOMIC_RELAXED);
+    s.u64PulseDeadReady =
+        __atomic_load_n(&g_soft.u64PulseDeadReady, __ATOMIC_RELAXED);
+    s.u64PulseDeadState =
+        __atomic_load_n(&g_soft.u64PulseDeadState, __ATOMIC_RELAXED);
     s.u64PulseZeroCoalesce =
         __atomic_load_n(&g_soft.u64PulseZeroCoalesce, __ATOMIC_RELAXED);
     s.u64PulseWake =
         __atomic_load_n(&g_soft.u64PulseWake, __ATOMIC_RELAXED);
     s.u64PulseNoWaiter =
         __atomic_load_n(&g_soft.u64PulseNoWaiter, __ATOMIC_RELAXED);
+    s.u64PulseEnter =
+        __atomic_load_n(&g_soft.u64PulseEnter, __ATOMIC_RELAXED);
     s.u64SignalAlias =
         __atomic_load_n(&g_soft.u64SignalAlias, __ATOMIC_RELAXED);
     s.u64WaitEnter =
@@ -150,41 +342,107 @@ notify_soft_log(void)
         __atomic_load_n(&g_soft.u64WaitPollMiss, __ATOMIC_RELAXED);
     s.u64WaitDead =
         __atomic_load_n(&g_soft.u64WaitDead, __ATOMIC_RELAXED);
+    s.u64WaitDeadEnter =
+        __atomic_load_n(&g_soft.u64WaitDeadEnter, __ATOMIC_RELAXED);
+    s.u64WaitDeadLoop =
+        __atomic_load_n(&g_soft.u64WaitDeadLoop, __ATOMIC_RELAXED);
     s.u64WaitCasRetry =
         __atomic_load_n(&g_soft.u64WaitCasRetry, __ATOMIC_RELAXED);
     s.u64WaitSelfWake =
         __atomic_load_n(&g_soft.u64WaitSelfWake, __ATOMIC_RELAXED);
     s.u64WaitMaskAny =
         __atomic_load_n(&g_soft.u64WaitMaskAny, __ATOMIC_RELAXED);
+    s.u64WaitBlock =
+        __atomic_load_n(&g_soft.u64WaitBlock, __ATOMIC_RELAXED);
+    s.u64WaitNoblock =
+        __atomic_load_n(&g_soft.u64WaitNoblock, __ATOMIC_RELAXED);
+    s.u64WaitRegister =
+        __atomic_load_n(&g_soft.u64WaitRegister, __ATOMIC_RELAXED);
+    s.u64WaitNoThr =
+        __atomic_load_n(&g_soft.u64WaitNoThr, __ATOMIC_RELAXED);
+    s.u64WaitLoop =
+        __atomic_load_n(&g_soft.u64WaitLoop, __ATOMIC_RELAXED);
     s.u64Poll = __atomic_load_n(&g_soft.u64Poll, __ATOMIC_RELAXED);
     s.u64Abort = __atomic_load_n(&g_soft.u64Abort, __ATOMIC_RELAXED);
     s.u64AbortWake =
         __atomic_load_n(&g_soft.u64AbortWake, __ATOMIC_RELAXED);
+    s.u64AbortNoWaiter =
+        __atomic_load_n(&g_soft.u64AbortNoWaiter, __ATOMIC_RELAXED);
     s.u64MarkDead =
         __atomic_load_n(&g_soft.u64MarkDead, __ATOMIC_RELAXED);
+    s.u64MarkDeadRevoke =
+        __atomic_load_n(&g_soft.u64MarkDeadRevoke, __ATOMIC_RELAXED);
+    s.u64MarkDeadForce =
+        __atomic_load_n(&g_soft.u64MarkDeadForce, __ATOMIC_RELAXED);
     s.u64InstallOk =
         __atomic_load_n(&g_soft.u64InstallOk, __ATOMIC_RELAXED);
     s.u64InstallFail =
         __atomic_load_n(&g_soft.u64InstallFail, __ATOMIC_RELAXED);
+    s.u64InstallFailNull =
+        __atomic_load_n(&g_soft.u64InstallFailNull, __ATOMIC_RELAXED);
+    s.u64InstallFailDead =
+        __atomic_load_n(&g_soft.u64InstallFailDead, __ATOMIC_RELAXED);
+    s.u64InstallFailCap =
+        __atomic_load_n(&g_soft.u64InstallFailCap, __ATOMIC_RELAXED);
+    s.u64InstallDefaultRights =
+        __atomic_load_n(&g_soft.u64InstallDefaultRights, __ATOMIC_RELAXED);
     s.u64MultiWakeCalls =
         __atomic_load_n(&g_soft.u64MultiWakeCalls, __ATOMIC_RELAXED);
     s.u64MultiWakeSum =
         __atomic_load_n(&g_soft.u64MultiWakeSum, __ATOMIC_RELAXED);
+    s.u64MultiWakeZero =
+        __atomic_load_n(&g_soft.u64MultiWakeZero, __ATOMIC_RELAXED);
+    s.u64MultiWakeNull =
+        __atomic_load_n(&g_soft.u64MultiWakeNull, __ATOMIC_RELAXED);
+    s.u64MultiWakePeak =
+        __atomic_load_n(&g_soft.u64MultiWakePeak, __ATOMIC_RELAXED);
+    s.u64WaitersPeak =
+        __atomic_load_n(&g_soft.u64WaitersPeak, __ATOMIC_RELAXED);
+    s.u64BadgeBitsSum =
+        __atomic_load_n(&g_soft.u64BadgeBitsSum, __ATOMIC_RELAXED);
+    s.u64BadgeLastOr =
+        __atomic_load_n(&g_soft.u64BadgeLastOr, __ATOMIC_RELAXED);
+    s.u64QuerySignals =
+        __atomic_load_n(&g_soft.u64QuerySignals, __ATOMIC_RELAXED);
+    s.u64QueryPending =
+        __atomic_load_n(&g_soft.u64QueryPending, __ATOMIC_RELAXED);
+    s.u64QueryLastBadge =
+        __atomic_load_n(&g_soft.u64QueryLastBadge, __ATOMIC_RELAXED);
+    s.u64QueryWaiters =
+        __atomic_load_n(&g_soft.u64QueryWaiters, __ATOMIC_RELAXED);
+    s.u64QueryIsLive =
+        __atomic_load_n(&g_soft.u64QueryIsLive, __ATOMIC_RELAXED);
+    s.u64QueryIsLiveYes =
+        __atomic_load_n(&g_soft.u64QueryIsLiveYes, __ATOMIC_RELAXED);
+    s.u64QueryIsLiveNo =
+        __atomic_load_n(&g_soft.u64QueryIsLiveNo, __ATOMIC_RELAXED);
     s.u64SoftLog =
         __atomic_load_n(&g_soft.u64SoftLog, __ATOMIC_RELAXED);
     s.u64MsixInit =
         __atomic_load_n(&g_soft.u64MsixInit, __ATOMIC_RELAXED);
+    s.u64MsixInitSkip =
+        __atomic_load_n(&g_soft.u64MsixInitSkip, __ATOMIC_RELAXED);
+    s.u64MsixGlobal =
+        __atomic_load_n(&g_soft.u64MsixGlobal, __ATOMIC_RELAXED);
+
+    notify_soft_msix_snap(&u32Ready, &u32Live, &u32Signals, &u64Pending,
+                          &u64Last, &u32Waiters, &u32HasWaiter);
+    u32PendBits = notify_soft_popcount64(u64Pending);
+    u32LastBits = notify_soft_popcount64(u64Last);
+    notify_soft_note_waiters(u32Waiters);
 
     /*
      * Catalog lines (prefix-stable): declare multi-waiter capacity and the
      * pulse/wait soft path surface so smoke/scripts can grep product depth
-     * without parsing C.
+     * without parsing C. Wave 13 deepen splits pulse/wait/multi/badge/
+     * install/abort/msix/query/path.
      */
     /* Grep: notify: soft inventory */
     kprintf("notify: soft inventory multi_max=%u tag_waiter=%u "
             "paths=pulse,signal,wait,poll,abort,mark_dead,install,msix "
             "cas=pending_and_mask park=thread_block+schedule "
-            "wake=thread_wake soft_log=%lu msix_init=%lu inits=%lu\n",
+            "wake=thread_wake soft_log=%lu msix_init=%lu inits=%lu "
+            "wave=13\n",
             (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER,
             (unsigned long)s.u64SoftLog, (unsigned long)s.u64MsixInit,
             (unsigned long)s.u64Init);
@@ -192,9 +450,14 @@ notify_soft_log(void)
     /* Grep: notify: soft pulse inventory */
     kprintf("notify: soft pulse inventory or=u64Pending "
             "zero_coalesce=bit0 wake=soft_multi_max irq_safe=atomics "
-            "hit=%lu dead=%lu zero_coalesce=%lu wake=%lu nowaiter=%lu "
+            "enter=%lu hit=%lu dead=%lu dead_null=%lu dead_ready=%lu "
+            "dead_state=%lu zero_coalesce=%lu wake=%lu nowaiter=%lu "
             "signal_alias=%lu multi_wake_calls=%lu multi_wake_sum=%lu\n",
+            (unsigned long)s.u64PulseEnter,
             (unsigned long)s.u64PulseHit, (unsigned long)s.u64PulseDead,
+            (unsigned long)s.u64PulseDeadNull,
+            (unsigned long)s.u64PulseDeadReady,
+            (unsigned long)s.u64PulseDeadState,
             (unsigned long)s.u64PulseZeroCoalesce,
             (unsigned long)s.u64PulseWake,
             (unsigned long)s.u64PulseNoWaiter,
@@ -207,12 +470,124 @@ notify_soft_log(void)
             "claim=cas_clear_matched multi_register=u32Waiters+pWaiter_hint "
             "paths=hit,park,poll_miss,dead,cas_retry,self_wake,mask_any "
             "enter=%lu hit=%lu park=%lu poll_miss=%lu dead=%lu "
-            "cas_retry=%lu self_wake=%lu mask_any=%lu poll=%lu\n",
+            "cas_retry=%lu self_wake=%lu mask_any=%lu poll=%lu "
+            "block=%lu noblock=%lu register=%lu no_thr=%lu loop=%lu\n",
             (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
             (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
             (unsigned long)s.u64WaitDead, (unsigned long)s.u64WaitCasRetry,
             (unsigned long)s.u64WaitSelfWake, (unsigned long)s.u64WaitMaskAny,
-            (unsigned long)s.u64Poll);
+            (unsigned long)s.u64Poll, (unsigned long)s.u64WaitBlock,
+            (unsigned long)s.u64WaitNoblock,
+            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
+            (unsigned long)s.u64WaitLoop);
+
+    /* Grep: notify: soft pulse — path tallies (Wave 13 deepen) */
+    kprintf("notify: soft pulse enter=%lu hit=%lu dead=%lu "
+            "dead_null=%lu dead_ready=%lu dead_state=%lu "
+            "zero_coalesce=%lu wake=%lu nowaiter=%lu signal_alias=%lu\n",
+            (unsigned long)s.u64PulseEnter, (unsigned long)s.u64PulseHit,
+            (unsigned long)s.u64PulseDead,
+            (unsigned long)s.u64PulseDeadNull,
+            (unsigned long)s.u64PulseDeadReady,
+            (unsigned long)s.u64PulseDeadState,
+            (unsigned long)s.u64PulseZeroCoalesce,
+            (unsigned long)s.u64PulseWake,
+            (unsigned long)s.u64PulseNoWaiter,
+            (unsigned long)s.u64SignalAlias);
+
+    /* Grep: notify: soft wait — path tallies (Wave 13 deepen) */
+    kprintf("notify: soft wait enter=%lu hit=%lu park=%lu poll_miss=%lu "
+            "dead=%lu dead_enter=%lu dead_loop=%lu cas_retry=%lu "
+            "self_wake=%lu mask_any=%lu block=%lu noblock=%lu "
+            "register=%lu no_thr=%lu loop=%lu poll=%lu\n",
+            (unsigned long)s.u64WaitEnter, (unsigned long)s.u64WaitHit,
+            (unsigned long)s.u64WaitPark, (unsigned long)s.u64WaitPollMiss,
+            (unsigned long)s.u64WaitDead,
+            (unsigned long)s.u64WaitDeadEnter,
+            (unsigned long)s.u64WaitDeadLoop,
+            (unsigned long)s.u64WaitCasRetry,
+            (unsigned long)s.u64WaitSelfWake,
+            (unsigned long)s.u64WaitMaskAny, (unsigned long)s.u64WaitBlock,
+            (unsigned long)s.u64WaitNoblock,
+            (unsigned long)s.u64WaitRegister, (unsigned long)s.u64WaitNoThr,
+            (unsigned long)s.u64WaitLoop, (unsigned long)s.u64Poll);
+
+    /* Grep: notify: soft multi */
+    kprintf("notify: soft multi calls=%lu sum=%lu zero=%lu null=%lu "
+            "peak_woken=%lu peak_waiters=%lu multi_max=%u "
+            "tag_waiter=%u hint=pWaiter count=u32Waiters\n",
+            (unsigned long)s.u64MultiWakeCalls,
+            (unsigned long)s.u64MultiWakeSum,
+            (unsigned long)s.u64MultiWakeZero,
+            (unsigned long)s.u64MultiWakeNull,
+            (unsigned long)s.u64MultiWakePeak,
+            (unsigned long)s.u64WaitersPeak,
+            (unsigned)NOTIFY_SOFT_MULTI_MAX,
+            (unsigned)NOTIFY_TAG_WAITER);
+
+    /* Grep: notify: soft badge */
+    kprintf("notify: soft badge pending=0x%lx pending_bits=%u "
+            "last=0x%lx last_bits=%u zero_coalesce=%lu bits_sum=%lu "
+            "last_or=0x%lx coalesce_policy=bit0\n",
+            (unsigned long)u64Pending, (unsigned)u32PendBits,
+            (unsigned long)u64Last, (unsigned)u32LastBits,
+            (unsigned long)s.u64PulseZeroCoalesce,
+            (unsigned long)s.u64BadgeBitsSum,
+            (unsigned long)s.u64BadgeLastOr);
+
+    /* Grep: notify: soft install */
+    kprintf("notify: soft install ok=%lu fail=%lu fail_null=%lu "
+            "fail_dead=%lu fail_cap=%lu default_rights=%lu "
+            "cap=GJ_CAP_NOTIFICATION\n",
+            (unsigned long)s.u64InstallOk,
+            (unsigned long)s.u64InstallFail,
+            (unsigned long)s.u64InstallFailNull,
+            (unsigned long)s.u64InstallFailDead,
+            (unsigned long)s.u64InstallFailCap,
+            (unsigned long)s.u64InstallDefaultRights);
+
+    /* Grep: notify: soft abort */
+    kprintf("notify: soft abort enter=%lu wake=%lu nowaiter=%lu "
+            "badge=none multi_wake=1\n",
+            (unsigned long)s.u64Abort, (unsigned long)s.u64AbortWake,
+            (unsigned long)s.u64AbortNoWaiter);
+
+    /* Grep: notify: soft mark_dead */
+    kprintf("notify: soft mark_dead enter=%lu revoke=%lu force=%lu "
+            "abort_follow=1 ready_clear=1\n",
+            (unsigned long)s.u64MarkDead,
+            (unsigned long)s.u64MarkDeadRevoke,
+            (unsigned long)s.u64MarkDeadForce);
+
+    /* Grep: notify: soft msix */
+    kprintf("notify: soft msix init=%lu skip=%lu global=%lu ready=%u "
+            "live=%u signals=%u pending=0x%lx last=0x%lx waiters=%u "
+            "has_waiter=%u soft_multi_max=%u\n",
+            (unsigned long)s.u64MsixInit,
+            (unsigned long)s.u64MsixInitSkip,
+            (unsigned long)s.u64MsixGlobal, (unsigned)u32Ready,
+            (unsigned)u32Live, (unsigned)u32Signals,
+            (unsigned long)u64Pending, (unsigned long)u64Last,
+            (unsigned)u32Waiters, (unsigned)u32HasWaiter,
+            (unsigned)NOTIFY_SOFT_MULTI_MAX);
+
+    /* Grep: notify: soft query */
+    kprintf("notify: soft query signals=%lu pending=%lu last_badge=%lu "
+            "waiters=%lu is_live=%lu is_live_yes=%lu is_live_no=%lu\n",
+            (unsigned long)s.u64QuerySignals,
+            (unsigned long)s.u64QueryPending,
+            (unsigned long)s.u64QueryLastBadge,
+            (unsigned long)s.u64QueryWaiters,
+            (unsigned long)s.u64QueryIsLive,
+            (unsigned long)s.u64QueryIsLiveYes,
+            (unsigned long)s.u64QueryIsLiveNo);
+
+    /* Grep: notify: soft path */
+    kprintf("notify: soft path claim=badge_pulse_wait "
+            "irq=pulse_or+soft_multi_wake cas=pending_and_mask "
+            "multi_max=%u tag_waiter=%u park=thread_block+schedule "
+            "wave=13 (soft inventory; not bar3)\n",
+            (unsigned)NOTIFY_SOFT_MULTI_MAX, (unsigned)NOTIFY_TAG_WAITER);
 
     /* Grep: notify: soft stats */
     kprintf("notify: soft stats init=%lu pulse_hit=%lu pulse_dead=%lu "
@@ -222,7 +597,7 @@ notify_soft_log(void)
             "wait_self_wake=%lu wait_mask_any=%lu poll=%lu "
             "abort=%lu abort_wake=%lu mark_dead=%lu "
             "install_ok=%lu install_fail=%lu multi_wake_calls=%lu "
-            "multi_wake_sum=%lu soft_log=%lu msix_init=%lu\n",
+            "multi_wake_sum=%lu soft_log=%lu msix_init=%lu wave=13\n",
             (unsigned long)s.u64Init, (unsigned long)s.u64PulseHit,
             (unsigned long)s.u64PulseDead,
             (unsigned long)s.u64PulseZeroCoalesce,
@@ -275,12 +650,14 @@ notify_soft_multi_wake(struct gj_notify *pN)
     u32 cWoken;
 
     if (pN == NULL) {
+        /* greppable: notify: soft multi wake */
+        notify_soft_inc(&g_soft.u64MultiWakeNull);
         return 0;
     }
     /* greppable: notify: soft multi wake */
     notify_soft_inc(&g_soft.u64MultiWakeCalls);
     cWoken = thread_wake(pN, NOTIFY_TAG_WAITER, NOTIFY_SOFT_MULTI_MAX);
-    notify_soft_add(&g_soft.u64MultiWakeSum, (u64)cWoken);
+    notify_soft_note_wake(cWoken);
     return cWoken;
 }
 
@@ -315,21 +692,43 @@ notify_init(struct gj_notify *pN)
 int
 notify_is_live(const struct gj_notify *pN)
 {
-    return notify_live(pN);
+    int fLive;
+
+    notify_soft_inc(&g_soft.u64QueryIsLive);
+    fLive = notify_live(pN);
+    if (fLive) {
+        notify_soft_inc(&g_soft.u64QueryIsLiveYes);
+    } else {
+        notify_soft_inc(&g_soft.u64QueryIsLiveNo);
+    }
+    return fLive;
 }
 
 void
 notify_pulse(struct gj_notify *pN, u64 u64Badge)
 {
-    if (pN == NULL || !pN->u32Ready) {
+    u32 cBits;
+    u64 u64Or;
+
+    notify_soft_inc(&g_soft.u64PulseEnter);
+
+    if (pN == NULL) {
         /* greppable: notify: soft pulse dead */
         notify_soft_inc(&g_soft.u64PulseDead);
+        notify_soft_inc(&g_soft.u64PulseDeadNull);
+        return;
+    }
+    if (!pN->u32Ready) {
+        /* greppable: notify: soft pulse dead */
+        notify_soft_inc(&g_soft.u64PulseDead);
+        notify_soft_inc(&g_soft.u64PulseDeadReady);
         return;
     }
     if (__atomic_load_n(&pN->hdr.u32State, __ATOMIC_ACQUIRE) !=
         (u32)GJ_OBJ_LIVE) {
         /* greppable: notify: soft pulse dead */
         notify_soft_inc(&g_soft.u64PulseDead);
+        notify_soft_inc(&g_soft.u64PulseDeadState);
         return;
     }
     /* Badge 0 is not a valid event bit; coalesce to bit 0. */
@@ -343,6 +742,21 @@ notify_pulse(struct gj_notify *pN, u64 u64Badge)
     __atomic_store_n(&pN->u64LastBadge, u64Badge, __ATOMIC_RELEASE);
     (void)__atomic_fetch_add(&pN->u32Signals, 1u, __ATOMIC_ACQ_REL);
     notify_soft_inc(&g_soft.u64PulseHit);
+    cBits = notify_soft_popcount64(u64Badge);
+    notify_soft_add(&g_soft.u64BadgeBitsSum, (u64)cBits);
+    /* Soft sticky OR of last badges (diagnostics). */
+    u64Or = __atomic_load_n(&g_soft.u64BadgeLastOr, __ATOMIC_RELAXED);
+    while (1) {
+        u64 u64New = u64Or | u64Badge;
+        if (u64New == u64Or) {
+            break;
+        }
+        if (__atomic_compare_exchange_n(&g_soft.u64BadgeLastOr, &u64Or,
+                                        u64New, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED)) {
+            break;
+        }
+    }
     if (notify_has_waiter(pN)) {
         /* greppable: notify: soft pulse wake */
         (void)notify_soft_multi_wake(pN);
@@ -369,12 +783,19 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
     u64               u64New;
     struct gj_thread *pCur;
     int               fRegistered = 0;
+    u32               cWaiters;
 
     notify_soft_inc(&g_soft.u64WaitEnter);
+    if (fBlock) {
+        notify_soft_inc(&g_soft.u64WaitBlock);
+    } else {
+        notify_soft_inc(&g_soft.u64WaitNoblock);
+    }
 
     if (!notify_live(pN)) {
         /* greppable: notify: soft wait dead */
         notify_soft_inc(&g_soft.u64WaitDead);
+        notify_soft_inc(&g_soft.u64WaitDeadEnter);
         return 0;
     }
     /* mask==0 means "any badge" — greppable: NOTIFY_BADGE_WAIT */
@@ -384,6 +805,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
     }
     pCur = thread_current();
     for (;;) {
+        notify_soft_inc(&g_soft.u64WaitLoop);
         if (!notify_live(pN)) {
             if (fRegistered) {
                 if (pN->pWaiter == pCur) {
@@ -394,6 +816,7 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
             }
             /* greppable: notify: soft wait dead */
             notify_soft_inc(&g_soft.u64WaitDead);
+            notify_soft_inc(&g_soft.u64WaitDeadLoop);
             notify_soft_log_once();
             return 0;
         }
@@ -424,6 +847,9 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
         }
         /* Non-blocking, or no runnable thread context (e.g. early IRQ). */
         if (!fBlock || pCur == NULL) {
+            if (pCur == NULL && fBlock) {
+                notify_soft_inc(&g_soft.u64WaitNoThr);
+            }
             if (fRegistered) {
                 if (pN->pWaiter == pCur) {
                     pN->pWaiter = NULL;
@@ -440,8 +866,12 @@ notify_wait(struct gj_notify *pN, u64 u64Mask, int fBlock)
          * greppable: NOTIFY_SOFT_MULTI_WAITER
          */
         if (!fRegistered) {
-            (void)__atomic_fetch_add(&pN->u32Waiters, 1u, __ATOMIC_ACQ_REL);
+            cWaiters = __atomic_fetch_add(&pN->u32Waiters, 1u,
+                                          __ATOMIC_ACQ_REL) +
+                       1u;
             fRegistered = 1;
+            notify_soft_inc(&g_soft.u64WaitRegister);
+            notify_soft_note_waiters(cWaiters);
         }
         pN->pWaiter = pCur;
         thread_block(pN, NOTIFY_TAG_WAITER);
@@ -476,6 +906,7 @@ u32
 notify_signals(const struct gj_notify *pN)
 {
     /* Lifetime pulse count (stats); 0 if object missing. */
+    notify_soft_inc(&g_soft.u64QuerySignals);
     if (pN == NULL) {
         return 0;
     }
@@ -486,6 +917,7 @@ u64
 notify_pending(const struct gj_notify *pN)
 {
     /* Current uncleared badge bits (stats); 0 if object missing. */
+    notify_soft_inc(&g_soft.u64QueryPending);
     if (pN == NULL) {
         return 0;
     }
@@ -495,6 +927,7 @@ notify_pending(const struct gj_notify *pN)
 u64
 notify_last_badge(const struct gj_notify *pN)
 {
+    notify_soft_inc(&g_soft.u64QueryLastBadge);
     if (pN == NULL) {
         return 0;
     }
@@ -505,6 +938,7 @@ u32
 notify_waiters(const struct gj_notify *pN)
 {
     /* Soft multi-waiter count (stats). greppable: NOTIFY_SOFT_MULTI_WAITER */
+    notify_soft_inc(&g_soft.u64QueryWaiters);
     if (pN == NULL) {
         return 0;
     }
@@ -523,6 +957,8 @@ notify_abort_waiter(struct gj_notify *pN)
     if (notify_has_waiter(pN)) {
         (void)notify_soft_multi_wake(pN);
         notify_soft_inc(&g_soft.u64AbortWake);
+    } else {
+        notify_soft_inc(&g_soft.u64AbortNoWaiter);
     }
 }
 
@@ -537,8 +973,10 @@ notify_mark_dead(struct gj_notify *pN)
     pN->u32Ready = 0;
     if (pN->hdr.u32State == (u32)GJ_OBJ_LIVE) {
         (void)gj_obj_revoke_begin(&pN->hdr);
+        notify_soft_inc(&g_soft.u64MarkDeadRevoke);
     } else {
         __atomic_store_n(&pN->hdr.u32State, (u32)GJ_OBJ_DEAD, __ATOMIC_RELEASE);
+        notify_soft_inc(&g_soft.u64MarkDeadForce);
     }
     notify_abort_waiter(pN);
 }
@@ -552,15 +990,18 @@ notify_install(struct gj_process *pProc, struct gj_notify *pN, u16 u16Rights,
     if (pProc == NULL || pN == NULL || pOutRef == NULL || pProc->pCnode == NULL) {
         /* greppable: notify: soft install fail */
         notify_soft_inc(&g_soft.u64InstallFail);
+        notify_soft_inc(&g_soft.u64InstallFailNull);
         return GJ_ERR_INVAL;
     }
     if (!notify_live(pN)) {
         /* greppable: notify: soft install fail */
         notify_soft_inc(&g_soft.u64InstallFail);
+        notify_soft_inc(&g_soft.u64InstallFailDead);
         return GJ_ERR_NODEV;
     }
     if (u16Rights == 0) {
         u16Rights = (u16)(GJ_RIGHT_READ | GJ_RIGHT_WAIT | GJ_RIGHT_IDENTIFY);
+        notify_soft_inc(&g_soft.u64InstallDefaultRights);
     }
     st = gj_cap_alloc_install(pProc->pCnode, (u16)GJ_CAP_NOTIFICATION,
                               u16Rights, &pN->hdr, pOutRef);
@@ -570,6 +1011,7 @@ notify_install(struct gj_process *pProc, struct gj_notify *pN, u16 u16Rights,
     } else {
         /* greppable: notify: soft install fail */
         notify_soft_inc(&g_soft.u64InstallFail);
+        notify_soft_inc(&g_soft.u64InstallFailCap);
     }
     return st;
 }
@@ -579,6 +1021,7 @@ notify_msix_init(void)
 {
     if (g_fMsixInited && g_msixNotify.u32Ready &&
         g_msixNotify.hdr.u32State == (u32)GJ_OBJ_LIVE) {
+        notify_soft_inc(&g_soft.u64MsixInitSkip);
         return;
     }
     notify_init(&g_msixNotify);
@@ -602,5 +1045,6 @@ notify_msix_init(void)
 struct gj_notify *
 notify_msix_global(void)
 {
+    notify_soft_inc(&g_soft.u64MsixGlobal);
     return &g_msixNotify;
 }

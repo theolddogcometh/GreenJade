@@ -10,15 +10,17 @@
  * pmm_release_high after success (main.c) for hierarchical free on large
  * RAM (768G soak_tib). Never identity-map high PAs into freelist links.
  *
- * Soft VMM inventory (Wave 10 exclusive deepen):
+ * Soft VMM inventory (Wave 13 exclusive deepen; Wave 10 base):
  *   - Live AS / COW table / HHDM / device UC / ensure_id snaps
- *   - Cumulative create/destroy/break/share/table counters
+ *   - Cumulative create/destroy/break/share/table + map/clone rejects
+ *   - Peaks / layout / path honesty / soft PASS lamp
  *   greppable: "vmm: soft …"
  *
- * Soft higher-half readiness inventory (exclusive deepen; soft only):
+ * Soft higher-half readiness inventory (Wave 13 exclusive deepen; soft only):
  *   - HHDM base / mapped span (P-MEM-5 data map; not kernel image move)
  *   - Identity bridge residual (low PML4 still shared into private AS)
  *   - User half empty goal lamp (empty user half without identity share)
+ *   - Geometry / bridge / debt checklist / OPEN honesty multi-line
  *   greppable: "vmm: higher-half soft …"
  *   lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
  * Honesty: higher-half kernel move OPEN; soft inventory only — no relocate.
@@ -28,8 +30,13 @@
  *            "vmm: ensure_identity_rw" (… soft PASS)
  *            "vmm: soft inventory" "vmm: soft as" "vmm: soft cow"
  *            "vmm: soft hhdm" "vmm: soft device_uc" "vmm: soft ensure_id"
+ *            "vmm: soft clone" "vmm: soft map" "vmm: soft destroy"
+ *            "vmm: soft reject" "vmm: soft peak" "vmm: soft layout"
+ *            "vmm: soft path" "vmm: soft lamps" "vmm: soft PASS"
  *            "vmm: higher-half soft inventory" "vmm: higher-half soft lamps"
  *            "vmm: higher-half soft path" "vmm: higher-half soft residual"
+ *            "vmm: higher-half soft geometry" "vmm: higher-half soft bridge"
+ *            "vmm: higher-half soft debt" "vmm: higher-half soft goal"
  *            "vmm: higher-half soft OPEN"
  */
 #include <gj/apic.h>
@@ -86,13 +93,55 @@ static u32               g_cEnsureIdCall;
 static u32               g_cEnsureIdFix;
 
 /*
- * Soft product inventory (Wave 10 exclusive). Cumulative unless noted live/peak.
- * Diagnostics only — never hard-gate product AS/COW/HHDM policy.
+ * Soft product inventory (Wave 13 exclusive deepen). Cumulative unless
+ * noted live/peak. Diagnostics only — never hard-gate product AS/COW/HHDM.
  * greppable: vmm: soft
  */
 static u32 g_cAsLivePeak;   /* high-water private AS live count */
 static u32 g_cSoftInvLogs;  /* soft_inventory_log emissions */
 static u8  g_fSoftInvOnce;  /* one-shot deep dump after product activity */
+
+/* Soft map/unmap/protect path tallies (wrap OK; never hard-gate). */
+static u32 g_cSoftMapOk;
+static u32 g_cSoftMapInval;
+static u32 g_cSoftMapPerm;
+static u32 g_cSoftMapNomem;
+static u32 g_cSoftUnmapOk;
+static u32 g_cSoftUnmapMiss;
+static u32 g_cSoftProtOk;
+static u32 g_cSoftProtMiss;
+static u32 g_cSoftProtPerm;
+
+/* Soft clone / destroy cumulative path tallies. */
+static u32 g_cSoftCloneCall;
+static u32 g_cSoftCloneOk;
+static u32 g_cSoftCloneReject;
+static u32 g_cSoftCloneNomem;
+static u32 g_cSoftClonePages;
+static u32 g_cSoftCloneCow;
+static u32 g_cSoftCloneRo;
+static u32 g_cSoftDestroyLeaf;
+static u32 g_cSoftDestroyPriv;
+static u32 g_cSoftDestroyCowDrop;
+static u32 g_cSoftDestroyTables;
+static u32 g_cSoftDestroySkip;
+
+/* Soft reject / fail path tallies. */
+static u32 g_cSoftAsCreateFail;
+static u32 g_cSoftAsDestroyReject;
+static u32 g_cSoftDevUcReject;
+static u32 g_cSoftDevUcNomem;
+static u32 g_cSoftMapDevReject;
+static u32 g_cSoftEnsureReject;
+static u32 g_cSoftEnsureNomem;
+static u32 g_cSoftCowBreakNomem;
+static u32 g_cSoftCowFreeOld;
+
+/* Soft peaks + HHDM leaf snap. */
+static u32 g_cCowLivePeak;
+static u32 g_cMapDeviceUcPagesPeak;
+static u32 g_cHhdm2MiB;           /* 2 MiB leaves installed by vmm_hhdm_init */
+static u32 g_cHhAsShareSlotsLast; /* last as_create shared_slots snap */
 
 /*
  * Soft higher-half readiness (progress counters only — not product move).
@@ -111,15 +160,48 @@ static u32 g_cHhSoftLogs;         /* higher_half_soft_inventory emissions */
 static u32 g_cHhSoftPathNotes;    /* soft path note line emissions */
 static u32 g_cHhAsShareIdentity;  /* as_create while identity still shared */
 static u32 g_cHhSoftGoalSnap0;    /* times user_half_empty_goal reported 0 */
+static u32 g_cHhSoftOpenLogs;     /* higher-half soft OPEN line emissions */
+static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 
 /* Soft product target for kernel image VA (observe only; not relocated). */
 #define GJ_VMM_SOFT_KERNEL_HH_BASE 0xffffffff80000000ull
 /* PML4 low half = user / identity bridge; high half = kernel maps (HHDM). */
 #define GJ_VMM_PML4_USER_SLOTS     256u
+#define GJ_VMM_PML4_SLOTS          512u
+/* Soft product user VA band floor (matches destroy/clone filters). */
+#define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
+#define GJ_VMM_SOFT_WAVE           13u
 
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
 static void higher_half_soft_inventory(void);
+static void vmm_soft_inc(u32 *pCtr);
+static void vmm_soft_note_peaks(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+vmm_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/** Soft: refresh live/peak high-water (diagnostics only). */
+static void
+vmm_soft_note_peaks(void)
+{
+    if (g_cAsLive > g_cAsLivePeak) {
+        g_cAsLivePeak = g_cAsLive;
+    }
+    if (g_cCowLive > g_cCowLivePeak) {
+        g_cCowLivePeak = g_cCowLive;
+    }
+    if (g_cMapDeviceUcPages > g_cMapDeviceUcPagesPeak) {
+        g_cMapDeviceUcPagesPeak = g_cMapDeviceUcPages;
+    }
+}
 
 static u64
 read_cr3(void)
@@ -171,6 +253,7 @@ cow_ref_share(gj_paddr_t pa)
             g_aCowRef[i].pa = pa;
             g_aCowRef[i].cRef = 2; /* parent + child */
             g_cCowLive++;
+            vmm_soft_note_peaks();
             g_cCowShareOk++;
             return 0;
         }
@@ -227,18 +310,23 @@ release_leaf_frame(gj_paddr_t pa, int fCow)
 }
 
 /**
- * Soft higher-half readiness inventory (product / smoke).
+ * Soft higher-half readiness inventory (product / smoke; Wave 13 deepen).
  * Prefix-stable markers (vmm: higher-half soft …):
  *   vmm: higher-half soft inventory  — HHDM base + residual geometry
  *   vmm: higher-half soft lamps      — hhdm_ready / identity_bridge /
  *                                      user_half_empty_goal=0|1 soft
  *   vmm: higher-half soft residual   — low/high PML4 present slot counts
+ *   vmm: higher-half soft geometry   — soft target VA + PML4 split constants
+ *   vmm: higher-half soft bridge     — identity share residual progress
+ *   vmm: higher-half soft debt       — product work still OPEN (checklist)
+ *   vmm: higher-half soft goal       — empty user half goal lamp snap
  *   vmm: higher-half soft path       — empty user half without identity
  *                                      share notes (progress counters only)
  *   vmm: higher-half soft OPEN       — honesty: kernel image move not done
  *
  * Never relocates the kernel. Never hard-gates AS/HHDM policy.
  * greppable: vmm: higher-half soft
+ * greppable: vmm: higher-half soft OPEN
  */
 static void
 higher_half_soft_inventory(void)
@@ -246,20 +334,28 @@ higher_half_soft_inventory(void)
     u32 iSlot;
     u32 cLowPresent = 0;
     u32 cHighPresent = 0;
+    u32 u32FirstLow = GJ_VMM_PML4_USER_SLOTS; /* no present → sentinel */
+    u32 u32LastLow = 0;
+    u32 u32FirstHigh = GJ_VMM_PML4_SLOTS;
+    u32 u32LastHigh = 0;
+    u32 u32HhdmSlot;
     int fHhdmReady;
     int fIdentityBridge;
     int fUserHalfEmptyGoal;
+    int fTemplate;
     u64 u64Anon;
 
-    if (g_cHhSoftLogs < 0xffffffffu) {
-        g_cHhSoftLogs++;
-    }
-    if (g_cHhSoftPathNotes < 0xffffffffu) {
-        g_cHhSoftPathNotes++;
-    }
+    vmm_soft_inc(&g_cHhSoftLogs);
+    vmm_soft_inc(&g_cHhSoftPathNotes);
+    vmm_soft_inc(&g_cHhSoftOpenLogs);
+    vmm_soft_inc(&g_cHhSoftDebtNotes);
+    vmm_soft_note_peaks();
 
     fHhdmReady = g_fHhdmReady ? 1 : 0;
+    fTemplate = (g_pKernelPml4 != NULL) ? 1 : 0;
     u64Anon = (g_pAnonCursor != NULL) ? *g_pAnonCursor : g_u64AnonNext;
+    /* Soft: which PML4 slot owns HHDM base (canonical high half). */
+    u32HhdmSlot = (u32)((GJ_HHDM_BASE >> 39) & 0x1ffull);
 
     /*
      * Soft residual walk: present PML4 slots in low half (identity bridge /
@@ -269,11 +365,20 @@ higher_half_soft_inventory(void)
         for (iSlot = 0; iSlot < GJ_VMM_PML4_USER_SLOTS; iSlot++) {
             if ((g_pKernelPml4[iSlot] & PTE_P) != 0) {
                 cLowPresent++;
+                if (u32FirstLow == GJ_VMM_PML4_USER_SLOTS) {
+                    u32FirstLow = iSlot;
+                }
+                u32LastLow = iSlot;
             }
         }
-        for (iSlot = GJ_VMM_PML4_USER_SLOTS; iSlot < 512u; iSlot++) {
+        for (iSlot = GJ_VMM_PML4_USER_SLOTS; iSlot < GJ_VMM_PML4_SLOTS;
+             iSlot++) {
             if ((g_pKernelPml4[iSlot] & PTE_P) != 0) {
                 cHighPresent++;
+                if (u32FirstHigh == GJ_VMM_PML4_SLOTS) {
+                    u32FirstHigh = iSlot;
+                }
+                u32LastHigh = iSlot;
             }
         }
     }
@@ -291,36 +396,91 @@ higher_half_soft_inventory(void)
      * with empty user half and no identity share. Still OPEN → always 0 soft.
      */
     fUserHalfEmptyGoal = 0;
-    if (g_cHhSoftGoalSnap0 < 0xffffffffu) {
-        g_cHhSoftGoalSnap0++;
-    }
+    vmm_soft_inc(&g_cHhSoftGoalSnap0);
 
     /* Grep: vmm: higher-half soft inventory */
     kprintf("vmm: higher-half soft inventory hhdm_base=0x%lx mapped=0x%lx "
             "hhdm_ready=%d ker_cr3=0x%lx soft_kernel_hh=0x%lx "
-            "anon_next=0x%lx as_live=%u logs=%u "
+            "anon_next=0x%lx as_live=%u logs=%u hhdm_2mib=%u "
+            "template=%d wave=%u "
             "(soft readiness; not kernel image move)\n",
             (unsigned long)GJ_HHDM_BASE, (unsigned long)g_u64HhdmMapped,
             fHhdmReady, (unsigned long)g_u64KernelCr3,
             (unsigned long)GJ_VMM_SOFT_KERNEL_HH_BASE,
-            (unsigned long)u64Anon, g_cAsLive, g_cHhSoftLogs);
+            (unsigned long)u64Anon, g_cAsLive, g_cHhSoftLogs, g_cHhdm2MiB,
+            fTemplate, (unsigned)GJ_VMM_SOFT_WAVE);
 
     /*
      * Grep: vmm: higher-half soft lamps
      * Lamps: hhdm_ready, identity_bridge, user_half_empty_goal=0/1 soft
      */
     kprintf("vmm: higher-half soft lamps hhdm_ready=%d identity_bridge=%d "
-            "user_half_empty_goal=%d soft "
+            "user_half_empty_goal=%d soft template=%d "
+            "kernel_image_hh=0 move=OPEN "
             "(0=goal open; 1=empty user half without identity share)\n",
-            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal);
+            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal, fTemplate);
 
     /* Grep: vmm: higher-half soft residual */
     kprintf("vmm: higher-half soft residual identity_bridge=%d "
             "low_pml4_present=%u high_pml4_present=%u "
-            "as_share_id=%u ensure_id_calls=%u ensure_id_fix=%u "
-            "(identity residual; soft only)\n",
-            fIdentityBridge, cLowPresent, cHighPresent,
+            "first_low=%u last_low=%u first_high=%u last_high=%u "
+            "hhdm_slot=%u as_share_id=%u ensure_id_calls=%u "
+            "ensure_id_fix=%u (identity residual; soft only)\n",
+            fIdentityBridge, cLowPresent, cHighPresent, u32FirstLow,
+            u32LastLow, u32FirstHigh, u32LastHigh, u32HhdmSlot,
             g_cHhAsShareIdentity, g_cEnsureIdCall, g_cEnsureIdFix);
+
+    /*
+     * Soft geometry catalog (observe-only targets + split constants).
+     * Grep: vmm: higher-half soft geometry
+     */
+    kprintf("vmm: higher-half soft geometry soft_kernel_hh=0x%lx "
+            "hhdm_base=0x%lx device_mmio=0x%lx device_span=0x%lx "
+            "pml4_user_slots=%u pml4_slots=%u page=%u user_floor=0x%lx "
+            "anon_band=[0x%lx,0x%lx) wave=%u\n",
+            (unsigned long)GJ_VMM_SOFT_KERNEL_HH_BASE,
+            (unsigned long)GJ_HHDM_BASE,
+            (unsigned long)GJ_DEVICE_MMIO_BASE,
+            (unsigned long)GJ_DEVICE_MMIO_SPAN,
+            (unsigned)GJ_VMM_PML4_USER_SLOTS, (unsigned)GJ_VMM_PML4_SLOTS,
+            (unsigned)GJ_PAGE_SIZE, (unsigned long)GJ_VMM_SOFT_USER_FLOOR,
+            (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+
+    /*
+     * Soft bridge residual: as_create still shares identity into private AS.
+     * Grep: vmm: higher-half soft bridge
+     */
+    kprintf("vmm: higher-half soft bridge residual=%d low_present=%u "
+            "as_share_id=%u share_slots_last=%u ensure_id=%u/%u "
+            "as_create=%u as_destroy=%u "
+            "(bring-up identity still shared into private AS; soft only)\n",
+            fIdentityBridge, cLowPresent, g_cHhAsShareIdentity,
+            g_cHhAsShareSlotsLast, g_cEnsureIdFix, g_cEnsureIdCall,
+            g_cAsCreate, g_cAsDestroy);
+
+    /*
+     * Product debt checklist — all remain OPEN until real higher-half work.
+     * Grep: vmm: higher-half soft debt
+     */
+    kprintf("vmm: higher-half soft debt kernel_reloc=OPEN "
+            "pml4_empty_user=OPEN stop_as_share_id=OPEN "
+            "identity_bridge_clear=OPEN user_half_empty_goal=OPEN "
+            "kernel_image_hh=OPEN as_share_id=%u goal_snap0=%u "
+            "notes=%u wave=%u (checklist; soft only; not product close)\n",
+            g_cHhAsShareIdentity, g_cHhSoftGoalSnap0, g_cHhSoftDebtNotes,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+
+    /*
+     * Soft goal lamp snap (always 0 while product empty half OPEN).
+     * Grep: vmm: higher-half soft goal
+     */
+    kprintf("vmm: higher-half soft goal "
+            "empty_user_half_without_id_share=%d soft "
+            "product=OPEN snap0=%u as_share_id=%u identity_bridge=%d "
+            "hhdm_ready=%d (1 only when product empty user half; soft)\n",
+            fUserHalfEmptyGoal, g_cHhSoftGoalSnap0, g_cHhAsShareIdentity,
+            fIdentityBridge, fHhdmReady);
 
     /*
      * Soft path notes: empty user half without identity share.
@@ -330,28 +490,42 @@ higher_half_soft_inventory(void)
     kprintf("vmm: higher-half soft path empty_user_half_without_id_share=OPEN "
             "as_share_id=%u goal_snap0=%u notes=%u as_create=%u "
             "as_destroy=%u hhdm_ready=%d identity_bridge=%d "
-            "(progress counters only; not product empty user half)\n",
+            "wave=%u (progress counters only; not product empty user half)\n",
             g_cHhAsShareIdentity, g_cHhSoftGoalSnap0, g_cHhSoftPathNotes,
-            g_cAsCreate, g_cAsDestroy, fHhdmReady, fIdentityBridge);
+            g_cAsCreate, g_cAsDestroy, fHhdmReady, fIdentityBridge,
+            (unsigned)GJ_VMM_SOFT_WAVE);
 
     /*
-     * Honesty close: higher-half kernel move remains OPEN.
+     * Honesty close: higher-half kernel move remains OPEN (deepen Wave 13).
      * Grep: vmm: higher-half soft OPEN
      */
     kprintf("vmm: higher-half soft OPEN move=OPEN inventory_only=1 "
             "hhdm_ready=%d identity_bridge=%d user_half_empty_goal=%d soft "
-            "kernel_image_hh=0 (soft inventory; higher-half move not done)\n",
-            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal);
+            "kernel_image_hh=0 empty_user_half=OPEN identity_share=OPEN "
+            "soft_kernel_hh=0x%lx open_logs=%u debt_notes=%u wave=%u "
+            "(soft inventory; higher-half move not done; not bar3)\n",
+            fHhdmReady, fIdentityBridge, fUserHalfEmptyGoal,
+            (unsigned long)GJ_VMM_SOFT_KERNEL_HH_BASE, g_cHhSoftOpenLogs,
+            g_cHhSoftDebtNotes, (unsigned)GJ_VMM_SOFT_WAVE);
 }
 
 /**
- * Greppable soft VMM inventory (product / smoke).
+ * Greppable soft VMM inventory (product / smoke; Wave 13 exclusive deepen).
  *   vmm: soft inventory …
  *   vmm: soft as …
  *   vmm: soft cow …
  *   vmm: soft hhdm …
  *   vmm: soft device_uc …
  *   vmm: soft ensure_id …
+ *   vmm: soft clone …
+ *   vmm: soft map …
+ *   vmm: soft destroy …
+ *   vmm: soft reject …
+ *   vmm: soft peak …
+ *   vmm: soft layout …
+ *   vmm: soft path …
+ *   vmm: soft lamps …
+ *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
  * Honesty: soft counters only — not product AS/COW/HHDM complete or bar3.
@@ -365,10 +539,11 @@ soft_inventory_log(void)
     u32 cCowRefs = 0;
     u64 u64Anon;
     int fHhdm;
+    int fTemplate;
+    int fSoftPass;
 
-    if (g_cSoftInvLogs < 0xffffffffu) {
-        g_cSoftInvLogs++;
-    }
+    vmm_soft_inc(&g_cSoftInvLogs);
+    vmm_soft_note_peaks();
 
     for (i = 0; i < GJ_COW_REF_MAX; i++) {
         if (g_aCowRef[i].u8Used) {
@@ -376,57 +551,157 @@ soft_inventory_log(void)
             cCowRefs += g_aCowRef[i].cRef;
         }
     }
-    if (g_cAsLive > g_cAsLivePeak) {
-        g_cAsLivePeak = g_cAsLive;
-    }
 
     fHhdm = g_fHhdmReady ? 1 : 0;
+    fTemplate = (g_pKernelPml4 != NULL && g_u64KernelCr3 != 0) ? 1 : 0;
     u64Anon = (g_pAnonCursor != NULL) ? *g_pAnonCursor : g_u64AnonNext;
 
     /* Grep: vmm: soft inventory */
     kprintf("vmm: soft inventory hhdm=%d as_live=%u as_peak=%u cow_live=%u "
-            "cow_slots=%u cow_refs=%u logs=%u "
-            "(soft; not product AS complete)\n",
+            "cow_slots=%u cow_refs=%u logs=%u template=%d wave=%u "
+            "(soft; not product AS complete; not bar3)\n",
             fHhdm, g_cAsLive, g_cAsLivePeak, g_cCowLive, cCowSlots, cCowRefs,
-            g_cSoftInvLogs);
+            g_cSoftInvLogs, fTemplate, (unsigned)GJ_VMM_SOFT_WAVE);
 
     /* Grep: vmm: soft as */
     kprintf("vmm: soft as create=%u destroy=%u live=%u peak=%u "
-            "ker_cr3=0x%lx anon_next=0x%lx band=[0x%lx,0x%lx)\n",
+            "create_fail=%u destroy_reject=%u "
+            "ker_cr3=0x%lx anon_next=0x%lx band=[0x%lx,0x%lx) "
+            "share_id=%u share_slots_last=%u\n",
             g_cAsCreate, g_cAsDestroy, g_cAsLive, g_cAsLivePeak,
+            g_cSoftAsCreateFail, g_cSoftAsDestroyReject,
             (unsigned long)g_u64KernelCr3, (unsigned long)u64Anon,
-            (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END);
+            (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END,
+            g_cHhAsShareIdentity, g_cHhAsShareSlotsLast);
 
     /* Grep: vmm: soft cow */
     kprintf("vmm: soft cow break=%u share_ok=%u share_full=%u tbl_cow=%u "
-            "live=%u frees=%u slots_used=%u slots_max=%u refsum=%u\n",
+            "live=%u peak=%u frees=%u free_old=%u break_nomem=%u "
+            "slots_used=%u slots_max=%u refsum=%u\n",
             g_cCowBreak, g_cCowShareOk, g_cCowShareFull, g_cCowTable,
-            g_cCowLive, g_cCowFrees, cCowSlots, (unsigned)GJ_COW_REF_MAX,
+            g_cCowLive, g_cCowLivePeak, g_cCowFrees, g_cSoftCowFreeOld,
+            g_cSoftCowBreakNomem, cCowSlots, (unsigned)GJ_COW_REF_MAX,
             cCowRefs);
 
     /* Grep: vmm: soft hhdm */
     kprintf("vmm: soft hhdm ready=%d base=0x%lx mapped=0x%lx "
-            "p_mem5=1 (soft inventory)\n",
+            "pages_2mib=%u p_mem5=1 wave=%u (soft inventory)\n",
             fHhdm, (unsigned long)GJ_HHDM_BASE,
-            (unsigned long)g_u64HhdmMapped);
+            (unsigned long)g_u64HhdmMapped, g_cHhdm2MiB,
+            (unsigned)GJ_VMM_SOFT_WAVE);
 
     /* Grep: vmm: soft device_uc */
-    kprintf("vmm: soft device_uc maps=%u pages=%u base=0x%lx span=0x%lx\n",
-            g_cMapDeviceUc, g_cMapDeviceUcPages,
+    kprintf("vmm: soft device_uc maps=%u pages=%u pages_peak=%u "
+            "reject=%u nomem=%u map_dev_reject=%u "
+            "base=0x%lx span=0x%lx\n",
+            g_cMapDeviceUc, g_cMapDeviceUcPages, g_cMapDeviceUcPagesPeak,
+            g_cSoftDevUcReject, g_cSoftDevUcNomem, g_cSoftMapDevReject,
             (unsigned long)GJ_DEVICE_MMIO_BASE,
             (unsigned long)GJ_DEVICE_MMIO_SPAN);
 
     /* Grep: vmm: soft ensure_id */
-    kprintf("vmm: soft ensure_id calls=%u fixed=%u\n", g_cEnsureIdCall,
-            g_cEnsureIdFix);
+    kprintf("vmm: soft ensure_id calls=%u fixed=%u reject=%u nomem=%u\n",
+            g_cEnsureIdCall, g_cEnsureIdFix, g_cSoftEnsureReject,
+            g_cSoftEnsureNomem);
+
+    /* Grep: vmm: soft clone */
+    kprintf("vmm: soft clone call=%u ok=%u reject=%u nomem=%u "
+            "pages=%u cow=%u ro=%u\n",
+            g_cSoftCloneCall, g_cSoftCloneOk, g_cSoftCloneReject,
+            g_cSoftCloneNomem, g_cSoftClonePages, g_cSoftCloneCow,
+            g_cSoftCloneRo);
+
+    /* Grep: vmm: soft map */
+    kprintf("vmm: soft map ok=%u inval=%u perm=%u nomem=%u "
+            "unmap_ok=%u unmap_miss=%u prot_ok=%u prot_miss=%u "
+            "prot_perm=%u\n",
+            g_cSoftMapOk, g_cSoftMapInval, g_cSoftMapPerm, g_cSoftMapNomem,
+            g_cSoftUnmapOk, g_cSoftUnmapMiss, g_cSoftProtOk, g_cSoftProtMiss,
+            g_cSoftProtPerm);
+
+    /* Grep: vmm: soft destroy */
+    kprintf("vmm: soft destroy calls=%u leaf=%u priv=%u cow_drop=%u "
+            "tables=%u shared_skip=%u reject=%u live=%u\n",
+            g_cAsDestroy, g_cSoftDestroyLeaf, g_cSoftDestroyPriv,
+            g_cSoftDestroyCowDrop, g_cSoftDestroyTables, g_cSoftDestroySkip,
+            g_cSoftAsDestroyReject, g_cAsLive);
+
+    /* Grep: vmm: soft reject */
+    kprintf("vmm: soft reject as_create=%u as_destroy=%u dev_uc=%u "
+            "dev_uc_nomem=%u map_dev=%u ensure=%u ensure_nomem=%u "
+            "map_inval=%u map_perm=%u map_nomem=%u clone=%u "
+            "clone_nomem=%u cow_break_nomem=%u\n",
+            g_cSoftAsCreateFail, g_cSoftAsDestroyReject, g_cSoftDevUcReject,
+            g_cSoftDevUcNomem, g_cSoftMapDevReject, g_cSoftEnsureReject,
+            g_cSoftEnsureNomem, g_cSoftMapInval, g_cSoftMapPerm,
+            g_cSoftMapNomem, g_cSoftCloneReject, g_cSoftCloneNomem,
+            g_cSoftCowBreakNomem);
+
+    /* Grep: vmm: soft peak */
+    kprintf("vmm: soft peak as_live=%u cow_live=%u device_uc_pages=%u "
+            "logs=%u hh_logs=%u\n",
+            g_cAsLivePeak, g_cCowLivePeak, g_cMapDeviceUcPagesPeak,
+            g_cSoftInvLogs, g_cHhSoftLogs);
+
+    /* Grep: vmm: soft layout */
+    kprintf("vmm: soft layout page=%u cow_ref_max=%u pml4_user=%u "
+            "pml4_slots=%u soft_kernel_hh=0x%lx hhdm_base=0x%lx "
+            "device_base=0x%lx user_floor=0x%lx anon=[0x%lx,0x%lx) "
+            "wave=%u\n",
+            (unsigned)GJ_PAGE_SIZE, (unsigned)GJ_COW_REF_MAX,
+            (unsigned)GJ_VMM_PML4_USER_SLOTS, (unsigned)GJ_VMM_PML4_SLOTS,
+            (unsigned long)GJ_VMM_SOFT_KERNEL_HH_BASE,
+            (unsigned long)GJ_HHDM_BASE,
+            (unsigned long)GJ_DEVICE_MMIO_BASE,
+            (unsigned long)GJ_VMM_SOFT_USER_FLOOR,
+            (unsigned long)GJ_VMM_ANON_BASE, (unsigned long)GJ_VMM_ANON_END,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+
+    /*
+     * Honesty: soft inventory ≠ product higher-half move / bar3.
+     * Grep: vmm: soft path
+     */
+    kprintf("vmm: soft path as=private_pml4+shared_kernel_half "
+            "cow=ro+soft_bit hhdm=p_mem5_2mib device_uc=high_window "
+            "ensure_id=repair_identity higher_half_move=OPEN "
+            "user_half_empty=OPEN identity_bridge=%u wave=%u "
+            "(soft inventory; not bar3)\n",
+            g_cHhAsShareIdentity != 0u ? 1u : 0u,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+
+    /* Grep: vmm: soft lamps */
+    kprintf("vmm: soft lamps hhdm_ready=%d template=%d as_live=%u "
+            "cow_live=%u identity_bridge=%u user_half_empty_goal=0 soft "
+            "higher_half_move=OPEN wave=%u\n",
+            fHhdm, fTemplate, g_cAsLive, g_cCowLive,
+            g_cHhAsShareIdentity != 0u ? 1u : 0u,
+            (unsigned)GJ_VMM_SOFT_WAVE);
+
+    /*
+     * Soft lamp: template bind is soft-pass; HHDM ready is stronger smoke.
+     * Never hard-gates. Grep: vmm: soft inventory PASS | vmm: soft PASS
+     * Grep: vmm: soft FAIL
+     */
+    fSoftPass = fTemplate;
+    if (fSoftPass != 0) {
+        kprintf("vmm: soft inventory PASS hhdm=%d as_live=%u logs=%u "
+                "wave=%u\n",
+                fHhdm, g_cAsLive, g_cSoftInvLogs,
+                (unsigned)GJ_VMM_SOFT_WAVE);
+        kprintf("vmm: soft PASS template=1 hhdm=%d wave=%u\n", fHhdm,
+                (unsigned)GJ_VMM_SOFT_WAVE);
+    } else {
+        kprintf("vmm: soft FAIL template=0 "
+                "(soft inventory only; not product gate)\n");
+    }
 
     /* Higher-half readiness lamps + path notes (move OPEN; soft only). */
     higher_half_soft_inventory();
 }
 
 /**
- * After first product AS/COW/device/ensure activity, print soft inventory once
- * (mirrors memobj soft-stats-once). Diagnostics only.
+ * After first product AS/COW/device/ensure/clone activity, print soft
+ * inventory once (mirrors memobj soft-stats-once). Diagnostics only.
  */
 static void
 soft_inventory_maybe_once(void)
@@ -435,7 +710,8 @@ soft_inventory_maybe_once(void)
         return;
     }
     if (g_cAsCreate == 0 && g_cMapDeviceUc == 0 && g_cCowBreak == 0 &&
-        g_cEnsureIdCall == 0 && g_cAsDestroy == 0) {
+        g_cEnsureIdCall == 0 && g_cAsDestroy == 0 &&
+        g_cSoftCloneCall == 0) {
         return;
     }
     g_fSoftInvOnce = 1;
@@ -519,7 +795,7 @@ vmm_init(void)
             (unsigned long)g_u64KernelCr3,
             (unsigned long)GJ_VMM_ANON_BASE,
             (unsigned long)GJ_VMM_ANON_END);
-    /* Wave 10: greppable soft inventory baseline after template bind. */
+    /* Wave 13: greppable soft inventory baseline after template bind. */
     soft_inventory_log();
 }
 
@@ -604,13 +880,14 @@ vmm_hhdm_init(u64 paMax)
     }
     g_fHhdmReady = 1;
     g_u64HhdmMapped = paMax;
+    g_cHhdm2MiB = (u32)cMapped;
     /* phys_to_virt now uses HHDM — refresh kernel pml4 pointer */
     g_pKernelPml4 = phys_to_virt(g_u64KernelCr3);
     /* Greppable: vmm: HHDM base= (P-MEM-5; unlocks pmm high hierarchical free) */
     kprintf("vmm: HHDM base=0x%lx mapped=0x%lx (%lu x 2MiB)\n",
             (unsigned long)GJ_HHDM_BASE, (unsigned long)paMax,
             (unsigned long)cMapped);
-    /* Wave 10: soft inventory after HHDM ready. */
+    /* Wave 13: soft inventory after HHDM ready. */
     soft_inventory_log();
     return GJ_OK;
 }
@@ -634,6 +911,7 @@ vmm_map_device(gj_paddr_t pa, u64 cb)
     u64 u64Ker1;
 
     if (g_pKernelPml4 == NULL || cb == 0) {
+        vmm_soft_inc(&g_cSoftMapDevReject);
         return GJ_ERR_INVAL;
     }
     /*
@@ -646,6 +924,7 @@ vmm_map_device(gj_paddr_t pa, u64 cb)
     u64Pa = (u64)pa & ~((1ull << 21) - 1);
     u64End = ((u64)pa + cb + (1ull << 21) - 1) & ~((1ull << 21) - 1);
     if (u64Pa < u64Ker1 && u64End > u64Ker0) {
+        vmm_soft_inc(&g_cSoftMapDevReject);
         kprintf("vmm: map_device reject pa=0x%lx (kernel image collision)\n",
                 (unsigned long)pa);
         return GJ_ERR_PERM;
@@ -713,12 +992,14 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
     u32 cHad = 0;
 
     if (g_pKernelPml4 == NULL || cb == 0 || pVaOut == NULL) {
+        vmm_soft_inc(&g_cSoftDevUcReject);
         kprintf("vmm: map_device_uc soft reject inval pa=0x%lx cb=0x%lx\n",
                 (unsigned long)pa, (unsigned long)cb);
         return GJ_ERR_INVAL;
     }
     if ((u64)pa >= GJ_DEVICE_MMIO_SPAN ||
         (u64)pa + cb > GJ_DEVICE_MMIO_SPAN) {
+        vmm_soft_inc(&g_cSoftDevUcReject);
         kprintf("vmm: map_device_uc soft reject span pa=0x%lx cb=0x%lx\n",
                 (unsigned long)pa, (unsigned long)cb);
         return GJ_ERR_INVAL;
@@ -737,6 +1018,7 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
         if ((g_pKernelPml4[u64I4] & PTE_P) == 0) {
             paTbl = alloc_table();
             if (paTbl == 0) {
+                vmm_soft_inc(&g_cSoftDevUcNomem);
                 kprintf("vmm: map_device_uc soft nomem pa=0x%lx\n",
                         (unsigned long)pa);
                 return GJ_ERR_NOMEM;
@@ -750,6 +1032,7 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
         if ((pPdpt[u64I3] & PTE_P) == 0) {
             paTbl = alloc_table();
             if (paTbl == 0) {
+                vmm_soft_inc(&g_cSoftDevUcNomem);
                 kprintf("vmm: map_device_uc soft nomem pa=0x%lx\n",
                         (unsigned long)pa);
                 return GJ_ERR_NOMEM;
@@ -779,6 +1062,7 @@ vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut)
     }
     g_cMapDeviceUc++;
     g_cMapDeviceUcPages += cNew;
+    vmm_soft_note_peaks();
     /* Soft CAP greppable (AHCI/NVMe BAR probes). */
     kprintf("vmm: map_device_uc pa=0x%lx va=0x%lx cb=0x%lx pages=%u had=%u "
             "total=%u soft PASS\n",
@@ -818,11 +1102,13 @@ vmm_as_create(void)
     u32 cShared = 0;
 
     if (g_pKernelPml4 == NULL) {
+        vmm_soft_inc(&g_cSoftAsCreateFail);
         kprintf("vmm: as_create fail no_template\n");
         return 0;
     }
     paPml4 = alloc_table();
     if (paPml4 == 0) {
+        vmm_soft_inc(&g_cSoftAsCreateFail);
         kprintf("vmm: as_create fail nomem live=%u\n", g_cAsLive);
         return 0;
     }
@@ -839,16 +1125,13 @@ vmm_as_create(void)
 
     g_cAsCreate++;
     g_cAsLive++;
-    if (g_cAsLive > g_cAsLivePeak) {
-        g_cAsLivePeak = g_cAsLive;
-    }
+    vmm_soft_note_peaks();
     /*
      * Soft progress: every create still shares identity bridge residual.
      * Product empty user half without identity share would stop this count.
      */
-    if (g_cHhAsShareIdentity < 0xffffffffu) {
-        g_cHhAsShareIdentity++;
-    }
+    vmm_soft_inc(&g_cHhAsShareIdentity);
+    g_cHhAsShareSlotsLast = cShared;
     kprintf("vmm: as_create cr3=0x%lx shared_slots=%u live=%u total=%u "
             "(shared lower, COW on map) PASS\n",
             (unsigned long)paPml4, cShared, g_cAsLive, g_cAsCreate);
@@ -925,6 +1208,7 @@ vmm_as_destroy(u64 u64Cr3)
     u64 *pPt;
 
     if (u64Cr3 == 0 || u64Cr3 == g_u64KernelCr3) {
+        vmm_soft_inc(&g_cSoftAsDestroyReject);
         kprintf("vmm: as_destroy reject cr3=0x%lx (kernel/zero)\n",
                 (unsigned long)u64Cr3);
         return GJ_ERR_INVAL;
@@ -1041,6 +1325,12 @@ vmm_as_destroy(u64 u64Cr3)
     if (g_cAsLive > 0) {
         g_cAsLive--;
     }
+    g_cSoftDestroyLeaf += cLeaf;
+    g_cSoftDestroyPriv += cPrivFree;
+    g_cSoftDestroyCowDrop += cCowDrop;
+    g_cSoftDestroyTables += cTables;
+    g_cSoftDestroySkip += cSharedSkip;
+    vmm_soft_note_peaks();
     /* Always greppable (leaf may be 0 for empty smoke AS). */
     kprintf("vmm: as_destroy leaf=%u priv=%u cow_drop=%u tables=%u "
             "shared_skip=%u live=%u frees=%u as_live=%u tbl_cow=%u "
@@ -1269,6 +1559,7 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     u64 u64F;
 
     if ((va & (GJ_PAGE_SIZE - 1)) != 0 || (pa & (GJ_PAGE_SIZE - 1)) != 0) {
+        vmm_soft_inc(&g_cSoftMapInval);
         return GJ_ERR_INVAL;
     }
     /*
@@ -1277,6 +1568,7 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
      */
     if (va_in_kernel_identity(va)) {
         if ((u32Prot & GJ_VMM_PROT_USER) != 0 || pa != (gj_paddr_t)va) {
+            vmm_soft_inc(&g_cSoftMapPerm);
             return GJ_ERR_PERM;
         }
         /* Kernel identity: always R/W, never user/COW. */
@@ -1285,6 +1577,7 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     /* W^X filtered at Linux ABI unless CapJit; vmm maps as requested. */
     pPte = walk_pte(va, 1);
     if (pPte == NULL) {
+        vmm_soft_inc(&g_cSoftMapNomem);
         return GJ_ERR_NOMEM;
     }
     u64F = prot_to_flags(u32Prot);
@@ -1292,6 +1585,7 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     /* Clear software COW bit on explicit map */
     *pPte &= ~PTE_COW;
     vmm_tlb_flush_page(va);
+    vmm_soft_inc(&g_cSoftMapOk);
     return GJ_OK;
 }
 
@@ -1304,6 +1598,7 @@ vmm_unmap_page(gj_vaddr_t va)
 
     pPte = walk_pte(va, 0);
     if (pPte == NULL || (*pPte & PTE_P) == 0) {
+        vmm_soft_inc(&g_cSoftUnmapMiss);
         return GJ_ERR_NOENT;
     }
     u64Pte = *pPte;
@@ -1315,6 +1610,7 @@ vmm_unmap_page(gj_vaddr_t va)
         pa != (gj_paddr_t)va) {
         release_leaf_frame(pa, 1);
     }
+    vmm_soft_inc(&g_cSoftUnmapOk);
     return GJ_OK;
 }
 
@@ -1327,6 +1623,7 @@ vmm_protect_page(gj_vaddr_t va, u32 u32Prot)
     /* JIT may pass W|X; non-JIT callers must filter first. */
     pPte = walk_pte(va, 0);
     if (pPte == NULL || (*pPte & PTE_P) == 0) {
+        vmm_soft_inc(&g_cSoftProtMiss);
         return GJ_ERR_NOENT;
     }
     /* Never demote kernel identity/BSS to RO or user. */
@@ -1335,13 +1632,16 @@ vmm_protect_page(gj_vaddr_t va, u32 u32Prot)
         if (pa == (gj_paddr_t)va || pa == 0) {
             *pPte = ((u64)va & PTE_ADDR_MASK) | PTE_P | PTE_W;
             vmm_tlb_flush_page(va);
+            vmm_soft_inc(&g_cSoftProtOk);
             return GJ_OK;
         }
+        vmm_soft_inc(&g_cSoftProtPerm);
         return GJ_ERR_PERM;
     }
     pa = *pPte & PTE_ADDR_MASK;
     *pPte = pa | prot_to_flags(u32Prot);
     vmm_tlb_flush_page(va);
+    vmm_soft_inc(&g_cSoftProtOk);
     return GJ_OK;
 }
 
@@ -1402,6 +1702,7 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
     int fDual = 0;
 
     if (g_u64KernelCr3 == 0 || cb == 0) {
+        vmm_soft_inc(&g_cSoftEnsureReject);
         kprintf("vmm: ensure_identity_rw soft reject va=0x%lx cb=%lu\n",
                 (unsigned long)va, (unsigned long)cb);
         return GJ_ERR_INVAL;
@@ -1413,6 +1714,7 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
     st = ensure_identity_rw_active(va, cb, &cFixKer);
     if (st != GJ_OK) {
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
+        vmm_soft_inc(&g_cSoftEnsureNomem);
         kprintf("vmm: ensure_identity_rw soft nomem va=0x%lx cb=%lu\n",
                 (unsigned long)va, (unsigned long)cb);
         return st;
@@ -1423,6 +1725,7 @@ vmm_ensure_identity_rw(gj_vaddr_t va, size_t cb)
         __asm__ volatile("mov %0, %%cr3" : : "r"(u64Saved) : "memory");
         st = ensure_identity_rw_active(va, cb, &cFixAct);
         if (st != GJ_OK) {
+            vmm_soft_inc(&g_cSoftEnsureNomem);
             kprintf("vmm: ensure_identity_rw soft nomem dual va=0x%lx "
                     "cb=%lu\n",
                     (unsigned long)va, (unsigned long)cb);
@@ -1591,6 +1894,7 @@ vmm_cow_break_page(gj_vaddr_t va)
     paSrc = u64Pte & PTE_ADDR_MASK;
     paDst = pmm_alloc();
     if (paDst == 0) {
+        vmm_soft_inc(&g_cSoftCowBreakNomem);
         kprintf("vmm: COW break va=0x%lx nomem live=%u\n", (unsigned long)va,
                 g_cCowLive);
         return GJ_ERR_NOMEM;
@@ -1614,6 +1918,7 @@ vmm_cow_break_page(gj_vaddr_t va)
         if (u32Rem == 0) {
             pmm_free(paSrc);
             fFreeOld = 1;
+            vmm_soft_inc(&g_cSoftCowFreeOld);
             kprintf("vmm: COW break va=0x%lx pa=0x%lx old=0x%lx free_old "
                     "rem=%u live=%u frees=%u breaks=%u PASS\n",
                     (unsigned long)va, (unsigned long)paDst,
@@ -1628,6 +1933,7 @@ vmm_cow_break_page(gj_vaddr_t va)
         }
         (void)fFreeOld;
     }
+    vmm_soft_note_peaks();
     soft_inventory_maybe_once();
     return GJ_OK;
 }
@@ -1656,13 +1962,16 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
     if (pCopied != NULL) {
         *pCopied = 0;
     }
+    vmm_soft_inc(&g_cSoftCloneCall);
     if (u64SrcCr3 == 0 || u64DstCr3 == 0 ||
         (u64SrcCr3 & ~0xfffull) == (u64DstCr3 & ~0xfffull)) {
+        vmm_soft_inc(&g_cSoftCloneReject);
         kprintf("vmm: as_clone_user reject src=0x%lx dst=0x%lx\n",
                 (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3);
         return GJ_ERR_INVAL;
     }
     if (g_pKernelPml4 == NULL) {
+        vmm_soft_inc(&g_cSoftCloneReject);
         kprintf("vmm: as_clone_user reject no_template\n");
         return GJ_ERR_INVAL;
     }
@@ -1807,6 +2116,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                             if (pCopied != NULL) {
                                 *pCopied = cCopy;
                             }
+                            vmm_soft_inc(&g_cSoftCloneNomem);
                             return GJ_ERR_NOMEM;
                         }
                         {
@@ -1838,6 +2148,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                         if (pCopied != NULL) {
                             *pCopied = cCopy;
                         }
+                        vmm_soft_inc(&g_cSoftCloneNomem);
                         kprintf("vmm: as_clone_user nomem pages=%u cow=%u "
                                 "rocopy=%u\n",
                                 cCopy, cCow, cRoCopy);
@@ -1874,6 +2185,7 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
                         if (pCopied != NULL) {
                             *pCopied = cCopy;
                         }
+                        vmm_soft_inc(&g_cSoftCloneNomem);
                         return GJ_ERR_NOMEM;
                     }
                     cCopy++;
@@ -1893,6 +2205,11 @@ vmm_as_clone_user_pages(u64 u64SrcCr3, u64 u64DstCr3, u32 u32Max, u32 *pCopied)
     if (pCopied != NULL) {
         *pCopied = cCopy;
     }
+    vmm_soft_inc(&g_cSoftCloneOk);
+    g_cSoftClonePages += cCopy;
+    g_cSoftCloneCow += cCow;
+    g_cSoftCloneRo += cRoCopy;
+    vmm_soft_note_peaks();
     kprintf("vmm: as_clone_user src=0x%lx dst=0x%lx pages=%u cow=%u rocopy=%u "
             "cow_live=%u share_ok=%u share_full=%u tbl_cow=%u PASS\n",
             (unsigned long)u64SrcCr3, (unsigned long)u64DstCr3, cCopy, cCow,

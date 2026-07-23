@@ -14,13 +14,18 @@
  * Used by GJ_SYS_SCSI and by store_door CAP/R/W when virtio-blk is absent.
  * Product path remains userspace scsi_mid; this is the kernel mid shim.
  *
- * Soft door inventory (Wave 10 exclusive deepen — this unit only):
- *   - Submit enter / ok / fail; per-op ok + reject tallies
+ * Soft door inventory (Wave 13 exclusive deepen — this unit only):
+ *   - Submit enter / ok / fail; per-op attempt + ok + unknown rejects
  *   - Soft deny reasons: null_req / null_data / mid_not_ready / blocks /
  *     empty_data / bad_raw / mid_submit / unknown_op
- *   - blocks_ok / blocks_truncate notes; stats/init inventory samples
+ *   - blocks_ok / blocks_truncate / def1 notes; multi-block transfers
+ *   - xfer: data-in|out ok + cumulative byte totals
+ *   - last: op / deny code / lba / blocks / cb snapshot
+ *   - peak: cbData / blocks / raw CDB length high-water
+ *   - mid: ready/soft lamps + soft_ok vs virt_ok + mid io/fail
+ *   - catalog: opcode name table; stats/init inventory samples
  *   greppable: "scsi_door: soft …"
- *   Never hard-gates; diagnostics / smoke grep only (wrap OK).
+ *   Never hard-gates; diagnostics / smoke grep only (wrap OK). Soft ≠ bar3.
  */
 #include <gj/klog.h>
 #include <gj/scsi_mid.h>
@@ -31,7 +36,7 @@ static u32 g_u32DoorIos;
 static u32 g_u32DoorFails;
 
 /*
- * Soft product inventory (Wave 10 exclusive). Cumulative path tallies.
+ * Soft product inventory (Wave 13 exclusive). Cumulative path tallies.
  * greppable: scsi_door: soft …
  */
 static u32 g_u32SoftEnter;        /* scsi_door_submit entries */
@@ -46,6 +51,14 @@ static u32 g_u32SoftOpTur;        /* TEST UNIT READY ok */
 static u32 g_u32SoftOpSync;       /* SYNCHRONIZE CACHE ok */
 static u32 g_u32SoftOpSense;      /* REQUEST SENSE ok */
 static u32 g_u32SoftOpUnknown;    /* default/unknown op rejects */
+static u32 g_u32SoftAttInq;       /* INQUIRY attempts (past mid-ready) */
+static u32 g_u32SoftAttReadCap;   /* READ_CAPACITY attempts */
+static u32 g_u32SoftAttRead10;    /* READ10 attempts */
+static u32 g_u32SoftAttWrite10;   /* WRITE10 attempts */
+static u32 g_u32SoftAttRaw;       /* RAW attempts */
+static u32 g_u32SoftAttTur;       /* TUR attempts */
+static u32 g_u32SoftAttSync;      /* SYNC CACHE attempts */
+static u32 g_u32SoftAttSense;     /* REQUEST SENSE attempts */
 static u32 g_u32SoftDenyNullReq;  /* pReq == NULL */
 static u32 g_u32SoftDenyNullData; /* cbData > 0 && pData == NULL */
 static u32 g_u32SoftDenyMidNrdy;  /* !scsi_mid_ready() */
@@ -56,13 +69,45 @@ static u32 g_u32SoftDenyMidSub;   /* scsi_mid_submit != 0 */
 static u32 g_u32SoftBlocksOk;     /* door_blocks_ok success */
 static u32 g_u32SoftBlocksTrunc;  /* door_blocks_ok truncated blocks */
 static u32 g_u32SoftBlocksDef1;   /* zero blocks defaulted to 1 */
+static u32 g_u32SoftMultiBlk;     /* R/W success with blocks > 1 */
+static u32 g_u32SoftDataInOk;     /* success with fDataIn */
+static u32 g_u32SoftDataOutOk;    /* success with !fDataIn */
+static u64 g_u64SoftBytesIn;      /* cumulative cbData on data-in ok */
+static u64 g_u64SoftBytesOut;     /* cumulative cbData on data-out ok */
+static u32 g_u32SoftLastOp;       /* last u32Op observed (submit) */
+static u32 g_u32SoftLastDeny;     /* last soft deny code (0 = none/ok) */
+static u32 g_u32SoftLastLba;      /* last pReq->u32Lba */
+static u32 g_u32SoftLastBlocks;   /* last blocks (post clamp when R/W) */
+static u32 g_u32SoftLastCb;       /* last cbData */
+static u32 g_u32SoftLastRet;      /* 0 ok, 1 fail on last submit exit */
+static u32 g_u32SoftPeakCb;       /* peak cbData seen */
+static u32 g_u32SoftPeakBlocks;   /* peak blocks after clamp */
+static u32 g_u32SoftPeakRawCdb;   /* peak RAW u8CdbLen accepted path */
+static u32 g_u32SoftRawCdbSum;    /* sum of accepted RAW CDB lengths */
+static u32 g_u32SoftMidSoftOk;    /* ok while soft LUN active */
+static u32 g_u32SoftMidVirtOk;    /* ok while mid ready, soft not active */
 static u32 g_u32SoftStatsCalls;   /* scsi_door_stats entries */
 static u32 g_u32SoftInitCalls;    /* scsi_door_init entries */
 static u32 g_u32SoftInvSamples;   /* soft inventory dump count */
 static u8  g_fSoftOnce;           /* one-shot after first submit activity */
 
+/* Soft deny reason codes for last-deny snapshot (greppable catalog). */
+#define SOFT_DENY_NONE      0u
+#define SOFT_DENY_NULL_REQ  1u
+#define SOFT_DENY_NULL_DATA 2u
+#define SOFT_DENY_MID_NRDY  3u
+#define SOFT_DENY_BLOCKS    4u
+#define SOFT_DENY_EMPTY     5u
+#define SOFT_DENY_BAD_RAW   6u
+#define SOFT_DENY_MID_SUB   7u
+#define SOFT_DENY_UNKNOWN   8u
+
 static void door_fail(void);
 static void soft_inc(u32 *pCtr);
+static void soft_add64(u64 *pCtr, u64 u64N);
+static void soft_peak_u32(u32 *pPeak, u32 u32Val);
+static void soft_note_deny(u32 u32Code);
+static void soft_note_req(const struct scsi_door_req *pReq, u32 cbData);
 static void soft_inventory_log(const char *szVia);
 static void soft_maybe_once(void);
 
@@ -76,17 +121,69 @@ soft_inc(u32 *pCtr)
     (*pCtr)++;
 }
 
+/** Soft: add to u64 path tally (wrap OK for telemetry). */
+static void
+soft_add64(u64 *pCtr, u64 u64N)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr) += u64N;
+}
+
+/** Soft: raise high-water if u32Val exceeds *pPeak. */
+static void
+soft_peak_u32(u32 *pPeak, u32 u32Val)
+{
+    if (pPeak == NULL) {
+        return;
+    }
+    if (u32Val > *pPeak) {
+        *pPeak = u32Val;
+    }
+}
+
+/** Soft: record last deny reason code (catalog in soft last line). */
+static void
+soft_note_deny(u32 u32Code)
+{
+    g_u32SoftLastDeny = u32Code;
+}
+
 /**
- * Greppable soft scsi_door inventory (Wave 10 exclusive; product / smoke).
+ * Soft: snapshot last request shape for inventory (op/lba/blocks/cb).
+ * Null pReq only updates cb / last-op leave alone when already set.
+ */
+static void
+soft_note_req(const struct scsi_door_req *pReq, u32 cbData)
+{
+    g_u32SoftLastCb = cbData;
+    soft_peak_u32(&g_u32SoftPeakCb, cbData);
+    if (pReq == NULL) {
+        return;
+    }
+    g_u32SoftLastOp = pReq->u32Op;
+    g_u32SoftLastLba = pReq->u32Lba;
+    g_u32SoftLastBlocks = (u32)pReq->u16Blocks;
+}
+
+/**
+ * Greppable soft scsi_door inventory (Wave 13 exclusive; product / smoke).
  * Prefix-stable markers (scsi_door: soft …):
- *   scsi_door: soft inventory  — enter/ok/fail + mid lamps + log_n
+ *   scsi_door: soft inventory  — enter/ok/fail + mid lamps + log_n + wave
  *   scsi_door: soft op         — per-op ok tallies + unknown rejects
+ *   scsi_door: soft att        — per-op attempt tallies (past mid-ready)
  *   scsi_door: soft deny       — soft reject reason catalog
  *   scsi_door: soft blocks     — block validation notes
+ *   scsi_door: soft xfer       — data-in|out ok + multi + byte totals
+ *   scsi_door: soft last       — last op/deny/lba/blocks/cb/ret snapshot
+ *   scsi_door: soft peak       — peak cb / blocks / raw CDB
+ *   scsi_door: soft mid        — ready/soft lamps + soft_ok/virt_ok + mid
+ *   scsi_door: soft catalog    — opcode name table (0..7)
  *   scsi_door: soft path       — honesty: kernel shim ≠ product scsi_mid
  *   scsi_door: soft inventory PASS / scsi_door: soft PASS
  *
- * Never hard-gates; diagnostics only.
+ * Never hard-gates; diagnostics only. Soft ≠ bar3.
  * greppable: scsi_door: soft
  */
 static void
@@ -95,19 +192,23 @@ soft_inventory_log(const char *szVia)
     const char *szViaSafe;
     u32         u32Ready;
     u32         u32Soft;
+    u32         u32MidIo;
+    u32         u32MidFail;
     int         fSoftPass;
 
     soft_inc(&g_u32SoftInvSamples);
     szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "unknown";
     u32Ready = scsi_mid_ready() ? 1u : 0u;
     u32Soft = scsi_mid_soft_active() ? 1u : 0u;
+    u32MidIo = scsi_mid_io_count();
+    u32MidFail = scsi_mid_fail_count();
 
     /* Grep: scsi_door: soft inventory */
     kprintf("scsi_door: soft inventory via=%s enter=%u ok=%u fail=%u "
             "ios=%u fails=%u mid_ready=%u soft_lun=%u "
             "stats=%u inits=%u logs=%u "
             "ops=inq,readcap,read10,write10,raw,tur,sync,sense "
-            "shim=kernel_mid product=userspace_scsi_mid\n",
+            "shim=kernel_mid product=userspace_scsi_mid wave=13\n",
             szViaSafe, g_u32SoftEnter, g_u32SoftOk, g_u32SoftFail,
             g_u32DoorIos, g_u32DoorFails, u32Ready, u32Soft,
             g_u32SoftStatsCalls, g_u32SoftInitCalls, g_u32SoftInvSamples);
@@ -119,19 +220,63 @@ soft_inventory_log(const char *szVia)
             g_u32SoftOpWrite10, g_u32SoftOpRaw, g_u32SoftOpTur,
             g_u32SoftOpSync, g_u32SoftOpSense, g_u32SoftOpUnknown);
 
+    /* Grep: scsi_door: soft att */
+    kprintf("scsi_door: soft att inq=%u readcap=%u read10=%u write10=%u "
+            "raw=%u tur=%u sync=%u sense=%u unknown=%u\n",
+            g_u32SoftAttInq, g_u32SoftAttReadCap, g_u32SoftAttRead10,
+            g_u32SoftAttWrite10, g_u32SoftAttRaw, g_u32SoftAttTur,
+            g_u32SoftAttSync, g_u32SoftAttSense, g_u32SoftOpUnknown);
+
     /* Grep: scsi_door: soft deny */
     kprintf("scsi_door: soft deny null_req=%u null_data=%u mid_nrdy=%u "
             "blocks=%u empty=%u bad_raw=%u mid_sub=%u unknown_op=%u "
-            "fail_total=%u\n",
+            "fail_total=%u codes=0none,1null_req,2null_data,3mid_nrdy,"
+            "4blocks,5empty,6bad_raw,7mid_sub,8unknown\n",
             g_u32SoftDenyNullReq, g_u32SoftDenyNullData, g_u32SoftDenyMidNrdy,
             g_u32SoftDenyBlocks, g_u32SoftDenyEmpty, g_u32SoftDenyBadRaw,
             g_u32SoftDenyMidSub, g_u32SoftOpUnknown, g_u32SoftFail);
 
     /* Grep: scsi_door: soft blocks */
-    kprintf("scsi_door: soft blocks ok=%u trunc=%u def1=%u "
+    kprintf("scsi_door: soft blocks ok=%u trunc=%u def1=%u multi=%u "
             "sec_size=%u soft_sectors=%u\n",
             g_u32SoftBlocksOk, g_u32SoftBlocksTrunc, g_u32SoftBlocksDef1,
-            (unsigned)GJ_SCSI_SOFT_SEC_SIZE, (unsigned)GJ_SCSI_SOFT_SECTORS);
+            g_u32SoftMultiBlk, (unsigned)GJ_SCSI_SOFT_SEC_SIZE,
+            (unsigned)GJ_SCSI_SOFT_SECTORS);
+
+    /* Grep: scsi_door: soft xfer */
+    kprintf("scsi_door: soft xfer data_in=%u data_out=%u multi_blk=%u "
+            "bytes_in=%lu bytes_out=%lu sec_size=%u\n",
+            g_u32SoftDataInOk, g_u32SoftDataOutOk, g_u32SoftMultiBlk,
+            (unsigned long)g_u64SoftBytesIn,
+            (unsigned long)g_u64SoftBytesOut,
+            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
+
+    /* Grep: scsi_door: soft last */
+    kprintf("scsi_door: soft last op=%u deny=%u lba=0x%x blocks=%u "
+            "cb=%u ret=%u via=%s\n",
+            g_u32SoftLastOp, g_u32SoftLastDeny, g_u32SoftLastLba,
+            g_u32SoftLastBlocks, g_u32SoftLastCb, g_u32SoftLastRet,
+            szViaSafe);
+
+    /* Grep: scsi_door: soft peak */
+    kprintf("scsi_door: soft peak cb=%u blocks=%u raw_cdb=%u "
+            "raw_cdb_sum=%u\n",
+            g_u32SoftPeakCb, g_u32SoftPeakBlocks, g_u32SoftPeakRawCdb,
+            g_u32SoftRawCdbSum);
+
+    /* Grep: scsi_door: soft mid */
+    kprintf("scsi_door: soft mid ready=%u soft_lun=%u soft_ok=%u "
+            "virt_ok=%u mid_io=%u mid_fail=%u door_ios=%u door_fails=%u\n",
+            u32Ready, u32Soft, g_u32SoftMidSoftOk, g_u32SoftMidVirtOk,
+            u32MidIo, u32MidFail, g_u32DoorIos, g_u32DoorFails);
+
+    /* Grep: scsi_door: soft catalog */
+    kprintf("scsi_door: soft catalog "
+            "0=inq 1=readcap 2=read10 3=write10 4=raw "
+            "5=tur 6=sync 7=sense raw_max=%u soft_secs=%u soft_sec_sz=%u "
+            "timeout_ms=5000 lun=0 wave=13\n",
+            (unsigned)GJ_SCSI_CDB_MAX, (unsigned)GJ_SCSI_SOFT_SECTORS,
+            (unsigned)GJ_SCSI_SOFT_SEC_SIZE);
 
     /*
      * Honesty line: kernel door is interim shim only.
@@ -140,7 +285,7 @@ soft_inventory_log(const char *szVia)
     kprintf("scsi_door: soft path claim=kernel_mid_shim "
             "product_userspace_scsi_mid=1 full_door_endpoint=0 "
             "virtio_preferred=1 soft_lun_fallback=1 "
-            "store_cap_fallback=1 via=%s\n",
+            "store_cap_fallback=1 soft_ne_bar3=1 wave=13 via=%s\n",
             szViaSafe);
 
     /*
@@ -151,11 +296,11 @@ soft_inventory_log(const char *szVia)
     fSoftPass = (u32Ready != 0) ? 1 : 0;
     if (fSoftPass != 0) {
         kprintf("scsi_door: soft inventory PASS via=%s logs=%u "
-                "mid_ready=%u soft_lun=%u\n",
+                "mid_ready=%u soft_lun=%u wave=13\n",
                 szViaSafe, g_u32SoftInvSamples, u32Ready, u32Soft);
-        kprintf("scsi_door: soft PASS via=%s\n", szViaSafe);
+        kprintf("scsi_door: soft PASS via=%s wave=13\n", szViaSafe);
     } else {
-        kprintf("scsi_door: soft FAIL via=%s mid_ready=0 "
+        kprintf("scsi_door: soft FAIL via=%s mid_ready=0 wave=13 "
                 "(soft inventory only; not product gate)\n",
                 szViaSafe);
     }
@@ -183,6 +328,7 @@ door_fail(void)
 {
     g_u32DoorFails++;
     soft_inc(&g_u32SoftFail);
+    g_u32SoftLastRet = 1;
 }
 
 /**
@@ -233,6 +379,8 @@ door_blocks_ok(u16 *pBlocks, u32 cbData)
     }
     *pBlocks = (u16)u32Blocks;
     soft_inc(&g_u32SoftBlocksOk);
+    soft_peak_u32(&g_u32SoftPeakBlocks, u32Blocks);
+    g_u32SoftLastBlocks = u32Blocks;
     if (fDef1 != 0 || u32Orig == 0) {
         soft_inc(&g_u32SoftBlocksDef1);
     }
@@ -246,11 +394,15 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
     u16 u16Blocks;
     u32 u32Op;
     u32 *pOpOk = NULL;
+    int fDataIn = 0;
 
     soft_inc(&g_u32SoftEnter);
+    g_u32SoftLastRet = 0;
+    soft_note_req(pReq, cbData);
 
     if (pReq == NULL) {
         soft_inc(&g_u32SoftDenyNullReq);
+        soft_note_deny(SOFT_DENY_NULL_REQ);
         door_fail();
         soft_maybe_once();
         return -1;
@@ -258,26 +410,34 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
     /* Data-bearing ops need a buffer when cbData > 0. */
     if (cbData > 0 && pData == NULL) {
         soft_inc(&g_u32SoftDenyNullData);
+        soft_note_deny(SOFT_DENY_NULL_DATA);
         door_fail();
         soft_maybe_once();
         return -1;
     }
     if (!scsi_mid_ready()) {
         soft_inc(&g_u32SoftDenyMidNrdy);
+        soft_note_deny(SOFT_DENY_MID_NRDY);
         door_fail();
         soft_maybe_once();
         return -1;
     }
 
     u32Op = pReq->u32Op;
+    g_u32SoftLastOp = u32Op;
+    g_u32SoftLastLba = pReq->u32Lba;
+    g_u32SoftLastBlocks = (u32)pReq->u16Blocks;
     memset(&req, 0, sizeof(req));
     switch (u32Op) {
     case GJ_SCSI_DOOR_OP_INQUIRY:
+        soft_inc(&g_u32SoftAttInq);
         /* Default allocation length matches standard INQUIRY page size. */
         scsi_cdb_inquiry(&req.cdb, 0, 0, (u16)(cbData ? cbData : 36u));
         req.fDataIn = 1;
+        fDataIn = 1;
         if (cbData == 0) {
             soft_inc(&g_u32SoftDenyEmpty);
+            soft_note_deny(SOFT_DENY_EMPTY);
             door_fail();
             soft_maybe_once();
             return -1;
@@ -286,11 +446,14 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
         break;
 
     case GJ_SCSI_DOOR_OP_READ_CAP:
+        soft_inc(&g_u32SoftAttReadCap);
         scsi_cdb_read_capacity10(&req.cdb);
         req.fDataIn = 1;
+        fDataIn = 1;
         /* Capacity payload is 8 bytes; reject empty windows. */
         if (cbData < 8) {
             soft_inc(&g_u32SoftDenyEmpty);
+            soft_note_deny(SOFT_DENY_EMPTY);
             door_fail();
             soft_maybe_once();
             return -1;
@@ -299,35 +462,43 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
         break;
 
     case GJ_SCSI_DOOR_OP_READ10:
+        soft_inc(&g_u32SoftAttRead10);
         u16Blocks = pReq->u16Blocks ? pReq->u16Blocks : 1u;
         if (door_blocks_ok(&u16Blocks, cbData) != 0) {
             soft_inc(&g_u32SoftDenyBlocks);
+            soft_note_deny(SOFT_DENY_BLOCKS);
             door_fail();
             soft_maybe_once();
             return -1;
         }
         scsi_cdb_read10(&req.cdb, pReq->u32Lba, u16Blocks);
         req.fDataIn = 1;
+        fDataIn = 1;
         pOpOk = &g_u32SoftOpRead10;
         break;
 
     case GJ_SCSI_DOOR_OP_WRITE10:
+        soft_inc(&g_u32SoftAttWrite10);
         u16Blocks = pReq->u16Blocks ? pReq->u16Blocks : 1u;
         if (door_blocks_ok(&u16Blocks, cbData) != 0) {
             soft_inc(&g_u32SoftDenyBlocks);
+            soft_note_deny(SOFT_DENY_BLOCKS);
             door_fail();
             soft_maybe_once();
             return -1;
         }
         scsi_cdb_write10(&req.cdb, pReq->u32Lba, u16Blocks);
         req.fDataIn = 0;
+        fDataIn = 0;
         pOpOk = &g_u32SoftOpWrite10;
         break;
 
     case GJ_SCSI_DOOR_OP_RAW:
+        soft_inc(&g_u32SoftAttRaw);
         /* Raw path: caller owns CDB bytes; clamp length defensively. */
         if (pReq->u8CdbLen == 0 || pReq->u8CdbLen > GJ_SCSI_CDB_MAX) {
             soft_inc(&g_u32SoftDenyBadRaw);
+            soft_note_deny(SOFT_DENY_BAD_RAW);
             door_fail();
             soft_maybe_once();
             return -1;
@@ -335,27 +506,38 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
         memcpy(req.cdb.aCdb, pReq->aCdb, pReq->u8CdbLen);
         req.cdb.u8CdbLen = pReq->u8CdbLen;
         req.fDataIn = pReq->fDataIn ? 1 : 0;
+        fDataIn = req.fDataIn;
+        soft_peak_u32(&g_u32SoftPeakRawCdb, (u32)pReq->u8CdbLen);
+        g_u32SoftRawCdbSum += (u32)pReq->u8CdbLen;
         pOpOk = &g_u32SoftOpRaw;
         break;
 
     case GJ_SCSI_DOOR_OP_TEST_UNIT:
+        soft_inc(&g_u32SoftAttTur);
         scsi_cdb_test_unit_ready(&req.cdb);
         req.fDataIn = 0;
+        fDataIn = 0;
         pOpOk = &g_u32SoftOpTur;
         break;
 
     case GJ_SCSI_DOOR_OP_SYNC_CACHE:
+        soft_inc(&g_u32SoftAttSync);
         u16Blocks = pReq->u16Blocks; /* 0 = whole medium per SBC soft path */
         scsi_cdb_synchronize_cache10(&req.cdb, pReq->u32Lba, u16Blocks);
         req.fDataIn = 0;
+        fDataIn = 0;
+        g_u32SoftLastBlocks = (u32)u16Blocks;
         pOpOk = &g_u32SoftOpSync;
         break;
 
     case GJ_SCSI_DOOR_OP_REQ_SENSE:
+        soft_inc(&g_u32SoftAttSense);
         scsi_cdb_request_sense(&req.cdb, (u8)(cbData > 255u ? 255u : cbData));
         req.fDataIn = 1;
+        fDataIn = 1;
         if (cbData == 0) {
             soft_inc(&g_u32SoftDenyEmpty);
+            soft_note_deny(SOFT_DENY_EMPTY);
             door_fail();
             soft_maybe_once();
             return -1;
@@ -365,6 +547,7 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
 
     default:
         soft_inc(&g_u32SoftOpUnknown);
+        soft_note_deny(SOFT_DENY_UNKNOWN);
         door_fail();
         soft_maybe_once();
         return -1;
@@ -379,14 +562,33 @@ scsi_door_submit(struct scsi_door_req *pReq, void *pData, u32 cbData)
 
     if (scsi_mid_submit(&req) != 0) {
         soft_inc(&g_u32SoftDenyMidSub);
+        soft_note_deny(SOFT_DENY_MID_SUB);
         door_fail();
         soft_maybe_once();
         return -1;
     }
     g_u32DoorIos++;
     soft_inc(&g_u32SoftOk);
+    soft_note_deny(SOFT_DENY_NONE);
+    g_u32SoftLastRet = 0;
     if (pOpOk != NULL) {
         soft_inc(pOpOk);
+    }
+    if (fDataIn != 0) {
+        soft_inc(&g_u32SoftDataInOk);
+        soft_add64(&g_u64SoftBytesIn, (u64)cbData);
+    } else {
+        soft_inc(&g_u32SoftDataOutOk);
+        soft_add64(&g_u64SoftBytesOut, (u64)cbData);
+    }
+    if ((u32Op == GJ_SCSI_DOOR_OP_READ10 || u32Op == GJ_SCSI_DOOR_OP_WRITE10) &&
+        g_u32SoftLastBlocks > 1u) {
+        soft_inc(&g_u32SoftMultiBlk);
+    }
+    if (scsi_mid_soft_active()) {
+        soft_inc(&g_u32SoftMidSoftOk);
+    } else {
+        soft_inc(&g_u32SoftMidVirtOk);
     }
     soft_maybe_once();
     return 0;

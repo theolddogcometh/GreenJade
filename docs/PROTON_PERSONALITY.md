@@ -9,12 +9,14 @@
 | **Doc precedence** | **Proton overrides Apple-channel** on conflict (§0.1) — still **below** project law & security core |
 | **Priorities** | Still **Security → Performance → Portability → Readability** — games do not reorder ranks |
 | **Not** | SteamOS distro port · importing GPL · loading Linux `.ko` · ambient root for anti-cheat |
-| **Honesty** | **2026-07-23 Wave 10** — soft PE / Proton path ≠ bar3 (§10); **no title PASS**; **no bar3 claim** |
+| **Honesty** | **2026-07-23 Wave 13** — soft PE / Proton path ≠ bar3 (§10 historical · §11); **no title PASS**; **no bar3 claim** |
 | **Companion** | [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) · [GREENJADE_KERNEL_SPEC.md](GREENJADE_KERNEL_SPEC.md) · [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 **Acceptance trail:** v1.4 Deck Top 50 · v1.5 clean-room Linux ABI OK · **v1.6** re-applies Proton + Deck Top 50 as the focused product path under that license rule.
 
-**Soft stamp (Wave 10):** greppable PE32 / WoW64 / `libprotonrt` / `protonrt-user` / A0–A1 bring-up smokes are **soft PE/Proton path only**. They do **not** close Steam **bar3**, launch the Steam client, or move any Deck Top 50 matrix row off **NOT-TRIED**. See §10.
+**Soft stamp (Wave 10, historical):** greppable PE32 / WoW64 / `libprotonrt` / `protonrt-user` / A0–A1 bring-up smokes are **soft PE/Proton path only**. They do **not** close Steam **bar3**, launch the Steam client, or move any Deck Top 50 matrix row off **NOT-TRIED**. See §10.
+
+**Soft stamp (Wave 13):** same soft PE / Proton bound restated — greppable PE32 / WoW64 / `libprotonrt` / `protonrt-user` / A0–A1 smokes remain **soft PE/Proton path only**. Soft PE / Proton path **≠ bar3**. **No title PASS.** **No bar3 claim.** See §11.
 
 ---
 
@@ -273,13 +275,13 @@ In-tree path when landed: `user/libprotonrt/`.
 | vs SteamOS | Distro port out; ABI compatibility in |
 | Anti-cheat | Userspace/GJ agent + PASS-OFFLINE; no `.ko` |
 | Critical path | A0→A1 from M2, not deferred forever |
-| Soft PE / Proton path | **≠ bar3** — greppable smokes only; matrix stays **NOT-TRIED** (§10) |
+| Soft PE / Proton path | **≠ bar3** — greppable smokes only; matrix stays **NOT-TRIED** (§10 historical · §11 Wave 13) |
 
 ---
 
-## 10. Honesty refresh — soft PE / Proton path ≠ bar3 (Wave 10 · 2026-07-23)
+## 10. Honesty refresh — soft PE / Proton path ≠ bar3 (Wave 10 · 2026-07-23) — historical ledger
 
-**Additive only.** Product facts (§0), precedence (§0.1), architecture (§§1–8), and the one-page summary (§9) stay **Accepted**. This section is an honesty ledger: what greppable **soft PE / Proton** bring-up means vs what remains **open** for bar3 and Deck Top 50. It does **not** re-litigate architecture, license, or §0.0 priorities.
+**Additive only (Wave 10).** Product facts (§0), precedence (§0.1), architecture (§§1–8), and the one-page summary (§9) stay **Accepted**. This section is the Wave 10 honesty ledger (kept as historical trail). Wave 13 restates the same bound in §11 without reopening architecture.
 
 | Term | Meaning in this document |
 |------|--------------------------|
@@ -341,5 +343,76 @@ In-tree path when landed: `user/libprotonrt/`.
 
 ---
 
+## 11. Honesty refresh — soft PE / Proton path ≠ bar3 (Wave 13 · 2026-07-23)
+
+**Additive only (Wave 13 exclusive for this file).** Product facts (§0), precedence (§0.1), architecture (§§1–8), one-page summary (§9), and the Wave 10 honesty ledger (§10) stay **Accepted** / historical. This section is Wave 13 honesty only: reaffirm that greppable **soft PE / Proton** bring-up is **not** Steam **bar3** and does **not** move Deck Top 50 rows. It does **not** re-litigate architecture, license, §0.0 priorities, or invent title PASS.
+
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Accepted** | Normative Proton / Deck Top 50 product surface — ship toward these rules (§§0–9) |
+| **Soft PE / Proton path** | Partial / greppable PE32, WoW64, `libprotonrt`, personality door, A0–A1 kernel/userspace smokes — **bring-up honesty only** |
+| **Open (product)** | Real Steam **client** on DUT; out-of-tree Proton-class runtime against titles; matrix leave **NOT-TRIED** |
+| **bar3** | Steam **client** launch on real DUT + Deck Top 50 rows can leave `NOT-TRIED` — see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
+
+**Hard stamp (Wave 13):** **soft PE / Proton path ≠ bar3.** Greppable soft PE surfaces do **not** close bar3, launch the Steam client, or promote any matrix row off **NOT-TRIED**.
+
+### 11.1 Soft PE / Proton path still does not close bar3
+
+| Soft surface (tree / host) | Closes A0 product demo path? | Closes A1 title path? | Closes bar3? | Moves matrix off NOT-TRIED? |
+|----------------------------|------------------------------|-----------------------|--------------|-------------------------------|
+| `pe32: * PASS` (parse / map / spawn / int80 / soft-exec / …) | **No** (PE bring-up only) | **No** | **No** | **No** |
+| `wow64: path PASS` / CS32 / compat frame / trampoline smokes | **No** | **No** | **No** | **No** |
+| `libprotonrt` cold Linux stubs / feature bits / `proton_rt_query` skeleton | Soft surface only | **No** | **No** | **No** |
+| `protonrt-user: door server up` / soft serve ready / soft miss markers | Soft door loop only | **No** | **No** | **No** |
+| A0 wine-server two-process demo (futex + socketpair-shaped + CapJit) | Soft A0 smoke | **No** | **No** | **No** |
+| A1 T0 Vulkan ICD / present / session input / HDA stubs | Soft present path | **No** (≠ real title) | **No** | **No** |
+| Host Steam media inventory **READY** (`steam-bar3-check`) | **No** | **No** | **No** | **No** |
+| Continuum **makefile_max** CREATE-ONLY graph decades | **No** | **No** | **No** | **No** |
+| Kernel smokes (io_uring min, 768G soak, aarch64 M0, hybrid ABI) | **No** | **No** | **No** | **No** |
+| This document **Accepted** (v1.6) + Wave 10/13 honesty | Decisions / honesty only | Decisions / honesty only | **No** | **No** |
+
+**Hard rule (Wave 13):** never promote greppable `pe32:*` / `wow64:*` / `protonrt-user:*` / A0–A1 soft smokes, media `STATUS=READY`, continuum soft gates, or design **Accepted** alone to “bar3 closed,” “Steam client runs,” “Proton titles work,” or any Deck Top 50 row off **NOT-TRIED**. Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) and [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md).
+
+**Wave 13 formula:** **soft PE / Proton path ≠ bar3.**
+
+### 11.2 Soft PE / Proton ledger (bring-up bound — unchanged product open)
+
+| Soft PE / Proton surface | Honest bound (what greppable PASS means) | Remaining product (do not claim done) |
+|--------------------------|------------------------------------------|----------------------------------------|
+| **PE32 load / map / spawn** | Kernel PE header/section/user-map/spawn smokes | Out-of-tree Windows game PE via Proton-class runtime on GreenJade |
+| **WoW64 / CS32 / int80** | 32-bit PE bring-up path; multi-NR int80 smokes | Product 32-bit Top 50 titles through full WoW64 + Proton stack |
+| **libprotonrt** | Clean-room personality stubs; feature-bit query skeleton | Depth driven by real matrix FAILs; wine-class FD/vfs/IPC product surface |
+| **protonrt-server (G-PERS)** | Ring-3 door loop soft markers; interim cold serve | Full userspace cold Linux service for game tasks |
+| **A0 ladder proof** | Two-process wine-server-shaped demo smokes | Durable A0 product demo as operator-facing critical path |
+| **A1 present / input / audio** | Vulkan ICD + session/HDA **stubs / soft present** | First real Top 50 title **PASS** or **PASS-OFFLINE** on DUT |
+| **Out-of-tree Proton** | Documented product intent only | Separate product/repo targeting GJ contracts; **not** in-tree |
+
+### 11.3 Explicit non-claims (Wave 13)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Proton personality v1.6 **Accepted**” | **Yes** — this document §§0–9 |
+| “Soft PE / WoW64 / libprotonrt / protonrt-user smokes greppable” | **Yes** — with soft bound (§10 / §11.1–§11.2) |
+| “Soft PE / Proton path = bar3 closed” | **No** — **soft PE/Proton path ≠ bar3** |
+| “Steam client launched on GreenJade” | **No** — bar3 client path remains **OPEN** |
+| “Deck Top 50 titles tried / PASS from PE or A0–A1 soft smokes” | **No** — matrix stays **NOT-TRIED × 50** until real client + title runs |
+| “Media READY / continuum / hybrid ABI closes Proton product or bar3” | **No** |
+| “Out-of-tree Proton shipped in-tree” | **No** — remains separate product/repo |
+| “Wave 13 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
+
+**Bar3 remains OPEN** (client + matrix). Soft PE / Proton path is real bring-up work and may unblock later A0→A1 engineering — it is **not** a bar3 or Top 50 claim. Wave 13 does **not** invent title PASS.
+
+### 11.4 Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ client run ≠ Top-50  
+- [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) — hybrid soft surface ≠ bar3  
+- [STEAM_HWTEST.md](STEAM_HWTEST.md) · [HCL.md](HCL.md) — media / HCL soft stamps  
+- [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title rows (**NOT-TRIED**)  
+- [TODO.md](TODO.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md) — PE / Proton coding boxes  
+- §10 above — Wave 10 historical soft PE / Proton ≠ bar3 ledger  
+
+---
+
 *Proton personality v1.6 **Accepted** — Deck Top 50 focus; clean-room Linux ABI grows with the matrix; no GPL; priorities unchanged.*  
-*Wave 10 honesty (§10): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**.*
+*Wave 10 honesty (§10, historical): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**.*  
+*Wave 13 honesty (§11): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*

@@ -5,11 +5,21 @@
  * UDX runtime core: init / run / exit / printk.
  * Product markers (greppable): GREENJADE_UDX, UDX_PRODUCT.
  *
- * Soft inventory (Wave 10 exclusive deepen) — greppable "udx: soft …":
+ * Soft inventory (Wave 13 exclusive deepen; this unit only) —
+ * greppable "udx: soft …":
  *   udx: soft inventory …
+ *   udx: soft lifecycle …
  *   udx: soft run …
+ *   udx: soft loop …
+ *   udx: soft irq …
+ *   udx: soft printk …
+ *   udx: soft build …
+ *   udx: soft path …
+ *   udx: soft product …
  *   udx: soft stats …
+ *   udx: soft wave …
  * Pure observation; never gates host skeleton PASS or freestanding path.
+ * Soft ≠ skeleton PASS. greppable: udx: soft
  */
 #include "udx_internal.h"
 
@@ -22,28 +32,57 @@
 #include <stdio.h>
 #endif
 
+/* Host demo idle-spin budget before soft break (udx_run). */
+#define UDX_SOFT_IDLE_BUDGET 64u
+/* Soft wave stamp for greppable inventory lines. */
+#define UDX_SOFT_WAVE        13u
+
 static u32 g_u32UdxStop;
 static u32 g_u32UdxInited;
 
 /*
- * Soft product inventory (Wave 10 exclusive). Cumulative for this process.
- * greppable: udx: soft …
+ * Soft product inventory (Wave 13 exclusive deepen). Cumulative for this
+ * process unless noted live/peak/last. greppable: udx: soft …
+ * Never hard-gates; wrap OK if ever hit.
  */
+static u32 g_u32SoftInitEnter;  /* udx_init entries (any) */
 static u32 g_u32SoftInitOk;     /* successful first-time udx_init */
 static u32 g_u32SoftInitRe;     /* udx_init while already inited (idempotent) */
 static u32 g_u32SoftExit;       /* udx_exit calls */
+static u32 g_u32SoftExitLive;   /* exit while inited=1 */
+static u32 g_u32SoftExitIdle;   /* exit while already not inited */
 static u32 g_u32SoftStop;       /* udx_request_stop calls */
+static u32 g_u32SoftStopLive;   /* stop while inited and not already stopped */
+static u32 g_u32SoftStopDup;    /* stop while already stop_flag=1 */
+static u32 g_u32SoftStopCold;   /* stop while not inited */
 static u32 g_u32SoftRun;        /* udx_run entries */
+static u32 g_u32SoftRunLive;    /* run entered with should_run true */
+static u32 g_u32SoftRunSkip;    /* run entered with should_run false */
 static u32 g_u32SoftLoop;       /* event-loop iterations */
 static u32 g_u32SoftFlush;      /* udx_work_flush invocations from core */
+static u32 g_u32SoftFinalFlush; /* post-loop terminal flushes */
 static u32 g_u32SoftIrqBadge;   /* NOTIFY_WAIT badge hits (freestanding) */
 static u32 g_u32SoftIrqLine;    /* per-line udx_irq_dispatch calls */
+static u32 g_u32SoftBadgePoll;  /* freestanding notify_wait_poll calls */
+static u32 g_u32SoftBadgeZero;  /* poll returned ≤0 (no badge) */
+static u32 g_u32SoftBadgePos;   /* poll returned >0 */
 static u32 g_u32SoftIdleBreak;  /* loops ended on idle spin budget */
 static u32 g_u32SoftStopBreak;  /* loops ended because stop/inited flag */
-static u32 g_u32SoftPrintk;     /* udx_printk calls (excl. soft inventory) */
+static u32 g_u32SoftPrintk;     /* udx_printk calls with non-null fmt */
+static u32 g_u32SoftPrintkNull; /* udx_printk rejected (szFmt == NULL) */
+static u32 g_u32SoftShouldYes;  /* udx_core_should_run returned 1 */
+static u32 g_u32SoftShouldNo;   /* udx_core_should_run returned 0 */
+static u32 g_u32SoftLastIdle;   /* idle spins observed on last udx_run */
+static u32 g_u32SoftPeakIdle;   /* peak idle spins across runs */
+static u32 g_u32SoftLastLoops;  /* loop iterations on last udx_run */
+static u32 g_u32SoftPeakLoops;  /* peak loop iterations in one run */
+static u32 g_u32SoftLastLines;  /* IRQ lines on last positive badge */
+static u32 g_u32SoftPeakLines;  /* peak IRQ lines decoded from one badge */
+static u32 g_u32SoftLastBadge;  /* last positive badge low 32 (soft snap) */
 static u32 g_u32SoftLogN;       /* soft inventory dumps emitted */
 
 static void soft_inc(u32 *pu32);
+static void soft_note_peak(u32 *pu32Peak, u32 u32Val);
 static void soft_emit(const char *szFmt, ...);
 static void soft_inventory_log(void);
 
@@ -52,6 +91,15 @@ soft_inc(u32 *pu32)
 {
     if (pu32 != NULL && *pu32 < 0xffffffffu) {
         (*pu32)++;
+    }
+}
+
+/** Soft: raise peak if u32Val is higher (diagnostics only). */
+static void
+soft_note_peak(u32 *pu32Peak, u32 u32Val)
+{
+    if (pu32Peak != NULL && u32Val > *pu32Peak) {
+        *pu32Peak = u32Val;
     }
 }
 
@@ -78,45 +126,148 @@ soft_emit(const char *szFmt, ...)
 #endif
 }
 
-/*
- * Greppable soft inventory (Wave 10). Prefix "udx: soft …".
- * Pure observation — always soft; does not gate skeleton PASS.
+/**
+ * Greppable soft inventory (Wave 13 exclusive deepen).
+ * Prefix-stable "udx: soft …" — never hard-gates; observation only.
  *
- *   udx: soft inventory init=… reinit=… exit=… stop=… run=…
- *   udx: soft run loops=… flushes=… irq_badge=… irq_line=…
- *                idle_break=… stop_break=…
- *   udx: soft stats printk=… inited=… stop_flag=… log_n=…
+ *   udx: soft inventory  — cumulative API + run rollup
+ *   udx: soft lifecycle  — init/reinit/exit/stop path splits
+ *   udx: soft run        — loops/flushes/irq + break reason
+ *   udx: soft loop       — idle budget + last/peak loop geometry
+ *   udx: soft irq        — freestanding badge→line pulse shape
+ *   udx: soft printk     — product printk vs soft-emit separation
+ *   udx: soft build      — host-libc vs freestanding notify path
+ *   udx: soft path       — claim surface catalog (soft bounds)
+ *   udx: soft product    — GREENJADE_UDX / UDX_PRODUCT identity
+ *   udx: soft stats      — live flags + should_run samples + log_n
+ *   udx: soft wave       — exclusive deepen stamp
+ *
+ * greppable: udx: soft
  */
 static void
 soft_inventory_log(void)
 {
+    u32 u32Host;
+    u32 u32Should;
+    u32 u32Inited;
+    u32 u32Stop;
+
     soft_inc(&g_u32SoftLogN);
 
+    u32Inited = g_u32UdxInited;
+    u32Stop = g_u32UdxStop;
+    u32Should = (u32Inited != 0u && u32Stop == 0u) ? 1u : 0u;
+#if defined(UDX_HOST_LIBC)
+    u32Host = 1u;
+#else
+    u32Host = 0u;
+#endif
+
     /* Grep: udx: soft inventory */
-    soft_emit("udx: soft inventory init=%u reinit=%u exit=%u stop=%u run=%u\n",
+    soft_emit("udx: soft inventory init=%u reinit=%u exit=%u stop=%u run=%u "
+              "loops=%u flushes=%u printk=%u log_n=%u wave=%u\n",
               g_u32SoftInitOk, g_u32SoftInitRe, g_u32SoftExit, g_u32SoftStop,
-              g_u32SoftRun);
+              g_u32SoftRun, g_u32SoftLoop, g_u32SoftFlush, g_u32SoftPrintk,
+              g_u32SoftLogN, UDX_SOFT_WAVE);
+
+    /* Grep: udx: soft lifecycle */
+    soft_emit("udx: soft lifecycle init_enter=%u init_ok=%u reinit=%u "
+              "exit=%u exit_live=%u exit_idle=%u stop=%u stop_live=%u "
+              "stop_dup=%u stop_cold=%u run=%u run_live=%u run_skip=%u\n",
+              g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftInitRe,
+              g_u32SoftExit, g_u32SoftExitLive, g_u32SoftExitIdle,
+              g_u32SoftStop, g_u32SoftStopLive, g_u32SoftStopDup,
+              g_u32SoftStopCold, g_u32SoftRun, g_u32SoftRunLive,
+              g_u32SoftRunSkip);
 
     /* Grep: udx: soft run */
-    soft_emit("udx: soft run loops=%u flushes=%u irq_badge=%u irq_line=%u "
-              "idle_break=%u stop_break=%u\n",
-              g_u32SoftLoop, g_u32SoftFlush, g_u32SoftIrqBadge,
-              g_u32SoftIrqLine, g_u32SoftIdleBreak, g_u32SoftStopBreak);
+    soft_emit("udx: soft run loops=%u flushes=%u final_flush=%u "
+              "irq_badge=%u irq_line=%u idle_break=%u stop_break=%u "
+              "run_live=%u run_skip=%u\n",
+              g_u32SoftLoop, g_u32SoftFlush, g_u32SoftFinalFlush,
+              g_u32SoftIrqBadge, g_u32SoftIrqLine, g_u32SoftIdleBreak,
+              g_u32SoftStopBreak, g_u32SoftRunLive, g_u32SoftRunSkip);
+
+    /* Grep: udx: soft loop */
+    soft_emit("udx: soft loop idle_budget=%u last_idle=%u peak_idle=%u "
+              "last_loops=%u peak_loops=%u total_loops=%u "
+              "idle_break=%u stop_break=%u should_yes=%u should_no=%u\n",
+              UDX_SOFT_IDLE_BUDGET, g_u32SoftLastIdle, g_u32SoftPeakIdle,
+              g_u32SoftLastLoops, g_u32SoftPeakLoops, g_u32SoftLoop,
+              g_u32SoftIdleBreak, g_u32SoftStopBreak, g_u32SoftShouldYes,
+              g_u32SoftShouldNo);
+
+    /* Grep: udx: soft irq */
+    soft_emit("udx: soft irq badge_poll=%u badge_pos=%u badge_zero=%u "
+              "irq_badge=%u irq_line=%u last_lines=%u peak_lines=%u "
+              "last_badge_lo=0x%x host_fire=1 freestanding_notify=%u\n",
+              g_u32SoftBadgePoll, g_u32SoftBadgePos, g_u32SoftBadgeZero,
+              g_u32SoftIrqBadge, g_u32SoftIrqLine, g_u32SoftLastLines,
+              g_u32SoftPeakLines, g_u32SoftLastBadge,
+              (u32Host == 0u) ? 1u : 0u);
+
+    /* Grep: udx: soft printk */
+    soft_emit("udx: soft printk ok=%u null=%u soft_emit_sep=1 "
+              "inventory_bumps_printk=0 product_printk=%u\n",
+              g_u32SoftPrintk, g_u32SoftPrintkNull, g_u32SoftPrintk);
+
+    /* Grep: udx: soft build */
+    soft_emit("udx: soft build host_libc=%u freestanding=%u "
+              "notify_wait_poll=%u idle_budget=%u wave=%u "
+              "soft_gates_pass=0\n",
+              u32Host, (u32Host == 0u) ? 1u : 0u,
+              (u32Host == 0u) ? 1u : 0u, UDX_SOFT_IDLE_BUDGET,
+              UDX_SOFT_WAVE);
+
+    /*
+     * Path catalog — what this soft surface is / is not.
+     * greppable: udx: soft path
+     */
+    soft_emit("udx: soft path init=udx_init run=udx_run exit=udx_exit "
+              "stop=udx_request_stop printk=udx_printk "
+              "should=udx_core_should_run flush=udx_work_flush "
+              "irq_dispatch=udx_irq_dispatch "
+              "skeleton_gate=0 hard_gate=0 soft=1\n");
+
+    /* Grep: udx: soft product */
+    soft_emit("udx: soft product name=%s tag=%s ver=%s "
+              "surface=Linux-porter soft_wave=%u\n",
+              UDX_PRODUCT_NAME, UDX_PRODUCT_TAG, UDX_PRODUCT_VERSION,
+              UDX_SOFT_WAVE);
 
     /* Grep: udx: soft stats (rollup) */
-    soft_emit("udx: soft stats printk=%u inited=%u stop_flag=%u log_n=%u\n",
-              g_u32SoftPrintk, g_u32UdxInited, g_u32UdxStop, g_u32SoftLogN);
+    soft_emit("udx: soft stats printk=%u printk_null=%u inited=%u "
+              "stop_flag=%u should=%u log_n=%u init_enter=%u "
+              "run_live=%u peak_loops=%u peak_idle=%u wave=%u\n",
+              g_u32SoftPrintk, g_u32SoftPrintkNull, u32Inited, u32Stop,
+              u32Should, g_u32SoftLogN, g_u32SoftInitEnter, g_u32SoftRunLive,
+              g_u32SoftPeakLoops, g_u32SoftPeakIdle, UDX_SOFT_WAVE);
+
+    /* Grep: udx: soft wave */
+    soft_emit("udx: soft wave n=%u unit=core exclusive=1 "
+              "prefix=udx:_soft deepen=1 "
+              "(soft inventory; never gates skeleton PASS)\n",
+              UDX_SOFT_WAVE);
 }
 
 u32
 udx_core_should_run(void)
 {
-    return g_u32UdxInited && !g_u32UdxStop;
+    u32 u32Yes;
+
+    u32Yes = (g_u32UdxInited && !g_u32UdxStop) ? 1u : 0u;
+    if (u32Yes != 0u) {
+        soft_inc(&g_u32SoftShouldYes);
+    } else {
+        soft_inc(&g_u32SoftShouldNo);
+    }
+    return u32Yes;
 }
 
 udx_status_t
 udx_init(void)
 {
+    soft_inc(&g_u32SoftInitEnter);
     if (g_u32UdxInited) {
         soft_inc(&g_u32SoftInitRe);
         return UDX_OK;
@@ -127,7 +278,7 @@ udx_init(void)
     /* Greppable product markers — see user/udx/README.md */
     udx_printk("udx: init %s %s v%s (Linux-porter surface)\n",
                UDX_PRODUCT_NAME, UDX_PRODUCT_TAG, UDX_PRODUCT_VERSION);
-    /* Wave 10 soft inventory baseline (greppable udx: soft …). */
+    /* Wave 13 soft inventory baseline (greppable udx: soft …). */
     soft_inventory_log();
     return UDX_OK;
 }
@@ -136,6 +287,11 @@ void
 udx_exit(void)
 {
     soft_inc(&g_u32SoftExit);
+    if (g_u32UdxInited != 0u) {
+        soft_inc(&g_u32SoftExitLive);
+    } else {
+        soft_inc(&g_u32SoftExitIdle);
+    }
     /* Final soft rollup while flags still reflect live state. */
     soft_inventory_log();
     g_u32UdxInited = 0;
@@ -146,6 +302,13 @@ void
 udx_request_stop(void)
 {
     soft_inc(&g_u32SoftStop);
+    if (g_u32UdxInited == 0u) {
+        soft_inc(&g_u32SoftStopCold);
+    } else if (g_u32UdxStop != 0u) {
+        soft_inc(&g_u32SoftStopDup);
+    } else {
+        soft_inc(&g_u32SoftStopLive);
+    }
     g_u32UdxStop = 1;
 }
 
@@ -153,7 +316,9 @@ void
 udx_run(void)
 {
     u32 u32IdleSpins;
+    u32 u32LoopThis;
     u32 fIdleBreak;
+    u32 fEnteredLive;
 
     /*
      * Full GJ: non-blocking NOTIFY_WAIT on MSI-X global, then
@@ -165,24 +330,46 @@ udx_run(void)
      */
     soft_inc(&g_u32SoftRun);
     u32IdleSpins = 0;
+    u32LoopThis = 0;
     fIdleBreak = 0;
+    fEnteredLive = udx_core_should_run();
+    if (fEnteredLive != 0u) {
+        soft_inc(&g_u32SoftRunLive);
+    } else {
+        soft_inc(&g_u32SoftRunSkip);
+    }
     while (udx_core_should_run()) {
         soft_inc(&g_u32SoftLoop);
+        if (u32LoopThis < 0xffffffffu) {
+            u32LoopThis++;
+        }
 #if !defined(UDX_HOST_LIBC)
         {
             long badge = udx_gj_notify_wait_poll();
 
+            soft_inc(&g_u32SoftBadgePoll);
             if (badge > 0) {
                 int nIrq;
+                u32 u32Lines;
 
+                soft_inc(&g_u32SoftBadgePos);
                 soft_inc(&g_u32SoftIrqBadge);
+                g_u32SoftLastBadge = (u32)((unsigned long)badge & 0xfffffffful);
+                u32Lines = 0;
                 for (nIrq = 0; nIrq < 64; nIrq++) {
                     if (((unsigned long)badge >> (unsigned)nIrq) & 1ul) {
                         soft_inc(&g_u32SoftIrqLine);
+                        if (u32Lines < 0xffffffffu) {
+                            u32Lines++;
+                        }
                         udx_irq_dispatch(nIrq);
                     }
                 }
+                g_u32SoftLastLines = u32Lines;
+                soft_note_peak(&g_u32SoftPeakLines, u32Lines);
                 u32IdleSpins = 0;
+            } else {
+                soft_inc(&g_u32SoftBadgeZero);
             }
         }
 #endif
@@ -194,19 +381,24 @@ udx_run(void)
          * mains do not hang forever. Long-running hosts should call
          * udx_request_stop from a handler/thread.
          */
-        if (u32IdleSpins > 64u) {
+        if (u32IdleSpins > UDX_SOFT_IDLE_BUDGET) {
             fIdleBreak = 1;
             break;
         }
     }
+    g_u32SoftLastIdle = u32IdleSpins;
+    soft_note_peak(&g_u32SoftPeakIdle, u32IdleSpins);
+    g_u32SoftLastLoops = u32LoopThis;
+    soft_note_peak(&g_u32SoftPeakLoops, u32LoopThis);
     if (fIdleBreak != 0u) {
         soft_inc(&g_u32SoftIdleBreak);
     } else {
         soft_inc(&g_u32SoftStopBreak);
     }
     soft_inc(&g_u32SoftFlush);
+    soft_inc(&g_u32SoftFinalFlush);
     udx_work_flush();
-    /* Wave 10 soft run snapshot (greppable udx: soft …). */
+    /* Wave 13 soft run snapshot (greppable udx: soft …). */
     soft_inventory_log();
 }
 
@@ -214,6 +406,7 @@ void
 udx_printk(const char *szFmt, ...)
 {
     if (szFmt == NULL) {
+        soft_inc(&g_u32SoftPrintkNull);
         return;
     }
     soft_inc(&g_u32SoftPrintk);

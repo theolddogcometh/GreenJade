@@ -8,6 +8,12 @@
  * Product path: vfsd claims door, format/mount, then create/read/write
  * or open/readfd/writefd/seekfd; sec_rw prefers store_door when virtio-blk
  * ready. SMP-safe via spinlock; pure C11 dual-license product surface.
+ *
+ * Soft claim path:
+ *   CLAIM token must be non-zero 32-bit; same token re-CLAIM is idempotent
+ *   (reclaim soft); a different token → BUSY. RELEASE when free is a soft
+ *   no-op (0). Format/mount allowed when free (bring-up smokes) or claimed
+ *   (product vfsd). Soft RAM disk when virtio-blk is absent.
  */
 #include <gj/error.h>
 #include <gj/klog.h>
@@ -66,6 +72,8 @@ struct vfs_fd {
 static int                g_fInit;
 static u32                g_u32Calls;
 static u32                g_u32Owner;
+static u32                g_u32Claims;   /* first successful CLAIM count */
+static u32                g_u32Reclaims; /* idempotent same-token CLAIM soft */
 static u32                g_u32Mounted;
 static u32                g_u32Files;
 static u8                 g_aRam[VFS_RAM_SECS][SEC];
@@ -400,6 +408,8 @@ vfs_door_init(void)
     g_fInit = 1;
     g_u32Calls = 0;
     g_u32Owner = 0;
+    g_u32Claims = 0;
+    g_u32Reclaims = 0;
     g_u32Mounted = 0;
     g_u32Files = 0;
     g_fRam = virtio_blk_ready() ? 0 : 1;
@@ -1050,6 +1060,19 @@ vfs_door_owned(void)
     return g_u32Owner != 0;
 }
 
+u32
+vfs_door_owner_token(void)
+{
+    return g_u32Owner;
+}
+
+u32
+vfs_door_claim_count(void)
+{
+    /* Soft diagnostics: first claims + idempotent reclaims. */
+    return g_u32Claims + g_u32Reclaims;
+}
+
 int
 vfs_door_mounted(void)
 {
@@ -1083,7 +1106,8 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
 
     switch (u32Op) {
     case GJ_VFS_OP_CLAIM:
-        if (u64Arg1 == 0) {
+        /* Non-zero 32-bit token only (align with store/session claim soft). */
+        if (u64Arg1 == 0 || (u64Arg1 >> 32) != 0) {
             i64Ret = GJ_ERR_INVAL;
             break;
         }
@@ -1091,20 +1115,36 @@ vfs_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             i64Ret = GJ_ERR_BUSY;
             break;
         }
+        /* Soft reclaim: same token re-CLAIM is idempotent. */
+        if (g_u32Owner == (u32)u64Arg1) {
+            g_u32Reclaims++;
+            i64Ret = 0;
+            break;
+        }
         g_u32Owner = (u32)u64Arg1;
+        g_u32Claims++;
         kprintf("vfs_door: CLAIM token=0x%x\n", g_u32Owner);
         i64Ret = 0;
         break;
     case GJ_VFS_OP_RELEASE:
-        if (g_u32Owner != 0 && g_u32Owner != (u32)u64Arg1) {
+        /* Soft free path: already unowned → 0 (no token match required). */
+        if (g_u32Owner == 0) {
+            i64Ret = 0;
+            break;
+        }
+        if ((u64Arg1 >> 32) != 0 || g_u32Owner != (u32)u64Arg1) {
             i64Ret = GJ_ERR_INVAL;
             break;
         }
+        kprintf("vfs_door: RELEASE token=0x%x\n", g_u32Owner);
         g_u32Owner = 0;
-        kprintf("vfs_door: RELEASE\n");
         i64Ret = 0;
         break;
     case GJ_VFS_OP_FORMAT:
+        /*
+         * Soft bring-up: format when free or claimed (product vfsd claims
+         * first). No third ownership state — always allowed here.
+         */
         if (do_format() != 0) {
             i64Ret = GJ_ERR_IO;
             break;

@@ -16,7 +16,11 @@ MARKERS=(
   "aarch64: pmm PASS"
   "aarch64: mmu PASS"
   "aarch64: svc PASS"
+  "aarch64: svc NR dispatch deepen PASS"
+  "aarch64: svc getpid soft PASS"
   "aarch64: virtio-mmio PASS"
+  "aarch64: virtio-mmio queue soft PASS"
+  "aarch64: virtio-mmio desc ring soft PASS"
   "aarch64: mem probe PASS"
   "M0 OK"
 )
@@ -30,11 +34,14 @@ if ! command -v "$QEMU" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "run-aarch64: $QEMU -M virt -cpu cortex-a57 -nographic -kernel $ELF"
+# virtio-net-device lands on virtio-mmio (user netdev); exercises queue +
+# desc-ring soft programming with QueueReady/QueuePFN left 0 (no DMA).
+echo "run-aarch64: $QEMU -M virt -cpu cortex-a57 -nographic -kernel $ELF -device virtio-net-device"
 # Capture serial so callers can grep; always stream to stdout.
 set +e
 OUT=$(timeout "${GJ_AARCH64_TIMEOUT:-15}" "$QEMU" \
-  -M virt -cpu cortex-a57 -nographic -kernel "$ELF" 2>&1)
+  -M virt -cpu cortex-a57 -nographic -kernel "$ELF" \
+  -netdev user,id=n0 -device virtio-net-device,netdev=n0 2>&1)
 RC=$?
 set -e
 printf '%s\n' "$OUT"

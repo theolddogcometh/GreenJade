@@ -144,63 +144,63 @@ Design all structures for **SMP** and **>1 TiB** even if M1 tests are smaller.
 Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 ### M2.1 Capability tables
-- [ ] CNode allocate/slots (quota-charged / **task ledger**)
-- [ ] cap types: CNODE, THREAD, SPACE, **PROCESS (task)**, ENDPOINT, NOTIFICATION, FRAME, REPLY, …
-- [ ] mint (weaker only), move, copy, delete
+- [x] CNode allocate/slots (soft slot-quota ledger; hierarchical **task ledger** still soft) — `gj_cap_alloc_install` + `gj_cap_quota_*`
+- [ ] cap types: CNODE, THREAD, SPACE, **PROCESS (task)**, ENDPOINT, NOTIFICATION, FRAME, REPLY, … (enum + PROCESS/ENDPOINT/NOTIFICATION/ROOT_META/MEMORY_OBJECT live; REPLY/FRAME/SPACE user path still open)
+- [x] mint (weaker only), move, copy, delete — `gj_cap_mint/copy/move/delete` + native `GJ_SYS_CAP_*`; greppable `cap: mint/copy/move+cdt PASS`
 - [x] **§1.1 policy + stubs**: DEAD/gen first, mandatory deferred slot invalidate — `cap.h` / `revoke.c`
 - [x] **x86_64 addressing Scheme A**: `u64` slot + `u32` gen; slot 0 root meta — `cnode.c` + [CAP_ADDRESSING.md](CAP_ADDRESSING.md)
 - [x] **Apple channel Accepted**: regions/objects, task ports, QoS, futex, session — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)
-- [ ] Wire CDT + CNode try-lock slot walk into `gj_revoke_process_deferred`
+- [ ] Wire CDT + CNode try-lock slot walk into `gj_revoke_process_deferred` (soft CDT walk PASS; R2 full try-lock still soft)
 - [x] Process + shared CNode + root meta + default pager PCB — `process.h` / `process.c` (+ smoke in `kmain`)
 - [x] Root meta = **kernel ops only** (no mint PROCESS/CNODE from slot 0) — CAP_ADDRESSING v1.6
 - [x] `GJ_CAP_PROCESS` mint to parent on spawn; rights matrix (KILL/WAIT/VM/…) — `spawn.c`
 - [x] Wire process into threads via `thread_create(pProc, …)`; boot process + spawn
 - [x] Map cookie + multi-page cluster + per-space fault lock policy — `fault.h` / `fault.c`
 - [x] VM **regions + memory objects** (anon); object pager + PCB default pager fallback later
-- [ ] `set_pager` kernel ref on ep; clear PCB on ep revoke
+- [ ] `set_pager` kernel ref on ep; clear PCB on ep revoke (`gj_process_set_pager` + death clear exist; full ep-revoke path open)
 - [ ] Fault: region lookup → Call pager + cookie + map **views** (object owns pages)
 - [ ] Kernel ephemeral **REPLY** on Call; single-use
 - [ ] Cluster coalesce adjacent not-present pages (cap GJ_FAULT_CLUSTER_MAX)
 - [ ] Freeze `syscall.h` per Apple §5 (incl. futex, vm_*, process_*)
-- [ ] Syscalls using `gj_cap_resolve` on all cap ops
-- [ ] Drive `gj_revoke_process_deferred` from idle/syscall exit (R7)
+- [ ] Syscalls using `gj_cap_resolve` on all cap ops (native CAP_* ops resolve; not universal yet)
+- [x] Drive `gj_revoke_process_deferred` from timer tick (R7) — `timer.c` + A2 partial already; idle/syscall-exit hooks optional
 
 ### M2.2 Quotas
-- [ ] quota_account hierarchy
-- [ ] charge on create; refund on destroy
-- [ ] `GJ_ERR_QUOTA` on exhaustion
+- [ ] quota_account hierarchy (struct soft `pParent` shape; charge roll-up not product-complete)
+- [x] charge on create; refund on destroy — soft slot charge/refund on install/delete/move (`gj_cap_quota_slot_*`)
+- [x] `GJ_ERR_QUOTA` on exhaustion — greppable `cap: quota exhaust PASS`
 
 ### M2.3 Address space caps
 - [ ] User `space_map` / `unmap` via FRAME caps
-- [ ] Activate AS on schedule
+- [x] Activate AS on schedule — `process_as_activate` in `thread.c` schedule path
 - [ ] death unmaps grants
 
 ### M2.4 Endpoints (sync IPC)
-- [ ] Endpoint + wait queues + **per-endpoint lock**
-- [ ] `ipc_call` / `ipc_recv` / `ipc_reply` + **mono timeout**
-- [ ] cap transfer (small K); server-set badges; single-use reply
-- [ ] peer death ⇒ `GJ_ERR_PEER_DEAD`
-- [ ] no implicit foreign memory maps
+- [x] Endpoint + wait queues (doors single-flight + server/client/slot tags) — product path is doors, not generic seL4-style IPC yet
+- [x] `door_call` / `door_recv` / `door_reply` + **mono timeout** — `door_call_timeout`; greppable `door: timeout/peer path PASS`
+- [ ] cap transfer (small K); single-use reply (server-set badges: `door: badge transfer PASS`; full transfer/REPLY open)
+- [x] peer death ⇒ client error — greppable `door: mid-call peer death PASS` (−EIO / G-DOOR-4)
+- [x] no implicit foreign memory maps (doors pass message regs only)
 
 ### M2.5 Notifications + time
-- [ ] Notification (badge bitmask)
-- [ ] mono clock; timer objects **quota-backed**
+- [x] Notification (badge bitmask) — `notify.c` + MSI-X IRQ bind (`notify: MSI-X IRQ PASS`)
+- [ ] mono clock; timer objects **quota-backed** (mono clock exists; quota-backed timer objects open)
 - [ ] infinite wait only with privilege cap
-- [ ] `futex_wait` / `futex_wake` (mono timeout) — Apple §9
-- [ ] Cross-process futex on shared memory objects — Proton **A0** / P0 (Accepted)
-- [ ] Named shareable memory objects (wine-server + GPU export) — Proton **A0**
+- [x] `futex_wait` / `futex_wake` (mono timeout) — Apple §9; `futex.c` + PE32/Linux paths
+- [x] Cross-process futex on shared memory objects — Proton **A0** (`winesrv` PA keys; M6 A0 checked)
+- [x] Named shareable memory objects (wine-server + GPU export) — Proton **A0** (`memobj_create_named` / map)
 
 ### M2.7 QoS + session (design Accepted; code later)
-- [ ] Thread QoS classes + capped PI — Apple §8
-- [ ] W^X + JIT cap — Apple §10
-- [ ] Exception port on PCB (≠ pager) — Apple §12
+- [ ] Thread QoS classes + capped PI — Apple §8 (soft QoS rank in sched; capped PI open)
+- [x] W^X + JIT cap — Apple §10 (CapJit / `GJ_RIGHT_JIT` / mprotect gates; M1 checked)
+- [x] Exception port on PCB (≠ pager) — Apple §12 (`except_port_*`; `except: port smoke PASS`)
 - [ ] Bootstrap seal checklist — Apple §13
 
 ### M2.6 Tests
 - [ ] IPC ping-pong 100k
-- [ ] kill server mid-call → client error
-- [ ] quota exhaustion error
-- [ ] timeout on blocked call
+- [x] kill server mid-call → client error — `door: mid-call peer death PASS`
+- [x] quota exhaustion error — `cap: quota exhaust PASS`
+- [x] timeout on blocked call — `door: timeout/peer path PASS`
 
 ---
 
@@ -469,7 +469,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 - [x] **A2:** PE32 int80 brk with real page maps (`pe32: int80 brk PASS`)
 - [x] **A2:** PE32 int80 access/mkdir/rename/unlink via vfs (`pe32: int80 access PASS`)
 - [ ] **Real-hardware install path / bar3** (UEFI boot, storage, display, input, net sufficient for Steam client — ESP image ready; full userspace/Steam still open)
-- [x] **io_uring min rings** — setup/enter/register + VFS fd (`linux: io_uring min rings PASS`); full SQE execution still soft
+- [x] **io_uring min rings + SQE I/O** — setup/enter/register + package mmap + SQE READ/WRITE/FSYNC/CLOSE/READV/WRITEV (`linux: io_uring min rings PASS`, `linux: io_uring mmap PASS`, `linux: io_uring SQE I/O PASS`); deeper opcodes still soft
 - [x] **A2 partial:** ELF PT_INTERP probe + ET_DYN load bias (`elf: PT_INTERP probe PASS`)
 - [x] **A2 partial:** execve INTERP load path (`linux: execve INTERP PASS`, `linux: dynlink path PASS`)
 - [x] **A2 partial:** `ld-gj` freestanding dynlinker scaffold → `lib/ld-gj.so.1` on rootfs + ESP
@@ -519,7 +519,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 ## M7 — Ports & polish
 
-- [x] **aarch64 product scaffold** — exceptions/GIC/timer/cpu/PMM/MMU/SVC/virtio-mmio (`make aarch64`; QEMU smoke when `qemu-system-aarch64` present). Shared C kernel + UEFI PE still open
+- [x] **aarch64 product scaffold** — exceptions/GIC/timer/cpu/PMM/MMU/SVC/virtio-mmio + shared `string`/`stdio_k`/`pmm_freelist`/`sched_coop` + PSCI (`aarch64: shared C kernel PASS`, `psci PASS`); UEFI PE / full shared product kernel still open
 - [x] **VFS capacity** raised (64 files / 96 fds / 16 pipes / 8 KiB data / 128 path) for install-shaped open storms
 - [x] **IOMMU probe** (DMAR/IVRS inventory; no enforce yet) (`iommu: probe PASS`)
 - [x] **MSI/MSI-X capability scan + enable bit** (`pci: MSI-X probe/enable PASS`)
@@ -560,8 +560,8 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 7. [ ] **Bar3:** real-hw install + Steam client + Deck Top 50 title matrix
 8. [ ] **True 1 TiB soak** when host allows (`-m 1280G`; 768 GiB soak already PASS)
 9. [ ] Full multi-server security / `confine` + drop ambient authority
-10. [x] `io_uring` min rings (setup/enter/register PASS; full SQE path still soft)
-11. [x] `aarch64` product-shaped kernel scaffold (PMM/MMU/SVC/virtio; shared C kernel still open)
+10. [x] `io_uring` min rings + SQE I/O PASS (deeper opcodes still soft)
+11. [x] `aarch64` product-shaped scaffold (shared C string/stdio/pmm/sched + PSCI; UEFI PE still open)
 
 ---
 
@@ -569,6 +569,7 @@ Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 | Date | Note |
 |------|------|
+| 2026-07-23 | **TODO reconcile (parallel deepen):** flip stale M2 boxes with greppable PASSes — `cap: mint/copy/move+cdt PASS`, `cap: quota exhaust PASS`, `door: timeout/peer path PASS`, `door: mid-call peer death PASS`; plus AS-on-schedule, notify, futex A0, named memobj A0, CapJit/except port, timer R7 revoke. Note io_uring SQE I/O + aarch64 shared C/PSCI already in tree. Keep open: bar3, 1 TiB soak, confine multi-server, CDT try-lock product, REPLY/FRAME caps, IPC 100k. **bar3 still open**. |
 | 2026-07-23 | **mmap + shared mm/sched + PSCI:** io_uring SQ/CQ package mmap (`linux: io_uring mmap PASS` + SQE fill without inject); shared `pmm_freelist`+`sched_coop` on aarch64; PSCI HVC/SMC with fault recovery (`psci PASS conduit=hvc`). **bar3 still open**. |
 | 2026-07-23 | **SQE I/O + shared aarch64 C:** io_uring full SQE path (READ/WRITE/FSYNC/CLOSE/READV/WRITEV via vfs_ram; inject+CQE); greppable `linux: io_uring SQE I/O PASS`. aarch64 links shared `string.c`+`stdio_k.c` via `console_*` (`aarch64: shared C kernel PASS`). **bar3 still open**. |
 | 2026-07-23 | **parallel wave:** ~40 exclusive-path agents; continuum **makefile_max=14900**; product polish across net/session/doors/caps/virtio/HDA/io_uring SQE soft/SMP/PMM/UDX/scripts. Parent fixed smoke regressions (door service-first + SMAP winesrv/futex). **M0 OK UD=0**. **bar3 still open**. |

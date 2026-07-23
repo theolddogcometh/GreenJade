@@ -31,6 +31,46 @@ int64_t protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1,
 /* Process cwd for getcwd/chdir (interim; product: per-process vfsd) */
 static char g_szCwd[96] = "/";
 
+/* Linux x86_64 open(2) flag bits used for soft promise mapping. */
+#define GJ_LINUX_O_ACCMODE 0x3u
+#define GJ_LINUX_O_RDONLY  0x0u
+#define GJ_LINUX_O_WRONLY  0x1u
+#define GJ_LINUX_O_RDWR    0x2u
+#define GJ_LINUX_O_CREAT   0x40u
+
+/**
+ * Soft path promise gate for open/openat/creat.
+ * RDONLY → RPATH; WRONLY → WPATH; RDWR → RPATH|WPATH; O_CREAT → +CPATH.
+ * Returns 0 or -LINUX_EACCES.
+ */
+static i64
+promise_gate_open_flags(u32 u32Flags, int fCreatForce)
+{
+    u32 u32Acc;
+    int fCreat = fCreatForce || ((u32Flags & GJ_LINUX_O_CREAT) != 0u);
+    i64 i64R;
+
+    if (fCreat) {
+        i64R = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_CPATH);
+        if (i64R != 0) {
+            return i64R;
+        }
+    }
+    u32Acc = u32Flags & GJ_LINUX_O_ACCMODE;
+    if (u32Acc == GJ_LINUX_O_RDONLY) {
+        return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+    }
+    if (u32Acc == GJ_LINUX_O_WRONLY) {
+        return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+    }
+    /* O_RDWR (and any other non-zero accmode): need both read + write path */
+    i64R = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_RPATH);
+    if (i64R != 0) {
+        return i64R;
+    }
+    return (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_WPATH);
+}
+
 static void
 copy_path_from_arg(char *szOut, size_t cbOut, u64 u64Path)
 {
@@ -85,25 +125,42 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     }
 
     switch (pRegs->u64Nr) {
-    case LINUX_NR_openat:
+    case LINUX_NR_openat: {
+        i64 i64Gate;
+
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg1);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
         }
         /* a2 flags: bit 6 = O_CREAT (0x40) on Linux x86_64 */
-        return vfs_ram_open(szPath, (pRegs->u64Arg2 & 0x40) ? 1 : 0);
+        i64Gate = promise_gate_open_flags((u32)pRegs->u64Arg2, 0);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        return vfs_ram_open(szPath, (pRegs->u64Arg2 & GJ_LINUX_O_CREAT) ? 1 : 0);
+    }
 
     case LINUX_NR_open:
-    case LINUX_NR_creat:
+    case LINUX_NR_creat: {
+        i64 i64Gate;
+        int fCreat = (pRegs->u64Nr == LINUX_NR_creat ||
+                      (pRegs->u64Arg1 & GJ_LINUX_O_CREAT))
+                         ? 1
+                         : 0;
+        u32 u32Flags = (pRegs->u64Nr == LINUX_NR_creat)
+                           ? (GJ_LINUX_O_WRONLY | GJ_LINUX_O_CREAT)
+                           : (u32)pRegs->u64Arg1;
+
         copy_path_from_arg(szPath, sizeof(szPath), pRegs->u64Arg0);
         if (szPath[0] == '\0') {
             return -LINUX_EFAULT;
         }
-        return vfs_ram_open(szPath,
-                            (pRegs->u64Nr == LINUX_NR_creat ||
-                             (pRegs->u64Arg1 & 0x40))
-                                ? 1
-                                : 0);
+        i64Gate = promise_gate_open_flags(u32Flags, fCreat);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        return vfs_ram_open(szPath, fCreat);
+    }
 
     case LINUX_NR_read:
         if (!vfs_ram_fd_ok((i64)pRegs->u64Arg0)) {
@@ -609,14 +666,17 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 0;
     }
 
-    case LINUX_NR_socket:
+    case LINUX_NR_socket: {
+        i64 i64Gate;
+
         /* Soft multi-server confine: INET promise gates ambient sockets. */
-        if (g_pLinuxProc != NULL &&
-            !gj_process_promise_ok(g_pLinuxProc, GJ_PROMISE_INET)) {
-            return -LINUX_EACCES;
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
         return net_lo_socket((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
                              (int)pRegs->u64Arg2);
+    }
 
     case LINUX_NR_sendto:
         if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
@@ -982,7 +1042,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 0;
     }
 
-    case LINUX_NR_bind:
+    case LINUX_NR_bind: {
+        i64 i64Gate;
+
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         /* sockaddr_in: port at offset 2, big-endian */
         if (pRegs->u64Arg1 != 0) {
             u16 u16PortBe = 0;
@@ -995,14 +1061,29 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                                (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
         }
         return -LINUX_EFAULT;
+    }
 
-    case LINUX_NR_listen:
+    case LINUX_NR_listen: {
+        i64 i64Gate;
+
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         return net_lo_listen((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+    }
 
     case LINUX_NR_accept:
-    case LINUX_NR_accept4:
+    case LINUX_NR_accept4: {
+        i64 i64Gate;
+
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         /* flags ignored for bring-up (CLOEXEC/NONBLOCK) */
         return net_lo_accept((i64)pRegs->u64Arg0);
+    }
 
     case LINUX_NR_fallocate:
         return vfs_ram_fallocate((i64)pRegs->u64Arg0, (i64)pRegs->u64Arg2,
@@ -1297,7 +1378,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_inotify_init:
         return vfs_ram_inotify_init1(0);
 
-    case LINUX_NR_connect:
+    case LINUX_NR_connect: {
+        i64 i64Gate;
+
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         if (pRegs->u64Arg1 != 0) {
             u16 u16PortBe = 0;
             if (user_range_ok(pRegs->u64Arg1 + 2, 2)) {
@@ -1309,6 +1396,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                                   (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
         }
         return -LINUX_EFAULT;
+    }
 
     case LINUX_NR_close:
         if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
@@ -1512,12 +1600,35 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return r;
     }
 
-    case LINUX_NR_kill:
+    case LINUX_NR_kill: {
+        i64 i64Gate;
+
+        /* Soft confine: PROC gates kill-shaped ambient ops. */
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
         /* Self-kill of pid 1/self → allow as no-op for smoke */
         if ((i64)pRegs->u64Arg0 <= 1) {
             return 0;
         }
         return -LINUX_ESRCH;
+    }
+
+    case LINUX_NR_tkill:
+    case LINUX_NR_tgkill: {
+        /*
+         * Soft gate if these ever hit cold (hot path owns product tkill/tgkill).
+         * Same PROC promise as kill.
+         */
+        i64 i64Gate;
+
+        i64Gate = (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_PROC);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        return 0; /* soft no-op when cold-routed */
+    }
 
     case LINUX_NR_access:
     case LINUX_NR_faccessat: {
@@ -1603,6 +1714,13 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_mount:
     case LINUX_NR_umount2:
     case LINUX_NR_pivot_root:
+        /*
+         * Soft: confined processes have no mount privilege (no promise bit).
+         * Ambient (u32Confined==0) still soft-succeeds for probe.
+         */
+        if (g_pLinuxProc != NULL && g_pLinuxProc->u32Confined != 0u) {
+            return -LINUX_EACCES;
+        }
         /* No real VFS mounts — success for probe (product: vfsd) */
         return 0;
 
@@ -2124,9 +2242,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         u64 u64Path = (pRegs->u64Nr == LINUX_NR_execveat) ? pRegs->u64Arg1
                                                            : pRegs->u64Arg0;
 
-        if (g_pLinuxProc != NULL &&
-            !gj_process_promise_ok(g_pLinuxProc, GJ_PROMISE_EXEC)) {
-            return -LINUX_EACCES;
+        {
+            i64 i64Gate =
+                (i64)gj_process_promise_require(g_pLinuxProc, GJ_PROMISE_EXEC);
+            if (i64Gate != 0) {
+                return i64Gate;
+            }
         }
         i64 i64Fd;
         i64 n;

@@ -12,8 +12,15 @@
  *
  * Ownership: token 0 means kernel interim owns policy; non-zero means
  * storaged claimed the door. Claim is re-entrant for the same token
- * (idempotent), BUSY for a different token. R/W is allowed without claim
- * for bring-up smokes (owned path preferred by product storaged).
+ * (idempotent reclaim soft), BUSY for a different token. R/W is allowed
+ * without claim for bring-up smokes (owned path preferred by product
+ * storaged).
+ *
+ * Ring soft path (storaged / UDX):
+ *   EXPORT/MAP/KICK → NODEV when virtio-blk is absent (client soft-skips).
+ *   RING_STATE always succeeds: ready=0 free=0 without blk.
+ *   MAP records last user VA for diagnostics; re-MAP of the same VA is a
+ *   soft reclaim of the map (re-install PTEs, re-export).
  *
  * User pointers: prefer user_range_ok + copy_{to,from}_user. The !user
  * branch is for early kernel smokes that pass HHDM/static buffers.
@@ -34,6 +41,10 @@ static int g_fInit;
 static u32 g_u32Calls;
 static u32 g_u32DoorRw;
 static u32 g_u32OwnerToken; /* 0 = kernel interim owns */
+static u32 g_u32Claims;     /* successful first claims */
+static u32 g_u32Reclaims;   /* idempotent same-token CLAIM soft path */
+static u32 g_u32RingCalls;  /* EXPORT/MAP/KICK/RING_STATE soft ops */
+static u64 g_u64RingMapVa;  /* last successful MAP_RING base (0 = none) */
 
 /**
  * Copy @cb bytes to caller buffer at @u64Dst.
@@ -82,6 +93,10 @@ store_door_init(void)
     g_u32Calls = 0;
     g_u32DoorRw = 0;
     g_u32OwnerToken = 0;
+    g_u32Claims = 0;
+    g_u32Reclaims = 0;
+    g_u32RingCalls = 0;
+    g_u64RingMapVa = 0;
     /* Backends may probe later; report readiness snapshot for bring-up. */
     kprintf("store_door: init xfer_max=%u blk=%d scsi=%d\n", STORE_XFER_MAX,
             virtio_blk_ready() ? 1 : 0, scsi_mid_ready() ? 1 : 0);
@@ -91,6 +106,31 @@ int
 store_door_owned(void)
 {
     return g_u32OwnerToken != 0;
+}
+
+u32
+store_door_owner_token(void)
+{
+    return g_u32OwnerToken;
+}
+
+u64
+store_door_ring_map_va(void)
+{
+    return g_u64RingMapVa;
+}
+
+u32
+store_door_ring_calls(void)
+{
+    return g_u32RingCalls;
+}
+
+u32
+store_door_claim_count(void)
+{
+    /* Soft diagnostics: first claims + idempotent reclaims. */
+    return g_u32Claims + g_u32Reclaims;
 }
 
 i64
@@ -110,15 +150,21 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         if (g_u32OwnerToken != 0 && g_u32OwnerToken != (u32)u64Arg1) {
             return GJ_ERR_BUSY; /* another storaged */
         }
+        /* Soft reclaim: same token re-CLAIM is idempotent. */
+        if (g_u32OwnerToken == (u32)u64Arg1) {
+            g_u32Reclaims++;
+            return 0;
+        }
         g_u32OwnerToken = (u32)u64Arg1;
+        g_u32Claims++;
         kprintf("store_door: CLAIM token=0x%x (userspace owns storage)\n",
                 g_u32OwnerToken);
         return 0;
 
     case GJ_STORE_OP_RELEASE:
-        /* arg1 must match claim token when owned. */
+        /* Soft free path: already unowned → 0 (no token match required). */
         if (g_u32OwnerToken == 0) {
-            return 0; /* already free */
+            return 0;
         }
         if ((u64Arg1 >> 32) != 0 || (u32)u64Arg1 != g_u32OwnerToken) {
             return GJ_ERR_INVAL;
@@ -255,7 +301,7 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
 
     case GJ_STORE_OP_QUEUE_INFO: {
-        /* aQ: [0]=blk_io [1]=scsi_io [2]=door_rw [3]=owned(0/1) */
+        /* aQ: [0]=blk_io [1]=scsi_io [2]=door_rw [3]=owned(0/1) — wire stable */
         u32 aQ[4];
         i64 st;
 
@@ -284,8 +330,13 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         struct gj_virtq_export ex;
         i64 st;
 
+        g_u32RingCalls++;
         if (u64Arg1 == 0) {
             return GJ_ERR_INVAL;
+        }
+        /* Soft-skip surface: no virtio-blk → NODEV (storaged soft-logs). */
+        if (!virtio_blk_ready()) {
+            return GJ_ERR_NODEV;
         }
         if (virtio_blk_export_q(&ex) != 0) {
             return GJ_ERR_NODEV;
@@ -295,15 +346,22 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     }
 
     case GJ_STORE_OP_KICK:
+        g_u32RingCalls++;
+        /* Soft-skip when blk absent; kick is best-effort notify. */
+        if (!virtio_blk_ready()) {
+            return GJ_ERR_NODEV;
+        }
         if (virtio_blk_kick_q() != 0) {
             return GJ_ERR_NODEV;
         }
         return 0;
 
     case GJ_STORE_OP_RING_STATE: {
+        /* Soft: always fills {free, ready}; ready=0 without virtio-blk. */
         u32 aS[2];
         i64 st;
 
+        g_u32RingCalls++;
         if (u64Arg1 == 0) {
             return GJ_ERR_INVAL;
         }
@@ -316,7 +374,9 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
     case GJ_STORE_OP_MAP_RING: {
         struct gj_virtq_export ex;
         i64 st;
+        int fRemap;
 
+        g_u32RingCalls++;
         if (u64Arg1 == 0) {
             return GJ_ERR_INVAL;
         }
@@ -324,9 +384,21 @@ store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         if ((u64Arg1 & (GJ_PAGE_SIZE - 1ull)) != 0) {
             return GJ_ERR_INVAL;
         }
+        /* Soft-skip surface: no blk → NODEV (distinct from map FAULT). */
+        if (!virtio_blk_ready()) {
+            return GJ_ERR_NODEV;
+        }
+        /*
+         * Soft re-MAP of the same VA: re-install PTEs + re-export (idempotent
+         * hand-off for storaged / UDX reclaim of the map window).
+         */
+        fRemap = (g_u64RingMapVa != 0 && g_u64RingMapVa == u64Arg1) ? 1 : 0;
         if (virtio_blk_map_q_user(u64Arg1, &ex) != 0) {
             return GJ_ERR_FAULT;
         }
+        g_u64RingMapVa = u64Arg1;
+        /* fRemap: soft re-MAP of same VA (PTE re-install); ring_calls covers it. */
+        (void)fRemap;
         if (u64Arg2 != 0) {
             st = store_copy_out(u64Arg2, &ex, sizeof(ex));
             if (st != 0) {

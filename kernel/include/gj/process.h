@@ -156,8 +156,13 @@ void gj_process_set_jit(struct gj_process *pProc, int fEnable);
 
 /** Drop ambient: set confined + promises mask (monotonic drop later). */
 void gj_process_confine(struct gj_process *pProc, u32 u32Promises);
-/** 1 if not confined or promise bit present. */
+/** 1 if not confined or promise bit present. NULL ⇒ 0. */
 int  gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise);
+/**
+ * Soft gate: 0 if ambient or promise present; -13 (LINUX_EACCES shape) else.
+ * NULL process ⇒ 0 (no confine subject; product ambient smokes).
+ */
+int  gj_process_promise_require(const struct gj_process *pProc, u32 u32Promise);
 int  gj_process_has_jit(const struct gj_process *pProc);
 
 /* ---- Linux wait4 reaper (interim; product: PROCESS caps G-PROC-5) -------- */

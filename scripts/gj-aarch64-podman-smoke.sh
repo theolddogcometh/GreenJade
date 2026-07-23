@@ -44,7 +44,11 @@ MARKERS=(
 	"aarch64: pmm PASS"
 	"aarch64: mmu PASS"
 	"aarch64: svc PASS"
+	"aarch64: svc NR dispatch deepen PASS"
+	"aarch64: svc getpid soft PASS"
 	"aarch64: virtio-mmio PASS"
+	"aarch64: virtio-mmio queue soft PASS"
+	"aarch64: virtio-mmio desc ring soft PASS"
 	"aarch64: mem probe PASS"
 	"M0 OK"
 )
@@ -90,12 +94,14 @@ echo "gj-aarch64-podman-smoke: image=$PODMAN_IMAGE mount=$ROOT:/work:$MOUNT_MODE
 echo "gj-aarch64-podman-smoke: kernel=$ELF_IN timeout=${TIMEOUT_S}s"
 
 # Inside the container: optional dnf install, then timeout + qemu virt.
+# virtio-net-device → virtio-mmio so queue/desc-ring soft paths program MMIO
+# (QueueReady / QueuePFN stay 0 in guest — no DMA).
 # shellcheck disable=SC2016
 if [[ -n "${GJ_PODMAN_SKIP_DNF:-}" ]]; then
 	INNER_CMD=$(cat <<EOF
 set -euo pipefail
 command -v qemu-system-aarch64 >/dev/null
-timeout ${TIMEOUT_S} qemu-system-aarch64 -M virt -cpu cortex-a57 -nographic -kernel '${ELF_IN}'
+timeout ${TIMEOUT_S} qemu-system-aarch64 -M virt -cpu cortex-a57 -nographic -kernel '${ELF_IN}' -netdev user,id=n0 -device virtio-net-device,netdev=n0
 EOF
 )
 else
@@ -104,7 +110,7 @@ set -euo pipefail
 if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
   dnf install -y -q qemu-system-aarch64 >/dev/null
 fi
-timeout ${TIMEOUT_S} qemu-system-aarch64 -M virt -cpu cortex-a57 -nographic -kernel '${ELF_IN}'
+timeout ${TIMEOUT_S} qemu-system-aarch64 -M virt -cpu cortex-a57 -nographic -kernel '${ELF_IN}' -netdev user,id=n0 -device virtio-net-device,netdev=n0
 EOF
 )
 fi

@@ -12,6 +12,15 @@
  *
  * Wait keys are the door object; tags distinguish roles.
  * Peer death / object DEAD → clients see -LINUX_EIO (G-DOOR-4 / G-PERS-3).
+ *
+ * Mid-call timeout races (cooperative UP + atomics for SMP-prep):
+ *   HasReply is observed before the deadline check in the client wait loop,
+ *   so a reply that lands cannot be demoted to -ETIMEDOUT on the same arm.
+ *   On timeout: clear HasReq then HasReply, then CAS-release pClient. A
+ *   concurrent door_reply after release sees pClient==NULL and drops (stale).
+ *   A concurrent door_recv that already sampled HasReq may still copy req and
+ *   later reply into a freed slot — reply is then dropped; no hang. Server
+ *   re-checks HasReq after wake if the client cancelled first.
  */
 #include <gj/cap.h>
 #include <gj/door.h>
@@ -31,6 +40,9 @@
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
 
+static void door_release_client_slot(struct gj_door *pDoor,
+                                     struct gj_thread *pCur);
+
 static int
 door_live(const struct gj_door *pDoor)
 {
@@ -45,6 +57,40 @@ door_live(const struct gj_door *pDoor)
         return 0;
     }
     return 1;
+}
+
+/* Snapshot server badge for client get_last_badge after a completed flight. */
+static void
+door_snapshot_last_badge(struct gj_door *pDoor)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    pDoor->u32LastBadge = pDoor->u32Badge;
+}
+
+/*
+ * Mid-call / peer-path cleanup: drop in-flight flags then release slot.
+ * Order matters — see file header race notes. Caller supplies the abort
+ * accounting (timeouts vs peer aborts).
+ */
+static void
+door_cancel_inflight(struct gj_door *pDoor, struct gj_thread *pCur)
+{
+    if (pDoor == NULL) {
+        return;
+    }
+    /*
+     * HasReq must be 0 before pClient is cleared so a server woken on the
+     * original post does not re-consume a cancelled request after re-check.
+     * HasReply cleared so a late reply cannot revive a timed-out client
+     * (client already leaving with -ETIMEDOUT / -EIO).
+     */
+    pDoor->u32HasReq = 0;
+    pDoor->u32HasReply = 0;
+    door_release_client_slot(pDoor, pCur);
+    /* Nudge server so a blocked recv re-evaluates after cancel. */
+    (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
 }
 
 void
@@ -68,8 +114,8 @@ door_cold_init(void)
     door_init(&g_doorCold);
     g_fColdInited = 1;
     /*
-     * Boot/smoke readability: ready flag + object state. Call/reply counts
-     * live in door_stats (and cold_ipc / linux dispatch layers).
+     * Boot/smoke readability: ready flag + object state. Call/reply/timeout
+     * counts live in door_stats (and cold_ipc / linux dispatch layers).
      */
     kprintf("door: cold personality ready=%u state=%u (ENDPOINT)\n",
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
@@ -89,7 +135,7 @@ door_is_live(const struct gj_door *pDoor)
 
 void
 door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
-           u64 *pAborts)
+           u64 *pAborts, u64 *pTimeouts)
 {
     if (pCalls != NULL) {
         *pCalls = (pDoor != NULL) ? pDoor->u64Calls : 0;
@@ -99,6 +145,9 @@ door_stats(const struct gj_door *pDoor, u64 *pCalls, u64 *pReplies,
     }
     if (pAborts != NULL) {
         *pAborts = (pDoor != NULL) ? pDoor->u64Aborts : 0;
+    }
+    if (pTimeouts != NULL) {
+        *pTimeouts = (pDoor != NULL) ? pDoor->u64Timeouts : 0;
     }
 }
 
@@ -148,6 +197,8 @@ door_abort_waiters(struct gj_door *pDoor)
     /*
      * Deliver a synthetic reply so a blocked client exits door_call with -EIO
      * rather than hanging. Server loops re-check door_live after wake.
+     * HasReq left as-is: client path clears it on the -EIO return arm after
+     * observing HasReply (or !door_live).
      */
     if (pDoor->pClient != NULL) {
         pDoor->i64Reply = -(i64)LINUX_EIO;
@@ -190,10 +241,16 @@ door_on_thread_exit(struct gj_thread *pThr)
     pExpected = pThr;
     if (__atomic_compare_exchange_n(&pDoor->pClient, &pExpected, NULL, 0,
                                     __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+        /*
+         * Same HasReq/HasReply clear order as mid-call timeout: cancel before
+         * slot is visible as free to contenders.
+         */
         pDoor->u32HasReq = 0;
         pDoor->u32HasReply = 0;
         pDoor->i64Reply = -(i64)LINUX_EIO;
+        pDoor->u64Aborts++;
         (void)thread_wake(pDoor, DOOR_TAG_CLIENT, 1);
+        (void)thread_wake(pDoor, DOOR_TAG_SERVER, 1);
         (void)thread_wake(pDoor, DOOR_TAG_SLOT, 8);
     }
     /* Drop server role so cold_ipc falls back to sync service. */
@@ -217,6 +274,27 @@ u32
 door_get_badge(const struct gj_door *pDoor)
 {
     return pDoor != NULL ? pDoor->u32Badge : 0u;
+}
+
+u32
+door_get_last_badge(const struct gj_door *pDoor)
+{
+    return pDoor != NULL ? pDoor->u32LastBadge : 0u;
+}
+
+void
+door_badge_or(struct gj_door *pDoor, u64 u64Bits)
+{
+    if (pDoor == NULL || u64Bits == 0) {
+        return;
+    }
+    pDoor->u64BadgeMask |= u64Bits;
+}
+
+u64
+door_get_badge_mask(const struct gj_door *pDoor)
+{
+    return pDoor != NULL ? pDoor->u64BadgeMask : 0ull;
 }
 
 i64
@@ -253,6 +331,7 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
         if (u64DeadlineMonoNsec != 0 &&
             (!timer_ready() ||
              timer_mono_nsec() >= u64DeadlineMonoNsec)) {
+            pDoor->u64Timeouts++;
             return -LINUX_ETIMEDOUT;
         }
         pExpected = NULL;
@@ -287,26 +366,34 @@ door_call_timeout(struct gj_door *pDoor, struct gj_linux_regs *pRegs,
     }
 
     for (;;) {
+        /*
+         * Reply arm first: if server completed before our timeout sample,
+         * return the real reply (never demote a landed reply to ETIMEDOUT).
+         */
         if (pDoor->u32HasReply) {
             i64Ret = pDoor->i64Reply;
             pDoor->u32HasReply = 0;
             pDoor->u32HasReq = 0;
+            door_snapshot_last_badge(pDoor);
             door_release_client_slot(pDoor, pCur);
             return i64Ret;
         }
         if (!door_live(pDoor)) {
-            pDoor->u32HasReq = 0;
-            pDoor->u32HasReply = 0;
-            door_release_client_slot(pDoor, pCur);
+            /* Peer death mid-wait: drop flight; last badge still useful. */
+            door_snapshot_last_badge(pDoor);
+            door_cancel_inflight(pDoor, pCur);
             return -LINUX_EIO;
         }
         if (u64DeadlineMonoNsec != 0 &&
             (!timer_ready() ||
              timer_mono_nsec() >= u64DeadlineMonoNsec)) {
-            pDoor->u32HasReq = 0;
-            pDoor->u32HasReply = 0;
-            door_release_client_slot(pDoor, pCur);
-            pDoor->u64Aborts++;
+            /*
+             * Mid-call timeout cleanup: HasReq/HasReply cleared inside
+             * door_cancel_inflight before slot release (see file header).
+             * Count under u64Timeouts only — not peer u64Aborts.
+             */
+            door_cancel_inflight(pDoor, pCur);
+            pDoor->u64Timeouts++;
             return -LINUX_ETIMEDOUT;
         }
         thread_block(pDoor, DOOR_TAG_CLIENT);

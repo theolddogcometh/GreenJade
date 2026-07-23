@@ -10,6 +10,9 @@
  *
  * Soft CDT edges (gj_cdt_edge_*) and soft slot-quota hooks live here so
  * mint/ledger can wire without changing the resolve/install surface.
+ *
+ * Grep: cap:cdt  — edge pool, link/unlink, mint wiring
+ * Grep: cap:quota — flat + soft hierarchical charge/refund
  */
 #include <gj/cap.h>
 #include <gj/types.h>
@@ -43,6 +46,8 @@ gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots, u64 cSlots)
     pCnode->cSlots = cSlots;
     pCnode->pSlots = pSlots;
     pCnode->pQuotaAccount = NULL; /* soft: ledger attaches later */
+    pCnode->u32SoftLock = 0;      /* cap:cdt trylock — free */
+    pCnode->u32PadLock = 0;
 
     for (iSlot = 0; iSlot < cSlots; iSlot++) {
         pSlots[iSlot].u16Type = (u16)GJ_CAP_INVALID;
@@ -58,11 +63,41 @@ gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots, u64 cSlots)
      */
 }
 
-/* charge/refund: real ledger impl at end of file */
+/*
+ * Soft CNode try-lock stub (R2). Atomic CAS on u32SoftLock until a real
+ * mutex lands. Order for full impl: CNode → Object → Endpoint.
+ * Grep: cap:cdt trylock
+ */
+int
+gj_cnode_trylock(struct gj_cnode *pCnode)
+{
+    u32 u32Expect;
+
+    if (pCnode == NULL) {
+        return 0;
+    }
+    u32Expect = 0u;
+    if (__atomic_compare_exchange_n(&pCnode->u32SoftLock, &u32Expect, 1u, 0,
+                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) {
+        return 1;
+    }
+    /* Busy — caller must defer edge (R2), not spin. */
+    return 0;
+}
+
+void
+gj_cnode_unlock(struct gj_cnode *pCnode)
+{
+    if (pCnode == NULL) {
+        return;
+    }
+    __atomic_store_n(&pCnode->u32SoftLock, 0u, __ATOMIC_RELEASE);
+}
 
 /*
  * Soft CDT link — edge storage is caller/slab-owned. Install does not
  * allocate edges yet; mint with CDT will call this after successful install.
+ * Grep: cap:cdt
  */
 gj_status_t
 gj_cdt_edge_link(struct gj_obj_hdr *pObj, struct gj_cdt_edge *pEdge,
@@ -201,6 +236,7 @@ gj_cap_resolve(struct gj_cnode *pProcCnode, u64 u64Slot, u32 u32SlotGen,
  * Install into an INVALID slot. Does not overwrite occupied slots (BUSY).
  * Root-meta type and slot 0 are mutually exclusive with general caps.
  * Soft quota charge then slots_left++; CDT edge is optional (mint wires).
+ * Grep: cap:quota / cap:cdt
  */
 gj_status_t
 gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
@@ -263,6 +299,7 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     }
 
     /* Soft process slot quota (no-op until pQuotaAccount attached). */
+    /* Grep: cap:quota charge */
     stQuota = gj_cap_quota_slot_charge(pCnode->pQuotaAccount);
     if (stQuota != GJ_OK) {
         return stQuota;
@@ -277,8 +314,8 @@ gj_cap_slot_install(struct gj_cnode *pCnode, u64 u64Slot, u16 u16Type,
     pObj->u32SlotsLeft++;
 
     /*
-     * Soft CDT: mint with edge storage should gj_cdt_edge_link() here.
-     * Until then deferred revoke uses slots_left + optional CNode scan.
+     * Soft CDT: mint/copy/move with edge pool call gj_cdt_edge_link() after.
+     * Until edges exist, deferred revoke uses slots_left + known-CNode scan.
      * Grep: cap:cdt soft
      */
 
@@ -326,6 +363,7 @@ gj_cap_alloc_install(struct gj_cnode *pCnode, u16 u16Type, u16 u16Rights,
  * Deferred invalidate helper — walk a known CNode and clear slots for pObj.
  * Prefer CDT walk when edges exist; this covers process-local hygiene and
  * tests without a global object index.
+ * Grep: cap:cdt
  */
 u32
 gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj,
@@ -339,6 +377,11 @@ gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj,
         return 0;
     }
 
+    /* Soft try-lock: if busy, return 0 so caller can defer (R2). */
+    if (!gj_cnode_trylock(pCnode)) {
+        return 0; /* cap:cdt trylock busy */
+    }
+
     for (iSlot = 0; iSlot < pCnode->cSlots && u32Cleared < u32MaxSlots;
          iSlot++) {
         struct gj_cap_slot *pSlot = &pCnode->pSlots[iSlot];
@@ -350,9 +393,8 @@ gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj,
             continue;
         }
         /*
-         * Full impl holds CNode lock; soft path assumes single-threaded or
-         * caller already serialised. R2 try-lock lands with CNode mutex.
-         * Soft quota refund against this CNode's account (grep: cap:quota soft).
+         * Soft quota refund against this CNode's account.
+         * Grep: cap:quota soft
          */
         (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount);
         gj_cap_slot_invalidate_locked(pSlot, pObj);
@@ -361,10 +403,12 @@ gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode, struct gj_obj_hdr *pObj,
         u32Cleared++;
     }
 
+    gj_cnode_unlock(pCnode);
     return u32Cleared;
 }
 
 /* ---- Soft CDT edge pool + mint/copy/move/delete ------------------------ */
+/* Grep: cap:cdt pool */
 
 #define GJ_CDT_EDGE_POOL 256u
 
@@ -414,6 +458,9 @@ cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge)
     cdt_edge_free(pEdge);
 }
 
+/* ---- Soft quota (flat + hierarchical parent roll-up) ------------------- */
+/* Grep: cap:quota */
+
 void
 gj_cap_quota_init(struct gj_cap_quota *pQ, u32 u32Limit)
 {
@@ -423,7 +470,10 @@ gj_cap_quota_init(struct gj_cap_quota *pQ, u32 u32Limit)
     pQ->u32Limit = u32Limit;
     pQ->u32Used = 0;
     pQ->u32Exhaust = 0;
-    pQ->u32Pad = 0;
+    pQ->u32HighWater = 0;
+    pQ->u32ChargeOk = 0;
+    pQ->u32RefundOk = 0;
+    pQ->pParent = NULL; /* flat until gj_cap_quota_set_parent */
 }
 
 void
@@ -432,7 +482,39 @@ gj_cap_quota_attach(struct gj_cnode *pCnode, struct gj_cap_quota *pQ)
     if (pCnode == NULL) {
         return;
     }
-    pCnode->pQuotaAccount = pQ;
+    pCnode->pQuotaAccount = pQ; /* cap:quota attach */
+}
+
+/*
+ * Soft hierarchical parent. Zone-like: child charges roll up to parent.
+ * Refuses self and shallow cycles. Grep: cap:quota parent
+ */
+void
+gj_cap_quota_set_parent(struct gj_cap_quota *pQ, struct gj_cap_quota *pParent)
+{
+    struct gj_cap_quota *pWalk;
+    u32 u32Depth;
+
+    if (pQ == NULL) {
+        return;
+    }
+    if (pParent == NULL) {
+        pQ->pParent = NULL;
+        return;
+    }
+    if (pParent == pQ) {
+        return; /* refuse self */
+    }
+    /* Refuse if pQ already appears on pParent's ancestor chain. */
+    pWalk = pParent;
+    for (u32Depth = 0; pWalk != NULL && u32Depth < GJ_CAP_QUOTA_DEPTH_MAX;
+         u32Depth++) {
+        if (pWalk == pQ) {
+            return; /* would cycle */
+        }
+        pWalk = pWalk->pParent;
+    }
+    pQ->pParent = pParent;
 }
 
 u32
@@ -447,33 +529,82 @@ gj_cap_quota_limit(const struct gj_cap_quota *pQ)
     return pQ != NULL ? pQ->u32Limit : 0u;
 }
 
-/* Replace soft stubs with real ledger when account attached. */
+u32
+gj_cap_quota_highwater(const struct gj_cap_quota *pQ)
+{
+    return pQ != NULL ? pQ->u32HighWater : 0u;
+}
+
+u32
+gj_cap_quota_exhaust_count(const struct gj_cap_quota *pQ)
+{
+    return pQ != NULL ? pQ->u32Exhaust : 0u;
+}
+
+/*
+ * Charge one slot at leaf and each soft parent (hierarchical roll-up).
+ * Pre-check all nodes, then commit — soft single-threaded safe.
+ * Grep: cap:quota charge
+ */
 gj_status_t
 gj_cap_quota_slot_charge(void *pAccount)
 {
     struct gj_cap_quota *pQ = (struct gj_cap_quota *)pAccount;
+    struct gj_cap_quota *pWalk;
+    u32 u32Depth;
 
     if (pQ == NULL) {
         return GJ_OK;
     }
-    if (pQ->u32Used >= pQ->u32Limit) {
-        pQ->u32Exhaust++;
-        return GJ_ERR_QUOTA;
+
+    /* Pass 1: every node on the chain must have room. */
+    pWalk = pQ;
+    for (u32Depth = 0; pWalk != NULL && u32Depth < GJ_CAP_QUOTA_DEPTH_MAX;
+         u32Depth++) {
+        if (pWalk->u32Used >= pWalk->u32Limit) {
+            pWalk->u32Exhaust++;
+            return GJ_ERR_QUOTA; /* cap:quota exhaust */
+        }
+        pWalk = pWalk->pParent;
     }
-    pQ->u32Used++;
+
+    /* Pass 2: commit leaf → root. */
+    pWalk = pQ;
+    for (u32Depth = 0; pWalk != NULL && u32Depth < GJ_CAP_QUOTA_DEPTH_MAX;
+         u32Depth++) {
+        pWalk->u32Used++;
+        if (pWalk->u32Used > pWalk->u32HighWater) {
+            pWalk->u32HighWater = pWalk->u32Used;
+        }
+        pWalk->u32ChargeOk++;
+        pWalk = pWalk->pParent;
+    }
     return GJ_OK;
 }
 
+/*
+ * Refund one slot at leaf and each soft parent (mirrors charge).
+ * Grep: cap:quota refund
+ */
 gj_status_t
 gj_cap_quota_slot_refund(void *pAccount)
 {
     struct gj_cap_quota *pQ = (struct gj_cap_quota *)pAccount;
+    struct gj_cap_quota *pWalk;
+    u32 u32Depth;
 
     if (pQ == NULL) {
         return GJ_OK;
     }
-    if (pQ->u32Used > 0u) {
-        pQ->u32Used--;
+
+    pWalk = pQ;
+    for (u32Depth = 0; pWalk != NULL && u32Depth < GJ_CAP_QUOTA_DEPTH_MAX;
+         u32Depth++) {
+        if (pWalk->u32Used > 0u) {
+            pWalk->u32Used--;
+            pWalk->u32RefundOk++;
+        }
+        pWalk = pWalk->pParent;
     }
     return GJ_OK;
 }
@@ -515,6 +646,7 @@ gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
+    /* Grep: cap:cdt mint */
     pEdge = cdt_edge_alloc();
     if (pEdge != NULL) {
         (void)gj_cdt_edge_link(res.pObj, pEdge, pDstCnode, pOut->u64Slot);
@@ -546,6 +678,7 @@ gj_cap_copy(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
+    /* Grep: cap:cdt copy */
     pEdge = cdt_edge_alloc();
     if (pEdge != NULL) {
         (void)gj_cdt_edge_link(res.pObj, pEdge, pCnode, pOut->u64Slot);
@@ -580,7 +713,7 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     if (st != GJ_OK) {
         return st;
     }
-    /* Retarget CDT: unlink old slot, link new. */
+    /* Retarget CDT: unlink old slot, link new. Grep: cap:cdt move */
     gj_cdt_unlink_slot(res.pObj, pCnode, u64SrcSlot);
     pEdge = cdt_edge_alloc();
     if (pEdge != NULL) {
@@ -588,7 +721,7 @@ gj_cap_move(struct gj_cnode *pCnode, u64 u64SrcSlot, u32 u32SrcGen,
     }
     /* Invalidate source without double-counting object death. */
     pSrc = &pCnode->pSlots[u64SrcSlot];
-    (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount);
+    (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
     gj_cap_slot_invalidate_locked(pSrc, res.pObj);
     return GJ_OK;
 }
@@ -610,8 +743,8 @@ gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen)
         (res.u16Rights & GJ_RIGHT_GRANT) == 0) {
         return GJ_ERR_PERM;
     }
-    gj_cdt_unlink_slot(res.pObj, pCnode, u64Slot);
-    (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount);
+    gj_cdt_unlink_slot(res.pObj, pCnode, u64Slot); /* cap:cdt delete */
+    (void)gj_cap_quota_slot_refund(pCnode->pQuotaAccount); /* cap:quota */
     gj_cap_slot_invalidate_locked(res.pSlot, res.pObj);
     return GJ_OK;
 }

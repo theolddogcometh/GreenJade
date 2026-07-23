@@ -1,6 +1,7 @@
 # Build outputs
 build/
 *.o
+*.d
 *.elf
 *.a
 *.so

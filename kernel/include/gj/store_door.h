@@ -9,6 +9,13 @@
  * Sector R/W prefers virtio-blk; scsi_door is CAP/R/W fallback when blk
  * is absent. Ring EXPORT/MAP/KICK hand the virtq to UDX without changing
  * sector semantics.
+ *
+ * Soft paths (bring-up / product smoke):
+ *   CLAIM is idempotent for the same 32-bit token (reclaim soft);
+ *   different token → BUSY. R/W and ring ops are allowed without claim
+ *   for smokes; storaged prefers the owned path.
+ *   EXPORT/MAP/KICK soft-skip with NODEV when virtio-blk is absent so
+ *   hosts without blk stay green on non-hard markers.
  */
 #pragma once
 
@@ -51,11 +58,15 @@
 #define GJ_STORE_OP_EXPORT_RING 9u
 /** KICK: notify device of available descriptors on the request queue */
 #define GJ_STORE_OP_KICK        10u
-/** RING_STATE: arg1 = user u32[2] {free_descs, ready(0/1)} */
+/**
+ * RING_STATE: arg1 = user u32[2] {free_descs, ready(0/1)}
+ * Soft: ready=0 / free=0 when virtio-blk is absent (no hard fail).
+ */
 #define GJ_STORE_OP_RING_STATE  11u
 /**
  * MAP_RING: arg1 = user VA base (page-aligned)
  *           arg2 = optional user ptr to gj_virtq_export (may be 0)
+ * Soft: NODEV when virtio-blk is absent; FAULT on map failure.
  */
 #define GJ_STORE_OP_MAP_RING    12u
 
@@ -63,3 +74,11 @@ void store_door_init(void);
 i64  store_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3);
 /** Non-zero when a userspace owner token is held. */
 int  store_door_owned(void);
+/** Current owner token, or 0 if kernel interim owns policy. */
+u32  store_door_owner_token(void);
+/** Last successful MAP_RING user VA base, or 0 if never mapped. */
+u64  store_door_ring_map_va(void);
+/** Soft path: EXPORT/MAP/KICK/RING_STATE call count. */
+u32  store_door_ring_calls(void);
+/** Soft path: first-claim count (excludes idempotent reclaims). */
+u32  store_door_claim_count(void);

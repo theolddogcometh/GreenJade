@@ -6,7 +6,8 @@
  * Pure C11, dual-licensed (MIT OR Apache-2.0).
  *
  * Features: SYN handshake, ordered RX, multi-segment TX, advertised window,
- * last-segment retransmit on poll, basic RTT ticks.
+ * last-segment retransmit on poll, basic RTT ticks, soft close-state progress
+ * (FIN_WAIT / LAST_ACK / TIME_WAIT reclaim), listen backlog soft.
  *
  * Multi-segment TX (product / netstackd 3000 B bulk smoke):
  *   net_tcp_send chunks payloads into TCP_MSS (1024) segments with FL_PSH.
@@ -35,6 +36,8 @@
 #define TCP_WND      4096
 #define TCP_RTX_MS   200
 #define TCP_RTX_MAX  8
+#define TCP_TW_MS    1000 /* soft TIME_WAIT reclaim */
+#define TCP_BACKLOG_MAX 8
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -46,6 +49,10 @@ typedef char tcp_mss_multi[(TCP_MSS > 0 && TCP_TX_MAX > TCP_MSS) ? 1 : -1];
 #define ST_SYN_RCVD    2
 #define ST_ESTABLISHED 3
 #define ST_CLOSE_WAIT  4
+#define ST_FIN_WAIT1   5
+#define ST_FIN_WAIT2   6
+#define ST_LAST_ACK    7
+#define ST_TIME_WAIT   8
 
 #define FL_FIN 0x01
 #define FL_SYN 0x02
@@ -61,6 +68,10 @@ struct tcp_sock {
 	u8  u8State;
 	u8  u8Listening;
 	u8  u8IsLoop;
+	u8  u8Backlog;  /* soft listen queue depth */
+	u8  u8Pending;  /* soft pending SYN/accept count */
+	u8  u8FinSent;  /* we have emitted FIN */
+	u8  u8Pad0;
 	u16 u16Lport;
 	u16 u16Rport;
 	u8  aRip[4];
@@ -83,6 +94,7 @@ struct tcp_sock {
 	u8  u8Pad2[3];
 	i16 i16Peer;
 	u16 u16Pad3;
+	u32 u32TwTick; /* TIME_WAIT start (ms) */
 };
 
 static struct tcp_sock g_aT[TCP_MAX];
@@ -91,6 +103,7 @@ static u32 g_u32Segs;
 static u32 g_u32RxB;
 static u32 g_u32TxB;
 static u32 g_u32Rtx;
+static u32 g_u32TwReap;
 static u16 g_u16IpId;
 
 static u16
@@ -267,6 +280,20 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 			if (flags & FL_SYN) {
 				g_aT[peer].u32RcvNxt = seq + 1;
 			}
+			/* Soft FIN: peer → CLOSE_WAIT when we emit FIN. */
+			if ((flags & FL_FIN) &&
+			    (g_aT[peer].u8State == ST_ESTABLISHED ||
+			     g_aT[peer].u8State == ST_FIN_WAIT1 ||
+			     g_aT[peer].u8State == ST_FIN_WAIT2)) {
+				g_aT[peer].u32RcvNxt++;
+				if (g_aT[peer].u8State == ST_ESTABLISHED) {
+					g_aT[peer].u8State = ST_CLOSE_WAIT;
+				} else if (g_aT[peer].u8State == ST_FIN_WAIT1 ||
+					   g_aT[peer].u8State == ST_FIN_WAIT2) {
+					g_aT[peer].u8State = ST_TIME_WAIT;
+					g_aT[peer].u32TwTick = now_ms();
+				}
+			}
 			g_u32TxB += cbPay;
 			g_u32Segs++;
 			/* Always report full payload length on success (ABI). */
@@ -360,6 +387,7 @@ tcp_tx(u32 s, u8 flags, const u8 *pPay, u32 cbPay)
 	}
 	if (flags & FL_FIN) {
 		g_aT[s].u32SndNxt++;
+		g_aT[s].u8FinSent = 1;
 	}
 	if (cbPay && r > 0) {
 		u32 n = (u32)r;
@@ -387,10 +415,12 @@ net_tcp_init(void)
 	g_u32RxB = 0;
 	g_u32TxB = 0;
 	g_u32Rtx = 0;
+	g_u32TwReap = 0;
 	g_u16IpId = 1;
-	kprintf("net_tcp: IPv4 TCP ready (fd %u..%u) rtx_ms=%u wnd=%u mss=%u\n",
+	kprintf("net_tcp: IPv4 TCP ready (fd %u..%u) rtx_ms=%u wnd=%u mss=%u "
+		"tw_ms=%u\n",
 		TCP_FD_BASE, TCP_FD_BASE + TCP_MAX - 1, TCP_RTX_MS, TCP_WND,
-		TCP_MSS);
+		TCP_MSS, TCP_TW_MS);
 }
 
 i64
@@ -429,14 +459,25 @@ i64
 net_tcp_listen(i64 fd, int backlog)
 {
 	u32 s;
+	int nBl;
 
-	(void)backlog;
 	if (fd_to_slot(fd, &s) != 0) {
 		return -9;
 	}
+	/* Soft backlog clamp (Linux-shaped: 0 → 1). */
+	nBl = backlog;
+	if (nBl < 1) {
+		nBl = 1;
+	}
+	if (nBl > TCP_BACKLOG_MAX) {
+		nBl = TCP_BACKLOG_MAX;
+	}
+	g_aT[s].u8Backlog = (u8)nBl;
+	g_aT[s].u8Pending = 0;
 	g_aT[s].u8Listening = 1;
 	g_aT[s].u8State = ST_LISTEN;
-	kprintf("net_tcp: LISTEN :%u fd=%ld\n", g_aT[s].u16Lport, (long)fd);
+	kprintf("net_tcp: LISTEN :%u fd=%ld backlog=%u\n", g_aT[s].u16Lport,
+		(long)fd, g_aT[s].u8Backlog);
 	return 0;
 }
 
@@ -452,8 +493,16 @@ net_tcp_connect(i64 fd, u16 port)
 	for (i = 0; i < TCP_MAX; i++) {
 		if (i != s && g_aT[i].u8Used && g_aT[i].u8Listening &&
 		    g_aT[i].u16Lport == port) {
-			int ns = alloc_slot();
+			int ns;
 
+			/* Soft backlog: reject when accept queue is full. */
+			if (g_aT[i].u8Backlog == 0) {
+				g_aT[i].u8Backlog = 1;
+			}
+			if (g_aT[i].u8Pending >= g_aT[i].u8Backlog) {
+				return -11; /* EAGAIN */
+			}
+			ns = alloc_slot();
 			if (ns < 0) {
 				return -24;
 			}
@@ -474,6 +523,9 @@ net_tcp_connect(i64 fd, u16 port)
 			g_aT[ns].u32RcvNxt = g_aT[s].u32SndNxt;
 			g_aT[s].u32RcvNxt = g_aT[ns].u32SndNxt;
 			g_aT[i].i16Peer = (i16)ns;
+			if (g_aT[i].u8Pending < 255u) {
+				g_aT[i].u8Pending++;
+			}
 			g_u32Accepts++;
 			return 0;
 		}
@@ -502,6 +554,9 @@ net_tcp_accept(i64 fd)
 		return -11;
 	}
 	g_aT[s].i16Peer = -1;
+	if (g_aT[s].u8Pending > 0) {
+		g_aT[s].u8Pending--;
+	}
 	return slot_to_fd((u32)peer);
 }
 
@@ -519,7 +574,15 @@ net_tcp_send(i64 fd, const void *pBuf, size_t cb)
 	if (cb == 0) {
 		return 0;
 	}
-	if (g_aT[s].u8State != ST_ESTABLISHED) {
+	/*
+	 * Soft: send allowed in ESTABLISHED and CLOSE_WAIT (half-close write
+	 * path after peer FIN). FIN_WAIT* / LAST_ACK reject new data.
+	 */
+	if (g_aT[s].u8State != ST_ESTABLISHED &&
+	    g_aT[s].u8State != ST_CLOSE_WAIT) {
+		return -32;
+	}
+	if (g_aT[s].u8FinSent) {
 		return -32;
 	}
 	/*
@@ -593,8 +656,12 @@ net_tcp_recv(i64 fd, void *pBuf, size_t cb)
 		return 0;
 	}
 	if (g_aT[s].u32RxLen == 0) {
-		if (g_aT[s].u8State == ST_CLOSE_WAIT) {
-			return 0; /* EOF after FIN */
+		/* Soft EOF after peer FIN or local close states. */
+		if (g_aT[s].u8State == ST_CLOSE_WAIT ||
+		    g_aT[s].u8State == ST_TIME_WAIT ||
+		    g_aT[s].u8State == ST_LAST_ACK ||
+		    g_aT[s].u8State == ST_CLOSED) {
+			return 0;
 		}
 		return -11; /* EAGAIN */
 	}
@@ -622,11 +689,34 @@ net_tcp_close(i64 fd)
 	if (fd_to_slot(fd, &s) != 0) {
 		return -9;
 	}
-	if (g_aT[s].u8State == ST_ESTABLISHED && !g_aT[s].u8IsLoop) {
+	/*
+	 * Soft close: emit FIN on ESTABLISHED / CLOSE_WAIT (virtio + loop).
+	 * Loopback tcp_tx_raw FIN advances peer to CLOSE_WAIT / TIME_WAIT.
+	 * User close always frees the local slot (fd ABI); peer half-close
+	 * and TIME_WAIT reaping live on remaining sockets / poll.
+	 */
+	if (g_aT[s].u8State == ST_ESTABLISHED ||
+	    g_aT[s].u8State == ST_CLOSE_WAIT) {
 		(void)tcp_tx(s, (u8)(FL_FIN | FL_ACK), 0, 0);
 	}
 	if (g_aT[s].i16Peer >= 0 && (u32)g_aT[s].i16Peer < TCP_MAX) {
-		g_aT[g_aT[s].i16Peer].i16Peer = -1;
+		if (g_aT[g_aT[s].i16Peer].i16Peer == (i16)s) {
+			g_aT[g_aT[s].i16Peer].i16Peer = -1;
+		}
+	}
+	/* Listener soft pending: if this was queued accept child, release. */
+	{
+		u32 i;
+
+		for (i = 0; i < TCP_MAX; i++) {
+			if (g_aT[i].u8Used && g_aT[i].u8Listening &&
+			    g_aT[i].i16Peer == (i16)s) {
+				g_aT[i].i16Peer = -1;
+				if (g_aT[i].u8Pending > 0) {
+					g_aT[i].u8Pending--;
+				}
+			}
+		}
 	}
 	memset(&g_aT[s], 0, sizeof(g_aT[s]));
 	return 0;
@@ -706,8 +796,20 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 	}
 
 	if ((flags & FL_SYN) && !(flags & FL_ACK) && ls >= 0 && cs < 0) {
-		int ns = alloc_slot();
+		int ns;
 
+		/* Soft backlog: drop SYN when accept queue is full. */
+		if (g_aT[ls].u8Backlog == 0) {
+			g_aT[ls].u8Backlog = 1;
+		}
+		if (g_aT[ls].u8Pending >= g_aT[ls].u8Backlog) {
+			return 1;
+		}
+		if (g_aT[ls].i16Peer >= 0) {
+			/* One soft pending child at a time on listener slot. */
+			return 1;
+		}
+		ns = alloc_slot();
 		if (ns < 0) {
 			return 1;
 		}
@@ -721,8 +823,9 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		g_aT[ns].u8IsLoop = 0;
 		g_aT[ns].i16Peer = -1;
 		(void)tcp_tx((u32)ns, (u8)(FL_SYN | FL_ACK), 0, 0);
-		if (g_aT[ls].i16Peer < 0) {
-			g_aT[ls].i16Peer = (i16)ns;
+		g_aT[ls].i16Peer = (i16)ns;
+		if (g_aT[ls].u8Pending < 255u) {
+			g_aT[ls].u8Pending++;
 		}
 		return 1;
 	}
@@ -751,17 +854,32 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			    ack >= g_aT[cs].u32RtxSeq + g_aT[cs].u32RtxLen) {
 				g_aT[cs].u8RtxValid = 0;
 			}
+			/* Soft close progress on ACK of our FIN. */
+			if (g_aT[cs].u8FinSent &&
+			    ack >= g_aT[cs].u32SndNxt) {
+				if (g_aT[cs].u8State == ST_FIN_WAIT1) {
+					g_aT[cs].u8State = ST_FIN_WAIT2;
+				} else if (g_aT[cs].u8State == ST_LAST_ACK) {
+					/* Fully closed — free slot. */
+					memset(&g_aT[cs], 0, sizeof(g_aT[cs]));
+					return 1;
+				}
+			}
 		}
 	}
 
 	if (g_aT[cs].u8State == ST_ESTABLISHED ||
-	    g_aT[cs].u8State == ST_SYN_RCVD) {
+	    g_aT[cs].u8State == ST_SYN_RCVD ||
+	    g_aT[cs].u8State == ST_FIN_WAIT1 ||
+	    g_aT[cs].u8State == ST_FIN_WAIT2) {
 		/*
 		 * In-order only; advance RcvNxt by bytes actually buffered.
 		 * pay_len is frame-derived; push_rx clamps to free RX space.
 		 * Multi-seg peers retransmit if we ACK less than offered.
 		 */
-		if (pay_len && seq == g_aT[cs].u32RcvNxt) {
+		if (pay_len && seq == g_aT[cs].u32RcvNxt &&
+		    (g_aT[cs].u8State == ST_ESTABLISHED ||
+		     g_aT[cs].u8State == ST_SYN_RCVD)) {
 			u32 cbTake = pay_len;
 			int got;
 
@@ -775,9 +893,26 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 			}
 		}
 		if (flags & FL_FIN) {
-			g_aT[cs].u32RcvNxt++;
-			g_aT[cs].u8State = ST_CLOSE_WAIT;
-			(void)tcp_tx((u32)cs, (u8)(FL_ACK | FL_FIN), 0, 0);
+			if (seq == g_aT[cs].u32RcvNxt ||
+			    seq + pay_len == g_aT[cs].u32RcvNxt) {
+				g_aT[cs].u32RcvNxt++;
+				if (g_aT[cs].u8State == ST_ESTABLISHED ||
+				    g_aT[cs].u8State == ST_SYN_RCVD) {
+					g_aT[cs].u8State = ST_CLOSE_WAIT;
+					(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
+				} else if (g_aT[cs].u8State == ST_FIN_WAIT1) {
+					/* Simultaneous close → TIME_WAIT soft. */
+					g_aT[cs].u8State = ST_TIME_WAIT;
+					g_aT[cs].u32TwTick = now_ms();
+					(void)tcp_tx((u32)cs,
+						     (u8)(FL_ACK | FL_FIN), 0,
+						     0);
+				} else if (g_aT[cs].u8State == ST_FIN_WAIT2) {
+					g_aT[cs].u8State = ST_TIME_WAIT;
+					g_aT[cs].u32TwTick = now_ms();
+					(void)tcp_tx((u32)cs, FL_ACK, 0, 0);
+				}
+			}
 		}
 	}
 	return 1;
@@ -791,7 +926,18 @@ net_tcp_poll(void)
 
 	/* Last unacked data segment retransmit (virtio path only). */
 	for (i = 0; i < TCP_MAX; i++) {
-		if (!g_aT[i].u8Used || !g_aT[i].u8RtxValid) {
+		if (!g_aT[i].u8Used) {
+			continue;
+		}
+		/* Soft TIME_WAIT reclaim — free slots for new accepts. */
+		if (g_aT[i].u8State == ST_TIME_WAIT) {
+			if (t - g_aT[i].u32TwTick >= TCP_TW_MS) {
+				memset(&g_aT[i], 0, sizeof(g_aT[i]));
+				g_u32TwReap++;
+			}
+			continue;
+		}
+		if (!g_aT[i].u8RtxValid) {
 			continue;
 		}
 		if (g_aT[i].u8IsLoop) {
@@ -840,4 +986,10 @@ u32
 net_tcp_retransmits(void)
 {
 	return g_u32Rtx;
+}
+
+u32
+net_tcp_tw_reaps(void)
+{
+	return g_u32TwReap;
 }

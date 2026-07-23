@@ -13,6 +13,10 @@
  * walk + structured invalidate (S7), Phase C reclaim when slots/refs/pins 0.
  * Soft CDT/quota hooks are present so mint and ledger can wire without
  * redesigning this surface (docs/SOLARIS_STYLE_REMAINING.md §2).
+ *
+ * Grep markers (cap surface):
+ *   cap:cdt    — soft CDT edges, walk, deferred hygiene
+ *   cap:quota  — flat/hierarchical slot quota ledger
  */
 #pragma once
 
@@ -110,11 +114,13 @@ struct gj_cap_slot {
 /* Forward: CNode used by soft CDT edges before full struct is defined. */
 struct gj_cnode;
 struct gj_cdt_edge;
+struct gj_cap_quota;
 
 /*
  * Object header — first field of every kernel cap object.
  * u32SlotsLeft: outstanding derived CNode bindings (S4/S6).
  * pCdtHead:     soft CDT child-edge list (NULL until mint wires edges).
+ * Grep: cap:cdt
  */
 struct gj_obj_hdr {
     u32                 u32State;
@@ -129,6 +135,7 @@ struct gj_obj_hdr {
  * Soft CDT child edge: one derived slot binding object ← CNode[slot].
  * Storage is mint/slab-owned; link/unlink only manipulate the list.
  * Full walk lands in gj_revoke_cdt_walk_batch (revoke.c).
+ * Grep: cap:cdt
  */
 struct gj_cdt_edge {
     struct gj_cdt_edge *pNext;
@@ -136,16 +143,24 @@ struct gj_cdt_edge {
     u64                 u64Slot;
 };
 
-/* One CNode per process; all threads of that process share this table. */
+/*
+ * One CNode per process; all threads of that process share this table.
+ *
+ * u32SoftLock: soft try-lock stub for R2 slot hygiene (0 free, 1 held).
+ * Full impl replaces with a real mutex; order CNode → Object → Endpoint.
+ * Grep: cap:cdt trylock
+ */
 struct gj_cnode {
     struct gj_obj_hdr    hdr;
     u64                  cSlots;   /* table length; index is u64 */
     struct gj_cap_slot  *pSlots;
     /*
-     * Soft process slot-quota account (hierarchical ledger later).
+     * Soft process slot-quota account (hierarchical ledger via pParent).
      * NULL ⇒ charge/refund hooks no-op. Grep: cap:quota soft
      */
     void                *pQuotaAccount;
+    u32                  u32SoftLock; /* 0 free, 1 held — soft stub */
+    u32                  u32PadLock;  /* align / future waiter bits */
 };
 
 struct gj_cap_resolved {
@@ -201,6 +216,14 @@ void gj_cnode_init(struct gj_cnode *pCnode, struct gj_cap_slot *pSlots,
                    u64 cSlots);
 
 /**
+ * Soft CNode try-lock (R2). Returns 1 if acquired, 0 if busy / NULL.
+ * Soft stub uses u32SoftLock atomic; full impl → real mutex.
+ * Grep: cap:cdt trylock
+ */
+int  gj_cnode_trylock(struct gj_cnode *pCnode);
+void gj_cnode_unlock(struct gj_cnode *pCnode);
+
+/**
  * Resolve Scheme A handle against the process CNode (shared by its threads).
  */
 gj_status_t gj_cap_resolve(struct gj_cnode *pProcCnode, u64 u64Slot,
@@ -237,41 +260,71 @@ gj_status_t gj_cap_alloc_install(struct gj_cnode *pCnode, u16 u16Type,
 /**
  * Soft CDT: push edge at head of pObj->pCdtHead. Edge storage is caller-owned.
  * No-op-safe: NULL args return INVAL. Duplicate link of same edge is refused.
+ * Grep: cap:cdt
  */
 gj_status_t gj_cdt_edge_link(struct gj_obj_hdr *pObj, struct gj_cdt_edge *pEdge,
                              struct gj_cnode *pCnode, u64 u64Slot);
 
 /**
  * Soft CDT: remove one edge from pObj's child list (does not free edge).
+ * Grep: cap:cdt
  */
 void gj_cdt_edge_unlink(struct gj_obj_hdr *pObj, struct gj_cdt_edge *pEdge);
 
 /**
  * Soft CDT: unlink any edge on pObj that names this CNode slot (S7 companion).
  * Safe when pCdtHead is NULL (no edges wired yet).
+ * Grep: cap:cdt
  */
 void gj_cdt_unlink_slot(struct gj_obj_hdr *pObj, struct gj_cnode *pCnode,
                         u64 u64Slot);
 
 /**
- * Soft process slot quota ledger (flat, not hierarchical yet).
- * Attach via gj_cap_quota_attach. Grep: cap:quota
+ * Soft process slot quota ledger with optional hierarchical parent.
+ * Attach via gj_cap_quota_attach. Charge rolls up pParent (zone-like).
+ * Grep: cap:quota
+ *
+ * u32Limit     — max occupied slots charged at this node
+ * u32Used      — currently charged at this node
+ * u32Exhaust   — times charge returned QUOTA (this node)
+ * u32HighWater — peak u32Used since init (observability)
+ * u32ChargeOk  — successful slot charges (observability)
+ * u32RefundOk  — successful slot refunds (observability)
+ * pParent      — soft hierarchical parent; NULL = flat leaf/root
  */
 struct gj_cap_quota {
-    u32 u32Limit; /* max occupied slots charged */
-    u32 u32Used;  /* currently charged */
-    u32 u32Exhaust; /* times charge returned QUOTA */
-    u32 u32Pad;
+    u32                 u32Limit;
+    u32                 u32Used;
+    u32                 u32Exhaust;
+    u32                 u32HighWater;
+    u32                 u32ChargeOk;
+    u32                 u32RefundOk;
+    struct gj_cap_quota *pParent; /* soft hierarchy; grep: cap:quota parent */
 };
+
+/** Max parent-chain depth for soft roll-up (cycle guard). Grep: cap:quota */
+#define GJ_CAP_QUOTA_DEPTH_MAX 8u
 
 void gj_cap_quota_init(struct gj_cap_quota *pQ, u32 u32Limit);
 void gj_cap_quota_attach(struct gj_cnode *pCnode, struct gj_cap_quota *pQ);
+
+/**
+ * Soft hierarchical link: pQ charges roll up into pParent.
+ * NULL parent → flat. Refuses simple self/cycle. Grep: cap:quota parent
+ */
+void gj_cap_quota_set_parent(struct gj_cap_quota *pQ,
+                             struct gj_cap_quota *pParent);
+
 u32  gj_cap_quota_used(const struct gj_cap_quota *pQ);
 u32  gj_cap_quota_limit(const struct gj_cap_quota *pQ);
+u32  gj_cap_quota_highwater(const struct gj_cap_quota *pQ);
+u32  gj_cap_quota_exhaust_count(const struct gj_cap_quota *pQ);
 
 /**
  * Soft quota hooks. pAccount NULL ⇒ GJ_OK (no charge).
- * Real account: charge/refund one slot; GJ_ERR_QUOTA on exhaust.
+ * Real account: charge/refund one slot at leaf and each pParent (soft hierarchy).
+ * GJ_ERR_QUOTA if any node on the chain is exhausted.
+ * Grep: cap:quota
  */
 gj_status_t gj_cap_quota_slot_charge(void *pAccount);
 gj_status_t gj_cap_quota_slot_refund(void *pAccount);
@@ -279,6 +332,7 @@ gj_status_t gj_cap_quota_slot_refund(void *pAccount);
 /**
  * Mint: derive a new slot in pDstCnode from src handle with rights ⊆ src.
  * Requires MINT on source. Wires soft CDT edge from edge pool.
+ * Grep: cap:cdt
  */
 gj_status_t gj_cap_mint(struct gj_cnode *pSrcCnode, u64 u64SrcSlot,
                         u32 u32SrcGen, u16 u16Rights,
@@ -303,6 +357,7 @@ gj_status_t gj_cap_delete(struct gj_cnode *pCnode, u64 u64Slot, u32 u32SlotGen);
  * apply structured invalidate (bounded by u32MaxSlots). Use when the CNode
  * is known (process death / local hygiene) without a full CDT walk.
  * Returns number of slots cleared.
+ * Grep: cap:cdt
  */
 u32 gj_cnode_invalidate_obj_slots(struct gj_cnode *pCnode,
                                   struct gj_obj_hdr *pObj, u32 u32MaxSlots);
@@ -319,13 +374,15 @@ gj_status_t gj_obj_revoke_begin(struct gj_obj_hdr *pObj);
 /**
  * Phase A′ driver (R2/R7): bounded deferred CDT/slot work. Call from timer,
  * idle, or syscall exit. Returns slots cleared this invocation.
+ * Grep: cap:cdt deferred
  */
 u32 gj_revoke_process_deferred(u32 u32MaxSlots);
 
 /**
- * Soft CDT walk batch: for each edge on pObj, try structured invalidate of
- * the named slot (try-lock stub until CNode mutex exists). Unlinks cleared
- * edges. Returns slots cleared. Grep: cap:cdt walk
+ * Soft CDT walk batch: for each edge on pObj, try-lock CNode (soft stub),
+ * structured invalidate of the named slot. Unlinks cleared/stale edges;
+ * leaves edges whose CNode try-lock is busy (R2). Returns slots cleared.
+ * Grep: cap:cdt walk
  */
 u32 gj_revoke_cdt_walk_batch(struct gj_obj_hdr *pObj, u32 u32MaxSlots);
 

@@ -4,14 +4,19 @@
  *
  * VFS door — multi-client file namespace over store/LBA mini-FS (product stack).
  * Pure C11 dual-license surface for vfsd / shell / native GJ_SYS_VFS clients.
+ *
+ * Soft claim path: token 0 is invalid; same non-zero token re-CLAIM is
+ * idempotent (reclaim soft); a different token returns BUSY. RELEASE when
+ * free is a soft no-op (0). Format/mount are allowed when free (bring-up)
+ * or claimed (product vfsd path).
  */
 #pragma once
 
 #include <gj/types.h>
 
-/** claim: arg1=token — vfsd ownership for format */
+/** claim: arg1=token — vfsd ownership for format (32-bit, non-zero) */
 #define GJ_VFS_OP_CLAIM    1u
-/** release: arg1=token */
+/** release: arg1=token (must match when owned; soft 0 when free) */
 #define GJ_VFS_OP_RELEASE  2u
 /** format: write super+freemap+empty inodes (requires claim or free) */
 #define GJ_VFS_OP_FORMAT   3u
@@ -71,3 +76,7 @@ int  vfs_door_owned(void);
 int  vfs_door_mounted(void);
 /** Open door-fd count (smoke / diagnostics). */
 u32  vfs_door_fd_count(void);
+/** Current owner token, or 0 if free (kernel interim / unclaimed). */
+u32  vfs_door_owner_token(void);
+/** Soft path: first-claim count (excludes idempotent reclaims). */
+u32  vfs_door_claim_count(void);

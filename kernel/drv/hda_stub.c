@@ -7,8 +7,9 @@
  * Output stream DMA: program SD0 BDL with real PA when BAR0 mapped;
  * otherwise software consume via hda_stream_tick.
  *
- * Soft deepen: multi-stream mixer + clean-room soft codec (no GPL HDA paste).
- * Greppable markers: "hda: … PASS" (stream / CORB / multi-stream / soft *).
+ * Soft deepen: multi-stream mixer + per-stream soft BDL/LPIB + soft codec
+ * (no GPL HDA paste). Greppable: "hda: … PASS" (stream / CORB / multi /
+ * soft BDL / soft LPIB / stream-id).
  */
 #include <gj/config.h>
 #include <gj/hda.h>
@@ -438,8 +439,36 @@ static u32 g_aRirb[GJ_HDA_CORB_ENTRIES];
 static u32 g_u32RirbWp;
 static u32 g_u32RirbRp;
 static u32 g_u32RirbCount;
+/* Legacy stream-0 BDL alias (kept for hda_bdl_set/kick API). */
 static struct gj_hda_bdl_entry g_aBdl[GJ_HDA_BDL_ENTRIES];
 static u32 g_u32BdlN;
+
+/*
+ * Per-stream soft BDL + SD shadow (software DMA engine for SD0/SD1).
+ * Real BAR path still programs hardware SD0 only; SD1 stays soft unless
+ * extended later.
+ */
+struct hda_soft_sd {
+    struct gj_hda_bdl_entry aBdl[GJ_HDA_BDL_ENTRIES];
+    u32 u32N;        /* BDL entry count */
+    u32 u32Kicks;    /* hda_bdl_n_kick count */
+    u32 u32Lpib;     /* link position in buffer (bytes) */
+    u32 u32Cbl;      /* cyclic buffer length */
+    u32 u32Lvi;      /* last valid BDL index */
+    u32 u32Fmt;      /* stream format bits */
+    u32 u32Tag;      /* stream tag 1..15 */
+    u32 u32Seg;      /* current soft BDL segment */
+    u32 u32SegOff;   /* byte offset in current segment */
+    u32 u32IocCount; /* soft IOC completions */
+    int fRun;        /* soft SD RUN */
+};
+
+static struct hda_soft_sd g_aSoftSd[GJ_HDA_STREAMS_MAX];
+
+static void hda_soft_sd_reset(u32 u32Id);
+static void hda_soft_sd_advance(u32 u32Id, u32 cb);
+static u32  hda_soft_fmt_from_params(u32 u32Channels, u32 u32RateHz,
+                                     u32 u32Bits);
 
 static int
 hda_hw_corb_setup(void)
@@ -528,6 +557,8 @@ hda_corb_init(void)
     g_u32BdlN = 0;
     g_fHwCorb = 0;
     g_u32HwCorbProgrammed = 0;
+    hda_soft_sd_reset(0);
+    hda_soft_sd_reset(1);
     /* Prefer real BAR0 CORB DMA pages when controller MMIO is mapped */
     if (g_pMmio != NULL && hda_hw_corb_setup() == 0) {
         /* Mirror software ring state for API compatibility */
@@ -678,28 +709,340 @@ hda_rirb_count(void)
     return g_u32RirbCount;
 }
 
+static u32
+hda_soft_fmt_from_params(u32 u32Channels, u32 u32RateHz, u32 u32Bits)
+{
+    u32 u32Fmt = 0;
+    u32 u32ChanM1;
+    u32 u32BitsCode;
+
+    /* Intel HDA stream format: BASE|MULT|DIV|BITS|CHAN — soft approximation. */
+    if (u32RateHz >= 44100u && u32RateHz < 48000u) {
+        u32Fmt |= (0u << 14); /* BASE 44.1 */
+    } else {
+        u32Fmt |= (1u << 14); /* BASE 48 */
+    }
+    if (u32Bits == 8u) {
+        u32BitsCode = 0u;
+    } else if (u32Bits == 16u) {
+        u32BitsCode = 1u;
+    } else if (u32Bits == 20u) {
+        u32BitsCode = 2u;
+    } else if (u32Bits == 24u) {
+        u32BitsCode = 3u;
+    } else {
+        u32BitsCode = 4u; /* 32 */
+    }
+    u32Fmt |= (u32BitsCode << 4);
+    u32ChanM1 = (u32Channels > 0u) ? (u32Channels - 1u) : 0u;
+    if (u32ChanM1 > 15u) {
+        u32ChanM1 = 15u;
+    }
+    u32Fmt |= u32ChanM1;
+    return u32Fmt;
+}
+
+static void
+hda_soft_sd_reset(u32 u32Id)
+{
+    struct hda_soft_sd *pSd;
+
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return;
+    }
+    pSd = &g_aSoftSd[u32Id];
+    memset(pSd, 0, sizeof(*pSd));
+    pSd->u32Tag = u32Id + 1u; /* default tag 1 for SD0, 2 for SD1 */
+}
+
+/**
+ * Advance soft BDL cursor + LPIB by cb bytes (software DMA consume).
+ * Wraps CBL; counts IOC when a segment with u32Ioc completes.
+ */
+static void
+hda_soft_sd_advance(u32 u32Id, u32 cb)
+{
+    struct hda_soft_sd *pSd;
+    u32 cbLeft = cb;
+
+    if (u32Id >= GJ_HDA_STREAMS_MAX || cb == 0) {
+        return;
+    }
+    pSd = &g_aSoftSd[u32Id];
+    if (!pSd->fRun || pSd->u32Cbl == 0) {
+        /* Still track LPIB against CBL when CBL known from BDL. */
+        if (pSd->u32Cbl != 0) {
+            pSd->u32Lpib = (pSd->u32Lpib + cb) % pSd->u32Cbl;
+        } else {
+            pSd->u32Lpib += cb;
+        }
+        return;
+    }
+    while (cbLeft > 0) {
+        u32 cbSeg;
+        u32 cbTake;
+
+        if (pSd->u32N == 0) {
+            pSd->u32Lpib = (pSd->u32Lpib + cbLeft) %
+                           (pSd->u32Cbl ? pSd->u32Cbl : (cbLeft + 1u));
+            break;
+        }
+        if (pSd->u32Seg >= pSd->u32N) {
+            pSd->u32Seg = 0;
+            pSd->u32SegOff = 0;
+        }
+        cbSeg = pSd->aBdl[pSd->u32Seg].u32Len;
+        if (cbSeg == 0 || pSd->u32SegOff >= cbSeg) {
+            /* Empty or finished segment — step */
+            if (pSd->aBdl[pSd->u32Seg].u32Ioc != 0 && pSd->u32SegOff >= cbSeg &&
+                cbSeg != 0) {
+                pSd->u32IocCount++;
+            }
+            pSd->u32Seg++;
+            if (pSd->u32Seg > pSd->u32Lvi || pSd->u32Seg >= pSd->u32N) {
+                pSd->u32Seg = 0;
+            }
+            pSd->u32SegOff = 0;
+            continue;
+        }
+        cbTake = cbSeg - pSd->u32SegOff;
+        if (cbTake > cbLeft) {
+            cbTake = cbLeft;
+        }
+        pSd->u32SegOff += cbTake;
+        pSd->u32Lpib += cbTake;
+        if (pSd->u32Cbl != 0) {
+            pSd->u32Lpib %= pSd->u32Cbl;
+        }
+        cbLeft -= cbTake;
+        if (pSd->u32SegOff >= cbSeg) {
+            if (pSd->aBdl[pSd->u32Seg].u32Ioc != 0) {
+                pSd->u32IocCount++;
+            }
+            pSd->u32Seg++;
+            if (pSd->u32Seg > pSd->u32Lvi || pSd->u32Seg >= pSd->u32N) {
+                pSd->u32Seg = 0;
+            }
+            pSd->u32SegOff = 0;
+        }
+    }
+    /* Mirror LPIB into SD0 MMIO shadow when stream 0 + BAR path */
+    if (u32Id == 0) {
+        hda_reg_write(HDA_SD0_BASE + HDA_SD_LPIB, pSd->u32Lpib);
+    } else if (g_pMmio != NULL) {
+        hda_reg_write(HDA_SD0_BASE + 0x20u + HDA_SD_LPIB, pSd->u32Lpib);
+    }
+}
+
+int
+hda_bdl_n_set(u32 u32Id, const struct gj_hda_bdl_entry *pEnt, u32 u32N)
+{
+    struct hda_soft_sd *pSd;
+    u32 i;
+    u32 u32Cbl = 0;
+
+    if (u32Id >= GJ_HDA_STREAMS_MAX || pEnt == NULL || u32N == 0 ||
+        u32N > GJ_HDA_BDL_ENTRIES) {
+        return -1;
+    }
+    pSd = &g_aSoftSd[u32Id];
+    for (i = 0; i < u32N; i++) {
+        pSd->aBdl[i] = pEnt[i];
+        u32Cbl += pEnt[i].u32Len;
+    }
+    for (; i < GJ_HDA_BDL_ENTRIES; i++) {
+        pSd->aBdl[i].u64Addr = 0;
+        pSd->aBdl[i].u32Len = 0;
+        pSd->aBdl[i].u32Ioc = 0;
+    }
+    pSd->u32N = u32N;
+    pSd->u32Lvi = u32N - 1u;
+    pSd->u32Cbl = u32Cbl;
+    pSd->u32Lpib = 0;
+    pSd->u32Seg = 0;
+    pSd->u32SegOff = 0;
+    if (u32Id == 0) {
+        /* Keep legacy global BDL in sync. */
+        for (i = 0; i < u32N; i++) {
+            g_aBdl[i] = pEnt[i];
+        }
+        g_u32BdlN = u32N;
+    }
+    return 0;
+}
+
+u32
+hda_bdl_n_entries(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32N;
+}
+
+int
+hda_bdl_n_kick(u32 u32Id)
+{
+    struct hda_soft_sd *pSd;
+    u32 i;
+    u32 u32Ch = 2;
+    u32 u32Rate = 48000;
+    u32 u32Bits = 16;
+
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return -1;
+    }
+    pSd = &g_aSoftSd[u32Id];
+    if (pSd->u32N == 0) {
+        return -1;
+    }
+    if (!hda_stream_n_ready(u32Id)) {
+        if (hda_stream_n_open(u32Id, u32Ch, u32Rate, u32Bits) != 0) {
+            return -1;
+        }
+    }
+    /* Prefer format already latched on soft SD (set at stream_n_open). */
+    if (pSd->u32Fmt != 0) {
+        /* keep latched fmt */
+    } else {
+        pSd->u32Fmt = hda_soft_fmt_from_params(u32Ch, u32Rate, u32Bits);
+    }
+    pSd->u32Lpib = 0;
+    pSd->u32Seg = 0;
+    pSd->u32SegOff = 0;
+    /* Feed each BDL segment into the stream PCM ring (software DMA fill). */
+    for (i = 0; i < pSd->u32N; i++) {
+        if (pSd->aBdl[i].u64Addr != 0 && pSd->aBdl[i].u32Len != 0) {
+            (void)hda_stream_n_write(
+                u32Id, (const void *)(uintptr_t)pSd->aBdl[i].u64Addr,
+                pSd->aBdl[i].u32Len);
+        }
+    }
+    if (pSd->u32Tag == 0) {
+        pSd->u32Tag = u32Id + 1u;
+    }
+    pSd->fRun = 1;
+    if (hda_stream_n_start(u32Id) != 0) {
+        pSd->fRun = 0;
+        return -1;
+    }
+    /* Soft + shadow SD regs (CBL/LVI/FMT); HW SD0 also programmed on stream0. */
+    if (u32Id == 0) {
+        hda_reg_write(HDA_SD0_BASE + HDA_SD_CBL, pSd->u32Cbl);
+        hda_reg_write(HDA_SD0_BASE + HDA_SD_LVI, pSd->u32Lvi);
+        hda_reg_write(HDA_SD0_BASE + HDA_SD_FMT, pSd->u32Fmt);
+        hda_reg_write(HDA_SD0_BASE + HDA_SD_LPIB, 0);
+        (void)hda_stream_dma_program();
+    } else {
+        u32 u32Base = HDA_SD0_BASE + 0x20u;
+
+        hda_reg_write(u32Base + HDA_SD_CBL, pSd->u32Cbl);
+        hda_reg_write(u32Base + HDA_SD_LVI, pSd->u32Lvi);
+        hda_reg_write(u32Base + HDA_SD_FMT, pSd->u32Fmt);
+        hda_reg_write(u32Base + HDA_SD_LPIB, 0);
+        if (g_pMmio != NULL) {
+            hda_reg_write(u32Base + HDA_SD_CTL, (pSd->u32Tag << 20) | 0x02u);
+        }
+    }
+    pSd->u32Kicks++;
+    kprintf("hda: soft BDL kick stream=%u segs=%u cbl=%u tag=%u fmt=0x%x\n",
+            u32Id, pSd->u32N, pSd->u32Cbl, pSd->u32Tag, pSd->u32Fmt);
+    return 0;
+}
+
+u32
+hda_bdl_n_kicks(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Kicks;
+}
+
+u32
+hda_stream_n_lpib(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Lpib;
+}
+
+u32
+hda_stream_n_cbl(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Cbl;
+}
+
+u32
+hda_stream_n_fmt(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Fmt;
+}
+
+u32
+hda_stream_n_tag(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Tag;
+}
+
+int
+hda_stream_n_set_tag(u32 u32Id, u32 u32Tag)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX || u32Tag == 0 || u32Tag > 15u) {
+        return -1;
+    }
+    g_aSoftSd[u32Id].u32Tag = u32Tag;
+    return 0;
+}
+
+u32
+hda_bdl_n_seg(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32Seg;
+}
+
+u32
+hda_bdl_n_seg_off(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32SegOff;
+}
+
+u32
+hda_bdl_n_ioc(u32 u32Id)
+{
+    if (u32Id >= GJ_HDA_STREAMS_MAX) {
+        return 0;
+    }
+    return g_aSoftSd[u32Id].u32IocCount;
+}
+
 int
 hda_bdl_set(const struct gj_hda_bdl_entry *pEnt, u32 u32N)
 {
-    u32 i;
-
-    if (pEnt == NULL || u32N == 0 || u32N > GJ_HDA_BDL_ENTRIES) {
-        return -1;
-    }
-    for (i = 0; i < u32N; i++) {
-        g_aBdl[i] = pEnt[i];
-    }
-    g_u32BdlN = u32N;
-    return 0;
+    return hda_bdl_n_set(0, pEnt, u32N);
 }
 
 u32
 hda_bdl_entries(void)
 {
-    return g_u32BdlN;
+    return hda_bdl_n_entries(0);
 }
-
-static u32 g_u32BdlKicks;
 
 /**
  * Program SD0 with a real BDL + 4 KiB PCM page (BAR0 path).
@@ -766,33 +1109,14 @@ hda_stream_dma_program(void)
 int
 hda_bdl_kick(void)
 {
-    u32 i;
-
-    if (g_u32BdlN == 0) {
-        return -1;
-    }
-    if (!g_fStreamOpen) {
-        if (hda_stream_open(2, 48000, 16) != 0) {
-            return -1;
-        }
-    }
-    for (i = 0; i < g_u32BdlN; i++) {
-        if (g_aBdl[i].u64Addr != 0 && g_aBdl[i].u32Len != 0) {
-            (void)hda_stream_write((const void *)(uintptr_t)g_aBdl[i].u64Addr,
-                                   g_aBdl[i].u32Len);
-        }
-    }
-    /* Prefer real SD0 DMA when BAR0 present; still feed software ring. */
-    (void)hda_stream_dma_program();
-    (void)hda_stream_start();
-    g_u32BdlKicks++;
-    return 0;
+    /* Stream-0 soft BDL kick (also arms HW SD0 when BAR0 mapped). */
+    return hda_bdl_n_kick(0);
 }
 
 u32
 hda_bdl_kicks(void)
 {
-    return g_u32BdlKicks;
+    return hda_bdl_n_kicks(0);
 }
 
 int
@@ -910,6 +1234,7 @@ static u32 g_u32CodecProg;
 static u32 g_u32PinCtrl;   /* SET_PIN_WIDGET_CONTROL shadow */
 static u32 g_u32PowerState; /* 0 = D0 */
 static u32 g_u32StreamFmt; /* SET_STREAM_FORMAT soft */
+static u32 g_u32CodecStreamId; /* SET_CHANNEL_STREAM_ID: tag in [7:4], ch [3:0] */
 static u32 g_u32SoftCodecHits;
 
 static u32
@@ -952,6 +1277,12 @@ hda_stream_n_open(u32 u32Id, u32 u32Channels, u32 u32RateHz, u32 u32Bits)
     p->u32Rate = u32RateHz;
     p->u32Bits = u32Bits;
     p->u32Gain256 = 256u;
+    /* Latch soft SD format + default stream tag (1 for SD0, 2 for SD1). */
+    g_aSoftSd[u32Id].u32Fmt =
+        hda_soft_fmt_from_params(u32Channels, u32RateHz, u32Bits);
+    if (g_aSoftSd[u32Id].u32Tag == 0) {
+        g_aSoftSd[u32Id].u32Tag = u32Id + 1u;
+    }
     if (u32Id == 0) {
         /* Keep legacy single-stream globals in sync for hda_stream_*. */
         (void)hda_stream_open(u32Channels, u32RateHz, u32Bits);
@@ -968,6 +1299,7 @@ hda_stream_n_close(u32 u32Id)
     g_aStr[u32Id].fOpen = 0;
     g_aStr[u32Id].fRunning = 0;
     g_aStr[u32Id].u32Len = 0;
+    g_aSoftSd[u32Id].fRun = 0;
     if (u32Id == 0) {
         hda_stream_close();
     }
@@ -1046,12 +1378,17 @@ hda_stream_n_start(u32 u32Id)
         return -1;
     }
     g_aStr[u32Id].fRunning = 1;
+    g_aSoftSd[u32Id].fRun = 1;
+    if (g_aSoftSd[u32Id].u32Tag == 0) {
+        g_aSoftSd[u32Id].u32Tag = u32Id + 1u;
+    }
     if (u32Id == 0) {
         return hda_stream_start();
     }
     /* SD1 base = SD0 + 0x20 when BAR present (second output stream). */
     if (g_pMmio != NULL) {
-        hda_reg_write(HDA_SD0_BASE + 0x20u + HDA_SD_CTL, (2u << 20) | 0x02u);
+        hda_reg_write(HDA_SD0_BASE + 0x20u + HDA_SD_CTL,
+                      (g_aSoftSd[u32Id].u32Tag << 20) | 0x02u);
     }
     return 0;
 }
@@ -1063,6 +1400,7 @@ hda_stream_n_stop(u32 u32Id)
         return;
     }
     g_aStr[u32Id].fRunning = 0;
+    g_aSoftSd[u32Id].fRun = 0;
     if (u32Id == 0) {
         hda_stream_stop();
     } else if (g_pMmio != NULL) {
@@ -1090,6 +1428,9 @@ hda_stream_n_tick(u32 u32Id, u32 u32Frames)
         p->u32Played += got;
         p->u32Len = hda_stream_bytes_queued();
         p->u32Underruns = hda_stream_underruns();
+        if (got != 0) {
+            hda_soft_sd_advance(0, got);
+        }
         return got;
     }
     bytesPerFrame = p->u32Channels * (p->u32Bits / 8u);
@@ -1107,6 +1448,7 @@ hda_stream_n_tick(u32 u32Id, u32 u32Frames)
         got++;
         p->u32Played++;
     }
+    hda_soft_sd_advance(u32Id, got);
     return got;
 }
 
@@ -1293,6 +1635,13 @@ hda_mixer_mix_tick(u32 u32Frames, u8 *pOut, u32 u32OutCap)
         }
         got++;
         g_u32MixBytes++;
+        /* Soft BDL/LPIB: each mixed output byte advances every active SD. */
+        for (iId = 0; iId < GJ_HDA_STREAMS_MAX; iId++) {
+            if (g_aStr[iId].fOpen && g_aStr[iId].fRunning &&
+                g_aSoftSd[iId].fRun) {
+                hda_soft_sd_advance(iId, 1);
+            }
+        }
     }
     return got;
 }
@@ -1419,6 +1768,14 @@ hda_soft_codec_respond(u32 u32Verb)
     if (verb == 0xf07u) {
         return g_u32PinCtrl;
     }
+    /* SET_CHANNEL_STREAM_ID 0x706 / GET 0xF06 — stream tag[7:4] channel[3:0] */
+    if (verb == 0x706u) {
+        g_u32CodecStreamId = pay & 0xffu;
+        return g_u32CodecStreamId;
+    }
+    if (verb == 0xf06u) {
+        return g_u32CodecStreamId;
+    }
     /* GET_CONNECT_LIST 0xF02 — DAC feeds PIN, PIN lists DAC */
     if (verb == 0xf02u) {
         if (nid == GJ_HDA_NID_DAC) {
@@ -1516,6 +1873,35 @@ hda_codec_set_power(u32 u32Nid, u32 u32State)
     return 0;
 }
 
+int
+hda_codec_set_stream_id(u32 u32Nid, u32 u32StreamTag, u32 u32Channel)
+{
+    u32 pay;
+    u32 resp = 0;
+
+    if (u32StreamTag == 0 || u32StreamTag > 15u || u32Channel > 15u) {
+        return -1;
+    }
+    pay = ((u32StreamTag & 0x0fu) << 4) | (u32Channel & 0x0fu);
+    if (hda_codec_verb(0, u32Nid, 0x706u, pay, &resp) != 0) {
+        return -1;
+    }
+    (void)resp;
+    return 0;
+}
+
+u32
+hda_codec_stream_id(void)
+{
+    return (g_u32CodecStreamId >> 4) & 0x0fu;
+}
+
+u32
+hda_codec_stream_channel(void)
+{
+    return g_u32CodecStreamId & 0x0fu;
+}
+
 u32
 hda_codec_pin_control(void)
 {
@@ -1572,6 +1958,15 @@ hda_codec_program(void)
     if (hda_codec_set_amp(GJ_HDA_NID_DAC, 0x7f, 0) != 0) {
         return -1;
     }
+    /* Bind DAC converter to stream tag 1 (matches soft SD0 default). */
+    if (hda_codec_set_stream_id(GJ_HDA_NID_DAC, 1u, 0u) != 0) {
+        return -1;
+    }
+    if (hda_codec_stream_id() != 1u) {
+        kprintf("hda: soft codec stream-id bind fail id=%u\n",
+                hda_codec_stream_id());
+        return -1;
+    }
     if (hda_codec_verb(0, GJ_HDA_NID_DAC, 0xf02u, 0, &conn) != 0) {
         return -1;
     }
@@ -1586,10 +1981,12 @@ hda_codec_program(void)
     g_u32CodecProg = 1;
     kprintf("hda: codec program vendor=0x%x nodes=0x%x fg=0x%x pcm=0x%x\n",
             (unsigned)vendor, (unsigned)nodes, (unsigned)fg, (unsigned)pcm);
-    kprintf("hda: soft codec PASS pin=0x%x pwr=0x%x hits=%u\n",
+    kprintf("hda: soft codec PASS pin=0x%x pwr=0x%x hits=%u sid=%u\n",
             (unsigned)g_u32PinCtrl, (unsigned)g_u32PowerState,
-            (unsigned)g_u32SoftCodecHits);
+            (unsigned)g_u32SoftCodecHits, hda_codec_stream_id());
     kprintf("hda: CORB codec program PASS\n");
+    kprintf("hda: CORB stream-id bind PASS tag=%u ch=%u\n",
+            hda_codec_stream_id(), hda_codec_stream_channel());
     return 0;
 }
 
@@ -1672,9 +2069,129 @@ hda_multi_stream_smoke(void)
     kprintf("hda: soft mixdown PASS bytes=%u energy=%u mix_total=%u\n", cbMix,
             uEnergy, hda_mixer_mix_bytes());
 
-    /* Per-stream tick still works on remaining queued PCM. */
-    (void)hda_stream_n_tick(0, 8);
-    (void)hda_stream_n_tick(1, 8);
+    /* Per-stream tick still works on remaining queued PCM + LPIB advance. */
+    {
+        u32 u32Lpib0 = hda_stream_n_lpib(0);
+        u32 u32Lpib1 = hda_stream_n_lpib(1);
+
+        if (u32Lpib0 < 64u || u32Lpib1 < 64u) {
+            kprintf("hda: soft LPIB after mix low p0=%u p1=%u\n", u32Lpib0,
+                    u32Lpib1);
+            return -1;
+        }
+        (void)hda_stream_n_tick(0, 8);
+        (void)hda_stream_n_tick(1, 8);
+        if (hda_stream_n_lpib(0) <= u32Lpib0 ||
+            hda_stream_n_lpib(1) <= u32Lpib1) {
+            kprintf("hda: soft LPIB tick stall p0=%u->%u p1=%u->%u\n", u32Lpib0,
+                    hda_stream_n_lpib(0), u32Lpib1, hda_stream_n_lpib(1));
+            return -1;
+        }
+        kprintf("hda: soft LPIB PASS lpib0=%u lpib1=%u\n", hda_stream_n_lpib(0),
+                hda_stream_n_lpib(1));
+    }
+
+    hda_stream_n_stop(0);
+    hda_stream_n_stop(1);
+    hda_stream_n_close(0);
+    hda_stream_n_close(1);
+
+    /*
+     * Soft multi-stream BDL path: independent BDL segments per SD, kick,
+     * consume via mix + per-stream tick, check CBL/IOC/seg cursor.
+     */
+    {
+        static u8 aPcm0[64];
+        static u8 aPcm1[64];
+        struct gj_hda_bdl_entry aB0[2];
+        struct gj_hda_bdl_entry aB1[2];
+        u32 j;
+        u32 cbMix2;
+        u32 u32Ioc0;
+
+        for (j = 0; j < sizeof(aPcm0); j++) {
+            aPcm0[j] = (u8)(0x80u + (j & 0x1fu));
+            aPcm1[j] = (u8)(0x80u - (j & 0x1fu));
+        }
+        aB0[0].u64Addr = (u64)(uintptr_t)aPcm0;
+        aB0[0].u32Len = 32;
+        aB0[0].u32Ioc = 0;
+        aB0[1].u64Addr = (u64)(uintptr_t)(aPcm0 + 32);
+        aB0[1].u32Len = 32;
+        aB0[1].u32Ioc = 1;
+        aB1[0].u64Addr = (u64)(uintptr_t)aPcm1;
+        aB1[0].u32Len = 32;
+        aB1[0].u32Ioc = 0;
+        aB1[1].u64Addr = (u64)(uintptr_t)(aPcm1 + 32);
+        aB1[1].u32Len = 32;
+        aB1[1].u32Ioc = 1;
+        if (hda_stream_n_open(0, 2, 48000, 16) != 0 ||
+            hda_stream_n_open(1, 2, 48000, 16) != 0) {
+            return -1;
+        }
+        (void)hda_stream_n_set_tag(0, 1u);
+        (void)hda_stream_n_set_tag(1, 2u);
+        if (hda_codec_set_stream_id(GJ_HDA_NID_DAC, 1u, 0u) != 0) {
+            return -1;
+        }
+        if (hda_bdl_n_set(0, aB0, 2) != 0 || hda_bdl_n_set(1, aB1, 2) != 0) {
+            return -1;
+        }
+        if (hda_bdl_n_entries(0) != 2u || hda_bdl_n_entries(1) != 2u) {
+            return -1;
+        }
+        if (hda_stream_n_cbl(0) != 64u || hda_stream_n_cbl(1) != 64u) {
+            kprintf("hda: soft BDL CBL mismatch c0=%u c1=%u\n",
+                    hda_stream_n_cbl(0), hda_stream_n_cbl(1));
+            return -1;
+        }
+        if (hda_bdl_n_kick(0) != 0 || hda_bdl_n_kick(1) != 0) {
+            return -1;
+        }
+        if (hda_bdl_n_kicks(0) < 1u || hda_bdl_n_kicks(1) < 1u) {
+            return -1;
+        }
+        if (hda_stream_n_fmt(0) == 0 || hda_stream_n_tag(0) != 1u ||
+            hda_stream_n_tag(1) != 2u) {
+            kprintf("hda: soft SD tag/fmt fail fmt0=0x%x t0=%u t1=%u\n",
+                    hda_stream_n_fmt(0), hda_stream_n_tag(0),
+                    hda_stream_n_tag(1));
+            return -1;
+        }
+        memset(aMix, 0, sizeof(aMix));
+        cbMix2 = hda_mixer_mix_tick(8, aMix, sizeof(aMix)); /* 32 bytes */
+        if (cbMix2 != 32u) {
+            kprintf("hda: soft BDL mix short %u\n", cbMix2);
+            return -1;
+        }
+        if (hda_stream_n_lpib(0) < 32u || hda_stream_n_lpib(1) < 32u) {
+            kprintf("hda: soft BDL LPIB low after mix %u %u\n",
+                    hda_stream_n_lpib(0), hda_stream_n_lpib(1));
+            return -1;
+        }
+        /* Drain rest via per-stream tick (also walks soft BDL segments). */
+        (void)hda_stream_n_tick(0, 8);
+        (void)hda_stream_n_tick(1, 8);
+        u32Ioc0 = hda_bdl_n_ioc(0);
+        /* Full 64-byte CBL consume should complete IOC on last segment. */
+        if (u32Ioc0 == 0) {
+            kprintf("hda: soft BDL IOC missing ioc0=%u played0=%u lpib=%u "
+                    "seg=%u off=%u\n",
+                    u32Ioc0, hda_stream_n_bytes_played(0), hda_stream_n_lpib(0),
+                    hda_bdl_n_seg(0), hda_bdl_n_seg_off(0));
+            return -1;
+        }
+        kprintf(
+            "hda: soft BDL multi-stream PASS kicks=%u/%u cbl=%u/%u ioc=%u/%u "
+            "lpib=%u/%u\n",
+            hda_bdl_n_kicks(0), hda_bdl_n_kicks(1), hda_stream_n_cbl(0),
+            hda_stream_n_cbl(1), hda_bdl_n_ioc(0), hda_bdl_n_ioc(1),
+            hda_stream_n_lpib(0), hda_stream_n_lpib(1));
+        hda_stream_n_stop(0);
+        hda_stream_n_stop(1);
+        hda_stream_n_close(0);
+        hda_stream_n_close(1);
+    }
 
     /* Mute via codec amp → master 0 */
     if (hda_codec_set_amp(GJ_HDA_NID_DAC, 0x00, 1) != 0) {
@@ -1684,10 +2201,6 @@ hda_multi_stream_smoke(void)
         kprintf("hda: mute did not zero master\n");
         return -1;
     }
-    hda_stream_n_stop(0);
-    hda_stream_n_stop(1);
-    hda_stream_n_close(0);
-    hda_stream_n_close(1);
     (void)hda_mixer_set_master(256);
     (void)hda_codec_set_amp(GJ_HDA_NID_DAC, 0x7f, 0);
     kprintf("hda: multi-stream mixer PASS streams=%u master=%u\n",

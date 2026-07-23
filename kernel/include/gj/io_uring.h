@@ -3,28 +3,72 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * io_uring product surface: setup/enter/register + SQE I/O + SQ/CQ mmap.
+ * Clean-room public Linux ABI opcode numbers. No GPL source.
  */
 #pragma once
 
 #include <gj/types.h>
 
+/* SQE opcodes (Linux uapi subset — public numbers). */
 #define GJ_IORING_OP_NOP              0u
 #define GJ_IORING_OP_READV            1u
 #define GJ_IORING_OP_WRITEV           2u
 #define GJ_IORING_OP_FSYNC            3u
+#define GJ_IORING_OP_READ_FIXED       4u
+#define GJ_IORING_OP_WRITE_FIXED      5u
+#define GJ_IORING_OP_POLL_ADD         6u
+#define GJ_IORING_OP_POLL_REMOVE      7u
 #define GJ_IORING_OP_SYNC_FILE_RANGE  8u
+#define GJ_IORING_OP_SENDMSG          9u
+#define GJ_IORING_OP_RECVMSG         10u
 #define GJ_IORING_OP_TIMEOUT         11u
+#define GJ_IORING_OP_TIMEOUT_REMOVE  12u
+#define GJ_IORING_OP_ACCEPT          13u
+#define GJ_IORING_OP_ASYNC_CANCEL    14u
+#define GJ_IORING_OP_LINK_TIMEOUT    15u
+#define GJ_IORING_OP_CONNECT         16u
+#define GJ_IORING_OP_FALLOCATE       17u
+#define GJ_IORING_OP_OPENAT          18u
 #define GJ_IORING_OP_CLOSE           19u
+#define GJ_IORING_OP_FILES_UPDATE   20u
+#define GJ_IORING_OP_STATX           21u
 #define GJ_IORING_OP_READ            22u
 #define GJ_IORING_OP_WRITE           23u
 #define GJ_IORING_OP_FADVISE         24u
 #define GJ_IORING_OP_MADVISE         25u
+#define GJ_IORING_OP_SEND            26u
+#define GJ_IORING_OP_RECV            27u
+#define GJ_IORING_OP_OPENAT2         28u
+#define GJ_IORING_OP_EPOLL_CTL       29u
+#define GJ_IORING_OP_PROVIDE_BUFFERS 31u
+#define GJ_IORING_OP_REMOVE_BUFFERS  32u
+#define GJ_IORING_OP_SHUTDOWN        34u
+#define GJ_IORING_OP_RENAMEAT        35u
+#define GJ_IORING_OP_UNLINKAT        36u
+#define GJ_IORING_OP_MKDIRAT         37u
+#define GJ_IORING_OP_SYMLINKAT       38u
+#define GJ_IORING_OP_LINKAT          39u
+
+/* SQE flags (public). */
+#define GJ_IOSQE_FIXED_FILE          (1u << 0)
+#define GJ_IOSQE_IO_DRAIN            (1u << 1)
+#define GJ_IOSQE_IO_LINK             (1u << 2)
+#define GJ_IOSQE_IO_HARDLINK         (1u << 3)
+#define GJ_IOSQE_ASYNC               (1u << 4)
+#define GJ_IOSQE_BUFFER_SELECT       (1u << 5)
 
 /* Register opcodes (Linux uapi subset). */
-#define GJ_IORING_REGISTER_BUFFERS     0u
-#define GJ_IORING_REGISTER_FILES       2u
-#define GJ_IORING_UNREGISTER_FILES     3u
-#define GJ_IORING_REGISTER_EVENTFD     4u
+#define GJ_IORING_REGISTER_BUFFERS          0u
+#define GJ_IORING_UNREGISTER_BUFFERS        1u
+#define GJ_IORING_REGISTER_FILES            2u
+#define GJ_IORING_UNREGISTER_FILES          3u
+#define GJ_IORING_REGISTER_EVENTFD          4u
+#define GJ_IORING_UNREGISTER_EVENTFD        5u
+#define GJ_IORING_REGISTER_FILES_UPDATE  6u
+#define GJ_IORING_REGISTER_EVENTFD_ASYNC    7u
+#define GJ_IORING_REGISTER_PROBE            8u
+#define GJ_IORING_REGISTER_PERSONALITY      9u
+#define GJ_IORING_UNREGISTER_PERSONALITY   10u
 
 /* Public mmap offsets (Linux uapi). */
 #define GJ_IORING_OFF_SQ_RING  0ull

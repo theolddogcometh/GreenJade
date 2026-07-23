@@ -90,6 +90,19 @@ gj_process_promise_ok(const struct gj_process *pProc, u32 u32Promise)
 }
 
 int
+gj_process_promise_require(const struct gj_process *pProc, u32 u32Promise)
+{
+    /* NULL process: no confine subject (product ambient smokes). */
+    if (pProc == NULL) {
+        return 0;
+    }
+    if (gj_process_promise_ok(pProc, u32Promise)) {
+        return 0;
+    }
+    return -13; /* LINUX_EACCES shape (linux_abi.h LINUX_EACCES) */
+}
+
+int
 gj_process_has_jit(const struct gj_process *pProc)
 {
     /*

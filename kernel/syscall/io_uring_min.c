@@ -15,6 +15,7 @@
  *
  * Greppable: io_uring: setup …, linux: io_uring min rings PASS,
  *            linux: io_uring SQE I/O PASS, linux: io_uring mmap PASS
+ *            linux: io_uring register depth PASS, linux: io_uring more opcodes PASS
  */
 #include <gj/error.h>
 #include <gj/io_uring.h>
@@ -34,25 +35,69 @@
 #define GJ_IORING_CQE_SIZE  16u
 #define GJ_IORING_IO_MAX    4096u
 #define GJ_IORING_PAGE      4096u
+#define GJ_IORING_PATH_MAX  256u
 
-#define IORING_REGISTER_BUFFERS  0u
-#define IORING_REGISTER_FILES    2u
-#define IORING_UNREGISTER_FILES  3u
-#define IORING_REGISTER_EVENTFD  4u
+/* Register opcodes (mirror header). */
+#define IORING_REGISTER_BUFFERS          0u
+#define IORING_UNREGISTER_BUFFERS        1u
+#define IORING_REGISTER_FILES            2u
+#define IORING_UNREGISTER_FILES          3u
+#define IORING_REGISTER_EVENTFD          4u
+#define IORING_UNREGISTER_EVENTFD        5u
+#define IORING_REGISTER_FILES_UPDATE  6u
+#define IORING_REGISTER_EVENTFD_ASYNC    7u
+#define IORING_REGISTER_PROBE            8u
+#define IORING_REGISTER_PERSONALITY      9u
+#define IORING_UNREGISTER_PERSONALITY   10u
 
 #define IORING_FEAT_SINGLE_MMAP  (1u << 0)
 
+/* SQE opcodes */
 #define IORING_OP_NOP              0u
 #define IORING_OP_READV            1u
 #define IORING_OP_WRITEV           2u
 #define IORING_OP_FSYNC            3u
+#define IORING_OP_READ_FIXED       4u
+#define IORING_OP_WRITE_FIXED      5u
+#define IORING_OP_POLL_ADD         6u
+#define IORING_OP_POLL_REMOVE      7u
 #define IORING_OP_SYNC_FILE_RANGE  8u
+#define IORING_OP_SENDMSG          9u
+#define IORING_OP_RECVMSG         10u
 #define IORING_OP_TIMEOUT         11u
+#define IORING_OP_TIMEOUT_REMOVE  12u
+#define IORING_OP_ACCEPT          13u
+#define IORING_OP_ASYNC_CANCEL    14u
+#define IORING_OP_LINK_TIMEOUT    15u
+#define IORING_OP_CONNECT         16u
+#define IORING_OP_FALLOCATE       17u
+#define IORING_OP_OPENAT          18u
 #define IORING_OP_CLOSE           19u
+#define IORING_OP_FILES_UPDATE   20u
+#define IORING_OP_STATX           21u
 #define IORING_OP_READ            22u
 #define IORING_OP_WRITE           23u
 #define IORING_OP_FADVISE         24u
 #define IORING_OP_MADVISE         25u
+#define IORING_OP_SEND            26u
+#define IORING_OP_RECV            27u
+#define IORING_OP_OPENAT2         28u
+#define IORING_OP_EPOLL_CTL       29u
+#define IORING_OP_PROVIDE_BUFFERS 31u
+#define IORING_OP_REMOVE_BUFFERS  32u
+#define IORING_OP_SHUTDOWN        34u
+#define IORING_OP_RENAMEAT        35u
+#define IORING_OP_UNLINKAT        36u
+#define IORING_OP_MKDIRAT         37u
+#define IORING_OP_SYMLINKAT       38u
+#define IORING_OP_LINKAT          39u
+
+/* SQE flags */
+#define IOSQE_FIXED_FILE   (1u << 0)
+
+/* Linux open flags (public x86_64). */
+#define LINUX_O_CREAT  0x40u
+#define LINUX_O_TRUNC  0x200u
 
 /* mmap offsets (public Linux uapi) */
 #define IORING_OFF_SQ_RING  0ull
@@ -108,7 +153,7 @@ struct gj_io_uring_sqe {
     u8  u8Flags;
     u16 u16Ioprio;
     i32 i32Fd;
-    u64 u64Off;
+    u64 u64Off;   /* also addr2 for renameat / dual-path ops */
     u64 u64Addr;
     u32 u32Len;
     u32 u32OpFlags;
@@ -177,10 +222,11 @@ struct gj_io_uring_ring {
     u32 u32Dropped;
     u32 u32Overflow;
     u32 u32SqeIoOk;
-    /* Soft register tables (depth for fixed-file / buffer ops later). */
+    /* Soft register tables (fixed-file / fixed-buffer / eventfd). */
     u32 u32RegFiles;
     u32 u32RegBufs;
     u32 u32RegEventfd;
+    u32 u32Personality;
     i32 aRegFiles[GJ_IORING_REG_FILES_MAX];
     u64 aRegBufAddr[GJ_IORING_REG_BUFS_MAX];
     u32 aRegBufLen[GJ_IORING_REG_BUFS_MAX];
@@ -246,7 +292,8 @@ gj_io_uring_init(void)
         g_aRingFd[i] = -1;
     }
     g_fInited = 1;
-    kprintf("io_uring: rings ready pool=%u depth<=%u SQE+I/O+mmap\n",
+    kprintf("io_uring: rings ready pool=%u depth<=%u SQE+I/O+mmap+"
+            "fixed+poll+openat\n",
             GJ_IORING_MAX, GJ_IORING_ENTRIES);
 }
 
@@ -331,20 +378,220 @@ buf_out(u64 u64Addr, const void *pKsrc, size_t cb)
     return (i64)cb;
 }
 
+/*
+ * Copy a NUL-terminated path from user/kernel VA into pDst (max cb-1 chars).
+ * Returns 0 or -errno.
+ */
 static i32
-exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
+path_copy(u64 u64Addr, char *pDst, size_t cb)
+{
+    size_t i;
+    i64 n;
+
+    if (pDst == NULL || cb < 2u || u64Addr == 0ull) {
+        return -LINUX_EFAULT;
+    }
+    memset(pDst, 0, cb);
+    n = buf_in(u64Addr, pDst, cb - 1u);
+    if (n < 0) {
+        return (i32)n;
+    }
+    pDst[cb - 1u] = '\0';
+    for (i = 0; i < cb; i++) {
+        if (pDst[i] == '\0') {
+            if (i == 0u) {
+                return -LINUX_ENOENT;
+            }
+            return 0;
+        }
+    }
+    pDst[cb - 1u] = '\0';
+    return 0;
+}
+
+/* Resolve fd: plain or IOSQE_FIXED_FILE index into registered files. */
+static i32
+resolve_fd(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
+{
+    i32 i32Fd;
+
+    if (pSqe == NULL) {
+        return -1;
+    }
+    i32Fd = pSqe->i32Fd;
+    if ((pSqe->u8Flags & IOSQE_FIXED_FILE) != 0u) {
+        u32 idx;
+
+        if (pR == NULL || pR->u32RegFiles == 0u) {
+            return -1;
+        }
+        if (i32Fd < 0) {
+            return -1;
+        }
+        idx = (u32)i32Fd;
+        if (idx >= pR->u32RegFiles || idx >= GJ_IORING_REG_FILES_MAX) {
+            return -1;
+        }
+        return pR->aRegFiles[idx];
+    }
+    return i32Fd;
+}
+
+/* Resolve fixed buffer (READ_FIXED / WRITE_FIXED) → addr/len. */
+static i32
+resolve_fixed_buf(struct gj_io_uring_ring *pR, u16 u16Idx, u64 *pAddr,
+                  u32 *pLen)
+{
+    if (pR == NULL || pAddr == NULL || pLen == NULL) {
+        return -LINUX_EINVAL;
+    }
+    if ((u32)u16Idx >= pR->u32RegBufs ||
+        (u32)u16Idx >= GJ_IORING_REG_BUFS_MAX) {
+        return -LINUX_EINVAL;
+    }
+    *pAddr = pR->aRegBufAddr[u16Idx];
+    *pLen = pR->aRegBufLen[u16Idx];
+    if (*pAddr == 0ull) {
+        return -LINUX_EFAULT;
+    }
+    return 0;
+}
+
+/* Optional: install fd into fixed-files slot when file_index is set. */
+static void
+maybe_install_fixed(struct gj_io_uring_ring *pR, u32 u32FileIndex, i32 i32NewFd)
+{
+    if (pR == NULL || i32NewFd < 0) {
+        return;
+    }
+    /* 0 means "no fixed slot" for openat-style install in this soft path. */
+    if (u32FileIndex == 0u) {
+        return;
+    }
+    if (u32FileIndex > GJ_IORING_REG_FILES_MAX) {
+        return;
+    }
+    {
+        u32 idx = u32FileIndex - 1u; /* 1-based soft mapping */
+
+        if (idx >= GJ_IORING_REG_FILES_MAX) {
+            return;
+        }
+        pR->aRegFiles[idx] = i32NewFd;
+        if (pR->u32RegFiles <= idx) {
+            pR->u32RegFiles = idx + 1u;
+        }
+    }
+}
+
+static i32
+do_rw(struct gj_io_uring_ring *pR, i32 i32Fd, u64 u64Off, u64 u64Addr,
+      u32 u32Len, int fWrite)
 {
     u8 aBounce[GJ_IORING_IO_MAX];
     i64 i64N;
-    u32 u32Len;
+
+    if (u32Len == 0u) {
+        return 0;
+    }
+    if (u32Len > GJ_IORING_IO_MAX) {
+        u32Len = GJ_IORING_IO_MAX;
+    }
+    if (!vfs_ram_fd_ok((i64)i32Fd)) {
+        return -LINUX_EBADF;
+    }
+    if (!fWrite) {
+        i64N = vfs_ram_pread((i64)i32Fd, aBounce, u32Len, u64Off);
+        if (i64N < 0) {
+            return (i32)i64N;
+        }
+        if (buf_out(u64Addr, aBounce, (size_t)i64N) < 0) {
+            return -LINUX_EFAULT;
+        }
+        if (pR != NULL && i64N > 0) {
+            pR->u32SqeIoOk++;
+        }
+        return (i32)i64N;
+    }
+    i64N = buf_in(u64Addr, aBounce, u32Len);
+    if (i64N < 0) {
+        return (i32)i64N;
+    }
+    i64N = vfs_ram_pwrite((i64)i32Fd, aBounce, (size_t)i64N, u64Off);
+    if (i64N > 0 && pR != NULL) {
+        pR->u32SqeIoOk++;
+    }
+    return (i32)i64N;
+}
+
+static i32
+do_rwv(struct gj_io_uring_ring *pR, i32 i32Fd, u64 u64Off, u64 u64Addr,
+       u32 u32NrVecs, int fWrite)
+{
+    struct gj_iovec iov;
+    u8 aBounce[GJ_IORING_IO_MAX];
+    i64 i64N;
+
+    if (u32NrVecs < 1u) {
+        return -LINUX_EINVAL;
+    }
+    memset(&iov, 0, sizeof(iov));
+    if (user_range_ok(u64Addr, sizeof(iov))) {
+        if (copy_from_user(&iov, u64Addr, sizeof(iov)) != GJ_OK) {
+            return -LINUX_EFAULT;
+        }
+    } else {
+        memcpy(&iov, (const void *)(gj_vaddr_t)u64Addr, sizeof(iov));
+    }
+    if (iov.u64Len == 0ull) {
+        return 0;
+    }
+    if (iov.u64Len > (u64)GJ_IORING_IO_MAX) {
+        iov.u64Len = GJ_IORING_IO_MAX;
+    }
+    if (!vfs_ram_fd_ok((i64)i32Fd)) {
+        return -LINUX_EBADF;
+    }
+    if (!fWrite) {
+        i64N = vfs_ram_pread((i64)i32Fd, aBounce, (size_t)iov.u64Len, u64Off);
+        if (i64N < 0) {
+            return (i32)i64N;
+        }
+        if (buf_out(iov.u64Base, aBounce, (size_t)i64N) < 0) {
+            return -LINUX_EFAULT;
+        }
+        if (pR != NULL && i64N > 0) {
+            pR->u32SqeIoOk++;
+        }
+        return (i32)i64N;
+    }
+    i64N = buf_in(iov.u64Base, aBounce, (size_t)iov.u64Len);
+    if (i64N < 0) {
+        return (i32)i64N;
+    }
+    i64N = vfs_ram_pwrite((i64)i32Fd, aBounce, (size_t)i64N, u64Off);
+    if (i64N > 0 && pR != NULL) {
+        pR->u32SqeIoOk++;
+    }
+    return (i32)i64N;
+}
+
+static i32
+exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
+{
     i32 i32Fd;
     u64 u64Off;
     u64 u64Addr;
+    u32 u32Len;
+    char aPath[GJ_IORING_PATH_MAX];
+    char aPath2[GJ_IORING_PATH_MAX];
+    i32 i32Rc;
+    i64 i64N;
 
     if (pSqe == NULL) {
         return -LINUX_EINVAL;
     }
-    i32Fd = pSqe->i32Fd;
+    i32Fd = resolve_fd(pR, pSqe);
     u64Off = pSqe->u64Off;
     u64Addr = pSqe->u64Addr;
     u32Len = pSqe->u32Len;
@@ -352,6 +599,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     switch (pSqe->u8Opcode) {
     case IORING_OP_NOP:
         return 0;
+
     case IORING_OP_FSYNC:
     case IORING_OP_SYNC_FILE_RANGE:
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
@@ -359,100 +607,296 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         }
         /* Soft: accept fsync / sync_file_range as success when fd live. */
         return 0;
+
     case IORING_OP_TIMEOUT:
-        /* Soft timeout SQE: complete immediately (no timer wait yet). */
+    case IORING_OP_TIMEOUT_REMOVE:
+    case IORING_OP_LINK_TIMEOUT:
+        /* Soft timeout SQEs: complete immediately (no timer wait yet). */
         return 0;
+
+    case IORING_OP_ASYNC_CANCEL:
+        /* Soft cancel: no outstanding async tracking; report success. */
+        return 0;
+
+    case IORING_OP_POLL_ADD: {
+        u32 want = pSqe->u32OpFlags;
+        u32 ready;
+
+        if (want == 0u) {
+            want = 0x5u; /* POLLIN|POLLOUT public bits (EPOLLIN|EPOLLOUT) */
+        }
+        if (!vfs_ram_fd_ok((i64)i32Fd)) {
+            return -LINUX_EBADF;
+        }
+        ready = vfs_ram_poll_mask((i64)i32Fd, want);
+        /* Soft: complete immediately with ready mask (0 = not ready). */
+        return (i32)ready;
+    }
+
+    case IORING_OP_POLL_REMOVE:
+        /* Soft: no poll wait-list; treat as successful removal. */
+        return 0;
+
     case IORING_OP_FADVISE:
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
         return 0;
+
     case IORING_OP_MADVISE:
         /* Soft madvise: no-op success (range not walked). */
         return 0;
+
+    case IORING_OP_SHUTDOWN:
+        if (!vfs_ram_fd_ok((i64)i32Fd)) {
+            return -LINUX_EBADF;
+        }
+        /* Soft: accept shutdown when fd live. */
+        return 0;
+
+    case IORING_OP_ACCEPT:
+    case IORING_OP_CONNECT:
+        /* Soft network accept/connect: not wired; report ENOSYS-shaped. */
+        if (!vfs_ram_fd_ok((i64)i32Fd)) {
+            return -LINUX_EBADF;
+        }
+        return -LINUX_ENOSYS;
+
+    case IORING_OP_SENDMSG:
+    case IORING_OP_RECVMSG:
+    case IORING_OP_SEND:
+    case IORING_OP_RECV:
+        /* Soft: treat as pipe/file R/W when fd is ram-backed. */
+        if (!vfs_ram_fd_ok((i64)i32Fd)) {
+            return -LINUX_EBADF;
+        }
+        if (pSqe->u8Opcode == IORING_OP_SEND ||
+            pSqe->u8Opcode == IORING_OP_SENDMSG) {
+            return do_rw(pR, i32Fd, 0, u64Addr, u32Len, 1);
+        }
+        return do_rw(pR, i32Fd, 0, u64Addr, u32Len, 0);
+
     case IORING_OP_CLOSE:
         return (i32)vfs_ram_close((i64)i32Fd);
-    case IORING_OP_READ:
-    case IORING_OP_WRITE:
-        if (u32Len == 0u) {
-            return 0;
-        }
-        if (u32Len > GJ_IORING_IO_MAX) {
-            u32Len = GJ_IORING_IO_MAX;
-        }
-        if (!vfs_ram_fd_ok((i64)i32Fd)) {
-            return -LINUX_EBADF;
-        }
-        if (pSqe->u8Opcode == IORING_OP_READ) {
-            i64N = vfs_ram_pread((i64)i32Fd, aBounce, u32Len, u64Off);
-            if (i64N < 0) {
-                return (i32)i64N;
-            }
-            if (buf_out(u64Addr, aBounce, (size_t)i64N) < 0) {
-                return -LINUX_EFAULT;
-            }
-            if (pR != NULL && i64N > 0) {
-                pR->u32SqeIoOk++;
-            }
-            return (i32)i64N;
-        }
-        i64N = buf_in(u64Addr, aBounce, u32Len);
-        if (i64N < 0) {
-            return (i32)i64N;
-        }
-        i64N = vfs_ram_pwrite((i64)i32Fd, aBounce, (size_t)i64N, u64Off);
-        if (i64N > 0 && pR != NULL) {
-            pR->u32SqeIoOk++;
-        }
-        return (i32)i64N;
-    case IORING_OP_READV:
-    case IORING_OP_WRITEV: {
-        struct gj_iovec iov;
 
-        if (u32Len < 1u) {
-            return -LINUX_EINVAL;
-        }
-        memset(&iov, 0, sizeof(iov));
-        if (user_range_ok(u64Addr, sizeof(iov))) {
-            if (copy_from_user(&iov, u64Addr, sizeof(iov)) != GJ_OK) {
-                return -LINUX_EFAULT;
-            }
-        } else {
-            memcpy(&iov, (const void *)(gj_vaddr_t)u64Addr, sizeof(iov));
-        }
-        if (iov.u64Len == 0ull) {
-            return 0;
-        }
-        if (iov.u64Len > (u64)GJ_IORING_IO_MAX) {
-            iov.u64Len = GJ_IORING_IO_MAX;
-        }
+    case IORING_OP_FALLOCATE:
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
-        if (pSqe->u8Opcode == IORING_OP_READV) {
-            i64N = vfs_ram_pread((i64)i32Fd, aBounce, (size_t)iov.u64Len,
-                                 u64Off);
-            if (i64N < 0) {
-                return (i32)i64N;
-            }
-            if (buf_out(iov.u64Base, aBounce, (size_t)i64N) < 0) {
-                return -LINUX_EFAULT;
-            }
-            if (pR != NULL && i64N > 0) {
-                pR->u32SqeIoOk++;
-            }
-            return (i32)i64N;
+        return (i32)vfs_ram_fallocate((i64)i32Fd, (i64)u64Off, (i64)u32Len);
+
+    case IORING_OP_OPENAT:
+    case IORING_OP_OPENAT2: {
+        int fCreate;
+
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
         }
-        i64N = buf_in(iov.u64Base, aBounce, (size_t)iov.u64Len);
-        if (i64N < 0) {
-            return (i32)i64N;
-        }
-        i64N = vfs_ram_pwrite((i64)i32Fd, aBounce, (size_t)i64N, u64Off);
-        if (i64N > 0 && pR != NULL) {
-            pR->u32SqeIoOk++;
+        fCreate = ((pSqe->u32OpFlags & LINUX_O_CREAT) != 0u) ? 1 : 0;
+        i64N = vfs_ram_open(aPath, fCreate);
+        if (i64N >= 0 && pR != NULL) {
+            maybe_install_fixed(pR, pSqe->u32FileIndex, (i32)i64N);
         }
         return (i32)i64N;
     }
+
+    case IORING_OP_FILES_UPDATE: {
+        /* Soft: update a single fixed-file slot. fd=index, off=new fd. */
+        u32 idx;
+
+        if (pR == NULL) {
+            return -LINUX_EINVAL;
+        }
+        if (pSqe->i32Fd < 0) {
+            return -LINUX_EINVAL;
+        }
+        idx = (u32)pSqe->i32Fd;
+        if (idx >= GJ_IORING_REG_FILES_MAX) {
+            return -LINUX_EINVAL;
+        }
+        pR->aRegFiles[idx] = (i32)u64Off;
+        if (pR->u32RegFiles <= idx) {
+            pR->u32RegFiles = idx + 1u;
+        }
+        return 0;
+    }
+
+    case IORING_OP_STATX: {
+        u8 aStat[144];
+
+        memset(aStat, 0, sizeof(aStat));
+        if (u64Addr != 0ull) {
+            i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+            if (i32Rc == 0) {
+                i64N = vfs_ram_stat(aPath, aStat, sizeof(aStat));
+            } else if (vfs_ram_fd_ok((i64)i32Fd)) {
+                i64N = vfs_ram_fstat((i64)i32Fd, aStat, sizeof(aStat));
+            } else {
+                return i32Rc;
+            }
+        } else if (vfs_ram_fd_ok((i64)i32Fd)) {
+            i64N = vfs_ram_fstat((i64)i32Fd, aStat, sizeof(aStat));
+        } else {
+            return -LINUX_EBADF;
+        }
+        if (i64N < 0) {
+            return (i32)i64N;
+        }
+        /* Soft: drop stat blob unless off points at a buffer (addr2-ish). */
+        if (u64Off != 0ull) {
+            if (buf_out(u64Off, aStat, sizeof(aStat)) < 0) {
+                return -LINUX_EFAULT;
+            }
+        }
+        return 0;
+    }
+
+    case IORING_OP_EPOLL_CTL: {
+        /*
+         * Public prep: fd=epfd, addr=epoll_event*, len=op, off=target_fd.
+         * epoll_event soft layout: u32 events + u64 data.
+         */
+        int nOp = (int)u32Len;
+        i64 i64Target = (i64)(i32)u64Off;
+        u32 u32Events = 0;
+        u64 u64Data = 0;
+
+        if (u64Addr != 0ull) {
+            u8 aEv[12];
+
+            memset(aEv, 0, sizeof(aEv));
+            if (buf_in(u64Addr, aEv, sizeof(aEv)) >= 0) {
+                /* Soft packed layout: u32 events + u64 data. */
+                memcpy(&u32Events, aEv, sizeof(u32Events));
+                memcpy(&u64Data, aEv + 4, sizeof(u64Data));
+            }
+        }
+        return (i32)vfs_ram_epoll_ctl((i64)i32Fd, nOp, i64Target, u32Events,
+                                      u64Data);
+    }
+
+    case IORING_OP_PROVIDE_BUFFERS: {
+        /* Soft: register one buffer at buf_index from addr/len. */
+        u16 idx;
+
+        if (pR == NULL) {
+            return -LINUX_EINVAL;
+        }
+        idx = pSqe->u16BufIndex;
+        if ((u32)idx >= GJ_IORING_REG_BUFS_MAX) {
+            return -LINUX_EINVAL;
+        }
+        pR->aRegBufAddr[idx] = u64Addr;
+        pR->aRegBufLen[idx] = u32Len;
+        if (pR->u32RegBufs <= (u32)idx) {
+            pR->u32RegBufs = (u32)idx + 1u;
+        }
+        return 0;
+    }
+
+    case IORING_OP_REMOVE_BUFFERS: {
+        u16 idx;
+
+        if (pR == NULL) {
+            return -LINUX_EINVAL;
+        }
+        idx = pSqe->u16BufIndex;
+        if ((u32)idx >= GJ_IORING_REG_BUFS_MAX) {
+            return -LINUX_EINVAL;
+        }
+        pR->aRegBufAddr[idx] = 0;
+        pR->aRegBufLen[idx] = 0;
+        return 0;
+    }
+
+    case IORING_OP_UNLINKAT:
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        return (i32)vfs_ram_unlink(aPath);
+
+    case IORING_OP_RENAMEAT:
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        /* newpath in off/addr2 */
+        i32Rc = path_copy(u64Off, aPath2, sizeof(aPath2));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        return (i32)vfs_ram_rename(aPath, aPath2);
+
+    case IORING_OP_MKDIRAT: {
+        i64 i64FdDir;
+
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        i64FdDir = vfs_ram_open(aPath, 1);
+        if (i64FdDir < 0) {
+            return (i32)i64FdDir;
+        }
+        i64N = vfs_ram_mark_dir(i64FdDir);
+        (void)vfs_ram_close(i64FdDir);
+        return (i32)i64N;
+    }
+
+    case IORING_OP_SYMLINKAT:
+        /* addr = target, off = linkpath */
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        i32Rc = path_copy(u64Off, aPath2, sizeof(aPath2));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        return (i32)vfs_ram_symlink(aPath, aPath2);
+
+    case IORING_OP_LINKAT:
+        /* addr = oldpath, off = newpath */
+        i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        i32Rc = path_copy(u64Off, aPath2, sizeof(aPath2));
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        return (i32)vfs_ram_link(aPath, aPath2);
+
+    case IORING_OP_READ_FIXED:
+    case IORING_OP_WRITE_FIXED: {
+        u64 bufAddr = 0;
+        u32 bufLen = 0;
+        u32 useLen;
+
+        i32Rc = resolve_fixed_buf(pR, pSqe->u16BufIndex, &bufAddr, &bufLen);
+        if (i32Rc != 0) {
+            return i32Rc;
+        }
+        useLen = u32Len;
+        if (useLen == 0u || useLen > bufLen) {
+            useLen = bufLen;
+        }
+        return do_rw(pR, i32Fd, u64Off, bufAddr, useLen,
+                     pSqe->u8Opcode == IORING_OP_WRITE_FIXED);
+    }
+
+    case IORING_OP_READ:
+    case IORING_OP_WRITE:
+        return do_rw(pR, i32Fd, u64Off, u64Addr, u32Len,
+                     pSqe->u8Opcode == IORING_OP_WRITE);
+
+    case IORING_OP_READV:
+    case IORING_OP_WRITEV:
+        return do_rwv(pR, i32Fd, u64Off, u64Addr, u32Len,
+                      pSqe->u8Opcode == IORING_OP_WRITEV);
+
     default:
         return -LINUX_EINVAL;
     }
@@ -564,6 +1008,8 @@ gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser)
     pR->u8Used = 1;
     pR->u32SqEntries = nSq;
     pR->u32CqEntries = nCq;
+    /* Fixed-file slots start as -1. */
+    memset(pR->aRegFiles, 0xff, sizeof(pR->aRegFiles));
     pkg_init(pR, nSq, nCq);
 
     i64Fd = vfs_ram_io_uring_open(u32Slot);
@@ -819,12 +1265,15 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
     if (u32Opcode == IORING_REGISTER_BUFFERS) {
         /*
          * Soft: accept buffer registration. u64Arg may be user iovec array;
-         * we only store first few base/len pairs when in-kernel smoke.
+         * we store first few base/len pairs (capped).
          */
         n = u32NrArgs;
         if (n > GJ_IORING_REG_BUFS_MAX) {
             n = GJ_IORING_REG_BUFS_MAX;
         }
+        /* Clear previous table first. */
+        memset(pR->aRegBufAddr, 0, sizeof(pR->aRegBufAddr));
+        memset(pR->aRegBufLen, 0, sizeof(pR->aRegBufLen));
         if (u64Arg != 0 && n > 0u) {
             for (i = 0; i < n; i++) {
                 struct {
@@ -852,11 +1301,18 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
         pR->u32RegBufs = n;
         return 0;
     }
+    if (u32Opcode == IORING_UNREGISTER_BUFFERS) {
+        pR->u32RegBufs = 0;
+        memset(pR->aRegBufAddr, 0, sizeof(pR->aRegBufAddr));
+        memset(pR->aRegBufLen, 0, sizeof(pR->aRegBufLen));
+        return 0;
+    }
     if (u32Opcode == IORING_REGISTER_FILES) {
         n = u32NrArgs;
         if (n > GJ_IORING_REG_FILES_MAX) {
             n = GJ_IORING_REG_FILES_MAX;
         }
+        memset(pR->aRegFiles, 0xff, sizeof(pR->aRegFiles));
         if (u64Arg != 0 && n > 0u) {
             for (i = 0; i < n; i++) {
                 i32 fd = -1;
@@ -881,10 +1337,82 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
         memset(pR->aRegFiles, 0xff, sizeof(pR->aRegFiles));
         return 0;
     }
-    if (u32Opcode == IORING_REGISTER_EVENTFD) {
+    if (u32Opcode == IORING_REGISTER_FILES_UPDATE) {
+        /*
+         * Soft sparse update: arg is fd array of nr_args entries starting
+         * at offset 0 of the fixed table (full replace of first n slots).
+         * Sparse offset protocol not fully modelled — first-n update.
+         */
+        n = u32NrArgs;
+        if (n > GJ_IORING_REG_FILES_MAX) {
+            n = GJ_IORING_REG_FILES_MAX;
+        }
+        if (u64Arg != 0 && n > 0u) {
+            for (i = 0; i < n; i++) {
+                i32 fd = -1;
+
+                if (user_range_ok(u64Arg + (u64)i * sizeof(i32),
+                                  sizeof(i32))) {
+                    if (copy_from_user(&fd, u64Arg + (u64)i * sizeof(i32),
+                                       sizeof(i32)) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    fd = ((const i32 *)(gj_vaddr_t)u64Arg)[i];
+                }
+                /* -1 means "skip / no change" in Linux sparse update. */
+                if (fd != -1) {
+                    pR->aRegFiles[i] = fd;
+                }
+            }
+            if (pR->u32RegFiles < n) {
+                pR->u32RegFiles = n;
+            }
+        }
+        return 0;
+    }
+    if (u32Opcode == IORING_REGISTER_EVENTFD ||
+        u32Opcode == IORING_REGISTER_EVENTFD_ASYNC) {
         pR->u32RegEventfd = 1u;
         (void)u64Arg;
         (void)u32NrArgs;
+        return 0;
+    }
+    if (u32Opcode == IORING_UNREGISTER_EVENTFD) {
+        pR->u32RegEventfd = 0u;
+        return 0;
+    }
+    if (u32Opcode == IORING_REGISTER_PROBE) {
+        /*
+         * Soft probe: if arg non-zero, write a tiny capability blob
+         * { last_op, ops_len, resv } so userspace can see depth>0.
+         * Layout is intentionally minimal (not full io_uring_probe).
+         */
+        if (u64Arg != 0 && u32NrArgs > 0u) {
+            struct {
+                u8 last_op;
+                u8 ops_len;
+                u16 resv;
+                u32 resv2;
+            } probe;
+
+            memset(&probe, 0, sizeof(probe));
+            probe.last_op = (u8)IORING_OP_LINKAT;
+            probe.ops_len = (u8)(u32NrArgs > 255u ? 255u : u32NrArgs);
+            if (buf_out(u64Arg, &probe, sizeof(probe)) < 0) {
+                return -LINUX_EFAULT;
+            }
+        }
+        return 0;
+    }
+    if (u32Opcode == IORING_REGISTER_PERSONALITY) {
+        pR->u32Personality = 1u;
+        (void)u64Arg;
+        (void)u32NrArgs;
+        return 0;
+    }
+    if (u32Opcode == IORING_UNREGISTER_PERSONALITY) {
+        pR->u32Personality = 0u;
         return 0;
     }
     return -LINUX_ENOSYS;

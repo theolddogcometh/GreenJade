@@ -18,6 +18,14 @@
  *   pop_order_split: exact order, else split a higher block and push
  *   sibling buddies back (rearranges nodes only — never invents frames).
  *
+ * 1 TiB design observability (no 1 TiB host required — soft markers):
+ *   Zone free frame counts (low/high) + per-order node counts.
+ *   "pmm: orders tag=..." histogram after init / high-release / soak.
+ *   "pmm: tib_design soft ..." always (max_order, block size, design ceil).
+ *   "pmm: tib_host soft PASS|SKIP" — true ≥1 TiB max_pa gate (soft).
+ *   "pmm: high_order soft ..." — high-order node presence after release/soak.
+ *   Soft hierarchical exercise runs even on soak_tib SKIP (small QEMU).
+ *
  * Serial markers (scripts/gj-soak-large-ram.sh, smoke-all, product-summary):
  *   "pmm: freelist free="
  *   "pmm: high released free="
@@ -34,6 +42,8 @@
 #define PMM_LOW_MAX          0x100000000ull
 /* Max hierarchical order: 9 → 512 pages = 2 MiB (matches HHDM large pages). */
 #define PMM_MAX_ORDER        9u
+/* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
+#define PMM_TIB_BYTES        (1ull << 40)
 
 struct pmm_pending {
     gj_paddr_t paBase;
@@ -48,8 +58,14 @@ static gj_paddr_t g_aOrderHigh[PMM_MAX_ORDER + 1u];
 /* Per-order free *nodes* (not frames). Order 0 tracks single-frame nodes. */
 static u64        g_aOrderCount[PMM_MAX_ORDER + 1u];
 static u64        g_cFramesFree;
+/* Zone free frames (sum = g_cFramesFree); 1 TiB-class observability. */
+static u64        g_cFramesFreeLow;
+static u64        g_cFramesFreeHigh;
 static u64        g_cFramesTotal;
 static u64        g_paMaxSeen;
+/* Soft observability: split / high-order push events (never invent frames). */
+static u64        g_cSplit;
+static u64        g_cHighOrderPush;
 static gj_paddr_t g_paKernel0;
 static gj_paddr_t g_paKernel1;
 static struct pmm_pending g_aHigh[PMM_HIGH_PENDING_MAX];
@@ -57,6 +73,10 @@ static u32        g_cHigh;
 static int        g_fHighReleased;
 
 static gj_paddr_t pop_order_split(u32 u32Order);
+static u64        high_order_nodes(void);
+static void       log_order_hist(const char *szTag);
+static void       log_tib_design_soft(void);
+static u32        soft_hier_exercise(u32 *pOutBig);
 
 static void *
 pa_to_ptr(gj_paddr_t pa)
@@ -168,7 +188,15 @@ push_order(gj_paddr_t paPage, u32 u32Order)
     *p = (u64)*pHead;
     *pHead = paPage;
     g_cFramesFree += cPages;
+    if (paPage < PMM_LOW_MAX) {
+        g_cFramesFreeLow += cPages;
+    } else {
+        g_cFramesFreeHigh += cPages;
+    }
     g_aOrderCount[u32Order]++;
+    if (u32Order > 0) {
+        g_cHighOrderPush++;
+    }
 }
 
 static void
@@ -227,6 +255,17 @@ pop_order(u32 u32Order)
     } else {
         g_cFramesFree = 0;
     }
+    if (pa < PMM_LOW_MAX) {
+        if (g_cFramesFreeLow >= cPages) {
+            g_cFramesFreeLow -= cPages;
+        } else {
+            g_cFramesFreeLow = 0;
+        }
+    } else if (g_cFramesFreeHigh >= cPages) {
+        g_cFramesFreeHigh -= cPages;
+    } else {
+        g_cFramesFreeHigh = 0;
+    }
     if (g_aOrderCount[u32Order] > 0) {
         g_aOrderCount[u32Order]--;
     }
@@ -272,6 +311,7 @@ pop_order_split(u32 u32Order)
             continue;
         }
         /* Split: free upper half buddies of orders o-1 … u32Order. */
+        g_cSplit++;
         while (o > u32Order) {
             o--;
             push_order(pa + ((gj_paddr_t)(1u << o) * GJ_PAGE_SIZE), o);
@@ -279,6 +319,125 @@ pop_order_split(u32 u32Order)
         return pa;
     }
     return 0;
+}
+
+/**
+ * Sum of free nodes on orders 1..PMM_MAX_ORDER (not frames).
+ * Greppable high-order soft observability for 1 TiB design.
+ */
+static u64
+high_order_nodes(void)
+{
+    u32 o;
+    u64 c = 0;
+
+    for (o = 1; o <= PMM_MAX_ORDER; o++) {
+        c += g_aOrderCount[o];
+    }
+    return c;
+}
+
+/**
+ * Greppable order histogram + zone free counts.
+ * tag=init | high_release | soak_tib | soak_soft | …
+ */
+static void
+log_order_hist(const char *szTag)
+{
+    u32 o;
+    u64 cHi = high_order_nodes();
+
+    if (szTag == 0) {
+        szTag = "?";
+    }
+    /* Greppable: pmm: orders tag= */
+    kprintf("pmm: orders tag=%s free=%lu low=%lu high=%lu o0=%lu",
+            szTag, (unsigned long)g_cFramesFree,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh,
+            (unsigned long)g_aOrderCount[0]);
+    for (o = 1; o <= PMM_MAX_ORDER; o++) {
+        kprintf(" o%u=%lu", o, (unsigned long)g_aOrderCount[o]);
+    }
+    kprintf(" high_order_nodes=%lu splits=%lu high_order_push=%lu "
+            "max_order=%u hierarchical free\n",
+            (unsigned long)cHi, (unsigned long)g_cSplit,
+            (unsigned long)g_cHighOrderPush, PMM_MAX_ORDER);
+}
+
+/**
+ * Always-on 1 TiB design soft marker (does not require 1 TiB host).
+ * Greppable: pmm: tib_design soft | pmm: tib_host soft PASS|SKIP
+ */
+static void
+log_tib_design_soft(void)
+{
+    u64 cHi = high_order_nodes();
+    u64 cbBlock = (u64)GJ_PAGE_SIZE << PMM_MAX_ORDER;
+
+    /* Greppable: pmm: tib_design soft */
+    kprintf("pmm: tib_design soft max_order=%u max_block_pages=%u "
+            "max_block_bytes=%lu design_ceil_tib=%u max_pa=0x%lx free=%lu "
+            "high_order_nodes=%lu hierarchical free (no 1TiB host required)\n",
+            PMM_MAX_ORDER, 1u << PMM_MAX_ORDER, (unsigned long)cbBlock,
+            (unsigned)GJ_PMM_MAX_PHYS_TIB, (unsigned long)g_paMaxSeen,
+            (unsigned long)g_cFramesFree, (unsigned long)cHi);
+
+    if (g_paMaxSeen >= PMM_TIB_BYTES) {
+        /* Greppable: pmm: tib_host soft PASS */
+        kprintf("pmm: tib_host soft PASS max_pa=0x%lx need=0x%lx free=%lu "
+                "high_order_nodes=%lu\n",
+                (unsigned long)g_paMaxSeen, (unsigned long)PMM_TIB_BYTES,
+                (unsigned long)g_cFramesFree, (unsigned long)cHi);
+    } else {
+        /* Greppable: pmm: tib_host soft SKIP */
+        kprintf("pmm: tib_host soft SKIP max_pa=0x%lx need=0x%lx free=%lu "
+                "high_order_nodes=%lu (host/QEMU below 1TiB; design path ready)\n",
+                (unsigned long)g_paMaxSeen, (unsigned long)PMM_TIB_BYTES,
+                (unsigned long)g_cFramesFree, (unsigned long)cHi);
+    }
+
+    /* Greppable: pmm: high_order soft */
+    kprintf("pmm: high_order soft nodes=%lu max_order=%u free_low=%lu "
+            "free_high=%lu hierarchical free\n",
+            (unsigned long)cHi, PMM_MAX_ORDER,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh);
+}
+
+/**
+ * Soft hierarchical exercise for any RAM size (1 TiB design observability).
+ * Tries alloc/free each order 1..MAX and a few max-order (2 MiB) blocks.
+ * Rearranges freelist nodes only — never invents frames; safe when free is
+ * small (failed orders simply skip). Returns # of orders that succeeded.
+ */
+static u32
+soft_hier_exercise(u32 *pOutBig)
+{
+    u32 o;
+    u32 cOrderOk = 0;
+    u32 nBig = 0;
+    u32 i;
+
+    for (o = 1; o <= PMM_MAX_ORDER; o++) {
+        gj_paddr_t pa = pmm_alloc_pages(1u << o);
+
+        if (pa != 0) {
+            pmm_free_pages(pa, 1u << o);
+            cOrderOk++;
+        }
+    }
+    for (i = 0; i < 8u; i++) {
+        gj_paddr_t pa = pmm_alloc_pages(1u << PMM_MAX_ORDER);
+
+        if (pa == 0) {
+            break;
+        }
+        pmm_free_pages(pa, 1u << PMM_MAX_ORDER);
+        nBig++;
+    }
+    if (pOutBig != 0) {
+        *pOutBig = nBig;
+    }
+    return cOrderOk;
 }
 
 /* Smallest order whose block has ≥ cPages (capped at PMM_MAX_ORDER). */
@@ -355,8 +514,12 @@ pmm_init(const struct gj_mem_region *pRegions, size_t cRegions,
     g_paFreeLow = 0;
     g_paFreeHigh = 0;
     g_cFramesFree = 0;
+    g_cFramesFreeLow = 0;
+    g_cFramesFreeHigh = 0;
     g_cFramesTotal = 0;
     g_paMaxSeen = 0;
+    g_cSplit = 0;
+    g_cHighOrderPush = 0;
     g_cHigh = 0;
     g_fHighReleased = 0;
     {
@@ -413,9 +576,12 @@ pmm_init(const struct gj_mem_region *pRegions, size_t cRegions,
 
     /* Greppable: pmm: freelist free= */
     kprintf("pmm: freelist free=%lu total=%lu max_pa=0x%lx high_pending=%u "
-            "orders=0..%u hierarchical free ready\n",
+            "orders=0..%u free_low=%lu free_high=%lu hierarchical free ready\n",
             (unsigned long)g_cFramesFree, (unsigned long)g_cFramesTotal,
-            (unsigned long)g_paMaxSeen, g_cHigh, PMM_MAX_ORDER);
+            (unsigned long)g_paMaxSeen, g_cHigh, PMM_MAX_ORDER,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh);
+    log_order_hist("init");
+    log_tib_design_soft();
 }
 
 void
@@ -432,7 +598,16 @@ pmm_release_high(void)
     }
     g_fHighReleased = 1;
     /* Greppable: pmm: high released free= */
-    kprintf("pmm: high released free=%lu\n", (unsigned long)g_cFramesFree);
+    kprintf("pmm: high released free=%lu free_low=%lu free_high=%lu "
+            "high_order_nodes=%lu hierarchical free\n",
+            (unsigned long)g_cFramesFree, (unsigned long)g_cFramesFreeLow,
+            (unsigned long)g_cFramesFreeHigh, (unsigned long)high_order_nodes());
+    log_order_hist("high_release");
+    /* High-order soft: after free_range bulk insert, expect order-N nodes. */
+    kprintf("pmm: high_order soft released nodes=%lu free_high=%lu "
+            "max_order=%u hierarchical free\n",
+            (unsigned long)high_order_nodes(),
+            (unsigned long)g_cFramesFreeHigh, PMM_MAX_ORDER);
 }
 
 gj_paddr_t
@@ -468,6 +643,9 @@ pmm_alloc_high(void)
     *p = 0;
     if (g_cFramesFree > 0) {
         g_cFramesFree--;
+    }
+    if (g_cFramesFreeHigh > 0) {
+        g_cFramesFreeHigh--;
     }
     if (g_aOrderCount[0] > 0) {
         g_aOrderCount[0]--;
@@ -617,6 +795,40 @@ pmm_order_count(u32 u32Order)
     return g_aOrderCount[u32Order];
 }
 
+u64
+pmm_order_nodes(u32 u32Order)
+{
+    if (u32Order > PMM_MAX_ORDER) {
+        return 0;
+    }
+    return g_aOrderCount[u32Order];
+}
+
+u64
+pmm_free_frames_low(void)
+{
+    return g_cFramesFreeLow;
+}
+
+u64
+pmm_free_frames_high(void)
+{
+    return g_cFramesFreeHigh;
+}
+
+u64
+pmm_high_order_nodes(void)
+{
+    return high_order_nodes();
+}
+
+void
+pmm_log_orders(void)
+{
+    log_order_hist("api");
+    log_tib_design_soft();
+}
+
 size_t
 pmm_free_count(void)
 {
@@ -635,28 +847,33 @@ pmm_soak_tib(u64 u64NeedBytes)
     u64 maxPa = g_paMaxSeen;
     gj_paddr_t pa4;
     gj_paddr_t pa16;
-    u32 o;
     u32 cOrderOk;
+    u32 nBig = 0;
 
     if (u64NeedBytes == 0) {
-        u64NeedBytes = 1ull << 40; /* default 1 TiB threshold */
+        u64NeedBytes = PMM_TIB_BYTES; /* default 1 TiB threshold */
     }
     /*
-     * Soft gate: only large-RAM hosts run the hierarchical exercise.
-     * main.c uses 768ull<<30 (768 GiB class); deck/small QEMU soft-SKIP
-     * with return 0 — not a soak failure.
+     * Soft gate for large-RAM PASS path: main.c uses 768ull<<30 (768 GiB).
+     * Below threshold → soak_tib SKIP soft (return 0, not a fail), but still
+     * run soft hierarchical exercise + order counts for 1 TiB design
+     * observability on small QEMU/deck hosts.
      * Greppable: "pmm: soak_tib SKIP soft" | "pmm: soak_tib PASS" |
      *            "pmm: soak_tib FAIL"
-     * Hierarchical free (orders 0..PMM_MAX_ORDER) remains available for
-     * power-of-two multi-page alloc/free on any RAM size.
      */
     if (maxPa < u64NeedBytes) {
+        cOrderOk = soft_hier_exercise(&nBig);
         kprintf("pmm: soak_tib SKIP soft max_pa=0x%lx need=0x%lx free=%lu "
-                "(host/QEMU below threshold); hierarchical free ready "
-                "orders=0..%u (max %u pages / block)\n",
+                "free_low=%lu free_high=%lu hier_soft_ok=%u/%u big2MiB=%u "
+                "high_order_nodes=%lu (host/QEMU below threshold); "
+                "hierarchical free ready orders=0..%u (max %u pages / block)\n",
                 (unsigned long)maxPa, (unsigned long)u64NeedBytes,
-                (unsigned long)g_cFramesFree, PMM_MAX_ORDER,
+                (unsigned long)g_cFramesFree, (unsigned long)g_cFramesFreeLow,
+                (unsigned long)g_cFramesFreeHigh, cOrderOk, PMM_MAX_ORDER, nBig,
+                (unsigned long)high_order_nodes(), PMM_MAX_ORDER,
                 1u << PMM_MAX_ORDER);
+        log_order_hist("soak_soft");
+        log_tib_design_soft();
         return 0;
     }
     /* Large machine: alloc/free multi-page blocks via order freelists. */
@@ -670,45 +887,30 @@ pmm_soak_tib(u64 u64NeedBytes)
             pmm_free_pages(pa16, 16);
         }
         kprintf("pmm: soak_tib FAIL alloc (4+16 hierarchical) free=%lu "
-                "max_pa=0x%lx max_order=%u\n",
+                "max_pa=0x%lx max_order=%u free_low=%lu free_high=%lu "
+                "high_order_nodes=%lu\n",
                 (unsigned long)g_cFramesFree, (unsigned long)maxPa,
-                PMM_MAX_ORDER);
+                PMM_MAX_ORDER, (unsigned long)g_cFramesFreeLow,
+                (unsigned long)g_cFramesFreeHigh,
+                (unsigned long)high_order_nodes());
+        log_order_hist("soak_fail");
         return -1;
     }
     /* Hierarchical free: power-of-two sizes land on order freelists. */
     pmm_free_pages(pa16, 16);
     pmm_free_pages(pa4, 4);
-    cOrderOk = 0;
-    for (o = 1; o <= PMM_MAX_ORDER; o++) {
-        gj_paddr_t pa = pmm_alloc_pages(1u << o);
-
-        if (pa != 0) {
-            pmm_free_pages(pa, 1u << o);
-            cOrderOk++;
-        }
-    }
-    /* Extra: a few max-order (2 MiB) blocks when free is huge (768G path). */
-    {
-        u32 nBig = 0;
-        u32 i;
-
-        for (i = 0; i < 8u; i++) {
-            gj_paddr_t pa = pmm_alloc_pages(1u << PMM_MAX_ORDER);
-
-            if (pa == 0) {
-                break;
-            }
-            pmm_free_pages(pa, 1u << PMM_MAX_ORDER);
-            nBig++;
-        }
-        /* Greppable: pmm: soak_tib PASS */
-        kprintf("pmm: soak_tib PASS max_pa=0x%lx free=%lu "
-                "hier_orders_ok=%u/%u max_order=%u big2MiB=%u need=0x%lx "
-                "hierarchical free\n",
-                (unsigned long)maxPa, (unsigned long)g_cFramesFree, cOrderOk,
-                PMM_MAX_ORDER, PMM_MAX_ORDER, nBig,
-                (unsigned long)u64NeedBytes);
-    }
+    cOrderOk = soft_hier_exercise(&nBig);
+    /* Greppable: pmm: soak_tib PASS */
+    kprintf("pmm: soak_tib PASS max_pa=0x%lx free=%lu free_low=%lu "
+            "free_high=%lu hier_orders_ok=%u/%u max_order=%u big2MiB=%u "
+            "need=0x%lx high_order_nodes=%lu splits=%lu hierarchical free\n",
+            (unsigned long)maxPa, (unsigned long)g_cFramesFree,
+            (unsigned long)g_cFramesFreeLow, (unsigned long)g_cFramesFreeHigh,
+            cOrderOk, PMM_MAX_ORDER, PMM_MAX_ORDER, nBig,
+            (unsigned long)u64NeedBytes, (unsigned long)high_order_nodes(),
+            (unsigned long)g_cSplit);
+    log_order_hist("soak_tib");
+    log_tib_design_soft();
     return 0;
 }
 

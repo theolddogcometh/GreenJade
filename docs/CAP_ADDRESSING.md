@@ -3,13 +3,13 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Cap addressing v1.7 |
-| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 9 honesty only |
+| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 12 honesty only |
 | **Handle ABI** | **Scheme A** — `u64` slot index + separate generation |
 | **Slot 0** | **Root meta** — **kernel ops only**; process + CNode identity; empty until bootstrap |
 | **Fault/pager** | **Region → memory object → pager**; PCB **default pager** fallback ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1) |
 | **CNode scope** | **One CNode per process** — all threads in that process **share** it |
 | **PROCESS** | Typed **task port** minted to parent on spawn — not root meta |
-| **Honesty (Wave 9)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (§9) |
+| **Honesty (Wave 12)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (§9) |
 | **Companion** | [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (game tier; overrides Apple on conflict) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
@@ -271,9 +271,9 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 
 ---
 
-## 9. Honesty bounds — soft cap surface vs product (Wave 9 · 2026-07-23)
+## 9. Honesty bounds — soft cap surface vs product multi-server (Wave 12 · 2026-07-23)
 
-**Additive only.** Scheme A, root meta (K1–K6), one CNode per process, PROCESS mint-to-parent, fault/pager registration, rights, and the resolve algorithm in §§1–8 stay **Accepted**. This section is an honesty ledger: what is greppable **soft cap surface** on the tree vs what remains **product-open**. It does **not** re-litigate the handle ABI or close any product bar.
+**Additive only (Wave 12 exclusive for this file).** Scheme A, root meta (K1–K6), one CNode per process, PROCESS mint-to-parent, fault/pager registration, rights, and the resolve algorithm in §§1–8 stay **Accepted**. This section is a Wave 12 honesty ledger: what is greppable **soft cap surface** on the tree vs what remains **product-open** multi-server confine. It does **not** re-litigate the handle ABI, close any product bar, invent multi-server product completion, or claim **bar3**.
 
 | Term | Meaning in this document |
 |------|--------------------------|
@@ -281,6 +281,8 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 | **Soft cap surface** | Scheme A resolve/install, mint/copy/move, soft CDT/quota/trylock, root-meta bootstrap, PROCESS parent mint — greppable / bring-up strength |
 | **Product multi-server confine** | Full multi-server drop-ambient security product (servers + clients confined by caps/promises end-to-end) — **open** |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
+
+**Hard stamp (Wave 12):** soft cap surface **≠** product multi-server confine. Soft greppable paths do **not** ship sealed multi-server product. **No bar3 claim** from this document.
 
 ### 9.1 Soft cap surface (honest bound — may claim soft only)
 
@@ -296,7 +298,8 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 | **Revoke DEAD/gen first** | Phase A fail-closed + deferred hygiene hooks | Stop-the-world never; full Phase C reclaim product under all pins |
 | **Confine / promises soft** | Process bitmask gates some ambient-style Linux paths (`confine soft`) | **Product multi-server confine closed** |
 
-**Hard rule:** soft greppable `PASS` lines and design **Accepted** are **bring-up / agent honesty**, not “capability product shipped” and not “multi-server confine done.”
+**Hard rule:** soft greppable `PASS` lines and design **Accepted** are **bring-up / agent honesty**, not “capability product shipped” and not “multi-server confine done.”  
+**Wave 12 formula:** **soft cap surface ≠ product multi-server.**
 
 ### 9.2 Product multi-server confine — **open**
 
@@ -311,7 +314,7 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 
 Soft cap surface and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement. Product multi-server confine stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md)).
 
-### 9.3 Explicit non-claims (Wave 9)
+### 9.3 Explicit non-claims (Wave 12)
 
 | Claim | Allowed? |
 |-------|----------|
@@ -323,7 +326,7 @@ Soft cap surface and soft promise gates are **not** a claim that every server an
 | “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
 | Any **bar3** closed claim from cap addressing alone | **No** |
 
-**Bar3 remains OPEN** (client + matrix). This Wave 9 edit is honesty-only: **soft cap surface vs product multi-server confine open; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
+**Bar3 remains OPEN** (client + matrix). This Wave 12 edit is honesty-only: **soft cap surface ≠ product multi-server confine; no bar3 claim.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this document does not promote those rows.
 
 ### 9.4 Related honesty surfaces
 
@@ -335,4 +338,4 @@ Soft cap surface and soft promise gates are **not** a claim that every server an
 ---
 
 *Accepted x86_64 capability addressing v1.7 — Scheme A, root meta, fault cookie / multi-page cluster, per-space fault lock.*  
-*§9 Wave 9 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*
+*§9 Wave 12 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*

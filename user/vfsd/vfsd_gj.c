@@ -19,17 +19,35 @@
  *   vfsd-gj: WRITEFD soft PASS | WRITEFD soft-skip
  *   vfsd-gj: SEEKFD soft PASS | SEEKFD soft-skip
  *   vfsd-gj: UNLINK soft PASS | UNLINK soft-skip
- * Greppable soft inventory prefix ("vfsd-gj: soft …") — deepen-only, never hard:
- *   vfsd-gj: soft door start
- *   vfsd-gj: soft STAT PASS | soft STAT soft-skip
- *   vfsd-gj: soft LIST PASS | soft LIST soft-skip
- *   vfsd-gj: soft SEEK_CUR PASS | soft SEEK_CUR soft-skip
- *   vfsd-gj: soft STATS PASS | soft STATS soft-skip
- *   vfsd-gj: soft stats ok=N bits=0xX
- *   vfsd-gj: soft door PASS | soft door soft-skip
  *   vfsd-gj: store LBA0 super mirror PASS | soft-skip
  *   vfsd-gj: store LBA0 read soft PASS | soft-skip
  *   vfsd-gj: RELEASE free soft PASS | soft-skip  (post-RELEASE no-op)
+ *
+ * Soft inventory (Wave 12 exclusive deepen — greppable "vfsd-gj: soft …"):
+ *   vfsd-gj: soft door start
+ *   vfsd-gj: soft reclaim PASS | soft reclaim soft-skip
+ *   vfsd-gj: soft bare PASS | soft bare soft-skip
+ *   vfsd-gj: soft WRITEFD PASS | soft WRITEFD soft-skip
+ *   vfsd-gj: soft STAT PASS | soft STAT soft-skip
+ *   vfsd-gj: soft LIST PASS | soft LIST soft-skip
+ *   vfsd-gj: soft SEEK_END PASS | soft SEEK_END soft-skip
+ *   vfsd-gj: soft SEEK_CUR PASS | soft SEEK_CUR soft-skip
+ *   vfsd-gj: soft SEEKFD PASS | soft SEEKFD soft-skip
+ *   vfsd-gj: soft UNLINK PASS | soft UNLINK soft-skip
+ *   vfsd-gj: soft STATS PASS | soft STATS soft-skip
+ *   vfsd-gj: soft store mirror PASS | soft store mirror soft-skip
+ *   vfsd-gj: soft store read PASS | soft store read soft-skip
+ *   vfsd-gj: soft free PASS | soft free soft-skip
+ *   vfsd-gj: soft inventory door_ok=… door_skip=… store_ok=… store_skip=…
+ *                free_ok=… free_skip=… wave=12
+ *   vfsd-gj: soft door reclaim=… bare=… writefd=… stat=… list=… seek_end=…
+ *                seek_cur=… seekfd=… unlink=… stats=… bits=…
+ *   vfsd-gj: soft store mirror=… read=… bits=…
+ *   vfsd-gj: soft free release=… bits=…
+ *   vfsd-gj: soft cache reclaim=… writefd=… seek=… unlink=… stat=… bits=… ok=…
+ *   vfsd-gj: soft stats ok=… skip=… door_bits=… store_bits=… free_bits=…
+ *   vfsd-gj: soft door PASS | soft door soft-skip
+ * Diagnostics only — never hard-fail live path PASS; not a bar3 claim.
  *
  *   make vfsd-gj → build/user/vfsd.elf
  * Boot embed (parent): kernel/proc/vfsd_embed.S (.incbin of the ELF).
@@ -103,7 +121,7 @@
 #define VFSD_CACHE_SOFT_STAT     13u
 #define VFSD_CACHE_SOFT_OK       14u
 
-/* Soft bit flags in pCache[VFSD_CACHE_SOFT_BITS] */
+/* Soft door sub-step bits in pCache[VFSD_CACHE_SOFT_BITS] / inventory. */
 #define VFSD_SOFT_BIT_RECLAIM  1u
 #define VFSD_SOFT_BIT_BARE     2u
 #define VFSD_SOFT_BIT_WRITEFD  4u
@@ -113,8 +131,38 @@
 #define VFSD_SOFT_BIT_LIST     64u
 #define VFSD_SOFT_BIT_SEEK_CUR 128u
 #define VFSD_SOFT_BIT_STATS    256u
+#define VFSD_SOFT_BIT_SEEK_END 512u
+
+/* Soft store path bits (Wave 12 inventory; LBA0 mirror + read). */
+#define VFSD_SOFT_STORE_MIRROR 1u
+#define VFSD_SOFT_STORE_READ   2u
+
+/* Soft free path bits (Wave 12 inventory; post-RELEASE no-op). */
+#define VFSD_SOFT_FREE_RELEASE 1u
 
 static unsigned g_uToken;
+
+/*
+ * Wave 12 soft inventory tallies (file-local; wrap OK).
+ * greppable: vfsd-gj: soft …
+ */
+static unsigned g_uSoftDoorBits;
+static unsigned g_uSoftStoreBits;
+static unsigned g_uSoftFreeBits;
+static unsigned g_cSoftDoorOk;
+static unsigned g_cSoftDoorSkip;
+static unsigned g_cSoftStoreOk;
+static unsigned g_cSoftStoreSkip;
+static unsigned g_cSoftFreeOk;
+static unsigned g_cSoftFreeSkip;
+/* Named-cache soft slot snapshots for soft cache inventory. */
+static unsigned g_uSoftCacheReclaim;
+static unsigned g_uSoftCacheWritefd;
+static unsigned g_uSoftCacheSeek;
+static unsigned g_uSoftCacheUnlink;
+static unsigned g_uSoftCacheStat;
+static unsigned g_uSoftCacheBits;
+static unsigned g_uSoftCacheOk;
 
 static void
 msg(const char *sz)
@@ -123,6 +171,52 @@ msg(const char *sz)
         return;
     }
     (void)gj_debug_log(sz, (long)gj_strlen(sz));
+}
+
+/* Append NUL-terminated string into aLine[*pO], leaving room for trailing NUL. */
+static void
+append_s(char *aLine, unsigned cb, unsigned *pO, const char *sz)
+{
+    unsigned o;
+
+    if (aLine == 0 || pO == 0 || sz == 0 || cb == 0u) {
+        return;
+    }
+    o = *pO;
+    while (*sz != '\0' && o + 1u < cb) {
+        aLine[o++] = *sz++;
+    }
+    *pO = o;
+}
+
+/* Append decimal unsigned long. */
+static void
+append_u(char *aLine, unsigned cb, unsigned *pO, unsigned long uVal)
+{
+    char aTmp[24];
+    size_t n;
+
+    n = gj_utoa(uVal, aTmp, sizeof(aTmp));
+    if (n == 0u) {
+        append_s(aLine, cb, pO, "0");
+        return;
+    }
+    append_s(aLine, cb, pO, aTmp);
+}
+
+/* Append lowercase hex (no 0x prefix). */
+static void
+append_x(char *aLine, unsigned cb, unsigned *pO, unsigned long uVal)
+{
+    char aTmp[24];
+    size_t n;
+
+    n = gj_xtoa(uVal, aTmp, sizeof(aTmp), 0, 0);
+    if (n == 0u) {
+        append_s(aLine, cb, pO, "0");
+        return;
+    }
+    append_s(aLine, cb, pO, aTmp);
 }
 
 static void
@@ -162,12 +256,196 @@ buf_contains(const char *pHay, long cbHay, const char *szNeedle, unsigned cbNeed
     return 0;
 }
 
+/* Note one soft door sub-step into Wave 12 inventory counters. */
+static void
+soft_door_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftDoorBits |= uBit;
+        if (g_cSoftDoorOk < 0xffffffffu) {
+            g_cSoftDoorOk++;
+        }
+    } else if (g_cSoftDoorSkip < 0xffffffffu) {
+        g_cSoftDoorSkip++;
+    }
+}
+
+/* Note one soft store sub-step into Wave 12 inventory counters. */
+static void
+soft_store_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftStoreBits |= uBit;
+        if (g_cSoftStoreOk < 0xffffffffu) {
+            g_cSoftStoreOk++;
+        }
+    } else if (g_cSoftStoreSkip < 0xffffffffu) {
+        g_cSoftStoreSkip++;
+    }
+}
+
+/* Note one soft free sub-step into Wave 12 inventory counters. */
+static void
+soft_free_note(unsigned uBit, int fOk)
+{
+    if (fOk != 0) {
+        g_uSoftFreeBits |= uBit;
+        if (g_cSoftFreeOk < 0xffffffffu) {
+            g_cSoftFreeOk++;
+        }
+    } else if (g_cSoftFreeSkip < 0xffffffffu) {
+        g_cSoftFreeSkip++;
+    }
+}
+
+/*
+ * Soft inventory dump (Wave 12 exclusive deepen).
+ * Greppable prefix: "vfsd-gj: soft …"
+ * Pure observation — always soft; never gates live path PASS.
+ *
+ *   vfsd-gj: soft inventory …
+ *   vfsd-gj: soft door …
+ *   vfsd-gj: soft store …
+ *   vfsd-gj: soft free …
+ *   vfsd-gj: soft cache …
+ *   vfsd-gj: soft stats …
+ */
+static void
+soft_inventory_log(void)
+{
+    char aLine[256];
+    unsigned o;
+    unsigned cOk;
+    unsigned cSkip;
+
+    cOk = g_cSoftDoorOk + g_cSoftStoreOk + g_cSoftFreeOk;
+    cSkip = g_cSoftDoorSkip + g_cSoftStoreSkip + g_cSoftFreeSkip;
+
+    /* Grep: vfsd-gj: soft inventory */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft inventory door_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorOk);
+    append_s(aLine, sizeof(aLine), &o, " door_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDoorSkip);
+    append_s(aLine, sizeof(aLine), &o, " store_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStoreOk);
+    append_s(aLine, sizeof(aLine), &o, " store_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStoreSkip);
+    append_s(aLine, sizeof(aLine), &o, " free_ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeOk);
+    append_s(aLine, sizeof(aLine), &o, " free_skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftFreeSkip);
+    append_s(aLine, sizeof(aLine), &o, " wave=12\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: vfsd-gj: soft door */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft door reclaim=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_RECLAIM) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bare=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_BARE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " writefd=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_WRITEFD) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " stat=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_STAT) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " list=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_LIST) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " seek_end=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_SEEK_END) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " seek_cur=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_SEEK_CUR) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " seekfd=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_SEEKFD) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " unlink=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_UNLINK) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftDoorBits & VFSD_SOFT_BIT_STATS) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDoorBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: vfsd-gj: soft store */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft store mirror=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStoreBits & VFSD_SOFT_STORE_MIRROR) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " read=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftStoreBits & VFSD_SOFT_STORE_READ) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStoreBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: vfsd-gj: soft free */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft free release=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)((g_uSoftFreeBits & VFSD_SOFT_FREE_RELEASE) != 0u));
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: vfsd-gj: soft cache (named-page soft slots) */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft cache reclaim=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheReclaim);
+    append_s(aLine, sizeof(aLine), &o, " writefd=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheWritefd);
+    append_s(aLine, sizeof(aLine), &o, " seek=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheSeek);
+    append_s(aLine, sizeof(aLine), &o, " unlink=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheUnlink);
+    append_s(aLine, sizeof(aLine), &o, " stat=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheStat);
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheBits);
+    append_s(aLine, sizeof(aLine), &o, " ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftCacheOk);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: vfsd-gj: soft stats (rollup) */
+    o = 0u;
+    append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft stats ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)cSkip);
+    append_s(aLine, sizeof(aLine), &o, " door_bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDoorBits);
+    append_s(aLine, sizeof(aLine), &o, " store_bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftStoreBits);
+    append_s(aLine, sizeof(aLine), &o, " free_bits=0x");
+    append_x(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+}
+
 /*
  * Soft door surface while CLAIM is held.
  * Never hard-fails: each step soft-skip on rejection / short I/O.
  * Leaves hard-path hello.txt content intact (only mutates soft.tmp).
  * Does not RELEASE / re-token CLAIM ownership (CLAIM PASS stays hard).
- * Returns count of soft sub-steps that greened (0..9).
+ * Tallies Wave 12 soft inventory (vfsd-gj: soft …).
+ * Returns count of soft door sub-steps that greened (0..10).
  */
 static unsigned
 soft_door_path(volatile unsigned *pCache)
@@ -176,7 +454,7 @@ soft_door_path(volatile unsigned *pCache)
     static char aList[160];
     static unsigned aStat[2];
     static unsigned aDoorSt[4];
-    static char aInv[96];
+    static char aInv[128];
     static const char szSoft[] = VFSD_SOFT_NAME;
     static const char szBody[] = VFSD_SOFT_BODY;
     static const char szPatch[] = VFSD_SOFT_PATCH;
@@ -199,20 +477,26 @@ soft_door_path(volatile unsigned *pCache)
     /*
      * 1) Soft reclaim: same-token re-CLAIM is idempotent (vfs_door soft path).
      *    Must stay owned after; failure is soft-skip only. Never hard-fails.
+     *    Dual markers: legacy "reclaim soft …" + greppable "soft reclaim …".
      */
     nRet = gj_vfs(GJ_VFS_OP_CLAIM, (long)VFSD_TOKEN, 0, 0);
     if (nRet == 0) {
         pCache[VFSD_CACHE_SOFT_RECLAIM] = 1u;
         uBits |= VFSD_SOFT_BIT_RECLAIM;
+        soft_door_note(VFSD_SOFT_BIT_RECLAIM, 1);
         cOk++;
         msg("vfsd-gj: reclaim soft PASS\n");
+        msg("vfsd-gj: soft reclaim PASS\n");
     } else {
+        soft_door_note(VFSD_SOFT_BIT_RECLAIM, 0);
         msg("vfsd-gj: reclaim soft-skip\n");
+        msg("vfsd-gj: soft reclaim soft-skip\n");
     }
 
     /*
      * 2) Bare-name OPEN (no /mnt/ prefix) + READFD on hard-path hello.txt.
      *    Soft: kernel path_normalize should accept bare names.
+     *    Dual: "bare OPEN soft …" + greppable "soft bare …".
      */
     {
         static const char szHello[] = "hello.txt";
@@ -221,7 +505,9 @@ soft_door_path(volatile unsigned *pCache)
 
         hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szHello, 0, 0);
         if (hFd < 0) {
+            soft_door_note(VFSD_SOFT_BIT_BARE, 0);
             msg("vfsd-gj: bare OPEN soft-skip\n");
+            msg("vfsd-gj: soft bare soft-skip\n");
         } else {
             (void)gj_memset(aRd, 0, sizeof(aRd));
             nRet = gj_vfs(GJ_VFS_OP_READFD, hFd, (long)(uintptr_t)aRd,
@@ -230,10 +516,14 @@ soft_door_path(volatile unsigned *pCache)
             if (nRet == (long)cbExpect &&
                 gj_memcmp(aRd, szExpect, cbExpect) == 0) {
                 uBits |= VFSD_SOFT_BIT_BARE;
+                soft_door_note(VFSD_SOFT_BIT_BARE, 1);
                 cOk++;
                 msg("vfsd-gj: bare OPEN soft PASS\n");
+                msg("vfsd-gj: soft bare PASS\n");
             } else {
+                soft_door_note(VFSD_SOFT_BIT_BARE, 0);
                 msg("vfsd-gj: bare OPEN soft-skip\n");
+                msg("vfsd-gj: soft bare soft-skip\n");
             }
         }
     }
@@ -241,18 +531,23 @@ soft_door_path(volatile unsigned *pCache)
     /*
      * 3) WRITEFD soft: OPEN(CREAT|RDWR) soft.tmp, WRITEFD body, CLOSE,
      *    name READ verify. Soft-skip on any step fail.
+     *    Dual: "WRITEFD soft …" + greppable "soft WRITEFD …".
      */
     hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szSoft,
                  (long)(GJ_VFS_O_CREAT | GJ_VFS_O_RDWR), 0);
     if (hFd < 0) {
+        soft_door_note(VFSD_SOFT_BIT_WRITEFD, 0);
         msg("vfsd-gj: WRITEFD soft-skip\n");
+        msg("vfsd-gj: soft WRITEFD soft-skip\n");
     } else {
         nRet = gj_vfs(GJ_VFS_OP_WRITEFD, hFd, (long)(uintptr_t)szBody,
                       (long)cbBody);
         (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
         hFd = -1;
         if (nRet != (long)cbBody) {
+            soft_door_note(VFSD_SOFT_BIT_WRITEFD, 0);
             msg("vfsd-gj: WRITEFD soft-skip\n");
+            msg("vfsd-gj: soft WRITEFD soft-skip\n");
         } else {
             (void)gj_memset(aRd, 0, sizeof(aRd));
             nRet = gj_vfs(GJ_VFS_OP_READ, (long)(uintptr_t)szSoft,
@@ -260,10 +555,14 @@ soft_door_path(volatile unsigned *pCache)
             if (nRet == (long)cbBody && gj_memcmp(aRd, szBody, cbBody) == 0) {
                 pCache[VFSD_CACHE_SOFT_WRITEFD] = cbBody;
                 uBits |= VFSD_SOFT_BIT_WRITEFD;
+                soft_door_note(VFSD_SOFT_BIT_WRITEFD, 1);
                 cOk++;
                 msg("vfsd-gj: WRITEFD soft PASS\n");
+                msg("vfsd-gj: soft WRITEFD PASS\n");
             } else {
+                soft_door_note(VFSD_SOFT_BIT_WRITEFD, 0);
                 msg("vfsd-gj: WRITEFD soft-skip\n");
+                msg("vfsd-gj: soft WRITEFD soft-skip\n");
             }
         }
     }
@@ -279,12 +578,15 @@ soft_door_path(volatile unsigned *pCache)
         if (nRet == 0 && aStat[0] == cbBody) {
             pCache[VFSD_CACHE_SOFT_STAT] = aStat[0];
             uBits |= VFSD_SOFT_BIT_STAT;
+            soft_door_note(VFSD_SOFT_BIT_STAT, 1);
             cOk++;
             msg("vfsd-gj: soft STAT PASS\n");
         } else {
+            soft_door_note(VFSD_SOFT_BIT_STAT, 0);
             msg("vfsd-gj: soft STAT soft-skip\n");
         }
     } else {
+        soft_door_note(VFSD_SOFT_BIT_STAT, 0);
         msg("vfsd-gj: soft STAT soft-skip\n");
     }
 
@@ -298,12 +600,15 @@ soft_door_path(volatile unsigned *pCache)
                       (long)sizeof(aList));
         if (nRet >= 0 && buf_contains(aList, nRet, szSoft, cbName)) {
             uBits |= VFSD_SOFT_BIT_LIST;
+            soft_door_note(VFSD_SOFT_BIT_LIST, 1);
             cOk++;
             msg("vfsd-gj: soft LIST PASS\n");
         } else {
+            soft_door_note(VFSD_SOFT_BIT_LIST, 0);
             msg("vfsd-gj: soft LIST soft-skip\n");
         }
     } else {
+        soft_door_note(VFSD_SOFT_BIT_LIST, 0);
         msg("vfsd-gj: soft LIST soft-skip\n");
     }
 
@@ -311,12 +616,18 @@ soft_door_path(volatile unsigned *pCache)
      * 4) SEEKFD soft: reopen RDWR, SEEK END, WRITEFD patch, SEEK SET,
      *    soft SEEK_CUR probe, READFD full, verify patch at end.
      *    Soft-skip if door returns NOSUPPORT or any step fails.
+     *    Wave 12: greppable soft SEEK_END + soft SEEKFD dual markers.
      */
     if ((uBits & VFSD_SOFT_BIT_WRITEFD) != 0u) {
         hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szSoft,
                      (long)GJ_VFS_O_RDWR, 0);
         if (hFd < 0) {
+            soft_door_note(VFSD_SOFT_BIT_SEEK_END, 0);
+            soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 0);
+            soft_door_note(VFSD_SOFT_BIT_SEEKFD, 0);
             msg("vfsd-gj: SEEKFD soft-skip\n");
+            msg("vfsd-gj: soft SEEKFD soft-skip\n");
+            msg("vfsd-gj: soft SEEK_END soft-skip\n");
             msg("vfsd-gj: soft SEEK_CUR soft-skip\n");
         } else {
             long nEnd;
@@ -326,9 +637,28 @@ soft_door_path(volatile unsigned *pCache)
             nEnd = gj_vfs(GJ_VFS_OP_SEEKFD, hFd, 0, (long)GJ_VFS_SEEK_END);
             if (nEnd < 0) {
                 (void)gj_vfs(GJ_VFS_OP_CLOSE, hFd, 0, 0);
+                soft_door_note(VFSD_SOFT_BIT_SEEK_END, 0);
+                soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 0);
+                soft_door_note(VFSD_SOFT_BIT_SEEKFD, 0);
                 msg("vfsd-gj: SEEKFD soft-skip\n");
+                msg("vfsd-gj: soft SEEKFD soft-skip\n");
+                msg("vfsd-gj: soft SEEK_END soft-skip\n");
                 msg("vfsd-gj: soft SEEK_CUR soft-skip\n");
             } else {
+                /*
+                 * Soft SEEK_END: end offset must match body size before patch.
+                 * Greppable: vfsd-gj: soft SEEK_END …
+                 */
+                if (nEnd == (long)cbBody) {
+                    uBits |= VFSD_SOFT_BIT_SEEK_END;
+                    soft_door_note(VFSD_SOFT_BIT_SEEK_END, 1);
+                    cOk++;
+                    msg("vfsd-gj: soft SEEK_END PASS\n");
+                } else {
+                    soft_door_note(VFSD_SOFT_BIT_SEEK_END, 0);
+                    msg("vfsd-gj: soft SEEK_END soft-skip\n");
+                }
+
                 nRet = gj_vfs(GJ_VFS_OP_WRITEFD, hFd,
                               (long)(uintptr_t)szPatch, (long)cbPatch);
                 nSeek = gj_vfs(GJ_VFS_OP_SEEKFD, hFd, 0,
@@ -344,14 +674,17 @@ soft_door_path(volatile unsigned *pCache)
                                   (long)GJ_VFS_SEEK_CUR);
                     if (nCur == (long)cbBody) {
                         uBits |= VFSD_SOFT_BIT_SEEK_CUR;
+                        soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 1);
                         cOk++;
                         msg("vfsd-gj: soft SEEK_CUR PASS\n");
                     } else {
+                        soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 0);
                         msg("vfsd-gj: soft SEEK_CUR soft-skip\n");
                     }
                     nSeek = gj_vfs(GJ_VFS_OP_SEEKFD, hFd, 0,
                                    (long)GJ_VFS_SEEK_SET);
                 } else {
+                    soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 0);
                     msg("vfsd-gj: soft SEEK_CUR soft-skip\n");
                 }
                 (void)gj_memset(aRd, 0, sizeof(aRd));
@@ -371,26 +704,38 @@ soft_door_path(volatile unsigned *pCache)
                     gj_memcmp(aRd + cbBody, szPatch, cbPatch) == 0) {
                     pCache[VFSD_CACHE_SOFT_SEEK] = (unsigned)nRet;
                     uBits |= VFSD_SOFT_BIT_SEEKFD;
+                    soft_door_note(VFSD_SOFT_BIT_SEEKFD, 1);
                     cOk++;
                     msg("vfsd-gj: SEEKFD soft PASS\n");
+                    msg("vfsd-gj: soft SEEKFD PASS\n");
                 } else {
+                    soft_door_note(VFSD_SOFT_BIT_SEEKFD, 0);
                     msg("vfsd-gj: SEEKFD soft-skip\n");
+                    msg("vfsd-gj: soft SEEKFD soft-skip\n");
                 }
                 (void)nCur;
             }
         }
     } else {
+        soft_door_note(VFSD_SOFT_BIT_SEEK_END, 0);
+        soft_door_note(VFSD_SOFT_BIT_SEEK_CUR, 0);
+        soft_door_note(VFSD_SOFT_BIT_SEEKFD, 0);
         msg("vfsd-gj: SEEKFD soft-skip\n");
+        msg("vfsd-gj: soft SEEKFD soft-skip\n");
+        msg("vfsd-gj: soft SEEK_END soft-skip\n");
         msg("vfsd-gj: soft SEEK_CUR soft-skip\n");
     }
 
     /*
      * 5) UNLINK soft: remove soft.tmp; LIST must not contain name.
      *    Best-effort even if create/write soft failed (NOENT is soft-skip).
+     *    Dual: "UNLINK soft …" + greppable "soft UNLINK …".
      */
     nRet = gj_vfs(GJ_VFS_OP_UNLINK, (long)(uintptr_t)szSoft, 0, 0);
     if (nRet != 0) {
+        soft_door_note(VFSD_SOFT_BIT_UNLINK, 0);
         msg("vfsd-gj: UNLINK soft-skip\n");
+        msg("vfsd-gj: soft UNLINK soft-skip\n");
     } else {
         (void)gj_memset(aList, 0, sizeof(aList));
         nRet = gj_vfs(GJ_VFS_OP_LIST, (long)(uintptr_t)aList, 0,
@@ -399,10 +744,14 @@ soft_door_path(volatile unsigned *pCache)
             !buf_contains(aList, nRet, szSoft, cbName)) {
             pCache[VFSD_CACHE_SOFT_UNLINK] = 1u;
             uBits |= VFSD_SOFT_BIT_UNLINK;
+            soft_door_note(VFSD_SOFT_BIT_UNLINK, 1);
             cOk++;
             msg("vfsd-gj: UNLINK soft PASS\n");
+            msg("vfsd-gj: soft UNLINK PASS\n");
         } else {
+            soft_door_note(VFSD_SOFT_BIT_UNLINK, 0);
             msg("vfsd-gj: UNLINK soft-skip\n");
+            msg("vfsd-gj: soft UNLINK soft-skip\n");
         }
     }
 
@@ -415,22 +764,38 @@ soft_door_path(volatile unsigned *pCache)
     nRet = gj_vfs(GJ_VFS_OP_STATS, (long)(uintptr_t)aDoorSt, 0, 0);
     if (nRet == 0 && aDoorSt[2] == 1u && aDoorSt[3] == 1u) {
         uBits |= VFSD_SOFT_BIT_STATS;
+        soft_door_note(VFSD_SOFT_BIT_STATS, 1);
         cOk++;
         msg("vfsd-gj: soft STATS PASS\n");
     } else {
+        soft_door_note(VFSD_SOFT_BIT_STATS, 0);
         msg("vfsd-gj: soft STATS soft-skip\n");
     }
 
     pCache[VFSD_CACHE_SOFT_BITS] = uBits;
     pCache[VFSD_CACHE_SOFT_OK] = cOk;
 
+    /* Snapshot named-cache soft slots for soft cache inventory. */
+    g_uSoftCacheReclaim = pCache[VFSD_CACHE_SOFT_RECLAIM];
+    g_uSoftCacheWritefd = pCache[VFSD_CACHE_SOFT_WRITEFD];
+    g_uSoftCacheSeek = pCache[VFSD_CACHE_SOFT_SEEK];
+    g_uSoftCacheUnlink = pCache[VFSD_CACHE_SOFT_UNLINK];
+    g_uSoftCacheStat = pCache[VFSD_CACHE_SOFT_STAT];
+    g_uSoftCacheBits = uBits;
+    g_uSoftCacheOk = cOk;
+
     /*
-     * Soft inventory rollup — greppable "vfsd-gj: soft stats ok=… bits=…".
-     * Pure observation; never gates hard PASS lines.
+     * Door-local soft stats rollup (Wave 12 deepened fields).
+     * Full store/free rollup is emitted later by soft_inventory_log.
+     * Greppable: vfsd-gj: soft stats ok=… (prefix-stable).
      */
     (void)gj_snprintf(aInv, sizeof(aInv),
-                      "vfsd-gj: soft stats ok=%u bits=0x%x\n",
-                      (unsigned long)cOk, (unsigned long)uBits);
+                      "vfsd-gj: soft stats ok=%u skip=%u bits=0x%x "
+                      "door_bits=0x%x\n",
+                      (unsigned long)cOk,
+                      (unsigned long)g_cSoftDoorSkip,
+                      (unsigned long)uBits,
+                      (unsigned long)g_uSoftDoorBits);
     msg(aInv);
 
     /* Aggregate soft door line — green if any sub-step greened. */
@@ -445,6 +810,7 @@ soft_door_path(volatile unsigned *pCache)
 /*
  * Optional store LBA0 super mirror + soft READ verify.
  * Ownership separate from VFS door; soft-skip when claim busy / short I/O.
+ * Tallies Wave 12 soft store inventory (vfsd-gj: soft store …).
  */
 static void
 soft_store_lba0_mirror(void)
@@ -456,7 +822,11 @@ soft_store_lba0_mirror(void)
     int fMagicOk;
 
     if (gj_store(GJ_STORE_OP_CLAIM, (long)VFSD_TOKEN, 0, 0) != 0) {
+        soft_store_note(VFSD_SOFT_STORE_MIRROR, 0);
+        soft_store_note(VFSD_SOFT_STORE_READ, 0);
         msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
+        msg("vfsd-gj: soft store mirror soft-skip\n");
+        msg("vfsd-gj: soft store read soft-skip\n");
         return;
     }
 
@@ -472,10 +842,16 @@ soft_store_lba0_mirror(void)
                     (long)VFSD_SECTOR_CB);
     if (nRet != (long)VFSD_SECTOR_CB) {
         (void)gj_store(GJ_STORE_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
+        soft_store_note(VFSD_SOFT_STORE_MIRROR, 0);
+        soft_store_note(VFSD_SOFT_STORE_READ, 0);
         msg("vfsd-gj: store LBA0 super mirror soft-skip\n");
+        msg("vfsd-gj: soft store mirror soft-skip\n");
+        msg("vfsd-gj: soft store read soft-skip\n");
         return;
     }
+    soft_store_note(VFSD_SOFT_STORE_MIRROR, 1);
     msg("vfsd-gj: store LBA0 super mirror PASS\n");
+    msg("vfsd-gj: soft store mirror PASS\n");
 
     /* Soft READ-back of LBA0 — verify magic LE bytes stick. */
     (void)gj_memset(aRd, 0, sizeof(aRd));
@@ -484,7 +860,9 @@ soft_store_lba0_mirror(void)
     (void)gj_store(GJ_STORE_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
 
     if (nRet != (long)VFSD_SECTOR_CB) {
+        soft_store_note(VFSD_SOFT_STORE_READ, 0);
         msg("vfsd-gj: store LBA0 read soft-skip\n");
+        msg("vfsd-gj: soft store read soft-skip\n");
         return;
     }
     fMagicOk = 1;
@@ -495,9 +873,13 @@ soft_store_lba0_mirror(void)
         }
     }
     if (fMagicOk != 0 && aRd[4] == aSec[4]) {
+        soft_store_note(VFSD_SOFT_STORE_READ, 1);
         msg("vfsd-gj: store LBA0 read soft PASS\n");
+        msg("vfsd-gj: soft store read PASS\n");
     } else {
+        soft_store_note(VFSD_SOFT_STORE_READ, 0);
         msg("vfsd-gj: store LBA0 read soft-skip\n");
+        msg("vfsd-gj: soft store read soft-skip\n");
     }
 }
 
@@ -679,13 +1061,25 @@ _start(void)
     /*
      * Soft free RELEASE: door already free → soft no-op (0).
      * Never hard-fails live path.
+     * Dual: "RELEASE free soft …" + greppable "soft free …".
+     * Tallies Wave 12 soft free inventory.
      */
     nRet = gj_vfs(GJ_VFS_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
     if (nRet == 0) {
+        soft_free_note(VFSD_SOFT_FREE_RELEASE, 1);
         msg("vfsd-gj: RELEASE free soft PASS\n");
+        msg("vfsd-gj: soft free PASS\n");
     } else {
+        soft_free_note(VFSD_SOFT_FREE_RELEASE, 0);
         msg("vfsd-gj: RELEASE free soft-skip\n");
+        msg("vfsd-gj: soft free soft-skip\n");
     }
+
+    /*
+     * Wave 12 soft inventory dump — greppable "vfsd-gj: soft …".
+     * Pure observation after all soft door / store / free work.
+     */
+    soft_inventory_log();
 
     /* Re-check named cache still holds magic after FS work */
     if (pCache[0] != GJ_VFS_MAGIC) {

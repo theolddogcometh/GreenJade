@@ -8,6 +8,21 @@
  * Soft deepen: multi-frame RX drain per poll, VLAN skip, IHL-aware ICMP,
  * frame/drop/tcp demux counters, greppable soft eth inventory log.
  *
+ * Wave 12 exclusive soft inventory deepen (this unit only; never hard-gates):
+ *   net: eth soft …              — prefix-stable product / smoke markers
+ *   net: eth soft inventory      — verdict + lifetime rollup + caps
+ *   net: eth soft frames         — rx / drop / ok / vlan / short buckets
+ *   net: eth soft demux          — ethertype + IPv4 proto path tallies
+ *   net: eth soft arp            — request / reply / reject soft path
+ *   net: eth soft icmp           — echo req / reply / reject soft path
+ *   net: eth soft udp            — port-7 echo / reject soft path
+ *   net: eth soft tcp            — demux hit / miss soft path
+ *   net: eth soft poll           — poll / nodev / drain / batch soft
+ *   net: eth soft link           — ready shadow + transitions + identity
+ *   net: eth soft tx             — reply TX ok/fail soft
+ *   net: eth soft path           — honesty: L2 demux soft ≠ netstackd / bar3
+ * greppable: net: eth soft
+ *
  * Greppable soft inventory (prefix-stable):
  *   net: eth soft …
  *   net_eth: ARP/UDP/ICMP-echo helpers
@@ -24,6 +39,10 @@ static const u8 g_aOurIp[4] = { 10, 0, 2, 15 };
 
 /* Max frames drained per net_eth_poll (soft batch). */
 #define NET_ETH_POLL_MAX 8
+/* Soft inventory re-log cadence after first activity (poll entries). */
+#define NET_ETH_SOFT_LOG_EVERY 256u
+/* Cap inventory spam (init + link flips + first drain + cadence). */
+#define NET_ETH_SOFT_LOG_CAP   16u
 
 /* Protocol soft counters (lifetime; door STATS + inventory). */
 static u32 g_u32ArpReplies;
@@ -39,11 +58,67 @@ static u32 g_u32FramesOk;      /* handle_frame recognized ethertype path */
 static u32 g_u32Polls;         /* net_eth_poll entries */
 static u32 g_u32PollsNoDev;    /* polls with virtio-net not ready */
 static u32 g_u32PollsDrain;    /* polls that drained ≥1 frame */
+static u32 g_u32PollsEmpty;    /* ready polls that drained 0 frames */
 static u32 g_u32LastBatch;     /* frames drained on last drain poll */
 static u32 g_u32BatchMax;      /* peak frames in one poll drain */
+static u32 g_u32BatchSum;      /* sum of batch sizes (avg = sum/drain) */
 static u32 g_u32LinkReady;     /* soft shadow of virtio_net_ready() */
 static u32 g_u32LinkChanges;   /* soft link ready 0↔1 transitions */
 static u32 g_u32SoftLogN;      /* inventory log emissions (cap spam) */
+
+/*
+ * Wave 12 exclusive deepen — file-local path tallies (wrap OK; never hard-gate).
+ * greppable: net: eth soft …
+ */
+static u32 g_u32DropShort;     /* cb < 14 or null frame */
+static u32 g_u32DropEtype;     /* unknown ethertype */
+static u32 g_u32DropIpv4Short; /* IPv4 ethertype but frame < 14+20 */
+static u32 g_u32DropIpv4Ver;   /* not IPv4 version nibble */
+static u32 g_u32DropProto;     /* IPv4 proto not ICMP/UDP/TCP */
+static u32 g_u32ArpSeen;       /* ARP ethertype into handle_arp */
+static u32 g_u32ArpBadOp;      /* ARP not request */
+static u32 g_u32ArpNotUs;      /* ARP TPA ≠ our IP */
+static u32 g_u32ArpTxFail;     /* ARP reply TX fail */
+static u32 g_u32IcmpSeen;      /* IPv4 proto 1 into handle_icmp */
+static u32 g_u32IcmpShort;     /* ICMP path length reject */
+static u32 g_u32IcmpNotUs;     /* ICMP dst ≠ our IP */
+static u32 g_u32IcmpNotEcho;   /* ICMP type ≠ echo request */
+static u32 g_u32IcmpTxFail;    /* ICMP reply TX fail */
+static u32 g_u32UdpSeen;       /* IPv4 proto 17 into handle_udp */
+static u32 g_u32UdpShort;      /* UDP path length reject */
+static u32 g_u32UdpNotEcho;    /* dport ≠ 7 */
+static u32 g_u32UdpTxFail;     /* UDP echo TX fail */
+static u32 g_u32TcpSeen;       /* IPv4 proto 6 into TCP demux */
+static u32 g_u32TcpMiss;       /* net_tcp_input returned 0 (no consume) */
+static u32 g_u32TxOk;          /* reply TX success (arp+icmp+udp) */
+static u32 g_u32TxFail;        /* reply TX fail aggregate */
+static u32 g_u32BytesRx;       /* soft sum of accepted frame lengths */
+static u32 g_u32BytesTx;       /* soft sum of reply TX lengths */
+
+static void net_eth_soft_inc(u32 *pCtr);
+static void net_eth_soft_add(u32 *pCtr, u32 u32N);
+static void net_eth_soft_log(void);
+static void net_eth_soft_maybe_cadence(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+net_eth_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/** Soft: add to path tally (u32 wrap OK). */
+static void
+net_eth_soft_add(u32 *pCtr, u32 u32N)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    *pCtr += u32N;
+}
 
 static u16
 htons(u16 u16V)
@@ -73,10 +148,22 @@ ip_checksum(const void *p, u32 cb)
 /**
  * Soft eth inventory log — greppable product markers only (never hard-gates).
  *
+ * Wave 12 multi-line deepen (prefix-stable "net: eth soft …"):
  *   net: eth soft PASS|UP|NODEV|PARTIAL frames_rx=… drop=… ok=… vlan=…
  *        tcp=… arp=… udp=… icmp=… poll_max=…
- *   net: eth soft link ready=… polls=… nodev=… drain=… last_batch=…
- *        batch_max=… link_ch=… ip=… mac=…
+ *   net: eth soft inventory …
+ *   net: eth soft frames …
+ *   net: eth soft demux …
+ *   net: eth soft arp …
+ *   net: eth soft icmp …
+ *   net: eth soft udp …
+ *   net: eth soft tcp …
+ *   net: eth soft poll …
+ *   net: eth soft link ready=… polls=… nodev=… drain=…
+ *        last_batch=… batch_max=… link_ch=… log_n=… ip=… mac=…
+ *   net: eth soft tx …
+ *   net: eth soft path …
+ * greppable: net: eth soft
  */
 static void
 net_eth_soft_log(void)
@@ -84,10 +171,15 @@ net_eth_soft_log(void)
     const char *szVerdict;
     u32 u32Ready;
     u32 u32Proto;
+    u32 u32AvgBatch;
 
     u32Ready = virtio_net_ready() ? 1u : 0u;
     u32Proto = g_u32ArpReplies + g_u32UdpEchoes + g_u32IcmpEchoes +
                g_u32TcpDemux;
+    u32AvgBatch = 0u;
+    if (g_u32PollsDrain != 0u) {
+        u32AvgBatch = g_u32BatchSum / g_u32PollsDrain;
+    }
 
     /*
      * Verdict (soft product inventory; door paths unchanged):
@@ -106,16 +198,74 @@ net_eth_soft_log(void)
         szVerdict = "UP";
     }
 
-    if (g_u32SoftLogN < 0xffffffffu) {
-        g_u32SoftLogN++;
-    }
+    net_eth_soft_inc(&g_u32SoftLogN);
 
-    /* Grep: net: eth soft */
+    /* Grep: net: eth soft (legacy verdict + protocol rollup; field-stable) */
     kprintf("net: eth soft %s frames_rx=%u drop=%u ok=%u vlan=%u tcp=%u "
             "arp=%u udp=%u icmp=%u poll_max=%u\n",
             szVerdict, g_u32FramesRx, g_u32FramesDrop, g_u32FramesOk,
             g_u32VlanSkip, g_u32TcpDemux, g_u32ArpReplies, g_u32UdpEchoes,
             g_u32IcmpEchoes, (u32)NET_ETH_POLL_MAX);
+
+    /* Grep: net: eth soft inventory */
+    kprintf("net: eth soft inventory verdict=%s ready=%u frames_rx=%u "
+            "drop=%u ok=%u vlan=%u proto=%u tcp=%u arp=%u udp=%u icmp=%u "
+            "tx_ok=%u tx_fail=%u bytes_rx=%u bytes_tx=%u poll_max=%u "
+            "log_n=%u wave=12\n",
+            szVerdict, u32Ready, g_u32FramesRx, g_u32FramesDrop,
+            g_u32FramesOk, g_u32VlanSkip, u32Proto, g_u32TcpDemux,
+            g_u32ArpReplies, g_u32UdpEchoes, g_u32IcmpEchoes, g_u32TxOk,
+            g_u32TxFail, g_u32BytesRx, g_u32BytesTx, (u32)NET_ETH_POLL_MAX,
+            g_u32SoftLogN);
+
+    /* Grep: net: eth soft frames */
+    kprintf("net: eth soft frames rx=%u drop=%u ok=%u vlan=%u short=%u "
+            "etype=%u ipv4_short=%u ipv4_ver=%u proto=%u bytes_rx=%u\n",
+            g_u32FramesRx, g_u32FramesDrop, g_u32FramesOk, g_u32VlanSkip,
+            g_u32DropShort, g_u32DropEtype, g_u32DropIpv4Short,
+            g_u32DropIpv4Ver, g_u32DropProto, g_u32BytesRx);
+
+    /* Grep: net: eth soft demux */
+    kprintf("net: eth soft demux arp_ok=%u icmp_ok=%u udp_ok=%u tcp_ok=%u "
+            "vlan_skip=%u drop_short=%u drop_etype=%u drop_ipv4=%u "
+            "drop_proto=%u frames_ok=%u\n",
+            g_u32ArpReplies, g_u32IcmpEchoes, g_u32UdpEchoes, g_u32TcpDemux,
+            g_u32VlanSkip, g_u32DropShort, g_u32DropEtype,
+            g_u32DropIpv4Short + g_u32DropIpv4Ver, g_u32DropProto,
+            g_u32FramesOk);
+
+    /* Grep: net: eth soft arp */
+    kprintf("net: eth soft arp seen=%u reply=%u bad_op=%u not_us=%u "
+            "tx_fail=%u\n",
+            g_u32ArpSeen, g_u32ArpReplies, g_u32ArpBadOp, g_u32ArpNotUs,
+            g_u32ArpTxFail);
+
+    /* Grep: net: eth soft icmp */
+    kprintf("net: eth soft icmp seen=%u echo=%u short=%u not_us=%u "
+            "not_echo=%u tx_fail=%u\n",
+            g_u32IcmpSeen, g_u32IcmpEchoes, g_u32IcmpShort, g_u32IcmpNotUs,
+            g_u32IcmpNotEcho, g_u32IcmpTxFail);
+
+    /* Grep: net: eth soft udp */
+    kprintf("net: eth soft udp seen=%u echo=%u short=%u not_echo=%u "
+            "tx_fail=%u dport=7\n",
+            g_u32UdpSeen, g_u32UdpEchoes, g_u32UdpShort, g_u32UdpNotEcho,
+            g_u32UdpTxFail);
+
+    /* Grep: net: eth soft tcp */
+    kprintf("net: eth soft tcp seen=%u demux=%u miss=%u "
+            "(net_tcp_input soft; multi-seg via net_tcp_poll)\n",
+            g_u32TcpSeen, g_u32TcpDemux, g_u32TcpMiss);
+
+    /* Grep: net: eth soft poll */
+    kprintf("net: eth soft poll entries=%u nodev=%u drain=%u empty=%u "
+            "last_batch=%u batch_max=%u batch_sum=%u batch_avg=%u "
+            "poll_max=%u cadence=%u\n",
+            g_u32Polls, g_u32PollsNoDev, g_u32PollsDrain, g_u32PollsEmpty,
+            g_u32LastBatch, g_u32BatchMax, g_u32BatchSum, u32AvgBatch,
+            (u32)NET_ETH_POLL_MAX, (u32)NET_ETH_SOFT_LOG_EVERY);
+
+    /* Grep: net: eth soft link (legacy field-stable line + log_n) */
     kprintf("net: eth soft link ready=%u polls=%u nodev=%u drain=%u "
             "last_batch=%u batch_max=%u link_ch=%u log_n=%u "
             "ip=%u.%u.%u.%u mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -124,6 +274,42 @@ net_eth_soft_log(void)
             g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
             g_aOurMac[0], g_aOurMac[1], g_aOurMac[2], g_aOurMac[3],
             g_aOurMac[4], g_aOurMac[5]);
+
+    /* Grep: net: eth soft tx */
+    kprintf("net: eth soft tx ok=%u fail=%u bytes=%u arp=%u icmp=%u udp=%u "
+            "(reply path only; not full stack TX)\n",
+            g_u32TxOk, g_u32TxFail, g_u32BytesTx, g_u32ArpReplies,
+            g_u32IcmpEchoes, g_u32UdpEchoes);
+
+    /* Grep: net: eth soft path */
+    kprintf("net: eth soft path virtio_rx=batch demux=arp|icmp|udp7|tcp "
+            "vlan=skip_count ihl=icmp_soft rtx=net_tcp_poll "
+            "guest=10.0.2.15/52:54:00:12:34:56 "
+            "(soft inventory; not netstackd; not bar3)\n");
+}
+
+/**
+ * Soft cadence re-log after activity (rate-capped). Never hard-gates.
+ */
+static void
+net_eth_soft_maybe_cadence(void)
+{
+    if (g_u32SoftLogN >= NET_ETH_SOFT_LOG_CAP) {
+        return;
+    }
+    if (g_u32Polls == 0u) {
+        return;
+    }
+    if ((g_u32Polls % NET_ETH_SOFT_LOG_EVERY) != 0u) {
+        return;
+    }
+    /* Only cadence when there has been RX or protocol activity. */
+    if (g_u32FramesRx == 0u && g_u32FramesDrop == 0u &&
+        g_u32ArpReplies == 0u && g_u32IcmpEchoes == 0u &&
+        g_u32UdpEchoes == 0u && g_u32TcpDemux == 0u) {
+        return;
+    }
+    net_eth_soft_log();
 }
 
 void
@@ -140,11 +326,37 @@ net_eth_init(void)
     g_u32Polls = 0;
     g_u32PollsNoDev = 0;
     g_u32PollsDrain = 0;
+    g_u32PollsEmpty = 0;
     g_u32LastBatch = 0;
     g_u32BatchMax = 0;
+    g_u32BatchSum = 0;
     g_u32LinkReady = 0;
     g_u32LinkChanges = 0;
     g_u32SoftLogN = 0;
+    g_u32DropShort = 0;
+    g_u32DropEtype = 0;
+    g_u32DropIpv4Short = 0;
+    g_u32DropIpv4Ver = 0;
+    g_u32DropProto = 0;
+    g_u32ArpSeen = 0;
+    g_u32ArpBadOp = 0;
+    g_u32ArpNotUs = 0;
+    g_u32ArpTxFail = 0;
+    g_u32IcmpSeen = 0;
+    g_u32IcmpShort = 0;
+    g_u32IcmpNotUs = 0;
+    g_u32IcmpNotEcho = 0;
+    g_u32IcmpTxFail = 0;
+    g_u32UdpSeen = 0;
+    g_u32UdpShort = 0;
+    g_u32UdpNotEcho = 0;
+    g_u32UdpTxFail = 0;
+    g_u32TcpSeen = 0;
+    g_u32TcpMiss = 0;
+    g_u32TxOk = 0;
+    g_u32TxFail = 0;
+    g_u32BytesRx = 0;
+    g_u32BytesTx = 0;
     /* Soft shadow of device ready at init (probe may run later). */
     g_u32LinkReady = virtio_net_ready() ? 1u : 0u;
     kprintf("net_eth: ARP/UDP/ICMP-echo helpers (IP %u.%u.%u.%u) poll_max=%u\n",
@@ -164,28 +376,37 @@ handle_icmp(const u8 *pFrame, u32 cb)
     u16 u16Tot;
     u16 u16Ihl;
     u32 cbIcmp;
+    u32 cbOut;
     u32 i;
 
+    net_eth_soft_inc(&g_u32IcmpSeen);
+
     if (cb < 42) {
+        net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
     pIp = pFrame + 14;
     if ((pIp[0] & 0xf0) != 0x40 || pIp[9] != 1) {
+        net_eth_soft_inc(&g_u32IcmpShort);
         return; /* IPv4 ICMP */
     }
     u16Ihl = (u16)((pIp[0] & 0x0f) * 4);
     if (u16Ihl < 20 || cb < 14u + u16Ihl + 8u) {
+        net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
     if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
+        net_eth_soft_inc(&g_u32IcmpNotUs);
         return;
     }
     pIcmp = pIp + u16Ihl;
     if (pIcmp[0] != 8) {
+        net_eth_soft_inc(&g_u32IcmpNotEcho);
         return; /* echo request */
     }
     u16Tot = (u16)((pIp[2] << 8) | pIp[3]);
     if (u16Tot < (u16)(u16Ihl + 8) || (u32)(14 + u16Tot) > cb || u16Tot > 100) {
+        net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
     cbIcmp = (u32)u16Tot - (u32)u16Ihl;
@@ -228,8 +449,14 @@ handle_icmp(const u8 *pFrame, u32 cb)
         aOut[14 + 22] = (u8)(u16C >> 8);
         aOut[14 + 23] = (u8)(u16C & 0xff);
     }
-    if (virtio_net_tx(aOut, 14u + 20u + cbIcmp) == 0) {
-        g_u32IcmpEchoes++;
+    cbOut = 14u + 20u + cbIcmp;
+    if (virtio_net_tx(aOut, cbOut) == 0) {
+        net_eth_soft_inc(&g_u32IcmpEchoes);
+        net_eth_soft_inc(&g_u32TxOk);
+        net_eth_soft_add(&g_u32BytesTx, cbOut);
+    } else {
+        net_eth_soft_inc(&g_u32IcmpTxFail);
+        net_eth_soft_inc(&g_u32TxFail);
     }
 }
 
@@ -240,15 +467,20 @@ handle_arp(const u8 *pFrame, u32 cb)
     u8 aOut[64];
     const u8 *pArp;
 
+    net_eth_soft_inc(&g_u32ArpSeen);
+
     if (cb < 42) {
+        net_eth_soft_inc(&g_u32ArpBadOp);
         return;
     }
     pArp = pFrame + 14;
     /* op == request (1), tpa == us */
     if (pArp[6] != 0 || pArp[7] != 1) {
+        net_eth_soft_inc(&g_u32ArpBadOp);
         return;
     }
     if (memcmp(pArp + 24, g_aOurIp, 4) != 0) {
+        net_eth_soft_inc(&g_u32ArpNotUs);
         return;
     }
     memset(aOut, 0, sizeof(aOut));
@@ -271,7 +503,12 @@ handle_arp(const u8 *pFrame, u32 cb)
     memcpy(aOut + 32, pArp + 8, 6);  /* tha = sender hw */
     memcpy(aOut + 38, pArp + 14, 4); /* tpa = sender ip */
     if (virtio_net_tx(aOut, 42) == 0) {
-        g_u32ArpReplies++;
+        net_eth_soft_inc(&g_u32ArpReplies);
+        net_eth_soft_inc(&g_u32TxOk);
+        net_eth_soft_add(&g_u32BytesTx, 42u);
+    } else {
+        net_eth_soft_inc(&g_u32ArpTxFail);
+        net_eth_soft_inc(&g_u32TxFail);
     }
 }
 
@@ -291,15 +528,20 @@ handle_udp(const u8 *pFrame, u32 cb)
     u8 *pOudp;
     u32 cbOut;
 
+    net_eth_soft_inc(&g_u32UdpSeen);
+
     if (cb < 14 + 20 + 8) {
+        net_eth_soft_inc(&g_u32UdpShort);
         return;
     }
     pIp = pFrame + 14;
     if ((pIp[0] >> 4) != 4 || pIp[9] != 17) {
+        net_eth_soft_inc(&g_u32UdpShort);
         return; /* not IPv4 UDP */
     }
     u16Ihl = (u16)((pIp[0] & 0x0f) * 4);
     if (cb < 14u + u16Ihl + 8u) {
+        net_eth_soft_inc(&g_u32UdpShort);
         return;
     }
     pUdp = pIp + u16Ihl;
@@ -307,9 +549,11 @@ handle_udp(const u8 *pFrame, u32 cb)
     u16Sport = (u16)((pUdp[0] << 8) | pUdp[1]);
     u16Ulen = (u16)((pUdp[4] << 8) | pUdp[5]);
     if (u16Dport != 7) {
+        net_eth_soft_inc(&g_u32UdpNotEcho);
         return; /* echo */
     }
     if (u16Ulen < 8 || 14u + u16Ihl + u16Ulen > cb) {
+        net_eth_soft_inc(&g_u32UdpShort);
         return;
     }
     cbPay = (u32)u16Ulen - 8u;
@@ -348,7 +592,12 @@ handle_udp(const u8 *pFrame, u32 cb)
     }
     cbOut = 14u + 20u + 8u + cbPay;
     if (virtio_net_tx(aOut, cbOut) == 0) {
-        g_u32UdpEchoes++;
+        net_eth_soft_inc(&g_u32UdpEchoes);
+        net_eth_soft_inc(&g_u32TxOk);
+        net_eth_soft_add(&g_u32BytesTx, cbOut);
+    } else {
+        net_eth_soft_inc(&g_u32UdpTxFail);
+        net_eth_soft_inc(&g_u32TxFail);
     }
     (void)htons;
 }
@@ -364,54 +613,63 @@ handle_frame(const u8 *pFrame, u32 cb)
     u16 u16Etype;
 
     if (pFrame == NULL || cb < 14) {
-        g_u32FramesDrop++;
+        net_eth_soft_inc(&g_u32FramesDrop);
+        net_eth_soft_inc(&g_u32DropShort);
         return 0;
     }
-    g_u32FramesRx++;
+    net_eth_soft_inc(&g_u32FramesRx);
+    net_eth_soft_add(&g_u32BytesRx, cb);
     u16Etype = (u16)((pFrame[12] << 8) | pFrame[13]);
     /* Soft VLAN: 802.1Q — count and ignore (no inner demux yet). */
     if (u16Etype == 0x8100u) {
-        g_u32VlanSkip++;
+        net_eth_soft_inc(&g_u32VlanSkip);
         return 0;
     }
     if (u16Etype == 0x0806u) {
         handle_arp(pFrame, cb);
-        g_u32FramesOk++;
+        net_eth_soft_inc(&g_u32FramesOk);
         return 1;
     }
     if (u16Etype == 0x0800u) {
         const u8 *pIp = pFrame + 14;
 
         if (cb < 14 + 20) {
-            g_u32FramesDrop++;
+            net_eth_soft_inc(&g_u32FramesDrop);
+            net_eth_soft_inc(&g_u32DropIpv4Short);
             return 0;
         }
         if ((pIp[0] & 0xf0) != 0x40) {
-            g_u32FramesDrop++;
+            net_eth_soft_inc(&g_u32FramesDrop);
+            net_eth_soft_inc(&g_u32DropIpv4Ver);
             return 0;
         }
         if (pIp[9] == 1) {
             handle_icmp(pFrame, cb);
-            g_u32FramesOk++;
+            net_eth_soft_inc(&g_u32FramesOk);
             return 1;
         }
         if (pIp[9] == 17) {
             handle_udp(pFrame, cb);
-            g_u32FramesOk++;
+            net_eth_soft_inc(&g_u32FramesOk);
             return 1;
         }
         if (pIp[9] == 6) {
             /* Ordered multi-seg data path for product TCP. */
+            net_eth_soft_inc(&g_u32TcpSeen);
             if (net_tcp_input(pFrame, cb)) {
-                g_u32TcpDemux++;
+                net_eth_soft_inc(&g_u32TcpDemux);
+            } else {
+                net_eth_soft_inc(&g_u32TcpMiss);
             }
-            g_u32FramesOk++;
+            net_eth_soft_inc(&g_u32FramesOk);
             return 1;
         }
-        g_u32FramesDrop++;
+        net_eth_soft_inc(&g_u32FramesDrop);
+        net_eth_soft_inc(&g_u32DropProto);
         return 0;
     }
-    g_u32FramesDrop++;
+    net_eth_soft_inc(&g_u32FramesDrop);
+    net_eth_soft_inc(&g_u32DropEtype);
     return 0;
 }
 
@@ -428,11 +686,9 @@ net_eth_soft_link_sample(void)
     u32Now = virtio_net_ready() ? 1u : 0u;
     if (u32Now != g_u32LinkReady) {
         g_u32LinkReady = u32Now;
-        if (g_u32LinkChanges < 0xffffffffu) {
-            g_u32LinkChanges++;
-        }
+        net_eth_soft_inc(&g_u32LinkChanges);
         /* Cap inventory spam: init + first few link flips only. */
-        if (g_u32SoftLogN < 8u) {
+        if (g_u32SoftLogN < NET_ETH_SOFT_LOG_CAP) {
             net_eth_soft_log();
         }
     }
@@ -447,9 +703,7 @@ net_eth_poll(void)
     u32 u32Batch;
     u32 u32Ready;
 
-    if (g_u32Polls < 0xffffffffu) {
-        g_u32Polls++;
-    }
+    net_eth_soft_inc(&g_u32Polls);
 
     u32Ready = net_eth_soft_link_sample();
     if (u32Ready == 0u) {
@@ -458,10 +712,9 @@ net_eth_poll(void)
          * loopback multi-seg advances SndUna inline in net_tcp_send.
          * Still tick TCP soft TIME_WAIT / rtx for any live sockets.
          */
-        if (g_u32PollsNoDev < 0xffffffffu) {
-            g_u32PollsNoDev++;
-        }
+        net_eth_soft_inc(&g_u32PollsNoDev);
         net_tcp_poll();
+        net_eth_soft_maybe_cadence();
         return;
     }
     /* Soft multi-frame drain: up to NET_ETH_POLL_MAX frames per call. */
@@ -474,9 +727,8 @@ net_eth_poll(void)
     }
     if (u32Batch != 0u) {
         g_u32LastBatch = u32Batch;
-        if (g_u32PollsDrain < 0xffffffffu) {
-            g_u32PollsDrain++;
-        }
+        net_eth_soft_inc(&g_u32PollsDrain);
+        net_eth_soft_add(&g_u32BatchSum, u32Batch);
         if (u32Batch > g_u32BatchMax) {
             g_u32BatchMax = u32Batch;
         }
@@ -484,12 +736,15 @@ net_eth_poll(void)
          * First drain with traffic: one more greppable inventory line so
          * smokes see frames soft counters without needing a soft_log export.
          */
-        if (g_u32PollsDrain == 1u && g_u32SoftLogN < 8u) {
+        if (g_u32PollsDrain == 1u && g_u32SoftLogN < NET_ETH_SOFT_LOG_CAP) {
             net_eth_soft_log();
         }
+    } else {
+        net_eth_soft_inc(&g_u32PollsEmpty);
     }
     /* Always tick last-seg rtx + TIME_WAIT soft reap after poll attempt. */
     net_tcp_poll();
+    net_eth_soft_maybe_cadence();
 }
 
 u32

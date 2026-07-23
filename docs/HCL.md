@@ -99,9 +99,11 @@ make live-iso
 
 Parallel waves **soft shipped** (kernel / media / continuum graph only). **Open bars stay open.**
 
-**Soft stamp (Wave 9):** continuum **makefile_max=15100** soft only (`graph_batch15100.c` parent wire / CREATE-ONLY decades when present on tree). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+**Soft stamp (Wave 9, historical):** continuum **makefile_max=15100** soft only (`graph_batch15100.c` parent wire / CREATE-ONLY decades when present on tree). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
 
-### Soft probes ≠ full HCL product (Wave 9 honesty)
+**Soft stamp (Wave 12):** continuum **makefile_max=15400** soft only (`graph_batch15400.c` parent wire / CREATE-ONLY decades when present on tree). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. Soft probes and continuum growth remain **≠ full HCL product**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+
+### Soft probes ≠ full HCL product (Wave 9 honesty — retained)
 
 HCL soft probes and continuum growth are **not** a product HCL certification:
 
@@ -109,17 +111,41 @@ HCL soft probes and continuum growth are **not** a product HCL certification:
 |--------------|------------|--------------------|
 | PCI class / CAP / GHC / status **soft probes** (NVMe, AHCI, USB HC, PS/2, virtio-scsi INQUIRY, …) | Bring-up greppable path; optional map via `vmm_map_device_uc` when present | Documented T1+ **product** install matrix; full driver stack; certified real-hw support |
 | T0 virtio + OVMF CI (`make smoke`) | Virtual HCL gate | Real-DUT HCL product close |
-| Continuum **makefile_max=15100** | CREATE-ONLY soft graph high-water only | Runtime ABI product; Steam client; Deck Top 50; bar3 |
+| Continuum **makefile_max=15100** (Wave 9 high-water, historical) | CREATE-ONLY soft graph high-water only | Runtime ABI product; Steam client; Deck Top 50; bar3 |
 | Media `STATUS=READY` / `steam-bar3-check` | Host/media bootstrap inventory | Client launch; title try; HCL product bar |
 | Kernel smokes (io_uring min, HDA multi-stream, 768G soak, aarch64 M0, VT-d soft, …) | Surface soft ship | Full HCL tier product; bar3; game I/O/audio |
 
-**Hard rule:** never promote soft probes, continuum **15100**, or media READY to “HCL product complete,” T1+ certified, or **bar3 closed**. Open bars below stay open.
+**Hard rule (Wave 9):** never promote soft probes, continuum **15100**, or media READY to “HCL product complete,” T1+ certified, or **bar3 closed**. Open bars below stay open.
+
+### Soft probes ≠ full HCL product (Wave 12 honesty)
+
+**Additive only.** Wave 9 table and hard rule above stay historical ledger. This section is Wave 12 honesty: continuum high-water **makefile_max=15400** soft only. Soft probes ≠ full HCL product. **bar3 remains OPEN.**
+
+| Soft surface | What it is | What it is **not** |
+|--------------|------------|--------------------|
+| PCI class / CAP / GHC / status **soft probes** (NVMe, AHCI, USB HC, PS/2, virtio-scsi INQUIRY, …) | Bring-up greppable path; optional map via `vmm_map_device_uc` when present | Documented T1+ **product** install matrix; full driver stack; certified real-hw support |
+| T0 virtio + OVMF CI (`make smoke`) | Virtual HCL gate | Real-DUT HCL product close |
+| Continuum **makefile_max=15400** | CREATE-ONLY soft graph high-water only (`graph_batch15400.c` when present) | Runtime ABI product; Steam client; Deck Top 50; bar3; **full HCL product** |
+| Media `STATUS=READY` / `steam-bar3-check` | Host/media bootstrap inventory | Client launch; title try; HCL product bar |
+| Kernel smokes (io_uring min, HDA multi-stream, 768G soak, aarch64 M0, VT-d soft, …) | Surface soft ship | Full HCL tier product; bar3; game I/O/audio |
+
+**Hard rule (Wave 12):** never promote soft probes, continuum **makefile_max=15400**, or media READY to “HCL product complete,” T1+ certified, or **bar3 closed**. Soft continuum ≠ full HCL product. Soft probes ≠ full HCL product. Open bars below stay open.
+
+### Explicit non-claims (Wave 12)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Continuum **makefile_max=15400** soft graph high-water (CREATE-ONLY)” | **Yes** — soft only |
+| “Media `STATUS=READY` / steam-bar3-check inventory READY” | **Yes** — media bootstrap only |
+| “Soft probes / T0 CI greppable” | **Yes** — probe / virtual gate only |
+| “Full HCL product / T1+ certified real-hw matrix closed” | **No** |
+| “bar3 closed / Steam client on DUT / Deck Top 50 leave NOT-TRIED” | **No** |
 
 ### Soft shipped (not product bars)
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid` / `hda_client`
 - Residual **#UD** closed
-- Continuum **makefile_max=15100** (soft graph only — not Steam client; parallel-wave CREATE-ONLY decades; **not** full HCL product)
+- Continuum **makefile_max=15400** (soft graph only — not Steam client; parallel-wave CREATE-ONLY decades; **not** full HCL product; Wave 9 historical high-water was **15100**)
 - **io_uring** soft surface shipped (`io_uring_min.c`; `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`) — vfs_ram/kernel smoke, **not** game I/O
 - **GJ_MEM=768G** hierarchical `soak_tib` **PASS** on host class **≥1TiB** — product bar still **≥ 1 TiB** full path when host allows
 - **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`; shared C + PSCI smokes) — separate arch tree; not Deck/x86 product kernel
@@ -129,11 +155,11 @@ HCL soft probes and continuum growth are **not** a product HCL certification:
 
 ### Open bars (do not claim done)
 
-- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**; soft probes / continuum 15100 do **not** close)
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**; soft probes / continuum **makefile_max=15400** do **not** close)
 - Deck Top 50 title runs — all **NOT-TRIED** (no titles tried; claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
 - Steam/game audio / title matrix fill — **open** (blocked on bar3 client run)
-- **Full HCL product** (documented T1+ real-hw install matrix beyond soft probes) — **open**
+- **Full HCL product** (documented T1+ real-hw install matrix beyond soft probes) — **open** (soft probes ≠ full HCL product)
 
 ## Related docs
 

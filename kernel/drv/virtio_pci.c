@@ -10,6 +10,16 @@
  *   - feature read/write helpers + soft negotiate ladder
  *   - queue soft size clamp, disable-before-setup, enable verify
  *
+ * Soft transport inventory (Wave 12 exclusive; this unit only):
+ *   - Scan catalog (found / kind tallies / modern setup)
+ *   - Setup / reset / feature negotiate + soft ladder
+ *   - Queue soft size clamp / enable verify / nomem
+ *   - I/O path tallies (add/kick/poll/reap/driver_ok)
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
+ * Greppable twin prefixes (product / agent greps):
+ *   "virtio-pci: soft …"
+ *   "virtio: soft …"
+ *
  * Greppable product markers (prefix-stable):
  *   virtio: scan PASS
  *   virtio: modern common@
@@ -18,6 +28,8 @@
  *   virtio: q soft
  *   virtio: q%u size=
  *   virtio: driver_ok
+ *   virtio-pci: soft inventory|scan|setup|features|queue|io|path …
+ *   virtio: soft inventory|scan|setup|features|queue|io|path …
  */
 #include <gj/config.h>
 #include <gj/klog.h>
@@ -56,6 +68,231 @@
 
 static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
+
+/*
+ * Soft product inventory (Wave 12 exclusive). Cumulative path tallies.
+ * greppable: virtio-pci: soft … / virtio: soft …
+ */
+static u32 g_u32SoftScanEnter;     /* virtio_pci_scan entries */
+static u32 g_u32SoftScanFound;     /* devices retained last scan (snapshot) */
+static u32 g_u32SoftKindNet;       /* scan: KIND_NET */
+static u32 g_u32SoftKindBlk;       /* scan: KIND_BLK */
+static u32 g_u32SoftKindGpu;       /* scan: KIND_GPU */
+static u32 g_u32SoftKindInput;     /* scan: KIND_INPUT */
+static u32 g_u32SoftKindConsole;   /* scan: KIND_CONSOLE */
+static u32 g_u32SoftKindScsi;      /* scan: KIND_SCSI */
+static u32 g_u32SoftKindUnknown;   /* scan: KIND_UNKNOWN */
+static u32 g_u32SoftBarMapFail;    /* high BAR vmm_map_device fail */
+static u32 g_u32SoftSetupOk;       /* virtio_pci_setup success */
+static u32 g_u32SoftSetupInval;    /* setup NULL pDev */
+static u32 g_u32SoftSetupNocap;    /* setup no PCI cap list */
+static u32 g_u32SoftSetupNocommon; /* setup no common-cfg */
+static u32 g_u32SoftModern;        /* live fModern count after setups */
+static u32 g_u32SoftReset;         /* virtio_reset calls with common */
+static u32 g_u32SoftResetTimeout;  /* reset spin exhausted */
+static u32 g_u32SoftNegoOk;        /* virtio_negotiate success */
+static u32 g_u32SoftNegoFail;      /* virtio_negotiate FEATURES_OK reject */
+static u32 g_u32SoftNegoInval;     /* negotiate bad args */
+static u32 g_u32SoftSoftOk;        /* virtio_negotiate_soft success */
+static u32 g_u32SoftSoftFail;      /* negotiate_soft exhausted ladder */
+static u32 g_u32SoftSoftInval;     /* negotiate_soft bad args */
+static u32 g_u32SoftSoftSteps;     /* soft ladder steps attempted (sum) */
+static u32 g_u32SoftQSetupOk;      /* virtio_q_setup success */
+static u32 g_u32SoftQClamp;        /* q size clamped from want */
+static u32 g_u32SoftQNomem;        /* q ring page alloc fail */
+static u32 g_u32SoftQEnableRej;    /* q enable read-back 0 */
+static u32 g_u32SoftQBeyond;       /* q idx ≥ num_queues */
+static u32 g_u32SoftQMax0;         /* device queue_size max 0 */
+static u32 g_u32SoftQInval;        /* q_setup bad args */
+static u32 g_u32SoftQDisable;      /* virtio_q_disable calls */
+static u32 g_u32SoftDriverOk;      /* virtio_driver_ok calls */
+static u32 g_u32SoftKick;          /* virtio_q_kick calls */
+static u32 g_u32SoftAdd;           /* virtio_q_add success */
+static u32 g_u32SoftAddFail;       /* virtio_q_add reject */
+static u32 g_u32SoftAdd2;          /* virtio_q_add2 success */
+static u32 g_u32SoftAdd2Fail;      /* virtio_q_add2 reject */
+static u32 g_u32SoftAdd3;          /* virtio_q_add3 success */
+static u32 g_u32SoftAdd3Fail;      /* virtio_q_add3 reject */
+static u32 g_u32SoftPollHit;       /* virtio_q_poll_id completion */
+static u32 g_u32SoftPollTo;        /* virtio_q_poll_id timeout */
+static u32 g_u32SoftReap;          /* virtio_q_reap completions (sum) */
+static u32 g_u32SoftIsr;           /* virtio_isr_read calls */
+static u32 g_u32SoftLogN;          /* soft inventory log emissions */
+static u8  g_fSoftInvOnce;         /* one-shot deep dump after activity */
+
+static void soft_inc(u32 *pCtr);
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/**
+ * Greppable soft virtio-pci transport inventory (product / smoke).
+ * Twin prefixes so either agent grep works:
+ *   virtio-pci: soft inventory|scan|setup|features|queue|io|path …
+ *   virtio: soft inventory|scan|setup|features|queue|io|path …
+ * greppable: virtio-pci: soft
+ * greppable: virtio: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Found;
+    u32 u32Modern;
+    u32 i;
+
+    soft_inc(&g_u32SoftLogN);
+
+    /* Live inventory snapshot (scan table; no lock). */
+    u32Found = g_cDevs;
+    u32Modern = 0;
+    for (i = 0; i < g_cDevs && i < GJ_VIRTIO_MAX_DEVS; i++) {
+        if (g_aDevs[i].fModern != 0) {
+            u32Modern++;
+        }
+    }
+    g_u32SoftModern = u32Modern;
+    g_u32SoftScanFound = u32Found;
+
+    /*
+     * Primary prefix: virtio-pci: soft …
+     * Catalog scan + setup + features + queues + I/O for smoke greps.
+     */
+    /* Grep: virtio-pci: soft inventory */
+    kprintf("virtio-pci: soft inventory found=%u modern=%u max_devs=%u "
+            "setup_ok=%u q_ok=%u nego_ok=%u driver_ok=%u log_n=%u wave=12\n",
+            u32Found, u32Modern, GJ_VIRTIO_MAX_DEVS, g_u32SoftSetupOk,
+            g_u32SoftQSetupOk, g_u32SoftNegoOk, g_u32SoftDriverOk,
+            g_u32SoftLogN);
+
+    /* Grep: virtio-pci: soft scan */
+    kprintf("virtio-pci: soft scan enter=%u found=%u net=%u blk=%u gpu=%u "
+            "input=%u scsi=%u console=%u unknown=%u bar_map_fail=%u\n",
+            g_u32SoftScanEnter, u32Found, g_u32SoftKindNet, g_u32SoftKindBlk,
+            g_u32SoftKindGpu, g_u32SoftKindInput, g_u32SoftKindScsi,
+            g_u32SoftKindConsole, g_u32SoftKindUnknown, g_u32SoftBarMapFail);
+
+    /* Grep: virtio-pci: soft setup */
+    kprintf("virtio-pci: soft setup ok=%u inval=%u nocap=%u nocommon=%u "
+            "modern=%u reset=%u reset_to=%u\n",
+            g_u32SoftSetupOk, g_u32SoftSetupInval, g_u32SoftSetupNocap,
+            g_u32SoftSetupNocommon, u32Modern, g_u32SoftReset,
+            g_u32SoftResetTimeout);
+
+    /* Grep: virtio-pci: soft features */
+    kprintf("virtio-pci: soft features nego_ok=%u nego_fail=%u nego_inval=%u "
+            "soft_ok=%u soft_fail=%u soft_inval=%u soft_steps=%u\n",
+            g_u32SoftNegoOk, g_u32SoftNegoFail, g_u32SoftNegoInval,
+            g_u32SoftSoftOk, g_u32SoftSoftFail, g_u32SoftSoftInval,
+            g_u32SoftSoftSteps);
+
+    /* Grep: virtio-pci: soft queue */
+    kprintf("virtio-pci: soft queue setup_ok=%u clamp=%u nomem=%u "
+            "enable_rej=%u beyond=%u max0=%u inval=%u disable=%u "
+            "q_max_size=%u\n",
+            g_u32SoftQSetupOk, g_u32SoftQClamp, g_u32SoftQNomem,
+            g_u32SoftQEnableRej, g_u32SoftQBeyond, g_u32SoftQMax0,
+            g_u32SoftQInval, g_u32SoftQDisable, GJ_VIRTQ_MAX_SIZE);
+
+    /* Grep: virtio-pci: soft io */
+    kprintf("virtio-pci: soft io kick=%u add=%u add_fail=%u add2=%u "
+            "add2_fail=%u add3=%u add3_fail=%u poll_hit=%u poll_to=%u "
+            "reap=%u driver_ok=%u isr=%u\n",
+            g_u32SoftKick, g_u32SoftAdd, g_u32SoftAddFail, g_u32SoftAdd2,
+            g_u32SoftAdd2Fail, g_u32SoftAdd3, g_u32SoftAdd3Fail,
+            g_u32SoftPollHit, g_u32SoftPollTo, g_u32SoftReap,
+            g_u32SoftDriverOk, g_u32SoftIsr);
+
+    /* Grep: virtio-pci: soft path */
+    kprintf("virtio-pci: soft path claim=pci_modern+vq "
+            "transport=common_cfg+notify+isr setup=cap_walk "
+            "features=ladder q=clamp+enable_verify "
+            "(soft inventory; not bar3)\n");
+
+    /*
+     * Twin prefix: virtio: soft … (agent-friendly alias; same tallies).
+     */
+    /* Grep: virtio: soft inventory */
+    kprintf("virtio: soft inventory found=%u modern=%u max_devs=%u "
+            "setup_ok=%u q_ok=%u nego_ok=%u driver_ok=%u log_n=%u wave=12\n",
+            u32Found, u32Modern, GJ_VIRTIO_MAX_DEVS, g_u32SoftSetupOk,
+            g_u32SoftQSetupOk, g_u32SoftNegoOk, g_u32SoftDriverOk,
+            g_u32SoftLogN);
+
+    /* Grep: virtio: soft scan */
+    kprintf("virtio: soft scan enter=%u found=%u net=%u blk=%u gpu=%u "
+            "input=%u scsi=%u console=%u unknown=%u bar_map_fail=%u\n",
+            g_u32SoftScanEnter, u32Found, g_u32SoftKindNet, g_u32SoftKindBlk,
+            g_u32SoftKindGpu, g_u32SoftKindInput, g_u32SoftKindScsi,
+            g_u32SoftKindConsole, g_u32SoftKindUnknown, g_u32SoftBarMapFail);
+
+    /* Grep: virtio: soft setup */
+    kprintf("virtio: soft setup ok=%u inval=%u nocap=%u nocommon=%u "
+            "modern=%u reset=%u reset_to=%u\n",
+            g_u32SoftSetupOk, g_u32SoftSetupInval, g_u32SoftSetupNocap,
+            g_u32SoftSetupNocommon, u32Modern, g_u32SoftReset,
+            g_u32SoftResetTimeout);
+
+    /* Grep: virtio: soft features */
+    kprintf("virtio: soft features nego_ok=%u nego_fail=%u nego_inval=%u "
+            "soft_ok=%u soft_fail=%u soft_inval=%u soft_steps=%u\n",
+            g_u32SoftNegoOk, g_u32SoftNegoFail, g_u32SoftNegoInval,
+            g_u32SoftSoftOk, g_u32SoftSoftFail, g_u32SoftSoftInval,
+            g_u32SoftSoftSteps);
+
+    /* Grep: virtio: soft queue */
+    kprintf("virtio: soft queue setup_ok=%u clamp=%u nomem=%u "
+            "enable_rej=%u beyond=%u max0=%u inval=%u disable=%u "
+            "q_max_size=%u\n",
+            g_u32SoftQSetupOk, g_u32SoftQClamp, g_u32SoftQNomem,
+            g_u32SoftQEnableRej, g_u32SoftQBeyond, g_u32SoftQMax0,
+            g_u32SoftQInval, g_u32SoftQDisable, GJ_VIRTQ_MAX_SIZE);
+
+    /* Grep: virtio: soft io */
+    kprintf("virtio: soft io kick=%u add=%u add_fail=%u add2=%u "
+            "add2_fail=%u add3=%u add3_fail=%u poll_hit=%u poll_to=%u "
+            "reap=%u driver_ok=%u isr=%u\n",
+            g_u32SoftKick, g_u32SoftAdd, g_u32SoftAddFail, g_u32SoftAdd2,
+            g_u32SoftAdd2Fail, g_u32SoftAdd3, g_u32SoftAdd3Fail,
+            g_u32SoftPollHit, g_u32SoftPollTo, g_u32SoftReap,
+            g_u32SoftDriverOk, g_u32SoftIsr);
+
+    /* Grep: virtio: soft path */
+    kprintf("virtio: soft path claim=pci_modern+vq "
+            "transport=common_cfg+notify+isr setup=cap_walk "
+            "features=ladder q=clamp+enable_verify "
+            "(soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product setup/negotiate/q/io activity, print soft inventory
+ * once (mirrors session_door/input_hub soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftSetupOk == 0 && g_u32SoftSetupNocommon == 0 &&
+        g_u32SoftNegoOk == 0 && g_u32SoftNegoFail == 0 &&
+        g_u32SoftQSetupOk == 0 && g_u32SoftDriverOk == 0 &&
+        g_u32SoftKick == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
 
 static void
 outl(u16 u16Port, u32 u32Val)
@@ -341,6 +578,54 @@ virtio_init(void)
 {
     memset(g_aDevs, 0, sizeof(g_aDevs));
     g_cDevs = 0;
+    /* Wave 12 soft tallies: baseline zero; log_n preserved across re-init. */
+    g_u32SoftScanEnter = 0;
+    g_u32SoftScanFound = 0;
+    g_u32SoftKindNet = 0;
+    g_u32SoftKindBlk = 0;
+    g_u32SoftKindGpu = 0;
+    g_u32SoftKindInput = 0;
+    g_u32SoftKindConsole = 0;
+    g_u32SoftKindScsi = 0;
+    g_u32SoftKindUnknown = 0;
+    g_u32SoftBarMapFail = 0;
+    g_u32SoftSetupOk = 0;
+    g_u32SoftSetupInval = 0;
+    g_u32SoftSetupNocap = 0;
+    g_u32SoftSetupNocommon = 0;
+    g_u32SoftModern = 0;
+    g_u32SoftReset = 0;
+    g_u32SoftResetTimeout = 0;
+    g_u32SoftNegoOk = 0;
+    g_u32SoftNegoFail = 0;
+    g_u32SoftNegoInval = 0;
+    g_u32SoftSoftOk = 0;
+    g_u32SoftSoftFail = 0;
+    g_u32SoftSoftInval = 0;
+    g_u32SoftSoftSteps = 0;
+    g_u32SoftQSetupOk = 0;
+    g_u32SoftQClamp = 0;
+    g_u32SoftQNomem = 0;
+    g_u32SoftQEnableRej = 0;
+    g_u32SoftQBeyond = 0;
+    g_u32SoftQMax0 = 0;
+    g_u32SoftQInval = 0;
+    g_u32SoftQDisable = 0;
+    g_u32SoftDriverOk = 0;
+    g_u32SoftKick = 0;
+    g_u32SoftAdd = 0;
+    g_u32SoftAddFail = 0;
+    g_u32SoftAdd2 = 0;
+    g_u32SoftAdd2Fail = 0;
+    g_u32SoftAdd3 = 0;
+    g_u32SoftAdd3Fail = 0;
+    g_u32SoftPollHit = 0;
+    g_u32SoftPollTo = 0;
+    g_u32SoftReap = 0;
+    g_u32SoftIsr = 0;
+    g_fSoftInvOnce = 0;
+    /* Grep: virtio-pci: soft / virtio: soft (baseline inventory after init) */
+    soft_inventory_log();
 }
 
 u32
@@ -353,6 +638,16 @@ virtio_pci_scan(void)
     u16 u16Vendor;
     u16 u16Device;
     u32 iBar;
+
+    soft_inc(&g_u32SoftScanEnter);
+    /* Kind tallies re-accumulate for this scan pass. */
+    g_u32SoftKindNet = 0;
+    g_u32SoftKindBlk = 0;
+    g_u32SoftKindGpu = 0;
+    g_u32SoftKindInput = 0;
+    g_u32SoftKindConsole = 0;
+    g_u32SoftKindScsi = 0;
+    g_u32SoftKindUnknown = 0;
 
     g_cDevs = 0;
     for (u8Bus = 0; u8Bus < 8; u8Bus++) {
@@ -383,6 +678,29 @@ virtio_pci_scan(void)
                 pDev->u8Slot = u8Slot;
                 pDev->u8Func = u8Func;
                 pDev->u32Kind = kind_from_device(u16Device);
+                switch (pDev->u32Kind) {
+                case 1:
+                    soft_inc(&g_u32SoftKindNet);
+                    break;
+                case 2:
+                    soft_inc(&g_u32SoftKindBlk);
+                    break;
+                case 3:
+                    soft_inc(&g_u32SoftKindGpu);
+                    break;
+                case 4:
+                    soft_inc(&g_u32SoftKindInput);
+                    break;
+                case 5:
+                    soft_inc(&g_u32SoftKindConsole);
+                    break;
+                case 6:
+                    soft_inc(&g_u32SoftKindScsi);
+                    break;
+                default:
+                    soft_inc(&g_u32SoftKindUnknown);
+                    break;
+                }
                 for (iBar = 0; iBar < 6; iBar++) {
                     u32 u32Bar = pci_read32(u8Bus, u8Slot, u8Func,
                                             (u8)(0x10u + iBar * 4u));
@@ -411,6 +729,7 @@ virtio_pci_scan(void)
                         pDev->u64Bar[iBar] >= 0xf0000000ull) {
                         if (vmm_map_device((gj_paddr_t)pDev->u64Bar[iBar],
                                            2ull * 1024ull * 1024ull) != GJ_OK) {
+                            soft_inc(&g_u32SoftBarMapFail);
                             kprintf("virtio: map bar%u 0x%lx failed\n", iBar,
                                     (unsigned long)pDev->u64Bar[iBar]);
                         }
@@ -428,11 +747,17 @@ virtio_pci_scan(void)
         }
     }
 done:
+    g_u32SoftScanFound = g_cDevs;
     if (g_cDevs > 0) {
         kprintf("virtio: scan PASS found %u device(s)\n", g_cDevs);
     } else {
         kprintf("virtio: scan found 0 device(s)\n");
     }
+    /*
+     * Wave 12 soft inventory after every scan (found=0 is honest NODEV-style
+     * catalog). greppable: virtio-pci: soft / virtio: soft
+     */
+    soft_inventory_log();
     return g_cDevs;
 }
 
@@ -462,6 +787,8 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
     u16 u16Cmd;
 
     if (pDev == NULL) {
+        soft_inc(&g_u32SoftSetupInval);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
 
@@ -484,9 +811,11 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
         u16 u16Status = pci_read16(pDev->u8Bus, pDev->u8Slot, pDev->u8Func, 0x06);
 
         if ((u16Status & 0x10u) == 0) {
+            soft_inc(&g_u32SoftSetupNocap);
             kprintf("virtio: %x:%x no cap list (status=0x%x)\n",
                     (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
                     (unsigned)u16Status);
+            soft_inventory_maybe_once();
             return GJ_ERR_NOSUPPORT;
         }
     }
@@ -535,8 +864,10 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
     }
 
     if (pDev->pCommon == NULL) {
+        soft_inc(&g_u32SoftSetupNocommon);
         kprintf("virtio: %x:%x no common cfg (legacy?)\n",
                 (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOSUPPORT;
     }
 
@@ -544,6 +875,7 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
     virtio_reset(pDev);
     pDev->u32NumQueues = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_NUMQ);
     pDev->fModern = 1;
+    soft_inc(&g_u32SoftSetupOk);
     kprintf("virtio: %x:%x modern common@%p queues=%u notify_mult=%u"
             " isr=%u devcfg=%u\n",
             (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
@@ -551,6 +883,7 @@ virtio_pci_setup(struct gj_virtio_dev *pDev)
             (unsigned)pDev->u32NotifyMult,
             pDev->pIsr != NULL ? 1u : 0u,
             pDev->pDevice != NULL ? 1u : 0u);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -562,6 +895,7 @@ virtio_reset(struct gj_virtio_dev *pDev)
     if (pDev == NULL || pDev->pCommon == NULL) {
         return;
     }
+    soft_inc(&g_u32SoftReset);
     mmio_w8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS, 0);
     for (iSpin = 0; iSpin < GJ_VIRTIO_RESET_SPINS; iSpin++) {
         if (mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS) == 0) {
@@ -572,6 +906,7 @@ virtio_reset(struct gj_virtio_dev *pDev)
     pDev->u64FeaturesDev = 0;
     pDev->u64FeaturesDrv = 0;
     if (mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS) != 0) {
+        soft_inc(&g_u32SoftResetTimeout);
         kprintf("virtio: reset soft timeout status=0x%x\n",
                 (unsigned)mmio_r8(pDev->pCommon + VIRTIO_PCI_COMMON_STATUS));
     }
@@ -602,6 +937,7 @@ virtio_driver_ok(struct gj_virtio_dev *pDev)
     if (pDev == NULL || pDev->pCommon == NULL) {
         return;
     }
+    soft_inc(&g_u32SoftDriverOk);
     u8St = (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                 GJ_VIRTIO_S_FEATURES_OK | GJ_VIRTIO_S_DRIVER_OK);
     virtio_set_status(pDev, u8St);
@@ -609,6 +945,7 @@ virtio_driver_ok(struct gj_virtio_dev *pDev)
             (unsigned)pDev->u8Bus, (unsigned)pDev->u8Slot,
             (unsigned)virtio_get_status(pDev),
             (unsigned long)pDev->u64FeaturesDrv);
+    soft_inventory_maybe_once();
 }
 
 u8
@@ -617,6 +954,7 @@ virtio_isr_read(struct gj_virtio_dev *pDev)
     if (pDev == NULL || pDev->pIsr == NULL) {
         return 0;
     }
+    soft_inc(&g_u32SoftIsr);
     return mmio_r8(pDev->pIsr);
 }
 
@@ -666,6 +1004,8 @@ virtio_negotiate(struct gj_virtio_dev *pDev, u64 u64WantFeatures)
     u64 u64Drv;
 
     if (pDev == NULL || pDev->pCommon == NULL) {
+        soft_inc(&g_u32SoftNegoInval);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
 
@@ -686,12 +1026,14 @@ virtio_negotiate(struct gj_virtio_dev *pDev, u64 u64WantFeatures)
     virtio_set_status(pDev, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                  GJ_VIRTIO_S_FEATURES_OK));
     if ((virtio_get_status(pDev) & GJ_VIRTIO_S_FEATURES_OK) == 0) {
+        soft_inc(&g_u32SoftNegoFail);
         kprintf("virtio: FEATURES_OK rejected want=0x%lx dev=0x%lx\n",
                 (unsigned long)u64WantFeatures, (unsigned long)u64Dev);
         virtio_set_status(pDev, (u8)(GJ_VIRTIO_S_ACKNOWLEDGE | GJ_VIRTIO_S_DRIVER |
                                      GJ_VIRTIO_S_FAILED));
         pDev->u64FeaturesDev = u64Dev;
         pDev->u64FeaturesDrv = 0;
+        soft_inventory_maybe_once();
         return GJ_ERR_NOSUPPORT;
     }
 
@@ -701,11 +1043,13 @@ virtio_negotiate(struct gj_virtio_dev *pDev, u64 u64WantFeatures)
     if (pDev->u64FeaturesDrv == 0) {
         pDev->u64FeaturesDrv = u64Drv; /* soft: some hosts omit GF read-back */
     }
+    soft_inc(&g_u32SoftNegoOk);
     kprintf("virtio: features dev=0x%lx drv=0x%lx want=0x%lx v1=%u\n",
             (unsigned long)pDev->u64FeaturesDev,
             (unsigned long)pDev->u64FeaturesDrv,
             (unsigned long)u64WantFeatures,
             (unsigned)((pDev->u64FeaturesDrv & GJ_VIRTIO_F_VERSION_1) != 0));
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -718,6 +1062,8 @@ virtio_negotiate_soft(struct gj_virtio_dev *pDev, const u64 *pWants, u32 cWants,
     u64 u64Last = 0;
 
     if (pDev == NULL || pDev->pCommon == NULL) {
+        soft_inc(&g_u32SoftSoftInval);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     /* Soft default ladder when caller omits masks: V1 then transitional empty. */
@@ -736,8 +1082,10 @@ virtio_negotiate_soft(struct gj_virtio_dev *pDev, const u64 *pWants, u32 cWants,
 
         for (i = 0; i < cTry; i++) {
             u64Last = pTry[i];
+            soft_inc(&g_u32SoftSoftSteps);
             st = virtio_negotiate(pDev, u64Last);
             if (st == GJ_OK) {
+                soft_inc(&g_u32SoftSoftOk);
                 kprintf("virtio: features soft step=%u/%u want=0x%lx drv=0x%lx\n",
                         (unsigned)(i + 1), (unsigned)cTry,
                         (unsigned long)u64Last,
@@ -745,16 +1093,19 @@ virtio_negotiate_soft(struct gj_virtio_dev *pDev, const u64 *pWants, u32 cWants,
                 if (pOutDrv != NULL) {
                     *pOutDrv = pDev->u64FeaturesDrv;
                 }
+                soft_inventory_maybe_once();
                 return GJ_OK;
             }
         }
         cWants = cTry;
     }
+    soft_inc(&g_u32SoftSoftFail);
     kprintf("virtio: features soft FAIL steps=%u last_want=0x%lx\n",
             (unsigned)cWants, (unsigned long)u64Last);
     if (pOutDrv != NULL) {
         *pOutDrv = 0;
     }
+    soft_inventory_maybe_once();
     return GJ_ERR_NOSUPPORT;
 }
 
@@ -774,6 +1125,7 @@ virtio_q_disable(struct gj_virtio_dev *pDev, u16 u16QIdx)
     if (pDev == NULL || pDev->pCommon == NULL) {
         return;
     }
+    soft_inc(&g_u32SoftQDisable);
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SELECT, u16QIdx);
     mmio_w16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE, 0);
 }
@@ -790,14 +1142,20 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
     gj_paddr_t paUsed;
 
     if (pDev == NULL || pQ == NULL || pDev->pCommon == NULL) {
+        soft_inc(&g_u32SoftQInval);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     if (u16Size == 0 || u16Size > GJ_VIRTQ_MAX_SIZE) {
+        soft_inc(&g_u32SoftQInval);
+        soft_inventory_maybe_once();
         return GJ_ERR_INVAL;
     }
     if (pDev->u32NumQueues != 0 && (u32)u16QIdx >= pDev->u32NumQueues) {
+        soft_inc(&g_u32SoftQBeyond);
         kprintf("virtio: q soft idx=%u beyond num_queues=%u\n",
                 (unsigned)u16QIdx, pDev->u32NumQueues);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOSUPPORT;
     }
 
@@ -812,8 +1170,10 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
 
     u16Max = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_SIZE);
     if (u16Max == 0) {
+        soft_inc(&g_u32SoftQMax0);
         kprintf("virtio: q soft idx=%u max_size=0 (absent)\n",
                 (unsigned)u16QIdx);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOSUPPORT;
     }
 
@@ -830,9 +1190,12 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
         u16Size = q_soft_size(GJ_VIRTQ_MAX_SIZE, GJ_VIRTQ_MAX_SIZE);
     }
     if (u16Size == 0) {
+        soft_inc(&g_u32SoftQMax0);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOSUPPORT;
     }
     if (u16Size != u16Want) {
+        soft_inc(&g_u32SoftQClamp);
         kprintf("virtio: q soft idx=%u size clamp want=%u -> %u (max=%u)\n",
                 (unsigned)u16QIdx, (unsigned)u16Want, (unsigned)u16Size,
                 (unsigned)u16Max);
@@ -858,7 +1221,9 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
         if (paUsed != 0) {
             pmm_free(paUsed);
         }
+        soft_inc(&g_u32SoftQNomem);
         kprintf("virtio: q soft idx=%u nomem\n", (unsigned)u16QIdx);
+        soft_inventory_maybe_once();
         return GJ_ERR_NOMEM;
     }
     pQ->paDesc = paDesc;
@@ -890,15 +1255,19 @@ virtio_q_setup(struct gj_virtio_dev *pDev, struct gj_virtq *pQ, u16 u16QIdx,
     /* Soft enable verify */
     u16Enabled = mmio_r16(pDev->pCommon + VIRTIO_PCI_COMMON_Q_ENABLE);
     if (u16Enabled == 0) {
+        soft_inc(&g_u32SoftQEnableRej);
         kprintf("virtio: q soft idx=%u enable rejected\n", (unsigned)u16QIdx);
         q_ring_free(pQ);
         memset(pQ, 0, sizeof(*pQ));
+        soft_inventory_maybe_once();
         return GJ_ERR_IO;
     }
 
+    soft_inc(&g_u32SoftQSetupOk);
     kprintf("virtio: q%u size=%u max=%u desc=0x%lx notify_off=%u soft ok\n",
             (unsigned)u16QIdx, (unsigned)u16Size, (unsigned)u16Max,
             (unsigned long)pQ->paDesc, (unsigned)pQ->u16NotifyOff);
+    soft_inventory_maybe_once();
     return GJ_OK;
 }
 
@@ -939,17 +1308,25 @@ virtio_q_add(struct gj_virtq *pQ, gj_paddr_t pa, u32 u32Len, int fWrite)
     int iHead;
 
     if (pQ == NULL || pa == 0 || u32Len == 0) {
+        soft_inc(&g_u32SoftAddFail);
         return -1;
     }
     iHead = virtio_q_alloc_desc(pQ);
     if (iHead < 0) {
+        soft_inc(&g_u32SoftAddFail);
         return -1;
     }
     pQ->pDesc[iHead].u64Addr = (u64)pa;
     pQ->pDesc[iHead].u32Len = u32Len;
     pQ->pDesc[iHead].u16Flags = fWrite ? GJ_VIRTQ_DESC_F_WRITE : 0;
     pQ->pDesc[iHead].u16Next = 0;
-    return virtio_q_push_head(pQ, (u16)iHead);
+    iHead = virtio_q_push_head(pQ, (u16)iHead);
+    if (iHead < 0) {
+        soft_inc(&g_u32SoftAddFail);
+        return -1;
+    }
+    soft_inc(&g_u32SoftAdd);
+    return iHead;
 }
 
 int
@@ -958,11 +1335,14 @@ virtio_q_add2(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
 {
     u16 u16A;
     u16 u16B;
+    int iHead;
 
     if (pQ == NULL || pa0 == 0 || pa1 == 0 || u32Len0 == 0 || u32Len1 == 0) {
+        soft_inc(&g_u32SoftAdd2Fail);
         return -1;
     }
     if (pQ->u16NumFree < 2) {
+        soft_inc(&g_u32SoftAdd2Fail);
         return -1;
     }
     {
@@ -970,6 +1350,7 @@ virtio_q_add2(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
         int ib = virtio_q_alloc_desc(pQ);
 
         if (ia < 0 || ib < 0) {
+            soft_inc(&g_u32SoftAdd2Fail);
             return -1;
         }
         u16A = (u16)ia;
@@ -985,7 +1366,13 @@ virtio_q_add2(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
     pQ->pDesc[u16B].u32Len = u32Len1;
     pQ->pDesc[u16B].u16Flags = fWrite1 ? GJ_VIRTQ_DESC_F_WRITE : 0;
     pQ->pDesc[u16B].u16Next = 0;
-    return virtio_q_push_head(pQ, u16A);
+    iHead = virtio_q_push_head(pQ, u16A);
+    if (iHead < 0) {
+        soft_inc(&g_u32SoftAdd2Fail);
+        return -1;
+    }
+    soft_inc(&g_u32SoftAdd2);
+    return iHead;
 }
 
 int
@@ -996,12 +1383,15 @@ virtio_q_add3(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
     u16 u16A;
     u16 u16B;
     u16 u16C;
+    int iHead;
 
     if (pQ == NULL || pa0 == 0 || pa1 == 0 || pa2 == 0 ||
         u32Len0 == 0 || u32Len1 == 0 || u32Len2 == 0) {
+        soft_inc(&g_u32SoftAdd3Fail);
         return -1;
     }
     if (pQ->u16NumFree < 3) {
+        soft_inc(&g_u32SoftAdd3Fail);
         return -1;
     }
     {
@@ -1010,6 +1400,7 @@ virtio_q_add3(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
         int ic = virtio_q_alloc_desc(pQ);
 
         if (ia < 0 || ib < 0 || ic < 0) {
+            soft_inc(&g_u32SoftAdd3Fail);
             return -1;
         }
         u16A = (u16)ia;
@@ -1032,7 +1423,13 @@ virtio_q_add3(struct gj_virtq *pQ, gj_paddr_t pa0, u32 u32Len0, int fWrite0,
     pQ->pDesc[u16C].u32Len = u32Len2;
     pQ->pDesc[u16C].u16Flags = fWrite2 ? GJ_VIRTQ_DESC_F_WRITE : 0;
     pQ->pDesc[u16C].u16Next = 0;
-    return virtio_q_push_head(pQ, u16A);
+    iHead = virtio_q_push_head(pQ, u16A);
+    if (iHead < 0) {
+        soft_inc(&g_u32SoftAdd3Fail);
+        return -1;
+    }
+    soft_inc(&g_u32SoftAdd3);
+    return iHead;
 }
 
 void
@@ -1044,9 +1441,11 @@ virtio_q_kick(struct gj_virtq *pQ)
     if (pQ == NULL || pQ->pDev == NULL || pQ->pDev->pNotify == NULL) {
         return;
     }
+    soft_inc(&g_u32SoftKick);
     u32Off = (u32)pQ->u16NotifyOff * pQ->pDev->u32NotifyMult;
     pNotify = pQ->pDev->pNotify + u32Off;
     mmio_w16(pNotify, pQ->u16QueueIdx);
+    soft_inventory_maybe_once();
 }
 
 i32
@@ -1085,9 +1484,17 @@ virtio_q_poll_id(struct gj_virtq *pQ, u32 u32Spins, u32 *pOutId)
             if (pOutId != NULL) {
                 *pOutId = u32Id;
             }
+            soft_inc(&g_u32SoftPollHit);
             return (i32)u32Len;
         }
         __asm__ volatile ("pause");
+    }
+    /*
+     * Soft: count spin timeouts only (spins>1). Single-shot empty (reap)
+     * is not a product timeout — leave poll_to honest.
+     */
+    if (u32Spins > 1u) {
+        soft_inc(&g_u32SoftPollTo);
     }
     return -1;
 }
@@ -1120,6 +1527,13 @@ virtio_q_reap(struct gj_virtq *pQ, u32 u32Max)
             break;
         }
         n++;
+    }
+    if (n > 0) {
+        if (g_u32SoftReap <= 0xffffffffu - n) {
+            g_u32SoftReap += n;
+        } else {
+            g_u32SoftReap = 0xffffffffu;
+        }
     }
     return n;
 }

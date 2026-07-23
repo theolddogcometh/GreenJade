@@ -18,6 +18,14 @@
  *   smp: soft ap_run …
  *   smp: soft madt …
  *   smp: soft phases …
+ *
+ * Wave 12 exclusive deepen (this unit only — greppable "smp: soft …"):
+ *   - Init path: rsdp / mb2 / bios scan / UP fallback + MADT parse tallies
+ *   - start_aps early-outs + INIT-SIPI + skip class split (dis/bsp/cap)
+ *   - AP entry: entry / percpu_fail / idle_fail / sched_ready + timer HWM
+ *   - ap_run: enter / inval / busy / ipi + poll drain
+ *   - spins HWM + log_n + path honesty catalog
+ *   Primary PASS|inventory|madt|phases|ap_run|slot lines stay field-stable.
  * Never hard-gates product; wrap-OK counters and kprintf only.
  */
 #include <gj/apic.h>
@@ -83,11 +91,63 @@ static u8  g_aSoftSlotStatus[GJ_CPU_STATIC_MAX]; /* GJ_SMP_SOFT_SLOT_* */
 static volatile u8 g_aSoftApPhase[GJ_CPU_STATIC_MAX]; /* GJ_SMP_AP_PHASE_* */
 static u32 g_aSoftSpins[GJ_CPU_STATIC_MAX];
 
+/*
+ * Wave 12 soft path tallies (file-local deepen; greppable "smp: soft …").
+ * Cumulative unless noted HWM; wrap-OK; never hard-gates bring-up.
+ */
+static u32 g_u32SoftInitRsdp;       /* smp_init_from_rsdp entries */
+static u32 g_u32SoftInitMb2;        /* smp_init_from_mb2 entries */
+static u32 g_u32SoftInitRsdpHit;    /* UEFI/RSDP path yielded MADT */
+static u32 g_u32SoftInitBiosScan;   /* scan_bios_rsdp invoked */
+static u32 g_u32SoftInitBiosHit;    /* BIOS scan yielded MADT */
+static u32 g_u32SoftInitUpFallback; /* MADT missing; UP fallback */
+static u32 g_u32SoftMadtParse;      /* parse_madt accepted */
+static u32 g_u32SoftMadtCsumBad;    /* parse_madt checksum reject */
+static u32 g_u32SoftMadtLocal;      /* LOCAL_APIC entries accepted */
+static u32 g_u32SoftMadtX2;         /* LOCAL_X2APIC entries accepted */
+static u32 g_u32SoftMadtDedup;      /* smp_add_apic de-dup drops */
+static u32 g_u32SoftMadtFull;       /* smp_add_apic at GJ_SMP_MAX_APICS */
+static u32 g_u32SoftMadtDisabled;   /* add with fEnabled=0 */
+static u32 g_u32SoftStartEnter;     /* smp_start_aps entries */
+static u32 g_u32SoftStartNoApic;    /* start_aps early: !apic_ready */
+static u32 g_u32SoftStartUp;        /* start_aps early: NLocalApic <= 1 */
+static u32 g_u32SoftStartBadTramp;  /* start_aps early: tramp size */
+static u32 g_u32SoftStartX2Arm;     /* x2APIC armed in start_aps */
+static u32 g_u32SoftStartSipi;      /* INIT-SIPI issued */
+static u32 g_u32SoftSkipDis;        /* skip class: MADT disabled */
+static u32 g_u32SoftSkipBsp;        /* skip class: MADT entry is BSP */
+static u32 g_u32SoftSkipCap;        /* skip class: over bring-up/stack cap */
+static u32 g_u32SoftApEntry;        /* smp_ap_c_entry entries */
+static u32 g_u32SoftApPercpuFail;   /* AP percpu missing → park */
+static u32 g_u32SoftApIdleFail;     /* AP idle create fail → park */
+static u32 g_u32SoftApSchedReady;   /* AP reached schedule ready */
+static u32 g_u32SoftApTimerSpinHwm; /* max AP local-timer wait spins */
+static u32 g_u32SoftApRunEnter;     /* smp_ap_run entries */
+static u32 g_u32SoftApRunInval;     /* ap_run bad args / OOB */
+static u32 g_u32SoftApRunBusy;      /* ap_run busy (outstanding work) */
+static u32 g_u32SoftApRunIpi;       /* ap_run IPI posted */
+static u32 g_u32SoftApPoll;         /* smp_ap_poll_work entries */
+static u32 g_u32SoftApPollDrain;    /* one-shot work drained on AP */
+static u32 g_u32SoftSpinsHwm;       /* max ready-wait spins (any slot) */
+static u32 g_u32SoftLogN;           /* smp_bringup_soft_log emissions */
+
 /* One-shot AP work for smp_ap_run (drained on AP schedule path). */
 static void (*volatile g_pfnApWork)(void *);
 static void *volatile g_pApWorkArg;
 static volatile u32 g_u32ApWorkSlot;
 static volatile u32 g_u32ApWorkDone;
+
+/** Soft: saturate-increment sticky u32 (wrap-OK diagnostics). */
+static void
+smp_soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
 
 /** Soft: raise sticky max phase for slot (never regresses). */
 static void
@@ -101,12 +161,22 @@ smp_soft_phase_set(u32 u32CpuSlot, u8 u8Phase)
     }
 }
 
+/** Soft: note ready-wait spin HWM (bring-up only). */
+static void
+smp_soft_note_spins(u32 u32Spins)
+{
+    if (u32Spins > g_u32SoftSpinsHwm) {
+        g_u32SoftSpinsHwm = u32Spins;
+    }
+}
+
 void
 smp_ap_poll_work(void)
 {
     void (*pfn)(void *) = g_pfnApWork;
     u32 u32Cpu = cpu_id();
 
+    smp_soft_inc(&g_u32SoftApPoll);
     if (pfn != NULL && g_u32ApWorkSlot == u32Cpu) {
         void *pArg = g_pApWorkArg;
 
@@ -114,6 +184,7 @@ smp_ap_poll_work(void)
         __asm__ volatile ("" ::: "memory");
         pfn(pArg);
         g_u32ApWorkDone = 1;
+        smp_soft_inc(&g_u32SoftApPollDrain);
     }
 }
 
@@ -162,6 +233,7 @@ smp_ap_c_entry(u32 u32CpuIndex)
     u64 u64Ticks1;
     u32 u32Spins;
 
+    smp_soft_inc(&g_u32SoftApEntry);
     /* Soft: trampoline reached C entry (before GDT/IDT). */
     smp_soft_phase_set(u32CpuIndex, (u8)GJ_SMP_AP_PHASE_ENTRY);
 
@@ -181,6 +253,7 @@ smp_ap_c_entry(u32 u32CpuIndex)
     cpu_init_ap(u32CpuIndex);
     if (!cpu_slot_online(u32CpuIndex)) {
         /* Greppable: smp: AP percpu missing */
+        smp_soft_inc(&g_u32SoftApPercpuFail);
         kprintf("smp: AP percpu missing cpu=%u — HLT park\n", u32CpuIndex);
         if (u32CpuIndex < GJ_CPU_STATIC_MAX) {
             g_aSoftSlotStatus[u32CpuIndex] = (u8)GJ_SMP_SOFT_SLOT_FAIL;
@@ -208,12 +281,16 @@ smp_ap_c_entry(u32 u32CpuIndex)
         }
         __asm__ volatile ("pause");
     }
+    if (u32Spins > g_u32SoftApTimerSpinHwm) {
+        g_u32SoftApTimerSpinHwm = u32Spins;
+    }
     kprintf("cpu: AP id=%u timer_ticks=%lu\n", u32CpuIndex,
             (unsigned long)apic_timer_ticks_cpu(u32CpuIndex));
 
     /* Per-CPU idle before signalling ready (serialize vs next SIPI). */
     if (u32CpuIndex >= GJ_CPU_STATIC_MAX ||
         thread_init_ap_idle(u32CpuIndex) != 0) {
+        smp_soft_inc(&g_u32SoftApIdleFail);
         kprintf("smp: AP idle create failed cpu=%u — HLT park\n", u32CpuIndex);
         if (u32CpuIndex < GJ_CPU_STATIC_MAX) {
             g_aSoftSlotStatus[u32CpuIndex] = (u8)GJ_SMP_SOFT_SLOT_FAIL;
@@ -230,6 +307,7 @@ smp_ap_c_entry(u32 u32CpuIndex)
     }
     smp_soft_phase_set(u32CpuIndex, (u8)GJ_SMP_AP_PHASE_SCHED);
     g_u32ApReady = 1;
+    smp_soft_inc(&g_u32SoftApSchedReady);
     /* Greppable: smp: AP schedule ready */
     kprintf("smp: AP schedule ready cpu=%u phase=%u\n", u32CpuIndex,
             (unsigned)smp_bringup_soft_phase(u32CpuIndex));
@@ -311,19 +389,27 @@ smp_add_apic(u32 u32ApicId, int fEnabled, int fX2)
     u32 i;
 
     if (g_Smp.u32NLocalApic >= GJ_SMP_MAX_APICS) {
+        smp_soft_inc(&g_u32SoftMadtFull);
         return;
     }
     /* de-dup */
     for (i = 0; i < g_Smp.u32NLocalApic; i++) {
         if (g_Smp.aApicId[i] == u32ApicId) {
+            smp_soft_inc(&g_u32SoftMadtDedup);
             return;
         }
     }
     i = g_Smp.u32NLocalApic++;
     g_Smp.aApicId[i] = u32ApicId;
     g_Smp.aEnabled[i] = fEnabled ? 1 : 0;
+    if (!fEnabled) {
+        smp_soft_inc(&g_u32SoftMadtDisabled);
+    }
     if (fX2) {
         g_Smp.fX2ApicIds = 1;
+        smp_soft_inc(&g_u32SoftMadtX2);
+    } else {
+        smp_soft_inc(&g_u32SoftMadtLocal);
     }
 }
 
@@ -354,10 +440,12 @@ parse_madt(const struct acpi_madt *pMadt)
         return;
     }
     if (!acpi_checksum(pMadt, pMadt->hdr.u32Length)) {
+        smp_soft_inc(&g_u32SoftMadtCsumBad);
         kprintf("smp: MADT checksum bad\n");
         return;
     }
     g_Smp.fHasMadt = 1;
+    smp_soft_inc(&g_u32SoftMadtParse);
     p = (const u8 *)pMadt + sizeof(*pMadt);
     pEnd = (const u8 *)pMadt + pMadt->hdr.u32Length;
     while (p + 2 <= pEnd) {
@@ -485,6 +573,7 @@ scan_bios_rsdp(void)
     u32 u32Off;
     const u8 *p;
 
+    smp_soft_inc(&g_u32SoftInitBiosScan);
     /* EBDA segment pointer at BDA 0x40E */
     u16EbdaSeg = *(volatile u16 *)(gj_vaddr_t)0x40E;
     if (u16EbdaSeg != 0) {
@@ -495,6 +584,7 @@ scan_bios_rsdp(void)
                 p[4] == 'P' && p[5] == 'T' && p[6] == 'R' && p[7] == ' ') {
                 from_rsdp(p, 36);
                 if (g_Smp.fHasMadt) {
+                    smp_soft_inc(&g_u32SoftInitBiosHit);
                     return;
                 }
             }
@@ -506,6 +596,7 @@ scan_bios_rsdp(void)
             p[4] == 'P' && p[5] == 'T' && p[6] == 'R' && p[7] == ' ') {
             from_rsdp(p, 36);
             if (g_Smp.fHasMadt) {
+                smp_soft_inc(&g_u32SoftInitBiosHit);
                 return;
             }
         }
@@ -516,6 +607,7 @@ static void
 smp_finish_madt_log(void)
 {
     if (g_Smp.u32NLocalApic == 0) {
+        smp_soft_inc(&g_u32SoftInitUpFallback);
         smp_add_apic(0, 1, 0);
         kprintf("smp: MADT missing; UP fallback\n");
     } else {
@@ -541,6 +633,7 @@ smp_finish_madt_log(void)
 void
 smp_init_from_rsdp(u64 u64Rsdp)
 {
+    smp_soft_inc(&g_u32SoftInitRsdp);
     kprintf("smp: init_from_rsdp pa=0x%lx\n", (unsigned long)u64Rsdp);
     memset(&g_Smp, 0, sizeof(g_Smp));
     g_Smp.u32NOnline = 1;
@@ -548,6 +641,9 @@ smp_init_from_rsdp(u64 u64Rsdp)
 
     if (u64Rsdp != 0) {
         from_rsdp((const void *)(gj_vaddr_t)u64Rsdp, 36);
+        if (g_Smp.fHasMadt) {
+            smp_soft_inc(&g_u32SoftInitRsdpHit);
+        }
     }
     if (!g_Smp.fHasMadt) {
         scan_bios_rsdp();
@@ -563,6 +659,7 @@ smp_init_from_mb2(u32 paMb2Info)
     u32 u32Tags;
     u32 u32Total;
 
+    smp_soft_inc(&g_u32SoftInitMb2);
     kprintf("smp: init_from_mb2 pa=0x%x\n", paMb2Info);
     memset(&g_Smp, 0, sizeof(g_Smp));
     g_Smp.u32NOnline = 1;
@@ -662,13 +759,16 @@ smp_ap_run(u32 u32CpuSlot, void (*pfn)(void *), void *pArg)
     u32 u32ApicId;
     u32 u32Cap = smp_bringup_cap();
 
+    smp_soft_inc(&g_u32SoftApRunEnter);
     if (pfn == NULL || u32CpuSlot == 0 || u32CpuSlot >= g_Smp.u32NOnline ||
         u32CpuSlot >= u32Cap || u32CpuSlot >= GJ_CPU_STATIC_MAX) {
         g_u32SoftApRunFail++;
+        smp_soft_inc(&g_u32SoftApRunInval);
         return -1;
     }
     if (g_pfnApWork != NULL) {
         g_u32SoftApRunFail++;
+        smp_soft_inc(&g_u32SoftApRunBusy);
         return -1; /* busy */
     }
     u32ApicId = g_aSlotApicId[u32CpuSlot];
@@ -680,6 +780,7 @@ smp_ap_run(u32 u32CpuSlot, void (*pfn)(void *), void *pArg)
     __asm__ volatile ("" ::: "memory");
     /* Wake AP from HLT via fixed IPI */
     apic_send_ipi(u32ApicId, (u8)GJ_APIC_IPI_RESCHED_VEC);
+    smp_soft_inc(&g_u32SoftApRunIpi);
 
     for (u32Spins = 0; u32Spins < 100000000u && !g_u32ApWorkDone; u32Spins++) {
         __asm__ volatile ("pause");
@@ -709,6 +810,7 @@ smp_start_aps(void)
     u8 *pTramp;
     u64 u64Cr3;
 
+    smp_soft_inc(&g_u32SoftStartEnter);
     g_aSlotApicId[0] = u32Bsp;
     g_aSoftSlotStatus[0] = (u8)GJ_SMP_SOFT_SLOT_ONLINE;
     g_aSoftApPhase[0] = (u8)GJ_SMP_AP_PHASE_SCHED;
@@ -719,16 +821,22 @@ smp_start_aps(void)
     g_u32SoftOk = 0;
     g_u32SoftTimeout = 0;
     g_u32SoftSkipped = 0;
+    g_u32SoftSkipDis = 0;
+    g_u32SoftSkipBsp = 0;
+    g_u32SoftSkipCap = 0;
     g_u32SoftLastSpins = 0;
     g_u32SoftLastApicId = 0;
     g_u32SoftLastSlot = 0;
+    g_u32SoftSpinsHwm = 0;
 
     if (!apic_ready()) {
+        smp_soft_inc(&g_u32SoftStartNoApic);
         kprintf("smp: start_aps skipped (no APIC)\n");
         smp_bringup_soft_log();
         return;
     }
     if (g_Smp.u32NLocalApic <= 1) {
+        smp_soft_inc(&g_u32SoftStartUp);
         kprintf("smp: start_aps UP (no APs in MADT)\n");
         smp_bringup_soft_log();
         return;
@@ -736,6 +844,7 @@ smp_start_aps(void)
 
     cbTramp = (u32)(ap_trampoline_end - ap_trampoline_start);
     if (cbTramp == 0 || cbTramp > 0x1000u) {
+        smp_soft_inc(&g_u32SoftStartBadTramp);
         kprintf("smp: bad trampoline size %u\n", cbTramp);
         smp_bringup_soft_log();
         return;
@@ -756,6 +865,7 @@ smp_start_aps(void)
      */
     if (x2apic_supported() && !x2apic_enabled()) {
         if (x2apic_enable() == 0) {
+            smp_soft_inc(&g_u32SoftStartX2Arm);
             kprintf("smp: bringup soft x2APIC ICR path armed\n");
         }
     }
@@ -772,14 +882,21 @@ smp_start_aps(void)
         u32 u32ApicId;
         u32 u32Spins;
 
-        if (!g_Smp.aEnabled[i] || g_Smp.aApicId[i] == u32Bsp) {
+        if (!g_Smp.aEnabled[i]) {
             g_u32SoftSkipped++;
+            smp_soft_inc(&g_u32SoftSkipDis);
+            continue;
+        }
+        if (g_Smp.aApicId[i] == u32Bsp) {
+            g_u32SoftSkipped++;
+            smp_soft_inc(&g_u32SoftSkipBsp);
             continue;
         }
         /* Park-stack array is the tightest static bound after bringup_cap. */
         if (u32CpuSlot >= GJ_AP_STACK_SLOTS ||
             u32CpuSlot >= GJ_CPU_STATIC_MAX) {
             g_u32SoftSkipped++;
+            smp_soft_inc(&g_u32SoftSkipCap);
             break;
         }
         u32ApicId = g_Smp.aApicId[i];
@@ -810,12 +927,14 @@ smp_start_aps(void)
          * Soft ICR counters bump inside x2apic_send_ipi_raw.
          */
         apic_send_init_sipi(u32ApicId, AP_SIPI_VECTOR);
+        smp_soft_inc(&g_u32SoftStartSipi);
 
         for (u32Spins = 0; u32Spins < 50000000u && !g_u32ApReady; u32Spins++) {
             __asm__ volatile ("pause");
         }
         g_aSoftSpins[u32CpuSlot] = u32Spins;
         g_u32SoftLastSpins = u32Spins;
+        smp_soft_note_spins(u32Spins);
 
         if (g_u32ApReady) {
             u32Ok++;
@@ -850,10 +969,11 @@ smp_start_aps(void)
              */
         }
     }
-    /* Count MADT leftovers past cap as soft-skipped. */
+    /* Count MADT leftovers past cap as soft-skipped (cap class). */
     for (; i < g_Smp.u32NLocalApic; i++) {
         if (g_Smp.aEnabled[i] && g_Smp.aApicId[i] != u32Bsp) {
             g_u32SoftSkipped++;
+            smp_soft_inc(&g_u32SoftSkipCap);
         }
     }
     /*
@@ -953,6 +1073,7 @@ smp_bringup_soft_log(void)
     u32 aPhHist[7];
     const char *szVerdict;
 
+    smp_soft_inc(&g_u32SoftLogN);
     smp_bringup_soft_snapshot(&stSoft);
     u32Cap = stSoft.u32Cap;
 
@@ -1012,7 +1133,7 @@ smp_bringup_soft_log(void)
     }
 
     /*
-     * Wave 9 greppable soft SMP inventory (product / smoke):
+     * Wave 9 greppable soft SMP inventory (product / smoke) — field-stable:
      *   smp: soft PASS|PARTIAL|UP|NONE …
      *   smp: soft inventory …
      *   smp: soft madt …
@@ -1060,6 +1181,66 @@ smp_bringup_soft_log(void)
                 (i == 0 || g_aApSchedReady[i] != 0) ? 1u : 0u,
                 smp_cpu_online(i) ? 1u : 0u);
     }
+
+    /*
+     * Wave 12 exclusive deepen (complementary; never reshapes primary lines):
+     *   smp: soft init …
+     *   smp: soft madt_path …
+     *   smp: soft start …
+     *   smp: soft skip …
+     *   smp: soft ap_entry …
+     *   smp: soft ap_run_path …
+     *   smp: soft spins …
+     *   smp: soft caps …
+     *   smp: soft path …
+     * greppable: smp: soft
+     */
+    /* Grep: smp: soft init */
+    kprintf("smp: soft init rsdp=%u mb2=%u rsdp_hit=%u bios_scan=%u "
+            "bios_hit=%u up_fallback=%u logs=%u\n",
+            g_u32SoftInitRsdp, g_u32SoftInitMb2, g_u32SoftInitRsdpHit,
+            g_u32SoftInitBiosScan, g_u32SoftInitBiosHit,
+            g_u32SoftInitUpFallback, g_u32SoftLogN);
+    /* Grep: smp: soft madt_path */
+    kprintf("smp: soft madt_path parse=%u csum_bad=%u local=%u x2=%u "
+            "dedup=%u full=%u disabled=%u\n",
+            g_u32SoftMadtParse, g_u32SoftMadtCsumBad, g_u32SoftMadtLocal,
+            g_u32SoftMadtX2, g_u32SoftMadtDedup, g_u32SoftMadtFull,
+            g_u32SoftMadtDisabled);
+    /* Grep: smp: soft start */
+    kprintf("smp: soft start enter=%u no_apic=%u up=%u bad_tramp=%u "
+            "x2_arm=%u sipi=%u\n",
+            g_u32SoftStartEnter, g_u32SoftStartNoApic, g_u32SoftStartUp,
+            g_u32SoftStartBadTramp, g_u32SoftStartX2Arm, g_u32SoftStartSipi);
+    /* Grep: smp: soft skip */
+    kprintf("smp: soft skip total=%u dis=%u bsp=%u cap=%u "
+            "(class split of soft skipped)\n",
+            stSoft.u32Skipped, g_u32SoftSkipDis, g_u32SoftSkipBsp,
+            g_u32SoftSkipCap);
+    /* Grep: smp: soft ap_entry */
+    kprintf("smp: soft ap_entry n=%u percpu_fail=%u idle_fail=%u "
+            "sched_ready=%u timer_spin_hwm=%u\n",
+            g_u32SoftApEntry, g_u32SoftApPercpuFail, g_u32SoftApIdleFail,
+            g_u32SoftApSchedReady, g_u32SoftApTimerSpinHwm);
+    /* Grep: smp: soft ap_run_path */
+    kprintf("smp: soft ap_run_path enter=%u inval=%u busy=%u ipi=%u "
+            "ok=%u fail=%u timeout=%u poll=%u drain=%u\n",
+            g_u32SoftApRunEnter, g_u32SoftApRunInval, g_u32SoftApRunBusy,
+            g_u32SoftApRunIpi, stSoft.u32ApRunOk, stSoft.u32ApRunFail,
+            stSoft.u32ApRunTimeout, g_u32SoftApPoll, g_u32SoftApPollDrain);
+    /* Grep: smp: soft spins */
+    kprintf("smp: soft spins last=%u hwm=%u timer_hwm=%u last_slot=%u "
+            "last_apic=%u\n",
+            stSoft.u32LastSpins, g_u32SoftSpinsHwm, g_u32SoftApTimerSpinHwm,
+            stSoft.u32LastSlot, stSoft.u32LastApicId);
+    /* Grep: smp: soft caps */
+    kprintf("smp: soft caps bringup=%u stack_slots=%u static_max=%u "
+            "madt_max=%u headroom=%u online=%u\n",
+            stSoft.u32Cap, (u32)GJ_AP_STACK_SLOTS, (u32)GJ_CPU_STATIC_MAX,
+            (u32)GJ_SMP_MAX_APICS, u32Headroom, stSoft.u32Online);
+    /* Grep: smp: soft path */
+    kprintf("smp: soft path claim=MADT+INIT-SIPI+ap_run "
+            "phases=ENTRY..SCHED soft=Wave12 (soft inventory; not bar3)\n");
 
     /*
      * Legacy greppable soft bring-up lines (kept for existing smoke greps):

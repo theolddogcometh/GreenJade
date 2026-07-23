@@ -6,6 +6,12 @@
  * Optional /dev/vda (virtio-blk) and /dev/sda (virtio-scsi) when mounted.
  * Also hosts pipes, eventfd, epoll, timerfd, signalfd, pidfd, inotify for
  * the Linux ABI bring-up path — independent of vfs_door product mini-FS.
+ *
+ * Soft ram inventory (Wave 12 exclusive deepen):
+ *   - Live files/fds/pipes/specials + mount lamps; peaks for files + fds
+ *   - Cumulative open/close/read/write/lseek + path + special create ops
+ *   - Soft deny tallies by errno shape (noent/badf/inval/nospc/mfile/…)
+ *   greppable: "vfs_ram: soft …"
  */
 #include <gj/klog.h>
 #include <gj/scsi_mid.h>
@@ -134,7 +140,421 @@ static int             g_fScsiMounted;
 static i32             g_iBlkFile = -1; /* file slot for /dev/vda */
 static u64             g_u64ScsiCapBytes;
 
+/*
+ * Soft product inventory (Wave 12 exclusive). Cumulative unless noted
+ * live/peak. greppable: vfs_ram: soft …
+ */
+static u32 g_u32SoftSeeded;       /* files seeded at last init */
+static u32 g_u32SoftOpenOk;
+static u32 g_u32SoftOpenFail;
+static u32 g_u32SoftCloseOk;
+static u32 g_u32SoftCloseFail;
+static u32 g_u32SoftReadOk;
+static u32 g_u32SoftReadFail;
+static u32 g_u32SoftWriteOk;
+static u32 g_u32SoftWriteFail;
+static u32 g_u32SoftLseekOk;
+static u32 g_u32SoftLseekFail;
+static u32 g_u32SoftDupOk;
+static u32 g_u32SoftDupFail;
+static u32 g_u32SoftMkdirOk;
+static u32 g_u32SoftMkdirFail;
+static u32 g_u32SoftUnlinkOk;
+static u32 g_u32SoftUnlinkFail;
+static u32 g_u32SoftRmdirOk;
+static u32 g_u32SoftRmdirFail;
+static u32 g_u32SoftRenameOk;
+static u32 g_u32SoftRenameFail;
+static u32 g_u32SoftLinkOk;
+static u32 g_u32SoftLinkFail;
+static u32 g_u32SoftSymlinkOk;
+static u32 g_u32SoftSymlinkFail;
+static u32 g_u32SoftAccessOk;
+static u32 g_u32SoftAccessFail;
+static u32 g_u32SoftStatOk;
+static u32 g_u32SoftStatFail;
+static u32 g_u32SoftGetdentsOk;
+static u32 g_u32SoftGetdentsFail;
+static u32 g_u32SoftPipeOk;
+static u32 g_u32SoftPipeFail;
+static u32 g_u32SoftEventfdOk;
+static u32 g_u32SoftEventfdFail;
+static u32 g_u32SoftEpollOk;
+static u32 g_u32SoftEpollFail;
+static u32 g_u32SoftTimerfdOk;
+static u32 g_u32SoftTimerfdFail;
+static u32 g_u32SoftSignalfdOk;
+static u32 g_u32SoftSignalfdFail;
+static u32 g_u32SoftInotifyOk;
+static u32 g_u32SoftInotifyFail;
+static u32 g_u32SoftPidfdOk;
+static u32 g_u32SoftPidfdFail;
+static u32 g_u32SoftIouringOk;
+static u32 g_u32SoftIouringFail;
+static u32 g_u32SoftMountBlkOk;
+static u32 g_u32SoftMountBlkSkip;
+static u32 g_u32SoftMountScsiOk;
+static u32 g_u32SoftMountScsiSkip;
+static u32 g_u32SoftDenyNoent;
+static u32 g_u32SoftDenyBadf;
+static u32 g_u32SoftDenyInval;
+static u32 g_u32SoftDenyNospc;
+static u32 g_u32SoftDenyMfile;
+static u32 g_u32SoftDenyExist;
+static u32 g_u32SoftDenyAgain;
+static u32 g_u32SoftDenyPipe;
+static u32 g_u32SoftDenyPerm;
+static u32 g_u32SoftDenyOther;
+static u32 g_u32SoftFilesPeak;
+static u32 g_u32SoftFdPeak;
+static u32 g_u32SoftPipePeak;
+static u32 g_u32SoftInvSamples;
+static u8  g_fSoftInvOnce;        /* one-shot dump after first activity */
+
 static void epoll_detach_fd(i64 i64Fd);
+static void soft_peak_note(void);
+static void soft_deny_note(i64 i64Ret);
+static i64 soft_out(u32 *pOk, u32 *pFail, i64 i64Ret);
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+
+/**
+ * Live slot counts for soft inventory (tables only; no alloc).
+ */
+static u32
+soft_count_files(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_FILES; i++) {
+        if (g_aFiles[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_fds(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_FDS; i++) {
+        if (g_aFds[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_pipes(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_PIPES; i++) {
+        if (g_aPipes[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_eventfd(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_EVENTFD; i++) {
+        if (g_aEventUsed[i]) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_epoll(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_EPOLL; i++) {
+        if (g_aEpoll[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_timerfd(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_TIMERFD; i++) {
+        if (g_aTimerUsed[i]) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_signalfd(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_SIGNALFD; i++) {
+        if (g_aSigUsed[i]) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_inotify(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_INOTIFY; i++) {
+        if (g_aInotify[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+static u32
+soft_count_symlinks(void)
+{
+    u32 i;
+    u32 c = 0;
+
+    for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
+        if (g_aSym[i].u8Used) {
+            c++;
+        }
+    }
+    return c;
+}
+
+/**
+ * Note live high-water for files / open fds / pipes.
+ */
+static void
+soft_peak_note(void)
+{
+    u32 u32Files = soft_count_files();
+    u32 u32Fds = soft_count_fds();
+    u32 u32Pipes = soft_count_pipes();
+
+    if (u32Files > g_u32SoftFilesPeak) {
+        g_u32SoftFilesPeak = u32Files;
+    }
+    if (u32Fds > g_u32SoftFdPeak) {
+        g_u32SoftFdPeak = u32Fds;
+    }
+    if (u32Pipes > g_u32SoftPipePeak) {
+        g_u32SoftPipePeak = u32Pipes;
+    }
+}
+
+/**
+ * Bump soft deny total into a typed errno bucket (Linux-shaped negatives).
+ */
+static void
+soft_deny_note(i64 i64Ret)
+{
+    i64 i64E;
+
+    if (i64Ret >= 0) {
+        return;
+    }
+    i64E = -i64Ret;
+    if (i64E == 2) {
+        g_u32SoftDenyNoent++;
+    } else if (i64E == 9) {
+        g_u32SoftDenyBadf++;
+    } else if (i64E == 22) {
+        g_u32SoftDenyInval++;
+    } else if (i64E == 28) {
+        g_u32SoftDenyNospc++;
+    } else if (i64E == 24) {
+        g_u32SoftDenyMfile++;
+    } else if (i64E == 17) {
+        g_u32SoftDenyExist++;
+    } else if (i64E == 11) {
+        g_u32SoftDenyAgain++;
+    } else if (i64E == 32) {
+        g_u32SoftDenyPipe++;
+    } else if (i64E == 1 || i64E == 13) {
+        g_u32SoftDenyPerm++;
+    } else {
+        g_u32SoftDenyOther++;
+    }
+}
+
+/**
+ * Soft-tally a public return (ok if >= 0). Diagnostics only; never mutates
+ * i64Ret semantics. Triggers one-shot inventory after first activity.
+ */
+static i64
+soft_out(u32 *pOk, u32 *pFail, i64 i64Ret)
+{
+    if (i64Ret >= 0) {
+        if (pOk != NULL && *pOk < 0xffffffffu) {
+            (*pOk)++;
+        }
+    } else {
+        if (pFail != NULL && *pFail < 0xffffffffu) {
+            (*pFail)++;
+        }
+        soft_deny_note(i64Ret);
+    }
+    soft_peak_note();
+    soft_inventory_maybe_once();
+    return i64Ret;
+}
+
+/**
+ * Greppable soft ram inventory (product / smoke).
+ *   vfs_ram: soft inventory …
+ *   vfs_ram: soft layout …
+ *   vfs_ram: soft fd …
+ *   vfs_ram: soft name …
+ *   vfs_ram: soft special …
+ *   vfs_ram: soft mount …
+ *   vfs_ram: soft deny …
+ *   vfs_ram: soft peak …
+ *   vfs_ram: soft path …
+ * greppable: vfs_ram: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    u32 u32Files;
+    u32 u32Fds;
+    u32 u32Pipes;
+    u32 u32Ev;
+    u32 u32Ep;
+    u32 u32Tmr;
+    u32 u32Sig;
+    u32 u32Ino;
+    u32 u32Sym;
+    u32 u32Samples;
+
+    soft_peak_note();
+    u32Files = soft_count_files();
+    u32Fds = soft_count_fds();
+    u32Pipes = soft_count_pipes();
+    u32Ev = soft_count_eventfd();
+    u32Ep = soft_count_epoll();
+    u32Tmr = soft_count_timerfd();
+    u32Sig = soft_count_signalfd();
+    u32Ino = soft_count_inotify();
+    u32Sym = soft_count_symlinks();
+    if (g_u32SoftInvSamples < 0xffffffffu) {
+        g_u32SoftInvSamples++;
+    }
+    u32Samples = g_u32SoftInvSamples;
+
+    /* Grep: vfs_ram: soft inventory */
+    kprintf("vfs_ram: soft inventory seeded=%u files=%u fds=%u pipes=%u "
+            "eventfd=%u epoll=%u timerfd=%u signalfd=%u inotify=%u "
+            "sym=%u blk=%u scsi=%u samples=%u wave=12\n",
+            g_u32SoftSeeded, u32Files, u32Fds, u32Pipes, u32Ev, u32Ep, u32Tmr,
+            u32Sig, u32Ino, u32Sym, g_fBlkMounted ? 1u : 0u,
+            g_fScsiMounted ? 1u : 0u, u32Samples);
+
+    /* Grep: vfs_ram: soft layout */
+    kprintf("vfs_ram: soft layout max_files=%u max_fds=%u max_data=%u "
+            "max_pipes=%u path=%u sym_max=%u\n",
+            VFS_MAX_FILES, VFS_MAX_FDS, VFS_MAX_DATA, VFS_MAX_PIPES,
+            VFS_MAX_PATH, VFS_MAX_SYMLINKS);
+
+    /* Grep: vfs_ram: soft fd */
+    kprintf("vfs_ram: soft fd open=%u/%u close=%u/%u read=%u/%u write=%u/%u "
+            "lseek=%u/%u dup=%u/%u getdents=%u/%u\n",
+            g_u32SoftOpenOk, g_u32SoftOpenFail, g_u32SoftCloseOk,
+            g_u32SoftCloseFail, g_u32SoftReadOk, g_u32SoftReadFail,
+            g_u32SoftWriteOk, g_u32SoftWriteFail, g_u32SoftLseekOk,
+            g_u32SoftLseekFail, g_u32SoftDupOk, g_u32SoftDupFail,
+            g_u32SoftGetdentsOk, g_u32SoftGetdentsFail);
+
+    /* Grep: vfs_ram: soft name */
+    kprintf("vfs_ram: soft name mkdir=%u/%u unlink=%u/%u rmdir=%u/%u "
+            "rename=%u/%u link=%u/%u symlink=%u/%u access=%u/%u "
+            "stat=%u/%u\n",
+            g_u32SoftMkdirOk, g_u32SoftMkdirFail, g_u32SoftUnlinkOk,
+            g_u32SoftUnlinkFail, g_u32SoftRmdirOk, g_u32SoftRmdirFail,
+            g_u32SoftRenameOk, g_u32SoftRenameFail, g_u32SoftLinkOk,
+            g_u32SoftLinkFail, g_u32SoftSymlinkOk, g_u32SoftSymlinkFail,
+            g_u32SoftAccessOk, g_u32SoftAccessFail, g_u32SoftStatOk,
+            g_u32SoftStatFail);
+
+    /* Grep: vfs_ram: soft special */
+    kprintf("vfs_ram: soft special pipe=%u/%u eventfd=%u/%u epoll=%u/%u "
+            "timerfd=%u/%u signalfd=%u/%u inotify=%u/%u pidfd=%u/%u "
+            "iouring=%u/%u\n",
+            g_u32SoftPipeOk, g_u32SoftPipeFail, g_u32SoftEventfdOk,
+            g_u32SoftEventfdFail, g_u32SoftEpollOk, g_u32SoftEpollFail,
+            g_u32SoftTimerfdOk, g_u32SoftTimerfdFail, g_u32SoftSignalfdOk,
+            g_u32SoftSignalfdFail, g_u32SoftInotifyOk, g_u32SoftInotifyFail,
+            g_u32SoftPidfdOk, g_u32SoftPidfdFail, g_u32SoftIouringOk,
+            g_u32SoftIouringFail);
+
+    /* Grep: vfs_ram: soft mount */
+    kprintf("vfs_ram: soft mount blk_ok=%u blk_skip=%u scsi_ok=%u "
+            "scsi_skip=%u live_blk=%u live_scsi=%u\n",
+            g_u32SoftMountBlkOk, g_u32SoftMountBlkSkip, g_u32SoftMountScsiOk,
+            g_u32SoftMountScsiSkip, g_fBlkMounted ? 1u : 0u,
+            g_fScsiMounted ? 1u : 0u);
+
+    /* Grep: vfs_ram: soft deny */
+    kprintf("vfs_ram: soft deny noent=%u badf=%u inval=%u nospc=%u mfile=%u "
+            "exist=%u eagain=%u epipe=%u perm=%u other=%u\n",
+            g_u32SoftDenyNoent, g_u32SoftDenyBadf, g_u32SoftDenyInval,
+            g_u32SoftDenyNospc, g_u32SoftDenyMfile, g_u32SoftDenyExist,
+            g_u32SoftDenyAgain, g_u32SoftDenyPipe, g_u32SoftDenyPerm,
+            g_u32SoftDenyOther);
+
+    /* Grep: vfs_ram: soft peak */
+    kprintf("vfs_ram: soft peak files=%u fds=%u pipes=%u samples=%u\n",
+            g_u32SoftFilesPeak, g_u32SoftFdPeak, g_u32SoftPipePeak,
+            u32Samples);
+
+    /* Grep: vfs_ram: soft path */
+    kprintf("vfs_ram: soft path cold_linux=1 ramfs+specials=1 "
+            "wave=12 (soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product open/op activity, print soft inventory once
+ * (mirrors input_hub/vfs_door soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u32SoftOpenOk == 0 && g_u32SoftOpenFail == 0 &&
+        g_u32SoftPipeOk == 0 && g_u32SoftReadOk == 0 &&
+        g_u32SoftWriteOk == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
 
 static int
 path_eq(const char *szA, const char *szB)
@@ -457,10 +877,89 @@ vfs_ram_init(void)
 
     memset(g_aFiles, 0, sizeof(g_aFiles));
     memset(g_aFds, 0, sizeof(g_aFds));
+    memset(g_aPipes, 0, sizeof(g_aPipes));
+    memset(g_aSym, 0, sizeof(g_aSym));
+    memset(g_aEventCnt, 0, sizeof(g_aEventCnt));
+    memset(g_aEventUsed, 0, sizeof(g_aEventUsed));
+    memset(g_aEpoll, 0, sizeof(g_aEpoll));
+    memset(g_aTimerTicks, 0, sizeof(g_aTimerTicks));
+    memset(g_aTimerInterval, 0, sizeof(g_aTimerInterval));
+    memset(g_aTimerUsed, 0, sizeof(g_aTimerUsed));
+    memset(g_aSigUsed, 0, sizeof(g_aSigUsed));
+    memset(g_aSigMask, 0, sizeof(g_aSigMask));
+    memset(g_aSigPending, 0, sizeof(g_aSigPending));
+    memset(g_aInotify, 0, sizeof(g_aInotify));
     g_fBlkMounted = 0;
     g_fScsiMounted = 0;
     g_iBlkFile = -1;
     g_u64ScsiCapBytes = 0;
+    /* Wave 12 soft inventory tallies (reset on re-init). */
+    g_u32SoftSeeded = 0;
+    g_u32SoftOpenOk = 0;
+    g_u32SoftOpenFail = 0;
+    g_u32SoftCloseOk = 0;
+    g_u32SoftCloseFail = 0;
+    g_u32SoftReadOk = 0;
+    g_u32SoftReadFail = 0;
+    g_u32SoftWriteOk = 0;
+    g_u32SoftWriteFail = 0;
+    g_u32SoftLseekOk = 0;
+    g_u32SoftLseekFail = 0;
+    g_u32SoftDupOk = 0;
+    g_u32SoftDupFail = 0;
+    g_u32SoftMkdirOk = 0;
+    g_u32SoftMkdirFail = 0;
+    g_u32SoftUnlinkOk = 0;
+    g_u32SoftUnlinkFail = 0;
+    g_u32SoftRmdirOk = 0;
+    g_u32SoftRmdirFail = 0;
+    g_u32SoftRenameOk = 0;
+    g_u32SoftRenameFail = 0;
+    g_u32SoftLinkOk = 0;
+    g_u32SoftLinkFail = 0;
+    g_u32SoftSymlinkOk = 0;
+    g_u32SoftSymlinkFail = 0;
+    g_u32SoftAccessOk = 0;
+    g_u32SoftAccessFail = 0;
+    g_u32SoftStatOk = 0;
+    g_u32SoftStatFail = 0;
+    g_u32SoftGetdentsOk = 0;
+    g_u32SoftGetdentsFail = 0;
+    g_u32SoftPipeOk = 0;
+    g_u32SoftPipeFail = 0;
+    g_u32SoftEventfdOk = 0;
+    g_u32SoftEventfdFail = 0;
+    g_u32SoftEpollOk = 0;
+    g_u32SoftEpollFail = 0;
+    g_u32SoftTimerfdOk = 0;
+    g_u32SoftTimerfdFail = 0;
+    g_u32SoftSignalfdOk = 0;
+    g_u32SoftSignalfdFail = 0;
+    g_u32SoftInotifyOk = 0;
+    g_u32SoftInotifyFail = 0;
+    g_u32SoftPidfdOk = 0;
+    g_u32SoftPidfdFail = 0;
+    g_u32SoftIouringOk = 0;
+    g_u32SoftIouringFail = 0;
+    g_u32SoftMountBlkOk = 0;
+    g_u32SoftMountBlkSkip = 0;
+    g_u32SoftMountScsiOk = 0;
+    g_u32SoftMountScsiSkip = 0;
+    g_u32SoftDenyNoent = 0;
+    g_u32SoftDenyBadf = 0;
+    g_u32SoftDenyInval = 0;
+    g_u32SoftDenyNospc = 0;
+    g_u32SoftDenyMfile = 0;
+    g_u32SoftDenyExist = 0;
+    g_u32SoftDenyAgain = 0;
+    g_u32SoftDenyPipe = 0;
+    g_u32SoftDenyPerm = 0;
+    g_u32SoftDenyOther = 0;
+    g_u32SoftFilesPeak = 0;
+    g_u32SoftFdPeak = 0;
+    g_u32SoftPipePeak = 0;
+    g_u32SoftInvSamples = 0;
+    g_fSoftInvOnce = 0;
     seed_file("/etc/hostname", "greenjade\n");
     seed_file("/etc/os-release",
               "NAME=\"GreenJade\"\nID=greenjade\nVERSION_ID=\"0.1\"\n"
@@ -496,9 +995,13 @@ vfs_ram_init(void)
             cSeed++;
         }
     }
+    g_u32SoftSeeded = cSeed;
+    soft_peak_note();
     kprintf("vfs_ram: init seeded=%u max_files=%u max_fds=%u "
             "stubs=/etc,/proc,/bin,/lib,/tmp\n",
             cSeed, VFS_MAX_FILES, VFS_MAX_FDS);
+    /* Grep: vfs_ram: soft (baseline inventory after init) */
+    soft_inventory_log();
 }
 
 void
@@ -510,6 +1013,9 @@ vfs_ram_mount_blk(void)
         return;
     }
     if (!virtio_blk_ready()) {
+        if (g_u32SoftMountBlkSkip < 0xffffffffu) {
+            g_u32SoftMountBlkSkip++;
+        }
         kprintf("vfs_ram: mount_blk skipped (no virtio-blk)\n");
         return;
     }
@@ -521,10 +1027,17 @@ vfs_ram_mount_blk(void)
             g_aFiles[i].cbData = 0;
             g_iBlkFile = (i32)i;
             g_fBlkMounted = 1;
+            if (g_u32SoftMountBlkOk < 0xffffffffu) {
+                g_u32SoftMountBlkOk++;
+            }
+            soft_peak_note();
             kprintf("vfs_ram: mounted /dev/vda capacity=%lu sectors\n",
                     (unsigned long)virtio_blk_capacity_sectors());
             return;
         }
+    }
+    if (g_u32SoftMountBlkSkip < 0xffffffffu) {
+        g_u32SoftMountBlkSkip++;
     }
     kprintf("vfs_ram: mount_blk ENOSPC\n");
 }
@@ -540,6 +1053,9 @@ vfs_ram_mount_scsi(void)
         return;
     }
     if (!virtio_scsi_ready()) {
+        if (g_u32SoftMountScsiSkip < 0xffffffffu) {
+            g_u32SoftMountScsiSkip++;
+        }
         kprintf("vfs_ram: mount_scsi skipped (no virtio-scsi)\n");
         return;
     }
@@ -549,6 +1065,9 @@ vfs_ram_mount_scsi(void)
     req.cbData = 8;
     req.fDataIn = 1;
     if (scsi_mid_submit(&req) != 0) {
+        if (g_u32SoftMountScsiSkip < 0xffffffffu) {
+            g_u32SoftMountScsiSkip++;
+        }
         kprintf("vfs_ram: mount_scsi capacity failed\n");
         return;
     }
@@ -559,6 +1078,9 @@ vfs_ram_mount_scsi(void)
                      ((u32)aCap[6] << 8) | (u32)aCap[7];
 
         if (u32Bsz != VFS_SCSI_SEC) {
+            if (g_u32SoftMountScsiSkip < 0xffffffffu) {
+                g_u32SoftMountScsiSkip++;
+            }
             kprintf("vfs_ram: mount_scsi unsupported block_len=%u\n", u32Bsz);
             return;
         }
@@ -571,10 +1093,17 @@ vfs_ram_mount_scsi(void)
             path_copy(g_aFiles[i].szPath, "/dev/sda");
             g_aFiles[i].cbData = 0;
             g_fScsiMounted = 1;
+            if (g_u32SoftMountScsiOk < 0xffffffffu) {
+                g_u32SoftMountScsiOk++;
+            }
+            soft_peak_note();
             kprintf("vfs_ram: mounted /dev/sda capacity=%lu bytes\n",
                     (unsigned long)g_u64ScsiCapBytes);
             return;
         }
+    }
+    if (g_u32SoftMountScsiSkip < 0xffffffffu) {
+        g_u32SoftMountScsiSkip++;
     }
     kprintf("vfs_ram: mount_scsi ENOSPC\n");
 }
@@ -601,7 +1130,7 @@ vfs_ram_open(const char *szPath, int fCreate)
     i64 st;
 
     if (szPath == NULL || szPath[0] == '\0') {
-        return -14; /* EFAULT */
+        return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -14); /* EFAULT */
     }
     st = path_resolve(szResolved, szPath);
     if (st != 0) {
@@ -632,7 +1161,7 @@ vfs_ram_open(const char *szPath, int fCreate)
                 }
             }
             if ((u32)iFile >= VFS_MAX_FILES) {
-                return -28;
+                return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -28);
             }
         }
     } else {
@@ -640,7 +1169,7 @@ vfs_ram_open(const char *szPath, int fCreate)
     }
     if (iFile < 0) {
         if (!fCreate) {
-            return -2; /* ENOENT */
+            return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -2); /* ENOENT */
         }
         for (iFile = 0; (u32)iFile < VFS_MAX_FILES; iFile++) {
             if (!g_aFiles[iFile].u8Used) {
@@ -655,7 +1184,7 @@ vfs_ram_open(const char *szPath, int fCreate)
             }
         }
         if ((u32)iFile >= VFS_MAX_FILES) {
-            return -28; /* ENOSPC */
+            return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -28); /* ENOSPC */
         }
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
@@ -664,10 +1193,10 @@ vfs_ram_open(const char *szPath, int fCreate)
             g_aFds[iFd].u8Kind = g_aFiles[iFile].u8Kind;
             g_aFds[iFd].u32File = (u32)iFile;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, (i64)iFd);
         }
     }
-    return -24; /* EMFILE */
+    return soft_out(&g_u32SoftOpenOk, &g_u32SoftOpenFail, -24); /* EMFILE */
 }
 
 int
@@ -682,36 +1211,36 @@ vfs_ram_dup(i64 i64Fd)
     u32 iFd;
 
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return -9; /* EBADF */
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9); /* EBADF */
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
             g_aFds[iFd] = g_aFds[i64Fd];
             g_aFds[iFd].u8Used = 1;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, (i64)iFd);
         }
     }
-    return -24; /* EMFILE */
+    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -24); /* EMFILE */
 }
 
 i64
 vfs_ram_dup2(i64 i64Old, i64 i64New)
 {
     if (!vfs_ram_fd_ok(i64Old)) {
-        return -9;
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
     }
     if (i64New < 3 || i64New >= VFS_MAX_FDS) {
-        return -9;
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
     }
     if (i64Old == i64New) {
-        return i64New;
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, i64New);
     }
     if (g_aFds[i64New].u8Used) {
         (void)vfs_ram_close(i64New);
     }
     g_aFds[i64New] = g_aFds[i64Old];
     g_aFds[i64New].u8Used = 1;
-    return i64New;
+    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, i64New);
 }
 
 i64
@@ -721,23 +1250,23 @@ vfs_ram_dup_from(i64 i64Fd, i64 i64Min)
     u32 u32Start;
 
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return -9;
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
     }
     if (i64Min < 3) {
         i64Min = 3;
     }
     if (i64Min >= VFS_MAX_FDS) {
-        return -9;
+        return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -9);
     }
     u32Start = (u32)i64Min;
     for (iFd = u32Start; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
             g_aFds[iFd] = g_aFds[i64Fd];
             g_aFds[iFd].u8Used = 1;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftDupOk, &g_u32SoftDupFail, -24);
 }
 
 i64
@@ -778,18 +1307,18 @@ vfs_ram_symlink(const char *szTarget, const char *szLink)
 
     if (szTarget == NULL || szLink == NULL || szLink[0] == '\0' ||
         szTarget[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftSymlinkOk, &g_u32SoftSymlinkFail, -14);
     }
     if (path_norm(szNorm, szLink) != 0) {
         path_copy(szNorm, szLink);
     }
     if (find_file(szNorm) >= 0) {
-        return -17; /* EEXIST */
+        return soft_out(&g_u32SoftSymlinkOk, &g_u32SoftSymlinkFail, -17); /* EEXIST */
     }
     for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
         if (g_aSym[i].u8Used && path_eq(g_aSym[i].szLink, szNorm)) {
             path_copy(g_aSym[i].szTarget, szTarget);
-            return 0;
+            return soft_out(&g_u32SoftSymlinkOk, &g_u32SoftSymlinkFail, 0);
         }
     }
     for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
@@ -797,10 +1326,10 @@ vfs_ram_symlink(const char *szTarget, const char *szLink)
             g_aSym[i].u8Used = 1;
             path_copy(g_aSym[i].szLink, szNorm);
             path_copy(g_aSym[i].szTarget, szTarget);
-            return 0;
+            return soft_out(&g_u32SoftSymlinkOk, &g_u32SoftSymlinkFail, 0);
         }
     }
-    return -28; /* ENOSPC */
+    return soft_out(&g_u32SoftSymlinkOk, &g_u32SoftSymlinkFail, -28); /* ENOSPC */
 }
 
 i64
@@ -849,7 +1378,7 @@ vfs_ram_link(const char *szOld, const char *szNew)
     char szNewR[VFS_MAX_PATH];
 
     if (szOld == NULL || szNew == NULL || szOld[0] == '\0' || szNew[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -14);
     }
     if (path_resolve(szOldR, szOld) != 0) {
         if (path_norm(szOldR, szOld) != 0) {
@@ -861,16 +1390,16 @@ vfs_ram_link(const char *szOld, const char *szNew)
     }
     iOld = find_file(szOldR);
     if (iOld < 0) {
-        return -2;
+        return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -2);
     }
     if (g_aFiles[iOld].u8Kind != VFS_KIND_RAM) {
-        return -1;
+        return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -1);
     }
     if (g_aFiles[iOld].u8IsDir) {
-        return -21; /* EISDIR */
+        return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -21); /* EISDIR */
     }
     if (find_file(szNewR) >= 0 || find_symlink(szNewR) >= 0) {
-        return -17; /* EEXIST */
+        return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -17); /* EEXIST */
     }
     /* New path entry that aliases same content (copy for bring-up) */
     for (iNew = 0; (u32)iNew < VFS_MAX_FILES; iNew++) {
@@ -884,10 +1413,10 @@ vfs_ram_link(const char *szOld, const char *szNew)
             for (i = 0; i < g_aFiles[iOld].cbData && i < VFS_MAX_DATA; i++) {
                 g_aFiles[iNew].aData[i] = g_aFiles[iOld].aData[i];
             }
-            return 0;
+            return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, 0);
         }
     }
-    return -28;
+    return soft_out(&g_u32SoftLinkOk, &g_u32SoftLinkFail, -28);
 }
 
 i64
@@ -898,7 +1427,7 @@ vfs_ram_unlink(const char *szPath)
     char szNorm[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, -14);
     }
     if (path_norm(szNorm, szPath) != 0) {
         path_copy(szNorm, szPath);
@@ -907,22 +1436,22 @@ vfs_ram_unlink(const char *szPath)
     for (s = 0; s < VFS_MAX_SYMLINKS; s++) {
         if (g_aSym[s].u8Used && path_eq(g_aSym[s].szLink, szNorm)) {
             memset(&g_aSym[s], 0, sizeof(g_aSym[s]));
-            return 0;
+            return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, 0);
         }
     }
     iFile = find_file(szNorm);
     if (iFile < 0) {
-        return -2;
+        return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, -2);
     }
     if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
-        return -1; /* device nodes not removable here */
+        return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, -1);
     }
     if (g_aFiles[iFile].u8IsDir) {
-        return -21; /* EISDIR */
+        return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, -21); /* EISDIR */
     }
     /* Copy-based hard links: free this path entry only */
     memset(&g_aFiles[iFile], 0, sizeof(g_aFiles[iFile]));
-    return 0;
+    return soft_out(&g_u32SoftUnlinkOk, &g_u32SoftUnlinkFail, 0);
 }
 
 i64
@@ -933,41 +1462,41 @@ vfs_ram_rmdir(const char *szPath)
     char szNorm[VFS_MAX_PATH];
 
     if (szPath == NULL || szPath[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -14);
     }
     if (path_norm(szNorm, szPath) != 0) {
         path_copy(szNorm, szPath);
     }
     if (path_eq(szNorm, "/") || path_eq(szNorm, "/tmp") ||
         path_eq(szNorm, "/proc") || path_eq(szNorm, "/dev")) {
-        return -16; /* EBUSY */
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -16); /* EBUSY */
     }
     iFile = find_file(szNorm);
     if (iFile < 0) {
-        return -2;
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -2);
     }
     if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
-        return -20;
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -20);
     }
     if (!g_aFiles[iFile].u8IsDir) {
-        return -20; /* ENOTDIR */
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -20); /* ENOTDIR */
     }
     if (g_aFiles[iFile].cbData != 0) {
-        return -39; /* ENOTEMPTY */
+        return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -39); /* ENOTEMPTY */
     }
     /* Refuse if any path is a direct child */
     for (i = 0; i < VFS_MAX_FILES; i++) {
         if (g_aFiles[i].u8Used && path_is_child_of(szNorm, g_aFiles[i].szPath)) {
-            return -39; /* ENOTEMPTY */
+            return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -39);
         }
     }
     for (i = 0; i < VFS_MAX_SYMLINKS; i++) {
         if (g_aSym[i].u8Used && path_is_child_of(szNorm, g_aSym[i].szLink)) {
-            return -39;
+            return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, -39);
         }
     }
     memset(&g_aFiles[iFile], 0, sizeof(g_aFiles[iFile]));
-    return 0;
+    return soft_out(&g_u32SoftRmdirOk, &g_u32SoftRmdirFail, 0);
 }
 
 i64
@@ -1176,13 +1705,13 @@ vfs_ram_mkdir(const char *szPath, u32 u32Mode)
     u32 u32Perm;
 
     if (szPath == NULL || szPath[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftMkdirOk, &g_u32SoftMkdirFail, -14);
     }
     if (path_norm(szNorm, szPath) != 0) {
         path_copy(szNorm, szPath);
     }
     if (find_file(szNorm) >= 0 || find_symlink(szNorm) >= 0) {
-        return -17; /* EEXIST */
+        return soft_out(&g_u32SoftMkdirOk, &g_u32SoftMkdirFail, -17); /* EEXIST */
     }
     u32Perm = (u32Mode & 07777u);
     if (u32Perm == 0) {
@@ -1197,10 +1726,10 @@ vfs_ram_mkdir(const char *szPath, u32 u32Mode)
             g_aFiles[iFile].u32Nlink = 2;
             path_copy(g_aFiles[iFile].szPath, szNorm);
             g_aFiles[iFile].cbData = 0;
-            return 0;
+            return soft_out(&g_u32SoftMkdirOk, &g_u32SoftMkdirFail, 0);
         }
     }
-    return -28;
+    return soft_out(&g_u32SoftMkdirOk, &g_u32SoftMkdirFail, -28);
 }
 
 i64
@@ -1378,14 +1907,14 @@ vfs_ram_access(const char *szPath, int nMode)
     int fNeedX = (nMode & 1) != 0;
 
     if (szPath == NULL || szPath[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -14);
     }
     if (path_norm(szNorm, szPath) != 0) {
         path_copy(szNorm, szPath);
     }
     /* Symlink existence for F_OK without follow when only checking link path */
     if (find_symlink(szNorm) >= 0 && nMode == 0) {
-        return 0;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, 0);
     }
     if (path_resolve(szResolved, szPath) != 0) {
         path_copy(szResolved, szNorm);
@@ -1399,16 +1928,16 @@ vfs_ram_access(const char *szPath, int nMode)
         path_eq(szResolved, "/bin/greenjade")) {
         if (fNeedW && (path_eq(szResolved, "/proc/self/exe") ||
                        path_eq(szResolved, "/proc/self/cwd"))) {
-            return -13; /* EACCES */
+            return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -13);
         }
-        return 0;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, 0);
     }
     iFile = find_file(szResolved);
     if (iFile < 0) {
-        return -2; /* ENOENT */
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -2); /* ENOENT */
     }
     if (nMode == 0) {
-        return 0;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, 0);
     }
     u32Mode = g_aFiles[iFile].u32Mode;
     if (u32Mode == 0) {
@@ -1416,15 +1945,15 @@ vfs_ram_access(const char *szPath, int nMode)
     }
     /* Owner bits only (uid 0 in bring-up still checks perm mask) */
     if (fNeedR && (u32Mode & 0444u) == 0) {
-        return -13;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -13);
     }
     if (fNeedW && (u32Mode & 0222u) == 0) {
-        return -13;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -13);
     }
     if (fNeedX && (u32Mode & 0111u) == 0) {
-        return -13;
+        return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, -13);
     }
-    return 0;
+    return soft_out(&g_u32SoftAccessOk, &g_u32SoftAccessFail, 0);
 }
 
 /* Linux x86_64 struct stat (public layout, first fields we fill). */
@@ -1473,16 +2002,16 @@ vfs_ram_fstat(i64 i64Fd, void *pStat, size_t cbStat)
     i64 size;
 
     if (pStat == NULL || cbStat < sizeof(st)) {
-        return -14;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -14);
     }
     if (i64Fd >= 0 && i64Fd <= 2) {
         /* stdin/out/err — char device-ish */
         fill_stat(&st, (u64)i64Fd + 1u, 0020000u | 0666u, 0);
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return -9;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -9);
     }
     pFd = &g_aFds[i64Fd];
     mode = 0100644u; /* regular */
@@ -1516,7 +2045,7 @@ vfs_ram_fstat(i64 i64Fd, void *pStat, size_t cbStat)
         st.st_nlink = g_aFiles[pFd->u32File].u32Nlink;
     }
     memcpy(pStat, &st, sizeof(st));
-    return 0;
+    return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
 }
 
 i64
@@ -1530,7 +2059,7 @@ vfs_ram_rename(const char *szOld, const char *szNew)
 
     if (szOld == NULL || szNew == NULL || szOld[0] == '\0' ||
         szNew[0] == '\0') {
-        return -14;
+        return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, -14);
     }
     if (path_norm(szOldN, szOld) != 0) {
         path_copy(szOldN, szOld);
@@ -1539,7 +2068,7 @@ vfs_ram_rename(const char *szOld, const char *szNew)
         path_copy(szNewN, szNew);
     }
     if (path_eq(szOldN, szNewN)) {
-        return 0;
+        return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, 0);
     }
     /* Symlink rename */
     for (s = 0; s < VFS_MAX_SYMLINKS; s++) {
@@ -1552,28 +2081,29 @@ vfs_ram_rename(const char *szOld, const char *szNew)
             iExist = find_file(szNewN);
             if (iExist >= 0) {
                 if (g_aFiles[iExist].u8IsDir) {
-                    return -21;
+                    return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail,
+                                    -21);
                 }
                 memset(&g_aFiles[iExist], 0, sizeof(g_aFiles[iExist]));
             }
             path_copy(g_aSym[s].szLink, szNewN);
-            return 0;
+            return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, 0);
         }
     }
     iFile = find_file(szOldN);
     if (iFile < 0) {
-        return -2;
+        return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, -2);
     }
     if (g_aFiles[iFile].u8Kind != VFS_KIND_RAM) {
-        return -1; /* EPERM-shaped for device nodes */
+        return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, -1);
     }
     iExist = find_file(szNewN);
     if (iExist >= 0 && iExist != iFile) {
         if (g_aFiles[iExist].u8IsDir && !g_aFiles[iFile].u8IsDir) {
-            return -21; /* EISDIR */
+            return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, -21);
         }
         if (!g_aFiles[iExist].u8IsDir && g_aFiles[iFile].u8IsDir) {
-            return -20; /* ENOTDIR */
+            return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, -20);
         }
         if (g_aFiles[iExist].u8IsDir) {
             /* Only replace empty dir */
@@ -1583,7 +2113,8 @@ vfs_ram_rename(const char *szOld, const char *szNew)
                 if (g_aFiles[i].u8Used &&
                     path_is_child_of(g_aFiles[iExist].szPath,
                                      g_aFiles[i].szPath)) {
-                    return -39;
+                    return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail,
+                                    -39);
                 }
             }
         }
@@ -1597,7 +2128,7 @@ vfs_ram_rename(const char *szOld, const char *szNew)
         }
     }
     path_copy(g_aFiles[iFile].szPath, szNewN);
-    return 0;
+    return soft_out(&g_u32SoftRenameOk, &g_u32SoftRenameFail, 0);
 }
 
 i64
@@ -1654,7 +2185,7 @@ vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat)
     char szResolved[VFS_MAX_PATH];
 
     if (szPath == NULL || pStat == NULL || cbStat < sizeof(st)) {
-        return -14;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -14);
     }
     if (path_resolve(szResolved, szPath) != 0) {
         if (path_norm(szResolved, szPath) != 0) {
@@ -1668,22 +2199,22 @@ vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat)
         path_eq(szResolved, "/var") || path_eq(szResolved, "/var/tmp")) {
         fill_stat(&st, 2, 0040755u, 0); /* directory */
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     if (path_eq(szResolved, "/proc/self/exe") ||
         path_eq(szResolved, "/bin/greenjade")) {
         fill_stat(&st, 3, 0100755u, 4096);
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     if (path_eq(szResolved, "/proc/self/cwd")) {
         fill_stat(&st, 4, 0040755u, 0);
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     iFile = find_file(szResolved);
     if (iFile < 0) {
-        return -2;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -2);
     }
     if (g_aFiles[iFile].u8Kind == VFS_KIND_RAM) {
         size = (i64)g_aFiles[iFile].cbData;
@@ -1704,7 +2235,7 @@ vfs_ram_stat(const char *szPath, void *pStat, size_t cbStat)
         st.st_nlink = g_aFiles[iFile].u32Nlink;
     }
     memcpy(pStat, &st, sizeof(st));
-    return 0;
+    return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
 }
 
 i64
@@ -1717,7 +2248,7 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
     size_t n;
 
     if (szPath == NULL || pStat == NULL || cbStat < sizeof(st)) {
-        return -14;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -14);
     }
     if (path_norm(szNorm, szPath) != 0) {
         path_copy(szNorm, szPath);
@@ -1727,7 +2258,7 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
         fill_stat(&st, 5, 0120777u, 0); /* S_IFLNK */
         st.st_size = path_eq(szNorm, "/proc/self/cwd") ? 1 : 13;
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     iSym = find_symlink(szNorm);
     if (iSym >= 0) {
@@ -1737,7 +2268,7 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
         }
         fill_stat(&st, (u64)iSym + 300u, 0120777u, (i64)n);
         memcpy(pStat, &st, sizeof(st));
-        return 0;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
     }
     /* Non-link: same as stat without follow (already resolved-ish) */
     iFile = find_file(szNorm);
@@ -1747,9 +2278,9 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
             path_eq(szNorm, "/proc") || path_eq(szNorm, "/dev")) {
             fill_stat(&st, 2, 0040755u, 0);
             memcpy(pStat, &st, sizeof(st));
-            return 0;
+            return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
         }
-        return -2;
+        return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, -2);
     }
     {
         u32 mode = 0100644u;
@@ -1771,7 +2302,7 @@ vfs_ram_lstat(const char *szPath, void *pStat, size_t cbStat)
         }
     }
     memcpy(pStat, &st, sizeof(st));
-    return 0;
+    return soft_out(&g_u32SoftStatOk, &g_u32SoftStatFail, 0);
 }
 
 i64
@@ -1782,9 +2313,10 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
     u32 u32Avail;
     u32 u32N;
     u32 i;
+    i64 i64Ret;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
-        return -9; /* EBADF / EFAULT */
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -9);
     }
     pFd = &g_aFds[i64Fd];
     pFile = &g_aFiles[pFd->u32File];
@@ -1794,15 +2326,15 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 iEv = pFd->u32File;
 
         if (iEv >= VFS_MAX_EVENTFD || !g_aEventUsed[iEv] || cb < 8) {
-            return -22;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -22);
         }
         if (g_aEventCnt[iEv] == 0) {
-            return -11; /* EAGAIN */
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -11);
         }
         u64V = g_aEventCnt[iEv];
         g_aEventCnt[iEv] = 0;
         memcpy(pBuf, &u64V, 8);
-        return 8;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_TIMERFD) {
@@ -1810,15 +2342,15 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 iT = pFd->u32File;
 
         if (iT >= VFS_MAX_TIMERFD || !g_aTimerUsed[iT] || cb < 8) {
-            return -22;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -22);
         }
         if (g_aTimerTicks[iT] == 0) {
-            return -11; /* EAGAIN */
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -11);
         }
         u64V = g_aTimerTicks[iT];
         g_aTimerTicks[iT] = 0;
         memcpy(pBuf, &u64V, 8);
-        return 8;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_SIGNALFD) {
@@ -1828,10 +2360,10 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 sig;
 
         if (iS >= VFS_MAX_SIGNALFD || !g_aSigUsed[iS] || cb < 128) {
-            return -22;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -22);
         }
         if (g_aSigPending[iS] == 0) {
-            return -11;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -11);
         }
         memset(aInfo, 0, sizeof(aInfo));
         /* pick lowest pending bit as signo */
@@ -1846,7 +2378,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             cb = sizeof(aInfo);
         }
         memcpy(pBuf, aInfo, cb);
-        return (i64)cb;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, (i64)cb);
     }
 
     if (pFd->u8Kind == VFS_KIND_INOTIFY) {
@@ -1859,10 +2391,10 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u8 *pOut = (u8 *)pBuf;
 
         if (iIn >= VFS_MAX_INOTIFY || !g_aInotify[iIn].u8Used) {
-            return -9;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -9);
         }
         if (cb < 16) {
-            return -22;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -22);
         }
         while (g_aInotify[iIn].u8Nq > 0 && nOut + 16 <= (u32)cb) {
             struct vfs_inotify *pIn = &g_aInotify[iIn];
@@ -1884,9 +2416,9 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             }
         }
         if (nOut == 0) {
-            return -11; /* EAGAIN */
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -11);
         }
-        return (i64)nOut;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, (i64)nOut);
     }
 
     if (pFd->u8Kind == VFS_KIND_PIPE) {
@@ -1896,16 +2428,16 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         u32 u32Done = 0;
 
         if (pFd->u32File >= VFS_MAX_PIPES || !g_aPipes[pFd->u32File].u8Used) {
-            return -9;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -9);
         }
         pPair = &g_aPipes[pFd->u32File];
         u8From = (u8)(1u - pFd->u8End);
         if (pPair->u32Len[u8From] == 0) {
             /* Peer closed with empty buffer → EOF; else would block → 0 for now */
             if (!pPair->u8Open[u8From]) {
-                return 0;
+                return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, 0);
             }
-            return -11; /* EAGAIN */
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -11);
         }
         if (u32Want > pPair->u32Len[u8From]) {
             u32Want = pPair->u32Len[u8From];
@@ -1917,7 +2449,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             pPair->u32Len[u8From]--;
             u32Done++;
         }
-        return (i64)u32Done;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, (i64)u32Done);
     }
 
     if (pFd->u8Kind == VFS_KIND_BLK || pFd->u8Kind == VFS_KIND_SCSI) {
@@ -1933,18 +2465,18 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
 
         if (pFd->u8Kind == VFS_KIND_BLK) {
             if (!virtio_blk_ready()) {
-                return -5;
+                return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -5);
             }
             u64CapBytes =
                 virtio_blk_capacity_sectors() * (u64)GJ_VIRTIO_BLK_SECTOR;
         } else {
             if (!virtio_scsi_ready()) {
-                return -5;
+                return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, -5);
             }
             u64CapBytes = g_u64ScsiCapBytes;
         }
         if (pFd->u64Off >= u64CapBytes) {
-            return 0;
+            return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, 0);
         }
         if ((u64)u32Want > u64CapBytes - pFd->u64Off) {
             u32Want = (u32)(u64CapBytes - pFd->u64Off);
@@ -1954,7 +2486,9 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             u32SecOff = (u32)(pFd->u64Off % u32SecSz);
             if (pFd->u8Kind == VFS_KIND_BLK) {
                 if (virtio_blk_read(u64Sector, aSec, u32SecSz) != 0) {
-                    return u32Done > 0 ? (i64)u32Done : -5;
+                    i64Ret = u32Done > 0 ? (i64)u32Done : -5;
+                    return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                                    i64Ret);
                 }
             } else {
                 struct gj_scsi_request req;
@@ -1965,7 +2499,9 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
                 req.cbData = u32SecSz;
                 req.fDataIn = 1;
                 if (scsi_mid_submit(&req) != 0) {
-                    return u32Done > 0 ? (i64)u32Done : -5;
+                    i64Ret = u32Done > 0 ? (i64)u32Done : -5;
+                    return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail,
+                                    i64Ret);
                 }
             }
             u32Copy = u32SecSz - u32SecOff;
@@ -1978,11 +2514,11 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
             pFd->u64Off += u32Copy;
             u32Done += u32Copy;
         }
-        return (i64)u32Done;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, (i64)u32Done);
     }
 
     if (pFd->u64Off >= pFile->cbData) {
-        return 0;
+        return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, 0);
     }
     u32Avail = pFile->cbData - (u32)pFd->u64Off;
     u32N = (u32)cb;
@@ -1993,7 +2529,7 @@ vfs_ram_read(i64 i64Fd, void *pBuf, size_t cb)
         ((u8 *)pBuf)[i] = pFile->aData[(u32)pFd->u64Off + i];
     }
     pFd->u64Off += u32N;
-    return (i64)u32N;
+    return soft_out(&g_u32SoftReadOk, &g_u32SoftReadFail, (i64)u32N);
 }
 
 i64
@@ -2003,9 +2539,10 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
     struct vfs_file *pFile;
     u32 u32N;
     u32 i;
+    i64 i64Ret;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
-        return -9;
+        return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -9);
     }
     pFd = &g_aFds[i64Fd];
     pFile = &g_aFiles[pFd->u32File];
@@ -2015,11 +2552,11 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 iEv = pFd->u32File;
 
         if (iEv >= VFS_MAX_EVENTFD || !g_aEventUsed[iEv] || cb < 8) {
-            return -22;
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -22);
         }
         memcpy(&u64Add, pBuf, 8);
         g_aEventCnt[iEv] += u64Add;
-        return 8;
+        return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, 8);
     }
 
     if (pFd->u8Kind == VFS_KIND_PIPE) {
@@ -2030,15 +2567,15 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 u32Space;
 
         if (pFd->u32File >= VFS_MAX_PIPES || !g_aPipes[pFd->u32File].u8Used) {
-            return -9;
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -9);
         }
         pPair = &g_aPipes[pFd->u32File];
         if (!pPair->u8Open[1u - u8To]) {
-            return -32; /* EPIPE */
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -32);
         }
         u32Space = VFS_PIPE_BUF - pPair->u32Len[u8To];
         if (u32Space == 0) {
-            return -11; /* EAGAIN */
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -11);
         }
         if (u32Want > u32Space) {
             u32Want = u32Space;
@@ -2050,7 +2587,7 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
             pPair->u32Len[u8To]++;
             u32Done++;
         }
-        return (i64)u32Done;
+        return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, (i64)u32Done);
     }
 
     if (pFd->u8Kind == VFS_KIND_BLK) {
@@ -2063,11 +2600,11 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
         u32 u32Want = (u32)cb;
 
         if (!virtio_blk_ready()) {
-            return -5;
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -5);
         }
         u64CapBytes = virtio_blk_capacity_sectors() * (u64)GJ_VIRTIO_BLK_SECTOR;
         if (pFd->u64Off >= u64CapBytes) {
-            return -28;
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -28);
         }
         if ((u64)u32Want > u64CapBytes - pFd->u64Off) {
             u32Want = (u32)(u64CapBytes - pFd->u64Off);
@@ -2078,7 +2615,9 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
             /* RMW partial sector */
             if (u32SecOff != 0 || (u32Want - u32Done) < GJ_VIRTIO_BLK_SECTOR) {
                 if (virtio_blk_read(u64Sector, aSec, GJ_VIRTIO_BLK_SECTOR) != 0) {
-                    return u32Done > 0 ? (i64)u32Done : -5;
+                    i64Ret = u32Done > 0 ? (i64)u32Done : -5;
+                    return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail,
+                                    i64Ret);
                 }
             } else {
                 memset(aSec, 0, sizeof(aSec));
@@ -2091,18 +2630,19 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
                 aSec[u32SecOff + i] = ((const u8 *)pBuf)[u32Done + i];
             }
             if (virtio_blk_write(u64Sector, aSec, GJ_VIRTIO_BLK_SECTOR) != 0) {
-                return u32Done > 0 ? (i64)u32Done : -5;
+                i64Ret = u32Done > 0 ? (i64)u32Done : -5;
+                return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, i64Ret);
             }
             pFd->u64Off += u32Copy;
             u32Done += u32Copy;
         }
-        return (i64)u32Done;
+        return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, (i64)u32Done);
     }
 
     u32N = (u32)cb;
     if ((u32)pFd->u64Off + u32N > VFS_MAX_DATA) {
         if ((u32)pFd->u64Off >= VFS_MAX_DATA) {
-            return -28;
+            return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, -28);
         }
         u32N = VFS_MAX_DATA - (u32)pFd->u64Off;
     }
@@ -2113,14 +2653,14 @@ vfs_ram_write(i64 i64Fd, const void *pBuf, size_t cb)
     if ((u32)pFd->u64Off > pFile->cbData) {
         pFile->cbData = (u32)pFd->u64Off;
     }
-    return (i64)u32N;
+    return soft_out(&g_u32SoftWriteOk, &g_u32SoftWriteFail, (i64)u32N);
 }
 
 i64
 vfs_ram_close(i64 i64Fd)
 {
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return -9;
+        return soft_out(&g_u32SoftCloseOk, &g_u32SoftCloseFail, -9);
     }
     /* Drop this fd from every epoll interest list before releasing */
     epoll_detach_fd(i64Fd);
@@ -2171,7 +2711,7 @@ vfs_ram_close(i64 i64Fd)
         }
     }
     g_aFds[i64Fd].u8Used = 0;
-    return 0;
+    return soft_out(&g_u32SoftCloseOk, &g_u32SoftCloseFail, 0);
 }
 
 static i64
@@ -2232,7 +2772,7 @@ i64
 vfs_ram_pipe2(i32 *pFds, int nFlags)
 {
     (void)nFlags;
-    return pipe_alloc_pair(pFds);
+    return soft_out(&g_u32SoftPipeOk, &g_u32SoftPipeFail, pipe_alloc_pair(pFds));
 }
 
 i64
@@ -2242,9 +2782,9 @@ vfs_ram_socketpair(int nDomain, int nType, int nProtocol, i32 *pFds)
     (void)nProtocol;
     /* SOCK_STREAM = 1; SOCK_DGRAM = 2 — accept either for bring-up */
     if (nType != 1 && nType != 2) {
-        return -22;
+        return soft_out(&g_u32SoftPipeOk, &g_u32SoftPipeFail, -22);
     }
-    return pipe_alloc_pair(pFds);
+    return soft_out(&g_u32SoftPipeOk, &g_u32SoftPipeFail, pipe_alloc_pair(pFds));
 }
 
 i64
@@ -2260,7 +2800,7 @@ vfs_ram_eventfd2(u32 u32Init, int nFlags)
         }
     }
     if (iEv >= VFS_MAX_EVENTFD) {
-        return -24;
+        return soft_out(&g_u32SoftEventfdOk, &g_u32SoftEventfdFail, -24);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2271,10 +2811,11 @@ vfs_ram_eventfd2(u32 u32Init, int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = iEv;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftEventfdOk, &g_u32SoftEventfdFail,
+                            (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftEventfdOk, &g_u32SoftEventfdFail, -24);
 }
 
 /* ---- epoll (interest list + ready probe for pipes/eventfd/ram) ----------- */
@@ -2480,7 +3021,7 @@ vfs_ram_epoll_create1(int nFlags)
         }
     }
     if (iEp >= VFS_MAX_EPOLL) {
-        return -24;
+        return soft_out(&g_u32SoftEpollOk, &g_u32SoftEpollFail, -24);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2491,10 +3032,10 @@ vfs_ram_epoll_create1(int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = iEp;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftEpollOk, &g_u32SoftEpollFail, (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftEpollOk, &g_u32SoftEpollFail, -24);
 }
 
 i64
@@ -2585,7 +3126,7 @@ vfs_ram_timerfd_create(int nClockid, int nFlags)
         }
     }
     if (iT >= VFS_MAX_TIMERFD) {
-        return -24;
+        return soft_out(&g_u32SoftTimerfdOk, &g_u32SoftTimerfdFail, -24);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2597,10 +3138,11 @@ vfs_ram_timerfd_create(int nClockid, int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = iT;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftTimerfdOk, &g_u32SoftTimerfdFail,
+                            (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftTimerfdOk, &g_u32SoftTimerfdFail, -24);
 }
 
 i64
@@ -2678,7 +3220,7 @@ vfs_ram_inotify_init1(int nFlags)
         }
     }
     if (iIn >= VFS_MAX_INOTIFY) {
-        return -24;
+        return soft_out(&g_u32SoftInotifyOk, &g_u32SoftInotifyFail, -24);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2690,10 +3232,11 @@ vfs_ram_inotify_init1(int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = iIn;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftInotifyOk, &g_u32SoftInotifyFail,
+                            (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftInotifyOk, &g_u32SoftInotifyFail, -24);
 }
 
 i64
@@ -2824,7 +3367,7 @@ vfs_ram_pidfd_open(u32 u32Pid, int nFlags)
 
     (void)nFlags;
     if (u32Pid == 0) {
-        return -22;
+        return soft_out(&g_u32SoftPidfdOk, &g_u32SoftPidfdFail, -22);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2833,10 +3376,10 @@ vfs_ram_pidfd_open(u32 u32Pid, int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = 0;
             g_aFds[iFd].u64Off = (u64)u32Pid; /* store target pid */
-            return (i64)iFd;
+            return soft_out(&g_u32SoftPidfdOk, &g_u32SoftPidfdFail, (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftPidfdOk, &g_u32SoftPidfdFail, -24);
 }
 
 u32
@@ -2863,10 +3406,11 @@ vfs_ram_io_uring_open(u32 u32RingSlot)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = u32RingSlot;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftIouringOk, &g_u32SoftIouringFail,
+                            (i64)iFd);
         }
     }
-    return -24; /* EMFILE */
+    return soft_out(&g_u32SoftIouringOk, &g_u32SoftIouringFail, -24); /* EMFILE */
 }
 
 int
@@ -2894,14 +3438,14 @@ vfs_ram_signalfd4(i64 i64Fd, u64 u64Mask, int nFlags)
     if (i64Fd >= 0) {
         /* Update existing signalfd mask */
         if (!vfs_ram_fd_ok(i64Fd)) {
-            return -9;
+            return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail, -9);
         }
         if (g_aFds[i64Fd].u8Kind != VFS_KIND_SIGNALFD ||
             g_aFds[i64Fd].u32File >= VFS_MAX_SIGNALFD) {
-            return -22;
+            return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail, -22);
         }
         g_aSigMask[g_aFds[i64Fd].u32File] = u64Mask;
-        return i64Fd;
+        return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail, i64Fd);
     }
     for (iS = 0; iS < VFS_MAX_SIGNALFD; iS++) {
         if (!g_aSigUsed[iS]) {
@@ -2909,7 +3453,7 @@ vfs_ram_signalfd4(i64 i64Fd, u64 u64Mask, int nFlags)
         }
     }
     if (iS >= VFS_MAX_SIGNALFD) {
-        return -24;
+        return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail, -24);
     }
     for (iFd = 3; iFd < VFS_MAX_FDS; iFd++) {
         if (!g_aFds[iFd].u8Used) {
@@ -2921,10 +3465,11 @@ vfs_ram_signalfd4(i64 i64Fd, u64 u64Mask, int nFlags)
             g_aFds[iFd].u8End = 0;
             g_aFds[iFd].u32File = iS;
             g_aFds[iFd].u64Off = 0;
-            return (i64)iFd;
+            return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail,
+                            (i64)iFd);
         }
     }
-    return -24;
+    return soft_out(&g_u32SoftSignalfdOk, &g_u32SoftSignalfdFail, -24);
 }
 
 /** Inject a signal number into all signalfds whose mask includes it. */
@@ -3009,7 +3554,7 @@ vfs_ram_lseek(i64 i64Fd, i64 i64Off, int nWhence)
     i64 i64End;
 
     if (!vfs_ram_fd_ok(i64Fd)) {
-        return -9;
+        return soft_out(&g_u32SoftLseekOk, &g_u32SoftLseekFail, -9);
     }
     pFd = &g_aFds[i64Fd];
     pFile = &g_aFiles[pFd->u32File];
@@ -3027,13 +3572,13 @@ vfs_ram_lseek(i64 i64Fd, i64 i64Off, int nWhence)
     } else if (nWhence == 2) {
         i64New = i64End + i64Off;
     } else {
-        return -22; /* EINVAL */
+        return soft_out(&g_u32SoftLseekOk, &g_u32SoftLseekFail, -22); /* EINVAL */
     }
     if (i64New < 0) {
-        return -22;
+        return soft_out(&g_u32SoftLseekOk, &g_u32SoftLseekFail, -22);
     }
     pFd->u64Off = (u64)i64New;
-    return i64New;
+    return soft_out(&g_u32SoftLseekOk, &g_u32SoftLseekFail, i64New);
 }
 
 i64
@@ -3087,15 +3632,15 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
     int fFilter;
 
     if (!vfs_ram_fd_ok(i64Fd) || pBuf == NULL) {
-        return -9;
+        return soft_out(&g_u32SoftGetdentsOk, &g_u32SoftGetdentsFail, -9);
     }
     if (cb < 32) {
-        return -22;
+        return soft_out(&g_u32SoftGetdentsOk, &g_u32SoftGetdentsFail, -22);
     }
     pFd = &g_aFds[i64Fd];
     if (pFd->u8Kind != VFS_KIND_RAM && pFd->u8Kind != VFS_KIND_BLK &&
         pFd->u8Kind != VFS_KIND_SCSI) {
-        return -20; /* ENOTDIR for pipes/eventfd/etc. */
+        return soft_out(&g_u32SoftGetdentsOk, &g_u32SoftGetdentsFail, -20);
     }
     pOut = (u8 *)pBuf;
     idx = (u32)pFd->u64Off;
@@ -3201,5 +3746,5 @@ vfs_ram_getdents64(i64 i64Fd, void *pBuf, size_t cb)
         u32Ord++;
         pFd->u64Off = idx;
     }
-    return (i64)written;
+    return soft_out(&g_u32SoftGetdentsOk, &g_u32SoftGetdentsFail, (i64)written);
 }

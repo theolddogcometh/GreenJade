@@ -651,3 +651,60 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 ---
 
 *Wave 10 honesty (2026-07-23): continuum **makefile_max=15200 soft only**; **bar3 remains OPEN**.*
+
+---
+
+## Progress note — GreenJade Wave 12 honesty (2026-07-23)
+
+**Additive only (Wave 12 exclusive for this file).** Prior progress rows and Wave 10 soft stamps above stay historical ledger. This section is Wave 12 honesty: continuum high-water and bar3 bound. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+
+### Soft stamp (Wave 12)
+
+| Field | Value |
+|-------|--------|
+| **Wave** | GreenJade Wave 12 (honesty refresh) |
+| **Continuum** | **makefile_max=15400** — **soft only** (CREATE-ONLY graph parent wire / `graph_batch15400.c` high-water when present on tree) |
+| **bar3** | **OPEN** |
+| **Matrix** | **NOT-TRIED × 50** (no titles tried) |
+
+**Soft stamp (Wave 12):** continuum **makefile_max=15400** soft only (`graph_batch15400.c` parent wire / CREATE-ONLY decades when present on tree). Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+
+### Soft continuum ≠ bar3 (Wave 12 honesty)
+
+| Soft surface | What it is | What it is **not** |
+|--------------|------------|--------------------|
+| Continuum **makefile_max=15400** | CREATE-ONLY soft graph high-water only (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
+| Kernel / parallel soft smokes | Surface ship honesty | bar3 client run; matrix fill |
+
+**Hard rule:** never promote continuum **makefile_max=15400**, media READY, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, or product DoD complete. Soft continuum ≠ bar3.
+
+### Explicit non-claims (Wave 12)
+
+| Claim | Allowed? |
+|-------|----------|
+| “Continuum **makefile_max=15400** soft graph high-water (CREATE-ONLY)” | **Yes** — soft only |
+| “Soft continuum 15400 = Steam client / Top-50 / product score” | **No** |
+| “bar3 closed by continuum 15400 / media READY / kernel soft gates” | **No** |
+| “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
+| Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
+
+### Open (unchanged by Wave 12)
+
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
+- Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
+- Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
+- Soft continuum growth past prior decades — **soft only**; does **not** close bar3
+
+**Bar3 remains OPEN.** Wave 12 honesty: continuum **makefile_max=15400 soft only**; soft continuum ≠ bar3; **no false PASS**.
+
+### Related honesty surfaces
+
+- [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
+- [STEAM_HWTEST.md](STEAM_HWTEST.md) — media path / continuum soft scope  
+- [HCL.md](HCL.md) — soft probes ≠ full HCL product  
+- [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title matrix honesty  
+
+---
+
+*Wave 12 honesty (2026-07-23): continuum **makefile_max=15400 soft only**; **bar3 remains OPEN**.*

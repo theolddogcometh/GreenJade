@@ -35,8 +35,19 @@
  * discards; read EOF (or eventfd counter); poll reports readiness for
  * owned fds; ioctl TTY/FIONREAD soft; fsync/madvise/flock no-op success.
  * No libc: freestanding only.
+ *
+ * Soft inventory (Wave 12 exclusive; this unit only) — greppable:
+ *   "protonrt: soft …"
+ *   "cold_linux: soft …"
+ * Prefix-stable serial markers:
+ *   protonrt: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
+ *             proc|uring|enosys|query|path …
+ *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
+ *               proc|uring|enosys|query|path …
+ * Pure observation; never hard-gates; wrap OK; soft ≠ bar3.
  */
 #include <stdint.h>
+#include <gj/klog.h>
 #include "../include/protonrt/protonrt.h"
 
 /* Linux x86_64 syscall numbers used on the cold path. */
@@ -247,6 +258,576 @@ static char g_szCwd[8] = { '/', 0, 0, 0, 0, 0, 0, 0 };
 static uint64_t g_u64ClearChildTid;
 
 /*
+ * Soft product inventory (Wave 12 exclusive). Enter-only tallies.
+ * greppable: protonrt: soft … / cold_linux: soft …
+ * Never rewrites syscall returns; diagnostics / smoke only.
+ */
+enum {
+    COLD_SOFT_GRP_IO = 0,     /* read/write/close/lseek/ioctl/fcntl/fsync/map */
+    COLD_SOFT_GRP_FD_ALLOC,   /* open/pipe/eventfd/timerfd/signalfd/epoll_create/dup/memfd */
+    COLD_SOFT_GRP_STAT,       /* stat/access/getdents */
+    COLD_SOFT_GRP_PATH,       /* getcwd/chdir/mkdir/unlink/rename/link/symlink/readlink */
+    COLD_SOFT_GRP_ID,         /* uname/pid/uid/personality/prctl/sched */
+    COLD_SOFT_GRP_TIME,       /* clock/nanosleep/sysinfo/rusage/getrandom/prlimit */
+    COLD_SOFT_GRP_POLL,       /* poll/select/epoll_ctl/wait */
+    COLD_SOFT_GRP_SOCK,       /* socket family */
+    COLD_SOFT_GRP_PROC,       /* clone/fork/exec/wait/kill/exit/sig */
+    COLD_SOFT_GRP_URING,      /* io_uring_* host ENOSYS stubs */
+    COLD_SOFT_GRP_OTHER,      /* unlisted NR → ENOSYS default */
+    COLD_SOFT_GRP_N
+};
+
+#define COLD_SOFT_WAVE     12u
+#define COLD_SOFT_VER_MAJ  ((uint32_t)PROTON_RT_VERSION_MAJOR)
+#define COLD_SOFT_VER_MIN  ((uint32_t)PROTON_RT_VERSION_MINOR)
+
+static uint64_t g_aSoftEnter[COLD_SOFT_GRP_N]; /* per-group handler entries */
+static uint64_t g_u64SoftEnterTotal;           /* sum of all group enters */
+static uint64_t g_u64SoftEnosys;               /* cold_enosys / default hits */
+static uint64_t g_u64SoftQueryEnter;           /* proton_rt_query entries */
+static uint64_t g_u64SoftQueryOk;              /* query success */
+static uint64_t g_u64SoftQueryNull;            /* query pOut == NULL */
+static uint64_t g_u64SoftLogN;                 /* inventory log emissions */
+static uint8_t  g_fSoftInvOnce;                /* one-shot deep dump after activity */
+
+static void soft_inc(uint64_t *pCtr);
+static void soft_inventory_log(void);
+static void soft_inventory_maybe_once(void);
+static uint32_t soft_classify_nr(uint64_t u64Nr);
+
+/** Soft: bump path tally (u64 wrap is fine for telemetry). */
+static void
+soft_inc(uint64_t *pCtr)
+{
+    if (pCtr == 0) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Map Linux x86_64 NR to soft inventory group (enter classification only).
+ * greppable: protonrt: soft / cold_linux: soft
+ */
+static uint32_t
+soft_classify_nr(uint64_t u64Nr)
+{
+    switch (u64Nr) {
+    case NR_read:
+    case NR_write:
+    case NR_close:
+    case NR_close_range:
+    case NR_lseek:
+    case NR_ftruncate:
+    case NR_ioctl:
+    case NR_fcntl:
+    case NR_flock:
+    case NR_fsync:
+    case NR_fdatasync:
+    case NR_sync:
+    case NR_syncfs:
+    case NR_madvise:
+    case NR_mprotect:
+    case NR_munmap:
+    case NR_brk:
+    case NR_pread64:
+    case NR_pwrite64:
+    case NR_readv:
+    case NR_writev:
+        return (uint32_t)COLD_SOFT_GRP_IO;
+
+    case NR_open:
+    case NR_openat:
+    case NR_creat:
+    case NR_memfd_create:
+    case NR_pipe:
+    case NR_pipe2:
+    case NR_eventfd:
+    case NR_eventfd2:
+    case NR_timerfd_create:
+    case NR_timerfd_settime:
+    case NR_timerfd_gettime:
+    case NR_signalfd4:
+    case NR_epoll_create:
+    case NR_epoll_create1:
+    case NR_dup:
+    case NR_dup2:
+    case NR_dup3:
+        return (uint32_t)COLD_SOFT_GRP_FD_ALLOC;
+
+    case NR_fstat:
+    case NR_stat:
+    case NR_lstat:
+    case NR_newfstatat:
+    case NR_statx:
+    case NR_access:
+    case NR_faccessat:
+    case NR_getdents:
+    case NR_getdents64:
+        return (uint32_t)COLD_SOFT_GRP_STAT;
+
+    case NR_getcwd:
+    case NR_chdir:
+    case NR_fchdir:
+    case NR_mkdir:
+    case NR_mkdirat:
+    case NR_rmdir:
+    case NR_unlink:
+    case NR_unlinkat:
+    case NR_rename:
+    case NR_renameat:
+    case NR_link:
+    case NR_linkat:
+    case NR_symlink:
+    case NR_symlinkat:
+    case NR_chmod:
+    case NR_utimensat:
+    case NR_readlink:
+    case NR_readlinkat:
+        return (uint32_t)COLD_SOFT_GRP_PATH;
+
+    case NR_uname:
+    case NR_getpid:
+    case NR_gettid:
+    case NR_getppid:
+    case NR_getuid:
+    case NR_geteuid:
+    case NR_getgid:
+    case NR_getegid:
+    case NR_getpgrp:
+    case NR_getsid:
+    case NR_setpgid:
+    case NR_setsid:
+    case NR_set_tid_address:
+    case NR_personality:
+    case NR_prctl:
+    case NR_arch_prctl:
+    case NR_sched_yield:
+    case NR_sched_getscheduler:
+    case NR_sched_getparam:
+    case NR_sched_setscheduler:
+    case NR_sched_setparam:
+    case NR_sched_get_priority_max:
+    case NR_sched_get_priority_min:
+        return (uint32_t)COLD_SOFT_GRP_ID;
+
+    case NR_getrandom:
+    case NR_prlimit64:
+    case NR_clock_gettime:
+    case NR_clock_getres:
+    case NR_clock_nanosleep:
+    case NR_nanosleep:
+    case NR_sysinfo:
+    case NR_getrusage:
+        return (uint32_t)COLD_SOFT_GRP_TIME;
+
+    case NR_poll:
+    case NR_ppoll:
+    case NR_select:
+    case NR_pselect6:
+    case NR_epoll_ctl:
+    case NR_epoll_wait:
+    case NR_epoll_pwait:
+        return (uint32_t)COLD_SOFT_GRP_POLL;
+
+    case NR_socket:
+    case NR_socketpair:
+    case NR_bind:
+    case NR_listen:
+    case NR_connect:
+    case NR_shutdown:
+    case NR_setsockopt:
+    case NR_getsockopt:
+    case NR_getsockname:
+    case NR_getpeername:
+    case NR_accept:
+    case NR_sendto:
+    case NR_sendmsg:
+    case NR_recvfrom:
+    case NR_recvmsg:
+        return (uint32_t)COLD_SOFT_GRP_SOCK;
+
+    case NR_clone:
+    case NR_clone3:
+    case NR_fork:
+    case NR_execve:
+    case NR_wait4:
+    case NR_kill:
+    case NR_exit:
+    case NR_rt_sigaction:
+    case NR_rt_sigprocmask:
+        return (uint32_t)COLD_SOFT_GRP_PROC;
+
+    case NR_io_uring_setup:
+    case NR_io_uring_enter:
+    case NR_io_uring_register:
+        return (uint32_t)COLD_SOFT_GRP_URING;
+
+    default:
+        return (uint32_t)COLD_SOFT_GRP_OTHER;
+    }
+}
+
+/**
+ * Count live soft FD table kinds (stdio reserved + allocated).
+ * Diagnostics only — never mutates table.
+ */
+static void
+soft_fd_live_counts(uint32_t *pFree, uint32_t *pLive, uint32_t *pStdio,
+                    uint32_t *pPipe, uint32_t *pEvent, uint32_t *pEpoll,
+                    uint32_t *pSock, uint32_t *pMemfd, uint32_t *pTimer,
+                    uint32_t *pOpen, uint32_t *pSig)
+{
+    uint32_t i;
+    uint32_t u32Free = 0;
+    uint32_t u32Live = 0;
+    uint32_t u32Stdio = 0;
+    uint32_t u32Pipe = 0;
+    uint32_t u32Event = 0;
+    uint32_t u32Epoll = 0;
+    uint32_t u32Sock = 0;
+    uint32_t u32Memfd = 0;
+    uint32_t u32Timer = 0;
+    uint32_t u32Open = 0;
+    uint32_t u32Sig = 0;
+
+    for (i = 0; i < (uint32_t)PR_MAX_FD; i++) {
+        uint8_t u8Kind = g_aFd[i].u8Kind;
+
+        switch (u8Kind) {
+        case PR_KIND_FREE:
+            u32Free++;
+            break;
+        case PR_KIND_STDIO:
+            u32Stdio++;
+            u32Live++;
+            break;
+        case PR_KIND_PIPE_R:
+        case PR_KIND_PIPE_W:
+            u32Pipe++;
+            u32Live++;
+            break;
+        case PR_KIND_EVENTFD:
+            u32Event++;
+            u32Live++;
+            break;
+        case PR_KIND_EPOLL:
+            u32Epoll++;
+            u32Live++;
+            break;
+        case PR_KIND_SOCKET:
+            u32Sock++;
+            u32Live++;
+            break;
+        case PR_KIND_MEMFD:
+            u32Memfd++;
+            u32Live++;
+            break;
+        case PR_KIND_TIMERFD:
+            u32Timer++;
+            u32Live++;
+            break;
+        case PR_KIND_OPEN:
+            u32Open++;
+            u32Live++;
+            break;
+        case PR_KIND_SIGNALFD:
+            u32Sig++;
+            u32Live++;
+            break;
+        default:
+            u32Live++;
+            break;
+        }
+    }
+    if (pFree != 0) {
+        *pFree = u32Free;
+    }
+    if (pLive != 0) {
+        *pLive = u32Live;
+    }
+    if (pStdio != 0) {
+        *pStdio = u32Stdio;
+    }
+    if (pPipe != 0) {
+        *pPipe = u32Pipe;
+    }
+    if (pEvent != 0) {
+        *pEvent = u32Event;
+    }
+    if (pEpoll != 0) {
+        *pEpoll = u32Epoll;
+    }
+    if (pSock != 0) {
+        *pSock = u32Sock;
+    }
+    if (pMemfd != 0) {
+        *pMemfd = u32Memfd;
+    }
+    if (pTimer != 0) {
+        *pTimer = u32Timer;
+    }
+    if (pOpen != 0) {
+        *pOpen = u32Open;
+    }
+    if (pSig != 0) {
+        *pSig = u32Sig;
+    }
+}
+
+/**
+ * Greppable soft protonrt / cold_linux inventory (product / smoke).
+ * Twin prefixes so either agent grep works:
+ *   protonrt: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
+ *             proc|uring|enosys|query|path …
+ *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
+ *               proc|uring|enosys|query|path …
+ * greppable: protonrt: soft
+ * greppable: cold_linux: soft
+ */
+static void
+soft_inventory_log(void)
+{
+    uint32_t u32Free;
+    uint32_t u32Live;
+    uint32_t u32Stdio;
+    uint32_t u32Pipe;
+    uint32_t u32Event;
+    uint32_t u32Epoll;
+    uint32_t u32Sock;
+    uint32_t u32Memfd;
+    uint32_t u32Timer;
+    uint32_t u32Open;
+    uint32_t u32Sig;
+    uint32_t u32FdInit;
+    uint32_t u32Feat;
+
+    soft_inc(&g_u64SoftLogN);
+    soft_fd_live_counts(&u32Free, &u32Live, &u32Stdio, &u32Pipe, &u32Event,
+                        &u32Epoll, &u32Sock, &u32Memfd, &u32Timer, &u32Open,
+                        &u32Sig);
+    u32FdInit = g_fFdInit ? 1u : 0u;
+    u32Feat = PROTON_FEAT_LINUX_COMPAT | PROTON_FEAT_FUTEX |
+              PROTON_FEAT_NAMED_SHM | PROTON_FEAT_SOCKETPAIR |
+              PROTON_FEAT_EVENTFD | PROTON_FEAT_EPOLL | PROTON_FEAT_PIPE |
+              PROTON_FEAT_MEMFD;
+
+    /*
+     * Primary prefix: protonrt: soft …
+     * Catalog capacity + live FD table + group enter tallies.
+     */
+    /* Grep: protonrt: soft inventory */
+    kprintf("protonrt: soft inventory wave=%u ver=%u.%u max_fd=%u "
+            "epoll_slots=%u groups=%u enter=%llu enosys=%llu query=%llu "
+            "log_n=%llu fd_init=%u features=0x%x\n",
+            (unsigned)COLD_SOFT_WAVE,
+            (unsigned)COLD_SOFT_VER_MAJ, (unsigned)COLD_SOFT_VER_MIN,
+            (unsigned)PR_MAX_FD, (unsigned)PR_EPOLL_SLOTS,
+            (unsigned)COLD_SOFT_GRP_N,
+            (unsigned long long)g_u64SoftEnterTotal,
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftLogN, u32FdInit, u32Feat);
+
+    /* Grep: protonrt: soft fd */
+    kprintf("protonrt: soft fd free=%u live=%u stdio=%u pipe=%u event=%u "
+            "epoll=%u sock=%u memfd=%u timer=%u open=%u sig=%u max=%u\n",
+            u32Free, u32Live, u32Stdio, u32Pipe, u32Event, u32Epoll, u32Sock,
+            u32Memfd, u32Timer, u32Open, u32Sig, (unsigned)PR_MAX_FD);
+
+    /* Grep: protonrt: soft io */
+    kprintf("protonrt: soft io enter=%llu "
+            "surface=read,write,close,lseek,ioctl,fcntl,fsync,madvise,brk,"
+            "readv,writev\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_IO]);
+
+    /* Grep: protonrt: soft fd_alloc */
+    kprintf("protonrt: soft fd_alloc enter=%llu "
+            "surface=open,pipe,eventfd,timerfd,signalfd,epoll_create,dup,"
+            "memfd\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_FD_ALLOC]);
+
+    /* Grep: protonrt: soft stat */
+    kprintf("protonrt: soft stat enter=%llu "
+            "surface=fstat,stat,lstat,newfstatat,statx,access,getdents\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_STAT]);
+
+    /* Grep: protonrt: soft namei */
+    kprintf("protonrt: soft namei enter=%llu "
+            "surface=getcwd,chdir,mkdir,unlink,rename,link,symlink,"
+            "readlink,chmod,utimensat\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_PATH]);
+
+    /* Grep: protonrt: soft id */
+    kprintf("protonrt: soft id enter=%llu "
+            "surface=uname,getpid,uid,gid,sid,personality,prctl,sched\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_ID]);
+
+    /* Grep: protonrt: soft time */
+    kprintf("protonrt: soft time enter=%llu "
+            "surface=clock_*,nanosleep,sysinfo,rusage,getrandom,prlimit\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_TIME]);
+
+    /* Grep: protonrt: soft poll */
+    kprintf("protonrt: soft poll enter=%llu "
+            "surface=poll,ppoll,select,pselect6,epoll_ctl,epoll_wait\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_POLL]);
+
+    /* Grep: protonrt: soft sock */
+    kprintf("protonrt: soft sock enter=%llu "
+            "surface=socket,socketpair,bind,listen,connect,send,recv,"
+            "getsockopt\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_SOCK]);
+
+    /* Grep: protonrt: soft proc */
+    kprintf("protonrt: soft proc enter=%llu "
+            "surface=clone,fork,execve,wait4,kill,exit,rt_sig* "
+            "host_enosys=spawn_native\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_PROC]);
+
+    /* Grep: protonrt: soft uring */
+    kprintf("protonrt: soft uring enter=%llu "
+            "surface=io_uring_setup,enter,register host=ENOSYS "
+            "product=kernel_min_rings\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_URING]);
+
+    /* Grep: protonrt: soft enosys */
+    kprintf("protonrt: soft enosys hits=%llu other_enter=%llu "
+            "errno=%u claim=unimplemented_nr_or_spawn\n",
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_OTHER],
+            (unsigned)E_NOSYS);
+
+    /* Grep: protonrt: soft query */
+    kprintf("protonrt: soft query enter=%llu ok=%llu null=%llu "
+            "ver=%u.%u features=0x%x\n",
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftQueryOk,
+            (unsigned long long)g_u64SoftQueryNull,
+            (unsigned)COLD_SOFT_VER_MAJ, (unsigned)COLD_SOFT_VER_MIN, u32Feat);
+
+    /* Grep: protonrt: soft path */
+    kprintf("protonrt: soft path claim=cold_linux_personality hybrid=OptionC "
+            "hot=kernel cold=libprotonrt enter_only=1 ret_rewrite=0 "
+            "(soft inventory; not bar3)\n");
+
+    /*
+     * Twin prefix: cold_linux: soft … (agent-friendly alias; same tallies).
+     */
+    /* Grep: cold_linux: soft inventory */
+    kprintf("cold_linux: soft inventory wave=%u ver=%u.%u max_fd=%u "
+            "epoll_slots=%u groups=%u enter=%llu enosys=%llu query=%llu "
+            "log_n=%llu fd_init=%u features=0x%x\n",
+            (unsigned)COLD_SOFT_WAVE,
+            (unsigned)COLD_SOFT_VER_MAJ, (unsigned)COLD_SOFT_VER_MIN,
+            (unsigned)PR_MAX_FD, (unsigned)PR_EPOLL_SLOTS,
+            (unsigned)COLD_SOFT_GRP_N,
+            (unsigned long long)g_u64SoftEnterTotal,
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftLogN, u32FdInit, u32Feat);
+
+    /* Grep: cold_linux: soft fd */
+    kprintf("cold_linux: soft fd free=%u live=%u stdio=%u pipe=%u event=%u "
+            "epoll=%u sock=%u memfd=%u timer=%u open=%u sig=%u max=%u\n",
+            u32Free, u32Live, u32Stdio, u32Pipe, u32Event, u32Epoll, u32Sock,
+            u32Memfd, u32Timer, u32Open, u32Sig, (unsigned)PR_MAX_FD);
+
+    /* Grep: cold_linux: soft io */
+    kprintf("cold_linux: soft io enter=%llu "
+            "surface=read,write,close,lseek,ioctl,fcntl,fsync,madvise,brk,"
+            "readv,writev\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_IO]);
+
+    /* Grep: cold_linux: soft fd_alloc */
+    kprintf("cold_linux: soft fd_alloc enter=%llu "
+            "surface=open,pipe,eventfd,timerfd,signalfd,epoll_create,dup,"
+            "memfd\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_FD_ALLOC]);
+
+    /* Grep: cold_linux: soft stat */
+    kprintf("cold_linux: soft stat enter=%llu "
+            "surface=fstat,stat,lstat,newfstatat,statx,access,getdents\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_STAT]);
+
+    /* Grep: cold_linux: soft namei */
+    kprintf("cold_linux: soft namei enter=%llu "
+            "surface=getcwd,chdir,mkdir,unlink,rename,link,symlink,"
+            "readlink,chmod,utimensat\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_PATH]);
+
+    /* Grep: cold_linux: soft id */
+    kprintf("cold_linux: soft id enter=%llu "
+            "surface=uname,getpid,uid,gid,sid,personality,prctl,sched\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_ID]);
+
+    /* Grep: cold_linux: soft time */
+    kprintf("cold_linux: soft time enter=%llu "
+            "surface=clock_*,nanosleep,sysinfo,rusage,getrandom,prlimit\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_TIME]);
+
+    /* Grep: cold_linux: soft poll */
+    kprintf("cold_linux: soft poll enter=%llu "
+            "surface=poll,ppoll,select,pselect6,epoll_ctl,epoll_wait\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_POLL]);
+
+    /* Grep: cold_linux: soft sock */
+    kprintf("cold_linux: soft sock enter=%llu "
+            "surface=socket,socketpair,bind,listen,connect,send,recv,"
+            "getsockopt\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_SOCK]);
+
+    /* Grep: cold_linux: soft proc */
+    kprintf("cold_linux: soft proc enter=%llu "
+            "surface=clone,fork,execve,wait4,kill,exit,rt_sig* "
+            "host_enosys=spawn_native\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_PROC]);
+
+    /* Grep: cold_linux: soft uring */
+    kprintf("cold_linux: soft uring enter=%llu "
+            "surface=io_uring_setup,enter,register host=ENOSYS "
+            "product=kernel_min_rings\n",
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_URING]);
+
+    /* Grep: cold_linux: soft enosys */
+    kprintf("cold_linux: soft enosys hits=%llu other_enter=%llu "
+            "errno=%u claim=unimplemented_nr_or_spawn\n",
+            (unsigned long long)g_u64SoftEnosys,
+            (unsigned long long)g_aSoftEnter[COLD_SOFT_GRP_OTHER],
+            (unsigned)E_NOSYS);
+
+    /* Grep: cold_linux: soft query */
+    kprintf("cold_linux: soft query enter=%llu ok=%llu null=%llu "
+            "ver=%u.%u features=0x%x\n",
+            (unsigned long long)g_u64SoftQueryEnter,
+            (unsigned long long)g_u64SoftQueryOk,
+            (unsigned long long)g_u64SoftQueryNull,
+            (unsigned)COLD_SOFT_VER_MAJ, (unsigned)COLD_SOFT_VER_MIN, u32Feat);
+
+    /* Grep: cold_linux: soft path */
+    kprintf("cold_linux: soft path claim=cold_linux_personality "
+            "hybrid=OptionC hot=kernel cold=libprotonrt enter_only=1 "
+            "ret_rewrite=0 (soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product query/cold enter, print soft inventory once
+ * (mirrors cold_ipc/wow64 soft-stats-once). Diagnostics only.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_u64SoftEnterTotal == 0 && g_u64SoftQueryEnter == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    soft_inventory_log();
+}
+
+/*
  * Canonical cold-path "not implemented here" result.
  * Prefer this over scattering bare -E_NOSYS so host and kernel-smoke
  * fall-throughs stay one contract.
@@ -254,6 +835,7 @@ static uint64_t g_u64ClearChildTid;
 static int64_t
 cold_enosys(void)
 {
+    soft_inc(&g_u64SoftEnosys);
     return -(int64_t)E_NOSYS;
 }
 
@@ -299,7 +881,10 @@ fd_table_init(void)
 int
 proton_rt_query(struct proton_rt_info *pOut)
 {
+    soft_inc(&g_u64SoftQueryEnter);
     if (pOut == 0) {
+        soft_inc(&g_u64SoftQueryNull);
+        soft_inventory_maybe_once();
         return -1;
     }
     /* Packed version: (major << 16) | minor — keep in sync with header. */
@@ -314,6 +899,9 @@ proton_rt_query(struct proton_rt_info *pOut)
                         PROTON_FEAT_NAMED_SHM | PROTON_FEAT_SOCKETPAIR |
                         PROTON_FEAT_EVENTFD | PROTON_FEAT_EPOLL |
                         PROTON_FEAT_PIPE | PROTON_FEAT_MEMFD;
+    soft_inc(&g_u64SoftQueryOk);
+    /* Wave 12: one-shot greppable soft inventory after first query. */
+    soft_inventory_maybe_once();
     return 0;
 }
 
@@ -1126,9 +1714,19 @@ int64_t
 protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
                     uint64_t a3, uint64_t a4, uint64_t a5)
 {
+    uint32_t u32Grp;
+
     (void)a5;
 
     fd_table_init();
+
+    /* Wave 12 soft enter — never rewrites ret. greppable: protonrt: soft */
+    u32Grp = soft_classify_nr(u64Nr);
+    if (u32Grp < (uint32_t)COLD_SOFT_GRP_N) {
+        soft_inc(&g_aSoftEnter[u32Grp]);
+    }
+    soft_inc(&g_u64SoftEnterTotal);
+    soft_inventory_maybe_once();
 
     switch (u64Nr) {
     /* ---- file open / close / seek / write -------------------------- */

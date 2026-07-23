@@ -11,14 +11,20 @@
  * When the ring is full the oldest event is dropped — latency over fidelity
  * for the interim keyboard/pointer path. Drop count is retained for STATS.
  *
- * Soft input hub inventory (Wave 10 exclusive; this unit only):
+ * Soft input hub inventory (Wave 12 exclusive deepen; this unit only):
  *   - Ring capacity / live pending / peak / free + drop-oldest policy
  *   - Fan-in src tallies (virtio live + soft inject slot)
- *   - Poll burst / push / pop / lazy-refill path counters
- *   Never hard-gates; diagnostics only (wrap OK).
+ *   - Poll: enter / nodev / ready / drain / idle / cap-hit / burst peaks
+ *   - Push: ok / reject split (null|bad_src) / per-src inject
+ *   - Enqueue: empty / partial / full(+drop) + event-type soft tallies
+ *   - Pop: direct hit / lazy hit|miss / null / repair empty
+ *   - Ready flip + query accessor soft samples
+ *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  * Greppable twin prefixes (product / agent greps):
  *   "input_hub: soft …"
  *   "input: soft …"
+ * greppable: input_hub: soft
+ * greppable: input: soft
  */
 #include <gj/klog.h>
 #include <gj/session_input.h>
@@ -40,35 +46,113 @@ static u32 g_aPushedSrc[GJ_INPUT_SRC_MAX];
 static int g_fReady;
 
 /*
- * Soft product inventory (Wave 10). Cumulative unless noted live/peak.
+ * Soft product inventory (Wave 12 exclusive deepen).
+ * Cumulative unless noted live/peak. Never hard-gates.
  * greppable: input_hub: soft … / input: soft …
  */
-static u32 g_u32SoftPollEnter;   /* session_input_poll entries */
-static u32 g_u32SoftPollNodev;   /* poll with virtio-input not ready */
-static u32 g_u32SoftPollDrain;   /* polls that accepted ≥1 event */
-static u32 g_u32SoftLastBurst;   /* events drained on last drain poll */
-static u32 g_u32SoftBurstMax;    /* peak events in one poll drain */
-static u32 g_u32SoftPushOk;      /* session_input_push_from accepted */
-static u32 g_u32SoftPushReject;  /* push_from bad args */
-static u32 g_u32SoftEnqueue;     /* input_enqueue accepted */
-static u32 g_u32SoftDropOld;     /* drop-oldest under full ring (shadow) */
-static u32 g_u32SoftPopHit;      /* session_input_pop filled *pOut */
-static u32 g_u32SoftPopEmpty;    /* pop terminal empty (after lazy) */
-static u32 g_u32SoftPopNull;     /* pop with pOut == NULL */
-static u32 g_u32SoftPopLazy;     /* empty-ring lazy fan-in polls */
-static u32 g_u32SoftPopLazyHit;  /* lazy refill then successful pop */
-static u32 g_u32SoftSaneRepair;  /* input_ring_sane repaired corrupt state */
-static u32 g_u32SoftLogN;        /* soft inventory log emissions */
-static u8  g_fSoftInvOnce;       /* one-shot deep dump after activity */
+static u32 g_u32SoftPollEnter;    /* session_input_poll entries */
+static u32 g_u32SoftPollNodev;    /* poll with virtio-input not ready */
+static u32 g_u32SoftPollReady;    /* poll with virtio-input ready */
+static u32 g_u32SoftPollDrain;    /* polls that accepted ≥1 event */
+static u32 g_u32SoftPollIdle;     /* ready poll drained 0 events */
+static u32 g_u32SoftPollCap;      /* drain hit GJ_INPUT_POLL_MAX */
+static u32 g_u32SoftLastBurst;    /* events drained on last drain poll */
+static u32 g_u32SoftBurstMax;     /* peak events in one poll drain */
+static u32 g_u32SoftBurstSum;     /* sum of events across drain polls */
+static u32 g_u32SoftPushOk;       /* session_input_push_from accepted */
+static u32 g_u32SoftPushReject;   /* push_from bad args (any) */
+static u32 g_u32SoftPushNull;     /* push_from pEv == NULL */
+static u32 g_u32SoftPushBadSrc;   /* push_from u32Src out of range */
+static u32 g_u32SoftPushVirtio;   /* push attributed to SRC_VIRTIO */
+static u32 g_u32SoftPushSoft;     /* push attributed to SRC_SOFT */
+static u32 g_u32SoftEnqueue;      /* input_enqueue accepted */
+static u32 g_u32SoftEnqEmpty;     /* enqueue onto empty ring */
+static u32 g_u32SoftEnqPartial;   /* enqueue with 0 < len < RING */
+static u32 g_u32SoftEnqFull;      /* enqueue when full (drop-oldest) */
+static u32 g_u32SoftDropOld;      /* drop-oldest under full ring (shadow) */
+static u32 g_u32SoftPopHit;       /* session_input_pop filled *pOut */
+static u32 g_u32SoftPopDirect;    /* pop hit without lazy refill */
+static u32 g_u32SoftPopEmpty;     /* pop terminal empty (after lazy) */
+static u32 g_u32SoftPopNull;      /* pop with pOut == NULL */
+static u32 g_u32SoftPopLazy;      /* empty-ring lazy fan-in polls */
+static u32 g_u32SoftPopLazyHit;   /* lazy refill then successful pop */
+static u32 g_u32SoftPopLazyMiss;  /* lazy refill still empty */
+static u32 g_u32SoftPopRepair;    /* pop aborted after ring repair */
+static u32 g_u32SoftSaneRepair;   /* input_ring_sane repaired corrupt state */
+static u32 g_u32SoftSaneOk;       /* input_ring_sane found usable state */
+static u32 g_u32SoftSaneCheck;    /* input_ring_sane entries */
+static u32 g_u32SoftEvSyn;        /* enqueued GJ_EV_SYN */
+static u32 g_u32SoftEvKey;        /* enqueued GJ_EV_KEY */
+static u32 g_u32SoftEvRel;        /* enqueued GJ_EV_REL */
+static u32 g_u32SoftEvAbs;        /* enqueued GJ_EV_ABS */
+static u32 g_u32SoftEvOther;      /* enqueued other type */
+static u32 g_u32SoftReadyFlip;    /* first sticky ready=1 transitions */
+static u32 g_u32SoftInit;         /* session_input_init entries */
+static u32 g_u32SoftQPending;     /* session_input_pending samples */
+static u32 g_u32SoftQPeak;        /* session_input_peak_pending samples */
+static u32 g_u32SoftQPushed;      /* session_input_pushed samples */
+static u32 g_u32SoftQDropped;     /* session_input_dropped samples */
+static u32 g_u32SoftQBursts;      /* session_input_poll_bursts samples */
+static u32 g_u32SoftQSrc;         /* session_input_pushed_src samples */
+static u32 g_u32SoftQSrcBad;      /* pushed_src out-of-range */
+static u32 g_u32SoftQReady;       /* session_input_ready samples */
+static u32 g_u32SoftLogN;         /* soft inventory log emissions */
+static u8  g_fSoftInvOnce;        /* one-shot deep dump after activity */
 
+static void soft_inc(u32 *pCtr);
+static void soft_note_ev_type(u16 u16Type);
+static void soft_note_ready(int fNow);
 static void soft_inventory_log(void);
 static void soft_inventory_maybe_once(void);
 
+/** Soft: saturating bump (u32 wrap avoided; wrap OK if ever hit). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
+
+/** Soft: classify enqueued event type for greppable ev surface. */
+static void
+soft_note_ev_type(u16 u16Type)
+{
+    if (u16Type == (u16)GJ_EV_SYN) {
+        soft_inc(&g_u32SoftEvSyn);
+    } else if (u16Type == (u16)GJ_EV_KEY) {
+        soft_inc(&g_u32SoftEvKey);
+    } else if (u16Type == (u16)GJ_EV_REL) {
+        soft_inc(&g_u32SoftEvRel);
+    } else if (u16Type == (u16)GJ_EV_ABS) {
+        soft_inc(&g_u32SoftEvAbs);
+    } else {
+        soft_inc(&g_u32SoftEvOther);
+    }
+}
+
+/** Soft: sticky ready flip when virtio-input first observed ready. */
+static void
+soft_note_ready(int fNow)
+{
+    if (fNow != 0 && g_fReady == 0) {
+        soft_inc(&g_u32SoftReadyFlip);
+    }
+    if (fNow != 0) {
+        g_fReady = 1;
+    }
+}
+
 /**
  * Greppable soft input hub inventory (product / smoke).
- * Twin prefixes so either agent grep works:
- *   input_hub: soft inventory|ring|fan-in|poll|push|pop|path …
- *   input: soft inventory|ring|fan-in|poll|push|pop|path …
+ * Twin prefixes so either agent grep works (Wave 12 deepen):
+ *   input_hub: soft inventory|ring|fan-in|poll|push|pop|enqueue|drop|
+ *              lazy|ready|ev|stats|query|path …
+ *   input: soft inventory|ring|fan-in|poll|push|pop|enqueue|drop|
+ *          lazy|ready|ev|stats|query|path …
  * greppable: input_hub: soft
  * greppable: input: soft
  */
@@ -85,16 +169,16 @@ soft_inventory_log(void)
     u32 u32Pushed;
     u32 u32Dropped;
     u32 u32Bursts;
+    u32 u32OccPct;
+    u32 u32DropRatio;
 
-    if (g_u32SoftLogN < 0xffffffffu) {
-        g_u32SoftLogN++;
-    }
+    soft_inc(&g_u32SoftLogN);
 
     /* Snapshot live ring (diagnostics only; no hard lock). */
     u32Ready = (g_fReady != 0) ? 1u : 0u;
     if (virtio_input_ready()) {
+        soft_note_ready(1);
         u32Ready = 1u;
-        g_fReady = 1;
     }
     u32Head = g_u32Head;
     u32Pending = g_u32Len;
@@ -109,50 +193,114 @@ soft_inventory_log(void)
     u32Bursts = g_u32PollBursts;
     u32Virtio = g_aPushedSrc[GJ_INPUT_SRC_VIRTIO];
     u32SoftSrc = g_aPushedSrc[GJ_INPUT_SRC_SOFT];
+    /* Soft occupancy % (integer; capacity never 0). */
+    u32OccPct = (u32Pending * 100u) / GJ_INPUT_RING;
+    /* Soft drop ratio in basis points of pushed (0 if none pushed). */
+    if (u32Pushed != 0u) {
+        u32DropRatio = (u32Dropped * 10000u) / u32Pushed;
+    } else {
+        u32DropRatio = 0;
+    }
 
     /*
      * Primary prefix: input_hub: soft …
-     * Catalog capacity + live ring + fan-in + path tallies for smoke greps.
+     * Wave 12 deepen splits enqueue/drop/lazy/ready/ev/stats/query.
      */
     /* Grep: input_hub: soft inventory */
     kprintf("input_hub: soft inventory ring=%u poll_max=%u src_max=%u "
             "ready=%u pending=%u free=%u peak=%u pushed=%u dropped=%u "
-            "log_n=%u\n",
+            "occ_pct=%u drop_bp=%u log_n=%u wave=12\n",
             GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX, u32Ready,
-            u32Pending, u32Free, u32Peak, u32Pushed, u32Dropped,
-            g_u32SoftLogN);
+            u32Pending, u32Free, u32Peak, u32Pushed, u32Dropped, u32OccPct,
+            u32DropRatio, g_u32SoftLogN);
 
     /* Grep: input_hub: soft ring */
     kprintf("input_hub: soft ring head=%u len=%u free=%u peak=%u "
-            "policy=drop_oldest repair=%u\n",
-            u32Head, u32Pending, u32Free, u32Peak, g_u32SoftSaneRepair);
+            "capacity=%u policy=drop_oldest repair=%u sane_ok=%u "
+            "sane_check=%u occ_pct=%u\n",
+            u32Head, u32Pending, u32Free, u32Peak, GJ_INPUT_RING,
+            g_u32SoftSaneRepair, g_u32SoftSaneOk, g_u32SoftSaneCheck,
+            u32OccPct);
 
     /* Grep: input_hub: soft fan-in */
     kprintf("input_hub: soft fan-in virtio=%u soft=%u src_max=%u "
-            "live=virtio inject=soft_src lazy_pop=1\n",
-            u32Virtio, u32SoftSrc, GJ_INPUT_SRC_MAX);
+            "live=virtio inject=soft_src lazy_pop=1 push_virtio=%u "
+            "push_soft=%u\n",
+            u32Virtio, u32SoftSrc, GJ_INPUT_SRC_MAX, g_u32SoftPushVirtio,
+            g_u32SoftPushSoft);
 
     /* Grep: input_hub: soft poll */
-    kprintf("input_hub: soft poll enter=%u nodev=%u drain=%u last_burst=%u "
-            "burst_max=%u bursts=%u poll_max=%u\n",
-            g_u32SoftPollEnter, g_u32SoftPollNodev, g_u32SoftPollDrain,
-            g_u32SoftLastBurst, g_u32SoftBurstMax, u32Bursts,
-            GJ_INPUT_POLL_MAX);
+    kprintf("input_hub: soft poll enter=%u nodev=%u ready=%u drain=%u "
+            "idle=%u cap=%u last_burst=%u burst_max=%u burst_sum=%u "
+            "bursts=%u poll_max=%u\n",
+            g_u32SoftPollEnter, g_u32SoftPollNodev, g_u32SoftPollReady,
+            g_u32SoftPollDrain, g_u32SoftPollIdle, g_u32SoftPollCap,
+            g_u32SoftLastBurst, g_u32SoftBurstMax, g_u32SoftBurstSum,
+            u32Bursts, GJ_INPUT_POLL_MAX);
 
     /* Grep: input_hub: soft push */
-    kprintf("input_hub: soft push ok=%u reject=%u enqueue=%u drop_old=%u\n",
-            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftEnqueue,
-            g_u32SoftDropOld);
+    kprintf("input_hub: soft push ok=%u reject=%u null=%u bad_src=%u "
+            "virtio=%u soft=%u enqueue=%u drop_old=%u\n",
+            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPushNull,
+            g_u32SoftPushBadSrc, g_u32SoftPushVirtio, g_u32SoftPushSoft,
+            g_u32SoftEnqueue, g_u32SoftDropOld);
 
     /* Grep: input_hub: soft pop */
-    kprintf("input_hub: soft pop hit=%u empty=%u null=%u lazy=%u "
-            "lazy_hit=%u\n",
-            g_u32SoftPopHit, g_u32SoftPopEmpty, g_u32SoftPopNull,
-            g_u32SoftPopLazy, g_u32SoftPopLazyHit);
+    kprintf("input_hub: soft pop hit=%u direct=%u empty=%u null=%u "
+            "lazy=%u lazy_hit=%u lazy_miss=%u repair=%u\n",
+            g_u32SoftPopHit, g_u32SoftPopDirect, g_u32SoftPopEmpty,
+            g_u32SoftPopNull, g_u32SoftPopLazy, g_u32SoftPopLazyHit,
+            g_u32SoftPopLazyMiss, g_u32SoftPopRepair);
+
+    /* Grep: input_hub: soft enqueue */
+    kprintf("input_hub: soft enqueue ok=%u empty=%u partial=%u full=%u "
+            "drop_old=%u policy=drop_oldest\n",
+            g_u32SoftEnqueue, g_u32SoftEnqEmpty, g_u32SoftEnqPartial,
+            g_u32SoftEnqFull, g_u32SoftDropOld);
+
+    /* Grep: input_hub: soft drop */
+    kprintf("input_hub: soft drop old=%u total=%u drop_bp=%u "
+            "policy=drop_oldest latency_over_fidelity=1\n",
+            g_u32SoftDropOld, u32Dropped, u32DropRatio);
+
+    /* Grep: input_hub: soft lazy */
+    kprintf("input_hub: soft lazy enter=%u hit=%u miss=%u "
+            "path=empty_pop_poll_once fanin=virtio\n",
+            g_u32SoftPopLazy, g_u32SoftPopLazyHit, g_u32SoftPopLazyMiss);
+
+    /* Grep: input_hub: soft ready */
+    kprintf("input_hub: soft ready sticky=%u flip=%u virtio_live=%u "
+            "init=%u\n",
+            u32Ready, g_u32SoftReadyFlip,
+            virtio_input_ready() ? 1u : 0u, g_u32SoftInit);
+
+    /* Grep: input_hub: soft ev */
+    kprintf("input_hub: soft ev syn=%u key=%u rel=%u abs=%u other=%u "
+            "enqueued=%u\n",
+            g_u32SoftEvSyn, g_u32SoftEvKey, g_u32SoftEvRel, g_u32SoftEvAbs,
+            g_u32SoftEvOther, g_u32SoftEnqueue);
+
+    /* Grep: input_hub: soft stats */
+    kprintf("input_hub: soft stats pushed=%u dropped=%u pending=%u "
+            "peak=%u poll_enter=%u poll_drain=%u push_ok=%u pop_hit=%u "
+            "pop_empty=%u enqueue=%u repair=%u log_n=%u wave=12\n",
+            u32Pushed, u32Dropped, u32Pending, u32Peak, g_u32SoftPollEnter,
+            g_u32SoftPollDrain, g_u32SoftPushOk, g_u32SoftPopHit,
+            g_u32SoftPopEmpty, g_u32SoftEnqueue, g_u32SoftSaneRepair,
+            g_u32SoftLogN);
+
+    /* Grep: input_hub: soft query */
+    kprintf("input_hub: soft query pending=%u peak=%u pushed=%u "
+            "dropped=%u bursts=%u src=%u src_bad=%u ready=%u\n",
+            g_u32SoftQPending, g_u32SoftQPeak, g_u32SoftQPushed,
+            g_u32SoftQDropped, g_u32SoftQBursts, g_u32SoftQSrc,
+            g_u32SoftQSrcBad, g_u32SoftQReady);
 
     /* Grep: input_hub: soft path */
     kprintf("input_hub: soft path claim=virtio+soft_inject irq=0 "
-            "drop_oldest=1 lazy_fanin=1 (soft inventory; not bar3)\n");
+            "drop_oldest=1 lazy_fanin=1 ring=%u poll_max=%u src_max=%u "
+            "wave=12 (soft inventory; not bar3)\n",
+            GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX);
 
     /*
      * Twin prefix: input: soft … (agent-friendly alias; same tallies).
@@ -160,41 +308,98 @@ soft_inventory_log(void)
     /* Grep: input: soft inventory */
     kprintf("input: soft inventory ring=%u poll_max=%u src_max=%u "
             "ready=%u pending=%u free=%u peak=%u pushed=%u dropped=%u "
-            "log_n=%u\n",
+            "occ_pct=%u drop_bp=%u log_n=%u wave=12\n",
             GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX, u32Ready,
-            u32Pending, u32Free, u32Peak, u32Pushed, u32Dropped,
-            g_u32SoftLogN);
+            u32Pending, u32Free, u32Peak, u32Pushed, u32Dropped, u32OccPct,
+            u32DropRatio, g_u32SoftLogN);
 
     /* Grep: input: soft ring */
     kprintf("input: soft ring head=%u len=%u free=%u peak=%u "
-            "policy=drop_oldest repair=%u\n",
-            u32Head, u32Pending, u32Free, u32Peak, g_u32SoftSaneRepair);
+            "capacity=%u policy=drop_oldest repair=%u sane_ok=%u "
+            "sane_check=%u occ_pct=%u\n",
+            u32Head, u32Pending, u32Free, u32Peak, GJ_INPUT_RING,
+            g_u32SoftSaneRepair, g_u32SoftSaneOk, g_u32SoftSaneCheck,
+            u32OccPct);
 
     /* Grep: input: soft fan-in */
     kprintf("input: soft fan-in virtio=%u soft=%u src_max=%u "
-            "live=virtio inject=soft_src lazy_pop=1\n",
-            u32Virtio, u32SoftSrc, GJ_INPUT_SRC_MAX);
+            "live=virtio inject=soft_src lazy_pop=1 push_virtio=%u "
+            "push_soft=%u\n",
+            u32Virtio, u32SoftSrc, GJ_INPUT_SRC_MAX, g_u32SoftPushVirtio,
+            g_u32SoftPushSoft);
 
     /* Grep: input: soft poll */
-    kprintf("input: soft poll enter=%u nodev=%u drain=%u last_burst=%u "
-            "burst_max=%u bursts=%u poll_max=%u\n",
-            g_u32SoftPollEnter, g_u32SoftPollNodev, g_u32SoftPollDrain,
-            g_u32SoftLastBurst, g_u32SoftBurstMax, u32Bursts,
-            GJ_INPUT_POLL_MAX);
+    kprintf("input: soft poll enter=%u nodev=%u ready=%u drain=%u "
+            "idle=%u cap=%u last_burst=%u burst_max=%u burst_sum=%u "
+            "bursts=%u poll_max=%u\n",
+            g_u32SoftPollEnter, g_u32SoftPollNodev, g_u32SoftPollReady,
+            g_u32SoftPollDrain, g_u32SoftPollIdle, g_u32SoftPollCap,
+            g_u32SoftLastBurst, g_u32SoftBurstMax, g_u32SoftBurstSum,
+            u32Bursts, GJ_INPUT_POLL_MAX);
 
     /* Grep: input: soft push */
-    kprintf("input: soft push ok=%u reject=%u enqueue=%u drop_old=%u\n",
-            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftEnqueue,
-            g_u32SoftDropOld);
+    kprintf("input: soft push ok=%u reject=%u null=%u bad_src=%u "
+            "virtio=%u soft=%u enqueue=%u drop_old=%u\n",
+            g_u32SoftPushOk, g_u32SoftPushReject, g_u32SoftPushNull,
+            g_u32SoftPushBadSrc, g_u32SoftPushVirtio, g_u32SoftPushSoft,
+            g_u32SoftEnqueue, g_u32SoftDropOld);
 
     /* Grep: input: soft pop */
-    kprintf("input: soft pop hit=%u empty=%u null=%u lazy=%u lazy_hit=%u\n",
-            g_u32SoftPopHit, g_u32SoftPopEmpty, g_u32SoftPopNull,
-            g_u32SoftPopLazy, g_u32SoftPopLazyHit);
+    kprintf("input: soft pop hit=%u direct=%u empty=%u null=%u "
+            "lazy=%u lazy_hit=%u lazy_miss=%u repair=%u\n",
+            g_u32SoftPopHit, g_u32SoftPopDirect, g_u32SoftPopEmpty,
+            g_u32SoftPopNull, g_u32SoftPopLazy, g_u32SoftPopLazyHit,
+            g_u32SoftPopLazyMiss, g_u32SoftPopRepair);
+
+    /* Grep: input: soft enqueue */
+    kprintf("input: soft enqueue ok=%u empty=%u partial=%u full=%u "
+            "drop_old=%u policy=drop_oldest\n",
+            g_u32SoftEnqueue, g_u32SoftEnqEmpty, g_u32SoftEnqPartial,
+            g_u32SoftEnqFull, g_u32SoftDropOld);
+
+    /* Grep: input: soft drop */
+    kprintf("input: soft drop old=%u total=%u drop_bp=%u "
+            "policy=drop_oldest latency_over_fidelity=1\n",
+            g_u32SoftDropOld, u32Dropped, u32DropRatio);
+
+    /* Grep: input: soft lazy */
+    kprintf("input: soft lazy enter=%u hit=%u miss=%u "
+            "path=empty_pop_poll_once fanin=virtio\n",
+            g_u32SoftPopLazy, g_u32SoftPopLazyHit, g_u32SoftPopLazyMiss);
+
+    /* Grep: input: soft ready */
+    kprintf("input: soft ready sticky=%u flip=%u virtio_live=%u "
+            "init=%u\n",
+            u32Ready, g_u32SoftReadyFlip,
+            virtio_input_ready() ? 1u : 0u, g_u32SoftInit);
+
+    /* Grep: input: soft ev */
+    kprintf("input: soft ev syn=%u key=%u rel=%u abs=%u other=%u "
+            "enqueued=%u\n",
+            g_u32SoftEvSyn, g_u32SoftEvKey, g_u32SoftEvRel, g_u32SoftEvAbs,
+            g_u32SoftEvOther, g_u32SoftEnqueue);
+
+    /* Grep: input: soft stats */
+    kprintf("input: soft stats pushed=%u dropped=%u pending=%u "
+            "peak=%u poll_enter=%u poll_drain=%u push_ok=%u pop_hit=%u "
+            "pop_empty=%u enqueue=%u repair=%u log_n=%u wave=12\n",
+            u32Pushed, u32Dropped, u32Pending, u32Peak, g_u32SoftPollEnter,
+            g_u32SoftPollDrain, g_u32SoftPushOk, g_u32SoftPopHit,
+            g_u32SoftPopEmpty, g_u32SoftEnqueue, g_u32SoftSaneRepair,
+            g_u32SoftLogN);
+
+    /* Grep: input: soft query */
+    kprintf("input: soft query pending=%u peak=%u pushed=%u "
+            "dropped=%u bursts=%u src=%u src_bad=%u ready=%u\n",
+            g_u32SoftQPending, g_u32SoftQPeak, g_u32SoftQPushed,
+            g_u32SoftQDropped, g_u32SoftQBursts, g_u32SoftQSrc,
+            g_u32SoftQSrcBad, g_u32SoftQReady);
 
     /* Grep: input: soft path */
     kprintf("input: soft path claim=virtio+soft_inject irq=0 "
-            "drop_oldest=1 lazy_fanin=1 (soft inventory; not bar3)\n");
+            "drop_oldest=1 lazy_fanin=1 ring=%u poll_max=%u src_max=%u "
+            "wave=12 (soft inventory; not bar3)\n",
+            GJ_INPUT_RING, GJ_INPUT_POLL_MAX, GJ_INPUT_SRC_MAX);
 }
 
 /**
@@ -208,7 +413,8 @@ soft_inventory_maybe_once(void)
         return;
     }
     if (g_u32SoftPollEnter == 0 && g_u32SoftPushOk == 0 &&
-        g_u32SoftPopHit == 0 && g_u32SoftPopEmpty == 0) {
+        g_u32SoftPushReject == 0 && g_u32SoftPopHit == 0 &&
+        g_u32SoftPopEmpty == 0 && g_u32SoftPopNull == 0) {
         return;
     }
     g_fSoftInvOnce = 1;
@@ -219,6 +425,8 @@ soft_inventory_maybe_once(void)
 void
 session_input_init(void)
 {
+    soft_inc(&g_u32SoftInit);
+
     memset(g_aRing, 0, sizeof(g_aRing));
     memset(g_aPushedSrc, 0, sizeof(g_aPushedSrc));
     g_u32Head = 0;
@@ -227,22 +435,55 @@ session_input_init(void)
     g_u32Dropped = 0;
     g_u32PeakPending = 0;
     g_u32PollBursts = 0;
-    g_fReady = virtio_input_ready() ? 1 : 0;
+    g_fReady = 0;
+    if (virtio_input_ready()) {
+        soft_note_ready(1);
+    }
     g_u32SoftPollEnter = 0;
     g_u32SoftPollNodev = 0;
+    g_u32SoftPollReady = 0;
     g_u32SoftPollDrain = 0;
+    g_u32SoftPollIdle = 0;
+    g_u32SoftPollCap = 0;
     g_u32SoftLastBurst = 0;
     g_u32SoftBurstMax = 0;
+    g_u32SoftBurstSum = 0;
     g_u32SoftPushOk = 0;
     g_u32SoftPushReject = 0;
+    g_u32SoftPushNull = 0;
+    g_u32SoftPushBadSrc = 0;
+    g_u32SoftPushVirtio = 0;
+    g_u32SoftPushSoft = 0;
     g_u32SoftEnqueue = 0;
+    g_u32SoftEnqEmpty = 0;
+    g_u32SoftEnqPartial = 0;
+    g_u32SoftEnqFull = 0;
     g_u32SoftDropOld = 0;
     g_u32SoftPopHit = 0;
+    g_u32SoftPopDirect = 0;
     g_u32SoftPopEmpty = 0;
     g_u32SoftPopNull = 0;
     g_u32SoftPopLazy = 0;
     g_u32SoftPopLazyHit = 0;
+    g_u32SoftPopLazyMiss = 0;
+    g_u32SoftPopRepair = 0;
     g_u32SoftSaneRepair = 0;
+    g_u32SoftSaneOk = 0;
+    g_u32SoftSaneCheck = 0;
+    g_u32SoftEvSyn = 0;
+    g_u32SoftEvKey = 0;
+    g_u32SoftEvRel = 0;
+    g_u32SoftEvAbs = 0;
+    g_u32SoftEvOther = 0;
+    /* Keep sticky ready-flip history across re-init (soft bring-up). */
+    g_u32SoftQPending = 0;
+    g_u32SoftQPeak = 0;
+    g_u32SoftQPushed = 0;
+    g_u32SoftQDropped = 0;
+    g_u32SoftQBursts = 0;
+    g_u32SoftQSrc = 0;
+    g_u32SoftQSrcBad = 0;
+    g_u32SoftQReady = 0;
     g_u32SoftLogN = 0;
     g_fSoftInvOnce = 0;
     kprintf("session_input: init ready=%d ring=%u fan-in src=%u\n", g_fReady,
@@ -258,13 +499,15 @@ session_input_init(void)
 static int
 input_ring_sane(void)
 {
+    soft_inc(&g_u32SoftSaneCheck);
     if (g_u32Head >= GJ_INPUT_RING || g_u32Len > GJ_INPUT_RING) {
         g_u32Head = 0;
         g_u32Len = 0;
         memset(g_aRing, 0, sizeof(g_aRing));
-        g_u32SoftSaneRepair++;
+        soft_inc(&g_u32SoftSaneRepair);
         return 0;
     }
+    soft_inc(&g_u32SoftSaneOk);
     return 1;
 }
 
@@ -290,17 +533,23 @@ input_enqueue(u32 u32Src, const struct gj_input_event *pEv)
     }
     if (g_u32Len >= GJ_INPUT_RING) {
         /* Drop oldest — keep a live tail for sessiond. */
+        soft_inc(&g_u32SoftEnqFull);
         g_u32Head = (g_u32Head + 1u) % GJ_INPUT_RING;
         g_u32Len--;
         g_u32Dropped++;
-        g_u32SoftDropOld++;
+        soft_inc(&g_u32SoftDropOld);
+    } else if (g_u32Len == 0u) {
+        soft_inc(&g_u32SoftEnqEmpty);
+    } else {
+        soft_inc(&g_u32SoftEnqPartial);
     }
     u32Pos = (g_u32Head + g_u32Len) % GJ_INPUT_RING;
     g_aRing[u32Pos] = *pEv;
     g_u32Len++;
     g_u32Pushed++;
     g_aPushedSrc[u32Src]++;
-    g_u32SoftEnqueue++;
+    soft_inc(&g_u32SoftEnqueue);
+    soft_note_ev_type(pEv->u16Type);
     input_note_pending();
 }
 
@@ -311,14 +560,15 @@ session_input_poll(void)
     struct gj_input_event ev;
     u32 u32Burst;
 
-    g_u32SoftPollEnter++;
+    soft_inc(&g_u32SoftPollEnter);
 
     if (!virtio_input_ready()) {
-        g_u32SoftPollNodev++;
+        soft_inc(&g_u32SoftPollNodev);
         soft_inventory_maybe_once();
         return;
     }
-    g_fReady = 1;
+    soft_note_ready(1);
+    soft_inc(&g_u32SoftPollReady);
     (void)input_ring_sane();
 
     u32Burst = 0;
@@ -330,11 +580,21 @@ session_input_poll(void)
     }
     if (u32Burst != 0) {
         g_u32PollBursts++;
-        g_u32SoftPollDrain++;
+        soft_inc(&g_u32SoftPollDrain);
         g_u32SoftLastBurst = u32Burst;
         if (u32Burst > g_u32SoftBurstMax) {
             g_u32SoftBurstMax = u32Burst;
         }
+        if (g_u32SoftBurstSum < (0xffffffffu - u32Burst)) {
+            g_u32SoftBurstSum += u32Burst;
+        } else {
+            g_u32SoftBurstSum = 0xffffffffu;
+        }
+        if (u32Burst >= GJ_INPUT_POLL_MAX) {
+            soft_inc(&g_u32SoftPollCap);
+        }
+    } else {
+        soft_inc(&g_u32SoftPollIdle);
     }
     /*
      * Soft secondary fan-in slot (GJ_INPUT_SRC_SOFT): no live producer at
@@ -346,14 +606,26 @@ session_input_poll(void)
 int
 session_input_push_from(u32 u32Src, const struct gj_input_event *pEv)
 {
-    if (pEv == NULL || u32Src >= GJ_INPUT_SRC_MAX) {
-        g_u32SoftPushReject++;
+    if (pEv == NULL) {
+        soft_inc(&g_u32SoftPushReject);
+        soft_inc(&g_u32SoftPushNull);
+        soft_inventory_maybe_once();
+        return 0;
+    }
+    if (u32Src >= GJ_INPUT_SRC_MAX) {
+        soft_inc(&g_u32SoftPushReject);
+        soft_inc(&g_u32SoftPushBadSrc);
         soft_inventory_maybe_once();
         return 0;
     }
     (void)input_ring_sane();
     input_enqueue(u32Src, pEv);
-    g_u32SoftPushOk++;
+    soft_inc(&g_u32SoftPushOk);
+    if (u32Src == GJ_INPUT_SRC_VIRTIO) {
+        soft_inc(&g_u32SoftPushVirtio);
+    } else if (u32Src == GJ_INPUT_SRC_SOFT) {
+        soft_inc(&g_u32SoftPushSoft);
+    }
     soft_inventory_maybe_once();
     return 1;
 }
@@ -367,30 +639,34 @@ int
 session_input_pop(struct gj_input_event *pOut)
 {
     if (pOut == NULL) {
-        g_u32SoftPopNull++;
+        soft_inc(&g_u32SoftPopNull);
         soft_inventory_maybe_once();
         return 0;
     }
     if (!input_ring_sane()) {
-        g_u32SoftPopEmpty++;
+        soft_inc(&g_u32SoftPopEmpty);
+        soft_inc(&g_u32SoftPopRepair);
         soft_inventory_maybe_once();
         return 0;
     }
     if (g_u32Len == 0) {
         /* Lazy fan-in soft: refill once before declaring empty. */
-        g_u32SoftPopLazy++;
+        soft_inc(&g_u32SoftPopLazy);
         session_input_poll();
         if (!input_ring_sane() || g_u32Len == 0) {
-            g_u32SoftPopEmpty++;
+            soft_inc(&g_u32SoftPopEmpty);
+            soft_inc(&g_u32SoftPopLazyMiss);
             soft_inventory_maybe_once();
             return 0;
         }
-        g_u32SoftPopLazyHit++;
+        soft_inc(&g_u32SoftPopLazyHit);
+    } else {
+        soft_inc(&g_u32SoftPopDirect);
     }
     *pOut = g_aRing[g_u32Head];
     g_u32Head = (g_u32Head + 1u) % GJ_INPUT_RING;
     g_u32Len--;
-    g_u32SoftPopHit++;
+    soft_inc(&g_u32SoftPopHit);
     soft_inventory_maybe_once();
     return 1;
 }
@@ -398,18 +674,21 @@ session_input_pop(struct gj_input_event *pOut)
 u32
 session_input_pushed(void)
 {
+    soft_inc(&g_u32SoftQPushed);
     return g_u32Pushed;
 }
 
 u32
 session_input_dropped(void)
 {
+    soft_inc(&g_u32SoftQDropped);
     return g_u32Dropped;
 }
 
 u32
 session_input_pending(void)
 {
+    soft_inc(&g_u32SoftQPending);
     if (!input_ring_sane()) {
         return 0;
     }
@@ -419,19 +698,23 @@ session_input_pending(void)
 u32
 session_input_peak_pending(void)
 {
+    soft_inc(&g_u32SoftQPeak);
     return g_u32PeakPending;
 }
 
 u32
 session_input_poll_bursts(void)
 {
+    soft_inc(&g_u32SoftQBursts);
     return g_u32PollBursts;
 }
 
 u32
 session_input_pushed_src(u32 u32Src)
 {
+    soft_inc(&g_u32SoftQSrc);
     if (u32Src >= GJ_INPUT_SRC_MAX) {
+        soft_inc(&g_u32SoftQSrcBad);
         return 0;
     }
     return g_aPushedSrc[u32Src];
@@ -440,5 +723,6 @@ session_input_pushed_src(u32 u32Src)
 int
 session_input_ready(void)
 {
+    soft_inc(&g_u32SoftQReady);
     return g_fReady != 0;
 }

@@ -11,6 +11,28 @@
  *     SNDBUF/RCVBUF (stored), LINGER soft, ACCEPTCONN, REUSEPORT
  *   - bind EADDRINUSE when port taken without reuse
  *   - soft stats + live-table inventory (grep: "net: lo soft")
+ *
+ * Soft inventory (Wave 12 exclusive; this unit only):
+ *   Lifetime path / ring / sockopt tallies (struct net_lo_soft).
+ *   Greppable prefix-stable serial markers (rate-limited; never flood):
+ *     net: lo soft inventory …
+ *     net: lo soft sock …
+ *     net: lo soft bind …
+ *     net: lo soft life …
+ *     net: lo soft xfer …
+ *     net: lo soft opt …
+ *     net: lo soft name …
+ *     net: lo soft ring …
+ *     net: lo soft stats …
+ *     net: lo soft path …
+ *     net: lo soft slot=…
+ *     net: lo soft init|listen|accept|emfile …
+ *     net: lo soft PASS …
+ *   Cadence dumps only at power-of-two op milestones, hard-capped at
+ *   NET_LO_SOFT_LOG_MAX (force emfile/empty also capped). Init always
+ *   emits once. Event lines (listen/accept/emfile) share
+ *   NET_LO_SOFT_EVENT_MAX. Never hard-gates product policy. Pure C.
+ * Grep: net: lo soft
  */
 #include <gj/klog.h>
 #include <gj/net_lo.h>
@@ -26,8 +48,16 @@
 #define NET_LO_BACKLOG_MAX 8
 #define NET_LO_RCVBUF_DEF  NET_LO_BUF
 #define NET_LO_SNDBUF_DEF  NET_LO_BUF
-/* Soft log cadence: dump inventory/stats every N ops (wrap-safe). */
-#define NET_LO_SOFT_LOG_EVERY 32u
+/*
+ * Soft inventory serial budget (Wave 12). Absolute cap of greppable full
+ * cadence dumps; milestones are power-of-two API op counts (1,2,4,…).
+ * Event lines (listen/accept/emfile) share a separate hard cap.
+ * greppable: net: lo soft
+ */
+#define NET_LO_SOFT_LOG_MAX   8u
+#define NET_LO_SOFT_EVENT_MAX 8u
+/* Slot detail only on force dumps or the first N cadence dumps. */
+#define NET_LO_SOFT_SLOT_LOGS 2u
 
 struct net_lo_sock {
     u8  u8Used;
@@ -58,11 +88,16 @@ struct net_lo_sock {
 /*
  * Soft product inventory counters — wrap OK; diagnostics only; never
  * hard-gate product paths. Grep: net: lo soft
+ * Wave 12 deepen: path / domain / sockopt / rate-limit lamps.
  */
 struct net_lo_soft {
     u64 u64Ops;          /* total API entries (success + fail) */
     u64 u64SockOk;
     u64 u64SockFail;
+    u64 u64SockInet;     /* AF_INET create */
+    u64 u64SockUnix;     /* AF_UNIX create */
+    u64 u64SockStream;   /* SOCK_STREAM create */
+    u64 u64SockDgram;    /* SOCK_DGRAM create */
     u64 u64BindOk;
     u64 u64BindFail;
     u64 u64EaddrInuse;
@@ -85,12 +120,27 @@ struct net_lo_soft {
     u64 u64RecvEof;
     u64 u64ShutOk;
     u64 u64ShutFail;
+    u64 u64ShutRd;       /* how=0 */
+    u64 u64ShutWr;       /* how=1 */
+    u64 u64ShutRdwr;     /* how=2 */
     u64 u64CloseOk;
     u64 u64CloseFail;
+    u64 u64ClosePeerHalf;/* close marked peer shut_rd soft */
     u64 u64SetoptOk;
     u64 u64SetoptFail;
     u64 u64GetoptOk;
     u64 u64GetoptFail;
+    u64 u64OptReuse;
+    u64 u64OptReusePort;
+    u64 u64OptBcast;
+    u64 u64OptKa;
+    u64 u64OptSndbuf;
+    u64 u64OptRcvbuf;
+    u64 u64OptLinger;
+    u64 u64OptNoop;      /* debug/dontroute/oob/timeo soft accept */
+    u64 u64OptType;
+    u64 u64OptError;
+    u64 u64OptAcceptConn;
     u64 u64NameOk;
     u64 u64NameFail;
     u64 u64PeerOk;
@@ -100,7 +150,11 @@ struct net_lo_soft {
     u64 u64PushFull;     /* peer RX ring full (short/zero push) */
     u64 u64PushPartial;  /* short write into ring */
     u64 u64HwmUsed;      /* high-water live used slots */
-    u64 u64LogDumps;     /* times soft log was emitted */
+    u64 u64LogDumps;     /* times soft inventory was emitted */
+    u64 u64LogSkip;      /* cadence dumps suppressed (cap / non-milestone) */
+    u64 u64EventSkip;    /* event lines suppressed (cap) */
+    u32 u32SoftLogN;     /* inventory log emissions (u32 twin) */
+    u32 u32EventN;       /* listen/accept/emfile event emissions */
 };
 
 static struct net_lo_sock g_aSocks[NET_LO_MAX];
@@ -201,12 +255,32 @@ lo_soft_tally(u32 *pUsed, u32 *pFree, u32 *pListen, u32 *pConn,
     }
 }
 
+/**
+ * Soft: rate-limit budget for one-shot event lines (listen/accept/emfile).
+ * Returns 1 if the line may print; 0 if suppressed (bump event_skip).
+ * greppable: net: lo soft listen|accept|emfile
+ */
+static int
+lo_soft_event_ok(void)
+{
+    if (g_soft.u32EventN >= NET_LO_SOFT_EVENT_MAX) {
+        lo_soft_bump(&g_soft.u64EventSkip);
+        return 0;
+    }
+    if (g_soft.u32EventN < 0xffffffffu) {
+        g_soft.u32EventN++;
+    }
+    return 1;
+}
+
 /*
- * Greppable soft product inventory + stats dump.
+ * Greppable soft product inventory + path dumps (Wave 12 exclusive).
  * Prefix-stable: "net: lo soft …" (smoke / product inventory).
+ * fForce: include per-live-slot detail (init / emfile / table-empty).
+ * Cadence dumps skip slots after NET_LO_SOFT_SLOT_LOGS to avoid flood.
  */
 static void
-lo_soft_print(void)
+lo_soft_print(int fForce)
 {
     u32 cUsed = 0;
     u32 cFree = 0;
@@ -220,23 +294,126 @@ lo_soft_print(void)
     u32 cShutWr = 0;
     u32 cReuse = 0;
     u32 i;
+    u32 fSlots;
     struct net_lo_soft s;
 
     lo_soft_tally(&cUsed, &cFree, &cListen, &cConn, &cStream, &cDgram,
                   &cPending, &cRx, &cShutRd, &cShutWr, &cReuse);
     s = g_soft;
     lo_soft_bump(&g_soft.u64LogDumps);
+    if (g_soft.u32SoftLogN < 0xffffffffu) {
+        g_soft.u32SoftLogN++;
+    }
+    /* Slot detail: force always; cadence only for first few dumps. */
+    fSlots = (fForce != 0 || g_soft.u32SoftLogN <= NET_LO_SOFT_SLOT_LOGS)
+                 ? 1u
+                 : 0u;
 
     /* Grep: net: lo soft inventory */
     kprintf("net: lo soft inventory used=%u free=%u listen=%u conn=%u "
             "stream=%u dgram=%u pending=%u rx_bytes=%u shut_rd=%u "
             "shut_wr=%u reuse=%u hwm=%llu max=%u fd_base=%u buf=%u "
-            "backlog_max=%u\n",
+            "backlog_max=%u logs=%u skip=%llu event_n=%u event_skip=%llu "
+            "wave=12\n",
             cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
             cShutRd, cShutWr, cReuse,
             (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
             (unsigned)NET_FD_BASE, (unsigned)NET_LO_BUF,
-            (unsigned)NET_LO_BACKLOG_MAX);
+            (unsigned)NET_LO_BACKLOG_MAX, g_soft.u32SoftLogN,
+            (unsigned long long)s.u64LogSkip, g_soft.u32EventN,
+            (unsigned long long)s.u64EventSkip);
+
+    /* Grep: net: lo soft sock */
+    kprintf("net: lo soft sock ok=%llu fail=%llu inet=%llu unix=%llu "
+            "stream=%llu dgram=%llu\n",
+            (unsigned long long)s.u64SockOk,
+            (unsigned long long)s.u64SockFail,
+            (unsigned long long)s.u64SockInet,
+            (unsigned long long)s.u64SockUnix,
+            (unsigned long long)s.u64SockStream,
+            (unsigned long long)s.u64SockDgram);
+
+    /* Grep: net: lo soft bind */
+    kprintf("net: lo soft bind ok=%llu fail=%llu eaddr=%llu\n",
+            (unsigned long long)s.u64BindOk,
+            (unsigned long long)s.u64BindFail,
+            (unsigned long long)s.u64EaddrInuse);
+
+    /* Grep: net: lo soft life */
+    kprintf("net: lo soft life listen=%llu listen_fail=%llu "
+            "conn=%llu conn_fail=%llu conn_again=%llu conn_orphan=%llu "
+            "accept=%llu accept_fail=%llu accept_again=%llu "
+            "shut=%llu shut_fail=%llu shut_rd=%llu shut_wr=%llu "
+            "shut_rdwr=%llu close=%llu close_fail=%llu close_half=%llu\n",
+            (unsigned long long)s.u64ListenOk,
+            (unsigned long long)s.u64ListenFail,
+            (unsigned long long)s.u64ConnOk,
+            (unsigned long long)s.u64ConnFail,
+            (unsigned long long)s.u64ConnAgain,
+            (unsigned long long)s.u64ConnOrphan,
+            (unsigned long long)s.u64AcceptOk,
+            (unsigned long long)s.u64AcceptFail,
+            (unsigned long long)s.u64AcceptAgain,
+            (unsigned long long)s.u64ShutOk,
+            (unsigned long long)s.u64ShutFail,
+            (unsigned long long)s.u64ShutRd,
+            (unsigned long long)s.u64ShutWr,
+            (unsigned long long)s.u64ShutRdwr,
+            (unsigned long long)s.u64CloseOk,
+            (unsigned long long)s.u64CloseFail,
+            (unsigned long long)s.u64ClosePeerHalf);
+
+    /* Grep: net: lo soft xfer */
+    kprintf("net: lo soft xfer send=%llu send_fail=%llu send_pipe=%llu "
+            "send_self=%llu recv=%llu recv_fail=%llu recv_again=%llu "
+            "recv_eof=%llu tx=%llu rx=%llu\n",
+            (unsigned long long)s.u64SendOk,
+            (unsigned long long)s.u64SendFail,
+            (unsigned long long)s.u64SendPipe,
+            (unsigned long long)s.u64SendSelf,
+            (unsigned long long)s.u64RecvOk,
+            (unsigned long long)s.u64RecvFail,
+            (unsigned long long)s.u64RecvAgain,
+            (unsigned long long)s.u64RecvEof,
+            (unsigned long long)s.u64BytesTx,
+            (unsigned long long)s.u64BytesRx);
+
+    /* Grep: net: lo soft opt */
+    kprintf("net: lo soft opt set=%llu set_fail=%llu get=%llu get_fail=%llu "
+            "reuse=%llu reusep=%llu bcast=%llu ka=%llu sndbuf=%llu "
+            "rcvbuf=%llu linger=%llu noop=%llu type=%llu error=%llu "
+            "acceptconn=%llu\n",
+            (unsigned long long)s.u64SetoptOk,
+            (unsigned long long)s.u64SetoptFail,
+            (unsigned long long)s.u64GetoptOk,
+            (unsigned long long)s.u64GetoptFail,
+            (unsigned long long)s.u64OptReuse,
+            (unsigned long long)s.u64OptReusePort,
+            (unsigned long long)s.u64OptBcast,
+            (unsigned long long)s.u64OptKa,
+            (unsigned long long)s.u64OptSndbuf,
+            (unsigned long long)s.u64OptRcvbuf,
+            (unsigned long long)s.u64OptLinger,
+            (unsigned long long)s.u64OptNoop,
+            (unsigned long long)s.u64OptType,
+            (unsigned long long)s.u64OptError,
+            (unsigned long long)s.u64OptAcceptConn);
+
+    /* Grep: net: lo soft name */
+    kprintf("net: lo soft name ok=%llu fail=%llu peer_ok=%llu "
+            "peer_fail=%llu\n",
+            (unsigned long long)s.u64NameOk,
+            (unsigned long long)s.u64NameFail,
+            (unsigned long long)s.u64PeerOk,
+            (unsigned long long)s.u64PeerFail);
+
+    /* Grep: net: lo soft ring */
+    kprintf("net: lo soft ring buf=%u push_full=%llu push_partial=%llu "
+            "rx_live=%u rcv_def=%u snd_def=%u\n",
+            (unsigned)NET_LO_BUF,
+            (unsigned long long)s.u64PushFull,
+            (unsigned long long)s.u64PushPartial, cRx,
+            (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF);
 
     /* Grep: net: lo soft stats */
     kprintf("net: lo soft stats ops=%llu sock=%llu sock_fail=%llu "
@@ -248,7 +425,8 @@ lo_soft_print(void)
             "shut=%llu shut_fail=%llu close=%llu close_fail=%llu "
             "setopt=%llu setopt_fail=%llu getopt=%llu getopt_fail=%llu "
             "name=%llu name_fail=%llu peer=%llu peer_fail=%llu "
-            "tx=%llu rx=%llu push_full=%llu push_partial=%llu dumps=%llu\n",
+            "tx=%llu rx=%llu push_full=%llu push_partial=%llu dumps=%llu "
+            "skip=%llu event_skip=%llu log_max=%u event_max=%u\n",
             (unsigned long long)s.u64Ops,
             (unsigned long long)s.u64SockOk,
             (unsigned long long)s.u64SockFail,
@@ -288,9 +466,34 @@ lo_soft_print(void)
             (unsigned long long)s.u64BytesRx,
             (unsigned long long)s.u64PushFull,
             (unsigned long long)s.u64PushPartial,
-            (unsigned long long)(s.u64LogDumps + 1ull));
+            (unsigned long long)g_soft.u64LogDumps,
+            (unsigned long long)s.u64LogSkip,
+            (unsigned long long)s.u64EventSkip,
+            (unsigned)NET_LO_SOFT_LOG_MAX,
+            (unsigned)NET_LO_SOFT_EVENT_MAX);
 
-    /* Per-live-slot soft detail (cap-bounded; product smoke inventory). */
+    /* Grep: net: lo soft path */
+    kprintf("net: lo soft path sock=af_inet|af_unix stream|dgram "
+            "bind=eaddr_reuse listen=backlog_soft conn=pair|orphan|again "
+            "accept=mint xfer=peer_ring|self_dgram shut=rd|wr|rdwr "
+            "opt=sol_socket_subset name=sin_lo peer=peer_port "
+            "fd=%u..%u (soft inventory; not bar3)\n",
+            (unsigned)NET_FD_BASE,
+            (unsigned)(NET_FD_BASE + NET_LO_MAX - 1u));
+
+    /* Grep: net: lo soft PASS */
+    kprintf("net: lo soft PASS wave=12 logs=%u skip=%llu event_n=%u "
+            "event_skip=%llu max=%u event_max=%u force=%u slots=%u "
+            "(soft inventory only; not product gate)\n",
+            g_soft.u32SoftLogN, (unsigned long long)s.u64LogSkip,
+            g_soft.u32EventN, (unsigned long long)s.u64EventSkip,
+            (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX,
+            fForce ? 1u : 0u, fSlots);
+
+    /* Per-live-slot soft detail (rate-limited; product smoke inventory). */
+    if (fSlots == 0u) {
+        return;
+    }
     for (i = 0; i < NET_LO_MAX; i++) {
         if (!g_aSocks[i].u8Used) {
             continue;
@@ -323,16 +526,38 @@ lo_soft_print(void)
     }
 }
 
-/* Cadence + force soft log (table-full / empty / init always force). */
+/*
+ * Rate-limit soft inventory: power-of-two op milestones, hard-capped.
+ * Force path (emfile / table-empty) prefers slots but still respects
+ * NET_LO_SOFT_LOG_MAX so serial cannot flood. Init calls lo_soft_print(1)
+ * directly (pre-activity). Soft skip tallies only suppressed dumps (cap);
+ * non-milestone ops are silent without a skip bump.
+ * greppable: net: lo soft
+ */
 static void
 lo_soft_maybe_log(int fForce)
 {
+    u64 u64N;
+
     lo_soft_bump(&g_soft.u64Ops);
-    if (fForce ||
-        (g_soft.u64Ops != 0 &&
-         (g_soft.u64Ops % (u64)NET_LO_SOFT_LOG_EVERY) == 0)) {
-        lo_soft_print();
+    if (fForce != 0) {
+        if (g_soft.u32SoftLogN >= NET_LO_SOFT_LOG_MAX) {
+            lo_soft_bump(&g_soft.u64LogSkip);
+            return;
+        }
+        lo_soft_print(1);
+        return;
     }
+    u64N = g_soft.u64Ops;
+    /* Milestone: first op and subsequent powers of two only. */
+    if (u64N == 0ull || (u64N & (u64N - 1ull)) != 0ull) {
+        return;
+    }
+    if (g_soft.u32SoftLogN >= NET_LO_SOFT_LOG_MAX) {
+        lo_soft_bump(&g_soft.u64LogSkip);
+        return;
+    }
+    lo_soft_print(0);
 }
 
 void
@@ -343,12 +568,12 @@ net_lo_init(void)
     kprintf("net_lo: init (loopback + peer ring + sockopt/backlog soft)\n");
     /* Grep: net: lo soft init */
     kprintf("net: lo soft init max=%u fd_base=%u buf=%u backlog_max=%u "
-            "rcv_def=%u snd_def=%u log_every=%u\n",
+            "rcv_def=%u snd_def=%u log_max=%u event_max=%u wave=12\n",
             (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
             (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
             (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF,
-            (unsigned)NET_LO_SOFT_LOG_EVERY);
-    lo_soft_print();
+            (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX);
+    lo_soft_print(1);
 }
 
 int
@@ -405,14 +630,27 @@ net_lo_socket(int nDomain, int nType, int nProto)
             lo_soft_tally(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                           NULL, NULL, NULL);
             lo_soft_bump(&g_soft.u64SockOk);
+            if (nDomain == AF_INET) {
+                lo_soft_bump(&g_soft.u64SockInet);
+            } else {
+                lo_soft_bump(&g_soft.u64SockUnix);
+            }
+            if (nType == SOCK_STREAM) {
+                lo_soft_bump(&g_soft.u64SockStream);
+            } else {
+                lo_soft_bump(&g_soft.u64SockDgram);
+            }
             lo_soft_maybe_log(0);
             return (i64)(NET_FD_BASE + i);
         }
     }
     lo_soft_bump(&g_soft.u64SockFail);
-    /* Grep: net: lo soft emfile */
-    kprintf("net: lo soft emfile max=%u ops=%llu\n", (unsigned)NET_LO_MAX,
-            (unsigned long long)g_soft.u64Ops);
+    /* Grep: net: lo soft emfile (rate-limited) */
+    if (lo_soft_event_ok()) {
+        kprintf("net: lo soft emfile max=%u ops=%llu used_hwm=%llu\n",
+                (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops,
+                (unsigned long long)g_soft.u64HwmUsed);
+    }
     lo_soft_maybe_log(1);
     return -24; /* EMFILE */
 }
@@ -493,10 +731,15 @@ net_lo_listen(i64 i64Fd, int nBacklog)
     g_aSocks[u32Slot].u8Pending = 0;
     g_aSocks[u32Slot].u8Listening = 1;
     lo_soft_bump(&g_soft.u64ListenOk);
-    /* Grep: net: lo soft listen */
-    kprintf("net: lo soft listen fd=%lld port=%u backlog=%u\n",
-            (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
-            (unsigned)g_aSocks[u32Slot].u8Backlog);
+    /* Grep: net: lo soft listen (rate-limited) */
+    if (lo_soft_event_ok()) {
+        kprintf("net: lo soft listen fd=%lld port=%u backlog=%u "
+                "type=%u ops=%llu\n",
+                (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
+                (unsigned)g_aSocks[u32Slot].u8Backlog,
+                (unsigned)g_aSocks[u32Slot].u8Type,
+                (unsigned long long)g_soft.u64Ops);
+    }
     lo_soft_maybe_log(0);
     return 0;
 }
@@ -611,18 +854,26 @@ net_lo_accept(i64 i64Fd)
                 g_aSocks[u32Slot].u8Pending--;
             }
             lo_soft_bump(&g_soft.u64AcceptOk);
-            /* Grep: net: lo soft accept */
-            kprintf("net: lo soft accept listen_fd=%lld new_fd=%u "
-                    "cli_slot=%d port=%u\n",
-                    (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
-                    (int)i16Cli, (unsigned)g_aSocks[i].u16Port);
+            /* Grep: net: lo soft accept (rate-limited) */
+            if (lo_soft_event_ok()) {
+                kprintf("net: lo soft accept listen_fd=%lld new_fd=%u "
+                        "cli_slot=%d port=%u type=%u pending=%u ops=%llu\n",
+                        (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
+                        (int)i16Cli, (unsigned)g_aSocks[i].u16Port,
+                        (unsigned)g_aSocks[i].u8Type,
+                        (unsigned)g_aSocks[u32Slot].u8Pending,
+                        (unsigned long long)g_soft.u64Ops);
+            }
             lo_soft_maybe_log(0);
             return (i64)(NET_FD_BASE + i);
         }
     }
     lo_soft_bump(&g_soft.u64AcceptFail);
-    kprintf("net: lo soft emfile max=%u ops=%llu (accept mint)\n",
-            (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
+    /* Grep: net: lo soft emfile (accept mint; rate-limited) */
+    if (lo_soft_event_ok()) {
+        kprintf("net: lo soft emfile max=%u ops=%llu (accept mint)\n",
+                (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
+    }
     lo_soft_maybe_log(1);
     return -24; /* EMFILE */
 }
@@ -783,6 +1034,13 @@ net_lo_shutdown(i64 i64Fd, int nHow)
         g_aSocks[u32Slot].u8ShutWr = 1;
     }
     lo_soft_bump(&g_soft.u64ShutOk);
+    if (nHow == 0) {
+        lo_soft_bump(&g_soft.u64ShutRd);
+    } else if (nHow == 1) {
+        lo_soft_bump(&g_soft.u64ShutWr);
+    } else {
+        lo_soft_bump(&g_soft.u64ShutRdwr);
+    }
     lo_soft_maybe_log(0);
     return 0;
 }
@@ -811,24 +1069,28 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
     if (nOpt == 2 /* SO_REUSEADDR */) {
         g_aSocks[u32Slot].u8Reuse = v ? 1u : 0u;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptReuse);
         lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 15 /* SO_REUSEPORT */) {
         g_aSocks[u32Slot].u8ReusePort = v ? 1u : 0u;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptReusePort);
         lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 6 /* SO_BROADCAST */) {
         g_aSocks[u32Slot].u8Broadcast = v ? 1u : 0u;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptBcast);
         lo_soft_maybe_log(0);
         return 0;
     }
     if (nOpt == 9 /* SO_KEEPALIVE */) {
         g_aSocks[u32Slot].u8Keepalive = v ? 1u : 0u;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptKa);
         lo_soft_maybe_log(0);
         return 0;
     }
@@ -841,6 +1103,7 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
         }
         g_aSocks[u32Slot].u32SndBuf = (u32)v;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptSndbuf);
         lo_soft_maybe_log(0);
         return 0;
     }
@@ -853,6 +1116,7 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
         }
         g_aSocks[u32Slot].u32RcvBuf = (u32)v;
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptRcvbuf);
         lo_soft_maybe_log(0);
         return 0;
     }
@@ -866,16 +1130,19 @@ net_lo_setsockopt(i64 i64Fd, int nLevel, int nOpt, const void *pVal, u32 u32Len)
                 pL[1] < 0 ? 0u : (u16)(pL[1] > 65535 ? 65535 : pL[1]);
         }
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptLinger);
         lo_soft_maybe_log(0);
         return 0;
     }
     /* SO_DEBUG=1, SO_DONTROUTE=5, SO_OOBINLINE=10, timeos — accept no-op */
     if (nOpt == 1 || nOpt == 5 || nOpt == 10 || nOpt == 20 || nOpt == 21) {
         lo_soft_bump(&g_soft.u64SetoptOk);
+        lo_soft_bump(&g_soft.u64OptNoop);
         lo_soft_maybe_log(0);
         return 0;
     }
     lo_soft_bump(&g_soft.u64SetoptOk);
+    lo_soft_bump(&g_soft.u64OptNoop);
     lo_soft_maybe_log(0);
     return 0;
 }
@@ -899,22 +1166,31 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
     }
     if (nOpt == 3 /* SO_TYPE */) {
         v = g_aSocks[u32Slot].u8Type;
+        lo_soft_bump(&g_soft.u64OptType);
     } else if (nOpt == 4 /* SO_ERROR */) {
         v = 0;
+        lo_soft_bump(&g_soft.u64OptError);
     } else if (nOpt == 2 /* SO_REUSEADDR */) {
         v = g_aSocks[u32Slot].u8Reuse;
+        lo_soft_bump(&g_soft.u64OptReuse);
     } else if (nOpt == 15 /* SO_REUSEPORT */) {
         v = g_aSocks[u32Slot].u8ReusePort;
+        lo_soft_bump(&g_soft.u64OptReusePort);
     } else if (nOpt == 6 /* SO_BROADCAST */) {
         v = g_aSocks[u32Slot].u8Broadcast;
+        lo_soft_bump(&g_soft.u64OptBcast);
     } else if (nOpt == 9 /* SO_KEEPALIVE */) {
         v = g_aSocks[u32Slot].u8Keepalive;
+        lo_soft_bump(&g_soft.u64OptKa);
     } else if (nOpt == 7 /* SO_SNDBUF */) {
         v = (int)g_aSocks[u32Slot].u32SndBuf;
+        lo_soft_bump(&g_soft.u64OptSndbuf);
     } else if (nOpt == 8 /* SO_RCVBUF */) {
         v = (int)g_aSocks[u32Slot].u32RcvBuf;
+        lo_soft_bump(&g_soft.u64OptRcvbuf);
     } else if (nOpt == 30 /* SO_ACCEPTCONN */) {
         v = g_aSocks[u32Slot].u8Listening ? 1 : 0;
+        lo_soft_bump(&g_soft.u64OptAcceptConn);
     } else if (nOpt == 13 /* SO_LINGER */) {
         if (*pLen < 8) {
             lo_soft_bump(&g_soft.u64GetoptFail);
@@ -925,10 +1201,12 @@ net_lo_getsockopt(i64 i64Fd, int nLevel, int nOpt, void *pVal, u32 *pLen)
         ((int *)pVal)[1] = (int)g_aSocks[u32Slot].u16LingerSec;
         *pLen = 8;
         lo_soft_bump(&g_soft.u64GetoptOk);
+        lo_soft_bump(&g_soft.u64OptLinger);
         lo_soft_maybe_log(0);
         return 0;
     } else {
         v = 0;
+        lo_soft_bump(&g_soft.u64OptNoop);
     }
     if (*pLen < 4) {
         lo_soft_bump(&g_soft.u64GetoptFail);
@@ -1034,6 +1312,7 @@ net_lo_close(i64 i64Fd)
         /* Soft half-close: peer sees RD shutdown if we were connected. */
         if (g_aSocks[u32Slot].u8Connected && !g_aSocks[u32Slot].u8Listening) {
             g_aSocks[peer].u8ShutRd = 1;
+            lo_soft_bump(&g_soft.u64ClosePeerHalf);
         }
         if (g_aSocks[peer].u8Listening && g_aSocks[peer].u8Pending > 0) {
             g_aSocks[peer].u8Pending--;

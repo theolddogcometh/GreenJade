@@ -1,0 +1,98 @@
+Notes — continuum milestone 15400 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_15400.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_15400.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch15391.c … graph_batch15400.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them.
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c                 static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
+  - cgj_soft_milestone_14500.c  prior decade soft probe
+  - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14700.c  prior decade soft probe
+  - cgj_soft_milestone_14800.c  prior decade soft probe
+  - cgj_soft_milestone_14900.c  prior decade soft probe
+  - cgj_soft_milestone_15000.c  prior decade soft probe
+  - cgj_soft_milestone_15100.c  prior decade soft probe
+  - cgj_soft_milestone_15200.c  prior decade soft probe
+  - cgj_soft_milestone_15300.c  prior decade soft probe
+
+New CREATE-ONLY soft host probe:
+  - cgj_soft_milestone_15400.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 15400 marker surfaces (batches 15391–15400)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_15400           1          graph_batch15391.c
+gj_libcgj_green_15400          1          graph_batch15392.c
+gj_bar3_ready_15400            0          graph_batch15393.c  (bar3 open)
+gj_product_score_15400         0          graph_batch15394.c  (score open)
+gj_continuum_ready_15400       1          graph_batch15395.c
+gj_smoke_soft_15400            1          graph_batch15396.c
+gj_dyn_soft_15400              1          graph_batch15397.c
+gj_milestone_tag_15400         15400      graph_batch15398.c
+gj_continuum_wave_15400        15400      graph_batch15399.c
+gj_batch_id_15400              15400      graph_batch15400.c
+gj_graph_milestone_15400       15400      graph_batch15400.c
+__libcgj_batch15NNN_marker     string     matching batch TU
+
+Fill continuum (batches 15376–15390, not soft-probed here)
+---------------------------------------------------------
+Each TU exports unique gj_batch_id_N plus a small unique soft unit
+helper (wave_fill / slot_a / … / anchor). Soft rule for this NOTES
+file remains decade markers 15391–15400 only.
+
+Identity continuum (batches 15351–15375, not soft-probed here)
+-------------------------------------------------------------
+Each TU exports unique gj_batch_id_N + gj_graph_milestone_N.
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. Wire graph_batch15351.c … graph_batch15400.c into CGJ_SRCS when
+   advancing makefile_max to 15400 (CREATE-ONLY wave lands first).
+2. libc.map may lag milestone 15400 globals; add 15400 symbols under
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
+5. Soft gates only; bar3 remains open (gj_bar3_ready_15400 == 0).
+
+Manual run
+----------
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_15400 \
+  user/libcgj/tests/cgj_soft_milestone_15400.c -ldl
+./build/cgj_soft_milestone_15400
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M15400_DIRECT \
+  -o build/cgj_soft_milestone_15400_direct \
+  user/libcgj/tests/cgj_soft_milestone_15400.c \
+  user/libcgj/src/graph_batch15391.c \
+  user/libcgj/src/graph_batch15392.c \
+  user/libcgj/src/graph_batch15393.c \
+  user/libcgj/src/graph_batch15394.c \
+  user/libcgj/src/graph_batch15395.c \
+  user/libcgj/src/graph_batch15396.c \
+  user/libcgj/src/graph_batch15397.c \
+  user/libcgj/src/graph_batch15398.c \
+  user/libcgj/src/graph_batch15399.c \
+  user/libcgj/src/graph_batch15400.c
+./build/cgj_soft_milestone_15400_direct

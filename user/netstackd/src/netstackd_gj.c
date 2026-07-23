@@ -30,13 +30,20 @@
  *   netstackd-gj: RING_STATE soft PASS | soft-skip
  *   netstackd-gj: soft door PASS | soft door soft-skip
  *   netstackd-gj: RELEASE free soft PASS | soft-skip
- * Soft inventory (greppable prefix "netstackd-gj: soft …"; never hard-fail):
- *   netstackd-gj: soft inventory ok=… bits=0x… ring_mapped=…
+ * Soft inventory (Wave 12 exclusive deepen — greppable "netstackd-gj: soft …"):
+ *   netstackd-gj: soft inventory ok=… skip=… bits=0x… ring_mapped=…
+ *                free_rel=… wave=12
+ *   netstackd-gj: soft door reclaim=… poll=… stats=… qinfo=… dgram=…
+ *                tcpst=… rx=… remap=… kick=… ringst=… bits=0x…
  *   netstackd-gj: soft stats arp=… udp=… icmp=… calls=… door=…
  *   netstackd-gj: soft queue tx=… rx=… ready=… owned=… vq=… door=…
  *   netstackd-gj: soft ring s0=… s1=… s2=… s3=… door=…
- *   netstackd-gj: soft rx frames=… last=…
+ *   netstackd-gj: soft rx frames=… last=… empty=…
+ *   netstackd-gj: soft free release=… bits=…
+ *   netstackd-gj: soft steps ok=… skip=… max=… bits=0x…
+ *   netstackd-gj: soft path reclaim=claim … (soft inventory; not bar3)
  *   netstackd-gj: soft free-release PASS | soft free-release soft-skip
+ * Diagnostics only — never hard-fail live path; soft ≠ bar3.
  *
  *   make netstackd-gj → build/user/netstackd.elf
  */
@@ -98,6 +105,12 @@
 #define GJ_SOFT_BIT_REMAP    (1u << 7)
 #define GJ_SOFT_BIT_KICK     (1u << 8)
 #define GJ_SOFT_BIT_RINGST   (1u << 9)
+/* Soft free-path bit (Wave 12 inventory; post-RELEASE no-op). */
+#define GJ_SOFT_FREE_RELEASE (1u << 0)
+/* Soft door suite step ceiling (reclaim..RING_STATE). */
+#define GJ_SOFT_DOOR_MAX     10u
+/* Wave stamp for greppable soft inventory lines (Wave 12 exclusive). */
+#define GJ_SOFT_WAVE         12u
 
 _Static_assert(GJ_MULTI_CB > GJ_TCP_MSS,
                "GJ_MULTI_CB must exceed MSS for multi-segment TX");
@@ -151,11 +164,16 @@ struct vq_avail {
     unsigned short ring[256];
 } __attribute__((packed));
 
-/* Soft-door bookkeeping (filled while CLAIM held; never hard-fails). */
+/*
+ * Soft-door bookkeeping (filled while CLAIM held; never hard-fails).
+ * Wave 12 inventory tallies: ok/skip + door lamps + free bit + snapshots.
+ */
 struct soft_ctx {
-    unsigned uBits;
-    unsigned cOk;
-    int fRingMapped; /* 1 when hard path mapped RING_VA */
+    unsigned uBits;      /* GJ_SOFT_BIT_* door suite mask */
+    unsigned cOk;        /* soft door sub-steps greened */
+    unsigned cSkip;      /* soft door sub-steps soft-skipped */
+    unsigned uFreeBits;  /* GJ_SOFT_FREE_* free-path mask */
+    int fRingMapped;     /* 1 when hard path mapped RING_VA */
     /* Soft inventory snapshots (greppable "netstackd-gj: soft …"). */
     unsigned aEth[4];  /* arp, udp, icmp, calls */
     unsigned aQ[5];    /* tx, rx, ready, owned, vq_calls */
@@ -166,6 +184,7 @@ struct soft_ctx {
     int fQDoor;    /* QUEUE_INFO door returned 0 */
     int fRingDoor; /* RING_STATE door returned 0 */
     int fFreeRel;  /* second RELEASE soft no-op greened */
+    int fRxEmpty;  /* VIRTIO_RX accepted with zero frames */
 };
 
 static void
@@ -239,14 +258,32 @@ append_hex(char *aLine, unsigned cb, unsigned *po, unsigned long u)
     }
 }
 
+/* Wave 12: 0/1 lamp from soft door bit mask. */
+static unsigned
+soft_lamp(unsigned uBits, unsigned uMask)
+{
+    return ((uBits & uMask) != 0u) ? 1u : 0u;
+}
+
 /*
- * Soft inventory dump — greppable prefix "netstackd-gj: soft …".
- * Pure observation; never hard-fails live path.
+ * Soft inventory dump (Wave 12 exclusive deepen).
+ * Greppable prefix: "netstackd-gj: soft …"
+ * Pure observation — always soft; never gates live path PASS.
+ *
+ *   netstackd-gj: soft inventory …
+ *   netstackd-gj: soft door …
+ *   netstackd-gj: soft stats …
+ *   netstackd-gj: soft queue …
+ *   netstackd-gj: soft ring …
+ *   netstackd-gj: soft rx …
+ *   netstackd-gj: soft free …
+ *   netstackd-gj: soft steps …
+ *   netstackd-gj: soft path …
  */
 static void
 soft_inventory_log(const struct soft_ctx *pSoft)
 {
-    char aLine[160];
+    char aLine[224];
     unsigned o;
 
     if (pSoft == 0) {
@@ -258,10 +295,56 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "netstackd-gj: soft inventory ok=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cSkip);
     append_s(aLine, sizeof(aLine), &o, " bits=0x");
     append_hex(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uBits);
     append_s(aLine, sizeof(aLine), &o, " ring_mapped=");
-    append_u(aLine, sizeof(aLine), &o, (unsigned long)(pSoft->fRingMapped ? 1u : 0u));
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fRingMapped ? 1u : 0u));
+    append_s(aLine, sizeof(aLine), &o, " free_rel=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fFreeRel ? 1u : 0u));
+    append_s(aLine, sizeof(aLine), &o, " wave=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_SOFT_WAVE);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: netstackd-gj: soft door (per-step lamps) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "netstackd-gj: soft door reclaim=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RECLAIM));
+    append_s(aLine, sizeof(aLine), &o, " poll=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_POLL));
+    append_s(aLine, sizeof(aLine), &o, " stats=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_STATS));
+    append_s(aLine, sizeof(aLine), &o, " qinfo=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_QINFO));
+    append_s(aLine, sizeof(aLine), &o, " dgram=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_DGRAM));
+    append_s(aLine, sizeof(aLine), &o, " tcpst=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_TCPST));
+    append_s(aLine, sizeof(aLine), &o, " rx=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RX));
+    append_s(aLine, sizeof(aLine), &o, " remap=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_REMAP));
+    append_s(aLine, sizeof(aLine), &o, " kick=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_KICK));
+    append_s(aLine, sizeof(aLine), &o, " ringst=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uBits, GJ_SOFT_BIT_RINGST));
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_hex(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uBits);
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
@@ -277,7 +360,8 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     append_s(aLine, sizeof(aLine), &o, " calls=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->aEth[3]);
     append_s(aLine, sizeof(aLine), &o, " door=");
-    append_u(aLine, sizeof(aLine), &o, (unsigned long)(pSoft->fEthDoor ? 1u : 0u));
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fEthDoor ? 1u : 0u));
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
@@ -295,7 +379,8 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     append_s(aLine, sizeof(aLine), &o, " vq=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->aQ[4]);
     append_s(aLine, sizeof(aLine), &o, " door=");
-    append_u(aLine, sizeof(aLine), &o, (unsigned long)(pSoft->fQDoor ? 1u : 0u));
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fQDoor ? 1u : 0u));
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
@@ -311,7 +396,8 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     append_s(aLine, sizeof(aLine), &o, " s3=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->aRing[3]);
     append_s(aLine, sizeof(aLine), &o, " door=");
-    append_u(aLine, sizeof(aLine), &o, (unsigned long)(pSoft->fRingDoor ? 1u : 0u));
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fRingDoor ? 1u : 0u));
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
@@ -323,13 +409,53 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     append_s(aLine, sizeof(aLine), &o, " last=");
     if (pSoft->nRxLast < 0) {
         append_s(aLine, sizeof(aLine), &o, "-");
-        append_u(aLine, sizeof(aLine), &o, (unsigned long)(-pSoft->nRxLast));
+        append_u(aLine, sizeof(aLine), &o,
+                 (unsigned long)(-pSoft->nRxLast));
     } else {
         append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->nRxLast);
     }
+    append_s(aLine, sizeof(aLine), &o, " empty=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)(pSoft->fRxEmpty ? 1u : 0u));
     append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     msg(aLine);
+
+    /* Grep: netstackd-gj: soft free */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "netstackd-gj: soft free release=");
+    append_u(aLine, sizeof(aLine), &o,
+             (unsigned long)soft_lamp(pSoft->uFreeBits, GJ_SOFT_FREE_RELEASE));
+    append_s(aLine, sizeof(aLine), &o, " bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /* Grep: netstackd-gj: soft steps (rollup) */
+    o = 0;
+    append_s(aLine, sizeof(aLine), &o, "netstackd-gj: soft steps ok=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cOk);
+    append_s(aLine, sizeof(aLine), &o, " skip=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->cSkip);
+    append_s(aLine, sizeof(aLine), &o, " max=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_SOFT_DOOR_MAX);
+    append_s(aLine, sizeof(aLine), &o, " bits=0x");
+    append_hex(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uBits);
+    append_s(aLine, sizeof(aLine), &o, " free_bits=");
+    append_u(aLine, sizeof(aLine), &o, (unsigned long)pSoft->uFreeBits);
+    append_s(aLine, sizeof(aLine), &o, "\n");
+    aLine[o] = '\0';
+    msg(aLine);
+
+    /*
+     * Grep: netstackd-gj: soft path
+     * Static route labels for agent greps (not live counters).
+     */
+    msg("netstackd-gj: soft path reclaim=claim poll=eth stats=eth "
+        "queue=owned dgram=echo tcp=door_stats rx=virtio remap=map_ring "
+        "kick=vq ring=state free=release_noop "
+        "(soft inventory; not bar3)\n");
 }
 
 static void
@@ -553,6 +679,8 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
     }
     pSoft->uBits = 0u;
     pSoft->cOk = 0u;
+    pSoft->cSkip = 0u;
+    /* uFreeBits / fFreeRel / fRingMapped owned by _start (free path later). */
     pSoft->aEth[0] = pSoft->aEth[1] = pSoft->aEth[2] = pSoft->aEth[3] = 0u;
     pSoft->aQ[0] = pSoft->aQ[1] = pSoft->aQ[2] = pSoft->aQ[3] = pSoft->aQ[4] = 0u;
     pSoft->aRing[0] = pSoft->aRing[1] = pSoft->aRing[2] = pSoft->aRing[3] = 0u;
@@ -561,7 +689,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
     pSoft->fEthDoor = 0;
     pSoft->fQDoor = 0;
     pSoft->fRingDoor = 0;
-    /* fRingMapped / fFreeRel owned by _start. */
+    pSoft->fRxEmpty = 0;
 
     msg("netstackd-gj: soft door start\n");
 
@@ -576,9 +704,11 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
             pSoft->cOk++;
             msg("netstackd-gj: reclaim soft PASS\n");
         } else {
+            pSoft->cSkip++;
             msg("netstackd-gj: reclaim soft-skip\n");
         }
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: reclaim soft-skip\n");
     }
 
@@ -589,6 +719,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: POLL soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: POLL soft-skip\n");
     }
 
@@ -609,6 +740,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: STATS soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: STATS soft-skip\n");
     }
 
@@ -630,6 +762,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: QUEUE_INFO soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: QUEUE_INFO soft-skip\n");
     }
 
@@ -650,9 +783,11 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
             pSoft->cOk++;
             msg("netstackd-gj: dgram echo soft PASS\n");
         } else {
+            pSoft->cSkip++;
             msg("netstackd-gj: dgram echo soft-skip\n");
         }
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: dgram echo soft-skip\n");
     }
 
@@ -662,6 +797,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: TCP_STATS soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: TCP_STATS soft-skip\n");
     }
 
@@ -695,11 +831,15 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->uBits |= GJ_SOFT_BIT_RX;
         pSoft->cOk++;
         if (cRx > 0u) {
+            pSoft->fRxEmpty = 0;
             msg("netstackd-gj: VIRTIO_RX soft PASS\n");
         } else {
+            pSoft->fRxEmpty = 1;
             msg("netstackd-gj: VIRTIO_RX soft-empty\n");
         }
     } else {
+        pSoft->cSkip++;
+        pSoft->fRxEmpty = 0;
         msg("netstackd-gj: VIRTIO_RX soft-skip\n");
     }
     (void)aRxFrame;
@@ -721,10 +861,12 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
             pSoft->cOk++;
             msg("netstackd-gj: re-MAP soft PASS\n");
         } else {
+            pSoft->cSkip++;
             msg("netstackd-gj: re-MAP soft-skip\n");
         }
         (void)ex;
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: re-MAP soft-skip\n");
     }
 
@@ -735,6 +877,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: KICK soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: KICK soft-skip\n");
     }
 
@@ -754,12 +897,14 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
         pSoft->cOk++;
         msg("netstackd-gj: RING_STATE soft PASS\n");
     } else {
+        pSoft->cSkip++;
         msg("netstackd-gj: RING_STATE soft-skip\n");
     }
 
     /*
      * Soft inventory (greppable "netstackd-gj: soft …") — always emit after
      * sub-steps so smoke can tally door/eth/queue/ring/rx without hard FAIL.
+     * free_rel may still be 0 here; final Wave 12 rollup re-emits after free.
      */
     soft_inventory_log(pSoft);
 
@@ -786,6 +931,8 @@ _start(void)
 
     soft.uBits = 0u;
     soft.cOk = 0u;
+    soft.cSkip = 0u;
+    soft.uFreeBits = 0u;
     soft.fRingMapped = 0;
     soft.aEth[0] = soft.aEth[1] = soft.aEth[2] = soft.aEth[3] = 0u;
     soft.aQ[0] = soft.aQ[1] = soft.aQ[2] = soft.aQ[3] = soft.aQ[4] = 0u;
@@ -796,6 +943,7 @@ _start(void)
     soft.fQDoor = 0;
     soft.fRingDoor = 0;
     soft.fFreeRel = 0;
+    soft.fRxEmpty = 0;
 
     msg("netstackd-gj: start\n");
     if (gj_net(GJ_NET_OP_CLAIM, (long)token, 0, 0) != 0) {
@@ -925,9 +1073,11 @@ _start(void)
      * Soft free RELEASE: door already free → soft no-op (0).
      * Never hard-fails live path (mirrors vfsd RELEASE free soft).
      * Dual markers: legacy RELEASE free soft + greppable soft free-release.
+     * Wave 12: also stamp uFreeBits and re-emit soft inventory (free_rel).
      */
     if (gj_net(GJ_NET_OP_RELEASE, (long)token, 0, 0) == 0) {
         soft.fFreeRel = 1;
+        soft.uFreeBits |= GJ_SOFT_FREE_RELEASE;
         msg("netstackd-gj: RELEASE free soft PASS\n");
         msg("netstackd-gj: soft free-release PASS\n");
     } else {
@@ -935,7 +1085,8 @@ _start(void)
         msg("netstackd-gj: RELEASE free soft-skip\n");
         msg("netstackd-gj: soft free-release soft-skip\n");
     }
-    (void)soft.fFreeRel;
+    /* Final Wave 12 soft inventory rollup (includes free_rel / free bits). */
+    soft_inventory_log(&soft);
 
     /* Hard live path: DGRAM RECV green (prefix-stable; smoke-all greps). */
     if (n > 0) {

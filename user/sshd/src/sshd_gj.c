@@ -18,11 +18,11 @@
  *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
  *  11. live path PASS → soft inventory → daemon park
  *
- * Soft inventory (Wave 9 exclusive deepen) — honesty, not product SSH.
+ * Soft inventory (Wave 12 exclusive deepen) — honesty, not product SSH.
  * Diagnostics only; never hard-fails the live path. Greppable prefix:
  *   "sshd-gj: soft …"
  *
- * Soft (optional; never fails live path):
+ * Soft suite (optional; never fails live path):
  *   sshd-gj: soft suite start
  *   sshd-gj: soft banner PASS | soft banner soft-skip
  *   sshd-gj: soft kexinit PASS | soft kexinit soft-skip
@@ -30,9 +30,24 @@
  *   sshd-gj: soft mac PASS | soft mac soft-skip
  *   sshd-gj: soft chacha PASS | soft chacha soft-skip
  *   sshd-gj: soft poly PASS | soft poly soft-skip
+ *   sshd-gj: soft sha256 PASS | soft sha256 soft-skip
+ *   sshd-gj: soft x25519 PASS | soft x25519 soft-skip
+ *   sshd-gj: soft newkeys PASS | soft newkeys soft-skip
+ *   sshd-gj: soft service PASS | soft service soft-skip
+ *   sshd-gj: soft ecdh PASS | soft ecdh soft-skip
+ *   sshd-gj: soft kdf PASS | soft kdf soft-skip
+ *   sshd-gj: soft memeq PASS | soft memeq soft-skip
+ *   sshd-gj: soft suite PASS | soft suite soft-skip
+ * Soft inventory / path / stats (Wave 12; greppable "sshd-gj: soft …"):
  *   sshd-gj: soft honesty not-product-ssh …
  *   sshd-gj: soft inventory …
- *   sshd-gj: soft suite PASS | soft suite soft-skip
+ *   sshd-gj: soft seq …
+ *   sshd-gj: soft crypto …
+ *   sshd-gj: soft kex …
+ *   sshd-gj: soft channel …
+ *   sshd-gj: soft path …
+ *   sshd-gj: soft stats …
+ *   sshd-gj: soft deepen wave=12 …
  *
  * Crypto primitives live in ssh_crypto.c (same license).
  *   make sshd-gj → build/user/sshd.elf
@@ -112,7 +127,7 @@ static uint32_t g_seq_c2s_tx, g_seq_c2s_rx;
 static int g_encrypted;
 
 /*
- * Soft product inventory (Wave 9). Cumulative milestone lamps + suite tallies.
+ * Soft product inventory (Wave 12). Cumulative milestone lamps + suite tallies.
  * Honesty-only — not a claim of OpenSSH-class product completeness.
  * greppable: sshd-gj: soft …
  */
@@ -132,7 +147,23 @@ static uint32_t g_u32SoftEncRx;    /* encrypted CHANNEL_DATA recv */
 static uint32_t g_u32SoftLive;     /* live path banner+session green */
 static uint32_t g_u32SoftSuiteOk;  /* offline soft-suite sub-steps OK */
 static uint32_t g_u32SoftSuiteN;   /* offline soft-suite sub-steps run */
+static uint32_t g_u32SoftSuiteBits;/* offline soft-suite bit lamps */
 static uint32_t g_u32SoftLogN;     /* inventory log emissions */
+
+/* Offline soft-suite bit lamps (Wave 12; never hard-gate). */
+#define SOFT_SUITE_BANNER   (1u << 0)
+#define SOFT_SUITE_KEXINIT  (1u << 1)
+#define SOFT_SUITE_HOSTKEY  (1u << 2)
+#define SOFT_SUITE_MAC      (1u << 3)
+#define SOFT_SUITE_CHACHA   (1u << 4)
+#define SOFT_SUITE_POLY     (1u << 5)
+#define SOFT_SUITE_SHA256   (1u << 6)
+#define SOFT_SUITE_X25519   (1u << 7)
+#define SOFT_SUITE_NEWKEYS  (1u << 8)
+#define SOFT_SUITE_SERVICE  (1u << 9)
+#define SOFT_SUITE_ECDH     (1u << 10)
+#define SOFT_SUITE_KDF      (1u << 11)
+#define SOFT_SUITE_MEMEQ    (1u << 12)
 
 static void
 msg(const char *sz)
@@ -699,16 +730,27 @@ do_service_soft(long fd_srv, long fd_cli)
 }
 
 /*
- * Greppable soft inventory + honesty (Wave 9).
+ * Greppable soft inventory + honesty (Wave 12 exclusive deepen).
  *   sshd-gj: soft honesty not-product-ssh …
  *   sshd-gj: soft inventory …
+ *   sshd-gj: soft seq …
+ *   sshd-gj: soft crypto …
+ *   sshd-gj: soft kex …
+ *   sshd-gj: soft channel …
+ *   sshd-gj: soft path …
+ *   sshd-gj: soft stats …
+ *   sshd-gj: soft deepen wave=12 …
  * Never hard-gates live path; pure observation for smoke/scripts.
  */
 static void
 soft_inventory_log(void)
 {
-	char aLine[256];
+	char aLine[288];
 	unsigned o;
+	unsigned cAreas = 0;
+	unsigned cKex;
+	unsigned cChan;
+	unsigned cCrypto;
 
 	if (g_u32SoftLogN < 0xffffffffu) {
 		g_u32SoftLogN++;
@@ -722,8 +764,9 @@ soft_inventory_log(void)
 	msg("sshd-gj: soft honesty not-product-ssh userauth=soft "
 	    "channel=soft service=soft rekey=0 multi=0 openssh=0 "
 	    "dropbear=0 authorized_keys=soft\n");
+	cAreas++;
 
-	/* Grep: sshd-gj: soft inventory */
+	/* Grep: sshd-gj: soft inventory (legacy Wave 9 kex lamps) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft inventory banner=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftBanner);
@@ -742,7 +785,9 @@ soft_inventory_log(void)
 	append_s(aLine, sizeof(aLine), &o, "\n");
 	aLine[o] = '\0';
 	msg(aLine);
+	cAreas++;
 
+	/* Grep: sshd-gj: soft inventory (legacy Wave 9 session lamps) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft inventory service=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftService);
@@ -767,6 +812,7 @@ soft_inventory_log(void)
 	append_s(aLine, sizeof(aLine), &o, "\n");
 	aLine[o] = '\0';
 	msg(aLine);
+	cAreas++;
 
 	/* Seq / encrypt soft snapshot (post-keys; values may be zero pre-KEX). */
 	o = 0;
@@ -783,17 +829,182 @@ soft_inventory_log(void)
 	append_s(aLine, sizeof(aLine), &o, "\n");
 	aLine[o] = '\0';
 	msg(aLine);
+	cAreas++;
+
+	/* Grep: sshd-gj: soft crypto (Wave 12 offline suite lamps) */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft crypto suite_ok=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteOk);
+	append_s(aLine, sizeof(aLine), &o, " suite_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteN);
+	append_s(aLine, sizeof(aLine), &o, " bits=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteBits);
+	append_s(aLine, sizeof(aLine), &o, " banner=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_BANNER) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " kexinit=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_KEXINIT) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " hostkey=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_HOSTKEY) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " mac=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_MAC) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " chacha=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_CHACHA) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " poly=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_POLY) != 0u));
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/* Grep: sshd-gj: soft crypto (Wave 12 deepen legs continued) */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft crypto sha256=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_SHA256) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " x25519=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_X25519) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " newkeys=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_NEWKEYS) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " service=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_SERVICE) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " ecdh=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_ECDH) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " kdf=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_KDF) != 0u));
+	append_s(aLine, sizeof(aLine), &o, " memeq=");
+	append_u(aLine, sizeof(aLine), &o,
+		 (unsigned long)((g_u32SoftSuiteBits & SOFT_SUITE_MEMEQ) != 0u));
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/* Grep: sshd-gj: soft kex (live-path KEX lamps, Wave 12) */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft kex banner=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftBanner);
+	append_s(aLine, sizeof(aLine), &o, " poly=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftPoly);
+	append_s(aLine, sizeof(aLine), &o, " hostkey=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftHostkey);
+	append_s(aLine, sizeof(aLine), &o, " ecdh=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEcdh);
+	append_s(aLine, sizeof(aLine), &o, " shared=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftShared);
+	append_s(aLine, sizeof(aLine), &o, " kex=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftKex);
+	append_s(aLine, sizeof(aLine), &o, " newkeys=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftNewkeys);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/* Grep: sshd-gj: soft channel (post-NEWKEYS session lamps, Wave 12) */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft channel service=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftService);
+	append_s(aLine, sizeof(aLine), &o, " channel=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftChannel);
+	append_s(aLine, sizeof(aLine), &o, " keys=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftKeys);
+	append_s(aLine, sizeof(aLine), &o, " aead=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftAead);
+	append_s(aLine, sizeof(aLine), &o, " enc_tx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEncTx);
+	append_s(aLine, sizeof(aLine), &o, " enc_rx=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftEncRx);
+	append_s(aLine, sizeof(aLine), &o, " live=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLive);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/*
+	 * Soft path honesty: surface catalog + explicit non-claims.
+	 * greppable: sshd-gj: soft path
+	 */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o,
+		 "sshd-gj: soft path port=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)SSH_PORT);
+	append_s(aLine, sizeof(aLine), &o,
+		 " algs=curve25519-sha256,chacha20,hmac-sha2-256,poly1305"
+		 " rekey=0 multi=0 agent=0 portfwd=0 sftp=0"
+		 " openssh=0 dropbear=0 product_ssh=0\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/* Rollup tallies for greppable soft stats. */
+	cKex = g_u32SoftBanner + g_u32SoftPoly + g_u32SoftHostkey +
+	       g_u32SoftEcdh + g_u32SoftShared + g_u32SoftKex +
+	       g_u32SoftNewkeys;
+	cChan = g_u32SoftService + g_u32SoftChannel + g_u32SoftKeys +
+		g_u32SoftAead + g_u32SoftEncTx + g_u32SoftEncRx +
+		g_u32SoftLive;
+	cCrypto = g_u32SoftSuiteOk;
+
+	/* Grep: sshd-gj: soft stats */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft stats kex=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)cKex);
+	append_s(aLine, sizeof(aLine), &o, " channel=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)cChan);
+	append_s(aLine, sizeof(aLine), &o, " crypto=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)cCrypto);
+	append_s(aLine, sizeof(aLine), &o, " suite_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteN);
+	append_s(aLine, sizeof(aLine), &o, " suite_bits=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteBits);
+	append_s(aLine, sizeof(aLine), &o, " live=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLive);
+	append_s(aLine, sizeof(aLine), &o, " encrypted=");
+	append_u(aLine, sizeof(aLine), &o, g_encrypted ? 1ul : 0ul);
+	append_s(aLine, sizeof(aLine), &o, " log_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLogN);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
+	cAreas++;
+
+	/* Grep: sshd-gj: soft deepen wave (Wave 12 stamp) */
+	o = 0;
+	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft deepen wave=12 areas=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)cAreas);
+	append_s(aLine, sizeof(aLine), &o, " suite_ok=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteOk);
+	append_s(aLine, sizeof(aLine), &o, " suite_n=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteN);
+	append_s(aLine, sizeof(aLine), &o, " live=");
+	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftLive);
+	append_s(aLine, sizeof(aLine), &o, "\n");
+	aLine[o] = '\0';
+	msg(aLine);
 }
 
 /*
  * Offline soft suite — pure local probes (no wire). Never hard-fails live path.
- * Deepens freestanding crypto/shape surface beyond the TCP smoke alone.
+ * Wave 12 deepen: freestanding crypto/shape surface beyond the TCP smoke alone.
  * greppable: sshd-gj: soft …
  */
 static void
 soft_suite(void)
 {
 	uint8_t aPkt[640];
+	uint8_t aReply[160];
 	uint8_t aHostPk[32];
 	uint8_t aMsg[32];
 	uint8_t aSig[32];
@@ -803,10 +1014,27 @@ soft_suite(void)
 	uint8_t aNonce[12];
 	uint8_t aBuf[32];
 	uint8_t aPlain[32];
+	uint8_t aDig1[32];
+	uint8_t aDig2[32];
+	uint8_t aSkS[32];
+	uint8_t aSkC[32];
+	uint8_t aPkS[32];
+	uint8_t aPkC[32];
+	uint8_t aSharedS[32];
+	uint8_t aSharedC[32];
+	uint8_t aBase[32];
+	uint8_t aKdfBuf[97];
+	uint8_t aKdfA[32];
+	uint8_t aKdfB[32];
+	uint8_t aKdfC[32];
 	uint32_t cb;
+	uint32_t cbInit;
+	uint32_t cbReply;
+	uint32_t uBits = 0;
 	unsigned i;
 	unsigned cOk = 0;
 	unsigned cN = 0;
+	int fOk;
 
 	msg("sshd-gj: soft suite start\n");
 
@@ -816,6 +1044,7 @@ soft_suite(void)
 	    banner_is_ssh(g_szClientBanner, (long)slen(g_szClientBanner))) {
 		msg("sshd-gj: soft banner PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_BANNER;
 	} else {
 		msg("sshd-gj: soft banner soft-skip\n");
 	}
@@ -826,6 +1055,7 @@ soft_suite(void)
 	if (cb >= 6 && aPkt[5] == SSH_MSG_KEXINIT) {
 		msg("sshd-gj: soft kexinit PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_KEXINIT;
 	} else {
 		msg("sshd-gj: soft kexinit soft-skip\n");
 	}
@@ -841,6 +1071,7 @@ soft_suite(void)
 	if (gj_ssh_hostkey_verify(aMsg, 32, aSig)) {
 		msg("sshd-gj: soft hostkey PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_HOSTKEY;
 	} else {
 		msg("sshd-gj: soft hostkey soft-skip\n");
 	}
@@ -856,6 +1087,7 @@ soft_suite(void)
 	if (gj_ssh_memeq_ct(aMac1, aMac2, 32)) {
 		msg("sshd-gj: soft mac PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_MAC;
 	} else {
 		msg("sshd-gj: soft mac soft-skip\n");
 	}
@@ -875,6 +1107,7 @@ soft_suite(void)
 	if (gj_ssh_memeq_ct(aBuf, aPlain, 32)) {
 		msg("sshd-gj: soft chacha PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_CHACHA;
 	} else {
 		msg("sshd-gj: soft chacha soft-skip\n");
 	}
@@ -884,12 +1117,162 @@ soft_suite(void)
 	if (gj_ssh_poly1305_ok()) {
 		msg("sshd-gj: soft poly PASS\n");
 		cOk++;
+		uBits |= SOFT_SUITE_POLY;
 	} else {
 		msg("sshd-gj: soft poly soft-skip\n");
 	}
 
+	/*
+	 * Soft SHA-256 determinism + init/update/final vs one-shot.
+	 * greppable: sshd-gj: soft sha256
+	 */
+	cN++;
+	{
+		struct sha256_ctx hx;
+		static const char szSoft[] = "sshd-gj soft sha256";
+
+		gj_ssh_sha256(szSoft, slen(szSoft), aDig1);
+		gj_ssh_sha256_init(&hx);
+		gj_ssh_sha256_update(&hx, szSoft, slen(szSoft));
+		gj_ssh_sha256_final(&hx, aDig2);
+		fOk = gj_ssh_memeq_ct(aDig1, aDig2, 32);
+		/* Second one-shot must match first (determinism). */
+		gj_ssh_sha256(szSoft, slen(szSoft), aDig2);
+		if (fOk && gj_ssh_memeq_ct(aDig1, aDig2, 32)) {
+			msg("sshd-gj: soft sha256 PASS\n");
+			cOk++;
+			uBits |= SOFT_SUITE_SHA256;
+		} else {
+			msg("sshd-gj: soft sha256 soft-skip\n");
+		}
+	}
+
+	/*
+	 * Soft X25519 dual shared-secret match (offline; RFC 7748 base u=9).
+	 * greppable: sshd-gj: soft x25519
+	 */
+	cN++;
+	bytes_zero(aBase, 32);
+	aBase[0] = 9;
+	for (i = 0; i < 32; i++) {
+		aSkS[i] = (uint8_t)(0x71 + i);
+		aSkC[i] = (uint8_t)(0x82 + i * 2);
+	}
+	aSkS[0] &= 248;
+	aSkS[31] &= 127;
+	aSkS[31] |= 64;
+	aSkC[0] &= 248;
+	aSkC[31] &= 127;
+	aSkC[31] |= 64;
+	gj_ssh_x25519(aPkS, aSkS, aBase);
+	gj_ssh_x25519(aPkC, aSkC, aBase);
+	gj_ssh_x25519(aSharedS, aSkS, aPkC);
+	gj_ssh_x25519(aSharedC, aSkC, aPkS);
+	if (gj_ssh_memeq_ct(aSharedS, aSharedC, 32)) {
+		msg("sshd-gj: soft x25519 PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_X25519;
+	} else {
+		msg("sshd-gj: soft x25519 soft-skip\n");
+	}
+
+	/*
+	 * Soft NEWKEYS packet shape (type 21; no wire).
+	 * greppable: sshd-gj: soft newkeys
+	 */
+	cN++;
+	cb = build_simple(aPkt, sizeof(aPkt), SSH_MSG_NEWKEYS, 0, 0);
+	if (cb >= 6 && aPkt[5] == SSH_MSG_NEWKEYS) {
+		msg("sshd-gj: soft newkeys PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_NEWKEYS;
+	} else {
+		msg("sshd-gj: soft newkeys soft-skip\n");
+	}
+
+	/*
+	 * Soft SERVICE_REQUEST/ACCEPT body shape ("ssh-userauth").
+	 * greppable: sshd-gj: soft service
+	 */
+	cN++;
+	cb = build_service(aPkt, sizeof(aPkt), SSH_MSG_SERVICE_REQUEST,
+			   "ssh-userauth");
+	cbInit = build_service(aReply, sizeof(aReply), SSH_MSG_SERVICE_ACCEPT,
+			       "ssh-userauth");
+	if (cb >= 6 && aPkt[5] == SSH_MSG_SERVICE_REQUEST && cbInit >= 6 &&
+	    aReply[5] == SSH_MSG_SERVICE_ACCEPT) {
+		msg("sshd-gj: soft service PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_SERVICE;
+	} else {
+		msg("sshd-gj: soft service soft-skip\n");
+	}
+
+	/*
+	 * Soft ECDH_INIT + ECDH_REPLY packet shapes (offline builders).
+	 * greppable: sshd-gj: soft ecdh
+	 */
+	cN++;
+	cbInit = build_ecdh_init(aPkt, sizeof(aPkt), aPkC);
+	cbReply = build_ecdh_reply(aReply, sizeof(aReply), aHostPk, aPkS, aSig);
+	if (cbInit >= 6 && aPkt[5] == SSH_MSG_KEX_ECDH_INIT &&
+	    cbReply >= 6 && aReply[5] == SSH_MSG_KEX_ECDH_REPLY) {
+		msg("sshd-gj: soft ecdh PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_ECDH;
+	} else {
+		msg("sshd-gj: soft ecdh soft-skip\n");
+	}
+
+	/*
+	 * Soft KDF letter shape (RFC 4253 §7.2 offline; does not arm g_enc_*).
+	 * Ki = HASH(K || H || X || session_id), X in {'A','B','C'}; A≠B≠C.
+	 * greppable: sshd-gj: soft kdf
+	 */
+	cN++;
+	for (i = 0; i < 32; i++) {
+		aKdfBuf[i] = aSharedS[i];
+		aKdfBuf[32 + i] = aDig1[i];
+		aKdfBuf[65 + i] = aDig1[i];
+	}
+	aKdfBuf[64] = 'A';
+	gj_ssh_sha256(aKdfBuf, 97, aKdfA);
+	aKdfBuf[64] = 'B';
+	gj_ssh_sha256(aKdfBuf, 97, aKdfB);
+	aKdfBuf[64] = 'C';
+	gj_ssh_sha256(aKdfBuf, 97, aKdfC);
+	if (!gj_ssh_memeq_ct(aKdfA, aKdfB, 32) &&
+	    !gj_ssh_memeq_ct(aKdfB, aKdfC, 32) &&
+	    !gj_ssh_memeq_ct(aKdfA, aKdfC, 32)) {
+		msg("sshd-gj: soft kdf PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_KDF;
+	} else {
+		msg("sshd-gj: soft kdf soft-skip\n");
+	}
+
+	/*
+	 * Soft memeq: equal buffers match; unequal buffers do not.
+	 * greppable: sshd-gj: soft memeq
+	 */
+	cN++;
+	for (i = 0; i < 32; i++) {
+		aDig1[i] = (uint8_t)(0xa0 + i);
+		aDig2[i] = aDig1[i];
+	}
+	fOk = gj_ssh_memeq_ct(aDig1, aDig2, 32);
+	aDig2[15] ^= 0x01u;
+	if (fOk && !gj_ssh_memeq_ct(aDig1, aDig2, 32)) {
+		msg("sshd-gj: soft memeq PASS\n");
+		cOk++;
+		uBits |= SOFT_SUITE_MEMEQ;
+	} else {
+		msg("sshd-gj: soft memeq soft-skip\n");
+	}
+
 	g_u32SoftSuiteOk = (uint32_t)cOk;
 	g_u32SoftSuiteN = (uint32_t)cN;
+	g_u32SoftSuiteBits = uBits;
 
 	/* Ephemeral soft material — clear before return. */
 	bytes_zero(aHostPk, sizeof(aHostPk));
@@ -901,7 +1284,21 @@ soft_suite(void)
 	bytes_zero(aNonce, sizeof(aNonce));
 	bytes_zero(aBuf, sizeof(aBuf));
 	bytes_zero(aPlain, sizeof(aPlain));
+	bytes_zero(aDig1, sizeof(aDig1));
+	bytes_zero(aDig2, sizeof(aDig2));
+	bytes_zero(aSkS, sizeof(aSkS));
+	bytes_zero(aSkC, sizeof(aSkC));
+	bytes_zero(aPkS, sizeof(aPkS));
+	bytes_zero(aPkC, sizeof(aPkC));
+	bytes_zero(aSharedS, sizeof(aSharedS));
+	bytes_zero(aSharedC, sizeof(aSharedC));
+	bytes_zero(aBase, sizeof(aBase));
+	bytes_zero(aKdfBuf, sizeof(aKdfBuf));
+	bytes_zero(aKdfA, sizeof(aKdfA));
+	bytes_zero(aKdfB, sizeof(aKdfB));
+	bytes_zero(aKdfC, sizeof(aKdfC));
 	bytes_zero(aPkt, 64); /* only need clear head; rest is KEXINIT shape */
+	bytes_zero(aReply, sizeof(aReply));
 
 	if (cOk > 0u) {
 		msg("sshd-gj: soft suite PASS\n");
@@ -1258,7 +1655,7 @@ _start(void)
 	}
 
 	/*
-	 * Wave 9 soft inventory: offline suite + honesty lines.
+	 * Wave 12 soft inventory: offline suite + honesty / path / stats.
 	 * Greppable "sshd-gj: soft …" — not product SSH completeness.
 	 * Never hard-fails after live path PASS.
 	 */

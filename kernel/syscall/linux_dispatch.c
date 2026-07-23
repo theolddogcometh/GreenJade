@@ -4,6 +4,21 @@
  *
  * Hybrid Option C: hot table / cold personality (doors) / ENOSYS.
  * Pure C11 clean-room Linux x86_64 surface — no GPL source.
+ *
+ * Soft inventory (Wave 12 exclusive; this unit only) — greppable:
+ *   "linux: nr class soft …"     — table inventory + runtime (legacy + deepen)
+ *   "linux: dispatch soft …"     — twin path/API tallies (agent-friendly)
+ *
+ * Catalog (prefix-stable; never hard-gates product / not bar3):
+ *   linux: nr class soft PASS|PARTIAL|NONE …   — product inventory (scripts)
+ *   linux: nr class soft hits_h=…              — runtime hits
+ *   linux: nr class soft armed=…               — integrity + cold route
+ *   linux: nr class soft fill|register|…       — Wave 12 deepen lines
+ *   linux: nr class soft idle (dispatch not init)
+ *   linux: dispatch soft inventory|init|classify|…
+ *   linux: dispatch soft path claim=… (soft inventory; not bar3)
+ * greppable: linux: nr class soft
+ * greppable: linux: dispatch soft
  */
 #include <gj/cold_ipc.h>
 #include <gj/klog.h>
@@ -29,6 +44,59 @@ static struct gj_linux_nr_class_stats g_class;
  * stats_get must not invent product coverage before dispatch_init finishes.
  */
 static int g_fNrClassLive;
+
+/*
+ * Soft product inventory (Wave 12 exclusive). File-local path tallies.
+ * Cumulative unless noted; wrap OK; never hard-gates.
+ * greppable: linux: nr class soft … / linux: dispatch soft …
+ */
+static u32 g_u32SoftInitEnter;      /* gj_linux_dispatch_init entries */
+static u32 g_u32SoftInitOk;         /* init completed + live published */
+static u32 g_u32SoftLogN;           /* soft inventory log emissions */
+static u32 g_u32SoftStatsGet;       /* nr_class_stats_get entries */
+static u32 g_u32SoftStatsGetNull;   /* stats_get with pOut == NULL */
+static u32 g_u32SoftStatsGetIdle;   /* stats_get pre-init fail-closed */
+static u32 g_u32SoftStatsGetLive;   /* stats_get post-init snapshot */
+static u32 g_u32SoftStatsReset;     /* dispatch_stats_reset entries */
+static u32 g_u32SoftDispatchStatsGet; /* coarse dispatch_stats_get entries */
+static u32 g_u32SoftDispatchStatsGetNull;
+static u32 g_u32SoftClassify;       /* gj_linux_classify entries */
+static u32 g_u32SoftClassifyOor;    /* classify NR >= table */
+static u32 g_u32SoftClassifyHot;    /* classify → HOT */
+static u32 g_u32SoftClassifyCold;   /* classify → COLD */
+static u32 g_u32SoftClassifyNone;   /* classify → NONE (in-table) */
+static u32 g_u32SoftSetColdBind;    /* set_cold_handler with non-NULL pfn */
+static u32 g_u32SoftSetColdUnbind;  /* set_cold_handler with NULL pfn */
+static u32 g_u32SoftWow64Enter;     /* dispatch with wow64 enabled */
+static u32 g_u32SoftWow64Map;       /* wow64_translate_nr success */
+static u32 g_u32SoftPathHot;        /* dispatch saw PATH_HOT (before defer) */
+static u32 g_u32SoftPathCold;       /* dispatch saw PATH_COLD */
+static u32 g_u32SoftPathNone;       /* dispatch saw PATH_NONE */
+static u32 g_u32SoftPathHotDirect;  /* HOT fn returned non-ENOSYS */
+static u32 g_u32SoftPathHotDefer;   /* HOT fn returned -ENOSYS */
+static u32 g_u32SoftPathHotNull;    /* PATH_HOT with NULL pfn at runtime */
+static u32 g_u32SoftPathOor;        /* dispatch NR OOR */
+static u32 g_u32SoftPathNullGuard;  /* NULL pRegs */
+static u32 g_u32SoftPathColdIpc;    /* cold_ipc_submit */
+static u32 g_u32SoftPathColdLeg;    /* legacy g_pfnCold */
+static u32 g_u32SoftPathColdBare;   /* cold/hot-defer bare ENOSYS */
+static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
+
+static void soft_inc(u32 *pCtr);
+static void soft_dispatch_deepen_log(void);
+static void soft_inventory_maybe_once(void);
+
+/** Soft: bump path tally (u32 wrap is fine for telemetry). */
+static void
+soft_inc(u32 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    if (*pCtr < 0xffffffffu) {
+        (*pCtr)++;
+    }
+}
 
 /**
  * Authoritative path-table scan (slot inventory + integrity soft deepen).
@@ -109,14 +177,207 @@ set_cold(u32 u32Nr)
     }
 }
 
+/**
+ * Wave 12 deepen lines under both greppable prefixes.
+ * Caller must already have refreshed g_class via nr_class_scan_slots when live.
+ * greppable: linux: nr class soft
+ * greppable: linux: dispatch soft
+ */
+static void
+soft_dispatch_deepen_log(void)
+{
+    u32 u32Table;
+    u32 u32Hot;
+    u32 u32Cold;
+    u32 u32None;
+    u32 u32Class;
+    u32 u32Sum;
+    u32 u32PctHot;
+    u32 u32PctCold;
+    u32 u32PctNone;
+    u32 u32PctClass;
+    u32 u32SumOk;
+    u32 u32ArmedOk;
+    u32 u32Attached;
+    u32 u32LegacyBound;
+    u32 u32Live;
+    u32 u32Wow64On;
+
+    soft_inc(&g_u32SoftLogN);
+
+    u32Table = g_class.u32TableSize;
+    u32Hot = g_class.u32HotSlots;
+    u32Cold = g_class.u32ColdSlots;
+    u32None = g_class.u32NoneSlots;
+    u32Class = g_class.u32Classified;
+    u32Sum = u32Hot + u32Cold + u32None + g_class.u32PathBad;
+    u32Live = g_fNrClassLive ? 1u : 0u;
+    u32Attached = cold_ipc_personality_attached() ? 1u : 0u;
+    u32LegacyBound = (g_pfnCold != NULL) ? 1u : 0u;
+    u32Wow64On = wow64_enabled() ? 1u : 0u;
+    u32SumOk = (u32Sum == u32Table && g_class.u32PathBad == 0) ? 1u : 0u;
+    u32ArmedOk =
+        (g_class.u32HotNullSlots == 0 && g_class.u32HotArmed == u32Hot) ? 1u
+                                                                         : 0u;
+
+    /* Soft percent of table (integer; 0 if table empty). */
+    if (u32Table > 0) {
+        u32PctHot = (u32Hot * 100u) / u32Table;
+        u32PctCold = (u32Cold * 100u) / u32Table;
+        u32PctNone = (u32None * 100u) / u32Table;
+        u32PctClass = (u32Class * 100u) / u32Table;
+    } else {
+        u32PctHot = 0;
+        u32PctCold = 0;
+        u32PctNone = 0;
+        u32PctClass = 0;
+    }
+
+    /*
+     * Wave 12 nr class deepen (additive; legacy 3 lines stay above).
+     * Grep: linux: nr class soft fill
+     */
+    kprintf("linux: nr class soft fill pct_hot=%u pct_cold=%u pct_none=%u "
+            "pct_class=%u sum=%u table=%u sum_ok=%u\n",
+            u32PctHot, u32PctCold, u32PctNone, u32PctClass, u32Sum, u32Table,
+            u32SumOk);
+
+    /* Grep: linux: nr class soft register */
+    kprintf("linux: nr class soft register set_hot=%u set_cold=%u rej_h=%u "
+            "rej_c=%u max_h=%u max_c=%u max=%u\n",
+            g_class.u32SetHotOk, g_class.u32SetColdOk, g_class.u32SetHotReject,
+            g_class.u32SetColdReject, g_class.u32MaxHotNr, g_class.u32MaxColdNr,
+            g_class.u32MaxClassNr);
+
+    /* Grep: linux: nr class soft integrity */
+    kprintf("linux: nr class soft integrity armed=%u null_slots=%u "
+            "path_bad=%u armed_ok=%u live=%u\n",
+            g_class.u32HotArmed, g_class.u32HotNullSlots, g_class.u32PathBad,
+            u32ArmedOk, u32Live);
+
+    /* Grep: linux: nr class soft route */
+    kprintf("linux: nr class soft route hits_h=%llu hits_c=%llu enosys=%llu "
+            "defer=%llu hot_null=%llu oor=%llu none_path=%llu entries=%llu\n",
+            (unsigned long long)g_class.u64HotHits,
+            (unsigned long long)g_class.u64ColdHits,
+            (unsigned long long)g_class.u64Enosys,
+            (unsigned long long)g_class.u64HotDeferCold,
+            (unsigned long long)g_class.u64HotNull,
+            (unsigned long long)g_class.u64Oor,
+            (unsigned long long)g_class.u64NonePath,
+            (unsigned long long)g_class.u64Entries);
+
+    /* Grep: linux: nr class soft cold_route */
+    kprintf("linux: nr class soft cold_route ipc=%llu leg=%llu bare=%llu "
+            "attached=%u legacy_bound=%u last_nr=%llu last_ret=%llu\n",
+            (unsigned long long)g_class.u64ColdIpc,
+            (unsigned long long)g_class.u64ColdLegacy,
+            (unsigned long long)g_class.u64ColdBare, u32Attached, u32LegacyBound,
+            (unsigned long long)g_class.u64LastNr,
+            (unsigned long long)g_class.u64LastRet);
+
+    /* Grep: linux: nr class soft path */
+    kprintf("linux: nr class soft path claim=hot+cold+none hybrid=OptionC "
+            "(soft inventory; not bar3)\n");
+
+    /*
+     * Twin prefix: linux: dispatch soft … (agent-friendly alias).
+     * Grep: linux: dispatch soft inventory
+     */
+    kprintf("linux: dispatch soft inventory live=%u table=%u hot=%u cold=%u "
+            "none=%u class=%u path_bad=%u log_n=%u\n",
+            u32Live, u32Table, u32Hot, u32Cold, u32None, u32Class,
+            g_class.u32PathBad, g_u32SoftLogN);
+
+    /* Grep: linux: dispatch soft init */
+    kprintf("linux: dispatch soft init enter=%u ok=%u stats_get=%u "
+            "stats_get_null=%u stats_get_idle=%u stats_get_live=%u "
+            "stats_reset=%u disp_stats_get=%u disp_stats_null=%u\n",
+            g_u32SoftInitEnter, g_u32SoftInitOk, g_u32SoftStatsGet,
+            g_u32SoftStatsGetNull, g_u32SoftStatsGetIdle, g_u32SoftStatsGetLive,
+            g_u32SoftStatsReset, g_u32SoftDispatchStatsGet,
+            g_u32SoftDispatchStatsGetNull);
+
+    /* Grep: linux: dispatch soft classify */
+    kprintf("linux: dispatch soft classify enter=%u hot=%u cold=%u none=%u "
+            "oor=%u\n",
+            g_u32SoftClassify, g_u32SoftClassifyHot, g_u32SoftClassifyCold,
+            g_u32SoftClassifyNone, g_u32SoftClassifyOor);
+
+    /* Grep: linux: dispatch soft cold_bind */
+    kprintf("linux: dispatch soft cold_bind bind=%u unbind=%u pfn=%u "
+            "attached=%u\n",
+            g_u32SoftSetColdBind, g_u32SoftSetColdUnbind, u32LegacyBound,
+            u32Attached);
+
+    /* Grep: linux: dispatch soft wow64 */
+    kprintf("linux: dispatch soft wow64 enter=%u map=%u enabled=%u\n",
+            g_u32SoftWow64Enter, g_u32SoftWow64Map, u32Wow64On);
+
+    /* Grep: linux: dispatch soft runtime */
+    kprintf("linux: dispatch soft runtime entries=%llu null_guard=%u "
+            "path_hot=%u path_cold=%u path_none=%u path_oor=%u "
+            "hot_direct=%u hot_defer=%u hot_null=%u "
+            "cold_ipc=%u cold_leg=%u cold_bare=%u\n",
+            (unsigned long long)g_class.u64Entries, g_u32SoftPathNullGuard,
+            g_u32SoftPathHot, g_u32SoftPathCold, g_u32SoftPathNone,
+            g_u32SoftPathOor, g_u32SoftPathHotDirect, g_u32SoftPathHotDefer,
+            g_u32SoftPathHotNull, g_u32SoftPathColdIpc, g_u32SoftPathColdLeg,
+            g_u32SoftPathColdBare);
+
+    /* Grep: linux: dispatch soft hits */
+    kprintf("linux: dispatch soft hits hot=%llu cold=%llu enosys=%llu "
+            "coarse_h=%llu coarse_c=%llu coarse_e=%llu\n",
+            (unsigned long long)g_class.u64HotHits,
+            (unsigned long long)g_class.u64ColdHits,
+            (unsigned long long)g_class.u64Enosys,
+            (unsigned long long)g_stats.u64HotHits,
+            (unsigned long long)g_stats.u64ColdHits,
+            (unsigned long long)g_stats.u64Enosys);
+
+    /* Grep: linux: dispatch soft path */
+    kprintf("linux: dispatch soft path claim=classify+hot+cold_ipc+legacy "
+            "hybrid=OptionC (soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product dispatch/classify activity, print soft inventory once
+ * (mirrors native/wow64 soft-stats-once). Diagnostics only — never gates.
+ */
+static void
+soft_inventory_maybe_once(void)
+{
+    if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (g_class.u64Entries == 0 && g_u32SoftClassify == 0 &&
+        g_u32SoftPathNullGuard == 0) {
+        return;
+    }
+    g_fSoftInvOnce = 1;
+    /*
+     * Full soft_log path (legacy + deepen). Safe only when live; otherwise
+     * emit idle deepen twin only.
+     */
+    if (g_fNrClassLive) {
+        gj_linux_nr_class_soft_log();
+    } else {
+        soft_inc(&g_u32SoftLogN);
+        kprintf("linux: dispatch soft idle (dispatch not init)\n");
+    }
+}
+
 void
 gj_linux_dispatch_init(void)
 {
     u32 iNr;
 
+    soft_inc(&g_u32SoftInitEnter);
+
     /* Unpublished until registration + scan complete (PATH_HOT=0 BSS trap). */
     g_fNrClassLive = 0;
     g_class.u32Live = 0;
+    g_fSoftInvOnce = 0;
 
     for (iNr = 0; iNr < GJ_LINUX_NR_TABLE; iNr++) {
         g_apfnHot[iNr] = NULL;
@@ -482,6 +743,7 @@ gj_linux_dispatch_init(void)
     nr_class_scan_slots();
     g_fNrClassLive = 1;
     g_class.u32Live = 1;
+    soft_inc(&g_u32SoftInitOk);
     gj_linux_nr_class_soft_log();
 }
 
@@ -490,15 +752,34 @@ gj_linux_set_cold_handler(gj_linux_cold_fn_t pfn, void *pCtx)
 {
     g_pfnCold = pfn;
     g_pColdCtx = pCtx;
+    if (pfn != NULL) {
+        soft_inc(&g_u32SoftSetColdBind);
+    } else {
+        soft_inc(&g_u32SoftSetColdUnbind);
+    }
 }
 
 enum gj_linux_path
 gj_linux_classify(u64 u64Nr)
 {
+    enum gj_linux_path ePath;
+
+    soft_inc(&g_u32SoftClassify);
     if (u64Nr >= GJ_LINUX_NR_TABLE) {
+        soft_inc(&g_u32SoftClassifyOor);
+        soft_inventory_maybe_once();
         return GJ_LINUX_PATH_NONE;
     }
-    return (enum gj_linux_path)g_aPath[(u32)u64Nr];
+    ePath = (enum gj_linux_path)g_aPath[(u32)u64Nr];
+    if (ePath == GJ_LINUX_PATH_HOT) {
+        soft_inc(&g_u32SoftClassifyHot);
+    } else if (ePath == GJ_LINUX_PATH_COLD) {
+        soft_inc(&g_u32SoftClassifyCold);
+    } else {
+        soft_inc(&g_u32SoftClassifyNone);
+    }
+    soft_inventory_maybe_once();
+    return ePath;
 }
 
 void
@@ -510,6 +791,8 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
 
     if (pRegs == NULL) {
         g_class.u64NullGuard++;
+        soft_inc(&g_u32SoftPathNullGuard);
+        soft_inventory_maybe_once();
         return;
     }
     g_class.u64Entries++;
@@ -520,9 +803,11 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
     if (wow64_enabled()) {
         u32 u32Nr64;
 
+        soft_inc(&g_u32SoftWow64Enter);
         if (wow64_translate_nr((u32)pRegs->u64Nr, &u32Nr64) == 0) {
             pRegs->u64Nr = u32Nr64;
             g_class.u64LastNr = pRegs->u64Nr;
+            soft_inc(&g_u32SoftWow64Map);
         }
         pRegs->u64Arg0 &= 0xffffffffull;
         pRegs->u64Arg1 &= 0xffffffffull;
@@ -536,13 +821,16 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
         g_stats.u64Enosys++;
         g_class.u64Enosys++;
         g_class.u64Oor++;
+        soft_inc(&g_u32SoftPathOor);
         g_class.u64LastRet = (u64)pRegs->i64Ret;
+        soft_inventory_maybe_once();
         return;
     }
     u32Nr = (u32)pRegs->u64Nr;
     ePath = (enum gj_linux_path)g_aPath[u32Nr];
 
     if (ePath == GJ_LINUX_PATH_HOT) {
+        soft_inc(&g_u32SoftPathHot);
         pfnHot = g_apfnHot[u32Nr];
         if (pfnHot != NULL) {
             pRegs->i64Ret = pfnHot(pRegs);
@@ -550,15 +838,23 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             if (pRegs->i64Ret != -LINUX_ENOSYS) {
                 g_stats.u64HotHits++;
                 g_class.u64HotHits++;
+                soft_inc(&g_u32SoftPathHotDirect);
                 g_class.u64LastRet = (u64)pRegs->i64Ret;
+                soft_inventory_maybe_once();
                 return;
             }
             g_class.u64HotDeferCold++;
+            soft_inc(&g_u32SoftPathHotDefer);
         } else {
             /* HOT slot without fn → defer (table inconsistency). */
             g_class.u64HotNull++;
+            soft_inc(&g_u32SoftPathHotNull);
         }
         /* Fall through to cold personality. */
+    } else if (ePath == GJ_LINUX_PATH_COLD) {
+        soft_inc(&g_u32SoftPathCold);
+    } else {
+        soft_inc(&g_u32SoftPathNone);
     }
 
     if (ePath == GJ_LINUX_PATH_COLD || ePath == GJ_LINUX_PATH_HOT) {
@@ -568,7 +864,9 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             g_stats.u64ColdHits++;
             g_class.u64ColdHits++;
             g_class.u64ColdIpc++;
+            soft_inc(&g_u32SoftPathColdIpc);
             g_class.u64LastRet = (u64)pRegs->i64Ret;
+            soft_inventory_maybe_once();
             return;
         }
         /* Legacy direct cold hook (tests / early bring-up). */
@@ -577,14 +875,18 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
             g_stats.u64ColdHits++;
             g_class.u64ColdHits++;
             g_class.u64ColdLegacy++;
+            soft_inc(&g_u32SoftPathColdLeg);
             g_class.u64LastRet = (u64)pRegs->i64Ret;
+            soft_inventory_maybe_once();
             return;
         }
         g_stats.u64Enosys++;
         g_class.u64Enosys++;
         g_class.u64ColdBare++;
+        soft_inc(&g_u32SoftPathColdBare);
         pRegs->i64Ret = -LINUX_ENOSYS;
         g_class.u64LastRet = (u64)pRegs->i64Ret;
+        soft_inventory_maybe_once();
         return;
     }
 
@@ -593,12 +895,15 @@ gj_linux_syscall_dispatch(struct gj_linux_regs *pRegs)
     g_class.u64NonePath++;
     pRegs->i64Ret = -LINUX_ENOSYS;
     g_class.u64LastRet = (u64)pRegs->i64Ret;
+    soft_inventory_maybe_once();
 }
 
 void
 gj_linux_dispatch_stats_get(struct gj_linux_dispatch_stats *pOut)
 {
+    soft_inc(&g_u32SoftDispatchStatsGet);
     if (pOut == NULL) {
+        soft_inc(&g_u32SoftDispatchStatsGetNull);
         return;
     }
     *pOut = g_stats;
@@ -607,6 +912,7 @@ gj_linux_dispatch_stats_get(struct gj_linux_dispatch_stats *pOut)
 void
 gj_linux_dispatch_stats_reset(void)
 {
+    soft_inc(&g_u32SoftStatsReset);
     g_stats.u64HotHits = 0;
     g_stats.u64ColdHits = 0;
     g_stats.u64Enosys = 0;
@@ -625,12 +931,30 @@ gj_linux_dispatch_stats_reset(void)
     g_class.u64ColdBare = 0;
     g_class.u64LastNr = 0;
     g_class.u64LastRet = 0;
+    /* Wave 12: runtime path tallies only; registration inventory stays. */
+    g_u32SoftPathHot = 0;
+    g_u32SoftPathCold = 0;
+    g_u32SoftPathNone = 0;
+    g_u32SoftPathHotDirect = 0;
+    g_u32SoftPathHotDefer = 0;
+    g_u32SoftPathHotNull = 0;
+    g_u32SoftPathOor = 0;
+    g_u32SoftPathNullGuard = 0;
+    g_u32SoftPathColdIpc = 0;
+    g_u32SoftPathColdLeg = 0;
+    g_u32SoftPathColdBare = 0;
+    g_u32SoftWow64Enter = 0;
+    g_u32SoftWow64Map = 0;
+    /* Allow one-shot deepen again after a product reset. */
+    g_fSoftInvOnce = 0;
 }
 
 void
 gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut)
 {
+    soft_inc(&g_u32SoftStatsGet);
     if (pOut == NULL) {
+        soft_inc(&g_u32SoftStatsGetNull);
         return;
     }
     /*
@@ -638,6 +962,7 @@ gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut)
      * Publish zeros + table size only.
      */
     if (!g_fNrClassLive) {
+        soft_inc(&g_u32SoftStatsGetIdle);
         *pOut = g_class;
         pOut->u32TableSize = GJ_LINUX_NR_TABLE;
         pOut->u32Live = 0;
@@ -651,6 +976,7 @@ gj_linux_nr_class_stats_get(struct gj_linux_nr_class_stats *pOut)
         return;
     }
     /* Refresh slot scan so callers see live table state. */
+    soft_inc(&g_u32SoftStatsGetLive);
     nr_class_scan_slots();
     g_class.u32Live = 1;
     *pOut = g_class;
@@ -668,10 +994,14 @@ gj_linux_nr_class_soft_log(void)
      * Emit greppable idle NONE; never claim product PASS before live.
      */
     if (!g_fNrClassLive) {
+        soft_inc(&g_u32SoftLogN);
         kprintf("linux: nr class soft NONE hot=0 cold=0 none=0 class=0 "
                 "max=0 table=%u set_hot=0 set_cold=0 rej_h=0 rej_c=0\n",
                 (unsigned)GJ_LINUX_NR_TABLE);
         kprintf("linux: nr class soft idle (dispatch not init)\n");
+        /* Twin idle (Wave 12). Grep: linux: dispatch soft idle */
+        kprintf("linux: dispatch soft idle (dispatch not init) log_n=%u\n",
+                g_u32SoftLogN);
         return;
     }
 
@@ -701,6 +1031,7 @@ gj_linux_nr_class_soft_log(void)
     /*
      * Greppable soft coverage lines (product / smoke inventory):
      *   linux: nr class soft PASS|PARTIAL|NONE hot=… cold=… …
+     * Stable format — scripts/gj-quick-keys.sh / gj-product-summary.sh.
      */
     kprintf("linux: nr class soft %s hot=%u cold=%u none=%u class=%u "
             "max=%u table=%u set_hot=%u set_cold=%u rej_h=%u rej_c=%u\n",
@@ -730,4 +1061,7 @@ gj_linux_nr_class_soft_log(void)
             (unsigned long long)g_class.u64ColdBare,
             (unsigned long long)g_class.u64LastNr,
             (unsigned long long)g_class.u64LastRet);
+
+    /* Wave 12 exclusive deepen (additive; never hard-gates). */
+    soft_dispatch_deepen_log();
 }

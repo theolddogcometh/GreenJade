@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
  *
- * io_uring rings + SQE I/O + SQ/CQ mmap (userspace fill without inject).
+ * io_uring min rings + SQE I/O + SQ/CQ mmap (userspace fill without inject).
  * Clean-room public Linux ABI shapes. No GPL source.
  *
  * Layout (IORING_FEAT_SINGLE_MMAP-shaped package, page-aligned):
@@ -13,9 +13,25 @@
  * Userspace: mmap(fd, …) → package VA; fill SQEs + advance sq.tail; enter.
  * Kernel smoke: gj_io_uring_mmap_package() returns package pointer.
  *
- * Greppable: io_uring: setup …, linux: io_uring min rings PASS,
- *            linux: io_uring SQE I/O PASS, linux: io_uring mmap PASS
- *            linux: io_uring register depth PASS, linux: io_uring more opcodes PASS
+ * Honesty: min rings ≠ full game I/O. This TU is a soft product surface
+ * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
+ * not bar3, and not a Deck Top-50 claim.
+ *
+ * Soft inventory (Wave 12 exclusive) — greppable "io_uring: soft …":
+ *   io_uring: soft inventory   — pool/depth caps + call rollup
+ *   io_uring: soft setup       — setup ok/enomem/efault tallies
+ *   io_uring: soft enter       — enter/submit/inject/eagain tallies
+ *   io_uring: soft register    — register opcode buckets
+ *   io_uring: soft mmap        — mmap / package-map tallies
+ *   io_uring: soft sqe         — exec category tallies
+ *   io_uring: soft pool        — live ring occupancy
+ *   io_uring: soft path        — product claim + honesty line
+ * greppable: io_uring: soft
+ *
+ * Greppable product: io_uring: min rings ready, io_uring: setup …,
+ *   linux: io_uring min rings PASS, linux: io_uring SQE I/O PASS,
+ *   linux: io_uring mmap PASS, linux: io_uring register depth PASS,
+ *   linux: io_uring more opcodes PASS
  */
 #include <gj/error.h>
 #include <gj/io_uring.h>
@@ -247,6 +263,242 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
+/*
+ * Soft product inventory (Wave 12 exclusive). File-local sticky counters;
+ * wrap OK; diagnostics only — never hard-gate setup/enter/register.
+ * greppable: io_uring: soft
+ */
+struct gj_io_uring_soft {
+    u64 u64Init;            /* gj_io_uring_init entries */
+    u64 u64SetupOk;         /* setup returned a ring fd */
+    u64 u64SetupEnomem;     /* pool full */
+    u64 u64SetupEfault;     /* params copy_to_user fail */
+    u64 u64SetupOpenFail;   /* vfs_ram_io_uring_open fail */
+    u64 u64EnterOk;         /* enter returned submitted count */
+    u64 u64EnterEbadf;      /* enter bad fd */
+    u64 u64EnterEagain;     /* min_complete not met */
+    u64 u64EnterSubmit;     /* total SQEs drained via enter */
+    u64 u64EnterInject;     /* empty-SQ soft inject advances */
+    u64 u64EnterNop;        /* enter with both submit/min 0 */
+    u64 u64RegOk;           /* register success */
+    u64 u64RegEbadf;        /* register bad fd */
+    u64 u64RegEnosys;       /* unknown register opcode */
+    u64 u64RegEfault;       /* register user copy fault */
+    u64 u64RegBuffers;      /* REGISTER/UNREGISTER_BUFFERS */
+    u64 u64RegFiles;        /* REGISTER/UNREGISTER/UPDATE FILES */
+    u64 u64RegEventfd;      /* eventfd register/unregister */
+    u64 u64RegProbe;        /* REGISTER_PROBE */
+    u64 u64RegPersonality;  /* personality register/unregister */
+    u64 u64MmapOk;          /* gj_io_uring_mmap success */
+    u64 u64MmapEbadf;       /* mmap bad fd */
+    u64 u64MmapEinval;      /* mmap bad offset */
+    u64 u64MmapEnomem;      /* mmap map fail */
+    u64 u64MmapPkg;         /* mmap_package hits */
+    u64 u64InjectOk;        /* sqe_inject success */
+    u64 u64InjectFail;      /* sqe_inject reject */
+    u64 u64SqeExec;         /* exec_sqe entries */
+    u64 u64SqeNop;          /* NOP / soft-immediate ops */
+    u64 u64SqeRw;           /* READ/WRITE/V/FIXED/SEND/RECV */
+    u64 u64SqeFs;           /* open/close/stat/path/fallocate */
+    u64 u64SqePoll;         /* POLL_ADD/REMOVE / epoll_ctl */
+    u64 u64SqeReg;          /* FILES_UPDATE / PROVIDE/REMOVE_BUFFERS */
+    u64 u64SqeEnosys;       /* ACCEPT/CONNECT soft ENOSYS */
+    u64 u64SqeEinval;       /* unknown opcode / bad args */
+    u64 u64CqePost;         /* CQE posts */
+    u64 u64CqeOverflow;     /* CQ overflow drops */
+    u64 u64SqDropped;       /* SQ array index drops */
+    u64 u64SoftLog;         /* soft inventory dumps */
+    u64 u64SoftScan;        /* pool occupancy samples */
+};
+
+static struct gj_io_uring_soft g_soft;
+static u8 g_fSoftOnce; /* one-shot deep print after first product activity */
+/* Soft live pool snapshot (filled by ioring_soft_scan). */
+static u32 g_u32SoftUsed;
+static u32 g_u32SoftFree;
+static u32 g_u32SoftMapped;
+static u32 g_u32SoftRegFiles;
+static u32 g_u32SoftRegBufs;
+
+static void ioring_soft_inc(u64 *pCtr);
+static void ioring_soft_scan(void);
+static void ioring_soft_log(void);
+static void ioring_soft_maybe_once(void);
+
+/** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
+static void
+ioring_soft_inc(u64 *pCtr)
+{
+    if (pCtr == NULL) {
+        return;
+    }
+    (*pCtr)++;
+}
+
+/**
+ * Soft: sample ring pool occupancy (no lock; diagnostic race OK).
+ * greppable via io_uring: soft pool
+ */
+static void
+ioring_soft_scan(void)
+{
+    u32 i;
+    u32 u32Used = 0;
+    u32 u32Mapped = 0;
+    u32 u32RegFiles = 0;
+    u32 u32RegBufs = 0;
+
+    ioring_soft_inc(&g_soft.u64SoftScan);
+    for (i = 0; i < GJ_IORING_MAX; i++) {
+        if (g_aRing[i].u8Used) {
+            u32Used++;
+            if (g_aRing[i].u8Mapped) {
+                u32Mapped++;
+            }
+            u32RegFiles += g_aRing[i].u32RegFiles;
+            u32RegBufs += g_aRing[i].u32RegBufs;
+        }
+    }
+    g_u32SoftUsed = u32Used;
+    g_u32SoftFree = (u32Used < GJ_IORING_MAX) ? (GJ_IORING_MAX - u32Used) : 0u;
+    g_u32SoftMapped = u32Mapped;
+    g_u32SoftRegFiles = u32RegFiles;
+    g_u32SoftRegBufs = u32RegBufs;
+}
+
+/**
+ * Greppable soft inventory (Wave 12 exclusive). Prefix "io_uring: soft …".
+ * Pure observation — never gates min-rings smoke PASS.
+ * Honesty: min rings ≠ full game I/O (soft path only).
+ *
+ * greppable: io_uring: soft inventory
+ * greppable: io_uring: soft setup
+ * greppable: io_uring: soft enter
+ * greppable: io_uring: soft register
+ * greppable: io_uring: soft mmap
+ * greppable: io_uring: soft sqe
+ * greppable: io_uring: soft pool
+ * greppable: io_uring: soft path
+ */
+static void
+ioring_soft_log(void)
+{
+    ioring_soft_inc(&g_soft.u64SoftLog);
+    ioring_soft_scan();
+
+    /* Grep: io_uring: soft inventory */
+    kprintf("io_uring: soft inventory wave=12 min_rings=1 full_game_io=0 "
+            "pool=%u depth<=%u reg_files<=%u reg_bufs<=%u io_max=%u "
+            "init=%lu setup_ok=%lu enter_ok=%lu reg_ok=%lu mmap_ok=%lu "
+            "sqe_exec=%lu logs=%lu "
+            "(min rings != full game I/O; not bar3)\n",
+            GJ_IORING_MAX, GJ_IORING_ENTRIES, GJ_IORING_REG_FILES_MAX,
+            GJ_IORING_REG_BUFS_MAX, GJ_IORING_IO_MAX,
+            (unsigned long)g_soft.u64Init,
+            (unsigned long)g_soft.u64SetupOk,
+            (unsigned long)g_soft.u64EnterOk,
+            (unsigned long)g_soft.u64RegOk,
+            (unsigned long)g_soft.u64MmapOk,
+            (unsigned long)g_soft.u64SqeExec,
+            (unsigned long)g_soft.u64SoftLog);
+
+    /* Grep: io_uring: soft setup */
+    kprintf("io_uring: soft setup ok=%lu enomem=%lu efault=%lu open_fail=%lu "
+            "default_sq=8 pow2_clamp=%u cq=2x_sq single_mmap=1\n",
+            (unsigned long)g_soft.u64SetupOk,
+            (unsigned long)g_soft.u64SetupEnomem,
+            (unsigned long)g_soft.u64SetupEfault,
+            (unsigned long)g_soft.u64SetupOpenFail,
+            GJ_IORING_ENTRIES);
+
+    /* Grep: io_uring: soft enter */
+    kprintf("io_uring: soft enter ok=%lu ebadf=%lu eagain=%lu nop=%lu "
+            "submit=%lu inject=%lu drain=sync_sqe "
+            "(no IOPOLL; not full async game I/O)\n",
+            (unsigned long)g_soft.u64EnterOk,
+            (unsigned long)g_soft.u64EnterEbadf,
+            (unsigned long)g_soft.u64EnterEagain,
+            (unsigned long)g_soft.u64EnterNop,
+            (unsigned long)g_soft.u64EnterSubmit,
+            (unsigned long)g_soft.u64EnterInject);
+
+    /* Grep: io_uring: soft register */
+    kprintf("io_uring: soft register ok=%lu ebadf=%lu enosys=%lu efault=%lu "
+            "buffers=%lu files=%lu eventfd=%lu probe=%lu personality=%lu "
+            "caps=files<=%u,bufs<=%u\n",
+            (unsigned long)g_soft.u64RegOk,
+            (unsigned long)g_soft.u64RegEbadf,
+            (unsigned long)g_soft.u64RegEnosys,
+            (unsigned long)g_soft.u64RegEfault,
+            (unsigned long)g_soft.u64RegBuffers,
+            (unsigned long)g_soft.u64RegFiles,
+            (unsigned long)g_soft.u64RegEventfd,
+            (unsigned long)g_soft.u64RegProbe,
+            (unsigned long)g_soft.u64RegPersonality,
+            GJ_IORING_REG_FILES_MAX, GJ_IORING_REG_BUFS_MAX);
+
+    /* Grep: io_uring: soft mmap */
+    kprintf("io_uring: soft mmap ok=%lu ebadf=%lu einval=%lu enomem=%lu "
+            "pkg=%lu inject_ok=%lu inject_fail=%lu single_mmap=1 "
+            "pkg_pages=%u\n",
+            (unsigned long)g_soft.u64MmapOk,
+            (unsigned long)g_soft.u64MmapEbadf,
+            (unsigned long)g_soft.u64MmapEinval,
+            (unsigned long)g_soft.u64MmapEnomem,
+            (unsigned long)g_soft.u64MmapPkg,
+            (unsigned long)g_soft.u64InjectOk,
+            (unsigned long)g_soft.u64InjectFail, PKG_PAGES);
+
+    /* Grep: io_uring: soft sqe */
+    kprintf("io_uring: soft sqe exec=%lu nop=%lu rw=%lu fs=%lu poll=%lu "
+            "reg=%lu enosys=%lu einval=%lu cqe_post=%lu overflow=%lu "
+            "sq_drop=%lu vfs_ram=1\n",
+            (unsigned long)g_soft.u64SqeExec,
+            (unsigned long)g_soft.u64SqeNop,
+            (unsigned long)g_soft.u64SqeRw,
+            (unsigned long)g_soft.u64SqeFs,
+            (unsigned long)g_soft.u64SqePoll,
+            (unsigned long)g_soft.u64SqeReg,
+            (unsigned long)g_soft.u64SqeEnosys,
+            (unsigned long)g_soft.u64SqeEinval,
+            (unsigned long)g_soft.u64CqePost,
+            (unsigned long)g_soft.u64CqeOverflow,
+            (unsigned long)g_soft.u64SqDropped);
+
+    /* Grep: io_uring: soft pool */
+    kprintf("io_uring: soft pool max=%u used=%u free=%u mapped=%u "
+            "reg_files_sum=%u reg_bufs_sum=%u samples=%lu\n",
+            GJ_IORING_MAX, g_u32SoftUsed, g_u32SoftFree, g_u32SoftMapped,
+            g_u32SoftRegFiles, g_u32SoftRegBufs,
+            (unsigned long)g_soft.u64SoftScan);
+
+    /* Grep: io_uring: soft path */
+    kprintf("io_uring: soft path setup=vfs_ram_fd enter=drain_sq "
+            "register=soft_tables mmap=single_pkg_3p "
+            "sqe=vfs_ram_sync inject=empty_sq_advance "
+            "min_rings=1 full_game_io=0 "
+            "(min rings != full game I/O; soft inventory; not bar3)\n");
+}
+
+/**
+ * After first product activity, print soft inventory once (mirrors futex /
+ * session_door soft-stats-once). Safe from setup/enter/register return paths.
+ */
+static void
+ioring_soft_maybe_once(void)
+{
+    if (g_fSoftOnce != 0) {
+        return;
+    }
+    if (g_soft.u64SetupOk == 0 && g_soft.u64EnterOk == 0 &&
+        g_soft.u64RegOk == 0 && g_soft.u64MmapOk == 0 &&
+        g_soft.u64MmapPkg == 0 && g_soft.u64InjectOk == 0) {
+        return;
+    }
+    g_fSoftOnce = 1;
+    ioring_soft_log();
+}
+
 /* ---- package accessors ------------------------------------------------- */
 
 static struct gj_io_sq_ctrl_pkg *
@@ -296,10 +548,24 @@ gj_io_uring_init(void)
     for (i = 0; i < GJ_IORING_MAX; i++) {
         g_aRingFd[i] = -1;
     }
+    memset(&g_soft, 0, sizeof(g_soft));
+    g_fSoftOnce = 0;
+    g_u32SoftUsed = 0;
+    g_u32SoftFree = GJ_IORING_MAX;
+    g_u32SoftMapped = 0;
+    g_u32SoftRegFiles = 0;
+    g_u32SoftRegBufs = 0;
     g_fInited = 1;
-    kprintf("io_uring: rings ready pool=%u depth<=%u SQE+I/O+mmap+"
-            "fixed+poll+openat\n",
+    ioring_soft_inc(&g_soft.u64Init);
+    /*
+     * Product marker: greppable "io_uring: min rings ready".
+     * Honesty: min rings ≠ full game I/O.
+     */
+    kprintf("io_uring: min rings ready pool=%u depth<=%u SQE+I/O+mmap+"
+            "fixed+poll+openat (min rings != full game I/O)\n",
             GJ_IORING_MAX, GJ_IORING_ENTRIES);
+    /* Wave 12 soft inventory baseline (greppable io_uring: soft …). */
+    ioring_soft_log();
 }
 
 static u32
@@ -593,7 +859,9 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     i32 i32Rc;
     i64 i64N;
 
+    ioring_soft_inc(&g_soft.u64SqeExec);
     if (pSqe == NULL) {
+        ioring_soft_inc(&g_soft.u64SqeEinval);
         return -LINUX_EINVAL;
     }
     i32Fd = resolve_fd(pR, pSqe);
@@ -603,10 +871,12 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
 
     switch (pSqe->u8Opcode) {
     case IORING_OP_NOP:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         return 0;
 
     case IORING_OP_FSYNC:
     case IORING_OP_SYNC_FILE_RANGE:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
@@ -616,10 +886,12 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_TIMEOUT:
     case IORING_OP_TIMEOUT_REMOVE:
     case IORING_OP_LINK_TIMEOUT:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         /* Soft timeout SQEs: complete immediately (no timer wait yet). */
         return 0;
 
     case IORING_OP_ASYNC_CANCEL:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         /* Soft cancel: no outstanding async tracking; report success. */
         return 0;
 
@@ -627,6 +899,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         u32 want = pSqe->u32OpFlags;
         u32 ready;
 
+        ioring_soft_inc(&g_soft.u64SqePoll);
         if (want == 0u) {
             want = 0x5u; /* POLLIN|POLLOUT public bits (EPOLLIN|EPOLLOUT) */
         }
@@ -639,20 +912,24 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     }
 
     case IORING_OP_POLL_REMOVE:
+        ioring_soft_inc(&g_soft.u64SqePoll);
         /* Soft: no poll wait-list; treat as successful removal. */
         return 0;
 
     case IORING_OP_FADVISE:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
         return 0;
 
     case IORING_OP_MADVISE:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         /* Soft madvise: no-op success (range not walked). */
         return 0;
 
     case IORING_OP_SHUTDOWN:
+        ioring_soft_inc(&g_soft.u64SqeNop);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
@@ -662,6 +939,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_ACCEPT:
     case IORING_OP_CONNECT:
         /* Soft network accept/connect: not wired; report ENOSYS-shaped. */
+        ioring_soft_inc(&g_soft.u64SqeEnosys);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
@@ -672,6 +950,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_SEND:
     case IORING_OP_RECV:
         /* Soft: treat as pipe/file R/W when fd is ram-backed. */
+        ioring_soft_inc(&g_soft.u64SqeRw);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
@@ -682,9 +961,11 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         return do_rw(pR, i32Fd, 0, u64Addr, u32Len, 0);
 
     case IORING_OP_CLOSE:
+        ioring_soft_inc(&g_soft.u64SqeFs);
         return (i32)vfs_ram_close((i64)i32Fd);
 
     case IORING_OP_FALLOCATE:
+        ioring_soft_inc(&g_soft.u64SqeFs);
         if (!vfs_ram_fd_ok((i64)i32Fd)) {
             return -LINUX_EBADF;
         }
@@ -694,6 +975,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_OPENAT2: {
         int fCreate;
 
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -710,6 +992,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         /* Soft: update a single fixed-file slot. fd=index, off=new fd. */
         u32 idx;
 
+        ioring_soft_inc(&g_soft.u64SqeReg);
         if (pR == NULL) {
             return -LINUX_EINVAL;
         }
@@ -730,6 +1013,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_STATX: {
         u8 aStat[144];
 
+        ioring_soft_inc(&g_soft.u64SqeFs);
         memset(aStat, 0, sizeof(aStat));
         if (u64Addr != 0ull) {
             i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
@@ -767,6 +1051,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         u32 u32Events = 0;
         u64 u64Data = 0;
 
+        ioring_soft_inc(&g_soft.u64SqePoll);
         if (u64Addr != 0ull) {
             u8 aEv[12];
 
@@ -785,6 +1070,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         /* Soft: register one buffer at buf_index from addr/len. */
         u16 idx;
 
+        ioring_soft_inc(&g_soft.u64SqeReg);
         if (pR == NULL) {
             return -LINUX_EINVAL;
         }
@@ -803,6 +1089,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_REMOVE_BUFFERS: {
         u16 idx;
 
+        ioring_soft_inc(&g_soft.u64SqeReg);
         if (pR == NULL) {
             return -LINUX_EINVAL;
         }
@@ -816,6 +1103,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     }
 
     case IORING_OP_UNLINKAT:
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -823,6 +1111,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         return (i32)vfs_ram_unlink(aPath);
 
     case IORING_OP_RENAMEAT:
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -837,6 +1126,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
     case IORING_OP_MKDIRAT: {
         i64 i64FdDir;
 
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -852,6 +1142,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
 
     case IORING_OP_SYMLINKAT:
         /* addr = target, off = linkpath */
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -864,6 +1155,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
 
     case IORING_OP_LINKAT:
         /* addr = oldpath, off = newpath */
+        ioring_soft_inc(&g_soft.u64SqeFs);
         i32Rc = path_copy(u64Addr, aPath, sizeof(aPath));
         if (i32Rc != 0) {
             return i32Rc;
@@ -880,6 +1172,7 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
         u32 bufLen = 0;
         u32 useLen;
 
+        ioring_soft_inc(&g_soft.u64SqeRw);
         i32Rc = resolve_fixed_buf(pR, pSqe->u16BufIndex, &bufAddr, &bufLen);
         if (i32Rc != 0) {
             return i32Rc;
@@ -894,15 +1187,18 @@ exec_sqe(struct gj_io_uring_ring *pR, const struct gj_io_uring_sqe *pSqe)
 
     case IORING_OP_READ:
     case IORING_OP_WRITE:
+        ioring_soft_inc(&g_soft.u64SqeRw);
         return do_rw(pR, i32Fd, u64Off, u64Addr, u32Len,
                      pSqe->u8Opcode == IORING_OP_WRITE);
 
     case IORING_OP_READV:
     case IORING_OP_WRITEV:
+        ioring_soft_inc(&g_soft.u64SqeRw);
         return do_rwv(pR, i32Fd, u64Off, u64Addr, u32Len,
                       pSqe->u8Opcode == IORING_OP_WRITEV);
 
     default:
+        ioring_soft_inc(&g_soft.u64SqeEinval);
         return -LINUX_EINVAL;
     }
 }
@@ -924,6 +1220,7 @@ cqe_post(struct gj_io_uring_ring *pR, u64 u64UserData, i32 i32Res)
     if (pending >= pCq->ring_entries) {
         pCq->overflow++;
         pR->u32Overflow++;
+        ioring_soft_inc(&g_soft.u64CqeOverflow);
         return;
     }
     idx = pCq->tail & mask;
@@ -931,6 +1228,7 @@ cqe_post(struct gj_io_uring_ring *pR, u64 u64UserData, i32 i32Res)
     pCq->cqes[idx].i32Res = i32Res;
     pCq->cqes[idx].u32Flags = 0;
     pCq->tail++;
+    ioring_soft_inc(&g_soft.u64CqePost);
 }
 
 static u32
@@ -964,6 +1262,7 @@ drain_sq(struct gj_io_uring_ring *pR, u32 u32ToSubmit)
         if (sqeIdx >= pSq->ring_entries) {
             pSq->dropped++;
             pR->u32Dropped++;
+            ioring_soft_inc(&g_soft.u64SqDropped);
             pSq->head++;
             submitted++;
             continue;
@@ -1007,6 +1306,8 @@ gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser)
         }
     }
     if (pR == NULL || u32Slot >= GJ_IORING_MAX) {
+        ioring_soft_inc(&g_soft.u64SetupEnomem);
+        ioring_soft_maybe_once();
         return -LINUX_ENOMEM;
     }
     memset(pR, 0, sizeof(*pR));
@@ -1021,6 +1322,8 @@ gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser)
     if (i64Fd < 0) {
         pR->u8Used = 0;
         g_aRingFd[u32Slot] = -1;
+        ioring_soft_inc(&g_soft.u64SetupOpenFail);
+        ioring_soft_maybe_once();
         return i64Fd;
     }
     g_aRingFd[u32Slot] = i64Fd;
@@ -1051,6 +1354,8 @@ gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser)
                 GJ_OK) {
                 (void)vfs_ram_close(i64Fd);
                 pR->u8Used = 0;
+                ioring_soft_inc(&g_soft.u64SetupEfault);
+                ioring_soft_maybe_once();
                 return -LINUX_EFAULT;
             }
         } else {
@@ -1058,8 +1363,10 @@ gj_io_uring_setup(u32 u32Entries, u64 u64ParamsUser)
         }
     }
 
+    ioring_soft_inc(&g_soft.u64SetupOk);
     kprintf("io_uring: setup fd=%ld sq=%u cq=%u mmap=1\n", (long)i64Fd, nSq,
             nCq);
+    ioring_soft_maybe_once();
     return i64Fd;
 }
 
@@ -1080,6 +1387,8 @@ gj_io_uring_mmap(i64 i64Fd, u64 u64Offset, u64 u64Len)
     gj_paddr_t pa;
 
     if (pR == NULL) {
+        ioring_soft_inc(&g_soft.u64MmapEbadf);
+        ioring_soft_maybe_once();
         return -LINUX_EBADF;
     }
     pBase = pR->aPkg;
@@ -1092,6 +1401,8 @@ gj_io_uring_mmap(i64 i64Fd, u64 u64Offset, u64 u64Len)
     } else if (u64Offset < PKG_SIZE) {
         offInPkg = u64Offset;
     } else {
+        ioring_soft_inc(&g_soft.u64MmapEinval);
+        ioring_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     mapLen = u64Len ? u64Len : (PKG_SIZE - offInPkg);
@@ -1105,11 +1416,15 @@ gj_io_uring_mmap(i64 i64Fd, u64 u64Offset, u64 u64Len)
      */
     if (g_pLinuxProc == NULL) {
         pR->u64UserMapVa = (u64)(gj_vaddr_t)pBase;
+        ioring_soft_inc(&g_soft.u64MmapOk);
+        ioring_soft_maybe_once();
         return (i64)((u64)(gj_vaddr_t)(pBase + offInPkg));
     }
 
     /* Map package pages into process at high band with USER|RW. */
     if (process_as_ensure(g_pLinuxProc) != GJ_OK) {
+        ioring_soft_inc(&g_soft.u64MmapEnomem);
+        ioring_soft_maybe_once();
         return -LINUX_ENOMEM;
     }
     process_as_activate(g_pLinuxProc);
@@ -1125,11 +1440,15 @@ gj_io_uring_mmap(i64 i64Fd, u64 u64Offset, u64 u64Len)
         if (vmm_map_page((gj_vaddr_t)(va - offInPkg + i * GJ_IORING_PAGE), pa,
                          GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE |
                              GJ_VMM_PROT_USER) != GJ_OK) {
+            ioring_soft_inc(&g_soft.u64MmapEnomem);
+            ioring_soft_maybe_once();
             return -LINUX_ENOMEM;
         }
     }
     pR->u64UserMapVa = va - offInPkg;
     (void)mapLen;
+    ioring_soft_inc(&g_soft.u64MmapOk);
+    ioring_soft_maybe_once();
     return (i64)va;
 }
 
@@ -1143,6 +1462,8 @@ gj_io_uring_mmap_package(i64 i64Fd)
         return NULL;
     }
     pR->u64UserMapVa = (u64)(gj_vaddr_t)pR->aPkg;
+    ioring_soft_inc(&g_soft.u64MmapPkg);
+    ioring_soft_maybe_once();
     return (void *)pR->aPkg;
 }
 
@@ -1155,9 +1476,13 @@ gj_io_uring_sqe_inject(i64 i64Fd, u32 u32Idx, u8 u8Opcode, i32 i32Fd,
     struct gj_io_sq_ctrl_pkg *pSq;
 
     if (pR == NULL) {
+        ioring_soft_inc(&g_soft.u64InjectFail);
+        ioring_soft_maybe_once();
         return -LINUX_EBADF;
     }
     if (u32Idx >= pR->u32SqEntries) {
+        ioring_soft_inc(&g_soft.u64InjectFail);
+        ioring_soft_maybe_once();
         return -LINUX_EINVAL;
     }
     pSqe = &sqes(pR)[u32Idx];
@@ -1170,6 +1495,8 @@ gj_io_uring_sqe_inject(i64 i64Fd, u32 u32Idx, u8 u8Opcode, i32 i32Fd,
     pSqe->u64UserData = u64UserData;
     pSq = sq_ctrl(pR);
     pSq->array[u32Idx] = u32Idx;
+    ioring_soft_inc(&g_soft.u64InjectOk);
+    ioring_soft_maybe_once();
     return 0;
 }
 
@@ -1225,9 +1552,14 @@ gj_io_uring_enter(i64 i64Fd, u32 u32ToSubmit, u32 u32MinComplete, u32 u32Flags)
 
     (void)u32Flags;
     if (pR == NULL) {
+        ioring_soft_inc(&g_soft.u64EnterEbadf);
+        ioring_soft_maybe_once();
         return -LINUX_EBADF;
     }
     if (u32ToSubmit == 0u && u32MinComplete == 0u) {
+        ioring_soft_inc(&g_soft.u64EnterNop);
+        ioring_soft_inc(&g_soft.u64EnterOk);
+        ioring_soft_maybe_once();
         return 0;
     }
 
@@ -1243,17 +1575,23 @@ gj_io_uring_enter(i64 i64Fd, u32 u32ToSubmit, u32 u32MinComplete, u32 u32Flags)
             n = pSq->ring_entries;
         }
         pSq->tail = pSq->head + n;
+        ioring_soft_inc(&g_soft.u64EnterInject);
     }
     u32Submitted = drain_sq(pR, u32ToSubmit);
+    g_soft.u64EnterSubmit += (u64)u32Submitted;
 
     if (u32MinComplete > 0u) {
         struct gj_io_cq_ctrl_pkg *pCq = cq_ctrl(pR);
 
         u32Ready = pCq->tail - pCq->head;
         if (u32Ready < u32MinComplete) {
+            ioring_soft_inc(&g_soft.u64EnterEagain);
+            ioring_soft_maybe_once();
             return -LINUX_EAGAIN;
         }
     }
+    ioring_soft_inc(&g_soft.u64EnterOk);
+    ioring_soft_maybe_once();
     return (i64)u32Submitted;
 }
 
@@ -1265,6 +1603,8 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
     u32 n;
 
     if (pR == NULL) {
+        ioring_soft_inc(&g_soft.u64RegEbadf);
+        ioring_soft_maybe_once();
         return -LINUX_EBADF;
     }
     if (u32Opcode == IORING_REGISTER_BUFFERS) {
@@ -1291,6 +1631,8 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
                                   sizeof(iov))) {
                     if (copy_from_user(&iov, u64Arg + (u64)i * sizeof(iov),
                                        sizeof(iov)) != GJ_OK) {
+                        ioring_soft_inc(&g_soft.u64RegEfault);
+                        ioring_soft_maybe_once();
                         return -LINUX_EFAULT;
                     }
                 } else {
@@ -1304,12 +1646,18 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
             }
         }
         pR->u32RegBufs = n;
+        ioring_soft_inc(&g_soft.u64RegBuffers);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_UNREGISTER_BUFFERS) {
         pR->u32RegBufs = 0;
         memset(pR->aRegBufAddr, 0, sizeof(pR->aRegBufAddr));
         memset(pR->aRegBufLen, 0, sizeof(pR->aRegBufLen));
+        ioring_soft_inc(&g_soft.u64RegBuffers);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_REGISTER_FILES) {
@@ -1326,6 +1674,8 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
                                   sizeof(i32))) {
                     if (copy_from_user(&fd, u64Arg + (u64)i * sizeof(i32),
                                        sizeof(i32)) != GJ_OK) {
+                        ioring_soft_inc(&g_soft.u64RegEfault);
+                        ioring_soft_maybe_once();
                         return -LINUX_EFAULT;
                     }
                 } else {
@@ -1335,11 +1685,17 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
             }
         }
         pR->u32RegFiles = n;
+        ioring_soft_inc(&g_soft.u64RegFiles);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_UNREGISTER_FILES) {
         pR->u32RegFiles = 0;
         memset(pR->aRegFiles, 0xff, sizeof(pR->aRegFiles));
+        ioring_soft_inc(&g_soft.u64RegFiles);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_REGISTER_FILES_UPDATE) {
@@ -1360,6 +1716,8 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
                                   sizeof(i32))) {
                     if (copy_from_user(&fd, u64Arg + (u64)i * sizeof(i32),
                                        sizeof(i32)) != GJ_OK) {
+                        ioring_soft_inc(&g_soft.u64RegEfault);
+                        ioring_soft_maybe_once();
                         return -LINUX_EFAULT;
                     }
                 } else {
@@ -1374,6 +1732,9 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
                 pR->u32RegFiles = n;
             }
         }
+        ioring_soft_inc(&g_soft.u64RegFiles);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_REGISTER_EVENTFD ||
@@ -1381,10 +1742,16 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
         pR->u32RegEventfd = 1u;
         (void)u64Arg;
         (void)u32NrArgs;
+        ioring_soft_inc(&g_soft.u64RegEventfd);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_UNREGISTER_EVENTFD) {
         pR->u32RegEventfd = 0u;
+        ioring_soft_inc(&g_soft.u64RegEventfd);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_REGISTER_PROBE) {
@@ -1405,20 +1772,33 @@ gj_io_uring_register(i64 i64Fd, u32 u32Opcode, u64 u64Arg, u32 u32NrArgs)
             probe.last_op = (u8)IORING_OP_LINKAT;
             probe.ops_len = (u8)(u32NrArgs > 255u ? 255u : u32NrArgs);
             if (buf_out(u64Arg, &probe, sizeof(probe)) < 0) {
+                ioring_soft_inc(&g_soft.u64RegEfault);
+                ioring_soft_maybe_once();
                 return -LINUX_EFAULT;
             }
         }
+        ioring_soft_inc(&g_soft.u64RegProbe);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_REGISTER_PERSONALITY) {
         pR->u32Personality = 1u;
         (void)u64Arg;
         (void)u32NrArgs;
+        ioring_soft_inc(&g_soft.u64RegPersonality);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
     if (u32Opcode == IORING_UNREGISTER_PERSONALITY) {
         pR->u32Personality = 0u;
+        ioring_soft_inc(&g_soft.u64RegPersonality);
+        ioring_soft_inc(&g_soft.u64RegOk);
+        ioring_soft_maybe_once();
         return 0;
     }
+    ioring_soft_inc(&g_soft.u64RegEnosys);
+    ioring_soft_maybe_once();
     return -LINUX_ENOSYS;
 }

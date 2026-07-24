@@ -3,13 +3,13 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Design specification complete **v1.0** |
-| **Status** | **Accepted** — closes remaining design gaps under project law; §17 Wave 46 honesty only |
+| **Status** | **Accepted** — closes remaining design gaps under project law; 17 Wave 47 honesty only |
 | **Does not** | Implement every feature in code; freezes **what** to build |
 | **Law** | Security → Performance → Portability → Readability · pure C in-tree · **no GPL/copyleft source** · clean-room OK · dual MIT OR Apache-2.0 |
-| **Adoption** | **Deck Top 50** ([GREENJADE_KERNEL_SPEC.md](GREENJADE_KERNEL_SPEC.md) §0.5.2) |
+| **Adoption** | **Deck Top 50** ([GREENJADE_KERNEL_SPEC.md](GREENJADE_KERNEL_SPEC.md) 0.5.2) |
 | **ABI** | Clean-room Linux-compatible via Option C ([LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md)) |
 | **Precedence** | Law → Security core → Cap addressing → **Proton** → Apple → Solaris → this freeze (fills holes only) |
-| **Honesty (Wave 46)** | Soft freezes (Accepted design) ≠ product multi-server / bar3; continuum **toward 18800** soft only; product lamps **0**; **no product claim** (§17) |
+| **Honesty (Wave 47)** | Soft freezes (Accepted design) ≠ product multi-server / bar3; continuum **toward 18900** soft only; product lamps **0**; **no product claim** (17) |
 
 This document is the **authoritative freeze** for topics previously listed as open, underspecified, or scaffold-only. Clean-room: reimplement behavior from public docs/manuals; never paste Linux/Wine/GPL trees into GreenJade.
 
@@ -29,7 +29,7 @@ This document is the **authoritative freeze** for topics previously listed as op
 | [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) | UEFI, VT-d, x2APIC, TSC, large pages |
 | [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) | Userspace driver surface |
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) / [TODO.md](TODO.md) | Build phases (subordinate to design) |
-| **This document** | Remaining freezes (isolation, traps, doors v1, AC, matrix, locks, …); §17 Wave 46 honesty only |
+| **This document** | Remaining freezes (isolation, traps, doors v1, AC, matrix, locks, …); 17 Wave 47 honesty only |
 
 Conflict: **higher authority wins**; this file only decides topics those docs left open.
 
@@ -132,7 +132,7 @@ Each PROCESS has:
 |------|--------|
 | **G-JIT-1** | JIT authority is `GJ_RIGHT_JIT` on a PROCESS (task) cap or a dedicated sealed grant from launcher. |
 | **G-JIT-2** | `mprotect`/`mmap` W\|X allowed **only** if current process holds JIT. |
-| **G-JIT-3** | Launcher grants JIT to Proton game tasks only; revoke on process death with §1.1. |
+| **G-JIT-3** | Launcher grants JIT to Proton game tasks only; revoke on process death with 1.1. |
 | **G-JIT-4** | Boolean `u32Jit` in PCB is a **cache** of the cap check, not the authority source (migrate). |
 
 ### 3.4 Credentials & uname (**P1**)
@@ -163,11 +163,11 @@ Each PROCESS has:
 | **G-DOOR-1** | Production door = **ENDPOINT** (or DOOR type alias) in CNode with Call/Recv/Reply. |
 | **G-DOOR-2** | `gj_door` bare struct is **v0**; must gain obj_hdr, DEAD/gen, CDT, quota. |
 | **G-DOOR-3** | Cap transfer on doors follows SOLARIS remaining (receiver-allocated slots, small K). |
-| **G-DOOR-4** | Server death: clients `PEER_DEAD`; revoke endpoint §1.1. |
+| **G-DOOR-4** | Server death: clients `PEER_DEAD`; revoke endpoint 1.1. |
 
 ### 4.2 Sync IPC + bulk rings
 
-Unchanged: doors for control; SPSC rings for bulk ([SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §3, §6).
+Unchanged: doors for control; SPSC rings for bulk ([SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 3, 6).
 
 ---
 
@@ -209,7 +209,7 @@ Unchanged: doors for control; SPSC rings for bulk ([SECURITY_CORE_DESIGN.md](SEC
 | **G-PROC-2** | Parent receives **PROCESS** task cap (not root meta). |
 | **G-PROC-3** | Wine-server = second process; shared memory objects mapped into both. |
 | **G-PROC-4** | No ambient fork of full CNode (security core). |
-| **G-PROC-5** | Death: clear pager, revoke CNode, unmap AS, refund quota (§1.1). |
+| **G-PROC-5** | Death: clear pager, revoke CNode, unmap AS, refund quota (1.1). |
 
 ---
 
@@ -220,7 +220,7 @@ Unchanged: doors for control; SPSC rings for bulk ([SECURITY_CORE_DESIGN.md](SEC
 | **G-AC-1** | **No** Linux `.ko` / kernel-module AC. |
 | **G-AC-2** | Optional **userspace AC agent** process: limited PROCESS INSPECT on game task only; no seat/GPU MMIO. |
 | **G-AC-3** | Titles requiring kernel AC with no userspace path → **BLOCKED-SECURITY** or **PASS-OFFLINE** if SP works. |
-| **G-AC-4** | Never weaken §0.0 for multiplayer catalog size. |
+| **G-AC-4** | Never weaken 0.0 for multiplayer catalog size. |
 
 ---
 
@@ -230,10 +230,10 @@ Unchanged: doors for control; SPSC rings for bulk ([SECURITY_CORE_DESIGN.md](SEC
 |------|--------|
 | **G-MAT-1** | Path: `matrix/deck-top50-YYYY-MM-DD.md` (or `.csv`) in-tree or release notes. |
 | **G-MAT-2** | Columns: rank, appid/title, result (PASS/PASS-OFFLINE/BLOCKED-SECURITY/FAIL/NOT-TRIED), HCL, notes, owner. |
-| **G-MAT-3** | Claims majority/met/full only against a **dated** snapshot per arch §0.5.2. |
+| **G-MAT-3** | Claims majority/met/full only against a **dated** snapshot per arch 0.5.2. |
 | **G-MAT-4** | FAIL with “missing Linux syscall N” → clean-room implement in hot or personality; never GPL paste. |
 
-Template: see §15.
+Template: see 15.
 
 ---
 
@@ -312,7 +312,7 @@ IDT + supervisor-only maps + SMEP
 | Linux ABI | **Allowed clean-room**; depth = Deck Top 50 |
 | Libc | Clean-room + optional MIT/Apache pieces only |
 | Netstack | Clean-room original userspace first |
-| Clean-room wall | Process in §9 + CI + provenance |
+| Clean-room wall | Process in 9 + CI + provenance |
 | Personality location | Kernel thread bring-up → **userspace doors** product |
 | Cold API | **Doors only** (production) |
 | Futex share | **Physical address** of word |
@@ -346,42 +346,42 @@ With this freeze, **design** for GreenJade’s product path is **complete enough
 
 isolation (AS, maps, IDT), hybrid Linux ABI production shape, personality TCB, doors, CapJit, futex, cold path, anti-cheat honesty, Deck Top 50 process, quotas, graphics A1, clean-room IP, and SMP lock direction.
 
-Remaining work is **coding and matrix execution**, not open-ended design choice—except measured perf refinements that do not violate §0.0.
+Remaining work is **coding and matrix execution**, not open-ended design choice—except measured perf refinements that do not violate 0.0.
 
 ---
 
-## 17. Honesty bounds — soft freezes ≠ product multi-server / bar3 (Wave 46 · 2026-07-23)
+## 17. Honesty bounds — soft freezes ≠ product multi-server / bar3 (Wave 47 · 2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** Freezes and decisions in §§0–16 stay **Accepted**. This section is a Wave 46 honesty ledger: what **design freezes** and greppable **soft** surfaces mean vs what remains **open** for product multi-server confine and Steam **bar3**. It does **not** re-litigate architecture, weaken §1 hard gates, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 45 §17 ledger text is superseded here as the same honesty formula under Wave 46 exclusive ownership of this file.
+**Additive only (Wave 47 exclusive for this file).** Freezes and decisions in 0–16 stay **Accepted**. This section is a Wave 47 honesty ledger: what **design freezes** and greppable **soft** surfaces mean vs what remains **open** for product multi-server confine and Steam **bar3**. It does **not** re-litigate architecture, weaken 1 hard gates, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 45 17 ledger text is superseded here as the same honesty formula under Wave 47 exclusive ownership of this file.
 
 ### 17.1 Soft freezes vs product bars
 
 | Term | Meaning on this document |
 |------|--------------------------|
 | **Soft freeze / Accepted freeze** | Normative **what to build** (isolation, doors, CapJit, futex, cold path, AC honesty, matrix process, …). Design complete enough to implement. |
-| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 18800** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **18700**, until next decade is wired). |
+| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 18900** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **18800**, until next decade is wired). |
 | **Product multi-server confine** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal — **open** |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN** |
 
 | Soft / freeze surface | What it is | What it is **not** |
 |-----------------------|------------|--------------------|
-| **This document Accepted** (§§0–16 freezes) | Design judgment closed; implement without further architectural ambiguity on listed topics | Product multi-server confine closed; bar3 closed; Deck Top 50 titles tried |
+| **This document Accepted** (0–16 freezes) | Design judgment closed; implement without further architectural ambiguity on listed topics | Product multi-server confine closed; bar3 closed; Deck Top 50 titles tried |
 | **Production freezes text** (personality doors, cold doors-only, CapJit rights, AS/IDT gates, …) | Normative contract for implementers | Every freeze row product-hard on DUT end-to-end |
 | **Live server embeds / soft confine / soft caps** (companion tree) | Bring-up / skeleton / greppable soft | Sealed multi-server product for every server+client |
-| **Continuum toward 18800 soft** / media `STATUS=READY` | Soft graph parent wire / host media inventory | Runtime ABI product complete; Steam client; matrix fill; product lamps lit |
-| **§16 Completion statement** | Design path complete enough to code | Product DoD complete; multi-server done; bar3 done |
+| **Continuum toward 18900 soft** / media `STATUS=READY` | Soft graph parent wire / host media inventory | Runtime ABI product complete; Steam client; matrix fill; product lamps lit |
+| **16 Completion statement** | Design path complete enough to code | Product DoD complete; multi-server done; bar3 done |
 
-**Hard rule:** never promote Accepted freezes, soft continuum (toward **18800**), media READY, or greppable soft `PASS` lines to “product multi-server closed,” “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. **Soft freezes ≠ product multi-server ≠ bar3.** **Soft ≠ product complete.**
+**Hard rule:** never promote Accepted freezes, soft continuum (toward **18900**), media READY, or greppable soft `PASS` lines to “product multi-server closed,” “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. **Soft freezes ≠ product multi-server ≠ bar3.** **Soft ≠ product complete.**
 
-**Hard stamp (Wave 46):** soft freezes **≠** product multi-server / bar3. Soft continuum high-water **toward 18800** is CREATE-ONLY parent wire only. Product lamps remain **0**. **No product claim** from this document.
+**Hard stamp (Wave 47):** soft freezes **≠** product multi-server / bar3. Soft continuum high-water **toward 18900** is CREATE-ONLY parent wire only. Product lamps remain **0**. **No product claim** from this document.
 
 ### 17.2 Product multi-server — **open**
 
 | Item | State |
 |------|--------|
 | Design freezes for isolation / doors / quotas / spawn (this doc) | **Accepted** — design only |
-| Soft confine / soft cap / doors greppable surface | Soft only — see [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §13, [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 |
+| Soft confine / soft cap / doors greppable surface | Soft only — see [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 13, [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9 |
 | Live embeds (`vfsd`, `sessiond`, `netstackd`, `storaged`, `sshd`, …) | Skeleton / door bring-up ≠ full multi-server product |
 | Bootstrap seal (drop ambient retype / broad authority after init) | **Open** |
 | Hierarchical quotas product for every creatable object class | **Open** / incomplete product path |
@@ -395,38 +395,38 @@ Soft freezes and soft promise/cap gates are **not** a claim that every server an
 | Item | State |
 |------|--------|
 | Steam **client** launch on GreenJade DUT | **OPEN** (bar3) |
-| Deck Top 50 title rows | **NOT-TRIED × 50** — claim **targeting only** (§7–§8 process still binds) |
-| Host media `STATUS=READY` / continuum soft high-water **toward 18800** | Soft only — **≠ bar3** |
+| Deck Top 50 title rows | **NOT-TRIED × 50** — claim **targeting only** (7–8 process still binds) |
+| Host media `STATUS=READY` / continuum soft high-water **toward 18900** | Soft only — **≠ bar3** |
 | Product lamps (`gj_bar3_ready_*` / `gj_product_score_*` soft stubs) | Remain **0** by design |
 | Product RAM **≥ 1 TiB** full path | **Open** when host allows (separate from bar3) |
 
 **Bar3 remains OPEN.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md). This document does not promote those rows.
 
-### 17.4 Explicit non-claims (Wave 46)
+### 17.4 Explicit non-claims (Wave 47)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Design Spec Complete **Accepted** — freezes what to build (§§0–16)” | **Yes** — design only |
-| “Soft freezes / soft continuum toward **18800** / soft greppable surface (with bound)” | **Yes** — honesty ledger only |
+| “Design Spec Complete **Accepted** — freezes what to build (0–16)” | **Yes** — design only |
+| “Soft freezes / soft continuum toward **18900** / soft greppable surface (with bound)” | **Yes** — honesty ledger only |
 | “Accepted freezes = product multi-server confine closed” | **No** |
 | “Accepted freezes / soft continuum / media READY = bar3 closed” | **No** |
 | “Product lamps lit / product complete from soft freezes or continuum” | **No** — lamps remain **0** |
 | “Deck Top 50 titles tried / PASS from this freeze alone” | **No** — matrix stays **NOT-TRIED** |
-| “§16 completion = product DoD / multi-server / bar3 done” | **No** |
-| “Wave 46 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
+| “16 completion = product DoD / multi-server / bar3 done” | **No** |
+| “Wave 47 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
 | Any **bar3** closed claim from DESIGN_SPEC_COMPLETE alone | **No** |
 
 ### 17.5 Related honesty surfaces
 
-- [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §13 — soft confine ≠ product multi-server  
-- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 / §9.5 — soft cap surface ≠ product multi-server; continuum toward 18800 soft  
+- [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 13 — soft confine ≠ product multi-server  
+- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9 / 9.5 — soft cap surface ≠ product multi-server; continuum toward 18900 soft  
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
 - [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) — soft surface ≠ bar3  
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) — soft stamps ≠ product score  
 - [TODO.md](TODO.md) — multi-server confine / bar3 open boxes  
-- [HCL.md](HCL.md) — soft probes ≠ full HCL product; continuum toward 18800  
+- [HCL.md](HCL.md) — soft probes ≠ full HCL product; continuum toward 18900  
 
 ---
 
 *Design Spec Complete v1.0 — Accepted. Clean-room. Deck Top 50. Security first.*  
-*§17 Wave 46 honesty (2026-07-23): soft freezes ≠ product multi-server / bar3; continuum **toward 18800 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*
+*17 Wave 47 honesty (2026-07-23): soft freezes ≠ product multi-server / bar3; continuum **toward 18900 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*

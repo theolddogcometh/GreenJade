@@ -307,8 +307,8 @@ SIMD/AES-NI hot paths should CPUID-dispatch where practical. Kernel FXSAVE/XSAVE
 | batch90 | ChaCha20 SSE2 stream XOR (`chacha20_xor_sse2` + `__` alias; RFC 8439; 4×64B parallel; remainder via batch42 `chacha20_xor`) — **wired** |
 | batch91 | Poly1305 SSE2 load path (`poly1305_auth_sse2` + `__` alias; mac-first/key-last; does **not** redefine batch42 `poly1305_auth`) — **wired** |
 | batch92 | mini libm (`sqrt`/`sqrtf` SSE2; `fabs`/`fabsf`; `floor`/`ceil` IEEE bit paths) — **wired** |
-| batch93 | base64url (`base64url_encode`/`base64url_decode` + `__` aliases; RFC 4648 §5; standard `base64_*` remain batch40) — **wired** |
-| batch94 | HTTP-date IMF-fixdate (`gj_http_date_parse`/`gj_http_date_format` + `__` aliases; RFC 7231 §7.1.1.1; integer-only, no SSE) — **wired** |
+| batch93 | base64url (`base64url_encode`/`base64url_decode` + `__` aliases; RFC 4648 5; standard `base64_*` remain batch40) — **wired** |
+| batch94 | HTTP-date IMF-fixdate (`gj_http_date_parse`/`gj_http_date_format` + `__` aliases; RFC 7231 7.1.1.1; integer-only, no SSE) — **wired** |
 | batch95 | AVX2 bulk mem (`gj_cpu_has_avx2`, `gj_memcpy_avx2`/`gj_memset_avx2` + `__` aliases; CPUID.7:0 EBX[5]; fallback batch84 SSE2; does **not** redefine `memcpy`/`memset`/batch84) — **wired** |
 | batch96 | AES-GCM fast path (`aes_gcm_encrypt_fast`/`aes_gcm_decrypt_fast` + `__` aliases; AES-NI + PCLMUL via batch83/85 when both present; else batch60; does **not** redefine `aes_gcm_*`/`ghash`) — **wired** |
 | batch97 | HighwayHash64 (`highwayhash64`/`__highwayhash64`; integer pure C; does **not** redefine siphash/cityhash batches) — **wired** |
@@ -340,7 +340,7 @@ SIMD/AES-NI hot paths should CPUID-dispatch where practical. Kernel FXSAVE/XSAVE
 | batch123 | ZIP EOCD/CD metadata (`gj_zip_eocd_find`/`gj_zip_eocd_parse`/`gj_zip_cd_entry`; APPNOTE; no extract/inflate; SSE2 bulk copy when `cb≥16`) — **wired** |
 | batch124 | Internet checksum (`gj_ip_checksum`/`gj_ip_checksum_fold`/`gj_ipv4_header_ok` + `__` aliases; RFC 1071) — **wired** |
 | batch125 | classic Bloom filter (`gj_bloom_init`/`gj_bloom_add`/`gj_bloom_may_contain` + `__` aliases; Kirsch–Mitzenmacher double FNV-1a; does **not** redefine batch41 `fnv1a_*`) — **wired** |
-| batch126 | WebSocket frame header (`gj_ws_header_parse`/`gj_ws_header_build`/`gj_ws_mask` + `__` aliases; RFC 6455 §5.2/§5.3; parse/build + payload mask XOR) — **wired** |
+| batch126 | WebSocket frame header (`gj_ws_header_parse`/`gj_ws_header_build`/`gj_ws_mask` + `__` aliases; RFC 6455 5.2/5.3; parse/build + payload mask XOR) — **wired** |
 | batch127 | MQTT 3.1.1 fixed header (`gj_mqtt_encode_remaining`/`gj_mqtt_decode_remaining`/`gj_mqtt_fixed_header` + `__` aliases; Remaining Length max 268435455) — **wired** |
 | batch128 | mini CBOR (`gj_cbor_encode_uint`/`bytes`/`text`, `gj_cbor_decode_uint`/`bytes`/`text`; RFC 8949 definite-length major 0/2/3 only) — **wired** |
 | batch129 | MessagePack subset (`gj_msgpack_encode_str`/`gj_msgpack_encode_uint`/`gj_msgpack_decode_str` + `__` aliases; positive fixint / fixstr / bin8) — **wired** |
@@ -349,7 +349,7 @@ SIMD/AES-NI hot paths should CPUID-dispatch where practical. Kernel FXSAVE/XSAVE
 | batch132 | Snappy raw-block uncompress (`gj_snappy_uncompressed_length`/`gj_snappy_uncompress` + `__` aliases; status 0/1/2; SSE2 bulk literals) — **wired** |
 | batch133 | LZ4 block safe decompress (`gj_lz4_decompress_safe`/`__gj_lz4_decompress_safe`; public block format; no frame) — **wired** |
 | batch134 | XOR + PKCS #7 (`gj_xor_buf`/`gj_xor_keystream`/`gj_pkcs7_pad`/`gj_pkcs7_unpad` + `__` aliases; SSE2 XOR when `n≥16`; block 1..255) — **wired** |
-| batch135 | HPACK integer (`gj_hpack_encode_int`/`gj_hpack_decode_int` + `__` aliases; RFC 7541 §5.1 prefix-N; N 1..8) — **wired** |
+| batch135 | HPACK integer (`gj_hpack_encode_int`/`gj_hpack_decode_int` + `__` aliases; RFC 7541 5.1 prefix-N; N 1..8) — **wired** |
 | batch136 | TLS record header (`gj_tls_record_header_parse`/`gj_tls_record_header_build` + `__` aliases; 5-byte type/version/length; RFC 5246/8446 layout) — **wired** |
 | batch137 | netstring (`gj_netstring_encode`/`gj_netstring_decode` + `__` aliases; DJB `len:data,`; no leading zeros except `0:,`) — **wired** |
 | batch138 | CSV field parse (`gj_csv_next_field`/`gj_csv_count_fields` + `__` aliases; RFC 4180 lite; quoted `""` unescape) — **wired** |
@@ -400,11 +400,11 @@ SIMD/AES-NI hot paths should CPUID-dispatch where practical. Kernel FXSAVE/XSAVE
 | batch183 | Fletcher-16 / Fletcher-32 checksums (`gj_fletcher16`/`gj_fletcher32`) — **wired** |
 | batch184 | Hamming distance over buffers (`gj_hamming_distance`; SWAR + optional SSE2) — **wired** |
 | batch185 | lock-free SPSC `uint64_t` ring power-of-2 (`gj_u64ring_*`; does **not** redefine batch117 `gj_ring_*`) — **wired** |
-| batch186 | base64url encode/decode with optional `=` padding (`gj_b64url_encode_pad`/`decode_pad` + `__` aliases; RFC 4648 §5; does **not** redefine batch40/93/22/`gj_jwt_b64url_decode_seg`) — **wired** |
+| batch186 | base64url encode/decode with optional `=` padding (`gj_b64url_encode_pad`/`decode_pad` + `__` aliases; RFC 4648 5; does **not** redefine batch40/93/22/`gj_jwt_b64url_decode_seg`) — **wired** |
 | batch187 | Punycode encode + IDNA label lite (`gj_punycode_encode`/`gj_idna_to_ascii_label` + `__` aliases; RFC 3492; ASCII LDH passthrough) — **wired** |
 | batch188 | Windows SID string parse (`gj_sid_parse` + `__` alias; `S-1-5-…` ConvertSidToStringSid form) — **wired** |
 | batch189 | ASN.1 DER TLV header parse (`gj_asn1_tlv` + `__` alias; X.690 definite-length only) — **wired** |
-| batch190 | ASN.1 OID content encode/decode (`gj_oid_encode`/`gj_oid_decode` + `__` aliases; X.690 §8.19 arcs; no Tag/Length) — **wired** |
+| batch190 | ASN.1 OID content encode/decode (`gj_oid_encode`/`gj_oid_decode` + `__` aliases; X.690 8.19 arcs; no Tag/Length) — **wired** |
 | batch191 | SPKI subjectPublicKey BIT STRING peel (`gj_spki_find_bitstring` + `__` alias; RFC 5280 outer SEQUENCE; does **not** redefine batch115 PEM) — **wired** |
 | batch192 | PEM block count + null-sep label list (`gj_pem_count`/`gj_pem_list_labels` + `__` aliases; complements batch115) — **wired** |
 | batch193 | TLS alert body parse (`gj_tls_alert_parse` + `__` alias; does **not** redefine batch136 record header) — **wired** |
@@ -412,13 +412,13 @@ SIMD/AES-NI hot paths should CPUID-dispatch where practical. Kernel FXSAVE/XSAVE
 | batch195 | Cookie header name=value get (`gj_cookie_get` + `__` alias; Cookie header only) — **wired** |
 | batch196 | multipart/form-data boundary find + part iterate (`gj_multipart_find_boundary`/`gj_multipart_next_part` + `__` aliases; RFC 2046/7578 subset) — **wired** |
 | batch197 | application/x-www-form-urlencoded get (`gj_form_get` + `__` alias; key lookup) — **wired** |
-| batch198 | WebSocket Sec-WebSocket-Accept key (`gj_ws_accept_key` + `__` alias; RFC 6455 §1.3/§4.2.2; SHA-1 + base64) — **wired** |
-| batch199 | HTTP/2 frame header parse (`gj_h2_frame_header` + `__` alias; RFC 7540 §4.1 fixed 9-byte) — **wired** |
-| batch200 | QUIC varint encode/decode (`gj_quic_varint_encode`/`decode` + `__` aliases; RFC 9000 §16) — **wired** |
+| batch198 | WebSocket Sec-WebSocket-Accept key (`gj_ws_accept_key` + `__` alias; RFC 6455 1.3/4.2.2; SHA-1 + base64) — **wired** |
+| batch199 | HTTP/2 frame header parse (`gj_h2_frame_header` + `__` alias; RFC 7540 4.1 fixed 9-byte) — **wired** |
+| batch200 | QUIC varint encode/decode (`gj_quic_varint_encode`/`decode` + `__` aliases; RFC 9000 16) — **wired** |
 | batch201 | streaming SipHash-2-4 (`gj_sip24_init`/`update`/`final` + `__` aliases; does **not** redefine batch36 `siphash24`) — **wired** |
 | batch202 | ChaCha20 single-block keystream (`gj_chacha20_block_counter` + `__` alias; does **not** redefine batch42/70 stream/AEAD) — **wired** |
 | batch203 | AES-CTR stream XOR (`gj_aes_ctr_xor` + `__` alias; NIST SP 800-38A; AES via batch45) — **wired** |
-| batch204 | TLS 1.3 HKDF-Expand-Label lite (`gj_hkdf_expand_label` + `__` alias; RFC 8446 §7.1 shape over batch71 expand) — **wired** |
+| batch204 | TLS 1.3 HKDF-Expand-Label lite (`gj_hkdf_expand_label` + `__` alias; RFC 8446 7.1 shape over batch71 expand) — **wired** |
 | batch205 | simple scrypt bring-up (`gj_scrypt_simple` + `__` alias; N=16 r=1 p=1 → 32 B; weak-link to batch46 `scrypt`) — **wired** |
 | batch206 | streaming RFC 4648 base64 encoder (`gj_b64_enc_init`/`update`/`final` + `__` aliases; does **not** redefine one-shot batch40/93/186) — **wired** |
 | batch207 | IEEE CRC-32 combine (`gj_crc32_combine` + `__` alias; GF(2); matches batch39/111 polys; does **not** redefine `crc32*`) — **wired** |
@@ -911,18 +911,18 @@ Wired exclusive CREATE-ONLY continuum product soft stubs through `graph_batch153
 
 Also on tree (kernel/media soft, not bar3 / not full glibc): 768G hierarchical soak; media Steam path wired; host soft check READY\|SKELETON\|MISSING.
 
-## Status note — 2026-07-23 (Wave 46 soft continuum)
+## Status note — 2026-07-23 (Wave 47 soft continuum)
 
-**Additive honesty (Wave 46 exclusive for this file).** Wave 11 / Wave 14 notes above stay historical ledger. Soft deepen on non-w13 surfaces only.
+**Additive honesty (Wave 47 exclusive for this file).** Wave 11 / Wave 14 notes above stay historical ledger. Soft deepen on non-w13 surfaces only.
 
 | Claim surface | What it is | What it is **not** |
 |---------------|------------|--------------------|
-| Continuum soft graph | CREATE-ONLY freestanding TUs; parent wires advancing makefile high-water **toward 18800** | Full GNU glibc product; drop-in behavioral parity; Steam/Proton runtime complete |
-| High-water **toward 18800** | Soft target advance via parent wires (tree may still report prior decade; verify `./scripts/gj-continuum-makefile-snippet.sh --max`) | Bar3 closed; Deck Top 50 tried; host-glibc replacement finished; product complete |
-| Soft deepen **retbailey** / **retpostern** | Wave 46 CREATE-ONLY soft graph surface names (docs/scripts/userland soft stamps) | Product glibc; bar3; product lamps lit |
+| Continuum soft graph | CREATE-ONLY freestanding TUs; parent wires advancing makefile high-water **toward 18900** | Full GNU glibc product; drop-in behavioral parity; Steam/Proton runtime complete |
+| High-water **toward 18900** | Soft target advance via parent wires (tree may still report prior decade; verify `./scripts/gj-continuum-makefile-snippet.sh --max`) | Bar3 closed; Deck Top 50 tried; host-glibc replacement finished; product complete |
+| Soft deepen **retinnerward** / **retdonjon** | Wave 47 CREATE-ONLY soft graph surface names (docs/scripts/userland soft stamps) | Product glibc; bar3; product lamps lit |
 | libcgj / `libc.so.6` product ELF | Clean-room **glibc-shaped** bring-up + growing symbol surface | Shipped GNU glibc; “full glibc” claim |
 | Product lamps | Soft stubs (`gj_bar3_ready_*` / `gj_product_score_*` class) remain **0** by design | Any product-score or bar3-ready claim |
 
-**Continuum soft ≠ full glibc product.** Wave 46 soft continuum / parent-wire growth **toward 18800** (soft deepen **retbailey**/**retpostern**) does **not** make libcgj a full glibc and does **not** close Option C host-glibc / Steam graphs. **Soft ≠ product complete.**
+**Continuum soft ≠ full glibc product.** Wave 47 soft continuum / parent-wire growth **toward 18900** (soft deepen **retinnerward**/**retdonjon**) does **not** make libcgj a full glibc and does **not** close Option C host-glibc / Steam graphs. **Soft ≠ product complete.**
 
 **bar3 still open** (Steam **client** launch + Deck Top 50 title runs; matrix **NOT-TRIED × 50**). Product lamps remain **0**. Soft continuum, media `STATUS=READY`, and kernel smokes are **not** bar3 completion.

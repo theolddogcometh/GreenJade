@@ -43,7 +43,7 @@
  *   "pmm: soft retcode …"    Wave 17 alloc/free retcode catalog
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   "pmm: soft deepen …"     wave=46 stamp + area count
+ *   "pmm: soft deepen …"     wave=47 stamp + area count
  *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
  * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3;
  *          soft ≠ bar3; soft ≠ product.
@@ -76,9 +76,9 @@
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
 /* Wave 19 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE 46u
+#define PMM_SOFT_WAVE 47u
 /* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
-#define PMM_SOFT_AREAS 74u
+#define PMM_SOFT_AREAS 76u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -503,7 +503,7 @@ log_tib_design_soft(void)
  *   pmm: soft api        — Wave 17 alloc/free surface return lamps
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   pmm: soft deepen     — wave=46 stamp + area count
+ *   pmm: soft deepen     — wave=47 stamp + area count
  *   pmm: soft PASS | EMPTY | NONE | inventory PASS
  *
  * Never allocates. Safe after pmm_init (and later release/soak paths).
@@ -1301,6 +1301,20 @@ kprintf("pmm: soft retpostern exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpostern stamp; Soft≠product)\n",
         (unsigned)PMM_SOFT_WAVE);
+
+/*
+ * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: pmm: soft retinnerward — Wave 47 return-innerward honesty */
+kprintf("pmm: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=47 "
+        "(retinnerward honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm: soft retdonjon — Wave 47 exclusive donjon stamp */
+kprintf("pmm: soft retdonjon exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=47 "
+        "(retdonjon stamp; Soft≠product)\n");
 
 
 

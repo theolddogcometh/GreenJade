@@ -41,7 +41,7 @@
  *     net: tcp soft stats …      — aggregate path tallies
  *     net: tcp soft path …       — honesty: soft inventory ≠ bar3
  *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
- *     net: tcp soft deepen …     — wave=46 stamp + area count
+ *     net: tcp soft deepen …     — wave=47 stamp + area count
  *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
  *     net: tcp soft PASS …
  *   Twin prefix also emitted: "net_tcp: soft …".
@@ -81,11 +81,11 @@
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
-/* Wave 35 exclusive soft deepen stamp (greppable wave=46). */
-#define TCP_SOFT_DEEPEN_WAVE 46u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=47). */
+#define TCP_SOFT_DEEPEN_WAVE 47u
 /* inventory sock bind life xfer input poll ring multi state capacity
  * catalog outcome stats path headroom surface ratio PASS slot deepen = 21 */
-#define TCP_SOFT_DEEPEN_AREAS 61u
+#define TCP_SOFT_DEEPEN_AREAS 63u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -1219,6 +1219,20 @@ kprintf("net: tcp: soft retpostern exclusive=1 soft_ne_product=1 "
         "(retpostern stamp; Soft≠product)\n",
         (unsigned)TCP_SOFT_DEEPEN_WAVE);
 
+/*
+ * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: net: tcp: soft retinnerward — Wave 47 return-innerward honesty */
+kprintf("net: tcp: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=47 "
+        "(retinnerward honesty; Soft≠product; not bar3)\n");
+/* Grep: net: tcp: soft retdonjon — Wave 47 exclusive donjon stamp */
+kprintf("net: tcp: soft retdonjon exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=47 "
+        "(retdonjon stamp; Soft≠product)\n");
+
 
 
                         kprintf("net: tcp soft deepen wave=%u areas=%u used=%u estab=%u "
@@ -1231,7 +1245,7 @@ kprintf("net: tcp: soft retpostern exclusive=1 soft_ne_product=1 "
 		(unsigned long long)s.u64EventSkip);
 
 	/* Grep: net_tcp: soft retmap — Wave 19 return-surface map */
-	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=46\n");
+	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=47\n");
 
 	/* Grep: net_tcp: soft deepen (twin) */
 	kprintf("net_tcp: soft deepen wave=%u areas=%u used=%u ops=%llu "

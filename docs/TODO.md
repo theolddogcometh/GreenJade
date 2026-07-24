@@ -4,7 +4,7 @@ Track implementation. Check boxes as you go.
 Policy: pure C, **MIT OR Apache-2.0**, no GPL, no OOP.  
 **Priorities: 1. Security → 2. Performance → 3. Portability → 4. Readability** (**do not reorder for games**)  
 **Product: desktop · UEFI · ≥1 TiB RAM · SMP · SAS/SCSI · adoption = Deck Top 50 (Proton, clean-room Linux ABI)**  
-**Critical path:** [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) §12 · arch §0.5.3 · [PROTON](PROTON_PERSONALITY.md)  
+**Critical path:** [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) 12 · arch 0.5.3 · [PROTON](PROTON_PERSONALITY.md)  
 **Design:** complete freeze — implement, do not re-litigate architecture  
 Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC_COMPLETE.md) · [Security](SECURITY_CORE_DESIGN.md) · [Proton](PROTON_PERSONALITY.md) · [Hybrid ABI](LINUX_ABI_HYBRID.md)
 
@@ -140,7 +140,7 @@ Design all structures for **SMP** and **>1 TiB** even if M1 tests are smaller.
 
 ## M2 — Capabilities + IPC + quotas + time
 
-**Goal:** implement [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §§1–5.  
+**Goal:** implement [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 1–5.  
 Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 **Progress note (2026-07-23 — substantial incomplete soft product, not closed):**  
@@ -152,7 +152,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 | Ephemeral REPLY / transfer | `door: reply single-use soft PASS` / badge transfer counters | CNode `GJ_CAP_REPLY` MIG product |
 | CDT R2 try-lock revoke | `cap: revoke try-lock` / `cap:cdt R2 soft` | Real CNode mutex/turnstile |
 | CDT edges everywhere | `cap: cdt mint\|copy\|move` coverage | No empty-edge product audit |
-| Bootstrap seal §13 | `process: bootstrap seal soft` / death tallies | Full retype / seal checklist product |
+| Bootstrap seal 13 | `process: bootstrap seal soft` / death tallies | Full retype / seal checklist product |
 | Higher-half move | `vmm: higher-half soft OPEN` | Kernel image relocate |
 | x2APIC mono vs PIT | `timer: apic mono preferred PASS` | Full x2APIC ICR/timer replace |
 | IOMMU no open bus-master | `iommu: no open bus-master soft PASS` | Production default always-on HW |
@@ -165,7 +165,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [x] CNode allocate/slots (soft slot-quota ledger; hierarchical **task ledger** still soft) — `gj_cap_alloc_install` + `gj_cap_quota_*`
 - [ ] cap types: CNODE, THREAD, SPACE, **PROCESS (task)**, ENDPOINT, NOTIFICATION, FRAME, REPLY, … (enum + PROCESS/ENDPOINT/NOTIFICATION/ROOT_META/MEMORY_OBJECT live; REPLY/FRAME/SPACE user path still open)
 - [x] mint (weaker only), move, copy, delete — `gj_cap_mint/copy/move/delete` + native `GJ_SYS_CAP_*`; greppable `cap: mint/copy/move+cdt PASS`
-- [x] **§1.1 policy + stubs**: DEAD/gen first, mandatory deferred slot invalidate — `cap.h` / `revoke.c`
+- [x] **1.1 policy + stubs**: DEAD/gen first, mandatory deferred slot invalidate — `cap.h` / `revoke.c`
 - [x] **x86_64 addressing Scheme A**: `u64` slot + `u32` gen; slot 0 root meta — `cnode.c` + [CAP_ADDRESSING.md](CAP_ADDRESSING.md)
 - [x] **Apple channel Accepted**: regions/objects, task ports, QoS, futex, session — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)
 - [ ] Wire CDT + CNode try-lock slot walk into `gj_revoke_process_deferred` (soft CDT walk PASS + R2 soft try-lock/retry; product mutex still open)
@@ -179,7 +179,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [ ] Fault: region lookup → Call pager + cookie + map **views** (object owns pages)
 - [ ] Kernel ephemeral **REPLY** on Call; single-use
 - [ ] Cluster coalesce adjacent not-present pages (cap GJ_FAULT_CLUSTER_MAX)
-- [ ] Freeze `syscall.h` per Apple §5 (incl. futex, vm_*, process_*)
+- [ ] Freeze `syscall.h` per Apple 5 (incl. futex, vm_*, process_*)
 - [ ] Syscalls using `gj_cap_resolve` on all cap ops (native CAP_* ops resolve; not universal yet)
 - [x] Drive `gj_revoke_process_deferred` from timer tick (R7) — `timer.c` + A2 partial already; idle/syscall-exit hooks optional
 
@@ -204,15 +204,15 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [x] Notification (badge bitmask) — `notify.c` + MSI-X IRQ bind (`notify: MSI-X IRQ PASS`)
 - [ ] mono clock; timer objects **quota-backed** (mono clock exists; quota-backed timer objects open)
 - [ ] infinite wait only with privilege cap
-- [x] `futex_wait` / `futex_wake` (mono timeout) — Apple §9; `futex.c` + PE32/Linux paths
+- [x] `futex_wait` / `futex_wake` (mono timeout) — Apple 9; `futex.c` + PE32/Linux paths
 - [x] Cross-process futex on shared memory objects — Proton **A0** (`winesrv` PA keys; M6 A0 checked)
 - [x] Named shareable memory objects (wine-server + GPU export) — Proton **A0** (`memobj_create_named` / map)
 
 ### M2.7 QoS + session (design Accepted; code later)
-- [ ] Thread QoS classes + capped PI — Apple §8 (soft QoS rank in sched; capped PI open)
-- [x] W^X + JIT cap — Apple §10 (CapJit / `GJ_RIGHT_JIT` / mprotect gates; M1 checked)
-- [x] Exception port on PCB (≠ pager) — Apple §12 (`except_port_*`; `except: port smoke PASS`)
-- [ ] Bootstrap seal checklist — Apple §13
+- [ ] Thread QoS classes + capped PI — Apple 8 (soft QoS rank in sched; capped PI open)
+- [x] W^X + JIT cap — Apple 10 (CapJit / `GJ_RIGHT_JIT` / mprotect gates; M1 checked)
+- [x] Exception port on PCB (≠ pager) — Apple 12 (`except_port_*`; `except: port smoke PASS`)
+- [ ] Bootstrap seal checklist — Apple 13
 
 ### M2.6 Tests
 - [ ] IPC ping-pong 100k
@@ -247,9 +247,9 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [x] Read/write sector 0 smoke + magic verify
 - [x] Interim `vfs_ram` mount `/dev/vda` over virtio-blk
 - [ ] Userspace driver host process
-- [ ] **SPSC ring** ownership protocol (security core §6)
+- [ ] **SPSC ring** ownership protocol (security core 6)
 - [x] **No** Linux virtio source (kernel path clean-room OASIS)
-- [ ] hard IRQ → Notification only; batch in userspace (security core §7)
+- [ ] hard IRQ → Notification only; batch in userspace (security core 7)
 
 ### M3.5 Simple FS (optional same milestone)
 - [x] Interim ramfs + `/dev/vda` blk mount in-kernel
@@ -355,7 +355,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [x] Session input hub (virtio-input fan-in ring)
 - [x] HDA PCI probe stub + software stream / CORB / BDL / multi-stream mixer soft (`hda: stream/CORB/multi-stream … PASS`)
 - [ ] POSIX personality subset for apps
-- [x] **Proton + Deck Top 50 design re-applied** — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) **v1.6**; arch §0.5.2–0.5.3
+- [x] **Proton + Deck Top 50 design re-applied** — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) **v1.6**; arch 0.5.2–0.5.3
 - [x] **A0:** wine-server two-process demo (named maps + shared futex + socketpair + CapJit)
 - [x] **A0:** eventfd2 cold path
 - [x] **A0–A1:** exception port register/deliver (user trap → port; SEH-shaped stub)
@@ -563,7 +563,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [ ] ~~SteamOS / Deck **distro port** (shipping their rootfs as ours)~~
 - [ ] ~~Legacy BIOS as product requirement~~
 - [ ] ~~Load Linux `.ko` binaries~~
-# Note: clean-room **Linux-compatible ABI** is **allowed** (not non-work) — see arch §11, PROTON v1.5
+# Note: clean-room **Linux-compatible ABI** is **allowed** (not non-work) — see arch 11, PROTON v1.5
 
 ---
 
@@ -587,7 +587,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 
 | Date | Note |
 |------|------|
-| 2026-07-23 | **Wave 46 soft continuum (honesty only):** makefile target high-water **advancing toward 18800** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retbailey**/**retpostern** (CREATE-ONLY soft only); honest scan may still report **makefile_max=18700** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
+| 2026-07-23 | **Wave 47 soft continuum (honesty only):** makefile target high-water **advancing toward 18900** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retinnerward**/**retdonjon** (CREATE-ONLY soft only); honest scan may still report **makefile_max=18800** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 38 soft continuum (honesty only):** makefile target high-water **advancing toward 18000** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retmoat**/**retower** (CREATE-ONLY soft only); honest scan may still report **makefile_max=17900** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 35 soft continuum (honesty only):** makefile target high-water **advancing toward 17700** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retfortress**/**retpalace** (CREATE-ONLY soft only); honest scan may still report **makefile_max=17600** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 34 soft continuum (honesty only):** makefile target high-water **advancing toward 17600** (parent wires / CREATE-ONLY graph); honest scan may still report **makefile_max=17500** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
@@ -612,10 +612,10 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 | 2026-07-19 | Proton personality v1.0 (game runtime tier; not SteamOS) |
 | 2026-07-19 | **Accepted** Proton personality v1.1 (normative P0/P1/P2 tiers) |
 | 2026-07-19 | **Proton-over-Apple** precedence (PROTON v1.2, Apple v1.1, arch v0.8) |
-| 2026-07-19 | Games = popular desktop adoption bar; **priorities unchanged** (arch §0.5.1, PROTON v1.3) |
-| 2026-07-19 | **Major game support** = **Steam Deck Top 50** (arch §0.5.2, PROTON v1.4) |
+| 2026-07-19 | Games = popular desktop adoption bar; **priorities unchanged** (arch 0.5.1, PROTON v1.3) |
+| 2026-07-19 | **Major game support** = **Steam Deck Top 50** (arch 0.5.2, PROTON v1.4) |
 | 2026-07-19 | Clarified: ban is **GPL copyleft source**, not Linux ABI; clean-room Linux compat OK (arch v0.11, PROTON v1.5) |
-| 2026-07-19 | **Re-applied** Proton + Deck Top 50 focus under clean-room ABI (PROTON v1.6, arch v0.12 §0.5.3) |
+| 2026-07-19 | **Re-applied** Proton + Deck Top 50 focus under clean-room ABI (PROTON v1.6, arch v0.12 0.5.3) |
 | 2026-07-19 | **Option C hybrid** Linux syscall dispatch implemented (`kernel/syscall/`, LINUX_ABI_HYBRID.md) |
 | 2026-07-19 | Open list 1–4: MSRs+GDT, vmm mmap, futex queues, cold_ipc→libprotonrt |
 | 2026-07-19 | Spec refresh + ptr check, ring-3, PA futex, CapJit, blocking cold IPC |

@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Security core design v1.7 |
-| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); §13 Wave 13 historical · §14 Wave 46 honesty |
+| **Status** | **Accepted** — implement against this + [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); 13 Wave 13 historical · 14 Wave 47 honesty |
 | **Priority** | Security → Performance → Portability → Readability |
 | **Heritage default** | **Solaris / Sun** for concurrency, doors, DDI, turnstiles; **Apple** for VM objects/views, task ports, QoS, session ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md)) |
 | **Heritage secondary** | IBM only when Solaris has no good analogue **and** it still matches GreenJade law |
 | **Companion** | [Architecture](GREENJADE_KERNEL_SPEC.md) · [Implementation](IMPLEMENTATION.md) · [Apple channel](APPLE_CHANNEL_REMAINING.md) |
-| **Honesty (Wave 46)** | Soft confine ≠ product multi-server; soft continuum toward **18800** ≠ product; lamps **0**; **no bar3 claim** (§13 historical · §14) |
+| **Honesty (Wave 47)** | Soft confine ≠ product multi-server; soft continuum toward **18900** ≠ product; lamps **0**; **no bar3 claim** (13 historical · 14) |
 
 This document **picks one direction** for the gaps that matter most. Alternatives are noted only to record why they lost.
 
@@ -51,8 +51,8 @@ When choosing patterns for new subsystems:
 | **Derivation** | **Capability Derivation Tree (CDT)** / parent links: every minted/copied cap records parent for subtree revoke |
 | **Rights** | Bitmask per cap: `Read`, `Write`, `Grant`, `Mint`, `Destroy`, `Map`, `Identify`, … type-specific |
 | **Mint / copy** | Can only mint **weaker or equal** rights; never escalate |
-| **Transfer** | Caps move/copy only via explicit syscalls or **IPC cap transfer slots** (see §3) — **Solaris doors**-like RPC carrying handles |
-| **Revoke** | Subtree revoke — **§1.1 mandatory SMP non-livelock algorithm** (**Solaris-style** fine-grained teardown, not stop-the-world) |
+| **Transfer** | Caps move/copy only via explicit syscalls or **IPC cap transfer slots** (see 3) — **Solaris doors**-like RPC carrying handles |
+| **Revoke** | Subtree revoke — **1.1 mandatory SMP non-livelock algorithm** (**Solaris-style** fine-grained teardown, not stop-the-world) |
 | **Bootstrap** | Single **root CNode** + **root untyped** pool to `init` only; then **zone-like** quota slices for subsystems (**Solaris zones** as policy analogy) |
 | **Seal** | After bootstrap, `init` drops/seals root retype of privileged types so ambient superpower ends |
 
@@ -207,7 +207,7 @@ Two channels, never confused:
 | Channel | Use | Security properties |
 |---------|-----|---------------------|
 | **A. Sync IPC** (`Call` / `Recv` / `Reply`) | RPCs like **Solaris doors**; short messages, **cap transfer** | Kernel copies small payload; optional cap slots; **timeout required**; **turnstile PI** |
-| **B. Shared rings** | Bulk I/O (block, net, GPU cmd) | Explicit **map grants**; ownership protocol §6 |
+| **B. Shared rings** | Bulk I/O (block, net, GPU cmd) | Explicit **map grants**; ownership protocol 6 |
 
 ### Sync IPC message
 
@@ -246,7 +246,7 @@ caps[0..K]: transferable/mintable caps (K small, e.g. 4)
 | **Preemption** | Kernel is **preemptible at safe points**; while holding spinlocks, preemption disabled on that CPU |
 | **Scheduler** | **Per-CPU runqueues**; IPI for remote reschedule; load balance periodic (**Solaris-like** MP) |
 | **PMM** | **Per-zone locks** (+ optional per-CPU page caches with drain) (**Solaris-class** MP scaling) |
-| **Cap tables** | **Lock per CNode**; object header for state; revoke uses §1.1 (no lock order cycles with IPI) |
+| **Cap tables** | **Lock per CNode**; object header for state; revoke uses 1.1 (no lock order cycles with IPI) |
 | **IPC endpoint** | **Lock per endpoint**; wait queues; **turnstile** for block (**Solaris turnstile** pattern) |
 | **Priority inversion** | **Priority inheritance** on sync IPC / turnstile wait (**Sun turnstile/PI**) — desktop audio-safe |
 | **Address space** | **Lock per space** for map/unmap; TLB shootdown IPI with generation |
@@ -256,9 +256,9 @@ caps[0..K]: transferable/mintable caps (K small, e.g. 4)
 
 1. **Lock order** published and enforced in debug builds (e.g. `CNode → Object → Endpoint` never reverse).
 2. **No blocking while holding spinlock** (only wait-queue sleep after drop) — **Solaris-style** sleepable locks vs spinlocks split.
-3. **Revoke** concurrent-safe per **§1.1**; readers see DEAD/gen mismatch → `STALE_CAP` / `DEAD`.
+3. **Revoke** concurrent-safe per **1.1**; readers see DEAD/gen mismatch → `STALE_CAP` / `DEAD`.
 4. **IRQ handlers** only wake notifications / mark work; **no heavy work in hard IRQ**.
-5. **Per-CPU data** for runqueue, idle thread, softirq equivalent (see §7).
+5. **Per-CPU data** for runqueue, idle thread, softirq equivalent (see 7).
 6. **Revoke workqueue** may run on any CPU; must obey R1–R8.
 
 ### Rejected
@@ -421,7 +421,7 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 | **Solaris** | **`posix_spawn`**, door clients attaching to servers; multi-LWP process model |
 | **Why not full fork** | Full fork copies ambient authority → fights seal + least privilege (GreenJade law > classic Unix fork) |
 | **API shape** | `spawn(space_spec, entry, stack, cap_bundle[], quota_slice)` |
-| **exit / wait** | Parent holds **process/task cap**; `wait` via notification or sync IPC; quotas refunded on death (**§1.1** teardown) |
+| **exit / wait** | Parent holds **process/task cap**; `wait` via notification or sync IPC; quotas refunded on death (**1.1** teardown) |
 | **threads** | Multiple threads per address space (**Solaris LWP-like**); thread caps under space |
 | **Later** | Optional `fork` emulation in POSIX personality **without** cap duplication — not kernel v1 |
 
@@ -429,12 +429,12 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 
 | Decision | **Region → memory object → pager**; PCB **default pager** is fallback only |
 |----------|--------------------------------------------------------------------------------|
-| **Full rules** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1–2 · cookie [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §7 |
+| **Full rules** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 1–2 · cookie [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 7 |
 | **Solaris** | HAT/segment spirit; pager is a **door server** |
 | **Apple** | Memory **objects** own pages; maps are **views**; shared file maps first-class |
 | **Path** | Fault → region lookup → object pager or default → Call (mono timeout) → map views or kill |
 | **Root meta (slot 0)** | Process + CNode identity for **kernel ops only**; empty until bootstrap; not a cap factory |
-| **Task port** | `GJ_CAP_PROCESS` to parent on spawn — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §3 |
+| **Task port** | `GJ_CAP_PROCESS` to parent on spawn — [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 3 |
 | **Default pager** | `sys_process_set_pager` → PCB; needs PROCESS VM / self |
 | **Pager death / timeout** | Fail closed (kill faulting thread) |
 | **File maps** | File **memory object** (often `vfsd` as object pager) |
@@ -445,7 +445,7 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 | Decision | **Sync Call/Recv/Reply** = **doors** |
 |----------|--------------------------------------|
 | **Server model** | Userspace door server thread pool; kernel is rendezvous only |
-| **PI** | **Turnstile priority inheritance** when client blocks on server (§4) |
+| **PI** | **Turnstile priority inheritance** when client blocks on server (4) |
 
 ### 9.4 Name service — **not kernel; door rendezvous / `door_call` to `ns`**
 
@@ -453,7 +453,7 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 |----------|----------------------------------------------------------------------------------------|
 | **Solaris** | Services reached by **doors** / well-known paths in userspace, not kernel namei for IPC |
 | **Bootstrap** | `init` passes well-known caps; optional `ns` for late bind |
-| **Restart** | Server death invalidates caps (§1.1); clients re-resolve via `ns` with timeout |
+| **Restart** | Server death invalidates caps (1.1); clients re-resolve via `ns` with timeout |
 | **Security** | `ns` high-trust; registration requires **register cap** from `init` |
 
 ### 9.5 IOMMU / DMA — **Solaris DDI DMA first**
@@ -463,7 +463,7 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 | **Solaris** | **DDI DMA** engine pattern: drivers don’t program raw bus-master; bind handles / windows |
 | **Create window** | `{ device_id, iova, FRAME caps, rw }` only with IOMMU/DMA authority cap |
 | **UDX** | `dma_alloc` / `dma_map` via IPC to **devmgr/iommu** helper |
-| **Death** | Phase A §1.1: **disable IOMMU window** before reclaim |
+| **Death** | Phase A 1.1: **disable IOMMU window** before reclaim |
 | **No IOMMU** | Production: refuse bus-master (or refuse device); QEMU dev profile may warn-and-allow |
 
 ### 9.6 Device drivers — **Solaris DDI/DKI** (primary)
@@ -478,31 +478,31 @@ These close earlier design gaps. Lineage is **inspirational**, reimplemented cle
 | Decision | v1: **no full POSIX signal storm in kernel**; **Notification** + optional user `sig` server |
 |----------|-----------------------------------------------------------------------------------------------|
 | **Ctrl+C** | Terminal → session server → Notification to process group cap set |
-| **CPU exception** | **Exception port** on PCB (separate from pager) if registered; else kill — Apple §12 |
+| **CPU exception** | **Exception port** on PCB (separate from pager) if registered; else kill — Apple 12 |
 | **Not** | Recreating full Solaris signal complexity in ring 0 |
 
 ### 9.8 Desktop product (Apple channel — Accepted)
 
 | Topic | Decision |
 |-------|----------|
-| **QoS** | Thread QoS classes + capped PI — Apple §8 |
-| **Futex** | Early `futex_wait`/`wake` — Apple §9 |
-| **W^X / JIT** | Hard W^X; JIT only with cap — Apple §10 |
-| **Session** | Single-seat compositor TCB — Apple §11 |
-| **Devices** | Match → grant → UDX host — Apple §6 |
-| **Reply IPC** | Kernel ephemeral single-use REPLY — Apple §4 |
+| **QoS** | Thread QoS classes + capped PI — Apple 8 |
+| **Futex** | Early `futex_wait`/`wake` — Apple 9 |
+| **W^X / JIT** | Hard W^X; JIT only with cap — Apple 10 |
+| **Session** | Single-seat compositor TCB — Apple 11 |
+| **Devices** | Match → grant → UDX host — Apple 6 |
+| **Reply IPC** | Kernel ephemeral single-use REPLY — Apple 4 |
 | **Full text** | [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) |
 
 ### 9.9 Proton personality + Deck Top 50 (**Accepted**; precedence over Apple)
 
 | Topic | Decision |
 |-------|----------|
-| **Adoption** | No major games ⇒ no popular desktop; **major** = **Deck Top 50** (arch §0.5.1–0.5.2) |
-| **Critical path** | A0→A1 unblocks from M2 (arch §0.5.3) — not a late hobby track |
+| **Adoption** | No major games ⇒ no popular desktop; **major** = **Deck Top 50** (arch 0.5.1–0.5.2) |
+| **Critical path** | A0→A1 unblocks from M2 (arch 0.5.3) — not a late hobby track |
 | **Priorities** | Still **Security → Performance → Portability → Readability** |
 | **ABI** | **Clean-room Linux-compatible** personality grows with matrix needs; **no GPL source** |
 | **Not** | SteamOS distro port; load Linux `.ko` |
-| **Doc precedence** | Proton over Apple among secure designs — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) §0.1 |
+| **Doc precedence** | Proton over Apple among secure designs — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 0.1 |
 | **Surface** | `libprotonrt` + `proton_rt_query`; native GJ underneath |
 | **Graphics** | Vulkan present path P0/P1 for A1; clean-room DRM shims only if Top 50 needs |
 | **Anti-cheat** | GJ userspace agent OK; `.ko` no; PASS-OFFLINE / BLOCKED-SECURITY honesty |
@@ -542,7 +542,7 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 | Peer class | Mapping |
 |------------|---------|
-| Driver ↔ storaged (same TCB tier) | SPSC; may use RW/RW with protocol (§6) |
+| Driver ↔ storaged (same TCB tier) | SPSC; may use RW/RW with protocol (6) |
 | App ↔ untrusted | Owner-flip remapping or RO peer PTEs; no secrets in clear rings |
 
 ---
@@ -551,7 +551,7 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 | Piece | Milestone |
 |-------|-----------|
-| Cap tables + mint + **§1.1 revoke** + generations | M2 |
+| Cap tables + mint + **1.1 revoke** + generations | M2 |
 | CDT / parent links + deferred CNode slot clear | M2 |
 | Quotas on create | M2 |
 | IPC + timeouts + cap transfer + **turnstile PI** | M2 |
@@ -577,7 +577,7 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 - [ ] Spinlock order documented if new lock added  
 - [ ] Death path **revokes** MMIO/IRQ/DMA/rings for that space  
 - [ ] Cap user handles never raw kernel pointers  
-- [ ] **Revoke follows §1.1** — no unbounded SMP spin; DEAD/gen before free  
+- [ ] **Revoke follows 1.1** — no unbounded SMP spin; DEAD/gen before free  
 - [ ] IOMMU window **disabled in hardware** before FRAME reclaim  
 - [ ] Spawn does **not** clone full ambient cap set  
 
@@ -588,7 +588,7 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 | Area | **Chosen direction** |
 |------|----------------------|
 | **Authority** | Untyped retype + CNodes + CDT (L4 mechanics); **bootstrap seal** |
-| **Revoke (SMP)** | **§1.1** invalidate → drain → epoch reclaim; **no livelock** (R1–R8) |
+| **Revoke (SMP)** | **1.1** invalidate → drain → epoch reclaim; **no livelock** (R1–R8) |
 | **Quotas** | Hierarchical quotas; **zones-like** slices; CPU sched budgets |
 | **IPC** | **Solaris doors**-like sync RPC + cap transfer; timeouts; **turnstile PI** |
 | **IPC memory** | No implicit maps; bulk = **SPSC rings** |
@@ -606,13 +606,13 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 ## 13. Honesty bounds — soft confine vs product multi-server (Wave 13 · 2026-07-23)
 
-**Additive only (Wave 13 exclusive for this file).** Design decisions in §§0–12 stay **Accepted**. This section is a Wave 13 honesty ledger: what is greppable **soft confine** (and related soft security surface) on the tree vs what remains **product multi-server** open. It does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 10 §13 ledger text is superseded here as the same honesty formula under Wave 13 exclusive ownership of this file.
+**Additive only (Wave 13 exclusive for this file).** Design decisions in 0–12 stay **Accepted**. This section is a Wave 13 honesty ledger: what is greppable **soft confine** (and related soft security surface) on the tree vs what remains **product multi-server** open. It does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 10 13 ledger text is superseded here as the same honesty formula under Wave 13 exclusive ownership of this file.
 
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Accepted** | Security-first core design frozen — ship toward these rules |
-| **Soft confine** | Partial / greppable confine or promise gates (e.g. process bitmask on some ambient-style Linux paths); OpenBSD-shaped *intent* in §OpenBSD features — **not** product seal |
-| **Product multi-server** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal; finite per-server authority as in §8 — **open** |
+| **Soft confine** | Partial / greppable confine or promise gates (e.g. process bitmask on some ambient-style Linux paths); OpenBSD-shaped *intent* in OpenBSD features — **not** product seal |
+| **Product multi-server** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal; finite per-server authority as in 8 — **open** |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
 
 **Hard stamp (Wave 13):** soft confine **≠** product multi-server. Soft greppable confine/promise bits do **not** ship sealed multi-server product. **No bar3 claim** from this document.
@@ -621,12 +621,12 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 
 | Soft surface | What shipped / greppable means | What it does **not** mean |
 |--------------|--------------------------------|---------------------------|
-| **Confine / promises soft** | Process bitmask gates some ambient-style Linux paths (`confine soft`); userspace drop-caps *intent* (§OpenBSD features) | **Product multi-server closed**; every server/client sealed under promises |
-| **Cap soft surface** | Mint/copy/move + soft CDT/quota/trylock; DEAD/gen first hooks — see [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 | Full §1 / §1.1 product revoke, zone-like quotas everywhere, IPC cap-transfer K complete |
-| **Doors / IPC soft** | Sync Call/Recv/Reply bring-up + timeout/peer-death soft | Full §3 doors product (cap transfer, turnstile PI under load, reply-only paths everywhere) |
+| **Confine / promises soft** | Process bitmask gates some ambient-style Linux paths (`confine soft`); userspace drop-caps *intent* (OpenBSD features) | **Product multi-server closed**; every server/client sealed under promises |
+| **Cap soft surface** | Mint/copy/move + soft CDT/quota/trylock; DEAD/gen first hooks — see [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9 | Full 1 / 1.1 product revoke, zone-like quotas everywhere, IPC cap-transfer K complete |
+| **Doors / IPC soft** | Sync Call/Recv/Reply bring-up + timeout/peer-death soft | Full 3 doors product (cap transfer, turnstile PI under load, reply-only paths everywhere) |
 | **Live server embeds** | `vfsd`, `sessiond`, `netstackd`, `storaged`, `sshd`, … freestanding spawn / door skeleton | Each server runs under sealed quota + only granted caps; full multi-server blast-radius product |
-| **Bootstrap / init soft** | Root untyped + root CNode + init path; quota-split *policy* in design | Post-bootstrap **seal** product (§1 seal rule); ambient retype gone for all untrusted |
-| **Production freezes text** | §9.10 / [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) **Accepted** decisions | Every freeze row product-hard on DUT |
+| **Bootstrap / init soft** | Root untyped + root CNode + init path; quota-split *policy* in design | Post-bootstrap **seal** product (1 seal rule); ambient retype gone for all untrusted |
+| **Production freezes text** | 9.10 / [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) **Accepted** decisions | Every freeze row product-hard on DUT |
 
 **Hard rule:** soft greppable `PASS` lines, soft confine bits, live embeds, and design **Accepted** are **bring-up / agent honesty**, not “security product shipped” and not “multi-server confine done.”  
 **Wave 13 formula:** **soft confine ≠ product multi-server.**
@@ -639,20 +639,20 @@ Full text: [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md).
 | Soft cap / CDT / quota / doors surface | Present — soft / greppable (companion docs) |
 | Live server embeds (`vfsd`, `sessiond`, `netstackd`, …) | Skeleton / door bring-up ≠ full multi-server product |
 | Bootstrap seal (drop ambient retype / broad authority after init) | **Open** |
-| Hierarchical quotas product for every creatable object class (§2) | **Open** / incomplete product path |
-| Cap transfer on IPC (copy/move K caps, all-or-nothing) (§3) | **Open** / incomplete product path |
-| Death cleanup product: revoke MMIO/IRQ/DMA/rings for dead space (§0, §1.1) | Soft hooks ≠ full product under all pins |
+| Hierarchical quotas product for every creatable object class (2) | **Open** / incomplete product path |
+| Cap transfer on IPC (copy/move K caps, all-or-nothing) (3) | **Open** / incomplete product path |
+| Death cleanup product: revoke MMIO/IRQ/DMA/rings for dead space (0, 1.1) | Soft hooks ≠ full product under all pins |
 | `expose` / path policy in `vfsd` (OpenBSD-shaped) | **Open** |
 | **Full multi-server product** (caps + confine end-to-end) | **Open** — soft confine does **not** close it |
 
-Soft confine and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement with bootstrap seal and least-privilege caps only. Product multi-server stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9).
+Soft confine and soft promise gates are **not** a claim that every server and client run under sealed multi-server confinement with bootstrap seal and least-privilege caps only. Product multi-server stays **open** until that path is actually product-complete (see [TODO.md](TODO.md) multi-server / confine items and [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9).
 
 ### 13.3 Explicit non-claims (Wave 13)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Security core design **Accepted**” | **Yes** — this document §§0–12 |
-| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in §13.1 |
+| “Security core design **Accepted**” | **Yes** — this document 0–12 |
+| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in 13.1 |
 | “Soft confine = product multi-server closed” | **No** |
 | “Bootstrap seal / full hierarchical quotas / IPC cap transfer product-complete” | **No** |
 | “All live embeds are multi-server confined product” | **No** |
@@ -665,51 +665,51 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 ### 13.4 Related honesty surfaces
 
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
-- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 — soft cap surface ≠ product multi-server confine  
-- [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §19 — remaining vs soft; no bar3 claim  
+- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9 — soft cap surface ≠ product multi-server confine  
+- [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 19 — remaining vs soft; no bar3 claim  
 - [TODO.md](TODO.md) — multi-server confine / `confine(promises)` / drop ambient open boxes  
 - [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) — production freezes (Accepted; product path separate)  
 
 
 
-## 14. Honesty bounds — Wave 46 restatement (2026-07-23)
+## 14. Honesty bounds — Wave 47 restatement (2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** Design decisions in §§0–12 stay **Accepted**. §13 Wave 13 soft-confine ledger stays historical. This section restates the product/bar3 bound under Wave 46 continuum honesty and does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks.
+**Additive only (Wave 47 exclusive for this file).** Design decisions in 0–12 stay **Accepted**. 13 Wave 13 soft-confine ledger stays historical. This section restates the product/bar3 bound under Wave 47 continuum honesty and does **not** re-litigate authority, revoke, quotas, IPC, or heritage picks.
 
 | Term | Meaning in this document |
 |------|--------------------------|
-| **Soft confine** | §13 greppable confine / promise surface — **not** product multi-server seal |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 18800**; honest scan may still report **makefile_max=18700** until parent wires — **not** product complete |
+| **Soft confine** | 13 greppable confine / promise surface — **not** product multi-server seal |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 18900**; honest scan may still report **makefile_max=18800** until parent wires — **not** product complete |
 | **Product lamps** | Soft bar3-ready / product-score stubs remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**; out of scope to close here |
 
-**Hard stamp (Wave 46):** soft confine **≠** product multi-server. Soft continuum toward **18800** **≠** product complete and **≠** bar3. Product lamps remain **0**. **No bar3 claim** from this document. Matrix stays **NOT-TRIED × 50**.
+**Hard stamp (Wave 47):** soft confine **≠** product multi-server. Soft continuum toward **18900** **≠** product complete and **≠** bar3. Product lamps remain **0**. **No bar3 claim** from this document. Matrix stays **NOT-TRIED × 50**.
 
-### 14.1 Explicit non-claims (Wave 46)
+### 14.1 Explicit non-claims (Wave 47)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Security core design **Accepted**” | **Yes** — this document §§0–12 |
-| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in §13.1 |
-| “Soft continuum high-water advancing toward **18800** (scan may still be 18400)” | **Yes** — soft only; scan is source of truth |
+| “Security core design **Accepted**” | **Yes** — this document 0–12 |
+| “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in 13.1 |
+| “Soft continuum high-water advancing toward **18900** (scan may still be 18400)” | **Yes** — soft only; scan is source of truth |
 | “Soft confine = product multi-server closed” | **No** |
 | “Soft continuum / product lamps close product DoD” | **No** — lamps remain **0**; soft ≠ product complete |
 | “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
 | “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** |
 | Any **bar3** closed claim from security core design alone | **No** |
 
-**Bar3 remains OPEN** (client + matrix). Wave 46 honesty-only: **soft confine ≠ product multi-server; soft continuum ≠ product complete; no bar3 claim.**
+**Bar3 remains OPEN** (client + matrix). Wave 47 honesty-only: **soft confine ≠ product multi-server; soft continuum ≠ product complete; no bar3 claim.**
 
 ### 14.2 Related honesty surfaces
 
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Wave 46 continuum toward 18800 soft stamp  
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Wave 47 continuum toward 18900 soft stamp  
 - [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title rows (**NOT-TRIED × 50**)  
-- §13 above — Wave 13 soft confine ≠ product multi-server ledger  
+- 13 above — Wave 13 soft confine ≠ product multi-server ledger  
 
 ---
 
 *Accepted security-first core design v1.7 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
-*§13 Wave 13 honesty (historical): soft confine ≠ product multi-server; **no bar3 claim**.*  
-*§14 Wave 46 honesty (2026-07-23): soft confine ≠ product multi-server; continuum toward **18800** soft only (scan may still be **18700**); product lamps **0**; **soft ≠ product complete**; **no bar3 claim**.*  
+*13 Wave 13 honesty (historical): soft confine ≠ product multi-server; **no bar3 claim**.*  
+*14 Wave 47 honesty (2026-07-23): soft confine ≠ product multi-server; continuum toward **18900** soft only (scan may still be **18800**); product lamps **0**; **soft ≠ product complete**; **no bar3 claim**.*  
 *Code: `kernel/include/gj/cap.h`, `kernel/cap/revoke.c`.*

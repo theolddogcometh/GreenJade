@@ -166,7 +166,7 @@ Must allocate/free pages across **sparse** memory maps (holes, >1 TiB).
 
 ### 4.0a Capability addressing + revoke (x86_64)
 
-See [CAP_ADDRESSING.md](CAP_ADDRESSING.md) and [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §1.1.
+See [CAP_ADDRESSING.md](CAP_ADDRESSING.md) and [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 1.1.
 
 | Rule | Implementation |
 |------|----------------|
@@ -413,7 +413,7 @@ Number in `rax`, args `rdi rsi rdx r10 r8 r9` (Linux-ish **shape**, original num
 
 ### Allocated numbers (stable once userspace exists)
 
-**Normative sketch:** [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §5 (includes futex, vm_*, process_*, QoS).  
+**Normative sketch:** [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 5 (includes futex, vm_*, process_*, QoS).  
 Do **not** use older incomplete maps in this file as ABI truth.
 
 | Num | Name | Phase |
@@ -458,7 +458,7 @@ Not built in M0. Order:
 
 ## 13. UDX drivers & storage (desktop)
 
-See architecture spec §7. Order:
+See architecture spec 7. Order:
 
 1. virtio transport + virtio-blk/net/gpu (QEMU desktop dev)
 2. NVMe clean-room
@@ -518,14 +518,14 @@ All in **userspace driver host** processes, not kernel.
 - [ ] SMP with **N>1** CPUs online and scheduling
 - [ ] Block I/O via **scsi_mid** + (virtio-scsi and/or SAS HBA)
 - [ ] Desktop input + framebuffer/compositor path (phased)
-- [ ] **Deck Top 50** track: Proton **A0** (libprotonrt smoke) → **A1** (first real title) → majority/met — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) v1.6 · arch §0.5.2–0.5.3
+- [ ] **Deck Top 50** track: Proton **A0** (libprotonrt smoke) → **A1** (first real title) → majority/met — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) v1.6 · arch 0.5.2–0.5.3
 - [ ] Clean-room Linux-compatible personality depth as matrix requires (**no GPL source**)
 
 ---
 
 ## 17. What to implement first (order)
 
-**Normative dependency graph:** [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) §12.
+**Normative dependency graph:** [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) 12.
 
 1. **IDT** + supervisor-only kernel maps + SMEP/SMAP (gate) — **done**  
 2. Finish M0 QEMU verify — **done** (`qemu-kvm` + GRUB Multiboot2 ISO)  
@@ -771,56 +771,56 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-## Progress note — GreenJade Wave 46 soft continuum (2026-07-23)
+## Progress note — GreenJade Wave 47 soft continuum (2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41 soft stamps above stay historical ledger (Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 46 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+**Additive only (Wave 47 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41 soft stamps above stay historical ledger (Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 47 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
 
-### Soft stamp (Wave 46)
+### Soft stamp (Wave 47)
 
 | Field | Value |
 |-------|--------|
-| **Wave** | GreenJade Wave 46 (soft continuum honesty) |
-| **Continuum** | makefile target high-water **advancing toward 18800** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=18700**; **do not hardcode false 18700**) |
-| **Soft deepen surfaces** | **retbailey** / **retpostern** (CREATE-ONLY soft graph names only — not product / not bar3) |
+| **Wave** | GreenJade Wave 47 (soft continuum honesty) |
+| **Continuum** | makefile target high-water **advancing toward 18900** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=18800**; **do not hardcode false 18900**) |
+| **Soft deepen surfaces** | **retinnerward** / **retdonjon** (CREATE-ONLY soft graph names only — not product / not bar3) |
 | **bar3** | **OPEN** |
 | **Matrix** | **NOT-TRIED × 50** (no titles tried) |
 | **Product lamps** | **0** (soft stubs stay zero by design) |
 
-**Soft stamp (Wave 46):** continuum high-water **advancing toward 18800** soft only (parent wires). Soft deepen surfaces **retbailey** / **retpostern** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=18800`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **18700** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
+**Soft stamp (Wave 47):** continuum high-water **advancing toward 18900** soft only (parent wires). Soft deepen surfaces **retinnerward** / **retdonjon** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=18900`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **18800** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
 
-### Soft continuum ≠ bar3 (Wave 46 honesty)
+### Soft continuum ≠ bar3 (Wave 47 honesty)
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 18800** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
-| Honest scan **makefile_max=18700** (when still tip) | Makefile wire truth until parent wires **18800** | Claim that **18800** is already greppable when scan lags |
-| Soft deepen **retbailey** / **retpostern** | Wave 46 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
+| Continuum **toward 18900** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Honest scan **makefile_max=18800** (when still tip) | Makefile wire truth until parent wires **18900** | Claim that **18900** is already greppable when scan lags |
+| Soft deepen **retinnerward** / **retdonjon** | Wave 47 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
 | Product lamps **0** | Soft score / bar3-ready stubs remain zero | Any product-score claim |
 
-**Hard rule:** never promote continuum advancing toward **18800**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
+**Hard rule:** never promote continuum advancing toward **18900**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
 
-### Explicit non-claims (Wave 46)
+### Explicit non-claims (Wave 47)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Continuum high-water advancing toward **18800** (parent wire soft)” | **Yes** — soft only |
-| “Honest scan still `makefile_max=18700` until parent wires 18800” | **Yes** — scan is source of truth |
-| “Soft continuum toward 18800 = Steam client / Top-50 / product score” | **No** |
-| “Product lamps lit / product complete from Wave 46 soft deepen” | **No** — lamps remain **0** |
-| “bar3 closed by continuum toward 18800 / media READY / kernel soft gates” | **No** |
+| “Continuum high-water advancing toward **18900** (parent wire soft)” | **Yes** — soft only |
+| “Honest scan still `makefile_max=18800` until parent wires 18900” | **Yes** — scan is source of truth |
+| “Soft continuum toward 18900 = Steam client / Top-50 / product score” | **No** |
+| “Product lamps lit / product complete from Wave 47 soft deepen” | **No** — lamps remain **0** |
+| “bar3 closed by continuum toward 18900 / media READY / kernel soft gates” | **No** |
 | “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
 | Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
 
-### Open (unchanged by Wave 46)
+### Open (unchanged by Wave 47)
 
 - **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
 - Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
-- Soft continuum growth toward **18800** — **soft only**; does **not** close bar3; product lamps stay **0**
+- Soft continuum growth toward **18900** — **soft only**; does **not** close bar3; product lamps stay **0**
 
-**Bar3 remains OPEN.** Wave 46 honesty: continuum **advancing toward 18800 soft only**; scan may still be **18700**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+**Bar3 remains OPEN.** Wave 47 honesty: continuum **advancing toward 18900 soft only**; scan may still be **18800**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
 
 ### Related honesty surfaces
 
@@ -831,5 +831,5 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-*Wave 46 soft continuum (2026-07-23): high-water **advancing toward 18800 soft only**; soft deepen **retbailey**/**retpostern**; honest scan may still be **18700**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 47 soft continuum (2026-07-23): high-water **advancing toward 18900 soft only**; soft deepen **retinnerward**/**retdonjon**; honest scan may still be **18800**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
 

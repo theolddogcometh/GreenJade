@@ -11,14 +11,14 @@
  *   ChaCha20         — RFC 8439 quarter-round stream cipher
  *   Poly1305         — RFC 8439 one-time authenticator (soft AEAD leg)
  *   Host identity    — seeded product key + HMAC-SHA256 of exchange hash H
- *   Soft self-check  — RFC 8439 §2.5.2 Poly1305 test vector at hostkey init
+ *   Soft self-check  — RFC 8439 2.5.2 Poly1305 test vector at hostkey init
  *
- * Soft inventory (Wave 46 exclusive deepen — greppable when hostkey init runs
+ * Soft inventory (Wave 47 exclusive deepen — greppable when hostkey init runs
  * via sshd-gj: soft crypto …). multi_server=0 confine=0; soft ≠ product
  * multi-server confine; not bar3. This unit is freestanding pure C only.
  *
  * Used by freestanding KEX: curve25519-sha256@libssh.org, NEWKEYS key
- * derivation (RFC 4253 §7.2), and post-NEWKEYS channel encrypt/MAC.
+ * derivation (RFC 4253 7.2), and post-NEWKEYS channel encrypt/MAC.
  *
  * Not an OpenSSH / Dropbear source paste. No GPL/LGPL code. Algorithms
  * follow published RFCs and well-known public-domain ladder structure.
@@ -26,22 +26,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Wave 46 exclusive soft inventory stamp (observability; never hard-gates). */
-/* Wave 46 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbailey continuum_toward=18800 soft_ne_product=1
- *   greppable: soft retpostern exclusive=1 continuum_toward=18800
+/* Wave 47 exclusive soft inventory stamp (observability; never hard-gates). */
+/* Wave 47 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retinnerward continuum_toward=18900 soft_ne_product=1
+ *   greppable: soft retdonjon exclusive=1 continuum_toward=18900
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-#define SSH_CRYPTO_SOFT_WAVE 46u
+#define SSH_CRYPTO_SOFT_WAVE 47u
 
-/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=46 multi_server=0 confine=0 */
+/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=47 multi_server=0 confine=0 */
 static const char g_szSshCryptoSoftDeepen[] =
-	"ssh_crypto: soft deepen product_kernel=OPEN wave=46 multi_server=0 confine=0 "
+	"ssh_crypto: soft deepen product_kernel=OPEN wave=47 multi_server=0 confine=0 "
 	"bar3=0 exclusive=1 soft=1\n";
 static const char g_szSshCryptoSoftHonesty[] =
 	"ssh_crypto: soft honesty multi_server=0 confine=0 bar3=0 "
-	"exclusive=1 soft=1 product_kernel=OPEN wave=46\n";
+	"exclusive=1 soft=1 product_kernel=OPEN wave=47\n";
 
 /* ---- SHA-256 (FIPS 180-4) ----------------------------------------------- */
 
@@ -577,7 +577,7 @@ gj_ssh_chacha20_xor(const uint8_t key[32], const uint8_t nonce[12],
 	}
 }
 
-/* ---- Poly1305 (RFC 8439 §2.5) ------------------------------------------- */
+/* ---- Poly1305 (RFC 8439 2.5) ------------------------------------------- */
 
 /*
  * Soft multiprecision helpers for Poly1305 over p = 2^130 - 5.
@@ -743,7 +743,7 @@ gj_ssh_poly1305(const uint8_t key[32], const uint8_t *pMsg, size_t cbMsg,
 	unsigned iLimb;
 	uint64_t u64C;
 
-	/* Clamp r per RFC 8439 §2.5 */
+	/* Clamp r per RFC 8439 2.5 */
 	for (iByte = 0; iByte < 16; iByte++) {
 		aClamp[iByte] = key[iByte];
 	}
@@ -846,13 +846,13 @@ gj_ssh_poly1305(const uint8_t key[32], const uint8_t *pMsg, size_t cbMsg,
 }
 
 /*
- * RFC 8439 §2.5.2 test vector (soft self-check).
+ * RFC 8439 2.5.2 test vector (soft self-check).
  * Returns 1 on match, 0 on mismatch. Does not use network.
  */
 int
 gj_ssh_poly1305_selfcheck(void)
 {
-	/* Key, message, and tag from RFC 8439 §2.5.2 */
+	/* Key, message, and tag from RFC 8439 2.5.2 */
 	static const uint8_t aKey[32] = {
 	    0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33, 0x7f, 0x44,
 	    0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8, 0x01, 0x03, 0x80, 0x8a,
@@ -868,7 +868,7 @@ gj_ssh_poly1305_selfcheck(void)
 	uint8_t aTag[16];
 
 	gj_ssh_poly1305(aKey, aMsg, sizeof(aMsg) - 1, aTag);
-	/* Soft inventory touch (Wave 46): keep greppable strings live. */
+	/* Soft inventory touch (Wave 47): keep greppable strings live. */
 	if (g_szSshCryptoSoftDeepen[0] == '\0' ||
 	    g_szSshCryptoSoftHonesty[0] == '\0' ||
 	    SSH_CRYPTO_SOFT_WAVE == 0u) {
@@ -921,7 +921,7 @@ gj_ssh_hostkey_init(void)
 	g_host_ready = 1;
 }
 
-/* 1 if Poly1305 RFC §2.5.2 vector matched at hostkey_init, else 0. */
+/* 1 if Poly1305 RFC 2.5.2 vector matched at hostkey_init, else 0. */
 int
 gj_ssh_poly1305_ok(void)
 {

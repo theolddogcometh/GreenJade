@@ -5,10 +5,10 @@
 | **Document** | Apple-channel decisions v1.1 |
 | **Status** | **Accepted** — product VM / task / session judgment under GreenJade law |
 | **Persona** | “What would an Apple systems kernel engineer ship for a desktop?” |
-| **Conflict rule** | **Proton personality wins** over this document when they conflict — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) §0.1 — **does not** change Security→Performance→Portability→Readability |
+| **Conflict rule** | **Proton personality wins** over this document when they conflict — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 0.1 — **does not** change Security→Performance→Portability→Readability |
 | **Completion** | Isolation/doors/JIT production freezes in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
 | **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
-| **Honesty (Wave 46)** | Soft shipped ≠ remaining open / bar3; continuum **toward 18800** soft only; product lamps **0** (§20) |
+| **Honesty (Wave 47)** | Soft shipped ≠ remaining open / bar3; continuum **toward 18900** soft only; product lamps **0** (20) |
 
 GreenJade law still wins: caps, security-first, pure C, dual MIT/Apache, no GPL, no ambient root.
 
@@ -58,7 +58,7 @@ process
 | **File maps** | `map_file` / vfs installs region + **file memory object** (pager = `vfsd` or helper) |
 | **Untrusted apps** | Cannot register arbitrary third-party pagers for arbitrary VA in v1 |
 | **No pager / unknown region** | **Kill** faulting thread (fail closed) |
-| **Cookie / cluster / fault lock** | Unchanged security: kernel-only cookie, multi-page cluster, one fault lock per space — [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §7, [CAP_ADDRESSING.md](CAP_ADDRESSING.md) |
+| **Cookie / cluster / fault lock** | Unchanged security: kernel-only cookie, multi-page cluster, one fault lock per space — [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 7, [CAP_ADDRESSING.md](CAP_ADDRESSING.md) |
 
 ### Fault path (updated)
 
@@ -93,10 +93,10 @@ Supersedes the strict reading of “client always owns FRAME as a CNode object a
 | Rule | Detail |
 |------|--------|
 | **O1** | Kernel **only** installs PTEs after cookie + FRAME validation (pager never ambient-maps client). |
-| **O2** | Most **desktop** apps do not manage per-page FRAMEs — libc/libvm hide this. **Proton tasks** create/map/**share named memory objects** (wine-server, GPU export) — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) §4. |
+| **O2** | Most **desktop** apps do not manage per-page FRAMEs — libc/libvm hide this. **Proton tasks** create/map/**share named memory objects** (wine-server, GPU export) — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 4. |
 | **O3** | Space death / unmap drops **views**; object refcount; free pages when object dies. |
 | **O4** | Shared libraries: one file memory object, many maps; **COW** on write planned (v1 may private-copy if needed to ship). |
-| **O5** | Pager death: object dead → further faults fail closed; resident pages policy v1 = unmap/teardown in order with §1.1. |
+| **O5** | Pager death: object dead → further faults fail closed; resident pages policy v1 = unmap/teardown in order with 1.1. |
 
 *Apple voice:* “Client owns every FRAME in its CNode” fights shared cache and compositor buffers.
 
@@ -258,7 +258,7 @@ Solaris turnstile mechanism remains; QoS is the **product policy** on top.
 | Timeout | Mono deadline required (infinite only with privilege) |
 | Same-process | Required for pthread |
 | **Cross-process** | **P0** on shared memory objects — key `(object_id, offset)`; Proton **overrides** “same-process first only” |
-| Purpose | pthread + **wine-server**; see [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) §8 |
+| Purpose | pthread + **wine-server**; see [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 8 |
 
 ---
 
@@ -301,7 +301,7 @@ v1: single-user, single-seat. Multi-user later.
 
 | Audience | Policy |
 |----------|--------|
-| **Proton game tasks** | Launcher **always** registers exception sink; libprotonrt maps to SEH/signal-shape — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) §14 (**P0–P1**, not deferred P2) |
+| **Proton game tasks** | Launcher **always** registers exception sink; libprotonrt maps to SEH/signal-shape — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 14 (**P0–P1**, not deferred P2) |
 | Other desktop apps | Optional; kill if unset (Apple default) |
 
 Debug requires PROCESS **INSPECT** + exception port — not ambient ptrace.
@@ -390,77 +390,77 @@ See [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md).
 |--------------|-----|
 | Single PCB pager as only fault path | **Default pager** + **per-region object pager** |
 | “Client owns FRAME” as sole model | **Object owns pages; maps are views** (cookie rules kept) |
-| IMPLEMENTATION incomplete syscall list | **This §5** + future `syscall.h` |
-| PROCESS only prose | **§3** typed task port + rights |
-| Futex “later” | **§9** early |
+| IMPLEMENTATION incomplete syscall list | **This 5** + future `syscall.h` |
+| PROCESS only prose | **3** typed task port + rights |
+| Futex “later” | **9** early |
 
 Solaris remaining doc stays authoritative for untyped ladder, CDT, CNode lock order, HCL tiers, nested CNode v1 ban, DDI DMA windows.
 
 ---
 
-## 20. Honesty refresh — soft shipped vs remaining open (Wave 46 · 2026-07-23)
+## 20. Honesty refresh — soft shipped vs remaining open (Wave 47 · 2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** Scope: tree status relative to **this document’s** decisions (§1–§19).  
+**Additive only (Wave 47 exclusive for this file).** Scope: tree status relative to **this document’s** decisions (1–19).  
 **Not a product claim.** Design **Accepted** ≠ desktop product complete. Parallel-wave soft surfaces and greppable smokes **do not** close Deck / Steam / TiB product bars.  
-**Proton personality** still overrides this channel on conflict. Open bars stay open. Wave 45 §20 ledger text is superseded here under Wave 46 exclusive ownership of this file’s honesty ledger.
+**Proton personality** still overrides this channel on conflict. Open bars stay open. Wave 45 20 ledger text is superseded here under Wave 47 exclusive ownership of this file’s honesty ledger.
 
 | Stamp | Meaning here |
 |-------|----------------|
 | **Design Accepted** | Normative judgment in this doc (unchanged by soft code) |
 | **Soft shipped** | Kernel / session / header surface exists, greppable, often smoke-covered — **bring-up / interim only** |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18800** soft only — **not** Apple product close |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18900** soft only — **not** Apple product close |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **Open** | Full production path, rights enforcement, or product bar still missing or incomplete |
 
 ### Soft shipped (Apple-channel surface only — not product bars)
 
-| § | Decision area | Soft in tree (honest bound) |
+|  | Decision area | Soft in tree (honest bound) |
 |---|----------------|------------------------------|
-| **§1–§2** | Regions + memory objects; object owns pages; maps as views | Anon + **named** memobj (`kernel/mm/memobj.c`, `GJ_SYS_MEMOBJ_*`); region table; wine-shm / winesrv share; G-MO-1 / G-MO-3 soft. FILE kind reserved, **not** full file-object production. |
-| **§3** | `GJ_CAP_PROCESS` mint to parent on spawn | `process_spawn` + mint/verify (G-PROC-2); rights bits on task cap; death path soft (G-PROC-5). Restricted self-port policy not fully product-hardened. |
-| **§5** | Syscall number table | Numbers live in `kernel/include/gj/syscall.h` (sparse blocks; **do not renumber**). Many `GJ_SYS_*` handled on native path; some still stub / partial vs full §5 semantics. |
-| **§6** | Match → grant → confined host | Virtio + MSI-X / Notification binds + live UDX-shaped hosts exist as soft platform. Full **devmgr personality match → grant graph** production not claimed. |
-| **§7** | Task ledgers / quotas | Soft slot-quota ledger + `GJ_ERR_QUOTA` smoke; hierarchical `pParent` shape soft. Full per-resource task ledger / spawn-slice product roll-up **open**. |
-| **§8** | Thread QoS | Soft QoS classes + `thread_set_qos` / `GJ_SYS_THREAD_SET_QOS` + rank in sched. **Capped PI along Call** still open (turnstile mechanism separate / incomplete for product PI). |
-| **§9** | Futex early + cross-process | `futex_wait` / `futex_wake` + mono timeout; cross-proc via shared PA keys (Proton A0 winesrv). Object-id formal key shape may still lag full §9 prose. |
-| **§10** | W^X + CapJit | Default W^X filter; `GJ_RIGHT_JIT` / CapJit cache; mprotect WX no-JIT / +JIT smokes. **Codesign later** (still open by design). |
-| **§11** | Session / compositor | Interim kernel compositor + session door + input hub; `sessiond` live spawn soft; surface present paths. Full **userspace session TCB / seat policy** not product-closed. |
-| **§12** | Exception ports (≠ pager) | PCB exception port register / deliver **stub** smoke (SEH-shaped); Proton launcher always-on policy not product-closed. |
-| **§16** | UDX + Apple match discipline | UDX / virtio host inject soft; Linux-shaped names for porters. Not a claim of complete DriverKit-class graph. |
-| **Order §18 items 1–5-ish** | Task/spawn, IPC doors, futex, anon/named objects, virtio host | Soft paths greppable in kmain / native / memobj / doors — **interactive product proof** (keyboard → compositor → pixel as product bar) **not** claimed here. |
+| **1–2** | Regions + memory objects; object owns pages; maps as views | Anon + **named** memobj (`kernel/mm/memobj.c`, `GJ_SYS_MEMOBJ_*`); region table; wine-shm / winesrv share; G-MO-1 / G-MO-3 soft. FILE kind reserved, **not** full file-object production. |
+| **3** | `GJ_CAP_PROCESS` mint to parent on spawn | `process_spawn` + mint/verify (G-PROC-2); rights bits on task cap; death path soft (G-PROC-5). Restricted self-port policy not fully product-hardened. |
+| **5** | Syscall number table | Numbers live in `kernel/include/gj/syscall.h` (sparse blocks; **do not renumber**). Many `GJ_SYS_*` handled on native path; some still stub / partial vs full 5 semantics. |
+| **6** | Match → grant → confined host | Virtio + MSI-X / Notification binds + live UDX-shaped hosts exist as soft platform. Full **devmgr personality match → grant graph** production not claimed. |
+| **7** | Task ledgers / quotas | Soft slot-quota ledger + `GJ_ERR_QUOTA` smoke; hierarchical `pParent` shape soft. Full per-resource task ledger / spawn-slice product roll-up **open**. |
+| **8** | Thread QoS | Soft QoS classes + `thread_set_qos` / `GJ_SYS_THREAD_SET_QOS` + rank in sched. **Capped PI along Call** still open (turnstile mechanism separate / incomplete for product PI). |
+| **9** | Futex early + cross-process | `futex_wait` / `futex_wake` + mono timeout; cross-proc via shared PA keys (Proton A0 winesrv). Object-id formal key shape may still lag full 9 prose. |
+| **10** | W^X + CapJit | Default W^X filter; `GJ_RIGHT_JIT` / CapJit cache; mprotect WX no-JIT / +JIT smokes. **Codesign later** (still open by design). |
+| **11** | Session / compositor | Interim kernel compositor + session door + input hub; `sessiond` live spawn soft; surface present paths. Full **userspace session TCB / seat policy** not product-closed. |
+| **12** | Exception ports (≠ pager) | PCB exception port register / deliver **stub** smoke (SEH-shaped); Proton launcher always-on policy not product-closed. |
+| **16** | UDX + Apple match discipline | UDX / virtio host inject soft; Linux-shaped names for porters. Not a claim of complete DriverKit-class graph. |
+| **Order 18 items 1–5-ish** | Task/spawn, IPC doors, futex, anon/named objects, virtio host | Soft paths greppable in kmain / native / memobj / doors — **interactive product proof** (keyboard → compositor → pixel as product bar) **not** claimed here. |
 
 ### Remaining open (do not claim done)
 
-| § / bar | Still open |
+|  / bar | Still open |
 |---------|------------|
-| **§1 fault path** | Production fault: region → object → **Call pager** + cookie + install **views** (fail-closed no-pager kill policy fully on that path). Cluster coalesce to `GJ_FAULT_CLUSTER_MAX` incomplete. |
-| **§2 FILE / shared file objects** | File memory object + vfs pager production; COW shared-lib path as designed. |
-| **§3 rights matrix** | Full PROCESS rights enforcement for all callers; restricted self vs parent matrix product-hard. |
-| **§4 Reply caps** | Kernel **ephemeral single-use `GJ_CAP_REPLY`** on Call (MIG/XPC shape) — **open** (doors reply exists; generic REPLY object path not product). |
-| **§5 freeze + resolve** | Universal `gj_cap_resolve` on all cap ops; every §5 op at full semantics (not only number reservation). |
-| **§6 production bootstrap** | Platform graph → match → grant → UDX host as sole production device story; no free-form bus-master; IOMMU production still out. |
-| **§7 product ledgers** | Hierarchical task ledger charge for pages/endpoints/timers/IRQ/IPC budget; spawn slice from parent remaining as product rule. Soft jetsam still optional. |
-| **§8 product QoS + PI** | Capped priority inheritance on Call chains; interactive/audio as product requirements, not only soft rank. |
-| **§9 formal keys** | Cross-process key fully as `(object_id, offset)` everywhere product code paths require it (beyond PA soft). |
-| **§11 session product** | Single-seat session leader TCB; apps without raw HID/GPU MMIO as **enforced product** policy (not interim door only). |
-| **§12 Proton exception policy** | Always-register exception sink for game tasks + libprotonrt SEH mapping as product path. |
-| **§13 Bootstrap seal** | One-way seal checklist (privileged retype / broad IRQ / root untyped abuse) — **open**. |
-| **§14 Name service restart** | Sticky bootstrap + supervised restart / PEER_DEAD resolve — **open** (P2). |
-| **§15 Firmware blobs** | Out-of-tree load + hash allowlist policy — **open** (P2). |
-| **§18 interactive proof** | Keyboard → compositor → pixel as **product** desktop proof — not closed by soft present/smoke. |
-| **Non-Apple product bars** (out of channel, listed so they are not smuggled) | **bar3** Steam client on DUT — **OPEN**; Deck Top 50 title rows — **NOT-TRIED × 50**; product RAM **≥ 1 TiB** full path — **open** (768G soak ≠ TiB bar). Soft continuum **toward 18800** / media READY ≠ client. Product lamps remain **0**. |
+| **1 fault path** | Production fault: region → object → **Call pager** + cookie + install **views** (fail-closed no-pager kill policy fully on that path). Cluster coalesce to `GJ_FAULT_CLUSTER_MAX` incomplete. |
+| **2 FILE / shared file objects** | File memory object + vfs pager production; COW shared-lib path as designed. |
+| **3 rights matrix** | Full PROCESS rights enforcement for all callers; restricted self vs parent matrix product-hard. |
+| **4 Reply caps** | Kernel **ephemeral single-use `GJ_CAP_REPLY`** on Call (MIG/XPC shape) — **open** (doors reply exists; generic REPLY object path not product). |
+| **5 freeze + resolve** | Universal `gj_cap_resolve` on all cap ops; every 5 op at full semantics (not only number reservation). |
+| **6 production bootstrap** | Platform graph → match → grant → UDX host as sole production device story; no free-form bus-master; IOMMU production still out. |
+| **7 product ledgers** | Hierarchical task ledger charge for pages/endpoints/timers/IRQ/IPC budget; spawn slice from parent remaining as product rule. Soft jetsam still optional. |
+| **8 product QoS + PI** | Capped priority inheritance on Call chains; interactive/audio as product requirements, not only soft rank. |
+| **9 formal keys** | Cross-process key fully as `(object_id, offset)` everywhere product code paths require it (beyond PA soft). |
+| **11 session product** | Single-seat session leader TCB; apps without raw HID/GPU MMIO as **enforced product** policy (not interim door only). |
+| **12 Proton exception policy** | Always-register exception sink for game tasks + libprotonrt SEH mapping as product path. |
+| **13 Bootstrap seal** | One-way seal checklist (privileged retype / broad IRQ / root untyped abuse) — **open**. |
+| **14 Name service restart** | Sticky bootstrap + supervised restart / PEER_DEAD resolve — **open** (P2). |
+| **15 Firmware blobs** | Out-of-tree load + hash allowlist policy — **open** (P2). |
+| **18 interactive proof** | Keyboard → compositor → pixel as **product** desktop proof — not closed by soft present/smoke. |
+| **Non-Apple product bars** (out of channel, listed so they are not smuggled) | **bar3** Steam client on DUT — **OPEN**; Deck Top 50 title rows — **NOT-TRIED × 50**; product RAM **≥ 1 TiB** full path — **open** (768G soak ≠ TiB bar). Soft continuum **toward 18900** / media READY ≠ client. Product lamps remain **0**. |
 
-**Hard stamp (Wave 46):** soft shipped Apple-channel surface **≠** remaining open closed **≠** bar3. Soft continuum **toward 18800** does **not** close Apple product paths. Product lamps **0**. **Soft ≠ product complete.**
+**Hard stamp (Wave 47):** soft shipped Apple-channel surface **≠** remaining open closed **≠** bar3. Soft continuum **toward 18900** does **not** close Apple product paths. Product lamps **0**. **Soft ≠ product complete.**
 
-### Explicit non-claims (Wave 46)
+### Explicit non-claims (Wave 47)
 
 - Soft greppable `PASS` lines (memobj, futex, qos, sessiond live, CapJit, except port smoke, etc.) are **agent / bring-up honesty**, not “Apple desktop shipped.”
 - This document’s **Accepted** status remains **design judgment** under GreenJade law; it does **not** promote matrix rows or close bar3.
-- Isolation / doors / JIT **production freezes** stay in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); this §20 does not re-freeze them.
-- Continuum high-water **toward 18800** is CREATE-ONLY soft graph only — **not** Apple channel product complete; product lamps stay **0**.
-- Wave 46 honesty does **not** invent title PASS or close any remaining-open row above.
+- Isolation / doors / JIT **production freezes** stay in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); this 20 does not re-freeze them.
+- Continuum high-water **toward 18900** is CREATE-ONLY soft graph only — **not** Apple channel product complete; product lamps stay **0**.
+- Wave 47 honesty does **not** invent title PASS or close any remaining-open row above.
 
 ---
 
 *Accepted Apple-channel decisions v1.1 — task ports, VM objects/views, QoS, session, match→grant. **Proton personality overrides this doc on conflict.***  
-*§20 Wave 46 honesty (2026-07-23): soft shipped vs remaining open; continuum **toward 18800 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*
+*20 Wave 47 honesty (2026-07-23): soft shipped vs remaining open; continuum **toward 18900 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*

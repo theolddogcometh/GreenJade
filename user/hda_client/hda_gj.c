@@ -9,7 +9,7 @@
  * soft underrun + mono + reclaim + reject + bits8 + idle + closed +
  * zerotick). Soft steps never hard-fail the live path.
  *
- * Soft inventory (Wave 46 exclusive deepen):
+ * Soft inventory (Wave 47 exclusive deepen):
  *   - Cumulative soft sub-step ok/skip; door open/write/start/tick/stats
  *   - Soft played-byte sum; underrun / reject / mono / reclaim lamps
  *   - Per-step lamps (multi/partial/…/bits8/idle/closed/zerotick)
@@ -50,7 +50,7 @@
  *   hda_client: soft door open=… write=… start=… tick=… stats=… close=…
  *   hda_client: soft played=… underrun=… reject=… mono=… reclaim=…
  *   hda_client: soft inventory ok=… skip=… door_ok=… door_miss=… played=…
- *                wave=46 areas=…
+ *                wave=47 areas=…
  *   hda_client: soft steps multi=… partial=… multiwrite=… underrun=…
  *                mono=… reclaim=… reject=… bits8=… idle=… closed=…
  *                zerotick=… bits=…
@@ -61,7 +61,7 @@
  *   hda_client: soft ops open=… write=… start=… tick=… stats=… close=…
  *   hda_client: soft format stereo=… mono=… bits8=…
  *   hda_client: soft ratio ok=… skip=… door_ok=… door_miss=…
- *   hda_client: soft deepen wave=46 areas=… ok=… skip=… played=…
+ *   hda_client: soft deepen wave=47 areas=… ok=… skip=… played=…
  *   hda_client: soft path open=stereo write=pcm … (soft; not bar3)
  *   hda_client: soft honesty not-bar3 not-pipewire soft-inventory-only
  *   hda-gj: soft suite|door|played|inventory|steps|miss|last|first|
@@ -127,17 +127,17 @@
 #define HDA_SOFT_BITS8_BYTES  (HDA_SOFT_BITS8_FRAMES * HDA_BITS8_BYTES_PER_FRAME)
 
 /*
- * Wave stamp + inventory area count (Wave 46 exclusive deepen).
+ * Wave stamp + inventory area count (Wave 47 exclusive deepen).
  * Areas: suite door played inventory steps miss last deepen path
  *        ops first peak format ratio honesty
  */
-#define HDA_SOFT_WAVE 46u
+#define HDA_SOFT_WAVE 47u
 #define HDA_SOFT_AREAS  15u
 
-/* Soft suite sub-step bits (Wave 46 greppable steps line). */
-/* Wave 46 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbailey continuum_toward=18800 soft_ne_product=1
- *   greppable: soft retpostern exclusive=1 continuum_toward=18800
+/* Soft suite sub-step bits (Wave 47 greppable steps line). */
+/* Wave 47 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retinnerward continuum_toward=18900 soft_ne_product=1
+ *   greppable: soft retdonjon exclusive=1 continuum_toward=18900
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -162,7 +162,7 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 46 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 47 exclusive deepen). Cumulative for this
  * process. greppable: hda_client: soft … / hda-gj: soft …
  * Never hard-gates live path.
  */
@@ -391,14 +391,14 @@ soft_stats(const char *tag, unsigned *aSt)
     g_aSoftLast[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
     g_aSoftLast[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
     g_aSoftLast[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
-    /* Wave 46: first successful STATS snapshot. */
+    /* Wave 47: first successful STATS snapshot. */
     if (g_fSoftFirst == 0u) {
         g_aSoftFirst[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
         g_aSoftFirst[HDA_ST_PLAYED] = aSt[HDA_ST_PLAYED];
         g_aSoftFirst[HDA_ST_UNDERRUNS] = aSt[HDA_ST_UNDERRUNS];
         g_fSoftFirst = 1u;
     }
-    /* Wave 46: peak q/p/u across soft STATS. */
+    /* Wave 47: peak q/p/u across soft STATS. */
     if (aSt[HDA_ST_QUEUED] > g_aSoftPeak[HDA_ST_QUEUED]) {
         g_aSoftPeak[HDA_ST_QUEUED] = aSt[HDA_ST_QUEUED];
     }
@@ -458,7 +458,7 @@ soft_note_step(int fOk)
 }
 
 /*
- * Greppable soft inventory (Wave 46 exclusive deepen).
+ * Greppable soft inventory (Wave 47 exclusive deepen).
  * Twin prefixes for product/agent greps:
  *   hda_client: soft suite|door|played|inventory|steps|miss|last|first|
  *               peak|ops|format|ratio|deepen|path|honesty …
@@ -543,7 +543,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft inventory (Wave 46 rollup) */
+    /* Grep: hda_client: soft inventory (Wave 47 rollup) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft inventory ok=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
@@ -563,7 +563,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft steps (Wave 46 per-sub-step lamps) */
+    /* Grep: hda_client: soft steps (Wave 47 per-sub-step lamps) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft steps multi=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftMulti);
@@ -626,7 +626,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft first (Wave 46 first STATS) */
+    /* Grep: hda_client: soft first (Wave 47 first STATS) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft first q=");
     append_u(aLine, sizeof(aLine), &o,
@@ -643,7 +643,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft peak (Wave 46 peak q/p/u) */
+    /* Grep: hda_client: soft peak (Wave 47 peak q/p/u) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft peak q=");
     append_u(aLine, sizeof(aLine), &o,
@@ -658,7 +658,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft ops (Wave 46 total door op attempts) */
+    /* Grep: hda_client: soft ops (Wave 47 total door op attempts) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft ops open=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)cOpenTot);
@@ -676,7 +676,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft format (Wave 46 format lamps) */
+    /* Grep: hda_client: soft format (Wave 47 format lamps) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft format stereo=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftStereoFmt);
@@ -688,7 +688,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft ratio (Wave 46 ok/skip + door rollup) */
+    /* Grep: hda_client: soft ratio (Wave 47 ok/skip + door rollup) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft ratio ok=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftOk);
@@ -702,7 +702,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: hda_client: soft deepen (Wave 46 stamp) */
+    /* Grep: hda_client: soft deepen (Wave 47 stamp) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "hda_client: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)HDA_SOFT_WAVE);
@@ -727,9 +727,9 @@ soft_inventory_log(void)
         "reject=inval idle=empty closed=reject zerotick=0 "
         "(soft inventory; not bar3)\n");
 
-    /* Grep: hda_client: soft honesty (Wave 46; never bar3) */
+    /* Grep: hda_client: soft honesty (Wave 47; never bar3) */
     msg("hda_client: soft honesty not-bar3 not-pipewire not-product-audio "
-        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=46\n");
+        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=47\n");
 
     /* Twin prefix: hda-gj: soft … (agent-friendly alias) */
     o = 0;
@@ -943,7 +943,7 @@ soft_inventory_log(void)
         "idle=empty closed=reject zerotick=0 "
         "(soft inventory; not bar3)\n");
     msg("hda-gj: soft honesty not-bar3 not-pipewire not-product-audio "
-        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=46\n");
+        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=47\n");
 }
 
 /*
@@ -1641,7 +1641,7 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 46 exclusive soft door deepen. */
+    /* Wave 47 exclusive soft door deepen. */
     fStep = soft_bits8_format();
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
@@ -1658,7 +1658,7 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 46 soft inventory — greppable hda_client: soft / hda-gj: soft. */
+    /* Wave 47 soft inventory — greppable hda_client: soft / hda-gj: soft. */
     soft_inventory_log();
 
     if (cOk > 0u) {

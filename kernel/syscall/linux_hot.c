@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE 46u
-#define GJ_LINUX_HOT_SOFT_AREAS 75u
+#define GJ_LINUX_HOT_SOFT_WAVE 47u
+#define GJ_LINUX_HOT_SOFT_AREAS 77u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -352,7 +352,7 @@ hot_soft_inventory_log(void)
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft note (Wave 20 deepen) */
-    kprintf("linux: hot soft note milestone=wave46 exclusive=1 "
+    kprintf("linux: hot soft note milestone=wave47 exclusive=1 "
             "soft_only=1 not_bar3=1 handlers=%u enter=%lu wave=%u\n",
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned long)s.u64EnterTotal,
@@ -812,11 +812,25 @@ kprintf("linux: hot: soft retpostern exclusive=1 soft_ne_product=1 "
         "(retpostern stamp; Soft≠product)\n",
         (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
+/*
+ * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: hot: soft retinnerward — Wave 47 return-innerward honesty */
+kprintf("linux: hot: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=47 "
+        "(retinnerward honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: hot: soft retdonjon — Wave 47 exclusive donjon stamp */
+kprintf("linux: hot: soft retdonjon exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=47 "
+        "(retdonjon stamp; Soft≠product)\n");
+
 
 
                             kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 46 exclusive; not bar3)\n",
+            "(Wave 47 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,

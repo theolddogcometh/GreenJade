@@ -20,7 +20,7 @@
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
  *   - Wave 19: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=46 + PASS/NONE
+ *   - Path catalog + stats rollup + deepen wave=47 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=46 …
+ *   kheap: soft deepen wave=47 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -60,10 +60,10 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 46 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 46u
+/* Wave 47 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 47u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 72u
+#define KHEAP_SOFT_AREAS 74u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1418,6 +1418,20 @@ kprintf("kheap: soft retpostern exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpostern stamp; Soft≠product)\n",
         (unsigned)KHEAP_SOFT_WAVE);
+
+/*
+ * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: kheap: soft retinnerward — Wave 47 return-innerward honesty */
+kprintf("kheap: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=47 "
+        "(retinnerward honesty; Soft≠product; not bar3)\n");
+/* Grep: kheap: soft retdonjon — Wave 47 exclusive donjon stamp */
+kprintf("kheap: soft retdonjon exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=47 "
+        "(retdonjon stamp; Soft≠product)\n");
 
 
 

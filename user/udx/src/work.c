@@ -5,8 +5,8 @@
  * Workqueue (schedule_work analogue). Host: FIFO list drained in udx_run.
  * cancel/pending for remove/quiesce soft path.
  *
- * Soft SPSC ownership protocol (Wave 46 exclusive deepen; this unit only):
- * The in-process work FIFO is the soft stand-in for security core §6
+ * Soft SPSC ownership protocol (Wave 47 exclusive deepen; this unit only):
+ * The in-process work FIFO is the soft stand-in for security core 6
  * zero-copy ring handoff (producer publishes filled slots; consumer
  * claims, processes, releases free slots). Greppable prefix:
  *
@@ -18,11 +18,11 @@
  *   claimed   — ownership held by consumer while pfnFn runs
  *   released  — pending cleared after run complete or cancel
  *
- * Soft ring handoff protocol inventory mirrors §6 shape (indexes /
+ * Soft ring handoff protocol inventory mirrors 6 shape (indexes /
  * owner phase / SPSC / backpressure / reset) without claiming shared
  * pages, map grants, or a multi-process driver-host product.
  *
- * Honesty (Wave 46): soft observation only — multi-process driver-host
+ * Honesty (Wave 47): soft observation only — multi-process driver-host
  * SPSC product remains OPEN. greppable: udx: spsc soft open
  */
 #include "udx_internal.h"
@@ -35,14 +35,14 @@
 #include <stdio.h>
 #endif
 
-/* Soft wave stamp + greppable area count (Wave 46 exclusive deepen). */
-/* Wave 46 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbailey continuum_toward=18800 soft_ne_product=1
- *   greppable: soft retpostern exclusive=1 continuum_toward=18800
+/* Soft wave stamp + greppable area count (Wave 47 exclusive deepen). */
+/* Wave 47 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retinnerward continuum_toward=18900 soft_ne_product=1
+ *   greppable: soft retdonjon exclusive=1 continuum_toward=18900
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-#define UDX_SPSC_SOFT_WAVE 46u
+#define UDX_SPSC_SOFT_WAVE 47u
 #define UDX_SPSC_SOFT_AREAS  13u
 
 static struct udx_work *g_pWorkHead;
@@ -50,10 +50,10 @@ static struct udx_work *g_pWorkTail;
 static struct udx_spinlock g_lockWork;
 
 /*
- * Soft SPSC ownership inventory (security core §6 shape).
+ * Soft SPSC ownership inventory (security core 6 shape).
  * Cumulative for this process. greppable: udx: spsc soft …
  *
- * Mapping work FIFO → §6 owner phases:
+ * Mapping work FIFO → 6 owner phases:
  *   free     ← released (cancel or post-run) — consumer returns free
  *   filled   ← producer schedule — producer publishes
  *   claimed  ← dequeued under flush — consumer processes
@@ -136,20 +136,20 @@ spsc_soft_note_pend_locked(void)
 }
 
 /**
- * Greppable soft SPSC ownership + ring handoff inventory (Wave 46 deepen).
+ * Greppable soft SPSC ownership + ring handoff inventory (Wave 47 deepen).
  * Prefix-stable "udx: spsc soft …" — never hard-gates; observation only.
  *
  *   udx: spsc soft honesty   — not multi-process driver-host product
  *   udx: spsc soft inventory — producer/consumer/claimed/released rollup
  *   udx: spsc soft states    — ownership state tallies (+ cancel path)
- *   udx: spsc soft handoff   — §6 free/filled/payload owner-phase shape
+ *   udx: spsc soft handoff   — 6 free/filled/payload owner-phase shape
  *   udx: spsc soft protocol  — SPSC rules inventory (head/tail, bp, reset)
  *   udx: spsc soft ring      — soft FIFO geometry (live/peak pending)
  *   udx: spsc soft owner     — free/filled/claimed phase tallies
  *   udx: spsc soft cancel    — cancel path split
  *   udx: spsc soft pending   — work_pending query samples
  *   udx: spsc soft open      — multi-process product remains OPEN
- *   udx: spsc soft deepen    — wave=46 stamp + area count
+ *   udx: spsc soft deepen    — wave=47 stamp + area count
  *   udx: spsc soft path      — claim surface catalog (soft bounds)
  *
  * greppable: udx: spsc soft
@@ -209,7 +209,7 @@ spsc_soft_inventory_log(void)
         UDX_SPSC_SOFT_WAVE);
 
     /*
-     * Soft ring handoff protocol inventory — security core §6 shape.
+     * Soft ring handoff protocol inventory — security core 6 shape.
      * free descriptors: consumer returns (released / cancel_rel)
      * filled descriptors: producer publishes (producer)
      * payload owner: claimed while consumer runs; released after
@@ -223,7 +223,7 @@ spsc_soft_inventory_log(void)
         UDX_SPSC_SOFT_WAVE);
 
     /*
-     * §6 rules inventory (soft claim surface).
+     * 6 rules inventory (soft claim surface).
      * greppable: udx: spsc soft protocol
      */
     spsc_soft_emit(
@@ -243,7 +243,7 @@ spsc_soft_inventory_log(void)
         g_u32SpscPeakPend, UDX_SPSC_SOFT_WAVE);
 
     /*
-     * Owner-phase tallies (Wave 46 deepen).
+     * Owner-phase tallies (Wave 47 deepen).
      * greppable: udx: spsc soft owner
      */
     spsc_soft_emit(
@@ -253,14 +253,14 @@ spsc_soft_inventory_log(void)
         u32FreePhase, u32FilledPhase, g_u32SpscClaimed, g_u32SpscReleased,
         g_u32SpscCancelRel, g_u32SpscLivePend, UDX_SPSC_SOFT_WAVE);
 
-    /* Grep: udx: spsc soft cancel (Wave 46 deepen) */
+    /* Grep: udx: spsc soft cancel (Wave 47 deepen) */
     spsc_soft_emit(
         "udx: spsc soft cancel rel=%u busy=%u nop=%u inv=%u "
         "released_via_cancel=%u wave=%u\n",
         g_u32SpscCancelRel, g_u32SpscCancelBusy, g_u32SpscCancelNop,
         g_u32SpscCancelInv, g_u32SpscCancelRel, UDX_SPSC_SOFT_WAVE);
 
-    /* Grep: udx: spsc soft pending (Wave 46 deepen) */
+    /* Grep: udx: spsc soft pending (Wave 47 deepen) */
     spsc_soft_emit(
         "udx: spsc soft pending query=%u yes=%u no=%u "
         "live_pend=%u wave=%u\n",
@@ -278,7 +278,7 @@ spsc_soft_inventory_log(void)
         "peer_death=OPEN product=0 soft=1 wave=%u\n",
         UDX_SPSC_SOFT_WAVE);
 
-    /* Grep: udx: spsc soft deepen wave (Wave 46 stamp) */
+    /* Grep: udx: spsc soft deepen wave (Wave 47 stamp) */
     spsc_soft_emit(
         "udx: spsc soft deepen wave=%u areas=%u unit=work exclusive=1 "
         "prefix=udx:_spsc_soft log_n=%u "
@@ -298,7 +298,7 @@ spsc_soft_inventory_log(void)
         UDX_SPSC_SOFT_WAVE);
 
     /*
-     * Grep: udx: spsc soft honesty (Wave 46 exclusive deepen).
+     * Grep: udx: spsc soft honesty (Wave 47 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     spsc_soft_emit(
@@ -339,7 +339,7 @@ udx_schedule_work(struct udx_work *pWork)
     if (pWork->u32Pending) {
         /*
          * Already filled / pending: producer coalesce (soft backpressure
-         * stand-in — no second slot; §6 full-ring waits become dup-OK).
+         * stand-in — no second slot; 6 full-ring waits become dup-OK).
          */
         spsc_soft_inc(&g_u32SpscProdDup);
         spsc_soft_note_pend_locked();

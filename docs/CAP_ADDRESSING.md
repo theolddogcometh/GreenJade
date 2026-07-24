@@ -3,14 +3,14 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Cap addressing v1.7 |
-| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 12 honesty; §9.5 Wave 46 soft continuum |
+| **Status** | **Accepted** for x86_64 product path (1–8); 9 Wave 12 honesty; 9.5 Wave 47 soft continuum |
 | **Handle ABI** | **Scheme A** — `u64` slot index + separate generation |
 | **Slot 0** | **Root meta** — **kernel ops only**; process + CNode identity; empty until bootstrap |
-| **Fault/pager** | **Region → memory object → pager**; PCB **default pager** fallback ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1) |
+| **Fault/pager** | **Region → memory object → pager**; PCB **default pager** fallback ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 1) |
 | **CNode scope** | **One CNode per process** — all threads in that process **share** it |
 | **PROCESS** | Typed **task port** minted to parent on spawn — not root meta |
-| **Honesty (Wave 12)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (§9) |
-| **Honesty (Wave 46)** | Soft continuum toward 18800 ≠ product; product lamps **0**; **no bar3 claim** (§9.5) |
+| **Honesty (Wave 12)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (9) |
+| **Honesty (Wave 47)** | Soft continuum toward 18900 ≠ product; product lamps **0**; **no bar3 claim** (9.5) |
 | **Companion** | [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (game tier; overrides Apple on conflict) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
@@ -19,7 +19,7 @@
 
 | Layer | Choice |
 |-------|--------|
-| **Kernel authority** | seL4-style **CNodes** holding typed caps; **untyped** retype; **CDT** + revoke §1.1 |
+| **Kernel authority** | seL4-style **CNodes** holding typed caps; **untyped** retype; **CDT** + revoke 1.1 |
 | **App-visible handle (v1)** | **Scheme A:** root-relative **`u64` slot** + **`u32` slot_gen** (two syscall args / two registers) |
 | **Slot 0** | **Root meta** — reserved; not a general-purpose install target |
 | **IPC** | Doors-like Call/Recv/Reply on endpoint caps |
@@ -149,7 +149,7 @@ struct gj_cap_ref {
 
 #### Fault path (normative — SOLARIS cookie rules + APPLE regions/objects)
 
-See [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1–2 and [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) §7.
+See [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 1–2 and [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 7.
 
 ```
 user page fault
@@ -184,7 +184,7 @@ user page fault
 | Transferable **task** handle | **`GJ_CAP_PROCESS`** minted to **parent** on spawn — not root meta |
 | Empty until bootstrap | Slot 0 and default pager **empty until bootstrap** |
 | Default pager endpoint | **Process PCB** fallback; per-region object pagers preferred |
-| Exception port | **PCB**, separate from pager ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §12) |
+| Exception port | **PCB**, separate from pager ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 12) |
 
 ```text
 Process (task)
@@ -239,7 +239,7 @@ CNode may have `cSlots` up to implementation max; index type is **u64** for ABI,
 | Threads | **Share** that CNode — no per-thread tables |
 | Slot 0 | Root meta |
 | Default size | e.g. 1024 slots (configurable; grow later via quota) |
-| Destroy | Process death ⇒ revoke/teardown entire CNode (§1.1) |
+| Destroy | Process death ⇒ revoke/teardown entire CNode (1.1) |
 
 ---
 
@@ -274,7 +274,7 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 
 ## 9. Honesty bounds — soft cap surface vs product multi-server (Wave 12 · 2026-07-23)
 
-**Additive only (Wave 12 exclusive for this file).** Scheme A, root meta (K1–K6), one CNode per process, PROCESS mint-to-parent, fault/pager registration, rights, and the resolve algorithm in §§1–8 stay **Accepted**. This section is a Wave 12 honesty ledger: what is greppable **soft cap surface** on the tree vs what remains **product-open** multi-server confine. It does **not** re-litigate the handle ABI, close any product bar, invent multi-server product completion, or claim **bar3**.
+**Additive only (Wave 12 exclusive for this file).** Scheme A, root meta (K1–K6), one CNode per process, PROCESS mint-to-parent, fault/pager registration, rights, and the resolve algorithm in 1–8 stay **Accepted**. This section is a Wave 12 honesty ledger: what is greppable **soft cap surface** on the tree vs what remains **product-open** multi-server confine. It does **not** re-litigate the handle ABI, close any product bar, invent multi-server product completion, or claim **bar3**.
 
 | Term | Meaning in this document |
 |------|--------------------------|
@@ -306,7 +306,7 @@ GJ_RIGHT_READ, WRITE, GRANT, MINT, DESTROY, MAP, IDENTIFY
 
 | Item | State |
 |------|--------|
-| Soft cap surface (this doc §§1–8 + `kernel/cap/*`) | Present — soft / greppable |
+| Soft cap surface (this doc 1–8 + `kernel/cap/*`) | Present — soft / greppable |
 | Soft confine / promise gates on some paths | Soft only — not product seal |
 | Live server embeds (`vfsd`, `sessiond`, `netstackd`, …) | Skeleton / door bring-up ≠ full confine product |
 | **Full multi-server confine product** | **Open** — soft cap surface does **not** close it |
@@ -319,8 +319,8 @@ Soft cap surface and soft promise gates are **not** a claim that every server an
 
 | Claim | Allowed? |
 |-------|----------|
-| “Scheme A / root meta / one CNode design **Accepted**” | **Yes** — this document §§1–8 |
-| “Soft cap surface greppable (mint/CDT/quota/root meta)” | **Yes** — with soft bound in §9.1 |
+| “Scheme A / root meta / one CNode design **Accepted**” | **Yes** — this document 1–8 |
+| “Soft cap surface greppable (mint/CDT/quota/root meta)” | **Yes** — with soft bound in 9.1 |
 | “Soft cap surface = product multi-server confine closed” | **No** |
 | “All revoke / CDT / quota / IPC transfer product-complete” | **No** |
 | “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
@@ -336,22 +336,22 @@ Soft cap surface and soft promise gates are **not** a claim that every server an
 - [TODO.md](TODO.md) — multi-server confine / CDT try-lock product / cap transfer open boxes  
 - [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) — soft surface ≠ product bar  
 
-### 9.5 Soft continuum note (Wave 46 · 2026-07-23)
+### 9.5 Soft continuum note (Wave 47 · 2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** §9 Wave 12 soft-cap bounds stay in force. Soft deepen on non-w13 surfaces does **not** re-litigate Scheme A or close multi-server confine.
+**Additive only (Wave 47 exclusive for this file).** 9 Wave 12 soft-cap bounds stay in force. Soft deepen on non-w13 surfaces does **not** re-litigate Scheme A or close multi-server confine.
 
 | Soft surface | Bound |
 |--------------|--------|
-| Continuum high-water **advancing toward 18800** | Parent-wire CREATE-ONLY soft only — **not** product multi-server; **not** bar3 |
+| Continuum high-water **advancing toward 18900** | Parent-wire CREATE-ONLY soft only — **not** product multi-server; **not** bar3 |
 | Soft deepen (non-w13) | Honesty / bring-up only — **soft ≠ product complete** |
 | Product lamps | Remain **0** by design |
 | Deck Top 50 | **NOT-TRIED × 50** — no title PASS from this doc |
 | **bar3** | Still **OPEN** |
 
-**Hard stamp (Wave 46):** soft continuum toward **18800** ≠ product multi-server confine ≠ bar3. Soft cap surface still ≠ product multi-server. **No bar3 claim.** Product lamps **0**.
+**Hard stamp (Wave 47):** soft continuum toward **18900** ≠ product multi-server confine ≠ bar3. Soft cap surface still ≠ product multi-server. **No bar3 claim.** Product lamps **0**.
 
 ---
 
 *Accepted x86_64 capability addressing v1.7 — Scheme A, root meta, fault cookie / multi-page cluster, per-space fault lock.*  
-*§9 Wave 12 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*  
-*§9.5 Wave 46 soft continuum (2026-07-23): high-water **toward 18800 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*9 Wave 12 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*  
+*9.5 Wave 47 soft continuum (2026-07-23): high-water **toward 18900 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*

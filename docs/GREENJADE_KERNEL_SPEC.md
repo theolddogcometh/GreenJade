@@ -12,8 +12,8 @@
 | **Status** | Draft design baseline — **implementation started (M0)** |
 | **Coding docs** | [IMPLEMENTATION.md](IMPLEMENTATION.md) · [TODO.md](TODO.md) |
 | **Priority order** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
-| **Product scope** | **General-purpose desktop**; adoption games = **Deck Top 50** (§0.5.2) |
-| **Honesty (Wave 46)** | Soft ship / continuum **toward 18800** ≠ product DoD / bar3; product lamps **0**; **no product claim** (§23) |
+| **Product scope** | **General-purpose desktop**; adoption games = **Deck Top 50** (0.5.2) |
+| **Honesty (Wave 47)** | Soft ship / continuum **toward 18900** ≠ product DoD / bar3; product lamps **0**; **no product claim** (23) |
 
 | **Firmware** | **UEFI** (primary); legacy BIOS only as best-effort if ever |
 | **Hardware bar** | **>1 TiB RAM**, **multi-CPU/SMP**, **SAS/SCSI** storage path |
@@ -54,7 +54,7 @@ When goals conflict, decide in this order only:
 
 Security first does **not** mean ignore speed: it means the secure design is fixed first, then make *that* design fast, then portable, then easy to read.
 
-**These four ranks do not change** for gaming, desktop popularity, or Proton. See §0.5.1 (product adoption vs priority law).
+**These four ranks do not change** for gaming, desktop popularity, or Proton. See 0.5.1 (product adoption vs priority law).
 
 ### 0.1 Language: pure C only
 
@@ -125,7 +125,7 @@ Historical parallel: the original BSD project **rewrote** its way out from under
 | **CPUs** | **SMP required** — multi-socket / multi-core production target, not an afterthought |
 | **Storage** | **SAS and SCSI** (plus NVMe/SATA/virtio) via clean-room userspace stacks |
 | **License** | **MIT OR Apache-2.0** dual |
-| **Games (adoption)** | **Major game support** = **Steam Deck Top 50** (see §0.5.1–0.5.2) via Proton personality |
+| **Games (adoption)** | **Major game support** = **Steam Deck Top 50** (see 0.5.1–0.5.2) via Proton personality |
 
 Desktop means userspace (compositor, input, GPU policy, audio, **game runtime**) is **in product scope**; it still lives **outside** the microkernel. Kernel stays minimal.
 
@@ -134,11 +134,11 @@ Desktop means userspace (compositor, input, GPU policy, audio, **game runtime**)
 | Statement | Status |
 |-----------|--------|
 | Without **credible major game support**, a general-purpose desktop will not see **popular** take-up | **Accepted product fact** |
-| **Major game support** means the **Steam Deck Top 50** catalog bar — §0.5.2 | **Accepted definition** |
+| **Major game support** means the **Steam Deck Top 50** catalog bar — 0.5.2 | **Accepted definition** |
 | Therefore GreenJade **must plan and ship** a Proton-class path ([PROTON_PERSONALITY.md](PROTON_PERSONALITY.md)) aimed at that bar, as part of the **desktop product**, not as a hobby side quest | **Accepted** |
-| **Priority order §0.0 is unchanged:** Security → Performance → Portability → Readability | **Immutable** |
+| **Priority order 0.0 is unchanged:** Security → Performance → Portability → Readability | **Immutable** |
 | Games do **not** become priority #1, do **not** outrank security, do **not** justify **importing GPL/copyleft code** or ambient root | **Immutable** |
-| Doc conflict **Proton over Apple** is about *which product surface to implement among secure designs* — **not** about reordering §0.0 | **Clarification** |
+| Doc conflict **Proton over Apple** is about *which product surface to implement among secure designs* — **not** about reordering 0.0 | **Clarification** |
 
 **How to decide:**
 
@@ -150,8 +150,8 @@ Need a game feature for Deck Top 50?
 ```
 
 **Not promised:** full Steam catalog, SteamOS distro port, **GPL code in tree**, or titles that **require** loading Linux `.ko` anti-cheat with no clean-room path.  
-**Allowed:** **clean-room** Linux-compatible ABI / Proton surface (no copyleft source) — §11.  
-**Promised as product intent:** drive the stack so **Deck Top 50** is the adoption target under GreenJade law (§0.5.2).
+**Allowed:** **clean-room** Linux-compatible ABI / Proton surface (no copyleft source) — 11.  
+**Promised as product intent:** drive the stack so **Deck Top 50** is the adoption target under GreenJade law (0.5.2).
 
 #### 0.5.2 Deck Top 50 — major game support definition (normative)
 
@@ -169,7 +169,7 @@ Need a game feature for Deck Top 50?
 |--------|------|
 | **PASS** | Boots to gameplay on GreenJade HCL (at least T0 virtio or documented T1+ GPU path); input + audio + present work; save/load works; **playable** (not a menu-only smoke) at a documented quality tier |
 | **PASS-OFFLINE** | Same as PASS but multiplayer/online disabled or broken **only** due to anti-cheat / network policy documented for that title |
-| **BLOCKED-SECURITY** | Requires in-kernel Linux module, ambient root, or other violation of §0.0 / project law — **not** a GreenJade defect to “fix” by weakening security; listed as unsupported |
+| **BLOCKED-SECURITY** | Requires in-kernel Linux module, ambient root, or other violation of 0.0 / project law — **not** a GreenJade defect to “fix” by weakening security; listed as unsupported |
 | **FAIL** | In scope of personality + ICD + session but broken; counts against the bar until fixed |
 | **NOT-TRIED** | Not yet on the matrix; counts against claiming the bar |
 
@@ -187,7 +187,7 @@ Need a game feature for Deck Top 50?
 1. Freeze a **dated** Top 50 list per certification (lists churn).  
 2. Re-cert on major GreenJade releases; do not silently reuse an old snapshot.  
 3. HCL for certification must be stated (e.g. QEMU virtio-gpu vs named GPU).  
-4. Priorities §0.0 still win: a title that needs illegal design stays **BLOCKED-SECURITY**, not a reason to import GPL or break caps.  
+4. Priorities 0.0 still win: a title that needs illegal design stays **BLOCKED-SECURITY**, not a reason to import GPL or break caps.  
 5. Missing Linux-compatible **behavior** is fixed by **clean-room** growth of [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) — not by pasting GPL.
 
 **Relationship to milestones:** A0→A4 ladder in Proton doc. **From M2 on**, work that unblocks **A0/A1** (futex, named objects, PROCESS, present path) is on the **desktop critical path** alongside other product bars — not deferred to “after SAS.”
@@ -199,7 +199,7 @@ Need a game feature for Deck Top 50?
 | **Game / Proton** | libprotonrt, wine-server shape, Vulkan present, session input/audio, Top 50 matrix | Clean-room Linux-compatible OK; no GPL source |
 | **Platform** | UEFI, 1 TiB PMM, SMP, VT-d | Unchanged |
 | **Storage** | virtio → NVMe → scsi_mid → SAS | Clean-room drivers |
-| **Never** | Import GPL · load `.ko` · reorder §0.0 for catalog size | |
+| **Never** | Import GPL · load `.ko` · reorder 0.0 for catalog size | |
 
 ---
 
@@ -212,8 +212,8 @@ Build a **modern microkernel desktop OS** — **Project GreenJade** — that kee
 3. **Portability third** — x86_64 + UEFI first; aarch64 UEFI; riscv64 later; same security model.
 4. **Readability fourth** — pure C, Hungarian variables, reviewable modules.
 
-Non-negotiable: **MIT OR Apache-2.0**, **no GPL**, **no OOP**, **clean-room** hardware support, **1 TiB+ RAM**, **SMP**, **SAS/SCSI**, **general-purpose desktop**, **priorities §0.0**.  
-Product intent: **Deck Top 50** major game support for popular desktop take-up, via **clean-room Linux-compatible Proton personality** — **without** changing those priorities (§0.5.1–0.5.3).
+Non-negotiable: **MIT OR Apache-2.0**, **no GPL**, **no OOP**, **clean-room** hardware support, **1 TiB+ RAM**, **SMP**, **SAS/SCSI**, **general-purpose desktop**, **priorities 0.0**.  
+Product intent: **Deck Top 50** major game support for popular desktop take-up, via **clean-room Linux-compatible Proton personality** — **without** changing those priorities (0.5.1–0.5.3).
 
 **One-line thesis:**  
 *A secure pure-C capability microkernel that boots UEFI, scales past a tebibyte of RAM and many CPUs, talks SAS/SCSI, and aims **Deck Top 50** games through clean-room Linux-compatible userspace — no GPL copy, security still first.*
@@ -229,8 +229,8 @@ Product intent: **Deck Top 50** major game support for popular desktop take-up, 
 | G1 | Minimal privileged kernel | Audited **C** core; no class drivers in kernel |
 | G2 | Capability-based isolation | All resources named by unforgeable capabilities |
 | G3 | Secure by default | No ambient authority; least privilege at process birth |
-| G4 | Desktop product | Compositor, input, audio, local apps under §0.0 |
-| G4b | **Deck Top 50** | Dated matrix; majority/met per §0.5.2; Proton critical path §0.5.3 |
+| G4 | Desktop product | Compositor, input, audio, local apps under 0.0 |
+| G4b | **Deck Top 50** | Dated matrix; majority/met per 0.5.2; Proton critical path 0.5.3 |
 | G5 | UEFI boot | Boot on modern UEFI firmware (and QEMU UEFI) |
 | G6 | Large memory | **≥ 1 TiB** RAM: boot, map, allocate, free without 4 GiB-era limits |
 | G7 | SMP | Multi-CPU scheduling, IPIs, per-CPU structures; scale beyond 1 core |
@@ -243,10 +243,10 @@ Product intent: **Deck Top 50** major game support for popular desktop take-up, 
 
 | ID | Non-goal | Rationale |
 |----|----------|-----------|
-| N1 | **Copying** Linux / GPL kernel or userspace **source** | Copyleft; clean-room reimplementation is OK (§0.2–0.3) |
+| N1 | **Copying** Linux / GPL kernel or userspace **source** | Copyleft; clean-room reimplementation is OK (0.2–0.3) |
 | N2 | Drop-in load of Linux `.ko` binaries | Wrong kernel binary interface; modules are almost always GPL-bound |
-| N3 | C++, Rust, or mixed-language TCB | Project law §0.1 |
-| N4 | OOP / Taligent frameworks | Project law §0.4 |
+| N3 | C++, Rust, or mixed-language TCB | Project law 0.1 |
+| N4 | OOP / Taligent frameworks | Project law 0.4 |
 | N5 | Full POSIX *in kernel* | POSIX is a userspace personality |
 | N6 | Formal seL4-level proof in v1 | Optional later |
 | N7 | Legacy BIOS as first-class | **UEFI primary**; BIOS not required |
@@ -342,7 +342,7 @@ Kernel substrate: capability rights masks and revocation — not string parsing 
 
 ### 5.2 IPC Model (procedural C)
 
-**Normative detail:** [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §§1–3, §6.
+**Normative detail:** [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) 1–3, 6.
 
 | Primitive | Description |
 |-----------|-------------|
@@ -353,7 +353,7 @@ Kernel substrate: capability rights masks and revocation — not string parsing 
 | Badge | Server-set; clients cannot forge |
 
 No CORBA, no OO ORB. **No implicit mapping of caller memory into callee.**  
-Bulk I/O uses **zero-copy SPSC rings** (§6 security core), not large kernel copies.
+Bulk I/O uses **zero-copy SPSC rings** (6 security core), not large kernel copies.
 
 **Order-of-magnitude targets (aspirational; security checks stay):**
 
@@ -374,8 +374,8 @@ quota_account
 ```
 
 Rights: bitmasks (`READ`, `WRITE`, `GRANT`, `MINT`, `MAP`, `DESTROY`, …).  
-**Bootstrap seal** after `init` setup — see security core §1.  
-**All creates charge hierarchical quotas** — security core §2.
+**Bootstrap seal** after `init` setup — see security core 1.  
+**All creates charge hierarchical quotas** — security core 2.
 
 ### 5.4 Scheduling (SMP-first)
 
@@ -465,7 +465,7 @@ All of the above: **pure C**, MIT/Apache.
 | Vendor Linux driver `.c` files | **GPL** |
 | Link against Linux kernel headers as a product dependency | Pulls GPL culture and often GPL constraints |
 | Load Linux `.ko` | Wrong kernel, wrong license |
-| “LDX runs Linux driver sources” | That design is **rejected** under §0.2 |
+| “LDX runs Linux driver sources” | That design is **rejected** under 0.2 |
 | Copy FreeBSD/OpenBSD drivers unless MIT/Apache | Typical BSD licenses are fine *in spirit*, but **project law is MIT/Apache only** — rewrite unless upstream is MIT/Apache |
 
 ### 7.2 What “Linux driver portability” means here
@@ -531,7 +531,7 @@ Engineers who know Linux drivers should feel at home because **UDX** (Userspace 
 | virtio-* (blk/net/**gpu**/console/**input**) | **P0** | Dev + VMs + **Deck Top 50 T0 HCL** |
 | UEFI GOP / simple FB | P0 | Early desktop path |
 | 16550 / PL011 | P0 | Bring-up console |
-| **libprotonrt / game present path** | **P0/P1** | **Adoption critical path** §0.5.3 — not “later hobby” |
+| **libprotonrt / game present path** | **P0/P1** | **Adoption critical path** 0.5.3 — not “later hobby” |
 | NVMe | P0 | Public spec; common desktop/workstation |
 | **SCSI mid-layer (original)** | **P0/P1** | **Required product path** |
 | **SAS HBA class** (clean-room when docs allow) | **P1** | Workstation; does not block A0 |
@@ -769,7 +769,7 @@ No “must match Linux by importing Linux.”
 
 ## 19. Open Questions
 
-**Resolved** (see [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) §14):
+**Resolved** (see [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) 14):
 
 | Topic | Decision |
 |-------|----------|
@@ -783,7 +783,7 @@ No “must match Linux by importing Linux.”
 | Personality TCB | Kernel thread bring-up → userspace doors product |
 | Isolation gates | IDT, supervisor-only kernel maps, AS clone |
 
-**No product-blocking design questions remain.** Further choices are implementation detail or measured performance under §0.0.
+**No product-blocking design questions remain.** Further choices are implementation detail or measured performance under 0.0.
 
 ---
 
@@ -826,9 +826,9 @@ No “must match Linux by importing Linux.”
 | 1 TiB+ + SMP + caps concurrency | Spec locking early; no UP-only core APIs |
 | UEFI + ACPI surface | Parse only what we need; keep ACPI interpret out of kernel if possible |
 | Proton/Wine + clean-room Linux compat | libprotonrt may grow Linux-compatible surface **without GPL source**; still no SteamOS |
-| **Deck Top 50** bar | Dated snapshot + matrix; PASS-OFFLINE / BLOCKED-SECURITY for anti-cheat; majority→met claims (§0.5.2) |
+| **Deck Top 50** bar | Dated snapshot + matrix; PASS-OFFLINE / BLOCKED-SECURITY for anti-cheat; majority→met claims (0.5.2) |
 | 32-bit PE in Top 50 | WoW64-class path; kernel stays 64-bit |
-| Multiplayer anti-cheat `.ko` | **BLOCKED-SECURITY** if no userspace path — does not weaken §0.0 |
+| Multiplayer anti-cheat `.ko` | **BLOCKED-SECURITY** if no userspace path — does not weaken 0.0 |
 
 ---
 
@@ -836,43 +836,43 @@ No “must match Linux by importing Linux.”
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid`
 - Residual **#UD** closed
-- Parallel soft waves: continuum high-water **advancing toward 18800** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **18700**) until the next decade is wired)
+- Parallel soft waves: continuum high-water **advancing toward 18900** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **18800**) until the next decade is wired)
 - Product lamps remain **0** by design (soft continuum ≠ product complete)
 - **bar3 still open** (Steam client / Deck Top 50 title runs; matrix NOT-TRIED × 50)
 
 ---
 
-## 23. Honesty bounds — soft ship ≠ product DoD / bar3 (Wave 46 · 2026-07-23)
+## 23. Honesty bounds — soft ship ≠ product DoD / bar3 (Wave 47 · 2026-07-23)
 
-**Additive only (Wave 46 exclusive for this file).** Project law (§0), product bars, architecture, and the rest of this sheet stay normative. This section is a Wave 46 honesty ledger only: greppable soft ship and continuum growth do **not** close product DoD or Steam **bar3**. It does **not** reorder §0.0, invent title PASS, or claim multi-server product complete.
+**Additive only (Wave 47 exclusive for this file).** Project law (0), product bars, architecture, and the rest of this sheet stay normative. This section is a Wave 47 honesty ledger only: greppable soft ship and continuum growth do **not** close product DoD or Steam **bar3**. It does **not** reorder 0.0, invent title PASS, or claim multi-server product complete.
 
 | Term | Meaning on this document |
 |------|--------------------------|
 | **Soft ship** | Greppable kernel/media/continuum bring-up on tree — honesty only |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18800** soft only |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18900** soft only |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN** |
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 18800** | CREATE-ONLY soft graph high-water advance (parent wires) | Runtime ABI product; Steam client; matrix fill; product lamps lit |
+| Continuum **toward 18900** | CREATE-ONLY soft graph high-water advance (parent wires) | Runtime ABI product; Steam client; matrix fill; product lamps lit |
 | Live embeds / soft smokes | Bring-up / skeleton honesty | Full multi-server product DoD; bar3 closed |
 | Design freeze / this sheet | Normative law + architecture | Product complete; titles tried |
 
-**Hard stamp (Wave 46):** soft ship / continuum **toward 18800** ≠ product DoD ≠ bar3. Product lamps **0**. **Soft ≠ product complete.** Matrix stays **NOT-TRIED × 50**.
+**Hard stamp (Wave 47):** soft ship / continuum **toward 18900** ≠ product DoD ≠ bar3. Product lamps **0**. **Soft ≠ product complete.** Matrix stays **NOT-TRIED × 50**.
 
 **Hard rule:** never promote continuum soft gates, media READY, or design text alone to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md).
 
-### Explicit non-claims (Wave 46)
+### Explicit non-claims (Wave 47)
 
 | Claim | Allowed? |
 |-------|----------|
 | “Architecture / project law as stated in this sheet” | **Yes** — design law |
-| “Soft continuum high-water advancing toward **18800** (CREATE-ONLY)” | **Yes** — soft only |
+| “Soft continuum high-water advancing toward **18900** (CREATE-ONLY)” | **Yes** — soft only |
 | “Product lamps lit / product DoD closed from soft continuum” | **No** |
 | “bar3 closed / Deck Top 50 leave NOT-TRIED from this sheet alone” | **No** |
 
 ---
 
 *End of spec sheet v0.13 — design complete freeze; Deck Top 50; clean-room Linux ABI; no GPL source; priorities unchanged.*  
-*§23 Wave 46 honesty (2026-07-23): soft ship / continuum **toward 18800 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*23 Wave 47 honesty (2026-07-23): soft ship / continuum **toward 18900 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*

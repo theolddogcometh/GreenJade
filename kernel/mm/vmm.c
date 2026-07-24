@@ -177,9 +177,9 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE 46u
+#define GJ_VMM_SOFT_WAVE 47u
 /* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS 78u
+#define GJ_VMM_SOFT_AREAS 80u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -586,7 +586,7 @@ higher_half_soft_inventory(void)
  *   vmm: soft retmap     — Wave 19 return-surface map
  *   vmm: soft return selftest — Wave 19 terminal return surface
  *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=46 …
+ *   vmm: soft deepen wave=47 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -1338,6 +1338,20 @@ kprintf("vmm: soft retpostern exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpostern stamp; Soft≠product)\n",
         (unsigned)GJ_VMM_SOFT_WAVE);
+
+/*
+ * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: vmm: soft retinnerward — Wave 47 return-innerward honesty */
+kprintf("vmm: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=47 "
+        "(retinnerward honesty; Soft≠product; not bar3)\n");
+/* Grep: vmm: soft retdonjon — Wave 47 exclusive donjon stamp */
+kprintf("vmm: soft retdonjon exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=47 "
+        "(retdonjon stamp; Soft≠product)\n");
 
 
 

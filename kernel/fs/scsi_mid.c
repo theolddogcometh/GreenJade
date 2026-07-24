@@ -10,7 +10,7 @@
  * ready, else a software LUN (soft path) so door / store CAP / smokes work
  * without an HBA. Product remains userspace mid + real host.
  *
- * Soft inventory (Wave 13 base + Wave 29 exclusive soft deepen — this unit):
+ * Soft inventory (Wave 13 base + Wave 30 exclusive soft deepen — this unit):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Submit enter / ok / fail; per-op ok tallies; transport path lamps
@@ -37,7 +37,7 @@ static u32 g_u32IoOk;
 static u32 g_u32IoFail;
 
 /*
- * Soft product inventory (Wave 13 base + Wave 29 exclusive deepen).
+ * Soft product inventory (Wave 13 base + Wave 30 exclusive deepen).
  * Cumulative path tallies. greppable: scsi_mid: soft …
  */
 static u32 g_u32SoftEnter;       /* scsi_mid_submit entries past null-guard */
@@ -71,7 +71,7 @@ static u32 g_u32SoftActiveCalls; /* scsi_mid_soft_active entries */
 static u32 g_u32SoftInvSamples;  /* soft inventory dump count */
 static u8  g_fSoftOnce;          /* one-shot after first submit activity */
 
-/* Wave 29 exclusive soft deepen — complementary path tallies. */
+/* Wave 30 exclusive soft deepen — complementary path tallies. */
 static u32 g_u32SoftSoftEnter;      /* soft_submit entries */
 static u32 g_u32SoftSoftOk;         /* soft_submit GOOD */
 static u32 g_u32SoftSoftFail;       /* soft_submit CHECK / -1 */
@@ -608,7 +608,7 @@ soft_submit(struct gj_scsi_request *pReq)
     }
 }
 
-/* ---- Soft inventory (Wave 13 base + Wave 29 exclusive deepen) ----------- */
+/* ---- Soft inventory (Wave 13 base + Wave 30 exclusive deepen) ----------- */
 
 /** Soft: bump path tally (u32 wrap is fine for telemetry). */
 static void
@@ -678,7 +678,7 @@ soft_note_op_ok(u8 u8Op)
 }
 
 /**
- * Greppable soft scsi_mid inventory (Wave 13 base; Wave 29 exclusive deepen).
+ * Greppable soft scsi_mid inventory (Wave 13 base; Wave 30 exclusive deepen).
  * Prefix-stable markers (scsi_mid: soft …):
  *   scsi_mid: soft inventory  — enter/ok/fail + mid lamps + log_n
  *   scsi_mid: soft op         — per-op ok tallies
@@ -718,7 +718,7 @@ soft_inventory_log(const char *szVia)
     }
 
     /* Grep: scsi_mid: soft inventory */
-    kprintf("scsi_mid: soft inventory via=%s wave=29 enter=%u ok=%u fail=%u "
+    kprintf("scsi_mid: soft inventory via=%s wave=30 enter=%u ok=%u fail=%u "
             "ios=%u fails=%u mid_ready=%u soft_lun=%u soft_armed=%u "
             "virtio=%u prefer_soft=%u stats_ready=%u stats_active=%u "
             "inits=%u logs=%u product=userspace_scsi_mid\n",
@@ -757,18 +757,18 @@ soft_inventory_log(const char *szVia)
             (unsigned)GJ_SCSI_SENSE_MAX, (unsigned)GJ_SCSI_CDB_MAX);
 
     /*
-     * Wave 29 exclusive deepen (complementary; never reshapes primary lines).
+     * Wave 30 exclusive deepen (complementary; never reshapes primary lines).
      */
     /* Grep: scsi_mid: soft total */
     kprintf("scsi_mid: soft total ok=%u fail=%u enter=%u ok_bp=%u "
-            "soft_ok=%u soft_fail=%u logs=%u wave=29\n",
+            "soft_ok=%u soft_fail=%u logs=%u wave=30\n",
             g_u32SoftOk, g_u32SoftFail, g_u32SoftEnter, u32OkBp,
             g_u32SoftSoftOk, g_u32SoftSoftFail, g_u32SoftInvSamples);
 
     /* Grep: scsi_mid: soft soft  (soft LUN path; honesty remains soft) */
     kprintf("scsi_mid: soft soft enter=%u ok=%u fail=%u lun_rej=%u "
             "lba_rej=%u evpd_rej=%u opc_rej=%u trunc=%u zero_blk=%u "
-            "armed=%u active=%u wave=29\n",
+            "armed=%u active=%u wave=30\n",
             g_u32SoftSoftEnter, g_u32SoftSoftOk, g_u32SoftSoftFail,
             g_u32SoftLunReject, g_u32SoftLbaReject, g_u32SoftEvpdReject,
             g_u32SoftOpcodeReject, g_u32SoftTruncXfer, g_u32SoftZeroBlocks,
@@ -805,21 +805,21 @@ soft_inventory_log(const char *szVia)
     /* Grep: scsi_mid: soft honesty  (soft LUN remains soft) */
     kprintf("scsi_mid: soft honesty soft_lun=soft soft_ne_product=1 "
             "soft_ne_bar3=1 kernel_mid_interim=1 sticky_prefer_soft=1 "
-            "inquiry_soft_fallback=1 wave=29\n");
+            "inquiry_soft_fallback=1 wave=30\n");
 
     /* Grep: scsi_mid: soft capacity — Wave 19 design-constant lamps. */
     kprintf("scsi_mid: soft capacity soft_lun=1 virtio_prefer=1 "
-            "inquiry_fallback=1 sticky_prefer=1 sec=512 wave=29\n");
+            "inquiry_fallback=1 sticky_prefer=1 sec=512 wave=30\n");
 
     /* Grep: scsi_mid: soft headroom — Wave 19 live path lamps. */
     kprintf("scsi_mid: soft headroom mid_ready=%u soft_lun=%u virtio=%u "
-            "enter=%u ok=%u fail=%u logs=%u wave=29\n",
+            "enter=%u ok=%u fail=%u logs=%u wave=30\n",
             u32Ready, u32SoftAct, u32Virtio, g_u32SoftEnter, g_u32SoftOk,
             g_u32SoftFail, g_u32SoftInvSamples);
 
     /* Grep: scsi_mid: soft surface — Wave 19 surface bit lamps. */
     kprintf("scsi_mid: soft surface ready=%u soft=%u virtio=%u prefer=%u "
-            "enter=%u ok=%u surf=0x%x wave=29\n",
+            "enter=%u ok=%u surf=0x%x wave=30\n",
             u32Ready, u32SoftAct, u32Virtio, u32Prefer,
             g_u32SoftEnter != 0u ? 1u : 0u, g_u32SoftOk != 0u ? 1u : 0u,
             (u32Ready) | (u32SoftAct << 1) | (u32Virtio << 2) |
@@ -837,7 +837,7 @@ soft_inventory_log(const char *szVia)
             u32FailBp = (g_u32SoftFail * 10000u) / u32Tot;
         }
         kprintf("scsi_mid: soft ratio ok_bp=%u fail_bp=%u ok=%u fail=%u "
-                "enter=%u wave=29\n",
+                "enter=%u wave=30\n",
                 u32OkBp, u32FailBp, g_u32SoftOk, g_u32SoftFail,
                 g_u32SoftEnter);
     }
@@ -845,14 +845,14 @@ soft_inventory_log(const char *szVia)
     /* Grep: scsi_mid: soft return — Wave 19 API return surfaces */
     kprintf("scsi_mid: soft return enter=%u ok=%u fail=%u via_virtio=%u "
             "via_soft=%u via_fallback=%u deny_null=%u deny_cdb=%u "
-            "no_path=%u mid_ready=%u product_scsi_mid=OPEN wave=29\n",
+            "no_path=%u mid_ready=%u product_scsi_mid=OPEN wave=30\n",
             g_u32SoftEnter, g_u32SoftOk, g_u32SoftFail,
             g_u32SoftViaVirtio, g_u32SoftViaSoft, g_u32SoftViaFallback,
             g_u32SoftDenyNull, g_u32SoftDenyCdbLen, g_u32SoftDenyNoPath,
             u32Ready);
 
     /* Grep: scsi_mid: soft retmap — Wave 19 return-surface map */
-    kprintf("scsi_mid: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
+    kprintf("scsi_mid: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
 
     /* Grep: scsi_mid: soft deepen */
     /*
@@ -1006,21 +1006,34 @@ soft_inventory_log(const char *szVia)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_SCSI_SOFT_SECTORS);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: scsi_mid: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: scsi_mid: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("scsi_mid: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=29 "
+                                    "never_blocks_m0=1 wave=30 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
-                            /* Grep: scsi_mid: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: scsi_mid: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("scsi_mid: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=29 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
                                     "(retscepter stamp; Soft≠product)\n");
-                            kprintf("scsi_mid: soft deepen wave=29 areas=total,soft,sense,xfer,,retclass,retlane"
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: scsi_mid: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("scsi_mid: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=30 "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n");
+                            /* Grep: scsi_mid: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("scsi_mid: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
+                                    "(retemblem stamp; Soft≠product)\n");
+                            kprintf("scsi_mid: soft deepen wave=30 areas=total,soft,sense,xfer,,retclass,retlane"
             "peak,last,honesty,capacity,headroom,surface,ratio,return logs=%u "
-            "(Wave 29 exclusive; soft LUN honesty remains soft; not bar3)\n",
+            "(Wave 30 exclusive; soft LUN honesty remains soft; not bar3)\n",
             g_u32SoftInvSamples);
 
     /*
@@ -1031,7 +1044,7 @@ soft_inventory_log(const char *szVia)
             "product_userspace_scsi_mid=1 virtio_preferred=1 "
             "soft_lun_fallback=1 sticky_prefer_soft=1 "
             "inquiry_soft_fallback=1 soft_lun_honesty=soft via=%s "
-            "wave=29 (soft inventory; not bar3)\n",
+            "wave=30 (soft inventory; not bar3)\n",
             szViaSafe);
 
     /*
@@ -1043,12 +1056,12 @@ soft_inventory_log(const char *szVia)
     if (fSoftPass != 0) {
         kprintf("scsi_mid: soft inventory PASS via=%s logs=%u "
                 "mid_ready=%u soft_lun=%u virtio=%u prefer_soft=%u "
-                "wave=29\n",
+                "wave=30\n",
                 szViaSafe, g_u32SoftInvSamples, u32Ready, u32SoftAct,
                 u32Virtio, u32Prefer);
-        kprintf("scsi_mid: soft PASS via=%s wave=29\n", szViaSafe);
+        kprintf("scsi_mid: soft PASS via=%s wave=30\n", szViaSafe);
     } else {
-        kprintf("scsi_mid: soft FAIL via=%s mid_ready=0 wave=29 "
+        kprintf("scsi_mid: soft FAIL via=%s mid_ready=0 wave=30 "
                 "(soft inventory only; not product gate)\n",
                 szViaSafe);
     }
@@ -1112,7 +1125,7 @@ scsi_mid_init(void)
     g_u32SoftActiveCalls = 0;
     g_u32SoftInvSamples = 0;
     g_fSoftOnce = 0;
-    /* Wave 29 exclusive soft deepen tallies (reset on re-init). */
+    /* Wave 30 exclusive soft deepen tallies (reset on re-init). */
     g_u32SoftSoftEnter = 0;
     g_u32SoftSoftOk = 0;
     g_u32SoftSoftFail = 0;

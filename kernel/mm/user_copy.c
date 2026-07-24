@@ -6,7 +6,7 @@
  * G-PTR-*: range must sit in product user window, be present, and U=1.
  * Soft deepen: write-intent (W|COW), page-chunk SMAP window, soft stats.
  *
- * Soft copy_from/to_user inventory (Wave 9 base; Wave 29 exclusive deepen):
+ * Soft copy_from/to_user inventory (Wave 9 base; Wave 30 exclusive deepen):
  *   - Cumulative from/to/load/store ok|fault|inval + byte totals
  *   - Soft peaks / last transfer sizes (diagnostics only; wrap OK)
  *   - SMAP STAC/CLAC + page-chunk counters
@@ -28,7 +28,7 @@
  *   "user_copy: soft stats …"     aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   "user_copy: soft deepen …"    wave=29 stamp + area count
+ *   "user_copy: soft deepen …"    wave=30 stamp + area count
  *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
  *   "user_copy: soft window …"    Wave 15 user VA / max copy geometry
  *   "user_copy: soft surfaces …"  Wave 19 return-surface catalog
@@ -52,11 +52,11 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
-/* Wave 29 soft inventory stamp (file-local; never product gate). */
-#define USER_COPY_SOFT_WAVE 29u
+/* Wave 30 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 30u
 
 /* Soft inventory greppable area count (honesty..OPEN; deepen excluded). */
-#define USER_COPY_SOFT_AREAS 40u
+#define USER_COPY_SOFT_AREAS 42u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -149,7 +149,7 @@ static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
  *   user_copy: soft stats      — aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   user_copy: soft deepen     — wave=29 stamp + areas
+ *   user_copy: soft deepen     — wave=30 stamp + areas
  *   user_copy: soft lamps      — SMAP readiness lamps
  *   user_copy: soft surfaces   — Wave 19 return-surface catalog
  *   user_copy: soft return     — Wave 17 ok/fault/inval return taxonomy
@@ -679,23 +679,38 @@ user_copy_soft_inventory_log(void)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)USER_COPY_SOFT_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: user_copy: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: user_copy: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("user_copy: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retglyph honesty; Soft≠product; not bar3)\n",
                                     (unsigned)USER_COPY_SOFT_WAVE);
-                            /* Grep: user_copy: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: user_copy: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("user_copy: soft retscepter exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retscepter stamp; Soft≠product)\n",
                                     (unsigned)USER_COPY_SOFT_WAVE);
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: user_copy: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("user_copy: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)USER_COPY_SOFT_WAVE);
+                            /* Grep: user_copy: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("user_copy: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retemblem stamp; Soft≠product)\n",
+                                    (unsigned)USER_COPY_SOFT_WAVE);
                             kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
             "catalog=%u smap=%llu surf=0x%x "
-            "(Wave 29 exclusive; not product SEH; not bar3; soft≠product)\n",
+            "(Wave 30 exclusive; not product SEH; not bar3; soft≠product)\n",
             (unsigned)USER_COPY_SOFT_WAVE,
             (unsigned)u32Areas,
             (unsigned long long)u64Logs,

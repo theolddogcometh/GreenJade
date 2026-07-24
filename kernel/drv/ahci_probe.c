@@ -22,7 +22,7 @@
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
  *   ahci: soft return rate — Wave 19 ok/fail rate lamps
  *   ahci: soft retcode    — Wave 19 retcode catalog
- *   ahci: soft deepen     — wave=29 areas stamp
+ *   ahci: soft deepen     — wave=30 areas stamp
  *   ahci: soft ratio      — Wave 15 port/ncs occupancy
  *   ahci: soft headroom   — Wave 15 NP vs PI head
  *   ahci: soft surface    — Wave 16 area catalog
@@ -103,8 +103,8 @@
 #define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define AHCI_SOFT_DEEPEN_AREAS 40u
-#define AHCI_SOFT_DEEPEN_WAVE 29u
+#define AHCI_SOFT_DEEPEN_AREAS 42u
+#define AHCI_SOFT_DEEPEN_WAVE 30u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -684,18 +684,31 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)AHCI_SOFT_DEEPEN_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: ahci: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: ahci: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("ahci: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=29 "
+                                    "never_blocks_m0=1 wave=30 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
-                            /* Grep: ahci: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: ahci: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("ahci: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=29 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
                                     "(retscepter stamp; Soft≠product)\n");
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: ahci: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("ahci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=30 "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n");
+                            /* Grep: ahci: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("ahci: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
+                                    "(retemblem stamp; Soft≠product)\n");
                             kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
             "skip=%u\n",

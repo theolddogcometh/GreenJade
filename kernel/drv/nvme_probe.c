@@ -25,7 +25,7 @@
  *   nvme: soft path       — honesty: probe/soft only; no queues / I/O
  *   nvme: soft return rate — Wave 19 ok/fail rate lamps
  *   nvme: soft retcode    — Wave 19 retcode catalog
- *   nvme: soft deepen     — wave=29 areas stamp
+ *   nvme: soft deepen     — wave=30 areas stamp
  *   nvme: soft ratio      — Wave 15 CAP/rdy/en basis lamps
  *   nvme: soft headroom   — Wave 15 MQES-derived soft head
  *   nvme: soft surface    — Wave 16 area catalog
@@ -105,8 +105,8 @@
 #define NVME_CAP_CSS_NVM   0x1u /* CSS bit 0: NVM command set supported */
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define NVME_SOFT_DEEPEN_AREAS 40u
-#define NVME_SOFT_DEEPEN_WAVE 29u
+#define NVME_SOFT_DEEPEN_AREAS 42u
+#define NVME_SOFT_DEEPEN_WAVE 30u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -802,18 +802,31 @@ nvme_soft_inventory(const char *szVia, u64 u64Cap, u32 u32Vs, u32 u32Csts,
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)NVME_SOFT_DEEPEN_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: nvme: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: nvme: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("nvme: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=29 "
+                                    "never_blocks_m0=1 wave=30 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
-                            /* Grep: nvme: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: nvme: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("nvme: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=29 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
                                     "(retscepter stamp; Soft≠product)\n");
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: nvme: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("nvme: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=30 "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n");
+                            /* Grep: nvme: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("nvme: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
+                                    "(retemblem stamp; Soft≠product)\n");
                             kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
             "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "
             "skip=%u\n",

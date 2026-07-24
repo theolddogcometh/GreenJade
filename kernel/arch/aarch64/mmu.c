@@ -61,7 +61,7 @@
  *   MAIR soft — Attr0 device / Attr1 normal pack match
  *   SCTLR soft lamps — M/C/I after enable
  *   L1 soft — valid block / attr / OA for [0] device + [1] normal
- * Soft deepen: area catalog + wave=29 stamp
+ * Soft deepen: area catalog + wave=30 stamp
  * Soft path honesty: identity scaffold only — product_kernel=OPEN
  * Greppable:
  *   aarch64: mmu PASS
@@ -71,9 +71,9 @@
  *   aarch64: mmu soft mair=… attr0=… attr1=… match=…
  *   aarch64: mmu soft sctlr=… m=… c=… i=…
  *   aarch64: mmu soft l1 d0_ok=… d1_ok=… map_ok=…
- *   aarch64: mmu soft inventory wave=29 …
- *   aarch64: mmu soft deepen wave=29 areas=…
- *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=29
+ *   aarch64: mmu soft inventory wave=30 …
+ *   aarch64: mmu soft deepen wave=30 areas=…
+ *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=30
  *   aarch64: mmu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: mmu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: mmu soft PASS | FAIL
@@ -119,11 +119,11 @@ extern void *aarch64_pmm_alloc(void);
 #define MMU_SOFT_PAGE_16K  16384ul
 #define MMU_SOFT_PAGE_64K  65536ul
 
-/* Wave 29 soft inventory stamp (greppable wave=29). */
-#define MMU_SOFT_WAVE 29u
+/* Wave 30 soft inventory stamp (greppable wave=30). */
+#define MMU_SOFT_WAVE 30u
 
 /* Soft deepen area count: page,ttbr,mair,sctlr,l1,path,honesty. */
-#define MMU_SOFT_AREAS 31u
+#define MMU_SOFT_AREAS 33u
 
 /* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
 #define TTBR_BADDR_MASK (~0xffful)
@@ -678,20 +678,35 @@ aarch64_uart_puts("aarch64: mmu: soft retcrown exclusive=1 soft_ne_product=1 "
 aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
 aarch64_uart_puts(" (retcrown stamp; Soft!=product)\n");
 /*
- * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: mmu: soft retglyph — Wave 29 return-glyph honesty */
+/* Grep: aarch64: mmu: soft retglyph — Wave 29 return-glyph honesty (kept) */
 aarch64_uart_puts("aarch64: mmu: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                    "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
 aarch64_uart_puts(" (retglyph honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: mmu: soft retscepter — Wave 29 exclusive scepter stamp */
+/* Grep: aarch64: mmu: soft retscepter — Wave 29 scepter stamp (kept) */
 aarch64_uart_puts("aarch64: mmu: soft retscepter exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
 aarch64_uart_puts(" (retscepter stamp; Soft!=product)\n");
+/*
+ * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: mmu: soft retsigil — Wave 30 return-sigil honesty */
+aarch64_uart_puts("aarch64: mmu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
+aarch64_uart_puts(" (retsigil honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: mmu: soft retemblem — Wave 30 exclusive emblem stamp */
+aarch64_uart_puts("aarch64: mmu: soft retemblem exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
+aarch64_uart_puts(" (retemblem stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: mmu soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -741,7 +756,7 @@ aarch64_uart_puts(" (retscepter stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: mmu soft exclusive — Wave 29 exclusive deepen */
+    /* Grep: aarch64: mmu soft exclusive — Wave 30 exclusive deepen */
     aarch64_uart_puts("aarch64: mmu soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);

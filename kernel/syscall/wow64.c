@@ -8,7 +8,7 @@
  * Hybrid SYSCALL uses this table; soft thunk zero-extends and fixes mmap2
  * pgoff / socketcall demux for pure-C paths without hardware compat CS.
  *
- * Soft inventory (Wave 14 base; Wave 29 exclusive deepen) —
+ * Soft inventory (Wave 14 base; Wave 30 exclusive deepen) —
  * greppable "wow64: soft …":
  *   wow64: soft inventory …
  *   wow64: soft map …
@@ -47,8 +47,8 @@ static u32 g_u32SocketcallHits;
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE  29u
-#define GJ_WOW64_SOFT_AREAS 36u
+#define GJ_WOW64_SOFT_WAVE  30u
+#define GJ_WOW64_SOFT_AREAS 38u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -229,7 +229,7 @@ soft_inventory_log(void)
             (unsigned)GJ_WOW64_SOFT_AREAS);
 
     /* Grep: wow64: soft note (Wave 20 deepen) */
-    kprintf("wow64: soft note milestone=wave29 exclusive=1 "
+    kprintf("wow64: soft note milestone=wave30 exclusive=1 "
             "soft_only=1 not_bar3=1 calls=%u map=%u wave=%u\n",
             g_u32Calls, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
@@ -240,7 +240,7 @@ soft_inventory_log(void)
             g_u32SoftAdjustNop, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft retmap — Wave 19 return-surface map */
-    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
+    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
 
     /* Grep: wow64: soft deepen wave */
     /*
@@ -394,23 +394,38 @@ soft_inventory_log(void)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_WOW64_SOFT_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: wow64: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: wow64: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("wow64: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retglyph honesty; Soft≠product; not bar3)\n",
                                     (unsigned)GJ_WOW64_SOFT_WAVE);
-                            /* Grep: wow64: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: wow64: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("wow64: soft retscepter exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retscepter stamp; Soft≠product)\n",
                                     (unsigned)GJ_WOW64_SOFT_WAVE);
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: wow64: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("wow64: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_WOW64_SOFT_WAVE);
+                            /* Grep: wow64: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("wow64: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retemblem stamp; Soft≠product)\n",
+                                    (unsigned)GJ_WOW64_SOFT_WAVE);
                             kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
-            "(Wave 29 exclusive; not bar3)\n",
+            "(Wave 30 exclusive; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,

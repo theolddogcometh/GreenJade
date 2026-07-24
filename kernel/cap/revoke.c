@@ -19,7 +19,7 @@
  *   linked, try siblings, soft-retry a bounded number of re-walks, then
  *   defer to timer/idle (R7). Counters: spins_avoided, retries, slots_cleared.
  *
- * Soft inventory (Wave 29 exclusive deepen; this unit only):
+ * Soft inventory (Wave 30 exclusive deepen; this unit only):
  *   - Phase A begin path: ok / dead / busy / again / null / queue full
  *   - Deferred queue: push / drop / pending samples / cursor / full
  *   - CDT walk batch: enter / clear / busy / stale / visit / pass / retry
@@ -56,9 +56,9 @@
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE  29u
+#define GJ_REVOKE_SOFT_WAVE  30u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_REVOKE_SOFT_AREAS 38u
+#define GJ_REVOKE_SOFT_AREAS 40u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -92,7 +92,7 @@ static u32 g_u32R2Retries;
 static u32 g_u32R2SlotsCleared;
 
 /*
- * Wave 29 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
+ * Wave 30 exclusive soft deepen counters (file-local; wrap OK; never hard-gate).
  * Grep: cap: revoke soft
  */
 static u32 g_u32SoftBeginEnter;     /* gj_obj_revoke_begin entries */
@@ -574,19 +574,34 @@ soft_revoke_inventory_log(void)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_REVOKE_SOFT_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: cap: revoke: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: cap: revoke: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("cap: revoke: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retglyph honesty; Soft≠product; not bar3)\n",
                                     (unsigned)GJ_REVOKE_SOFT_WAVE);
-                            /* Grep: cap: revoke: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: cap: revoke: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("cap: revoke: soft retscepter exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: cap: revoke: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("cap: revoke: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_REVOKE_SOFT_WAVE);
+                            /* Grep: cap: revoke: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("cap: revoke: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retemblem stamp; Soft≠product)\n",
                                     (unsigned)GJ_REVOKE_SOFT_WAVE);
                             kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "

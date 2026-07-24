@@ -6,7 +6,7 @@
  * (QEMU virt). Pure freestanding C; MRS system registers only.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 29 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 30 exclusive deepen; this unit only — greppable
  * "aarch64: cpu soft …")
  * -------------------------------------------------------------------------
  * Soft-read ID_AA64* / CTR / DCZID / CLIDR / DFR0 and emit greppable
@@ -38,9 +38,9 @@
  *   aarch64: cpu soft regs pfr0=… isar0=… mmfr0=…
  *   aarch64: cpu soft path mrs=1 mmu=0 gic=0 timer=0 claim=0 product_kernel=OPEN
  *   aarch64: cpu soft inv el1=… el0_a64=… el1_a64=… tgran4=… ok=…
- *   aarch64: cpu soft inventory wave=29 …
+ *   aarch64: cpu soft inventory wave=30 …
  *   aarch64: cpu soft surf …
- *   aarch64: cpu soft deepen wave=29 areas=…
+ *   aarch64: cpu soft deepen wave=30 areas=…
  *   aarch64: cpu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: cpu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: cpu soft PASS | FAIL
@@ -95,10 +95,10 @@ extern void aarch64_uart_soft_selftest(void);
 #define DCZID_BS_MASK 0xful
 #define DCZID_DZP_BIT (1ul << 4)
 
-/* Wave 29 soft inventory stamp (file-local; never product gate). */
-#define CPU_SOFT_WAVE   29u
+/* Wave 30 soft inventory stamp (file-local; never product gate). */
+#define CPU_SOFT_WAVE   30u
 /* Areas: id,midr,mpidr,pfr,isar,mmfr,cache,extra,regs,path,inv,surf,honesty,deepen */
-#define CPU_SOFT_AREAS 35u
+#define CPU_SOFT_AREAS 37u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cCpuSoftLogs;
@@ -686,20 +686,35 @@ aarch64_uart_puts("aarch64: cpu: soft retcrown exclusive=1 soft_ne_product=1 "
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retcrown stamp; Soft!=product)\n");
 /*
- * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: cpu: soft retglyph — Wave 29 return-glyph honesty */
+/* Grep: aarch64: cpu: soft retglyph — Wave 29 return-glyph honesty (kept) */
 aarch64_uart_puts("aarch64: cpu: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                    "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retglyph honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: cpu: soft retscepter — Wave 29 exclusive scepter stamp */
+/* Grep: aarch64: cpu: soft retscepter — Wave 29 scepter stamp (kept) */
 aarch64_uart_puts("aarch64: cpu: soft retscepter exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retscepter stamp; Soft!=product)\n");
+/*
+ * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: cpu: soft retsigil — Wave 30 return-sigil honesty */
+aarch64_uart_puts("aarch64: cpu: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
+aarch64_uart_puts(" (retsigil honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: cpu: soft retemblem — Wave 30 exclusive emblem stamp */
+aarch64_uart_puts("aarch64: cpu: soft retemblem exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
+aarch64_uart_puts(" (retemblem stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: cpu soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -715,7 +730,7 @@ aarch64_uart_puts(" (retscepter stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: cpu soft exclusive — Wave 29 exclusive deepen */
+    /* Grep: aarch64: cpu soft exclusive — Wave 30 exclusive deepen */
     aarch64_uart_puts("aarch64: cpu soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);

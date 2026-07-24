@@ -6,7 +6,7 @@
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 29 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 30 exclusive deepen; this unit only; never hard-gates):
  * greppable: "elf: soft …" | "elf_load: soft …"
  *   elf: soft inventory …
  *   elf: soft probe …
@@ -23,7 +23,7 @@
  *   elf: soft return …       (Wave 19 return-path catalog)
  *   elf: soft ret_surface …  (Wave 19 terminal return classes)
  *   elf: soft surface …      (Wave 19 area catalog)
- *   elf: soft deepen wave=29 …
+ *   elf: soft deepen wave=30 …
  *   elf: soft catalog …      (capacity honesty rollup)
  *   elf: soft bias …         (dyn/so bias + step geometry)
  *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
@@ -139,7 +139,7 @@ static u32              g_cSo;
  * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 29u
+#define GJ_ELF_SOFT_WAVE 30u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -364,13 +364,13 @@ elf_soft_inventory(const char *szVia)
     kprintf("elf: soft ret_surface probe=ok|fail load=ok|fail "
             "reloc=hits|ops handoff=ok|fail verify=ok|fail "
             "so_live interp=first|direct product_kernel=OPEN "
-            "areas=23 wave=%u\n",
+            "areas=25 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft surface — Wave 19 area catalog */
     kprintf("elf: soft surface inventory,probe,load,reloc,reloc_kind,so,"
             "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=23 wave=%u\n",
+            "surface,deepen,catalog,bias,capacity areas=25 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf: soft deepen */
@@ -663,11 +663,11 @@ elf_soft_inventory(const char *szVia)
     /* Grep: elf_load: soft surface (Wave 19 twin) */
     kprintf("elf_load: soft surface inventory,probe,load,reloc,reloc_kind,so,"
             "needed,resolve,auxv,handoff,interp,path,return,ret_surface,"
-            "surface,deepen,catalog,bias,capacity areas=23 wave=%u\n",
+            "surface,deepen,catalog,bias,capacity areas=25 wave=%u\n",
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft retmap — Wave 19 return-surface map */
-    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
+    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
 
     /* Grep: elf_load: soft deepen */
     /*
@@ -821,19 +821,34 @@ elf_soft_inventory(const char *szVia)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_ELF_SOFT_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: elf_load: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: elf_load: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("elf_load: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retglyph honesty; Soft≠product; not bar3)\n",
                                     (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: elf_load: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("elf_load: soft retscepter exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_ELF_SOFT_WAVE);
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: elf_load: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("elf_load: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_ELF_SOFT_WAVE);
+                            /* Grep: elf_load: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("elf_load: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retemblem stamp; Soft≠product)\n",
                                     (unsigned)GJ_ELF_SOFT_WAVE);
                             kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
             "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "

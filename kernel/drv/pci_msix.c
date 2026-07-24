@@ -9,7 +9,7 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14/15 base; Wave 29 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 30 exclusive deepen; this unit only):
  * greppable: "pci: soft …" | "msix: soft …"
  *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
  *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
@@ -23,7 +23,7 @@
  *   pci: soft path …      / msix: soft path …       — honesty non-claim
  *   pci: soft return rate — Wave 19 ok/fail rate lamps
  *   pci: soft retcode    — Wave 19 retcode catalog
- *   pci: soft deepen …    / msix: soft deepen …     — wave=29 areas stamp
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=30 areas stamp
  *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
  *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
  *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
@@ -66,8 +66,8 @@ static int g_fSoftReady;
 static u32 g_u32SoftInvLogs;
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define PCI_MSIX_SOFT_DEEPEN_AREAS 38u
-#define PCI_MSIX_SOFT_DEEPEN_WAVE 29u
+#define PCI_MSIX_SOFT_DEEPEN_AREAS 40u
+#define PCI_MSIX_SOFT_DEEPEN_WAVE 30u
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -818,18 +818,31 @@ pci_msix_soft_inventory(const char *szVia)
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
                                 /*
-                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: pci: soft retglyph — Wave 29 return-glyph honesty */
+                            /* Grep: pci: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("pci: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=29 "
+                                    "never_blocks_m0=1 wave=30 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
-                            /* Grep: pci: soft retscepter — Wave 29 exclusive scepter stamp */
+                            /* Grep: pci: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("pci: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=29 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
                                     "(retscepter stamp; Soft≠product)\n");
+                                /*
+                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: pci: soft retsigil — Wave 30 return-sigil honesty */
+                            kprintf("pci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=30 "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n");
+                            /* Grep: pci: soft retemblem — Wave 30 exclusive emblem stamp */
+                            kprintf("pci: soft retemblem exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=30 "
+                                    "(retemblem stamp; Soft≠product)\n");
                             kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
             "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,

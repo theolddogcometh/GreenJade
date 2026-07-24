@@ -3,13 +3,13 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Design specification complete **v1.0** |
-| **Status** | **Accepted** — closes remaining design gaps under project law; §17 Wave 34 honesty only |
+| **Status** | **Accepted** — closes remaining design gaps under project law; §17 Wave 35 honesty only |
 | **Does not** | Implement every feature in code; freezes **what** to build |
 | **Law** | Security → Performance → Portability → Readability · pure C in-tree · **no GPL/copyleft source** · clean-room OK · dual MIT OR Apache-2.0 |
 | **Adoption** | **Deck Top 50** ([GREENJADE_KERNEL_SPEC.md](GREENJADE_KERNEL_SPEC.md) §0.5.2) |
 | **ABI** | Clean-room Linux-compatible via Option C ([LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md)) |
 | **Precedence** | Law → Security core → Cap addressing → **Proton** → Apple → Solaris → this freeze (fills holes only) |
-| **Honesty (Wave 34)** | Soft freezes (Accepted design) ≠ product multi-server / bar3; continuum **toward 17600** soft only; product lamps **0**; **no product claim** (§17) |
+| **Honesty (Wave 35)** | Soft freezes (Accepted design) ≠ product multi-server / bar3; continuum **toward 17700** soft only; product lamps **0**; **no product claim** (§17) |
 
 This document is the **authoritative freeze** for topics previously listed as open, underspecified, or scaffold-only. Clean-room: reimplement behavior from public docs/manuals; never paste Linux/Wine/GPL trees into GreenJade.
 
@@ -29,7 +29,7 @@ This document is the **authoritative freeze** for topics previously listed as op
 | [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) | UEFI, VT-d, x2APIC, TSC, large pages |
 | [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) | Userspace driver surface |
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) / [TODO.md](TODO.md) | Build phases (subordinate to design) |
-| **This document** | Remaining freezes (isolation, traps, doors v1, AC, matrix, locks, …); §17 Wave 34 honesty only |
+| **This document** | Remaining freezes (isolation, traps, doors v1, AC, matrix, locks, …); §17 Wave 35 honesty only |
 
 Conflict: **higher authority wins**; this file only decides topics those docs left open.
 
@@ -350,16 +350,16 @@ Remaining work is **coding and matrix execution**, not open-ended design choice�
 
 ---
 
-## 17. Honesty bounds — soft freezes ≠ product multi-server / bar3 (Wave 34 · 2026-07-23)
+## 17. Honesty bounds — soft freezes ≠ product multi-server / bar3 (Wave 35 · 2026-07-23)
 
-**Additive only (Wave 34 exclusive for this file).** Freezes and decisions in §§0–16 stay **Accepted**. This section is a Wave 34 honesty ledger: what **design freezes** and greppable **soft** surfaces mean vs what remains **open** for product multi-server confine and Steam **bar3**. It does **not** re-litigate architecture, weaken §1 hard gates, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 16 §17 ledger text is superseded here as the same honesty formula under Wave 34 exclusive ownership of this file.
+**Additive only (Wave 35 exclusive for this file).** Freezes and decisions in §§0–16 stay **Accepted**. This section is a Wave 35 honesty ledger: what **design freezes** and greppable **soft** surfaces mean vs what remains **open** for product multi-server confine and Steam **bar3**. It does **not** re-litigate architecture, weaken §1 hard gates, close any product bar, invent multi-server product completion, or claim **bar3**. Wave 34 §17 ledger text is superseded here as the same honesty formula under Wave 35 exclusive ownership of this file.
 
 ### 17.1 Soft freezes vs product bars
 
 | Term | Meaning on this document |
 |------|--------------------------|
 | **Soft freeze / Accepted freeze** | Normative **what to build** (isolation, doors, CapJit, futex, cold path, AC honesty, matrix process, …). Design complete enough to implement. |
-| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 17600** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **17500**, until next decade is wired). |
+| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 17700** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **17600**, until next decade is wired). |
 | **Product multi-server confine** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal — **open** |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN** |
@@ -369,12 +369,12 @@ Remaining work is **coding and matrix execution**, not open-ended design choice�
 | **This document Accepted** (§§0–16 freezes) | Design judgment closed; implement without further architectural ambiguity on listed topics | Product multi-server confine closed; bar3 closed; Deck Top 50 titles tried |
 | **Production freezes text** (personality doors, cold doors-only, CapJit rights, AS/IDT gates, …) | Normative contract for implementers | Every freeze row product-hard on DUT end-to-end |
 | **Live server embeds / soft confine / soft caps** (companion tree) | Bring-up / skeleton / greppable soft | Sealed multi-server product for every server+client |
-| **Continuum toward 17600 soft** / media `STATUS=READY` | Soft graph parent wire / host media inventory | Runtime ABI product complete; Steam client; matrix fill; product lamps lit |
+| **Continuum toward 17700 soft** / media `STATUS=READY` | Soft graph parent wire / host media inventory | Runtime ABI product complete; Steam client; matrix fill; product lamps lit |
 | **§16 Completion statement** | Design path complete enough to code | Product DoD complete; multi-server done; bar3 done |
 
-**Hard rule:** never promote Accepted freezes, soft continuum (toward **17600**), media READY, or greppable soft `PASS` lines to “product multi-server closed,” “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. **Soft freezes ≠ product multi-server ≠ bar3.** **Soft ≠ product complete.**
+**Hard rule:** never promote Accepted freezes, soft continuum (toward **17700**), media READY, or greppable soft `PASS` lines to “product multi-server closed,” “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. **Soft freezes ≠ product multi-server ≠ bar3.** **Soft ≠ product complete.**
 
-**Hard stamp (Wave 34):** soft freezes **≠** product multi-server / bar3. Soft continuum high-water **toward 17600** is CREATE-ONLY parent wire only. Product lamps remain **0**. **No product claim** from this document.
+**Hard stamp (Wave 35):** soft freezes **≠** product multi-server / bar3. Soft continuum high-water **toward 17700** is CREATE-ONLY parent wire only. Product lamps remain **0**. **No product claim** from this document.
 
 ### 17.2 Product multi-server — **open**
 
@@ -396,37 +396,37 @@ Soft freezes and soft promise/cap gates are **not** a claim that every server an
 |------|--------|
 | Steam **client** launch on GreenJade DUT | **OPEN** (bar3) |
 | Deck Top 50 title rows | **NOT-TRIED × 50** — claim **targeting only** (§7–§8 process still binds) |
-| Host media `STATUS=READY` / continuum soft high-water **toward 17600** | Soft only — **≠ bar3** |
+| Host media `STATUS=READY` / continuum soft high-water **toward 17700** | Soft only — **≠ bar3** |
 | Product lamps (`gj_bar3_ready_*` / `gj_product_score_*` soft stubs) | Remain **0** by design |
 | Product RAM **≥ 1 TiB** full path | **Open** when host allows (separate from bar3) |
 
 **Bar3 remains OPEN.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md). This document does not promote those rows.
 
-### 17.4 Explicit non-claims (Wave 34)
+### 17.4 Explicit non-claims (Wave 35)
 
 | Claim | Allowed? |
 |-------|----------|
 | “Design Spec Complete **Accepted** — freezes what to build (§§0–16)” | **Yes** — design only |
-| “Soft freezes / soft continuum toward **17600** / soft greppable surface (with bound)” | **Yes** — honesty ledger only |
+| “Soft freezes / soft continuum toward **17700** / soft greppable surface (with bound)” | **Yes** — honesty ledger only |
 | “Accepted freezes = product multi-server confine closed” | **No** |
 | “Accepted freezes / soft continuum / media READY = bar3 closed” | **No** |
 | “Product lamps lit / product complete from soft freezes or continuum” | **No** — lamps remain **0** |
 | “Deck Top 50 titles tried / PASS from this freeze alone” | **No** — matrix stays **NOT-TRIED** |
 | “§16 completion = product DoD / multi-server / bar3 done” | **No** |
-| “Wave 34 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
+| “Wave 35 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
 | Any **bar3** closed claim from DESIGN_SPEC_COMPLETE alone | **No** |
 
 ### 17.5 Related honesty surfaces
 
 - [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) §13 — soft confine ≠ product multi-server  
-- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 / §9.5 — soft cap surface ≠ product multi-server; continuum toward 17600 soft  
+- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) §9 / §9.5 — soft cap surface ≠ product multi-server; continuum toward 17700 soft  
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
 - [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) — soft surface ≠ bar3  
 - [IMPLEMENTATION.md](IMPLEMENTATION.md) — soft stamps ≠ product score  
 - [TODO.md](TODO.md) — multi-server confine / bar3 open boxes  
-- [HCL.md](HCL.md) — soft probes ≠ full HCL product; continuum toward 17600  
+- [HCL.md](HCL.md) — soft probes ≠ full HCL product; continuum toward 17700  
 
 ---
 
 *Design Spec Complete v1.0 — Accepted. Clean-room. Deck Top 50. Security first.*  
-*§17 Wave 34 honesty (2026-07-23): soft freezes ≠ product multi-server / bar3; continuum **toward 17600 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*
+*§17 Wave 35 honesty (2026-07-23): soft freezes ≠ product multi-server / bar3; continuum **toward 17700 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*

@@ -16,7 +16,7 @@
  * Soft conduit detail + recover-fault counters are greppable.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 34 exclusive; this unit only)
+ * Soft inventory deepen (Wave 35 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: psci soft …" under fixed areas:
  *   inventory | version | conduit | features | recover | gates | path | deepen
@@ -73,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 34 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 34u
-#define PSCI_SOFT_AREAS 41u
+/* Wave 35 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE 35u
+#define PSCI_SOFT_AREAS 43u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -661,6 +661,21 @@ aarch64_uart_puts("aarch64: psci: soft retkeep exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft retfortress — Wave 35 return-fortress honesty */
+aarch64_uart_puts("aarch64: psci: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retfortress honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: psci: soft retpalace — Wave 35 exclusive palace stamp */
+aarch64_uart_puts("aarch64: psci: soft retpalace exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retpalace stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: psci soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -675,7 +690,7 @@ aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: psci soft exclusive — Wave 34 exclusive deepen */
+    /* Grep: aarch64: psci soft exclusive — Wave 35 exclusive deepen */
     aarch64_uart_puts("aarch64: psci soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);

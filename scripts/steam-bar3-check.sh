@@ -29,10 +29,11 @@
 #   - Soft MANIFEST / READY / STAGE_META stamps
 #   - Always: bar3 client run OPEN; Top50 NOT-TRIED
 #
-# Wave 34 soft note (exclusive scripts high-water era):
-#   Continuum soft high-water advancing toward M=17600 (CREATE-ONLY soft graph).
-#   Honest makefile_max is a Makefile scan — may still report 17500 until parent wires.
-#   Do not hardcode false makefile_max=17600. Product lamps remain 0.
+# Wave 35 soft note (exclusive scripts high-water era):
+#   Continuum soft high-water advancing toward M=17700 (CREATE-ONLY soft graph).
+#   Soft deepen surfaces: retfortress / retpalace (CREATE-ONLY soft names only).
+#   Honest makefile_max is a Makefile scan — may still report 17600 until parent wires.
+#   Do not hardcode false makefile_max=17700. Product lamps remain 0.
 #   multi_server=0 confine=0 bar3 OPEN lamps 0.
 #   media READY ≠ continuum wire ≠ smoke-all PASS ≠ title PASS ≠ product complete.
 #   Soft ≠ bar3; Top50 stays NOT-TRIED until real DUT title runs.
@@ -319,7 +320,7 @@ esac
 
 echo "  note:   soft check — exit 0 always; does not download or run Steam"
 echo "  note:   media READY ≠ smoke-all PASS ≠ bar3 client / Top50"
-echo "  note:   Wave 34 soft  continuum toward M=17600 ≠ bar3; makefile_max=scan truth (may be 17500)"
+echo "  note:   Wave 35 soft  continuum toward M=17700 ≠ bar3; makefile_max=scan truth (may be 17600); retfortress/retpalace soft only"
 echo "  note:   soft ≠ product complete; product lamps 0; Top50 NOT-TRIED × 50"
 echo "  bar3:   OPEN (client launch + matrix fill still required)"
 echo "  see:    docs/STEAM_BAR3_STATUS.md  docs/STEAM_HWTEST.md"

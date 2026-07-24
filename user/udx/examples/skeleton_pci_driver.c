@@ -449,14 +449,14 @@ main(int argc, char **argv)
     if (fPass) {
         udx_printk("my_drv: host demo done\n");
         /*
-         * Grep: udx: skeleton soft deepen (Wave 34 exclusive).
+         * Grep: udx: skeleton soft deepen (Wave 35 exclusive).
          * Soft inventory only — never gates skeleton PASS product claim.
          * multi_server=0 confine=0 bar3=0.
          */
-        udx_printk("udx: skeleton soft deepen wave=34 areas=1 "
+        udx_printk("udx: skeleton soft deepen wave=35 areas=1 "
                    "multi_server=0 confine=0 bar3=0 exclusive=1\n");
         udx_printk("udx: skeleton soft honesty multi_server=0 confine=0 "
-                   "bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=34\n");
+                   "bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=35\n");
         udx_printk("udx: skeleton PASS\n");
         return 0;
     }

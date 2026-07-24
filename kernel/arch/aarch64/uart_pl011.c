@@ -6,7 +6,7 @@
  * (scaffold; not in x86_64 build). Base: 0x09000000 on virt machine.
  *
  * -------------------------------------------------------------------------
- * Soft UART inventory (Wave 34 exclusive deepen — no IRQ / no RX product path)
+ * Soft UART inventory (Wave 35 exclusive deepen — no IRQ / no RX product path)
  * -------------------------------------------------------------------------
  * Soft FR peek: TXFF/RXFE/TXFE/RXFF/BUSY status lamps while transmitting.
  * Soft ID peek: PeripheralID + CellID (PrimeCell PL011 shape on virt).
@@ -16,7 +16,7 @@
  * aarch64_uart_soft_selftest (called by cpu_info soft deepen).
  * Soft TX stats: char count + thrwait + max FR-wait spins + TXFF hits.
  * Soft program: expected PrimeCell peri/cell pack + base + spin cap.
- * Soft deepen: area catalog stamp wave=34.
+ * Soft deepen: area catalog stamp wave=35.
  * Soft path honesty: polled early console only; product_kernel=OPEN.
  *
  * Shared serial hex dump helper: aarch64_uart_put_hex / put_hex_n /
@@ -28,11 +28,11 @@
  *   aarch64: uart soft lamps txfe=… rxfe=… txff=… rxff=… busy=…
  *   aarch64: uart soft ctrl cr=… lcrh=… ibrd=… fbrd=… imsc=… dmacr=… rsr=…
  *   aarch64: uart soft id peri=… cell=… match=… fr_live=…
- *   aarch64: uart soft inventory wave=34 …
+ *   aarch64: uart soft inventory wave=35 …
  *   aarch64: uart soft program base=… peri=… cell=… spin_cap=…
  *   aarch64: uart soft stats …
- *   aarch64: uart soft deepen wave=34 areas=…
- *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=34
+ *   aarch64: uart soft deepen wave=35 areas=…
+ *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=35
  *   aarch64: uart soft return inv_ret=… product_kernel=OPEN
  *   aarch64: uart soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: uart soft PASS | FAIL
@@ -104,11 +104,11 @@
 /* Soft hex-dump cap (early-console safety). */
 #define PL011_SOFT_DUMP_MAX 256u
 
-/* Wave 34 soft inventory stamp (greppable wave=34). */
-#define PL011_SOFT_WAVE 34u
+/* Wave 35 soft inventory stamp (greppable wave=35). */
+#define PL011_SOFT_WAVE 35u
 
 /* Soft deepen areas: chars,fr,lamps,ctrl,id,program,stats,path,honesty. */
-#define PL011_SOFT_AREAS 42u
+#define PL011_SOFT_AREAS 44u
 
 /*
  * Soft UART inventory snapshot (Wave 19).
@@ -805,6 +805,21 @@ aarch64_uart_puts("aarch64: uart: soft retkeep exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
 aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: uart: soft retfortress — Wave 35 return-fortress honesty */
+aarch64_uart_puts("aarch64: uart: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+aarch64_uart_puts(" (retfortress honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: uart: soft retpalace — Wave 35 exclusive palace stamp */
+aarch64_uart_puts("aarch64: uart: soft retpalace exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+aarch64_uart_puts(" (retpalace stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: uart soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -850,7 +865,7 @@ aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: uart soft exclusive — Wave 34 exclusive deepen */
+    /* Grep: aarch64: uart soft exclusive — Wave 35 exclusive deepen */
     aarch64_uart_puts("aarch64: uart soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);

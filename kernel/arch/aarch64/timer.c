@@ -51,9 +51,9 @@
  *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
  *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
  *   aarch64: timer tick soft PASS | FAIL
- *   aarch64: timer soft inventory wave=34 …
+ *   aarch64: timer soft inventory wave=35 …
  *   aarch64: timer soft stats …
- *   aarch64: timer soft deepen wave=34 areas=…
+ *   aarch64: timer soft deepen wave=35 areas=…
  *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
  *   aarch64: timer soft return inv_ret=… product_kernel=OPEN
  *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
@@ -99,11 +99,11 @@ extern void aarch64_uart_put_hex(unsigned long v);
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
 
-/* Wave 34 soft inventory stamp (greppable wave=34). */
-#define TIMER_SOFT_WAVE 34u
+/* Wave 35 soft inventory stamp (greppable wave=35). */
+#define TIMER_SOFT_WAVE 35u
 
 /* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
-#define TIMER_SOFT_AREAS 39u
+#define TIMER_SOFT_AREAS 41u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cTimerSoftLogs;
@@ -810,6 +810,21 @@ aarch64_uart_puts("aarch64: timer: soft retkeep exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: timer: soft retfortress — Wave 35 return-fortress honesty */
+aarch64_uart_puts("aarch64: timer: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retfortress honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: timer: soft retpalace — Wave 35 exclusive palace stamp */
+aarch64_uart_puts("aarch64: timer: soft retpalace exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retpalace stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: timer soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -856,7 +871,7 @@ aarch64_uart_puts(" (retkeep stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft exclusive — Wave 34 exclusive deepen */
+    /* Grep: aarch64: timer soft exclusive — Wave 35 exclusive deepen */
     aarch64_uart_puts("aarch64: timer soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);

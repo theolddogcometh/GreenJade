@@ -37,7 +37,7 @@
  *   virtio-scsi: soft oasis …        (Wave 15)
  *   virtio-scsi: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-scsi: soft retcode    — Wave 19 retcode catalog
- *   virtio-scsi: soft deepen wave=34 …
+ *   virtio-scsi: soft deepen wave=35 …
  *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
  *   virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV
  *
@@ -86,9 +86,9 @@
 /* Product kind marker from virtio_pci kind_from_device (scsi modern/transitional). */
 #define VIRTIO_SCSI_KIND 6u
 
-/* Wave 34 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define SCSI_SOFT_WAVE 34u
-#define SCSI_SOFT_AREAS 62u
+/* Wave 35 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define SCSI_SOFT_WAVE 35u
+#define SCSI_SOFT_AREAS 64u
 
 /* ---- OASIS request / response shapes (clean-room public layout) ---------- */
 
@@ -804,6 +804,21 @@ kprintf("virtio-scsi: soft retredoubt soft_only=1 product_gate=0 soft_ne_product
 kprintf("virtio-scsi: soft retkeep exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retkeep stamp; Soft≠product)\n",
+        (unsigned)SCSI_SOFT_WAVE);
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: virtio-scsi: soft retfortress — Wave 35 return-fortress honesty */
+kprintf("virtio-scsi: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retfortress honesty; Soft≠product; not bar3)\n",
+        (unsigned)SCSI_SOFT_WAVE);
+/* Grep: virtio-scsi: soft retpalace — Wave 35 exclusive palace stamp */
+kprintf("virtio-scsi: soft retpalace exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpalace stamp; Soft≠product)\n",
         (unsigned)SCSI_SOFT_WAVE);
                             kprintf("virtio-scsi: soft deepen wave=%u areas=%u via=%s ready=%u "
             "soft=%u io=%u ctrl=%u ev=%u log_n=%u "

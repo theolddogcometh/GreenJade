@@ -12,7 +12,7 @@
  *   take:     soft claim pending; resume path separate (EXCEPT_TAG_FAULT)
  * One-slot port (product: queue / SEH chain). Pure C freestanding.
  *
- * Soft product inventory (Wave 34 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 35 exclusive deepen; this unit only):
  *   - Register / unregister / deliver / take / drop / wait / resume tallies
  *   - Fail-closed + one-slot overwrite + wake budget diagnostics
  *   - Wave 15: rebind, wait-race self-wake, handler/count query, smoke, deepen
@@ -34,7 +34,7 @@
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 34u
+#define GJ_EXCEPT_SOFT_WAVE 35u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -212,7 +212,7 @@ soft_inventory_log(void)
             GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft retmap — Wave 19 return-surface map */
-    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=34\n");
+    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=35\n");
 
     /* Grep: except: soft deepen */
     /*
@@ -459,6 +459,21 @@ kprintf("except: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("except: soft retkeep exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retkeep stamp; Soft≠product)\n",
+        (unsigned)GJ_EXCEPT_SOFT_WAVE);
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: except: soft retfortress — Wave 35 return-fortress honesty */
+kprintf("except: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retfortress honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_EXCEPT_SOFT_WAVE);
+/* Grep: except: soft retpalace — Wave 35 exclusive palace stamp */
+kprintf("except: soft retpalace exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpalace stamp; Soft≠product)\n",
         (unsigned)GJ_EXCEPT_SOFT_WAVE);
                             kprintf("except: soft deepen wave=%u bind=%u del_ok=%u take=%u drop=%u "
             "overwrite=%u thr0=%u rebind=%u race=%u logs=%u "

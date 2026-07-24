@@ -6,13 +6,13 @@
  * residual-#UD invariants (TSS.RSP0 dedicated IRQ stack; per-thr SYSCALL
  * USER_* save/restore across schedule).
  *
- * Soft product deepen (Wave 34 exclusive; this unit only):
+ * Soft product deepen (Wave 35 exclusive; this unit only):
  *   - QoS classes 0..4 + capped soft boost (Apple §8 spirit)
  *   - pick_next soft stats + equal-rank wait-age fairness
  *   - kstack base+mid canary + poison HWM soft scan
  *   - soft sched inventory: ready/run snap + HWM + transition counts
  *   - path tallies: create/block/wake/yield/switch/exit + aff/proc
- *   - Wave 19 greppable "thread: soft …" deepen (wave=34 stamp):
+ *   - Wave 19 greppable "thread: soft …" deepen (wave=35 stamp):
  *       inventory|table|ready|run|create|block|wake|yield|switch|
  *       path|qos|canary|aff|pick|stack|idle|caps|stats|exit|deepen|
  *       hwm|sysuser|user|boost|exec|invariant|return|ret_surface|ratio|surface|headroom
@@ -58,10 +58,10 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 34 exclusive soft deepen stamp (greppable wave=34). */
-#define THREAD_SOFT_DEEPEN_WAVE 34u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=35). */
+#define THREAD_SOFT_DEEPEN_WAVE 35u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 55u
+#define THREAD_SOFT_DEEPEN_AREAS 57u
 
 /*
  * Soft sched inventory (Wave 19; file-local; ready = RUNNABLE, run = RUNNING).
@@ -743,7 +743,7 @@ sched_soft_inventory_print(void)
             (unsigned)THREAD_SOFT_DEEPEN_AREAS,
             (unsigned)THREAD_SOFT_DEEPEN_WAVE);
     /* Grep: thread: soft retmap — Wave 19 return-surface map */
-    kprintf("thread: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=34\n");
+    kprintf("thread: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=35\n");
 
     /* Grep: thread: soft deepen wave (Wave 24 stamp) */
     /*
@@ -903,11 +903,11 @@ sched_soft_inventory_print(void)
                              */
                             /* Grep: thread: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("thread: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=34 "
+                                    "never_blocks_m0=1 wave=35 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: thread: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("thread: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=34 "
+                                    "product_kernel=OPEN bar3=0 wave=35 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -916,11 +916,11 @@ sched_soft_inventory_print(void)
                              */
                             /* Grep: thread: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("thread: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=34 "
+                                    "never_blocks_m0=1 wave=35 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: thread: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("thread: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=34 "
+                                    "product_kernel=OPEN bar3=0 wave=35 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -929,15 +929,15 @@ sched_soft_inventory_print(void)
                              */
                             /* Grep: thread: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("thread: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=34 "
+                                    "never_blocks_m0=1 wave=35 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: thread: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("thread: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=34 "
+                                    "never_blocks_m0=1 wave=35 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: thread: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("thread: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=34 "
+                                    "product_kernel=OPEN bar3=0 wave=35 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -946,11 +946,11 @@ sched_soft_inventory_print(void)
  */
 /* Grep: thread: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("thread: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=34 "
+        "never_blocks_m0=1 wave=35 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: thread: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("thread: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=34 "
+        "product_kernel=OPEN bar3=0 wave=35 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -959,11 +959,11 @@ kprintf("thread: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: thread: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("thread: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=34 "
+        "never_blocks_m0=1 wave=35 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: thread: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("thread: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=34 "
+        "product_kernel=OPEN bar3=0 wave=35 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -972,12 +972,25 @@ kprintf("thread: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: thread: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("thread: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=34 "
+        "never_blocks_m0=1 wave=35 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: thread: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("thread: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=34 "
+        "product_kernel=OPEN bar3=0 wave=35 "
         "(retkeep stamp; Soft≠product)\n");
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: thread: soft retfortress — Wave 35 return-fortress honesty */
+kprintf("thread: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=35 "
+        "(retfortress honesty; Soft≠product; not bar3)\n");
+/* Grep: thread: soft retpalace — Wave 35 exclusive palace stamp */
+kprintf("thread: soft retpalace exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=35 "
+        "(retpalace stamp; Soft≠product)\n");
                             kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
             "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",
             (unsigned)THREAD_SOFT_DEEPEN_WAVE,

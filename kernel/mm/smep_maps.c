@@ -11,7 +11,7 @@
  *   - Post-harden residual-U audit → greppable soft PASS/FAIL
  *   - CPUID-gated CR4.SMEP / CR4.SMAP enable + soft query/stats
  *
- * Soft deepen (Wave 9 base; Wave 34 exclusive deepen): soft SMEP/map
+ * Soft deepen (Wave 9 base; Wave 35 exclusive deepen): soft SMEP/map
  * inventory + greppable "smep: soft …" logs (map U axes, leaf sizes,
  * CR4/CPUID, harden stats, honesty/path/deepen stamps).
  * Diagnostics only — never hard-gate boot; wrap OK.
@@ -27,7 +27,7 @@
  *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   "smep: soft deepen …"     wave=34 stamp + area count
+ *   "smep: soft deepen …"     wave=35 stamp + area count
  *   "smep: soft lamps …"      CR4/CPUID readiness lamps
  *   "smep: soft band …"       Wave 15 user-band geometry
  *   "smep: soft surfaces …"   Wave 19 return-surface catalog
@@ -82,11 +82,11 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
-/* Wave 34 soft inventory stamp (file-local; never product gate). */
-#define SMEP_SOFT_WAVE 34u
+/* Wave 35 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 35u
 
 /* Soft inventory greppable area count (honesty..gmap; deepen excluded). */
-#define SMEP_SOFT_AREAS 48u
+#define SMEP_SOFT_AREAS 50u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -378,7 +378,7 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   smep: soft deepen     — wave=34 stamp + area count
+ *   smep: soft deepen     — wave=35 stamp + area count
  *   smep: soft lamps      — CR4/CPUID readiness lamps
  *   smep: soft surfaces   — Wave 19 return-surface catalog
  *   smep: soft walk       — Wave 17 PML4 walk surface
@@ -916,9 +916,24 @@ kprintf("smep: soft retkeep exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retkeep stamp; Soft≠product)\n",
         (unsigned)SMEP_SOFT_WAVE);
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: smep: soft retfortress — Wave 35 return-fortress honesty */
+kprintf("smep: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retfortress honesty; Soft≠product; not bar3)\n",
+        (unsigned)SMEP_SOFT_WAVE);
+/* Grep: smep: soft retpalace — Wave 35 exclusive palace stamp */
+kprintf("smep: soft retpalace exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpalace stamp; Soft≠product)\n",
+        (unsigned)SMEP_SOFT_WAVE);
                             kprintf("smep: soft deepen wave=%u areas=%u via=%s logs=%lu "
             "catalog=%u residual_u=%lu surf=0x%x "
-            "(Wave 34 exclusive; not product G-MAP; not bar3; soft≠product)\n",
+            "(Wave 35 exclusive; not product G-MAP; not bar3; soft≠product)\n",
             (unsigned)SMEP_SOFT_WAVE,
             (unsigned)u32Areas,
             szWhere,

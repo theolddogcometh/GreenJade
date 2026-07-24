@@ -5,7 +5,7 @@
  * Linux hybrid Option C — kernel hot paths (clean-room pure C11).
  * Dual MIT OR Apache-2.0. No GPL source.
  *
- * Soft product inventory (Wave 11/14 base + Wave 34 exclusive deepen):
+ * Soft product inventory (Wave 11/14 base + Wave 35 exclusive deepen):
  *   - Group enter tallies (io/id/mem/time/futex/sched/sig/sock/info/proc)
  *   - Live task view snapshot (pid/tid/cred/brk/fs_base)
  *   - Handler catalog capacity (static product surface count)
@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE 34u
-#define GJ_LINUX_HOT_SOFT_AREAS 55u
+#define GJ_LINUX_HOT_SOFT_WAVE 35u
+#define GJ_LINUX_HOT_SOFT_AREAS 57u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -352,7 +352,7 @@ hot_soft_inventory_log(void)
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft note (Wave 20 deepen) */
-    kprintf("linux: hot soft note milestone=wave34 exclusive=1 "
+    kprintf("linux: hot soft note milestone=wave35 exclusive=1 "
             "soft_only=1 not_bar3=1 handlers=%u enter=%lu wave=%u\n",
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned long)s.u64EnterTotal,
@@ -627,9 +627,24 @@ kprintf("linux: hot: soft retkeep exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retkeep stamp; Soft≠product)\n",
         (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+/*
+ * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: hot: soft retfortress — Wave 35 return-fortress honesty */
+kprintf("linux: hot: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retfortress honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+/* Grep: linux: hot: soft retpalace — Wave 35 exclusive palace stamp */
+kprintf("linux: hot: soft retpalace exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpalace stamp; Soft≠product)\n",
+        (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
                             kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 34 exclusive; not bar3)\n",
+            "(Wave 35 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,

@@ -11,14 +11,14 @@
  *   uint32_t __gj_continuum_wave_51500  (alias)
  *   __libcgj_batch51499_marker = "libcgj-batch51499"
  *
- * Milestone 51500 exclusive continuum CREATE-ONLY (25891-51500). Unique
+ * Milestone 51500 exclusive continuum CREATE-ONLY (51491-51500). Unique
  * gj_continuum_wave_51500 surface only; no multi-def. Distinct from
- * gj_continuum_wave_25800 / gj_continuum_wave_25700 /
- * gj_continuum_wave_25600, gj_milestone_tag_51500 (batch25898), and
+ * gj_continuum_wave_51400 / gj_continuum_wave_51300 /
+ * gj_continuum_wave_51200, gj_milestone_tag_51500 (batch51498), and
  * gj_batch_id_51500 / gj_graph_milestone_51500 (batch51500).
  * No parent wires. No __int128.
  *
- * CGJ soft marker band (25891–51500): host soft probes
+ * CGJ soft marker band (51491–51500): host soft probes
  * (cgj_soft_milestone_51500.*) may dlsym / direct-link this lamp.
  * Soft rule: missing symbol → skip; present but wrong value → hard fail.
  * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.

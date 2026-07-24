@@ -46,7 +46,7 @@
  *   aarch64: kmain soft shared c=… sched=… pmm=…
  *   aarch64: kmain soft mem probe=… free=… total=…
  *   aarch64: kmain soft stats lamps=… bringup=… shared=… mem=… ratio=…
- *   aarch64: kmain soft deepen wave=118 areas=… logs=…
+ *   aarch64: kmain soft deepen wave=119 areas=… logs=…
  *   aarch64: kmain soft surf bringup=… shared=… mem=… lamps=… bits=…
  *   aarch64: kmain soft return inv_ret=… soft_ok=… soft_fail=…
  *             product_kernel=OPEN wave=118
@@ -79,11 +79,11 @@ void aarch64_psci_probe(void);
 #define KMAIN_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ul
 #define KMAIN_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aul
 
-/* Wave 45 soft inventory stamp (greppable wave=118). */
-#define KMAIN_SOFT_WAVE 118u
+/* Wave 45 soft inventory stamp (greppable wave=119). */
+#define KMAIN_SOFT_WAVE 119u
 
 /* Soft area count for deepen catalog (inventory+bringup+shared+mem+path+stats). */
-#define KMAIN_SOFT_AREAS 203u
+#define KMAIN_SOFT_AREAS 205u
 
 /* Soft observability (kmain-local; never gate product M0). */
 static u32 g_cSoftPhases;
@@ -1333,6 +1333,10 @@ kprintf("aarch64: kmain: soft retcondangle exclusive=1 soft_ne_product=1 product
 kprintf("aarch64: kmain: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
 kprintf("aarch64: kmain: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=118 (retatomicangle stamp; Soft≠product)\n");
+/* Grep: aarch64: kmain: soft retqueueangle — Wave 119 return-queueangle honesty */
+kprintf("aarch64: kmain: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: kmain: soft reteventangle — Wave 119 exclusive eventangle stamp */
+kprintf("aarch64: kmain: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
                             kprintf("aarch64: kmain soft deepen wave=%u areas=%u "
             "catalog=inventory,bringup,shared,mem,stats,path,surf,return,honesty,exclusive,open "
             "logs=%u soft_only=1\n",

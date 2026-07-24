@@ -58,10 +58,10 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=118). */
-#define THREAD_SOFT_DEEPEN_WAVE 118u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=119). */
+#define THREAD_SOFT_DEEPEN_WAVE 119u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 179u
+#define THREAD_SOFT_DEEPEN_AREAS 181u
 
 /*
  * Soft sched inventory (Wave 19; file-local; ready = RUNNABLE, run = RUNNING).

@@ -30,7 +30,7 @@
 #include <gj/string.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 118u
+#define PMM_CORE_SOFT_WAVE 119u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;

@@ -31,7 +31,7 @@
 #include <gj/string.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 118u
+#define COOP_SOFT_WAVE 119u
 
 struct gj_coop_thr {
     u8  u8State;

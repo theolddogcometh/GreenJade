@@ -59,8 +59,8 @@ extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define SVC_SOFT_WAVE 118u
-#define SVC_SOFT_AREAS 203u
+#define SVC_SOFT_WAVE 119u
+#define SVC_SOFT_AREAS 205u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -1671,6 +1671,10 @@ aarch64_uart_puts("aarch64: svc: soft retcondangle exclusive=1 soft_ne_product=1
 aarch64_uart_puts("aarch64: svc: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: svc: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
 aarch64_uart_puts("aarch64: svc: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=118 (retatomicangle stamp; Soft≠product)\n");
+/* Grep: aarch64: svc: soft retqueueangle — Wave 119 return-queueangle honesty */
+aarch64_uart_puts("aarch64: svc: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: svc: soft reteventangle — Wave 119 exclusive eventangle stamp */
+aarch64_uart_puts("aarch64: svc: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: svc soft deepen wave=");

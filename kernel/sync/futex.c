@@ -148,10 +148,10 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=118). */
-#define FUTEX_SOFT_DEEPEN_WAVE 118u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=119). */
+#define FUTEX_SOFT_DEEPEN_WAVE 119u
 /* Fixed greppable categories emitted under "futex: soft …". */
-#define FUTEX_SOFT_DEEPEN_AREAS 177u
+#define FUTEX_SOFT_DEEPEN_AREAS 179u
 
 /*
  * Soft wait/wake sticky counters (wrap OK; diagnostics only).

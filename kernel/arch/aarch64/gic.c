@@ -161,8 +161,8 @@
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 118u
-#define GIC_SOFT_AREAS 204u
+#define GIC_SOFT_WAVE 119u
+#define GIC_SOFT_AREAS 206u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -1657,6 +1657,10 @@ aarch64_uart_puts("aarch64: gic: soft retcondangle exclusive=1 soft_ne_product=1
 aarch64_uart_puts("aarch64: gic: soft retbarrierangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=118 (retbarrierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: gic: soft retatomicangle — Wave 118 exclusive atomicangle stamp */
 aarch64_uart_puts("aarch64: gic: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=118 (retatomicangle stamp; Soft≠product)\n");
+/* Grep: aarch64: gic: soft retqueueangle — Wave 119 return-queueangle honesty */
+aarch64_uart_puts("aarch64: gic: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: gic: soft reteventangle — Wave 119 exclusive eventangle stamp */
+aarch64_uart_puts("aarch64: gic: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");

@@ -7,7 +7,7 @@
  * Live path (order fixed for smoke greps):
  *   CLAIM → soft door surface → WRITE/READ sector smoke →
  *   UDX ring EXPORT/MAP/STATE/KICK → RELEASE → soft free →
- *   soft inventory (Wave 118) → live path PASS
+ *   soft inventory (Wave 119) → live path PASS
  *
  * Store-door ops used here (must match kernel/include/gj/store_door.h and
  * the GJ_STORE_OP_* subset in user/libgj/include/gj/syscalls.h):
@@ -42,7 +42,7 @@
  *   storaged-gj: ring soft-skip (no virtio-blk)
  *   storaged-gj: free soft PASS | free soft-skip
  *
- * Soft inventory (Wave 118 exclusive deepen — greppable "storaged-gj: soft …"):
+ * Soft inventory (Wave 119 exclusive deepen — greppable "storaged-gj: soft …"):
  *   storaged-gj: soft inventory door_ok=… door_skip=… free_ok=… free_skip=…
  *                ring_ok=… ring_skip=… ok=… skip=… wave=70 log_n=…
  *   storaged-gj: soft door reclaim=… cap=… stats=… queue=… multi=… flush=…
@@ -101,10 +101,10 @@
 #define SOFT_BYTES    (SOFT_SECTS * SECTOR_BYTES)
 /* Store-door ownership token (storaged product claim; non-zero). */
 #define STORE_TOKEN   0x510e0002u
-/* Soft inventory wave stamp (Wave 118 exclusive deepen). */
-/* Wave 118 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbarrierangle continuum_toward=26000 soft_ne_product=1 wave=118
- *   greppable: soft retatomicangle exclusive=1 continuum_toward=26000 soft_ne_product=1 wave=118
+/* Soft inventory wave stamp (Wave 119 exclusive deepen). */
+/* Wave 119 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retqueueangle continuum_toward=26100 soft_ne_product=1 wave=119
+ *   greppable: soft reteventangle exclusive=1 continuum_toward=26100 soft_ne_product=1 wave=119
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -157,7 +157,7 @@ struct vq_export {
 static unsigned g_uToken;
 
 /*
- * Soft inventory tallies (Wave 118 exclusive deepen).
+ * Soft inventory tallies (Wave 119 exclusive deepen).
  * Wrap-OK counters; diagnostics only — never gate live path PASS.
  * greppable: storaged-gj: soft
  */
@@ -338,7 +338,7 @@ msg_rstate_soft(const unsigned *aSt)
 }
 
 /*
- * Soft inventory dump (Wave 118 exclusive deepen).
+ * Soft inventory dump (Wave 119 exclusive deepen).
  * Greppable prefix: "storaged-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
  * Honesty: soft ≠ product multi-server confine.
@@ -585,7 +585,7 @@ soft_inventory_log(void)
     msg(aLine);
 
     /*
-     * Grep: storaged-gj: soft honesty (Wave 118 exclusive deepen).
+     * Grep: storaged-gj: soft honesty (Wave 119 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("storaged-gj: soft honesty multi_server=0 confine=0 bar3=0 "
@@ -637,7 +637,7 @@ soft_ring_note(unsigned uBit, int fOk)
     }
 }
 
-/* Snapshot virtq export fields for Wave 118 soft export / ring lines. */
+/* Snapshot virtq export fields for Wave 119 soft export / ring lines. */
 static void
 soft_export_snap(const struct vq_export *pEx)
 {
@@ -656,7 +656,7 @@ soft_export_snap(const struct vq_export *pEx)
  * Never hard-fails: each step soft-skips on rejection / short I/O.
  * Leaves hard-path smoke LBA 2 alone (only mutates soft LBA 3..4).
  * Returns count of soft sub-steps that greened.
- * Tallies Wave 118 soft inventory (storaged-gj: soft …).
+ * Tallies Wave 119 soft inventory (storaged-gj: soft …).
  */
 static unsigned
 soft_door_path(void)
@@ -811,7 +811,7 @@ soft_door_path(void)
 /*
  * Soft free path after RELEASE: already-unowned RELEASE is 0; QUEUE owned
  * should drop. Never hard-fails live path.
- * Tallies Wave 118 soft inventory (storaged-gj: soft …).
+ * Tallies Wave 119 soft inventory (storaged-gj: soft …).
  */
 static void
 soft_free_path(void)
@@ -860,7 +860,7 @@ soft_free_path(void)
  * Soft UDX ring path: EXPORT → MAP → RING_STATE → KICK.
  * Soft-skip without virtio-blk (or on MAP fail). Never hard-fails live path.
  * On full success, emits hard-smoke substring "ring map PASS".
- * Tallies Wave 118 soft inventory (storaged-gj: soft …).
+ * Tallies Wave 119 soft inventory (storaged-gj: soft …).
  */
 static void
 soft_ring_path(void)
@@ -1000,7 +1000,7 @@ _start(void)
     soft_free_path();
 
     /*
-     * Wave 118 exclusive soft inventory rollup (greppable "storaged-gj: soft …").
+     * Wave 119 exclusive soft inventory rollup (greppable "storaged-gj: soft …").
      * Emitted after all soft sub-paths; never gates live path PASS.
      */
     soft_inventory_log();

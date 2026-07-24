@@ -11,13 +11,13 @@
  *   uint32_t __gj_smoke_soft_51500  (alias)
  *   __libcgj_batch51496_marker = "libcgj-batch51496"
  *
- * Milestone 51500 exclusive continuum CREATE-ONLY (25891-51500). Unique
+ * Milestone 51500 exclusive continuum CREATE-ONLY (51491-51500). Unique
  * gj_smoke_soft_51500 surface only; no multi-def. Distinct from
- * gj_smoke_soft_25800 / gj_smoke_soft_25700 / gj_smoke_soft_25600 and
+ * gj_smoke_soft_51400 / gj_smoke_soft_51300 / gj_smoke_soft_51200 and
  * sibling 51500 milestone symbols (dyn_soft, continuum_ready, …).
  * No parent wires. No __int128.
  *
- * CGJ soft marker band (25891–51500): pairs with static freestanding
+ * CGJ soft marker band (51491–51500): pairs with static freestanding
  * soft smoke hosts (cgj_smoke / cgj_soft_milestone_51500). Soft rule:
  * missing symbol → skip; present but wrong value → hard fail.
  * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.

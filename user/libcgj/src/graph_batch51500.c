@@ -14,7 +14,7 @@
  *   __libcgj_batch51500_marker = "libcgj-batch51500"
  *
  * MILESTONE 51500 for the exclusive continuum CREATE-ONLY wave
- * (batches 25891-25899: shell_green_51500, libcgj_green_51500,
+ * (batches 51491-51499: shell_green_51500, libcgj_green_51500,
  * bar3_ready_51500, product_score_51500, continuum_ready_51500,
  * smoke_soft_51500, dyn_soft_51500, milestone_tag_51500,
  * continuum_wave_51500). Does NOT redefine gj_batch_id /
@@ -25,7 +25,7 @@
  * makefile_max=51500. bar3 remains open (gj_bar3_ready_51500 == 0);
  * product_score remains open (gj_product_score_51500 == 0).
  *
- * CGJ soft marker band capstone (25891–51500): host soft probes
+ * CGJ soft marker band capstone (51491–51500): host soft probes
  * (cgj_soft_milestone_51500.*) may dlsym / direct-link these lamps.
  * Soft rule: missing symbol → skip; present but wrong value → hard fail.
  * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.

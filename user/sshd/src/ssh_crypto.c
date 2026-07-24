@@ -13,7 +13,7 @@
  *   Host identity    — seeded product key + HMAC-SHA256 of exchange hash H
  *   Soft self-check  — RFC 8439 2.5.2 Poly1305 test vector at hostkey init
  *
- * Soft inventory (Wave 119 exclusive deepen — greppable when hostkey init runs
+ * Soft inventory (Wave 120 exclusive deepen — greppable when hostkey init runs
  * via sshd-gj: soft crypto …). multi_server=0 confine=0; soft ≠ product
  * multi-server confine; not bar3. This unit is freestanding pure C only.
  *
@@ -26,10 +26,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Wave 119 exclusive soft inventory stamp (observability; never hard-gates). */
-/* Wave 119 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retqueueangle continuum_toward=26100 soft_ne_product=1 wave=119
- *   greppable: soft reteventangle exclusive=1 continuum_toward=26100 soft_ne_product=1 wave=119
+/* Wave 120 exclusive soft inventory stamp (observability; never hard-gates). */
+/* Wave 120 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retchannelangle continuum_toward=26200 soft_ne_product=1 wave=120
+ *   greppable: soft retmailboxangle exclusive=1 continuum_toward=26200 soft_ne_product=1 wave=120
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -868,7 +868,7 @@ gj_ssh_poly1305_selfcheck(void)
 	uint8_t aTag[16];
 
 	gj_ssh_poly1305(aKey, aMsg, sizeof(aMsg) - 1, aTag);
-	/* Soft inventory touch (Wave 119): keep greppable strings live. */
+	/* Soft inventory touch (Wave 120): keep greppable strings live. */
 	if (g_szSshCryptoSoftDeepen[0] == '\0' ||
 	    g_szSshCryptoSoftHonesty[0] == '\0' ||
 	    SSH_CRYPTO_SOFT_WAVE == 0u) {

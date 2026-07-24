@@ -39,19 +39,19 @@
  *   aarch64: shared pmm soft PASS | FAIL free=… total=…
  *   aarch64: mem probe soft pa=… free0=… free1=… pat=…
  *   aarch64: mem probe PASS | soft FAIL
- *   aarch64: kmain soft inventory wave=55 phases=… soft_ok=… soft_fail=…
+ *   aarch64: kmain soft inventory wave=56 phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=… logs=…
  *   aarch64: kmain soft bringup exceptions=… cpu=… psci=… gic=…
  *             timer=… pmm=… mmu=… coop=… svc=… virtio=…
  *   aarch64: kmain soft shared c=… sched=… pmm=…
  *   aarch64: kmain soft mem probe=… free=… total=…
  *   aarch64: kmain soft stats lamps=… bringup=… shared=… mem=… ratio=…
- *   aarch64: kmain soft deepen wave=55 areas=… logs=…
+ *   aarch64: kmain soft deepen wave=56 areas=… logs=…
  *   aarch64: kmain soft surf bringup=… shared=… mem=… lamps=… bits=…
  *   aarch64: kmain soft return inv_ret=… soft_ok=… soft_fail=…
- *             product_kernel=OPEN wave=55
+ *             product_kernel=OPEN wave=56
  *   aarch64: kmain soft path m0=1 bar3=0 deck=0 continuum=0 arch=aarch64
- *             product_kernel=OPEN wave=55
+ *             product_kernel=OPEN wave=56
  *   aarch64: kmain soft honesty product_kernel=OPEN soft_only=1 no_bar3=1
  *   aarch64: kmain soft PASS phases=… soft_ok=… soft_fail=…
  *             pmm_free=… pmm_tot=… coop_id=…
@@ -79,11 +79,11 @@ void aarch64_psci_probe(void);
 #define KMAIN_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ul
 #define KMAIN_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aul
 
-/* Wave 45 soft inventory stamp (greppable wave=55). */
-#define KMAIN_SOFT_WAVE 55u
+/* Wave 45 soft inventory stamp (greppable wave=56). */
+#define KMAIN_SOFT_WAVE 56u
 
 /* Soft area count for deepen catalog (inventory+bringup+shared+mem+path+stats). */
-#define KMAIN_SOFT_AREAS 79u
+#define KMAIN_SOFT_AREAS 81u
 
 /* Soft observability (kmain-local; never gate product M0). */
 static u32 g_cSoftPhases;
@@ -814,11 +814,11 @@ kprintf("aarch64: kmain: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("aarch64: kmain: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("aarch64: kmain: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -828,11 +828,11 @@ kprintf("aarch64: kmain: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("aarch64: kmain: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("aarch64: kmain: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -842,11 +842,11 @@ kprintf("aarch64: kmain: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("aarch64: kmain: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("aarch64: kmain: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -855,11 +855,11 @@ kprintf("aarch64: kmain: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retsally — Wave 50 return-sally honesty */
 kprintf("aarch64: kmain: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("aarch64: kmain: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -868,11 +868,11 @@ kprintf("aarch64: kmain: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("aarch64: kmain: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("aarch64: kmain: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -882,11 +882,11 @@ kprintf("aarch64: kmain: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("aarch64: kmain: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("aarch64: kmain: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -895,11 +895,11 @@ kprintf("aarch64: kmain: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("aarch64: kmain: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("aarch64: kmain: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -908,11 +908,11 @@ kprintf("aarch64: kmain: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("aarch64: kmain: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("aarch64: kmain: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -921,12 +921,25 @@ kprintf("aarch64: kmain: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: kmain: soft retflank — Wave 55 return-flank honesty */
 kprintf("aarch64: kmain: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=55 "
+        "never_blocks_m0=1 wave=56 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retface — Wave 55 exclusive face stamp */
 kprintf("aarch64: kmain: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=55 "
+        "product_kernel=OPEN bar3=0 wave=56 "
         "(retface stamp; Soft≠product)\n");
+/*
+ * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: kmain: soft retgorge — Wave 56 return-gorge honesty */
+kprintf("aarch64: kmain: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=56 "
+        "(retgorge honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: kmain: soft retshoulder — Wave 56 exclusive shoulder stamp */
+kprintf("aarch64: kmain: soft retshoulder exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=56 "
+        "(retshoulder stamp; Soft≠product)\n");
 
 
 

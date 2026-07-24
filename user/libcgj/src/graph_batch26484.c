@@ -1,0 +1,86 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch26484: continuum link soft soft unit + batch id.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_batch_id_26484(void);
+ *     - Returns the compile-time graph batch number for this TU (26484).
+ *   uint32_t gj_link_soft_u_26484(void);
+ *     - Returns 1 (small unique soft helper for continuum fill).
+ *   uint32_t __gj_batch_id_26484  (alias)
+ *   uint32_t __gj_link_soft_u_26484  (alias)
+ *   __libcgj_batch26484_marker = "libcgj-batch26484"
+ *
+ * Exclusive continuum CREATE-ONLY (26476-26500 wave toward MILESTONE
+ * 26500). Unique surface only; no multi-def. Distinct from prior
+ * gj_batch_id_* and sibling soft units. No parent wires.
+ * No __int128.
+ *
+ * Soft continuum only: fill helpers are compile-time lamps, not runtime
+ * product probes. bar3 / product score remain open at milestone markers.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch26484_marker[] = "libcgj-batch26484";
+
+/* Batch identity. */
+#define B26484_ID  26484u
+/* Soft unit lamp: always on (compile-time fill tag). */
+#define B26484_UNIT  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b26484_id(void)
+{
+	return B26484_ID;
+}
+
+static uint32_t
+b26484_link_soft(void)
+{
+	return B26484_UNIT;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_batch_id_26484 - soft continuum surface
+ *
+ * Always returns 26484u. Soft pure-data product tag. Does not call
+ * libc. No parent wires.
+ */
+uint32_t
+gj_batch_id_26484(void)
+{
+	(void)NULL;
+	return b26484_id();
+}
+
+/*
+ * gj_link_soft_u_26484 - small unique soft helper
+ *
+ * Always returns 1u. Soft pure-data product tag. Does not call
+ * libc. No parent wires.
+ */
+uint32_t
+gj_link_soft_u_26484(void)
+{
+	return b26484_link_soft();
+}
+
+/* ---- underscored aliases ----------------------------------------------- */
+
+uint32_t __gj_batch_id_26484(void)
+    __attribute__((alias("gj_batch_id_26484")));
+
+uint32_t __gj_link_soft_u_26484(void)
+    __attribute__((alias("gj_link_soft_u_26484")));

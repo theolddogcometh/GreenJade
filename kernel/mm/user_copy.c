@@ -28,7 +28,7 @@
  *   "user_copy: soft stats …"     aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   "user_copy: soft deepen …"    wave=38 stamp + area count
+ *   "user_copy: soft deepen …"    wave=39 stamp + area count
  *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
  *   "user_copy: soft window …"    Wave 15 user VA / max copy geometry
  *   "user_copy: soft surfaces …"  Wave 19 return-surface catalog
@@ -52,11 +52,11 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
-/* Wave 38 soft inventory stamp (file-local; never product gate). */
-#define USER_COPY_SOFT_WAVE 38u
+/* Wave 39 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 39u
 
 /* Soft inventory greppable area count (honesty..OPEN; deepen excluded). */
-#define USER_COPY_SOFT_AREAS 58u
+#define USER_COPY_SOFT_AREAS 60u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -149,7 +149,7 @@ static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
  *   user_copy: soft stats      — aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   user_copy: soft deepen     — wave=38 stamp + areas
+ *   user_copy: soft deepen     — wave=39 stamp + areas
  *   user_copy: soft lamps      — SMAP readiness lamps
  *   user_copy: soft surfaces   — Wave 19 return-surface catalog
  *   user_copy: soft return     — Wave 17 ok/fault/inval return taxonomy
@@ -832,6 +832,22 @@ kprintf("user_copy: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("user_copy: soft retower exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retower stamp; Soft≠product)\n",
+        (unsigned)USER_COPY_SOFT_WAVE);
+                            
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: user_copy: soft retbarbican — Wave 39 return-barbican honesty */
+kprintf("user_copy: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbarbican honesty; Soft≠product; not bar3)\n",
+        (unsigned)USER_COPY_SOFT_WAVE);
+/* Grep: user_copy: soft retglacis — Wave 39 exclusive glacis stamp */
+kprintf("user_copy: soft retglacis exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retglacis stamp; Soft≠product)\n",
         (unsigned)USER_COPY_SOFT_WAVE);
                             kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
             "catalog=%u smap=%llu surf=0x%x "

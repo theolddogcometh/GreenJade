@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 38u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 39u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -864,13 +864,29 @@ kprintf("cpu: syscall: soft retower exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retower stamp; Soft≠product)\n",
         (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+                            
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cpu: syscall: soft retbarbican — Wave 39 return-barbican honesty */
+kprintf("cpu: syscall: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbarbican honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+/* Grep: cpu: syscall: soft retglacis — Wave 39 exclusive glacis stamp */
+kprintf("cpu: syscall: soft retglacis exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retglacis stamp; Soft≠product)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
                             kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
             "areas=inventory,program,star,lstar,cstar,sfmask,efer,"
             "enter,verify,expect,path,geom,msr,flags,init,capacity,"
             "exclusive,claim,ratio,honesty,return,return_selftest,retmap,"
             "return_rate,retcode "
-            "(Wave 38 exclusive; soft only; not bar3)\n",
+            "(Wave 39 exclusive; soft only; not bar3)\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
             (unsigned)(g_fSyscallReady ? 1u : 0u),
             (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,

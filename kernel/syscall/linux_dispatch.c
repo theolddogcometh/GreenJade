@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE 38u
-#define LINUX_DISPATCH_SOFT_AREAS 70u
+#define LINUX_DISPATCH_SOFT_WAVE 39u
+#define LINUX_DISPATCH_SOFT_AREAS 72u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -388,7 +388,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: nr class soft note (Wave 20 deepen) */
-    kprintf("linux: nr class soft note milestone=wave38 exclusive=1 "
+    kprintf("linux: nr class soft note milestone=wave39 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -683,7 +683,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: dispatch soft note (Wave 20 deepen) */
-    kprintf("linux: dispatch soft note milestone=wave38 exclusive=1 "
+    kprintf("linux: dispatch soft note milestone=wave39 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -1006,6 +1006,22 @@ kprintf("linux: dispatch: soft retmoat soft_only=1 product_gate=0 soft_ne_produc
 kprintf("linux: dispatch: soft retower exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retower stamp; Soft≠product)\n",
+        (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+                            
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: dispatch: soft retbarbican — Wave 39 return-barbican honesty */
+kprintf("linux: dispatch: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbarbican honesty; Soft≠product; not bar3)\n",
+        (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+/* Grep: linux: dispatch: soft retglacis — Wave 39 exclusive glacis stamp */
+kprintf("linux: dispatch: soft retglacis exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retglacis stamp; Soft≠product)\n",
         (unsigned)LINUX_DISPATCH_SOFT_WAVE);
                             kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "
             "table=%u hot=%u cold=%u none=%u log_n=%u\n",

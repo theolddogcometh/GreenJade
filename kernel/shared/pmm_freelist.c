@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 38 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 39 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -21,7 +21,7 @@
  *   pmm_core: soft path      — surface catalog + product non-claims
  *   pmm_core: soft geom      — Wave 19 page/span geometry
  *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=38 stamp + area count
+ *   pmm_core: soft deepen    — wave=39 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 38 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 38u
+/* Wave 39 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 39u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -536,6 +536,22 @@ kprintf("pmm_core: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("pmm_core: soft retower exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retower stamp; Soft≠product)\n",
+        (unsigned)PMM_CORE_SOFT_WAVE);
+                            
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: pmm_core: soft retbarbican — Wave 39 return-barbican honesty */
+kprintf("pmm_core: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbarbican honesty; Soft≠product; not bar3)\n",
+        (unsigned)PMM_CORE_SOFT_WAVE);
+/* Grep: pmm_core: soft retglacis — Wave 39 exclusive glacis stamp */
+kprintf("pmm_core: soft retglacis exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retglacis stamp; Soft≠product)\n",
         (unsigned)PMM_CORE_SOFT_WAVE);
                             kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",

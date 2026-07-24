@@ -73,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 38 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 38u
-#define PSCI_SOFT_AREAS 49u
+/* Wave 39 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE 39u
+#define PSCI_SOFT_AREAS 51u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -721,6 +721,21 @@ aarch64_uart_puts("aarch64: psci: soft retower exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retower stamp; Soft!=product)\n");
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft retbarbican — Wave 39 return-barbican honesty */
+aarch64_uart_puts("aarch64: psci: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retbarbican honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: psci: soft retglacis — Wave 39 exclusive glacis stamp */
+aarch64_uart_puts("aarch64: psci: soft retglacis exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retglacis stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: psci soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

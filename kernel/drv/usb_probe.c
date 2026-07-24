@@ -23,7 +23,7 @@
  *   usb: soft honesty    — bar3/HID/rings non-claims
  *   usb: soft return rate — Wave 19 ok/fail rate lamps
  *   usb: soft retcode    — Wave 19 retcode catalog
- *   usb: soft deepen     — wave=38 areas stamp
+ *   usb: soft deepen     — wave=39 areas stamp
  *   usb: soft ratio      — Wave 16 identify/BAR occupancy
  *   usb: soft headroom   — Wave 16 map/bar head
  *   usb: soft surface    — Wave 16 area catalog
@@ -52,8 +52,8 @@
 #define USB_PIF_XHCI 0x30u
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define USB_SOFT_DEEPEN_AREAS 53u
-#define USB_SOFT_DEEPEN_WAVE 38u
+#define USB_SOFT_DEEPEN_AREAS 55u
+#define USB_SOFT_DEEPEN_WAVE 39u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -656,11 +656,11 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                              */
                             /* Grep: usb: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("usb: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=38 "
+                                    "never_blocks_m0=1 wave=39 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: usb: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("usb: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=38 "
+                                    "product_kernel=OPEN bar3=0 wave=39 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -669,11 +669,11 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                              */
                             /* Grep: usb: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("usb: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=38 "
+                                    "never_blocks_m0=1 wave=39 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: usb: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("usb: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=38 "
+                                    "product_kernel=OPEN bar3=0 wave=39 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -682,15 +682,15 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                              */
                             /* Grep: usb: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("usb: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=38 "
+                                    "never_blocks_m0=1 wave=39 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: usb: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("usb: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=38 "
+                                    "never_blocks_m0=1 wave=39 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: usb: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("usb: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=38 "
+                                    "product_kernel=OPEN bar3=0 wave=39 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -699,11 +699,11 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
  */
 /* Grep: usb: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("usb: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("usb: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -712,11 +712,11 @@ kprintf("usb: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("usb: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("usb: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -725,11 +725,11 @@ kprintf("usb: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("usb: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("usb: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -738,11 +738,11 @@ kprintf("usb: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("usb: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("usb: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -751,11 +751,11 @@ kprintf("usb: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft rethold — Wave 36 return-hold honesty */
 kprintf("usb: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("usb: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -764,11 +764,11 @@ kprintf("usb: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft retwall — Wave 37 return-wall honesty */
 kprintf("usb: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("usb: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -777,12 +777,25 @@ kprintf("usb: soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: usb: soft retmoat — Wave 38 return-moat honesty */
 kprintf("usb: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=38 "
+        "never_blocks_m0=1 wave=39 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: usb: soft retower — Wave 38 exclusive tower stamp */
 kprintf("usb: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=38 "
+        "product_kernel=OPEN bar3=0 wave=39 "
         "(retower stamp; Soft≠product)\n");
+/*
+ * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: usb: soft retbarbican — Wave 39 return-barbican honesty */
+kprintf("usb: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=39 "
+        "(retbarbican honesty; Soft≠product; not bar3)\n");
+/* Grep: usb: soft retglacis — Wave 39 exclusive glacis stamp */
+kprintf("usb: soft retglacis exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=39 "
+        "(retglacis stamp; Soft≠product)\n");
                             kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,

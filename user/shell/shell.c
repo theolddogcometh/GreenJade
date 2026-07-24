@@ -196,7 +196,8 @@
  *           uwave15 (product v1.71 Wave 15 exclusive soft deepen kept)
  *           uwave16 (product v1.72 Wave 16 exclusive soft deepen kept)
  *           uwave17 (product v1.73 Wave 18 exclusive soft deepen kept)
- *           uwave18 (product v1.74 Wave 38 exclusive soft deepen)
+ *           uwave18 (product v1.74 Wave 38 exclusive soft deepen kept)
+ *           uwave19 (product v1.75 Wave 39 exclusive soft deepen)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -383,14 +384,15 @@
  *            uwave15 prints 1 (Wave 15 exclusive soft deepen stamp kept);
  *            uwave16 prints 1 (Wave 16 exclusive soft deepen stamp kept);
  *            uwave17 prints 1 (Wave 18 exclusive soft deepen stamp kept);
- *            uwave18 prints 1 (Wave 38 exclusive soft deepen stamp);
+ *            uwave18 prints 1 (Wave 38 exclusive soft deepen stamp kept);
+ *            uwave19 prints 1 (Wave 39 exclusive soft deepen stamp);
  *            free exclusive names; soft facts only; soft ≠ bar3)
- *           (help/version soft banners Wave 38 honesty: help prints
+ *           (help/version soft banners Wave 39 honesty: help prints
  *            GreenJade soft product + shell=native vfs door + soft=1 +
  *            bar3=0 + multi_server=0 + confine=0 before cmds:; version keeps
- *            "GreenJade shell (native vfs door) v1.74" smoke substring then
+ *            "GreenJade shell (native vfs door) v1.75" smoke substring then
  *            GreenJade soft product + soft=1 + bar3=0 + multi_server=0 +
- *            confine=0 + wave=38 + product_kernel=OPEN; soft facts only —
+ *            confine=0 + wave=39 + product_kernel=OPEN; soft facts only —
  *            not bar3 close, not Deck Top 50 PASS; soft ≠ product
  *            multi-server confine)
  */
@@ -15066,7 +15068,7 @@ cmd_umatrixopen(void)
 
 /*
  * uwave14 — print 1 (Wave 14 exclusive soft deepen stamp) (product v1.70).
- * Soft fact only: Wave 14 stamp remains greppable after Wave 38 deepen.
+ * Soft fact only: Wave 14 stamp remains greppable after Wave 39 deepen.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * Usage: uwave14
  */
@@ -15079,7 +15081,7 @@ cmd_uwave14(void)
 
 /*
  * uwave15 — print 1 (Wave 15 exclusive soft deepen stamp) (product v1.71).
- * Soft fact only: Wave 15 stamp remains greppable after Wave 38 deepen.
+ * Soft fact only: Wave 15 stamp remains greppable after Wave 39 deepen.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 (soft ≠ product multi-server confine).
  * Usage: uwave15
@@ -15093,7 +15095,7 @@ cmd_uwave15(void)
 
 /*
  * uwave16 — print 1 (Wave 16 exclusive soft deepen stamp) (product v1.72).
- * Soft fact only: Wave 16 stamp remains greppable after Wave 38 deepen.
+ * Soft fact only: Wave 16 stamp remains greppable after Wave 39 deepen.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 bar3=0 (soft ≠ product multi-server confine).
  * Usage: uwave16
@@ -15107,7 +15109,7 @@ cmd_uwave16(void)
 
 /*
  * uwave17 — print 1 (Wave 18 exclusive soft deepen stamp) (product v1.73).
- * Soft fact only: Wave 18 stamp remains greppable after Wave 38 deepen.
+ * Soft fact only: Wave 18 stamp remains greppable after Wave 39 deepen.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
  * (soft ≠ product multi-server confine / product kernel complete).
@@ -15121,8 +15123,8 @@ cmd_uwave17(void)
 }
 
 /*
- * uwave18 — print 1 (Wave 38 exclusive soft deepen stamp) (product v1.74).
- * Soft fact only: user-daemon soft inventory wave high-water is 18.
+ * uwave18 — print 1 (Wave 38 exclusive soft deepen stamp kept) (product v1.74).
+ * Soft fact only: Wave 38 stamp remains greppable after Wave 39 deepen.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
  * (soft ≠ product multi-server confine / product kernel complete).
@@ -15136,8 +15138,24 @@ cmd_uwave18(void)
 }
 
 /*
+ * uwave19 — print 1 (Wave 39 exclusive soft deepen stamp) (product v1.75).
+ * Soft fact only: user-daemon soft inventory wave high-water is 19.
+ * Free exclusive name; soft facts only; soft ≠ bar3.
+ * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Soft deepen surfaces: retbarbican / retglacis (CREATE-ONLY soft only).
+ * (soft ≠ product multi-server confine / product kernel complete).
+ * Usage: uwave19
+ */
+static int
+cmd_uwave19(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
  * umulticonfine — print 0 (soft ≠ product multi-server confine) (product v1.70).
- * Wave 38 honesty one-liner. Soft inventory greps ≠ multi-server product.
+ * Wave 39 honesty one-liner. Soft inventory greps ≠ multi-server product.
  * Free exclusive name; soft facts only; does not claim bar3 close.
  * Usage: umulticonfine
  */
@@ -15149,30 +15167,37 @@ cmd_umulticonfine(void)
 }
 
 /*
- * udaemonsoft — print soft daemon inventory honesty (product v1.74 Wave 38).
+ * udaemonsoft — print soft daemon inventory honesty (product v1.75 Wave 39).
  * Greppable soft inventory for live logs. Soft facts only; never bar3.
  * Honesty: soft ≠ product multi-server confine; product_kernel=OPEN.
+ * Soft deepen: retbarbican / retglacis (CREATE-ONLY soft ≠ product).
  * Usage: udaemonsoft
  */
 static int
 cmd_udaemonsoft(void)
 {
-    out("greenjade-shell: soft inventory wave=38 areas=13\n");
+    out("greenjade-shell: soft inventory wave=39 areas=14\n");
     out("greenjade-shell: soft daemons init=1 shell=1 vfsd=1 sessiond=1 "
         "storaged=1 sshd=1 netstackd=1 scsi_mid=1 hda_client=1 ld-gj=1\n");
     out("greenjade-shell: soft units udx=1 cold_linux=1 libgj=1 "
         "libgj-so=1 libgj-gnu=1 vulkan_icd=1 multi_server=0 confine=0\n");
-    out("greenjade-shell: soft deepen wave=38 multi_server=0 confine=0 "
+    out("greenjade-shell: soft deepen wave=39 multi_server=0 confine=0 "
         "bar3=0 exclusive=1 product_kernel=OPEN\n");
     out("greenjade-shell: soft honesty multi_server=0 confine=0 bar3=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=38\n");
+        "exclusive=1 soft=1 product_kernel=OPEN wave=39\n");
     out("greenjade-shell: soft path soft=1 multi_server=0 confine=0 "
         "(soft inventory; not bar3; soft != product multi-server confine)\n");
-    out("greenjade-shell: soft exclusive wave=38 multi_server=0 "
+    out("greenjade-shell: soft exclusive wave=39 multi_server=0 "
         "confine=0 bar3=0 userland=1 kernel=0 continuum=0 "
         "product_kernel=OPEN\n");
     out("greenjade-shell: soft open multi_server=0 confine=0 bar3=0 "
-        "product_kernel=OPEN soft_only=1 wave=38\n");
+        "product_kernel=OPEN soft_only=1 wave=39\n");
+    /* Grep: greenjade-shell: soft retbarbican / retglacis (Wave 39) */
+    out("greenjade-shell: soft retbarbican soft_only=1 product_gate=0 "
+        "soft_ne_product=1 continuum_toward=18100 (retbarbican honesty; "
+        "Soft!=product; not bar3)\n");
+    out("greenjade-shell: soft retglacis exclusive=1 soft_ne_product=1 "
+        "continuum_toward=18100 (retglacis stamp; Soft!=product)\n");
     return 0;
 }
 
@@ -15190,7 +15215,7 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "help") == 0) {
         /*
-         * Soft product banner Wave 38 honesty (facts only). Identifies
+         * Soft product banner Wave 39 honesty (facts only). Identifies
          * GreenJade soft product continuum shell; soft=1; bar3=0 (still
          * open); multi_server=0; confine=0. Soft continuum ≠ bar3.
          * Soft ≠ product multi-server confine. Not Deck Top 50 PASS.
@@ -15203,7 +15228,7 @@ run_line(const char *szLine)
         out("multi_server=0\n");
         out("confine=0\n");
         out("product_kernel=OPEN\n");
-        out("wave=38\n");
+        out("wave=39\n");
         out("cmds: help echo cat ls rm stat touch cp mv head tail wc cmp "
             "sleep size true false clear hostname uname id whoami date env "
             "printenv nproc uptime basename dirname cksum grep test printf "
@@ -15362,7 +15387,7 @@ run_line(const char *szLine)
             "u768gsoak umakefile14600 ubar3open "
             "ucontinuum14600 uioringmin u1tibopen "
             "ucontinuum15300 umakefile15300 umatrixopen "
-            "uwave14 umulticonfine udaemonsoft uwave15 uwave16 uwave17 uwave18 "
+            "uwave14 umulticonfine udaemonsoft uwave15 uwave16 uwave17 uwave18 uwave19 "
             "dos2unix unix2dos "
             "sync pwd format mount bigfile install stats storecap storestats "
             "storeflush netstats version exit\n");
@@ -15505,21 +15530,21 @@ run_line(const char *szLine)
     }
     if (gj_strcmp(aCmd, "version") == 0) {
         /*
-         * Soft product version banner Wave 38 honesty.
+         * Soft product version banner Wave 39 honesty.
          * Keep substring "GreenJade shell (native vfs door)" for smoke gate.
          * Extra lines are soft inventory only: GreenJade soft product identity,
-         * soft=1, bar3=0 (still open), multi_server=0, confine=0, wave=38.
+         * soft=1, bar3=0 (still open), multi_server=0, confine=0, wave=39.
          * Soft continuum ≠ bar3. Soft ≠ product multi-server confine.
          * Does not claim Deck Top 50 PASS or bar3 close.
          */
-        out("GreenJade shell (native vfs door) v1.74\n");
+        out("GreenJade shell (native vfs door) v1.75\n");
         out("GreenJade soft product\n");
         out("soft=1\n");
         out("bar3=0\n");
         out("multi_server=0\n");
         out("confine=0\n");
         out("product_kernel=OPEN\n");
-        out("wave=38\n");
+        out("wave=39\n");
         return 0;
     }
     if (gj_strcmp(aCmd, "storecap") == 0) {
@@ -19108,6 +19133,9 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "uwave18") == 0) {
         return cmd_uwave18();
     }
+    if (gj_strcmp(aCmd, "uwave19") == 0) {
+        return cmd_uwave19();
+    }
     if (gj_strcmp(aCmd, "umulticonfine") == 0) {
         return cmd_umulticonfine();
     }
@@ -19650,8 +19678,10 @@ _start(void)
         "uwave16",
         /* product v1.73 Wave 18: exclusive soft deepen stamp kept */
         "uwave17",
-        /* product v1.74 Wave 38: exclusive soft deepen stamp */
+        /* product v1.74 Wave 38: exclusive soft deepen stamp kept */
         "uwave18",
+        /* product v1.75 Wave 39: exclusive soft deepen stamp */
+        "uwave19",
         "version",
         "install",
         "exit",
@@ -19792,6 +19822,7 @@ _start(void)
     out("greenjade-shell: uwave16 PASS\n");
     out("greenjade-shell: uwave17 PASS\n");
     out("greenjade-shell: uwave18 PASS\n");
+    out("greenjade-shell: uwave19 PASS\n");
     out("greenjade-shell: storeflush PASS\n");
     out("greenjade-shell: vfs PASS\n");
     out("greenjade-shell: interactive PASS\n");

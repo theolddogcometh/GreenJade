@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 28u
+#define GJ_SPAWN_SOFT_WAVE 29u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -319,7 +319,7 @@ soft_inventory_log(const char *szVia)
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=28\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -458,21 +458,36 @@ soft_inventory_log(const char *szVia)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_SPAWN_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: spawn: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: spawn: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("spawn: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_SPAWN_SOFT_WAVE);
-                            /* Grep: spawn: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: spawn: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("spawn: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_SPAWN_SOFT_WAVE);
-    kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: spawn: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("spawn: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_SPAWN_SOFT_WAVE);
+                            /* Grep: spawn: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("spawn: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_SPAWN_SOFT_WAVE);
+                            kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
             "live=%u peak=%u mint_soft=%u mint_soft_bad=%u teardown=%u "
             "logs=%u (soft inventory only; not product gate)\n",
             GJ_SPAWN_SOFT_WAVE, szViaSafe, g_u32SoftSpawnEnter, g_cSpawned,

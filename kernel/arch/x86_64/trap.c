@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    28u
+#define TRAP_SOFT_WAVE    29u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -735,21 +735,36 @@ trap_soft_inventory_log(void)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)TRAP_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: trap: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: trap: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("trap: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)TRAP_SOFT_WAVE);
-                            /* Grep: trap: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: trap: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("trap: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)TRAP_SOFT_WAVE);
-    kprintf("trap: soft deepen wave=%u areas="
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: trap: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("trap: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)TRAP_SOFT_WAVE);
+                            /* Grep: trap: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("trap: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)TRAP_SOFT_WAVE);
+                            kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"
             "honesty,api,frame,vec,mile,"

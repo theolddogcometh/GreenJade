@@ -9,7 +9,7 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14/15 base; Wave 28 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 29 exclusive deepen; this unit only):
  * greppable: "pci: soft …" | "msix: soft …"
  *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
  *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
@@ -23,7 +23,7 @@
  *   pci: soft path …      / msix: soft path …       — honesty non-claim
  *   pci: soft return rate — Wave 19 ok/fail rate lamps
  *   pci: soft retcode    — Wave 19 retcode catalog
- *   pci: soft deepen …    / msix: soft deepen …     — wave=28 areas stamp
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=29 areas stamp
  *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
  *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
  *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
@@ -67,7 +67,7 @@ static u32 g_u32SoftInvLogs;
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
 #define PCI_MSIX_SOFT_DEEPEN_AREAS 38u
-#define PCI_MSIX_SOFT_DEEPEN_WAVE  28u
+#define PCI_MSIX_SOFT_DEEPEN_WAVE 29u
 
 static u32
 pci_cfg_read(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off)
@@ -803,21 +803,34 @@ pci_msix_soft_inventory(const char *szVia)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: pci: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: pci: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("pci: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-                            /* Grep: pci: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: pci: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("pci: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-    kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: pci: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("pci: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=29 "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n");
+                            /* Grep: pci: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("pci: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=29 "
+                                    "(retscepter stamp; Soft≠product)\n");
+                            kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
             "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",
             (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE,
             (unsigned)PCI_MSIX_SOFT_DEEPEN_AREAS, szViaSafe,

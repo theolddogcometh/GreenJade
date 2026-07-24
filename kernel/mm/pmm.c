@@ -43,7 +43,7 @@
  *   "pmm: soft retcode …"    Wave 17 alloc/free retcode catalog
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   "pmm: soft deepen …"     wave=28 stamp + area count
+ *   "pmm: soft deepen …"     wave=29 stamp + area count
  *   "pmm: soft PASS" | "pmm: soft inventory PASS" | "pmm: soft EMPTY|NONE"
  * Honesty: soft inventory never claims 1 TiB product host or closes P-MEM-3;
  *          soft ≠ bar3; soft ≠ product.
@@ -76,7 +76,7 @@
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
 /* Wave 19 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE        28u
+#define PMM_SOFT_WAVE        29u
 /* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
 #define PMM_SOFT_AREAS 44u
 
@@ -503,7 +503,7 @@ log_tib_design_soft(void)
  *   pmm: soft api        — Wave 17 alloc/free surface return lamps
  *   pmm: soft return selftest — Wave 19 terminal return surface
  *   pmm: soft retmap     — Wave 19 return-surface map
- *   pmm: soft deepen     — wave=28 stamp + area count
+ *   pmm: soft deepen     — wave=29 stamp + area count
  *   pmm: soft PASS | EMPTY | NONE | inventory PASS
  *
  * Never allocates. Safe after pmm_init (and later release/soak paths).
@@ -1008,23 +1008,38 @@ pmm_soft_inventory(const char *szWhere)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)PMM_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: pmm: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: pmm: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("pmm: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)PMM_SOFT_WAVE);
-                            /* Grep: pmm: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: pmm: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("pmm: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)PMM_SOFT_WAVE);
-    kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: pmm: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("pmm: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)PMM_SOFT_WAVE);
+                            /* Grep: pmm: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("pmm: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)PMM_SOFT_WAVE);
+                            kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
             "free=%lu logs=%u surf=0x%x product_tib=0 pmem3=OPEN bar3=OPEN "
-            "(Wave 28 exclusive; soft; not 1TiB product; not bar3; "
+            "(Wave 29 exclusive; soft; not 1TiB product; not bar3; "
             "soft≠product)\n",
             (unsigned)PMM_SOFT_WAVE, cAreas, (unsigned)PMM_SOFT_AREAS,
             szWhere, szReady, (unsigned long)g_cFramesFree, g_cSoftInvLogs,

@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 28u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 29u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -695,27 +695,42 @@ cpu_syscall_soft_inventory(void)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: cpu: syscall: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: cpu: syscall: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("cpu: syscall: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
-                            /* Grep: cpu: syscall: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: cpu: syscall: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("cpu: syscall: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
-    kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: cpu: syscall: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("cpu: syscall: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+                            /* Grep: cpu: syscall: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("cpu: syscall: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+                            kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
             "areas=inventory,program,star,lstar,cstar,sfmask,efer,"
             "enter,verify,expect,path,geom,msr,flags,init,capacity,"
             "exclusive,claim,ratio,honesty,return,return_selftest,retmap,"
             "return_rate,retcode "
-            "(Wave 28 exclusive; soft only; not bar3)\n",
+            "(Wave 29 exclusive; soft only; not bar3)\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
             (unsigned)(g_fSyscallReady ? 1u : 0u),
             (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,

@@ -21,7 +21,7 @@
  * this tree. Candidate symbols that already live in user/libcgj (or the
  * shipped product TU) must not be redefined here.
  *
- * Soft surface (unwired; Wave 28 exclusive deepen):
+ * Soft surface (unwired; Wave 29 exclusive deepen):
  *   gj_so_batch1_export      — data (0x421); optional future resolve target
  *   gj_so_batch1_soft_stamp  — soft companion stamp ('B1s1')
  *   gj_so_batch1_init        — restores the marker + stamp
@@ -31,7 +31,7 @@
  *   gj_so_batch1_bucket      — hash % nbucket index helper
  *   gj_so_batch1_soft_get    — soft read of marker
  *   gj_so_batch1_soft_probe  — soft check + careful restore
- *   gj_so_batch1_soft_wave   — Wave 28 stamp (17)
+ *   gj_so_batch1_soft_wave   — Wave 29 stamp (17)
  *   gj_so_batch1_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_SO_BATCH1_SOFT_MARKER
@@ -39,7 +39,7 @@
  * greppable: GJ_SO_BATCH1_SOFT_GET
  * greppable: GJ_SO_BATCH1_SOFT_PROBE
  * greppable: GJ_SO_BATCH1_SOFT_STAMP
- * greppable: libgj-so: soft batch1 wave=28
+ * greppable: libgj-so: soft batch1 wave=29
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -49,9 +49,9 @@
 #define GJ_SO_BATCH1_STAMP_CANON   ((uint64_t)0x42317331ull) /* 'B1s1' */
 #define GJ_SO_BATCH1_SOFT_WAVE     25u
 
-/* greppable: libgj-so: soft batch1 wave=28 */
+/* greppable: libgj-so: soft batch1 wave=29 */
 static const char g_szSoBatch1SoftInventory[] =
-	"libgj-so: soft batch1 wave=28 areas=9 "
+	"libgj-so: soft batch1 wave=29 areas=9 "
 	"export,stamp,init,id,hash,streq,bucket,get,probe "
 	"marker=0x421 stamp=B1s1 freestanding=1 multi_server=0 "
 	"confine=0 bar3=0";
@@ -156,7 +156,7 @@ gj_so_batch1_soft_probe(void)
 	return 1;
 }
 
-/* Cold soft inventory: Wave 28 stamp. Grep: libgj-so: soft batch1 wave= */
+/* Cold soft inventory: Wave 29 stamp. Grep: libgj-so: soft batch1 wave= */
 unsigned
 gj_so_batch1_soft_wave(void)
 {

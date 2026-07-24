@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 28 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 29 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -21,7 +21,7 @@
  *   pmm_core: soft path      — surface catalog + product non-claims
  *   pmm_core: soft geom      — Wave 19 page/span geometry
  *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=28 stamp + area count
+ *   pmm_core: soft deepen    — wave=29 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 28 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 28u
+/* Wave 29 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 29u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -174,7 +174,7 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
             "(soft inventory only; not hierarchical pmm)\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
 
-    /* Grep: pmm_core: soft exclusive — Wave 28 exclusive deepen */
+    /* Grep: pmm_core: soft exclusive — Wave 29 exclusive deepen */
     kprintf("pmm_core: soft exclusive multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 order0=1 wave=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE);
@@ -368,21 +368,36 @@ pmm_core_soft_inventory(int fPass, unsigned cAreas, unsigned cChain,
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)PMM_CORE_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: pmm_core: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: pmm_core: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("pmm_core: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)PMM_CORE_SOFT_WAVE);
-                            /* Grep: pmm_core: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: pmm_core: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("pmm_core: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)PMM_CORE_SOFT_WAVE);
-    kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: pmm_core: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("pmm_core: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)PMM_CORE_SOFT_WAVE);
+                            /* Grep: pmm_core: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("pmm_core: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)PMM_CORE_SOFT_WAVE);
+                            kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE, cAreas, cFreeSnap, cTotalSnap,
             g_cSoftInvLogs);

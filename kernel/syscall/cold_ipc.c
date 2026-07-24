@@ -9,14 +9,14 @@
  *
  * greppable: GJ_COLD_MODE_ cold_ipc_register_service cold_ipc_stats
  *
- * Soft product inventory (Wave 14 base + Wave 28 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 14 base + Wave 29 exclusive deepen; this unit only):
  *   - Mode mask / path preference (service-first vs doors-first)
  *   - Service + queue-consumer registration gens + bind tallies
  *   - Queue slot lifecycle (FREE/PENDING/CLAIMED/DONE) + depth
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=28 stamp
+ *   - soft deepen wave=29 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -65,13 +65,13 @@ static u64 g_u64RegQueue;
 static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
-/* Wave 28 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE  28u
+/* Wave 29 soft inventory stamp (file-local; never product gate). */
+#define GJ_COLD_SOFT_WAVE  29u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
 #define GJ_COLD_SOFT_AREAS 41u
 
 /*
- * Soft product inventory (Wave 28 exclusive deepen). Cumulative unless noted live.
+ * Soft product inventory (Wave 29 exclusive deepen). Cumulative unless noted live.
  * greppable: cold_ipc: soft … / cold: soft …
  */
 static u32 g_u32SoftInitEnter;     /* cold_ipc_init entries */
@@ -446,7 +446,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft note (Wave 20 deepen) */
-    kprintf("cold_ipc: soft note milestone=wave28 exclusive=1 "
+    kprintf("cold_ipc: soft note milestone=wave29 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -460,7 +460,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft retmap — Wave 19 return-surface map */
-    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=28\n");
+    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
 
     /* Grep: cold_ipc: soft deepen wave (Wave 15 stamp) */
     /*
@@ -599,23 +599,23 @@ soft_inventory_log(void)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_COLD_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: cold_ipc: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: cold_ipc: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("cold_ipc: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_COLD_SOFT_WAVE);
-                            /* Grep: cold_ipc: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: cold_ipc: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("cold_ipc: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_COLD_SOFT_WAVE);
     kprintf("cold_ipc: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
-            "(Wave 28 exclusive; soft inventory; not bar3)\n",
+            "(Wave 29 exclusive; soft inventory; not bar3)\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS,
             g_u32SoftLogN, u32SvcBound, u32DoorsUsable, u32QueueUsable,
             (unsigned long long)g_u64Submits);
@@ -780,7 +780,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold: soft note (Wave 20 deepen) */
-    kprintf("cold: soft note milestone=wave28 exclusive=1 "
+    kprintf("cold: soft note milestone=wave29 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -930,23 +930,38 @@ soft_inventory_log(void)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_COLD_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: cold: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: cold: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("cold: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_COLD_SOFT_WAVE);
-                            /* Grep: cold: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: cold: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("cold: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_COLD_SOFT_WAVE);
-    kprintf("cold: soft deepen wave=%u areas=%u logs=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: cold: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("cold: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_COLD_SOFT_WAVE);
+                            /* Grep: cold: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("cold: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_COLD_SOFT_WAVE);
+                            kprintf("cold: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
-            "(Wave 28 exclusive; soft inventory; not bar3)\n",
+            "(Wave 29 exclusive; soft inventory; not bar3)\n",
             (unsigned)GJ_COLD_SOFT_WAVE, (unsigned)GJ_COLD_SOFT_AREAS,
             g_u32SoftLogN, u32SvcBound, u32DoorsUsable, u32QueueUsable,
             (unsigned long long)g_u64Submits);

@@ -6,7 +6,7 @@
  * Product path: probe → map PT_LOAD → SO registry → relocs → auxv handoff
  * → INTERP-first start (ld-gj). No third-party loader code.
  *
- * Soft inventory (Wave 28 exclusive deepen; this unit only; never hard-gates):
+ * Soft inventory (Wave 29 exclusive deepen; this unit only; never hard-gates):
  * greppable: "elf: soft …" | "elf_load: soft …"
  *   elf: soft inventory …
  *   elf: soft probe …
@@ -23,7 +23,7 @@
  *   elf: soft return …       (Wave 19 return-path catalog)
  *   elf: soft ret_surface …  (Wave 19 terminal return classes)
  *   elf: soft surface …      (Wave 19 area catalog)
- *   elf: soft deepen wave=28 …
+ *   elf: soft deepen wave=29 …
  *   elf: soft catalog …      (capacity honesty rollup)
  *   elf: soft bias …         (dyn/so bias + step geometry)
  *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
@@ -139,7 +139,7 @@ static u32              g_cSo;
  * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 28u
+#define GJ_ELF_SOFT_WAVE 29u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -510,16 +510,16 @@ elf_soft_inventory(const char *szVia)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_ELF_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: elf: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: elf: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("elf: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: elf: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("elf: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
@@ -667,7 +667,7 @@ elf_soft_inventory(const char *szVia)
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft retmap — Wave 19 return-surface map */
-    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=28\n");
+    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=29\n");
 
     /* Grep: elf_load: soft deepen */
     /*
@@ -806,21 +806,36 @@ elf_soft_inventory(const char *szVia)
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_ELF_SOFT_WAVE);
                             /*
-                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: elf_load: soft retshard — Wave 28 return-shard honesty */
+                            /* Grep: elf_load: soft retshard — Wave 28 return-shard honesty (kept) */
                             kprintf("elf_load: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
                                 "never_blocks_m0=1 wave=%u "
                                 "(retshard honesty; Soft≠product; not bar3)\n",
                                 (unsigned)GJ_ELF_SOFT_WAVE);
-                            /* Grep: elf_load: soft retcrown — Wave 28 exclusive crown stamp */
+                            /* Grep: elf_load: soft retcrown — Wave 28 crown stamp (kept) */
                             kprintf("elf_load: soft retcrown exclusive=1 soft_ne_product=1 "
                                 "product_kernel=OPEN bar3=0 wave=%u "
                                 "(retcrown stamp; Soft≠product)\n",
                                 (unsigned)GJ_ELF_SOFT_WAVE);
-    kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
+                                /*
+                             * ---- Wave 29 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: elf_load: soft retglyph — Wave 29 return-glyph honesty */
+                            kprintf("elf_load: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retglyph honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_ELF_SOFT_WAVE);
+                            /* Grep: elf_load: soft retscepter — Wave 29 exclusive scepter stamp */
+                            kprintf("elf_load: soft retscepter exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retscepter stamp; Soft≠product)\n",
+                                    (unsigned)GJ_ELF_SOFT_WAVE);
+                            kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
             "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "
             "(soft inventory only; not product gate)\n",
             GJ_ELF_SOFT_WAVE, szVia, g_u32SoftLoadOk, g_u32SoftProbeOk,

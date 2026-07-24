@@ -5,7 +5,7 @@
  * Host MMIO window table + inject helpers (UDX_HOST_LIBC).
  * Window table is also available freestanding for granted maps.
  *
- * Soft inventory (Wave 81 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 82 exclusive deepen; this unit only) —
  * greppable "udx: host soft …":
  *   udx: host soft inventory …
  *   udx: host soft window …
@@ -48,7 +48,7 @@ struct udx_host_window {
 static struct udx_host_window g_aWin[UDX_HOST_WIN_MAX];
 
 /*
- * Soft host window / BAR inventory (Wave 81 exclusive deepen).
+ * Soft host window / BAR inventory (Wave 82 exclusive deepen).
  * Cumulative for this process. greppable: udx: host soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -143,7 +143,7 @@ host_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft host inventory (Wave 81 exclusive deepen).
+ * Greppable soft host inventory (Wave 82 exclusive deepen).
  * Prefix-stable "udx: host soft …" — never hard-gates; observation only.
  *
  * greppable: udx: host soft
@@ -226,7 +226,7 @@ host_soft_inventory_log(void)
                    UDX_HOST_SOFT_WAVE);
 
     /*
-     * Grep: udx: host soft honesty (Wave 81 exclusive deepen).
+     * Grep: udx: host soft honesty (Wave 82 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     host_soft_emit("udx: host soft honesty multi_server=0 confine=0 bar3=0 "
@@ -717,8 +717,8 @@ udx_host_bar_memcpy_from(struct udx_pci_dev *pPdev, int nBar, u64 u64Off,
 
 /* pci inject / remove live in pci.c — declared in host.h */
 
-/* Wave 81 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retpanoplyangle continuum_toward=22300 soft_ne_product=1
- *   greppable: soft retbulwarkangle exclusive=1 continuum_toward=22300
+/* Wave 82 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmantleangle continuum_toward=22400 soft_ne_product=1
+ *   greppable: soft retaegisangle exclusive=1 continuum_toward=22400
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

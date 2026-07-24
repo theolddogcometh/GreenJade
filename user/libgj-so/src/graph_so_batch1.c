@@ -21,7 +21,7 @@
  * this tree. Candidate symbols that already live in user/libcgj (or the
  * shipped product TU) must not be redefined here.
  *
- * Soft surface (unwired; Wave 81 exclusive deepen):
+ * Soft surface (unwired; Wave 82 exclusive deepen):
  *   gj_so_batch1_export      — data (0x421); optional future resolve target
  *   gj_so_batch1_soft_stamp  — soft companion stamp ('B1s1')
  *   gj_so_batch1_init        — restores the marker + stamp
@@ -31,7 +31,7 @@
  *   gj_so_batch1_bucket      — hash % nbucket index helper
  *   gj_so_batch1_soft_get    — soft read of marker
  *   gj_so_batch1_soft_probe  — soft check + careful restore
- *   gj_so_batch1_soft_wave   — Wave 81 stamp (40)
+ *   gj_so_batch1_soft_wave   — Wave 82 stamp (40)
  *   gj_so_batch1_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_SO_BATCH1_SOFT_MARKER
@@ -156,7 +156,7 @@ gj_so_batch1_soft_probe(void)
 	return 1;
 }
 
-/* Cold soft inventory: Wave 81 stamp. Grep: libgj-so: soft batch1 wave= */
+/* Cold soft inventory: Wave 82 stamp. Grep: libgj-so: soft batch1 wave= */
 unsigned
 gj_so_batch1_soft_wave(void)
 {

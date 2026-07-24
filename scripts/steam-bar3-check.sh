@@ -29,11 +29,11 @@
 #   - Soft MANIFEST / READY / STAGE_META stamps
 #   - Always: bar3 client run OPEN; Top50 NOT-TRIED
 #
-# Wave 81 soft note (exclusive scripts high-water era):
-#   Continuum soft high-water advancing toward M=22300 (CREATE-ONLY soft graph).
-#   Soft deepen surfaces: retpanoplyangle / retbulwarkangle (CREATE-ONLY soft names only).
-#   Honest makefile_max is a Makefile scan — may still report 22200 until parent wires 22300.
-#   Do not hardcode false makefile_max=22300. Product lamps remain 0.
+# Wave 82 soft note (exclusive scripts high-water era):
+#   Continuum soft high-water advancing toward M=22400 (CREATE-ONLY soft graph).
+#   Soft deepen surfaces: retmantleangle / retaegisangle (CREATE-ONLY soft names only).
+#   Honest makefile_max is a Makefile scan — may still report 22300 until parent wires 22400.
+#   Do not hardcode false makefile_max=22400. Product lamps remain 0.
 #   multi_server=0 confine=0 bar3 OPEN lamps 0.
 #   media READY ≠ continuum wire ≠ smoke-all PASS ≠ title PASS ≠ product complete.
 #   Soft ≠ bar3; Top50 stays NOT-TRIED until real DUT title runs.
@@ -320,7 +320,7 @@ esac
 
 echo "  note:   soft check — exit 0 always; does not download or run Steam"
 echo "  note:   media READY ≠ smoke-all PASS ≠ bar3 client / Top50"
-echo "  note:   Wave 81 soft  continuum toward M=22300 ≠ bar3; makefile_max=scan truth (may be 22200); retpanoplyangle/retbulwarkangle soft only"
+echo "  note:   Wave 82 soft  continuum toward M=22400 ≠ bar3; makefile_max=scan truth (may be 22300); retmantleangle/retaegisangle soft only"
 echo "  note:   soft ≠ product complete; product lamps 0; Top50 NOT-TRIED × 50"
 echo "  bar3:   OPEN (client launch + matrix fill still required)"
 echo "  see:    docs/STEAM_BAR3_STATUS.md  docs/STEAM_HWTEST.md"

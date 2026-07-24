@@ -25,14 +25,14 @@
  *   process: soft return …  (Wave 19 return-path catalog)
  *   process: soft ret_surface … (Wave 19 terminal return classes)
  *   process: soft surface … (Wave 19 area catalog)
- *   process: soft deepen wave=44 …
+ *   process: soft deepen wave=45 …
  *   process: soft PASS|PARTIAL
- *   Apple §13 bootstrap seal checklist (wave=44 stamp):
+ *   Apple §13 bootstrap seal checklist (wave=45 stamp):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=44 …
- *   G-PROC-5 death tallies (wave=44 stamp):
- *     process: death … / process: death deepen wave=44 …
+ *     process: bootstrap seal soft deepen wave=45 …
+ *   G-PROC-5 death tallies (wave=45 stamp):
+ *     process: death … / process: death deepen wave=45 …
  *
  * Honesty: soft inventory only — not product multi-server seal, not Apple §13
  * closed, not bar3. Death cleanup ≠ bootstrap seal product.
@@ -50,9 +50,9 @@
 #include <gj/vmm.h>
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
-#define GJ_PROCESS_SOFT_WAVE 44u
-#define GJ_PROCESS_SOFT_AREAS 69u /* greppable inventory area count */
-#define GJ_SEAL_SOFT_WAVE 44u /* Apple s13 seal checklist stamp */
+#define GJ_PROCESS_SOFT_WAVE 45u
+#define GJ_PROCESS_SOFT_AREAS 71u /* greppable inventory area count */
+#define GJ_SEAL_SOFT_WAVE 45u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
 /* Forward: wait table lives later; soft census snapshots used/zombie/free. */
@@ -303,7 +303,7 @@ process_soft_inventory(const char *szVia)
             GJ_PROCESS_SOFT_WAVE);
 
     /* Grep: process: soft retmap — Wave 19 return-surface map */
-    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
+    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
 
     /* Grep: process: soft deepen */
     /*
@@ -1142,6 +1142,23 @@ kprintf("process: bootstrap seal: soft retembrasure exclusive=1 soft_ne_product=
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_PROCESS_SOFT_WAVE);
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: process: bootstrap seal: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("process: bootstrap seal: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_PROCESS_SOFT_WAVE);
+/* Grep: process: bootstrap seal: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("process: bootstrap seal: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_PROCESS_SOFT_WAVE);
+
 
 
                             kprintf("process: bootstrap seal soft deepen wave=%u via=%s "

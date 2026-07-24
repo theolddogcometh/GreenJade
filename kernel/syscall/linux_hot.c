@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE 44u
-#define GJ_LINUX_HOT_SOFT_AREAS 71u
+#define GJ_LINUX_HOT_SOFT_WAVE 45u
+#define GJ_LINUX_HOT_SOFT_AREAS 73u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -352,7 +352,7 @@ hot_soft_inventory_log(void)
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft note (Wave 20 deepen) */
-    kprintf("linux: hot soft note milestone=wave44 exclusive=1 "
+    kprintf("linux: hot soft note milestone=wave45 exclusive=1 "
             "soft_only=1 not_bar3=1 handlers=%u enter=%lu wave=%u\n",
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned long)s.u64EnterTotal,
@@ -780,10 +780,27 @@ kprintf("linux: hot: soft retembrasure exclusive=1 soft_ne_product=1 "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: hot: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("linux: hot: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+/* Grep: linux: hot: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("linux: hot: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
+
+
 
                             kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 44 exclusive; not bar3)\n",
+            "(Wave 45 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,

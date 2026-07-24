@@ -31,7 +31,7 @@
  *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
  *   io_uring: soft last        — Wave 15 live pool snapshot lamps
  *   io_uring: soft catalog     — Wave 15 surface catalog stamp
- *   io_uring: soft deepen      — wave=44 areas stamp
+ *   io_uring: soft deepen      — wave=45 areas stamp
  *   io_uring: soft inventory PASS / soft PASS
  * greppable: io_uring: soft
  *
@@ -273,10 +273,10 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 44 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE 44u
+/* Wave 45 soft inventory stamp (file-local; never product gate). */
+#define GJ_IORING_SOFT_WAVE 45u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 66u
+#define GJ_IORING_SOFT_AREAS 68u
 
 /*
  * Soft product inventory (Wave 35 exclusive deepen). File-local sticky
@@ -639,7 +639,7 @@ ioring_soft_log(void)
             (unsigned)GJ_IORING_SOFT_AREAS, (unsigned)GJ_IORING_SOFT_WAVE);
 
     /* Grep: io_uring: soft note (Wave 20 deepen) */
-    kprintf("io_uring: soft note milestone=wave44 exclusive=1 "
+    kprintf("io_uring: soft note milestone=wave45 exclusive=1 "
             "min_rings=1 full_game_io=0 soft_only=1 not_bar3=1 "
             "wave=%u\n",
             (unsigned)GJ_IORING_SOFT_WAVE);
@@ -658,7 +658,7 @@ ioring_soft_log(void)
 
 /* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
     /* Grep: io_uring: soft retmap — Wave 19 return-surface map */
-    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
+    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
 
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
@@ -1057,6 +1057,23 @@ kprintf("io_uring: soft retembrasure exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_IORING_SOFT_WAVE);
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: io_uring: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("io_uring: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_IORING_SOFT_WAVE);
+/* Grep: io_uring: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("io_uring: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_IORING_SOFT_WAVE);
+
 
 
                             kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "

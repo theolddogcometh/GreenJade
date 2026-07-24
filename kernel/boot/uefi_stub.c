@@ -17,7 +17,7 @@
  *   optional GOP is absent. Memmap soft REJECT still proceeds to EBS so
  *   partial boots remain diagnosable.
  *
- * Wave 44 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
+ * Wave 45 exclusive soft deepen (this unit only — greppable "GJ-EFI: soft …"):
  *   GJ-EFI: soft inventory  — master surface + wave stamp
  *   GJ-EFI: soft path       — P-BOOT-1/3/4 claim + soft_never_gates
  *   GJ-EFI: soft honesty    — explicit non-claims (not Multiboot; not bar3)
@@ -37,7 +37,7 @@
  *   GJ-EFI: soft catalog    — Wave 19 area name rollup
  *   GJ-EFI: soft retclass   — Wave 19 return-class taxonomy (kept)
  *   GJ-EFI: soft retlane    — Wave 19 return-lane catalog (kept)
- *   GJ-EFI: soft deepen     — wave=44 stamp + area catalog
+ *   GJ-EFI: soft deepen     — wave=45 stamp + area catalog
  *   GJ-EFI: soft PASS|PARTIAL — close marker (soft readiness only)
  *
  * Legacy companion markers (still emitted; prefix-stable):
@@ -90,7 +90,7 @@ typedef u64 efi_uintn_t;
 #define EfiMemoryMappedIOPort 12u
 
 /* Wave 15 soft inventory stamp (observability only; never gates product). */
-#define GJ_EFI_SOFT_WAVE 44u
+#define GJ_EFI_SOFT_WAVE 45u
 
 struct efi_table_header {
     u64 u64Signature;
@@ -983,7 +983,7 @@ soft_wave14_inventory(u64 u64Entry)
               "surfaces,note,return,retmap,deepen\n");
 
     /* Grep: GJ-EFI: soft note (Wave 20 deepen) */
-    com1_puts("GJ-EFI: soft note milestone=wave44 exclusive=1 "
+    com1_puts("GJ-EFI: soft note milestone=wave45 exclusive=1 "
               "soft_only=1 not_bar3=1 not-multiboot wave=");
     com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
     com1_puts("\n");
@@ -1152,11 +1152,11 @@ com1_puts(" (retflame stamp; Soft!=product)\n");
  */
 /* Grep: GJ-EFI: soft retprism — Wave 27 return-prism honesty (kept) */
 com1_puts("GJ-EFI: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retprism honesty; Soft!=product; not bar3)\n");
 /* Grep: GJ-EFI: soft retforge — Wave 27 forge stamp (kept) */
 com1_puts("GJ-EFI: soft retforge exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retforge stamp; Soft!=product)\n");
 cAreas++;
 cAreas++;
@@ -1167,11 +1167,11 @@ cAreas++;
  */
 /* Grep: GJ-EFI: soft retshard — Wave 28 return-shard honesty (kept) */
 com1_puts("GJ-EFI: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retshard honesty; Soft!=product; not bar3)\n");
 /* Grep: GJ-EFI: soft retcrown — Wave 28 crown stamp (kept) */
 com1_puts("GJ-EFI: soft retcrown exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retcrown stamp; Soft!=product)\n");
 /*
  * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
@@ -1179,11 +1179,11 @@ com1_puts("GJ-EFI: soft retcrown exclusive=1 soft_ne_product=1 "
  */
 /* Grep: GJ-EFI: soft retglyph — Wave 29 return-glyph honesty (kept) */
 com1_puts("GJ-EFI: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-          "never_blocks_m0=1 wave=44 "
+          "never_blocks_m0=1 wave=45 "
           "(retglyph honesty; Soft!=product; not bar3)\n");
 /* Grep: GJ-EFI: soft retscepter — Wave 29 scepter stamp (kept) */
 com1_puts("GJ-EFI: soft retscepter exclusive=1 soft_ne_product=1 "
-          "product_kernel=OPEN bar3=0 wave=44 "
+          "product_kernel=OPEN bar3=0 wave=45 "
           "(retscepter stamp; Soft!=product)\n");
 /*
  * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -1191,11 +1191,11 @@ com1_puts("GJ-EFI: soft retscepter exclusive=1 soft_ne_product=1 "
  */
 /* Grep: GJ-EFI: soft retsigil — Wave 30 return-sigil honesty (kept) */
 com1_puts("GJ-EFI: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-          "never_blocks_m0=1 wave=44 "
+          "never_blocks_m0=1 wave=45 "
           "(retsigil honesty; Soft!=product; not bar3)\n");
 /* Grep: GJ-EFI: soft retemblem — Wave 30 emblem stamp (kept) */
 com1_puts("GJ-EFI: soft retemblem exclusive=1 soft_ne_product=1 "
-          "product_kernel=OPEN bar3=0 wave=44 "
+          "product_kernel=OPEN bar3=0 wave=45 "
           "(retemblem stamp; Soft!=product)\n");
 /*
  * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -1204,11 +1204,11 @@ com1_puts("GJ-EFI: soft retemblem exclusive=1 soft_ne_product=1 "
  */
 /* Grep: GJ-EFI: soft retaegis — Wave 31 return-aegis honesty (kept) */
 com1_puts("GJ-EFI: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-          "never_blocks_m0=1 wave=44 "
+          "never_blocks_m0=1 wave=45 "
           "(retaegis honesty; Soft!=product; not bar3)\n");
 /* Grep: GJ-EFI: soft retmantle — Wave 31 mantle stamp (kept) */
 com1_puts("GJ-EFI: soft retmantle exclusive=1 soft_ne_product=1 "
-          "product_kernel=OPEN bar3=0 wave=44 "
+          "product_kernel=OPEN bar3=0 wave=45 "
           "(retmantle stamp; Soft!=product)\n");
 cAreas++;
 /*
@@ -1218,12 +1218,12 @@ cAreas++;
  */
 /* Grep: GJ-EFI: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 com1_puts("GJ-EFI: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-          "never_blocks_m0=1 wave=44 "
+          "never_blocks_m0=1 wave=45 "
           "(retbulwark honesty; Soft!=product; not bar3)\n");
 cAreas++;
 /* Grep: GJ-EFI: soft retpanoply — Wave 32 panoply stamp (kept) */
 com1_puts("GJ-EFI: soft retpanoply exclusive=1 soft_ne_product=1 "
-          "product_kernel=OPEN bar3=0 wave=44 "
+          "product_kernel=OPEN bar3=0 wave=45 "
           "(retpanoply stamp; Soft!=product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -1232,12 +1232,12 @@ com1_puts("GJ-EFI: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: GJ-EFI: soft retbastion — Wave 33 return-bastion honesty (kept) */
 com1_puts("GJ-EFI: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-          "never_blocks_m0=1 wave=44 "
+          "never_blocks_m0=1 wave=45 "
           "(retbastion honesty; Soft!=product; not bar3)\n");
 cAreas++;
 /* Grep: GJ-EFI: soft retcitadel — Wave 33 citadel stamp (kept) */
 com1_puts("GJ-EFI: soft retcitadel exclusive=1 soft_ne_product=1 "
-          "product_kernel=OPEN bar3=0 wave=44 "
+          "product_kernel=OPEN bar3=0 wave=45 "
           "(retcitadel stamp; Soft!=product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -1246,11 +1246,11 @@ com1_puts("GJ-EFI: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -1259,11 +1259,11 @@ kprintf("soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -1272,11 +1272,11 @@ kprintf("soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft rethold — Wave 36 return-hold honesty */
 kprintf("soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -1285,11 +1285,11 @@ kprintf("soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retwall — Wave 37 return-wall honesty */
 kprintf("soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -1298,11 +1298,11 @@ kprintf("soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retmoat — Wave 38 return-moat honesty */
 kprintf("soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retower — Wave 38 exclusive tower stamp */
 kprintf("soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retower stamp; Soft≠product)\n");
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -1311,11 +1311,11 @@ kprintf("soft retower exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retbarbican — Wave 39 return-barbican honesty */
 kprintf("soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retbarbican honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retglacis — Wave 39 exclusive glacis stamp */
 kprintf("soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retglacis stamp; Soft≠product)\n");
 /*
  * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
@@ -1324,11 +1324,11 @@ kprintf("soft retglacis exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retcurtain — Wave 40 return-curtain honesty */
 kprintf("soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retcurtain honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retparapet — Wave 40 exclusive parapet stamp */
 kprintf("soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retparapet stamp; Soft≠product)\n");
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
@@ -1337,11 +1337,11 @@ kprintf("soft retparapet exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retravelin — Wave 41 return-travelin honesty */
 kprintf("soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retditch — Wave 41 exclusive ditch stamp */
 kprintf("soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retditch stamp; Soft≠product)\n");
 /*
  * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
@@ -1350,11 +1350,11 @@ kprintf("soft retditch exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retportcullis — Wave 42 return-portcullis honesty */
 kprintf("soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retportcullis honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retbattlement — Wave 42 exclusive battlement stamp */
 kprintf("soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retbattlement stamp; Soft≠product)\n");
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
@@ -1363,11 +1363,11 @@ kprintf("soft retbattlement exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retmachicolation — Wave 43 return-machicolation honesty */
 kprintf("soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retmachicolation honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
 kprintf("soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retarrowslit stamp; Soft≠product)\n");
 
 /*
@@ -1377,12 +1377,27 @@ kprintf("soft retarrowslit exclusive=1 soft_ne_product=1 "
  */
 /* Grep: soft retmerlon — Wave 44 return-merlon honesty */
 kprintf("soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=44 "
+        "never_blocks_m0=1 wave=45 "
         "(retmerlon honesty; Soft≠product; not bar3)\n");
 /* Grep: soft retembrasure — Wave 44 exclusive embrasure stamp */
 kprintf("soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=44 "
+        "product_kernel=OPEN bar3=0 wave=45 "
         "(retembrasure stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=45 "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n");
+/* Grep: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=45 "
+        "(retouterward stamp; Soft≠product)\n");
+
 
 
 cAreas++;

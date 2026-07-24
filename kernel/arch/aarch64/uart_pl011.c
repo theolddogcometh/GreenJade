@@ -16,7 +16,7 @@
  * aarch64_uart_soft_selftest (called by cpu_info soft deepen).
  * Soft TX stats: char count + thrwait + max FR-wait spins + TXFF hits.
  * Soft program: expected PrimeCell peri/cell pack + base + spin cap.
- * Soft deepen: area catalog stamp wave=44.
+ * Soft deepen: area catalog stamp wave=45.
  * Soft path honesty: polled early console only; product_kernel=OPEN.
  *
  * Shared serial hex dump helper: aarch64_uart_put_hex / put_hex_n /
@@ -28,11 +28,11 @@
  *   aarch64: uart soft lamps txfe=… rxfe=… txff=… rxff=… busy=…
  *   aarch64: uart soft ctrl cr=… lcrh=… ibrd=… fbrd=… imsc=… dmacr=… rsr=…
  *   aarch64: uart soft id peri=… cell=… match=… fr_live=…
- *   aarch64: uart soft inventory wave=44 …
+ *   aarch64: uart soft inventory wave=45 …
  *   aarch64: uart soft program base=… peri=… cell=… spin_cap=…
  *   aarch64: uart soft stats …
- *   aarch64: uart soft deepen wave=44 areas=…
- *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=44
+ *   aarch64: uart soft deepen wave=45 areas=…
+ *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=45
  *   aarch64: uart soft return inv_ret=… product_kernel=OPEN
  *   aarch64: uart soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: uart soft PASS | FAIL
@@ -104,11 +104,11 @@
 /* Soft hex-dump cap (early-console safety). */
 #define PL011_SOFT_DUMP_MAX 256u
 
-/* Wave 44 soft inventory stamp (greppable wave=44). */
-#define PL011_SOFT_WAVE 44u
+/* Wave 45 soft inventory stamp (greppable wave=45). */
+#define PL011_SOFT_WAVE 45u
 
 /* Soft deepen areas: chars,fr,lamps,ctrl,id,program,stats,path,honesty. */
-#define PL011_SOFT_AREAS 58u
+#define PL011_SOFT_AREAS 60u
 
 /*
  * Soft UART inventory snapshot (Wave 19).
@@ -956,6 +956,23 @@ aarch64_uart_puts("aarch64: uart: soft retembrasure exclusive=1 soft_ne_product=
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
 aarch64_uart_puts(" (retembrasure stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: uart: soft retkeepgate — Wave 45 return-keepgate honesty */
+aarch64_uart_puts("aarch64: uart: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+aarch64_uart_puts(" (retkeepgate honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: uart: soft retouterward — Wave 45 exclusive outerward stamp */
+aarch64_uart_puts("aarch64: uart: soft retouterward exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
+aarch64_uart_puts(" (retouterward stamp; Soft!=product)\n");
+
 
 
     aarch64_uart_puts("aarch64: uart soft deepen wave=");

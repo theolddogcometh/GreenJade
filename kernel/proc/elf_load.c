@@ -23,7 +23,7 @@
  *   elf: soft return …       (Wave 19 return-path catalog)
  *   elf: soft ret_surface …  (Wave 19 terminal return classes)
  *   elf: soft surface …      (Wave 19 area catalog)
- *   elf: soft deepen wave=44 …
+ *   elf: soft deepen wave=45 …
  *   elf: soft catalog …      (capacity honesty rollup)
  *   elf: soft bias …         (dyn/so bias + step geometry)
  *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
@@ -139,7 +139,7 @@ static u32              g_cSo;
  * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 44u
+#define GJ_ELF_SOFT_WAVE 45u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -667,7 +667,7 @@ elf_soft_inventory(const char *szVia)
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft retmap — Wave 19 return-surface map */
-    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
+    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
 
     /* Grep: elf_load: soft deepen */
     /*
@@ -1067,6 +1067,23 @@ kprintf("elf_load: soft retembrasure exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_ELF_SOFT_WAVE);
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: elf_load: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("elf_load: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_ELF_SOFT_WAVE);
+/* Grep: elf_load: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("elf_load: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_ELF_SOFT_WAVE);
+
 
 
                             kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "

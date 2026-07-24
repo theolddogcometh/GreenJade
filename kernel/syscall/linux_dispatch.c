@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE 44u
-#define LINUX_DISPATCH_SOFT_AREAS 78u
+#define LINUX_DISPATCH_SOFT_WAVE 45u
+#define LINUX_DISPATCH_SOFT_AREAS 80u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -388,7 +388,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: nr class soft note (Wave 20 deepen) */
-    kprintf("linux: nr class soft note milestone=wave44 exclusive=1 "
+    kprintf("linux: nr class soft note milestone=wave45 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -683,7 +683,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: dispatch soft note (Wave 20 deepen) */
-    kprintf("linux: dispatch soft note milestone=wave44 exclusive=1 "
+    kprintf("linux: dispatch soft note milestone=wave45 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -1099,6 +1099,23 @@ kprintf("linux: dispatch: soft retembrasure exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: dispatch: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("linux: dispatch: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+/* Grep: linux: dispatch: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("linux: dispatch: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+
 
 
                             kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "

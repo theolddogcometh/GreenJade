@@ -53,7 +53,7 @@
 #define GJ_SESS_TMP_W   64u
 #define GJ_SESS_TMP_H   64u
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_SESS_SOFT_WAVE 44u
+#define GJ_SESS_SOFT_WAVE 45u
 
 static int g_fInit;
 static u32 g_u32Calls;
@@ -546,7 +546,7 @@ sess_soft_inventory_log(void)
     cAreas++;
 
     /* Grep: session_door: soft retmap — Wave 19 return-surface map */
-    kprintf("session_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
+    kprintf("session_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
 
     /* Grep: session_door: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -946,6 +946,23 @@ kprintf("session_door: soft retembrasure exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_SESS_SOFT_WAVE);
+
+/*
+ * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: session_door: soft retkeepgate — Wave 45 return-keepgate honesty */
+kprintf("session_door: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retkeepgate honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_SESS_SOFT_WAVE);
+/* Grep: session_door: soft retouterward — Wave 45 exclusive outerward stamp */
+kprintf("session_door: soft retouterward exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_SESS_SOFT_WAVE);
+
 
 
                             kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "

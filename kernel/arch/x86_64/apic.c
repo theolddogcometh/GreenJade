@@ -101,7 +101,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE 122u
+#define APIC_SOFT_WAVE 123u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -1802,6 +1802,10 @@ kprintf("apic: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("apic: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: apic: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("apic: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: apic: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("apic: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: apic: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("apic: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"
             "eoi,icr,irq,bringup,path,query,lapic,sample,lamps,reject,"

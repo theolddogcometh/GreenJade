@@ -72,7 +72,7 @@
  *   aarch64: mmu soft sctlr=… m=… c=… i=…
  *   aarch64: mmu soft l1 d0_ok=… d1_ok=… map_ok=…
  *   aarch64: mmu soft inventory wave=118 …
- *   aarch64: mmu soft deepen wave=122 areas=…
+ *   aarch64: mmu soft deepen wave=123 areas=…
  *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=118
  *   aarch64: mmu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: mmu soft honesty product_kernel=OPEN soft_only=1
@@ -120,10 +120,10 @@ extern void *aarch64_pmm_alloc(void);
 #define MMU_SOFT_PAGE_64K  65536ul
 
 /* Wave 45 soft inventory stamp (greppable wave=121). */
-#define MMU_SOFT_WAVE 122u
+#define MMU_SOFT_WAVE 123u
 
 /* Soft deepen area count: page,ttbr,mair,sctlr,l1,path,honesty. */
-#define MMU_SOFT_AREAS 209u
+#define MMU_SOFT_AREAS 211u
 
 /* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
 #define TTBR_BADDR_MASK (~0xffful)
@@ -1530,6 +1530,10 @@ aarch64_uart_puts("aarch64: mmu: soft retpacketangle exclusive=1 soft_ne_product
 aarch64_uart_puts("aarch64: mmu: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 aarch64_uart_puts("aarch64: mmu: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: aarch64: mmu: soft retlayerangle — Wave 123 return-layerangle honesty */
+aarch64_uart_puts("aarch64: mmu: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: mmu: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+aarch64_uart_puts("aarch64: mmu: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: mmu soft deepen wave=");

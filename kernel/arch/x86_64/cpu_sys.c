@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 122u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 123u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -1531,6 +1531,10 @@ kprintf("cpu: syscall: soft retpacketangle exclusive=1 soft_ne_product=1 product
 kprintf("cpu: syscall: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("cpu: syscall: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: cpu: syscall: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("cpu: syscall: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: cpu: syscall: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("cpu: syscall: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
             "areas=inventory,program,star,lstar,cstar,sfmask,efer,"

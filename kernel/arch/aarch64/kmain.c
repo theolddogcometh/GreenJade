@@ -46,7 +46,7 @@
  *   aarch64: kmain soft shared c=… sched=… pmm=…
  *   aarch64: kmain soft mem probe=… free=… total=…
  *   aarch64: kmain soft stats lamps=… bringup=… shared=… mem=… ratio=…
- *   aarch64: kmain soft deepen wave=122 areas=… logs=…
+ *   aarch64: kmain soft deepen wave=123 areas=… logs=…
  *   aarch64: kmain soft surf bringup=… shared=… mem=… lamps=… bits=…
  *   aarch64: kmain soft return inv_ret=… soft_ok=… soft_fail=…
  *             product_kernel=OPEN wave=118
@@ -80,10 +80,10 @@ void aarch64_psci_probe(void);
 #define KMAIN_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aul
 
 /* Wave 45 soft inventory stamp (greppable wave=121). */
-#define KMAIN_SOFT_WAVE 122u
+#define KMAIN_SOFT_WAVE 123u
 
 /* Soft area count for deepen catalog (inventory+bringup+shared+mem+path+stats). */
-#define KMAIN_SOFT_AREAS 209u
+#define KMAIN_SOFT_AREAS 211u
 
 /* Soft observability (kmain-local; never gate product M0). */
 static u32 g_cSoftPhases;
@@ -1349,6 +1349,10 @@ kprintf("aarch64: kmain: soft retpacketangle exclusive=1 soft_ne_product=1 produ
 kprintf("aarch64: kmain: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("aarch64: kmain: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: aarch64: kmain: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("aarch64: kmain: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: kmain: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("aarch64: kmain: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("aarch64: kmain soft deepen wave=%u areas=%u "
             "catalog=inventory,bringup,shared,mem,stats,path,surf,return,honesty,exclusive,open "
             "logs=%u soft_only=1\n",

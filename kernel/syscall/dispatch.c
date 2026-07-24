@@ -48,8 +48,8 @@
 #include <gj/thread.h>
 
 /* Wave 45 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE 122u
-#define SYSCALL_SOFT_AREAS 220u
+#define SYSCALL_SOFT_WAVE 123u
+#define SYSCALL_SOFT_AREAS 222u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -1359,6 +1359,10 @@ kprintf("syscall: soft retpacketangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("syscall: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("syscall: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: syscall: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("syscall: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: syscall: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("syscall: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
             "prefix=syscall:soft "
             "surfaces=inventory,stats,bridge,route,personality,bind,"

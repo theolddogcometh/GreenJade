@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE 122u
+#define TRAP_SOFT_WAVE 123u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -1571,6 +1571,10 @@ kprintf("trap: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("trap: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: trap: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("trap: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: trap: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("trap: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: trap: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("trap: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"
             "limit,last,resume,halt,rate,path,"

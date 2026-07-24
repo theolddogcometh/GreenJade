@@ -35,7 +35,7 @@
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
 #define ENTRY_BRIDGE_SOFT_WAVE 123u
 /* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
-#define ENTRY_BRIDGE_SOFT_AREAS 210u
+#define ENTRY_BRIDGE_SOFT_AREAS 212u
 
 /*
  * Soft edge tallies (wrap OK). Diagnostics only — does not alter route.

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """CREATE-ONLY soft packages M=76100..80000 (mirror 25800 KATs; bar3=0).
 
-Writes cgj_soft_milestone_M.c + NOTES_milestone_M.txt for each missing M.
+Writes thin cgj_soft_milestone_M.c (includes _cgj_soft_m_template.inc)
++ NOTES_milestone_M.txt for each missing M.
+Skips existing files. Full-form packages already present (e.g. 76100-76400) are left.
+
 Run: python3 user/libcgj/tests/_emit_soft_pkg_76100_80000.py
 """
 from pathlib import Path
@@ -14,15 +17,6 @@ def c_body(m: int) -> str:
     b0 = b[0]
     fill0, fill1 = m - 24, m - 10
     id0, id1 = m - 49, m - 25
-    ex = "\n".join(f"extern const char __libcgj_batch{x}_marker[];" for x in b)
-    sc = " ||\n\t    ".join(
-        f'strcmp(__libcgj_batch{x}_marker, "libcgj-batch{x}") != 0' for x in b
-    )
-    sm = "\n".join(
-        f'\tnFail += soft_marker(h, "__libcgj_batch{x}_marker",\n'
-        f'\t                     "libcgj-batch{x}", &nChecked);'
-        for x in b
-    )
     gl = "\n".join(
         f" *     user/libcgj/src/graph_batch{x}.c"
         + (" \\" if i < len(b) - 1 else "")
@@ -37,6 +31,7 @@ def c_body(m: int) -> str:
  * Coherent soft package (see NOTES_milestone_{m}.txt):
  *   - this TU (libcgj continuum dyn/direct soft KATs)
  *   - NOTES_milestone_{m}.txt
+ *   - _cgj_soft_m_template.inc (shared body)
  *
  * Mirror 25800 soft pattern; bar3 still open (gj_bar3_ready_{m} == 0).
  * Sibling harnesses: cgj_smoke.c / cgj_dyn_smoke.c / prior soft decades.
@@ -54,212 +49,32 @@ def c_body(m: int) -> str:
 {gl}
  *   ./build/cgj_soft_milestone_{m}_direct
  *
- * Expected soft KATs (wave {b0}–{m} exclusive continuum markers):
- *   gj_shell_green_{m}      → 1
- *   gj_libcgj_green_{m}     → 1
- *   gj_bar3_ready_{m}       → 0   (bar3 still open)
- *   gj_product_score_{m}    → 0   (product score still open)
- *   gj_continuum_ready_{m}  → 1
- *   gj_smoke_soft_{m}       → 1
- *   gj_dyn_soft_{m}         → 1
- *   gj_milestone_tag_{m}    → {m}
- *   gj_continuum_wave_{m}   → {m}
- *   gj_batch_id_{m}         → {m}
- *   gj_graph_milestone_{m}  → {m}
- *   __libcgj_batch{b0}_marker … __libcgj_batch{m}_marker
+ * Expected soft KATs (wave {b0}–{m}): gj_shell_green_{m}→1,
+ * gj_libcgj_green_{m}→1, gj_bar3_ready_{m}→0, gj_product_score_{m}→0,
+ * gj_continuum_ready_{m}→1, gj_smoke_soft_{m}→1, gj_dyn_soft_{m}→1,
+ * gj_milestone_tag/wave/batch_id/graph_milestone_{m}→{m}, markers match.
  *
  * Parent wiring: graph_batch{b0}.c … graph_batch{m}.c (fill {fill0}–{fill1},
  * identity {id0}–{id1}) CREATE-ONLY until makefile_max advances to {m}.
  */
 
 #define _GNU_SOURCE
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-
-#ifndef CGJ_SOFT_M{m}_DIRECT
-#include <dlfcn.h>
-#endif
-
-#ifdef CGJ_SOFT_M{m}_DIRECT
-extern uint32_t gj_shell_green_{m}(void);
-extern uint32_t gj_libcgj_green_{m}(void);
-extern uint32_t gj_bar3_ready_{m}(void);
-extern uint32_t gj_product_score_{m}(void);
-extern uint32_t gj_continuum_ready_{m}(void);
-extern uint32_t gj_smoke_soft_{m}(void);
-extern uint32_t gj_dyn_soft_{m}(void);
-extern uint32_t gj_milestone_tag_{m}(void);
-extern uint32_t gj_continuum_wave_{m}(void);
-extern uint32_t gj_batch_id_{m}(void);
-extern uint32_t gj_graph_milestone_{m}(void);
-{ex}
-
-static int
-direct_check(void)
-{{
-	int nFail = 0;
-
-	if (gj_shell_green_{m}() != 1u) {{
-		fprintf(stderr, "libcgj: direct gj_shell_green_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_libcgj_green_{m}() != 1u) {{
-		fprintf(stderr, "libcgj: direct gj_libcgj_green_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_bar3_ready_{m}() != 0u) {{
-		fprintf(stderr, "libcgj: direct gj_bar3_ready_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_product_score_{m}() != 0u) {{
-		fprintf(stderr, "libcgj: direct gj_product_score_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_continuum_ready_{m}() != 1u) {{
-		fprintf(stderr, "libcgj: direct gj_continuum_ready_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_smoke_soft_{m}() != 1u) {{
-		fprintf(stderr, "libcgj: direct gj_smoke_soft_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_dyn_soft_{m}() != 1u) {{
-		fprintf(stderr, "libcgj: direct gj_dyn_soft_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_milestone_tag_{m}() != {m}u) {{
-		fprintf(stderr, "libcgj: direct gj_milestone_tag_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_continuum_wave_{m}() != {m}u) {{
-		fprintf(stderr, "libcgj: direct gj_continuum_wave_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_batch_id_{m}() != {m}u) {{
-		fprintf(stderr, "libcgj: direct gj_batch_id_{m} fail\\n");
-		nFail++;
-	}}
-	if (gj_graph_milestone_{m}() != {m}u) {{
-		fprintf(stderr, "libcgj: direct gj_graph_milestone_{m} fail\\n");
-		nFail++;
-	}}
-	if ({sc}) {{
-		fprintf(stderr, "libcgj: direct m{m} marker string fail\\n");
-		nFail++;
-	}}
-	return nFail;
-}}
+#if defined(CGJ_SOFT_M{m}_DIRECT)
+#define CGJ_SOFT_IS_DIRECT 1
 #else
-
-typedef uint32_t (*u32_fn)(void);
-
-static int
-soft_u32(void *h, const char *szName, uint32_t u32Expect, int *pChecked)
-{{
-	u32_fn pfn;
-	uint32_t u32Got;
-
-	pfn = (u32_fn)dlsym(h, szName);
-	if (pfn == NULL)
-		return 0;
-	if (pChecked != NULL)
-		(*pChecked)++;
-	u32Got = pfn();
-	if (u32Got != u32Expect) {{
-		fprintf(stderr,
-		        "libcgj: soft m{m} %s KAT fail got=%u expect=%u\\n",
-		        szName, (unsigned)u32Got, (unsigned)u32Expect);
-		return 1;
-	}}
-	return 0;
-}}
-
-static int
-soft_marker(void *h, const char *szSym, const char *szExpect, int *pChecked)
-{{
-	const char *szGot;
-
-	szGot = (const char *)dlsym(h, szSym);
-	if (szGot == NULL)
-		return 0;
-	if (pChecked != NULL)
-		(*pChecked)++;
-	if (strcmp(szGot, szExpect) != 0) {{
-		fprintf(stderr,
-		        "libcgj: soft m{m} %s marker fail got=\\"%s\\" "
-		        "expect=\\"%s\\"\\n",
-		        szSym, szGot, szExpect);
-		return 1;
-	}}
-	return 0;
-}}
-
-static const char *const kPaths[] = {{
-    "build/user/libc.so.6",
-    "./build/user/libc.so.6",
-    NULL,
-}};
-
+#define CGJ_SOFT_IS_DIRECT 0
 #endif
-
-int
-main(void)
-{{
-#ifdef CGJ_SOFT_M{m}_DIRECT
-	int nFail = direct_check();
-	if (nFail != 0) {{
-		fprintf(stderr, "libcgj: soft m{m} DIRECT FAIL fails=%d\\n", nFail);
-		return 1;
-	}}
-	printf("libcgj: soft m{m} DIRECT PASS (all 11 lamps + markers)\\n");
-	return 0;
-#else
-	void *h = NULL;
-	const char *szPath = NULL;
-	int i, nChecked = 0, nFail = 0;
-
-	for (i = 0; kPaths[i] != NULL; i++) {{
-		h = dlopen(kPaths[i], RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
-		if (h != NULL) {{
-			szPath = kPaths[i];
-			break;
-		}}
-	}}
-	if (h == NULL) {{
-		fprintf(stderr, "libcgj: soft m{m} skip (dlopen fail: %s)\\n",
-		        dlerror());
-		printf("libcgj: soft m{m} SOFT-SKIP (no product SO)\\n");
-		return 0;
-	}}
-
-	nFail += soft_u32(h, "gj_shell_green_{m}", 1u, &nChecked);
-	nFail += soft_u32(h, "gj_libcgj_green_{m}", 1u, &nChecked);
-	nFail += soft_u32(h, "gj_bar3_ready_{m}", 0u, &nChecked);
-	nFail += soft_u32(h, "gj_product_score_{m}", 0u, &nChecked);
-	nFail += soft_u32(h, "gj_continuum_ready_{m}", 1u, &nChecked);
-	nFail += soft_u32(h, "gj_smoke_soft_{m}", 1u, &nChecked);
-	nFail += soft_u32(h, "gj_dyn_soft_{m}", 1u, &nChecked);
-	nFail += soft_u32(h, "gj_milestone_tag_{m}", {m}u, &nChecked);
-	nFail += soft_u32(h, "gj_continuum_wave_{m}", {m}u, &nChecked);
-	nFail += soft_u32(h, "gj_batch_id_{m}", {m}u, &nChecked);
-	nFail += soft_u32(h, "gj_graph_milestone_{m}", {m}u, &nChecked);
-{sm}
-
-	if (nFail != 0) {{
-		(void)dlclose(h);
-		fprintf(stderr,
-		        "libcgj: soft m{m} FAIL path=%s fails=%d checked=%d\\n",
-		        szPath, nFail, nChecked);
-		return 2;
-	}}
-	printf("libcgj: soft m{m} PASS path=%s checked=%d "
-	       "(soft-skip unexported/missing; bar3 still open)\\n",
-	       szPath, nChecked);
-	(void)dlclose(h);
-	return 0;
-#endif
-}}
+#define CGJ_SOFT_M {m}
+#define CGJ_SOFT_B0 {b[0]}
+#define CGJ_SOFT_B1 {b[1]}
+#define CGJ_SOFT_B2 {b[2]}
+#define CGJ_SOFT_B3 {b[3]}
+#define CGJ_SOFT_B4 {b[4]}
+#define CGJ_SOFT_B5 {b[5]}
+#define CGJ_SOFT_B6 {b[6]}
+#define CGJ_SOFT_B7 {b[7]}
+#define CGJ_SOFT_B8 {b[8]}
+#include "_cgj_soft_m_template.inc"
 """
 
 
@@ -281,6 +96,7 @@ Scope (CREATE-ONLY soft; Makefile not edited from this wave)
 Coherent soft package (untracked / new soft only):
   - user/libcgj/tests/NOTES_milestone_{m}.txt   (this file)
   - user/libcgj/tests/cgj_soft_milestone_{m}.c  (host dyn + direct KATs)
+  - user/libcgj/tests/_cgj_soft_m_template.inc  (shared body)
 
 libcgj continuum markers (graph_batch{b0}.c … graph_batch{m}.c) are
 product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +

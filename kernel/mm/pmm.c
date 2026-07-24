@@ -76,9 +76,9 @@
 /* Product soft gate: true 1 TiB host class (1ull<<40). Soft only — never hard-fail. */
 #define PMM_TIB_BYTES        (1ull << 40)
 /* Wave 19 greppable soft inventory stamp (file-local; never product gate). */
-#define PMM_SOFT_WAVE 122u
+#define PMM_SOFT_WAVE 123u
 /* Catalog area count for deepen stamp (honesty..api prior to deepen line). */
-#define PMM_SOFT_AREAS 222u
+#define PMM_SOFT_AREAS 224u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1844,6 +1844,10 @@ kprintf("pmm: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("pmm: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("pmm: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: pmm: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("pmm: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("pmm: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("pmm: soft deepen wave=%u areas=%u catalog=%u via=%s ready=%s "
             "free=%lu logs=%u surf=0x%x product_tib=0 pmem3=OPEN bar3=OPEN "
             "(Wave 35 exclusive; soft; not 1TiB product; not bar3; "

@@ -40,7 +40,7 @@
  *   aarch64: cpu soft inv el1=… el0_a64=… el1_a64=… tgran4=… ok=…
  *   aarch64: cpu soft inventory wave=118 …
  *   aarch64: cpu soft surf …
- *   aarch64: cpu soft deepen wave=122 areas=…
+ *   aarch64: cpu soft deepen wave=123 areas=…
  *   aarch64: cpu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: cpu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: cpu soft PASS | FAIL
@@ -96,9 +96,9 @@ extern void aarch64_uart_soft_selftest(void);
 #define DCZID_DZP_BIT (1ul << 4)
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define CPU_SOFT_WAVE 122u
+#define CPU_SOFT_WAVE 123u
 /* Areas: id,midr,mpidr,pfr,isar,mmfr,cache,extra,regs,path,inv,surf,honesty,deepen */
-#define CPU_SOFT_AREAS 213u
+#define CPU_SOFT_AREAS 215u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cCpuSoftLogs;
@@ -1538,6 +1538,10 @@ aarch64_uart_puts("aarch64: cpu: soft retpacketangle exclusive=1 soft_ne_product
 aarch64_uart_puts("aarch64: cpu: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: cpu: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 aarch64_uart_puts("aarch64: cpu: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: aarch64: cpu: soft retlayerangle — Wave 123 return-layerangle honesty */
+aarch64_uart_puts("aarch64: cpu: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: cpu: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+aarch64_uart_puts("aarch64: cpu: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: cpu soft deepen wave=");

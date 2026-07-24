@@ -123,7 +123,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 122u
+#define UART_SOFT_WAVE 123u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -1956,6 +1956,10 @@ kprintf("serial: soft retpacketangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("serial: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("serial: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: serial: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("serial: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: serial: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("serial: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"
             "lamps,stats,mcr,float,honesty,"

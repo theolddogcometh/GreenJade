@@ -316,7 +316,7 @@ soft_inventory_log(void)
 
     /*
      * Grep: udx: soft retcircumangle — Wave 98 return-circumangle honesty
-     * Grep: udx: soft retellipseangle — Wave 98 exclusive arcangle stamp
+     * Grep: udx: soft retellipseangle — Wave 98 exclusive ellipseangle stamp
      * CREATE-ONLY soft names; continuum toward 24000; Soft≠product.
      */
     soft_emit("udx: soft retcircumangle soft_only=1 product_gate=0 "

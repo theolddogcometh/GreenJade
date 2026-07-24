@@ -836,7 +836,7 @@ No “must match Linux by importing Linux.”
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid`
 - Residual **#UD** closed
-- Parallel soft waves: continuum high-water **advancing toward 24000** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **23800**) until the next decade is wired)
+- Parallel soft waves: continuum high-water **advancing toward 24000** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **23900**) until the next decade is wired)
 - Product lamps remain **0** by design (soft continuum ≠ product complete)
 - **bar3 still open** (Steam client / Deck Top 50 title runs; matrix NOT-TRIED × 50)
 

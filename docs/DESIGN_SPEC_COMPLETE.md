@@ -359,7 +359,7 @@ Remaining work is **coding and matrix execution**, not open-ended design choice�
 | Term | Meaning on this document |
 |------|--------------------------|
 | **Soft freeze / Accepted freeze** | Normative **what to build** (isolation, doors, CapJit, futex, cold path, AC honesty, matrix process, …). Design complete enough to implement. |
-| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 24000** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **23800**, until next decade is wired). |
+| **Soft continuum / soft ship gates** | CREATE-ONLY graph high-water / greppable kernel smokes / media inventory — bring-up honesty only (companion docs). Parent-wire high-water **advancing toward 24000** soft only; honest `makefile_max` is a Makefile scan (may still report prior tip, e.g. **23900**, until next decade is wired). |
 | **Product multi-server confine** | Full multi-server drop-ambient security product: servers + clients confined by caps/promises end-to-end; bootstrap seal — **open** |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN** |

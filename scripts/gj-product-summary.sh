@@ -45,9 +45,9 @@
 #   scsi_mid-gj: soft stats …            freestanding scsi soft counters
 # Continuum side panel (host helper; soft graph only):
 #   makefile_max=N                       honest Makefile scan (source of truth)
-#   high-water toward 24000              Wave 98 soft target (note 24000 greppable only when N>=24000; 24000 prior tip when N>=24000)
-#   prior tip makefile_max=24000         may still be scan truth until parent wires 24000
-#   (do not hardcode false makefile_max if scan still 23800 until parent wires)
+#   high-water toward 24000              Wave 98 soft target (note 24000 greppable only when N>=24000; 23900 prior tip when N>=23900)
+#   prior tip makefile_max=23900         may still be scan truth until parent wires 24000
+#   (do not hardcode false makefile_max if scan still 23900 until parent wires)
 #   soft deepen retcircumangle/retellipseangle      Wave 98 CREATE-ONLY soft names only (≠ product)
 #   product lamps remain 0; soft ≠ product complete; soft ≠ bar3
 # Bar3 honesty (host media check; always OPEN while client/matrix open):
@@ -271,7 +271,7 @@ else
 fi
 # Continuum high-water (honest Makefile scan; soft graph only — not bar3).
 # Wave 98: soft target M=24000; note makefile_max=24000 greppable only when N>=24000.
-# Scan is source of truth — never hardcode false 24000 if scan still 23800.
+# Scan is source of truth — never hardcode false 24000 if scan still 23900.
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
 	mx_line=${mx_line//$'\r'/}
@@ -284,11 +284,11 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	fi
 	if [[ -n "$_mx_n" ]]; then
 		echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
-		# Wave 98 high-water stamp: note 24000 greppable only when N>=24000; 24000 prior tip when N>=24000
+		# Wave 98 high-water stamp: note 24000 greppable only when N>=24000; 23900 prior tip when N>=23900
 		if [[ "$_mx_n" -ge 24000 ]]; then
 			echo "  info: continuum high-water  makefile_max=24000 greppable  (soft graph ≠ bar3)"
-		elif [[ "$_mx_n" -ge 23800 ]]; then
-			echo "  info: continuum high-water  makefile_max=24000 greppable  (prior tip; soft ≠ product)"
+		elif [[ "$_mx_n" -ge 23900 ]]; then
+			echo "  info: continuum high-water  makefile_max=23900 greppable  (prior tip; soft ≠ product)"
 			echo "  info: continuum high-water  makefile_max=24000  (absent; tree max=$_mx_n; scan=truth)"
 		else
 			echo "  info: continuum high-water  makefile_max=24000  (absent; tree max=$_mx_n; scan=truth)"
@@ -298,7 +298,7 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
 	fi
 	echo "  info: continuum honesty  soft graph wire ≠ bar3 client / Top50 titles"
 	echo "  info: continuum honesty  soft ≠ product complete; product lamps 0"
-	echo "  info: continuum wave 97  target decade M=24000 (CREATE-ONLY soft; parent paste wires)"
+	echo "  info: continuum wave 98  target decade M=24000 (CREATE-ONLY soft; parent paste wires)"
 	echo "  info: continuum soft deepen  retcircumangle/retellipseangle (CREATE-ONLY soft ≠ product)"
 else
 	echo "  info: continuum makefile_max=(helper missing)"

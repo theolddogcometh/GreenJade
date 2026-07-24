@@ -20,7 +20,7 @@
 #      Example generator for the 24000 wave (Wave 98 exclusive continuum track):
 #        user/libcgj/src/_gen_milestone_24000.py
 #        python3 user/libcgj/src/_gen_milestone_24000.py --dry-run
-#      (prior Wave 96: _gen_milestone_23800.py / M=23800; Wave 95: _gen_milestone_23700.py / M=23700; Wave 94: _gen_milestone_23600.py / M=23600; Wave 93: _gen_milestone_23500.py / M=23500; Wave 92: _gen_milestone_23400.py / M=23400; Wave 91: _gen_milestone_23300.py / M=23300; Wave 90: _gen_milestone_23200.py / M=23200; Wave 89: _gen_milestone_23100.py / M=23100; Wave 88: _gen_milestone_23000.py / M=23000; Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
+#      (prior Wave 97: _gen_milestone_23900.py / M=23900; Wave 96: _gen_milestone_23800.py / M=23800; Wave 95: _gen_milestone_23700.py / M=23700; Wave 94: _gen_milestone_23600.py / M=23600; Wave 93: _gen_milestone_23500.py / M=23500; Wave 92: _gen_milestone_23400.py / M=23400; Wave 91: _gen_milestone_23300.py / M=23300; Wave 90: _gen_milestone_23200.py / M=23200; Wave 89: _gen_milestone_23100.py / M=23100; Wave 88: _gen_milestone_23000.py / M=23000; Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
 #   2. Parent wires CGJ_SRCS by pasting this helper's stdout into the
 #      Makefile (this script never writes the Makefile itself).
 #   3. Rebuild libcgj; optional soft milestone host probes.
@@ -39,7 +39,7 @@
 # (docs/userland soft stamps): retcircumangle / retellipseangle (CREATE-ONLY soft
 # names only — not product). Until parent pastes those basenames into
 # CGJ_SRCS, ``--max`` may still report the prior high-water
-# (e.g. makefile_max=24000). **Scan is the source of truth** — do not
+# (e.g. makefile_max=23900). **Scan is the source of truth** — do not
 # hardcode a false makefile_max here or in side panels. Soft high-water
 # may be described as **advancing toward 24000** while the honest scan
 # remains at the prior tip.
@@ -211,7 +211,7 @@ makefile_max honesty:
   Wave 98 exclusive target decade: M=24000 (soft graph only — not bar3 /
   Steam client / Top-50 titles). Soft deepen surfaces: retcircumangle /
   retellipseangle (CREATE-ONLY soft names only). Until parent wires 23901–24000,
-  --max may still report prior tip (e.g. makefile_max=24000). Soft high-water
+  --max may still report prior tip (e.g. makefile_max=23900). Soft high-water
   may advance toward 24000 while scan remains at prior tip.
 
 Workflow:

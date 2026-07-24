@@ -1,9 +1,9 @@
 # Steam on hardware-test media (options 2 + 3)
 
 **Bar3 status (product ceiling):** **OPEN.** Media path + host prep are **wired**.  
-**Soft stamp (2026-07-24 / Wave 98):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Continuum high-water **advancing toward 24000** soft only (honest scan may still report **makefile_max=24000** until parent wires). Soft deepen surfaces **retcircumangle**/**retellipseangle** (CREATE-ONLY soft only). Product lamps **0**. **Soft ≠ bar3.** **Soft ≠ product complete.**  
+**Soft stamp (2026-07-24 / Wave 98):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Continuum high-water **advancing toward 24000** soft only (honest scan may still report **makefile_max=23900** until parent wires). Soft deepen surfaces **retcircumangle**/**retellipseangle** (CREATE-ONLY soft only). Product lamps **0**. **Soft ≠ bar3.** **Soft ≠ product complete.**  
 **Real-hw path:** **open** (DUT UEFI install → client launch → matrix fill still required).  
-**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **24000** if scan still **23800**).  
+**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **24000** if scan still **23900**).  
 Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  
 **Open:** real-DUT UEFI install → launch Steam client → Deck Top 50 matrix  
@@ -58,7 +58,7 @@ Host soft check (no download, always exit 0):
 | Product **sshd** live at boot | **done** | `sshd.elf` embed; TCP **:22**; `sshd: live spawn PASS` |
 | **scsi_mid** live embed | **done** | `scsi_mid.elf` boot spawn; `GJ_SYS_SCSI` + virtio-scsi path |
 | **HDA multi-stream (kernel)** | **PASS** | SD0 DMA + multi-stream mixer; `hda: multi-stream mixer PASS` — **kernel only** |
-| Graph continuum **toward 24000** | **soft** | high-water **advancing toward 24000** (scan may still be **24000**); CREATE-ONLY soft gates; **soft ≠ bar3** client run |
+| Graph continuum **toward 24000** | **soft** | high-water **advancing toward 24000** (scan may still be **23900**); CREATE-ONLY soft gates; **soft ≠ bar3** client run |
 | **io_uring** min rings + mmap/SQE soft | **PASS** | Kernel smokes (`linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`); vfs_ram / soft surface — **not** game I/O |
 | Kernel large-RAM **768G soak** | **PASS** | Hierarchical freelist + `soak_tib` at 768G; **not** full 1 TiB host path; **not** Steam |
 | **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke`; shared C + PSCI smokes; separate arch tree — **not** Deck/x86 path |
@@ -71,7 +71,7 @@ Host soft check (no download, always exit 0):
 |-------|--------|---------------|
 | Decades parent wire / soft gates **toward 24000** | **soft** | Graph/product soft stubs + milestone gates only (parallel-wave growth) |
 | Soft deepen **retcircumangle** / **retellipseangle** | **soft** | Wave 98 CREATE-ONLY soft graph surface names only — **≠ product** / **≠ bar3** |
-| Honest `makefile_max` (scan) | **source of truth** | May still report **24000** (or less) until parent wires **24000**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
+| Honest `makefile_max` (scan) | **source of truth** | May still report **23900** (or less) until parent wires **24000**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
 | Implies Steam client / Top-50 | **no** | Soft continuum ≠ runtime ABI ≠ DUT launch |
 | Closes bar3 | **no** | **Soft ≠ bar3.** Product lamps **0**. Bar3 remains client-run + matrix open |
 
@@ -233,7 +233,7 @@ See [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) for the product ceiling stamp.
 
 ## Wave 98 honesty — real-hw path open; soft ≠ bar3
 
-**Additive only (2026-07-24 / Wave 98 exclusive for this file).** Options **2+3**, script surface, layout, and operator commands above stay as documented. This section is an honesty ledger for agents and operators: what is **soft / media-wired** vs what remains **open** on the real-hw bar3 path. It does **not** close bar3 or promote matrix rows. Soft continuum high-water **advancing toward 24000** (scan may still be **24000**) does **not** close bar3. Product lamps remain **0**. **Soft ≠ product complete.**
+**Additive only (2026-07-24 / Wave 98 exclusive for this file).** Options **2+3**, script surface, layout, and operator commands above stay as documented. This section is an honesty ledger for agents and operators: what is **soft / media-wired** vs what remains **open** on the real-hw bar3 path. It does **not** close bar3 or promote matrix rows. Soft continuum high-water **advancing toward 24000** (scan may still be **23900**) does **not** close bar3. Product lamps remain **0**. **Soft ≠ product complete.**
 
 ### Soft / media-wired (may claim only with these bounds)
 
@@ -242,7 +242,7 @@ See [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) for the product ceiling stamp.
 | Option 2 pack / option 3 host prep | **wired** | Tree on media or host cache only |
 | `steam-bar3-check.sh` → READY \| SKELETON \| MISSING | Soft inventory exit 0 | **Media only** — not client run |
 | `STATUS=READY` / MANIFEST / STAGE_META / HOST_PREP_META | Bootstrap tree staged or packed | Never Top-50 PASS; never bar3 closed |
-| Continuum high-water **toward 24000** | CREATE-ONLY soft graph parent wire | Scan may still be **24000**; **Soft ≠ bar3** — not runtime ABI, not DUT launch |
+| Continuum high-water **toward 24000** | CREATE-ONLY soft graph parent wire | Scan may still be **23900**; **Soft ≠ bar3** — not runtime ABI, not DUT launch |
 | Kernel ship gates (HDA multi-stream, io_uring min/mmap/SQE soft, 768G soak, sshd, scsi_mid, aarch64 M0, GPU A1 partial) | Surface / smoke as marked above | None is Steam client or Deck title evidence |
 
 ### Real-hw / bar3 path — **open**
@@ -264,7 +264,7 @@ Media READY, continuum soft gates, and kernel smokes are **not** bar3 completion
 |-------|----------|
 | “Steam tree READY on media / host soft check READY” | **Yes** — when stage/fetch/check agree |
 | “Options 2+3 media path wired” | **Yes** — host scripts + image pack |
-| “Soft continuum high-water advancing toward **24000** (scan may still be **24000**)” | **Yes** — CREATE-ONLY graph only; **soft ≠ bar3** |
+| “Soft continuum high-water advancing toward **24000** (scan may still be **23900**)” | **Yes** — CREATE-ONLY graph only; **soft ≠ bar3** |
 | “Bar3 done because STATUS=READY / soft check READY” | **No** |
 | “Real-hw path closed / DUT client ran” without a real run | **No** — real-hw path **open** |
 | “Top-50 PASS / titles tried” from host scripts or kernel smokes | **No** — rows stay **NOT-TRIED** |
@@ -282,7 +282,7 @@ Media READY, continuum soft gates, and kernel smokes are **not** bar3 completion
 
 ---
 
-*Wave 98 honesty (2026-07-24): real-hw path **open**; continuum **toward 24000 soft only** (scan may still be **24000**); product lamps **0**; media/continuum/kernel soft **≠ bar3**; **soft ≠ product complete**; **no title PASS** invented.*
+*Wave 98 honesty (2026-07-24): real-hw path **open**; continuum **toward 24000 soft only** (scan may still be **23900**); product lamps **0**; media/continuum/kernel soft **≠ bar3**; **soft ≠ product complete**; **no title PASS** invented.*
 
 ## Related
 

@@ -5,7 +5,7 @@
  * DMA helpers. Host: calloc identity cookies.
  * Freestanding: static slab (UDX_FS_DMA_SLOTS × UDX_FS_DMA_SLOT_CB).
  *
- * Soft inventory (Wave 109 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 110 exclusive deepen; this unit only) —
  * greppable "udx: dma soft …":
  *   udx: dma soft inventory …
  *   udx: dma soft alloc …
@@ -37,7 +37,7 @@ static struct udx_fs_dma_slot g_aFsDma[UDX_FS_DMA_SLOTS];
 #define UDX_DMA_SOFT_WAVE 70u
 
 /*
- * Soft DMA product inventory (Wave 109 exclusive deepen). Cumulative for
+ * Soft DMA product inventory (Wave 110 exclusive deepen). Cumulative for
  * this process. greppable: udx: dma soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -112,7 +112,7 @@ dma_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft DMA inventory (Wave 109 exclusive deepen).
+ * Greppable soft DMA inventory (Wave 110 exclusive deepen).
  * Prefix-stable "udx: dma soft …" — never hard-gates; observation only.
  *
  * greppable: udx: dma soft
@@ -194,7 +194,7 @@ dma_soft_inventory_log(void)
                   UDX_DMA_SOFT_WAVE);
 
     /*
-     * Grep: udx: dma soft honesty (Wave 109 exclusive deepen).
+     * Grep: udx: dma soft honesty (Wave 110 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     dma_soft_emit("udx: dma soft honesty multi_server=0 confine=0 bar3=0 "
@@ -406,8 +406,8 @@ udx_dma_sync_single_for_device(struct udx_device *pDev, udx_dma_addr_t dma,
     __asm__ volatile("mfence" ::: "memory");
 }
 
-/* Wave 109 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retnurbsangle continuum_toward=25100 soft_ne_product=1 wave=109
- *   greppable: soft retbsplineangle exclusive=1 continuum_toward=25100 soft_ne_product=1 wave=109
+/* Wave 110 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmeshangle continuum_toward=25200 soft_ne_product=1 wave=110
+ *   greppable: soft retgridangle exclusive=1 continuum_toward=25200 soft_ne_product=1 wave=110
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

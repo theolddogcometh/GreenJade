@@ -23,8 +23,8 @@
  *   gj_gnu_batch1_soft_get    — soft read of marker
  *   gj_gnu_batch1_soft_probe  — soft check + careful restore
  *
- * Soft surface (Wave 59 exclusive deepen):
- *   gj_gnu_batch1_soft_wave      — Wave 59 stamp (40)
+ * Soft surface (Wave 60 exclusive deepen):
+ *   gj_gnu_batch1_soft_wave      — Wave 60 stamp (40)
  *   gj_gnu_batch1_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_GNU_BATCH1_SOFT_MARKER
@@ -32,18 +32,18 @@
  * greppable: GJ_GNU_BATCH1_SOFT_GET
  * greppable: GJ_GNU_BATCH1_SOFT_PROBE
  * greppable: GJ_GNU_BATCH1_SOFT_STAMP
- * greppable: libgj-gnu: soft batch1 wave=59
+ * greppable: libgj-gnu: soft batch1 wave=60
  */
 #include <stddef.h>
 #include <stdint.h>
 
 #define GJ_GNU_BATCH1_CANON       ((uint64_t)0x471)
 #define GJ_GNU_BATCH1_STAMP_CANON ((uint64_t)0x42317331ull) /* 'B1s1' */
-#define GJ_GNU_BATCH1_SOFT_WAVE 59u
+#define GJ_GNU_BATCH1_SOFT_WAVE 60u
 
-/* greppable: libgj-gnu: soft batch1 wave=59 */
+/* greppable: libgj-gnu: soft batch1 wave=60 */
 static const char g_szGnuBatch1SoftInventory[] =
-	"libgj-gnu: soft batch1 wave=59 areas=6 "
+	"libgj-gnu: soft batch1 wave=60 areas=6 "
 	"export,stamp,init,id,get,probe "
 	"marker=0x471 stamp=B1s1 freestanding=1 multi_server=0 "
 	"confine=0 bar3=0";
@@ -99,7 +99,7 @@ gj_gnu_batch1_soft_probe(void)
     return 1;
 }
 
-/* Cold soft inventory: Wave 59 stamp. Grep: libgj-gnu: soft batch1 wave= */
+/* Cold soft inventory: Wave 60 stamp. Grep: libgj-gnu: soft batch1 wave= */
 unsigned
 gj_gnu_batch1_soft_wave(void)
 {

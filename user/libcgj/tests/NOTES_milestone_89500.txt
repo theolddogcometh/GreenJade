@@ -1,0 +1,70 @@
+Notes — continuum milestone 89500 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_89500.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_89500.c  (host dyn + direct KATs)
+  - user/libcgj/tests/_cgj_soft_m_template.inc  (shared body)
+
+libcgj continuum markers (graph_batch89491.c … graph_batch89500.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them. Mirror 25800; bar3=0.
+
+Harness
+-------
+  - cgj_smoke.c / cgj_dyn_smoke.c
+  - prior cgj_soft_milestone_*.c decade soft probes
+  - NEW: cgj_soft_milestone_89500.c
+
+MILESTONE 89500 marker surfaces (batches 89491–89500)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_89500           1          graph_batch89491.c
+gj_libcgj_green_89500          1          graph_batch89492.c
+gj_bar3_ready_89500            0          graph_batch89493.c  (bar3 open)
+gj_product_score_89500         0          graph_batch89494.c  (score open)
+gj_continuum_ready_89500       1          graph_batch89495.c
+gj_smoke_soft_89500            1          graph_batch89496.c
+gj_dyn_soft_89500              1          graph_batch89497.c
+gj_milestone_tag_89500         89500      graph_batch89498.c
+gj_continuum_wave_89500        89500      graph_batch89499.c
+gj_batch_id_89500              89500      graph_batch89500.c
+gj_graph_milestone_89500       89500      graph_batch89500.c
+
+Fill continuum (batches 89476–89490, not soft-probed here)
+Identity continuum (batches 89451–89475, not soft-probed here)
+
+Soft rule: missing → skip; present but wrong → hard fail.
+Soft gates only; bar3 remains open (gj_bar3_ready_89500 == 0).
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. Wire graph_batch89451.c … graph_batch89500.c into CGJ_SRCS when
+   advancing makefile_max to 89500.
+2. libc.map may lag; add 89500 symbols under GLIBC_2.2.5 global.
+3. Rebuild: make libcgj
+4. Soft gates only; bar3 remains open.
+
+Manual run
+----------
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_89500 \
+  user/libcgj/tests/cgj_soft_milestone_89500.c -ldl
+./build/cgj_soft_milestone_89500
+
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M89500_DIRECT \
+  -o build/cgj_soft_milestone_89500_direct \
+  user/libcgj/tests/cgj_soft_milestone_89500.c \
+  user/libcgj/src/graph_batch89491.c \
+  user/libcgj/src/graph_batch89492.c \
+  user/libcgj/src/graph_batch89493.c \
+  user/libcgj/src/graph_batch89494.c \
+  user/libcgj/src/graph_batch89495.c \
+  user/libcgj/src/graph_batch89496.c \
+  user/libcgj/src/graph_batch89497.c \
+  user/libcgj/src/graph_batch89498.c \
+  user/libcgj/src/graph_batch89499.c \
+  user/libcgj/src/graph_batch89500.c
+./build/cgj_soft_milestone_89500_direct

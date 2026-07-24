@@ -33,9 +33,9 @@
 #include <gj/types.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define ENTRY_BRIDGE_SOFT_WAVE 124u
+#define ENTRY_BRIDGE_SOFT_WAVE 125u
 /* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
-#define ENTRY_BRIDGE_SOFT_AREAS 212u
+#define ENTRY_BRIDGE_SOFT_AREAS 214u
 
 /*
  * Soft edge tallies (wrap OK). Diagnostics only — does not alter route.
@@ -1162,6 +1162,10 @@ kprintf("entry_bridge: soft retcanvasangle exclusive=1 soft_ne_product=1 product
 kprintf("entry_bridge: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: entry_bridge: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("entry_bridge: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
+/* Grep: entry_bridge: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("entry_bridge: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: entry_bridge: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("entry_bridge: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
                             kprintf("entry_bridge: soft deepen wave=%u areas=%u enter=%lu "
             "route=%lu logs=%lu "
             "(Wave 92 exclusive; not bar3)\n",

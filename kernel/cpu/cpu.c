@@ -1753,7 +1753,11 @@ kprintf("cpu: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("cpu: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("cpu: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
-                                kprintf("cpu: soft deepen wave=124 areas=185 online=%u static=%u "
+/* Grep: cpu: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("cpu: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: cpu: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("cpu: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+                                kprintf("cpu: soft deepen wave=125 areas=187 online=%u static=%u "
                 "dyn=%u oom=%u reject=%u logs=%u\n",
                 stSoft.u32Online, stSoft.u32StaticOnline,
                 stSoft.u32DynOnline, stSoft.u32Oom, stSoft.u32Reject,

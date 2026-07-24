@@ -202,7 +202,8 @@
  *           uwave21 (product v1.77 Wave 43 exclusive soft deepen kept)
  *           uwave22 (product v1.78 Wave 82 exclusive soft deepen kept)
  *           uwave23 (product v1.80 Wave 123 exclusive soft deepen kept)
- *           uwave24 (product v1.81 Wave 124 exclusive soft deepen)
+ *           uwave24 (product v1.81 Wave 124 exclusive soft deepen kept)
+ *           uwave25 (product v1.82 Wave 125 exclusive soft deepen)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -395,7 +396,8 @@
  *            uwave21 prints 1 (Wave 43 exclusive soft deepen stamp kept);
  *            uwave22 prints 1 (Wave 82 exclusive soft deepen stamp kept);
  *            uwave23 prints 1 (Wave 123 exclusive soft deepen stamp kept);
- *            uwave24 prints 1 (Wave 124 exclusive soft deepen stamp);
+ *            uwave24 prints 1 (Wave 124 exclusive soft deepen stamp kept);
+ *            uwave25 prints 1 (Wave 125 exclusive soft deepen stamp);
  *            free exclusive names; soft facts only; soft ≠ bar3)
  *           (help/version soft banners Wave 111 honesty: help prints
  *            GreenJade soft product + shell=native vfs door + soft=1 +
@@ -15227,12 +15229,12 @@ cmd_uwave23(void)
 }
 
 /*
- * uwave24 — print 1 (Wave 124 exclusive soft deepen stamp) (product v1.81).
- * Soft fact only: user-daemon soft inventory wave high-water is 24.
+ * uwave24 — print 1 (Wave 124 exclusive soft deepen stamp kept) (product v1.81).
+ * Soft fact only: user-daemon soft inventory wave high-water is 24 (historical).
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
- * Soft deepen surfaces: retbrushangle / retinkangle (CREATE-ONLY soft only).
- * Continuum toward 26600; soft ≠ product complete; product lamps 0.
+ * Soft deepen surfaces: retbrushangle / retinkangle (CREATE-ONLY soft only; historical).
+ * Continuum toward 26600 era (historical); soft ≠ product complete; product lamps 0.
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave24
  */
@@ -15244,8 +15246,25 @@ cmd_uwave24(void)
 }
 
 /*
+ * uwave25 — print 1 (Wave 125 exclusive soft deepen stamp) (product v1.82).
+ * Soft fact only: user-daemon soft inventory wave high-water is 25.
+ * Free exclusive name; soft facts only; soft ≠ bar3.
+ * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Soft deepen surfaces: retpaletteangle / retstrokeangle (CREATE-ONLY soft only).
+ * Continuum toward 26700; soft ≠ product complete; product lamps 0.
+ * (soft ≠ product multi-server confine / product kernel complete).
+ * Usage: uwave25
+ */
+static int
+cmd_uwave25(void)
+{
+    out("1\n");
+    return 0;
+}
+
+/*
  * umulticonfine — print 0 (soft ≠ product multi-server confine) (product v1.70).
- * Wave 124 honesty one-liner. Soft inventory greps ≠ multi-server product.
+ * Wave 125 honesty one-liner. Soft inventory greps ≠ multi-server product.
  * Free exclusive name; soft facts only; does not claim bar3 close.
  * Usage: umulticonfine
  */
@@ -15257,10 +15276,10 @@ cmd_umulticonfine(void)
 }
 
 /*
- * udaemonsoft — print soft daemon inventory honesty (product v1.76 Wave 124).
+ * udaemonsoft — print soft daemon inventory honesty (product v1.76 Wave 125).
  * Greppable soft inventory for live logs. Soft facts only; never bar3.
  * Honesty: soft ≠ product multi-server confine; product_kernel=OPEN.
- * Soft deepen: retbrushangle / retinkangle (CREATE-ONLY soft ≠ product).
+ * Soft deepen: retpaletteangle / retstrokeangle (CREATE-ONLY soft ≠ product).
  * Usage: udaemonsoft
  */
 static int
@@ -15282,12 +15301,12 @@ cmd_udaemonsoft(void)
         "product_kernel=OPEN\n");
     out("greenjade-shell: soft open multi_server=0 confine=0 bar3=0 "
         "product_kernel=OPEN soft_only=1 wave=70\n");
-    /* Grep: greenjade-shell: soft retbrushangle / retinkangle (Wave 124) */
-    out("greenjade-shell: soft retbrushangle soft_only=1 product_gate=0 "
-        "soft_ne_product=1 continuum_toward=26600 wave=124 (retbrushangle honesty; "
+    /* Grep: greenjade-shell: soft retpaletteangle / retstrokeangle (Wave 125) */
+    out("greenjade-shell: soft retpaletteangle soft_only=1 product_gate=0 "
+        "soft_ne_product=1 continuum_toward=26700 wave=125 (retpaletteangle honesty; "
         "Soft!=product; not bar3)\n");
-    out("greenjade-shell: soft retinkangle exclusive=1 soft_ne_product=1 "
-        "continuum_toward=26600 wave=124 (retinkangle stamp; Soft!=product)\n");
+    out("greenjade-shell: soft retstrokeangle exclusive=1 soft_ne_product=1 "
+        "continuum_toward=26700 wave=125 (retstrokeangle stamp; Soft!=product)\n");
     return 0;
 }
 
@@ -15477,7 +15496,7 @@ run_line(const char *szLine)
             "u768gsoak umakefile14600 ubar3open "
             "ucontinuum14600 uioringmin u1tibopen "
             "ucontinuum15300 umakefile15300 umatrixopen "
-            "uwave14 umulticonfine udaemonsoft uwave15 uwave16 uwave17 uwave18 uwave19 uwave20 uwave21 uwave22 uwave23 uwave24 "
+            "uwave14 umulticonfine udaemonsoft uwave15 uwave16 uwave17 uwave18 uwave19 uwave20 uwave21 uwave22 uwave23 uwave24 uwave25 "
             "dos2unix unix2dos "
             "sync pwd format mount bigfile install stats storecap storestats "
             "storeflush netstats version exit\n");
@@ -19241,6 +19260,9 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "uwave24") == 0) {
         return cmd_uwave24();
     }
+    if (gj_strcmp(aCmd, "uwave25") == 0) {
+        return cmd_uwave25();
+    }
     if (gj_strcmp(aCmd, "umulticonfine") == 0) {
         return cmd_umulticonfine();
     }
@@ -19795,8 +19817,10 @@ _start(void)
         "uwave22",
         /* product v1.80 Wave 123: exclusive soft deepen stamp kept */
         "uwave23",
-        /* product v1.81 Wave 124: exclusive soft deepen stamp */
+        /* product v1.81 Wave 124: exclusive soft deepen stamp kept */
         "uwave24",
+        /* product v1.82 Wave 125: exclusive soft deepen stamp */
+        "uwave25",
         "version",
         "install",
         "exit",
@@ -19943,6 +19967,7 @@ _start(void)
     out("greenjade-shell: uwave22 PASS\n");
     out("greenjade-shell: uwave23 PASS\n");
     out("greenjade-shell: uwave24 PASS\n");
+    out("greenjade-shell: uwave25 PASS\n");
     out("greenjade-shell: storeflush PASS\n");
     out("greenjade-shell: vfs PASS\n");
     out("greenjade-shell: interactive PASS\n");

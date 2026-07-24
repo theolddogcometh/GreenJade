@@ -2245,7 +2245,11 @@ kprintf("smp: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("smp: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: smp: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("smp: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
-                                kprintf("smp: soft deepen wave=124 areas=185 verdict=%s tried=%u "
+/* Grep: smp: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("smp: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: smp: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("smp: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+                                kprintf("smp: soft deepen wave=125 areas=187 verdict=%s tried=%u "
                 "ok=%u timeout=%u skipped=%u online=%u cap=%u logs=%u\n",
                 szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,

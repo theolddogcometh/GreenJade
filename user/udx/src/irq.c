@@ -12,7 +12,7 @@
  * final enable delivers once. Use disable in quiesce before free_irq.
  *
  * -------------------------------------------------------------------------
- * Soft notify path → real Notification (gap doc; Wave 124 exclusive deepen)
+ * Soft notify path → real Notification (gap doc; Wave 125 exclusive deepen)
  * greppable: udx: notify soft …
  *
  * Real GreenJade product path (kernel owns the endpoint):
@@ -39,7 +39,7 @@
  *     kernel/ipc/notify.c (see greppable notify: soft … there)
  *   - Wiring UDX host to a real Notification cap is M4.2 (TODO)
  *
- * Honesty (Wave 124): UDX kernel notify product remains OPEN. Soft deepen
+ * Honesty (Wave 125): UDX kernel notify product remains OPEN. Soft deepen
  * catalogs the UDX-side fire_irq → dispatch pulse surface so greps measure
  * readiness without claiming a kernel endpoint.
  * greppable: udx: notify soft open
@@ -51,10 +51,10 @@
 #define UDX_IRQ_MAX 256
 #define UDX_IRQ_SHARE_MAX 4
 
-/* Soft wave stamp + greppable area count (Wave 124 exclusive deepen). */
-/* Wave 124 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbrushangle continuum_toward=26600 soft_ne_product=1 wave=124
- *   greppable: soft retinkangle exclusive=1 continuum_toward=26600 soft_ne_product=1 wave=124
+/* Soft wave stamp + greppable area count (Wave 125 exclusive deepen). */
+/* Wave 125 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retpaletteangle continuum_toward=26700 soft_ne_product=1 wave=125
+ *   greppable: soft retstrokeangle exclusive=1 continuum_toward=26700 soft_ne_product=1 wave=125
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -232,7 +232,7 @@ notify_soft_table_snap(u32 *pu32Actions, u32 *pu32LinesUsed,
 }
 
 /*
- * Greppable soft notify inventory (toward real Notification; Wave 124).
+ * Greppable soft notify inventory (toward real Notification; Wave 125).
  * Pure observation — never gates skeleton PASS or dispatch behavior.
  *
  *   udx: notify soft protocol …
@@ -395,7 +395,7 @@ notify_soft_log(void)
                (unsigned)UDX_NOTIFY_SOFT_WAVE);
 
     /*
-     * Grep: udx: notify soft honesty (Wave 124 exclusive deepen).
+     * Grep: udx: notify soft honesty (Wave 125 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     udx_printk("udx: notify soft honesty multi_server=0 confine=0 bar3=0 "

@@ -148,7 +148,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE 124u   /* Wave 37 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE 125u   /* Wave 37 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -1704,6 +1704,10 @@ kprintf("gdt: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("gdt: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("gdt: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
+/* Grep: gdt: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("gdt: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: gdt: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("gdt: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
                             kprintf("gdt: soft deepen wave=%u areas="
             "inventory,slots,user,tss,lamps,counters,star,path,"
             "kernel,null,cs32,cs64,ds,desc,lar,verify,init,stack,"

@@ -177,9 +177,9 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE 124u
+#define GJ_VMM_SOFT_WAVE 125u
 /* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS 228u
+#define GJ_VMM_SOFT_AREAS 230u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -586,7 +586,7 @@ higher_half_soft_inventory(void)
  *   vmm: soft retmap     — Wave 19 return-surface map
  *   vmm: soft return selftest — Wave 19 terminal return surface
  *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=124 …
+ *   vmm: soft deepen wave=125 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -1889,6 +1889,10 @@ kprintf("vmm: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("vmm: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: vmm: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("vmm: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
+/* Grep: vmm: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("vmm: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: vmm: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("vmm: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
                             kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
             "product_tib=0 bar3=OPEN "

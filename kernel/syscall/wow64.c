@@ -47,8 +47,8 @@ static u32 g_u32SocketcallHits;
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE 124u
-#define GJ_WOW64_SOFT_AREAS 216u
+#define GJ_WOW64_SOFT_WAVE 125u
+#define GJ_WOW64_SOFT_AREAS 218u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -1223,6 +1223,10 @@ kprintf("wow64: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("wow64: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retinkangle — Wave 124 exclusive inkangle stamp */
 kprintf("wow64: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
+/* Grep: wow64: soft retpaletteangle — Wave 125 return-paletteangle honesty */
+kprintf("wow64: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: wow64: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
+kprintf("wow64: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
                             kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
             "(Wave 92 exclusive; not bar3)\n",

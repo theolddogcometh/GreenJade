@@ -1,0 +1,63 @@
+created=80 skipped=0
+range=M=88100..92000 step 100 (40 milestones × 2 files)
+mirror=25800 soft KATs; bar3=0; product_score=0
+form=thin (_cgj_soft_m_template.inc)
+status=CREATE-ONLY soft packages under user/libcgj/tests/
+pairs:
+  + cgj_soft_milestone_88100.c NOTES_milestone_88100.txt
+  + cgj_soft_milestone_88200.c NOTES_milestone_88200.txt
+  + cgj_soft_milestone_88300.c NOTES_milestone_88300.txt
+  + cgj_soft_milestone_88400.c NOTES_milestone_88400.txt
+  + cgj_soft_milestone_88500.c NOTES_milestone_88500.txt
+  + cgj_soft_milestone_88600.c NOTES_milestone_88600.txt
+  + cgj_soft_milestone_88700.c NOTES_milestone_88700.txt
+  + cgj_soft_milestone_88800.c NOTES_milestone_88800.txt
+  + cgj_soft_milestone_88900.c NOTES_milestone_88900.txt
+  + cgj_soft_milestone_89000.c NOTES_milestone_89000.txt
+  + cgj_soft_milestone_89100.c NOTES_milestone_89100.txt
+  + cgj_soft_milestone_89200.c NOTES_milestone_89200.txt
+  + cgj_soft_milestone_89300.c NOTES_milestone_89300.txt
+  + cgj_soft_milestone_89400.c NOTES_milestone_89400.txt
+  + cgj_soft_milestone_89500.c NOTES_milestone_89500.txt
+  + cgj_soft_milestone_89600.c NOTES_milestone_89600.txt
+  + cgj_soft_milestone_89700.c NOTES_milestone_89700.txt
+  + cgj_soft_milestone_89800.c NOTES_milestone_89800.txt
+  + cgj_soft_milestone_89900.c NOTES_milestone_89900.txt
+  + cgj_soft_milestone_90000.c NOTES_milestone_90000.txt
+  + cgj_soft_milestone_90100.c NOTES_milestone_90100.txt
+  + cgj_soft_milestone_90200.c NOTES_milestone_90200.txt
+  + cgj_soft_milestone_90300.c NOTES_milestone_90300.txt
+  + cgj_soft_milestone_90400.c NOTES_milestone_90400.txt
+  + cgj_soft_milestone_90500.c NOTES_milestone_90500.txt
+  + cgj_soft_milestone_90600.c NOTES_milestone_90600.txt
+  + cgj_soft_milestone_90700.c NOTES_milestone_90700.txt
+  + cgj_soft_milestone_90800.c NOTES_milestone_90800.txt
+  + cgj_soft_milestone_90900.c NOTES_milestone_90900.txt
+  + cgj_soft_milestone_91000.c NOTES_milestone_91000.txt
+  + cgj_soft_milestone_91100.c NOTES_milestone_91100.txt
+  + cgj_soft_milestone_91200.c NOTES_milestone_91200.txt
+  + cgj_soft_milestone_91300.c NOTES_milestone_91300.txt
+  + cgj_soft_milestone_91400.c NOTES_milestone_91400.txt
+  + cgj_soft_milestone_91500.c NOTES_milestone_91500.txt
+  + cgj_soft_milestone_91600.c NOTES_milestone_91600.txt
+  + cgj_soft_milestone_91700.c NOTES_milestone_91700.txt
+  + cgj_soft_milestone_91800.c NOTES_milestone_91800.txt
+  + cgj_soft_milestone_91900.c NOTES_milestone_91900.txt
+  + cgj_soft_milestone_92000.c NOTES_milestone_92000.txt
+kat_spotcheck:
+  gj_bar3_ready_88100 → 0 (ok; header + NOTES + template SOFT_U32 0u)
+  gj_bar3_ready_88200 → 0 (ok)
+  gj_bar3_ready_90000 → 0 (ok)
+  gj_bar3_ready_91000 → 0 (ok)
+  gj_bar3_ready_92000 → 0 (ok)
+  gj_product_score_M → 0
+  gj_shell_green_M / gj_libcgj_green_M / gj_continuum_ready_M → 1
+  gj_smoke_soft_M / gj_dyn_soft_M → 1
+  gj_milestone_tag_M / gj_continuum_wave_M / gj_batch_id_M / gj_graph_milestone_M → M
+  markers __libcgj_batch(M-9)..__libcgj_batch(M) via CGJ_SOFT_B0..B8 + M
+honesty:
+  soft packages only; Makefile not edited; soft ≠ bar3; bar3 remains open
+  soft ≠ product complete; product lamps 0
+emitter:
+  user/libcgj/tests/_emit_soft_pkg_88100_92000.py (CREATE-ONLY if missing)
+  form=thin includes _cgj_soft_m_template.inc (same KATs as full 25800 mirror)

@@ -23,7 +23,7 @@
  *   elf: soft return …       (Wave 19 return-path catalog)
  *   elf: soft ret_surface …  (Wave 19 terminal return classes)
  *   elf: soft surface …      (Wave 19 area catalog)
- *   elf: soft deepen wave=48 …
+ *   elf: soft deepen wave=49 …
  *   elf: soft catalog …      (capacity honesty rollup)
  *   elf: soft bias …         (dyn/so bias + step geometry)
  *   elf: soft capacity …     (so_max/img/needed/auxv lamps)
@@ -139,7 +139,7 @@ static u32              g_cSo;
  * Wave 15 soft inventory telemetry (never hard-gates product load path).
  * greppable: elf: soft / elf_load: soft
  */
-#define GJ_ELF_SOFT_WAVE 48u
+#define GJ_ELF_SOFT_WAVE 49u
 
 static u32 g_u32SoftProbeOk;      /* elf_probe_image success */
 static u32 g_u32SoftProbeFail;    /* probe header / fill fail */
@@ -667,7 +667,7 @@ elf_soft_inventory(const char *szVia)
             GJ_ELF_SOFT_WAVE);
 
     /* Grep: elf_load: soft retmap — Wave 19 return-surface map */
-    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=48\n");
+    kprintf("elf_load: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=49\n");
 
     /* Grep: elf_load: soft deepen */
     /*
@@ -1107,11 +1107,11 @@ kprintf("elf_load: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: elf_load: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("elf_load: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=48 "
+        "never_blocks_m0=1 wave=49 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: elf_load: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("elf_load: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=48 "
+        "product_kernel=OPEN bar3=0 wave=49 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1121,12 +1121,26 @@ kprintf("elf_load: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: elf_load: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("elf_load: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=48 "
+        "never_blocks_m0=1 wave=49 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: elf_load: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("elf_load: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=48 "
+        "product_kernel=OPEN bar3=0 wave=49 "
         "(retpalisade stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: elf_load: soft retglacisgate — Wave 49 return-glacisgate honesty */
+kprintf("elf_load: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=49 "
+        "(retglacisgate honesty; Soft≠product; not bar3)\n");
+/* Grep: elf_load: soft retoutwork — Wave 49 exclusive outwork stamp */
+kprintf("elf_load: soft retoutwork exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=49 "
+        "(retoutwork stamp; Soft≠product)\n");
 
 
 

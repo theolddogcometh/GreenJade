@@ -11,7 +11,7 @@
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  *
- * Wave 48 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
+ * Wave 49 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
  *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
  *   vtd: soft tables     — root/context/SLPT identity construct
  *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
@@ -34,7 +34,7 @@
  *   vtd: soft return     — Wave 17 attach/domain return taxonomy
  *   vtd: soft return selftest — Wave 19 terminal return surface
  *   vtd: soft retmap     — Wave 19 return-surface map
- *   vtd: soft deepen     — wave=48 stamp + area count
+ *   vtd: soft deepen     — wave=49 stamp + area count
  *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
  *   vtd: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close;
@@ -99,10 +99,10 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
-/* Wave 48 soft inventory stamp (file-local; never product gate). */
-#define VTD_SOFT_WAVE 48u
+/* Wave 49 soft inventory stamp (file-local; never product gate). */
+#define VTD_SOFT_WAVE 49u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define VTD_SOFT_AREAS 80u
+#define VTD_SOFT_AREAS 82u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1593,11 +1593,11 @@ kprintf("vtd: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: vtd: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("vtd: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=48 "
+        "never_blocks_m0=1 wave=49 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: vtd: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("vtd: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=48 "
+        "product_kernel=OPEN bar3=0 wave=49 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1607,12 +1607,26 @@ kprintf("vtd: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: vtd: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("vtd: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=48 "
+        "never_blocks_m0=1 wave=49 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: vtd: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("vtd: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=48 "
+        "product_kernel=OPEN bar3=0 wave=49 "
         "(retpalisade stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: vtd: soft retglacisgate — Wave 49 return-glacisgate honesty */
+kprintf("vtd: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=49 "
+        "(retglacisgate honesty; Soft≠product; not bar3)\n");
+/* Grep: vtd: soft retoutwork — Wave 49 exclusive outwork stamp */
+kprintf("vtd: soft retoutwork exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=49 "
+        "(retoutwork stamp; Soft≠product)\n");
 
 
 

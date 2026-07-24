@@ -42,7 +42,7 @@
  *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
  *   notify: soft return selftest — Wave 19 terminal return surface
  *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=49 areas stamp
+ *   notify: soft deepen            — wave=50 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -76,7 +76,7 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=49). */
+/* Wave 35 exclusive soft deepen stamp (greppable wave=50). */
 #define NOTIFY_SOFT_DEEPEN_WAVE 48u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
 #define NOTIFY_SOFT_DEEPEN_AREAS 70u
@@ -1006,11 +1006,11 @@ notify_soft_log(void)
                              */
                             /* Grep: notify: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("notify: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=49 "
+                                    "never_blocks_m0=1 wave=50 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("notify: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=49 "
+                                    "product_kernel=OPEN bar3=0 wave=50 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -1019,11 +1019,11 @@ notify_soft_log(void)
                              */
                             /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=49 "
+                                    "never_blocks_m0=1 wave=50 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("notify: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=49 "
+                                    "product_kernel=OPEN bar3=0 wave=50 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -1032,15 +1032,15 @@ notify_soft_log(void)
                              */
                             /* Grep: notify: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("notify: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=49 "
+                                    "never_blocks_m0=1 wave=50 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=49 "
+                                    "never_blocks_m0=1 wave=50 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("notify: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=49 "
+                                    "product_kernel=OPEN bar3=0 wave=50 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -1049,11 +1049,11 @@ notify_soft_log(void)
  */
 /* Grep: notify: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("notify: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("notify: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -1062,11 +1062,11 @@ kprintf("notify: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("notify: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("notify: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -1075,11 +1075,11 @@ kprintf("notify: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("notify: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("notify: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -1088,11 +1088,11 @@ kprintf("notify: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("notify: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("notify: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -1101,11 +1101,11 @@ kprintf("notify: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft rethold — Wave 36 return-hold honesty */
 kprintf("notify: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("notify: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -1114,11 +1114,11 @@ kprintf("notify: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retwall — Wave 37 return-wall honesty */
 kprintf("notify: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("notify: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -1127,11 +1127,11 @@ kprintf("notify: soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retmoat — Wave 38 return-moat honesty */
 kprintf("notify: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retower — Wave 38 exclusive tower stamp */
 kprintf("notify: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retower stamp; Soft≠product)\n");
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -1140,11 +1140,11 @@ kprintf("notify: soft retower exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retbarbican — Wave 39 return-barbican honesty */
 kprintf("notify: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retbarbican honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retglacis — Wave 39 exclusive glacis stamp */
 kprintf("notify: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retglacis stamp; Soft≠product)\n");
 /*
  * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
@@ -1153,11 +1153,11 @@ kprintf("notify: soft retglacis exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retcurtain — Wave 40 return-curtain honesty */
 kprintf("notify: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retcurtain honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retparapet — Wave 40 exclusive parapet stamp */
 kprintf("notify: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retparapet stamp; Soft≠product)\n");
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
@@ -1166,11 +1166,11 @@ kprintf("notify: soft retparapet exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retravelin — Wave 41 return-travelin honesty */
 kprintf("notify: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retditch — Wave 41 exclusive ditch stamp */
 kprintf("notify: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retditch stamp; Soft≠product)\n");
 /*
  * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
@@ -1179,11 +1179,11 @@ kprintf("notify: soft retditch exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retportcullis — Wave 42 return-portcullis honesty */
 kprintf("notify: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retportcullis honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retbattlement — Wave 42 exclusive battlement stamp */
 kprintf("notify: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retbattlement stamp; Soft≠product)\n");
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
@@ -1192,11 +1192,11 @@ kprintf("notify: soft retbattlement exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retmachicolation — Wave 43 return-machicolation honesty */
 kprintf("notify: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retmachicolation honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
 kprintf("notify: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retarrowslit stamp; Soft≠product)\n");
 
 /*
@@ -1206,11 +1206,11 @@ kprintf("notify: soft retarrowslit exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retmerlon — Wave 44 return-merlon honesty */
 kprintf("notify: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retmerlon honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retembrasure — Wave 44 exclusive embrasure stamp */
 kprintf("notify: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retembrasure stamp; Soft≠product)\n");
 
 /*
@@ -1220,11 +1220,11 @@ kprintf("notify: soft retembrasure exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retkeepgate — Wave 45 return-keepgate honesty */
 kprintf("notify: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retkeepgate honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retouterward — Wave 45 exclusive outerward stamp */
 kprintf("notify: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retouterward stamp; Soft≠product)\n");
 
 /*
@@ -1234,11 +1234,11 @@ kprintf("notify: soft retouterward exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retbailey — Wave 46 return-bailey honesty */
 kprintf("notify: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retbailey honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retpostern — Wave 46 exclusive postern stamp */
 kprintf("notify: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpostern stamp; Soft≠product)\n");
 
 /*
@@ -1248,11 +1248,11 @@ kprintf("notify: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("notify: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("notify: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1262,11 +1262,11 @@ kprintf("notify: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("notify: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("notify: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1276,12 +1276,26 @@ kprintf("notify: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: notify: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("notify: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: notify: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("notify: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retoutwork stamp; Soft≠product)\n");
+/*
+ * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: notify: soft retsally — Wave 50 return-sally honesty */
+kprintf("notify: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=50 "
+        "(retsally honesty; Soft≠product; not bar3)\n");
+/* Grep: notify: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
+kprintf("notify: soft retcounterscarp exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=50 "
+        "(retcounterscarp stamp; Soft≠product)\n");
+
 
 
 

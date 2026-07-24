@@ -42,7 +42,7 @@
  *   apic: soft retmap …                     — Wave 17 return-surface map (kept)
  *   apic: soft return rate — Wave 19 ok/fail rate lamps
  *   apic: soft retcode    — Wave 19 retcode catalog
- *   apic: soft deepen …                     — wave=49 areas stamp
+ *   apic: soft deepen …                     — wave=50 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -101,7 +101,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE 49u
+#define APIC_SOFT_WAVE 50u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -1267,11 +1267,11 @@ kprintf("apic: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: apic: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("apic: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: apic: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("apic: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1281,11 +1281,11 @@ kprintf("apic: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: apic: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("apic: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: apic: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("apic: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1295,12 +1295,26 @@ kprintf("apic: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: apic: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("apic: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: apic: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("apic: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retoutwork stamp; Soft≠product)\n");
+/*
+ * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: apic: soft retsally — Wave 50 return-sally honesty */
+kprintf("apic: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=50 "
+        "(retsally honesty; Soft≠product; not bar3)\n");
+/* Grep: apic: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
+kprintf("apic: soft retcounterscarp exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=50 "
+        "(retcounterscarp stamp; Soft≠product)\n");
+
 
 
 

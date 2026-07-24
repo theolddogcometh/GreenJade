@@ -104,7 +104,7 @@
 #define PIC_EOI     0x20
 
 /* Soft inventory wave stamp (this unit exclusive deepen; never hard-gates). */
-#define TIMER_SOFT_WAVE 49u
+#define TIMER_SOFT_WAVE 50u
 
 /* Soft surface bit lamps (Wave 15+ catalog; software-only claims). */
 #define TIMER_SOFT_SURF_MONO       (1u << 0)
@@ -1616,11 +1616,11 @@ kprintf("timer: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: timer: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("timer: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: timer: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("timer: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1630,11 +1630,11 @@ kprintf("timer: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: timer: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("timer: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: timer: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("timer: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1644,12 +1644,26 @@ kprintf("timer: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: timer: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("timer: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: timer: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("timer: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retoutwork stamp; Soft≠product)\n");
+/*
+ * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: timer: soft retsally — Wave 50 return-sally honesty */
+kprintf("timer: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=50 "
+        "(retsally honesty; Soft≠product; not bar3)\n");
+/* Grep: timer: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
+kprintf("timer: soft retcounterscarp exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=50 "
+        "(retcounterscarp stamp; Soft≠product)\n");
+
 
 
 

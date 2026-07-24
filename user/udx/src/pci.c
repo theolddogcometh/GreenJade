@@ -5,7 +5,7 @@
  * PCI driver surface: register, match, probe/remove/quiesce.
  * Host soft: 256-byte config image, BAR windows, inject/remove.
  *
- * Soft inventory (Wave 49 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 50 exclusive deepen; this unit only) —
  * greppable "udx: pci soft …":
  *   udx: pci soft inventory …
  *   udx: pci soft driver …
@@ -34,7 +34,7 @@
 #endif
 
 /* Soft wave stamp for greppable inventory lines. */
-#define UDX_PCI_SOFT_WAVE 48u
+#define UDX_PCI_SOFT_WAVE 50u
 
 struct udx_pci_bound {
     struct udx_pci_dev    *pPdev;
@@ -57,7 +57,7 @@ static struct udx_pci_driver *g_pPciDrivers;
 static struct udx_pci_bound  *g_pPciDevices;
 
 /*
- * Soft PCI product inventory (Wave 49 exclusive deepen).
+ * Soft PCI product inventory (Wave 50 exclusive deepen).
  * Cumulative for this process. greppable: udx: pci soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -175,7 +175,7 @@ pci_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft PCI inventory (Wave 49 exclusive deepen).
+ * Greppable soft PCI inventory (Wave 50 exclusive deepen).
  * Prefix-stable "udx: pci soft …" — never hard-gates; observation only.
  *
  * greppable: udx: pci soft
@@ -261,7 +261,7 @@ pci_soft_inventory_log(void)
                   UDX_PCI_SOFT_WAVE);
 
     /*
-     * Grep: udx: pci soft honesty (Wave 49 exclusive deepen).
+     * Grep: udx: pci soft honesty (Wave 50 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     pci_soft_emit("udx: pci soft honesty multi_server=0 confine=0 bar3=0 "
@@ -1186,8 +1186,8 @@ udx_pci_write_config_dword(struct udx_pci_dev *pPdev, int nWhere, u32 u32Val)
     return UDX_OK;
 }
 
-/* Wave 49 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retglacisgate continuum_toward=19100 soft_ne_product=1
- *   greppable: soft retoutwork exclusive=1 continuum_toward=19100
+/* Wave 50 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retsally continuum_toward=19200 soft_ne_product=1
+ *   greppable: soft retcounterscarp exclusive=1 continuum_toward=19200
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

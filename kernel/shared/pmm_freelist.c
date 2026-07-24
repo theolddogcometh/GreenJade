@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 49 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 50 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -21,7 +21,7 @@
  *   pmm_core: soft path      — surface catalog + product non-claims
  *   pmm_core: soft geom      — Wave 19 page/span geometry
  *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=49 stamp + area count
+ *   pmm_core: soft deepen    — wave=50 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 49 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 49u
+/* Wave 50 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 50u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -669,11 +669,11 @@ kprintf("pmm_core: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: pmm_core: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("pmm_core: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm_core: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("pmm_core: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -683,11 +683,11 @@ kprintf("pmm_core: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: pmm_core: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("pmm_core: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm_core: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("pmm_core: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -697,12 +697,26 @@ kprintf("pmm_core: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: pmm_core: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("pmm_core: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=49 "
+        "never_blocks_m0=1 wave=50 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm_core: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("pmm_core: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=49 "
+        "product_kernel=OPEN bar3=0 wave=50 "
         "(retoutwork stamp; Soft≠product)\n");
+/*
+ * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: pmm_core: soft retsally — Wave 50 return-sally honesty */
+kprintf("pmm_core: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=50 "
+        "(retsally honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm_core: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
+kprintf("pmm_core: soft retcounterscarp exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=50 "
+        "(retcounterscarp stamp; Soft≠product)\n");
+
 
 
 

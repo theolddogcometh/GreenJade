@@ -26,7 +26,7 @@
  *   5. Soft SVC inventory — greppable "aarch64: svc soft …" (Wave 9)
  *   6. Soft inventory deepen — Wave 19 multi-area inventory (this unit only)
  *
- * Soft inventory deepen (Wave 35 exclusive; this unit only):
+ * Soft inventory deepen (Wave 36 exclusive; this unit only):
  *   Multi-line greppable "aarch64: svc soft …" under fixed areas:
  *     inventory | count | nrs | have | groups | gates | path | deepen
  *   Groups soft: io / mm / net / proc / sync NR presence rollups
@@ -58,9 +58,9 @@
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
 
-/* Wave 35 soft inventory stamp (file-local; never product gate). */
-#define SVC_SOFT_WAVE 35u
-#define SVC_SOFT_AREAS 43u
+/* Wave 36 soft inventory stamp (file-local; never product gate). */
+#define SVC_SOFT_WAVE 36u
+#define SVC_SOFT_AREAS 45u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -939,6 +939,21 @@ aarch64_uart_puts("aarch64: svc: soft retpalace exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
 aarch64_uart_puts(" (retpalace stamp; Soft!=product)\n");
+/*
+ * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: svc: soft rethold — Wave 36 return-hold honesty */
+aarch64_uart_puts("aarch64: svc: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (rethold honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: svc: soft retspire — Wave 36 exclusive spire stamp */
+aarch64_uart_puts("aarch64: svc: soft retspire exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (retspire stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: svc soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

@@ -10,7 +10,7 @@
  * First few ICR writes are rate-limited to serial (greppable).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 35 exclusive deepen) — greppable "x2apic: soft …"
+ * Soft inventory (Wave 36 exclusive deepen) — greppable "x2apic: soft …"
  * -------------------------------------------------------------------------
  * Pure observation; never hard-gates IPI delivery. Counters wrap OK.
  * Soft ≠ full ICR/timer replace product (timer.c / apic.c product paths
@@ -47,7 +47,7 @@
  *   x2apic: soft ratio       — probe/enable/icr/eoi path ratios
  *   x2apic: soft return rate — Wave 19 ok/fail rate lamps
  *   x2apic: soft retcode    — Wave 19 retcode catalog
- *   x2apic: soft deepen      — wave=35 areas stamp
+ *   x2apic: soft deepen      — wave=36 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   x2apic: soft return      — Wave 17 API return surfaces (kept)
  *   x2apic: soft return selftest — Wave 17 terminal return surface (kept)
@@ -85,10 +85,10 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=35). */
-#define X2APIC_SOFT_DEEPEN_WAVE 35u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=36). */
+#define X2APIC_SOFT_DEEPEN_WAVE 36u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
-#define X2APIC_SOFT_DEEPEN_AREAS 57u
+#define X2APIC_SOFT_DEEPEN_AREAS 59u
 
 /* Soft ICR field masks (SDM ICR; decode only — never rewrites product ICR). */
 #define X2APIC_SOFT_ICR_DM_SHIFT     11u /* destination mode (phys/logical) */
@@ -939,11 +939,11 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("x2apic: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=35 "
+                                    "never_blocks_m0=1 wave=36 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("x2apic: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=35 "
+                                    "product_kernel=OPEN bar3=0 wave=36 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -952,11 +952,11 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("x2apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=35 "
+                                    "never_blocks_m0=1 wave=36 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("x2apic: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=35 "
+                                    "product_kernel=OPEN bar3=0 wave=36 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -965,15 +965,15 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("x2apic: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=35 "
+                                    "never_blocks_m0=1 wave=36 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("x2apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=35 "
+                                    "never_blocks_m0=1 wave=36 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("x2apic: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=35 "
+                                    "product_kernel=OPEN bar3=0 wave=36 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -982,11 +982,11 @@ x2apic_soft_inventory(void)
  */
 /* Grep: x2apic: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("x2apic: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=35 "
+        "never_blocks_m0=1 wave=36 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("x2apic: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=35 "
+        "product_kernel=OPEN bar3=0 wave=36 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -995,11 +995,11 @@ kprintf("x2apic: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("x2apic: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=35 "
+        "never_blocks_m0=1 wave=36 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("x2apic: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=35 "
+        "product_kernel=OPEN bar3=0 wave=36 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -1008,11 +1008,11 @@ kprintf("x2apic: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("x2apic: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=35 "
+        "never_blocks_m0=1 wave=36 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("x2apic: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=35 "
+        "product_kernel=OPEN bar3=0 wave=36 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -1021,12 +1021,25 @@ kprintf("x2apic: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("x2apic: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=35 "
+        "never_blocks_m0=1 wave=36 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("x2apic: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=35 "
+        "product_kernel=OPEN bar3=0 wave=36 "
         "(retpalace stamp; Soft≠product)\n");
+/*
+ * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: x2apic: soft rethold — Wave 36 return-hold honesty */
+kprintf("x2apic: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=36 "
+        "(rethold honesty; Soft≠product; not bar3)\n");
+/* Grep: x2apic: soft retspire — Wave 36 exclusive spire stamp */
+kprintf("x2apic: soft retspire exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=36 "
+        "(retspire stamp; Soft≠product)\n");
                             kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

@@ -23,7 +23,7 @@
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
  * Wave 35 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=35
+ *   serial: soft inventory … wave=36
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -47,7 +47,7 @@
  *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
  *   serial: soft return rate — Wave 19 ok/fail rate lamps
  *   serial: soft retcode    — Wave 19 retcode catalog
- *   serial: soft deepen …     — wave=35 areas stamp
+ *   serial: soft deepen …     — wave=36 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   serial: soft return …     — Wave 17 API return surfaces (kept)
  *   serial: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -123,7 +123,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 35u
+#define UART_SOFT_WAVE 36u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -1243,6 +1243,21 @@ kprintf("serial: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("serial: soft retpalace exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpalace stamp; Soft≠product)\n",
+        (unsigned)UART_SOFT_WAVE);
+/*
+ * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: serial: soft rethold — Wave 36 return-hold honesty */
+kprintf("serial: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(rethold honesty; Soft≠product; not bar3)\n",
+        (unsigned)UART_SOFT_WAVE);
+/* Grep: serial: soft retspire — Wave 36 exclusive spire stamp */
+kprintf("serial: soft retspire exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retspire stamp; Soft≠product)\n",
         (unsigned)UART_SOFT_WAVE);
                             kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"

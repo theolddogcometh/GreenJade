@@ -42,7 +42,7 @@
  *   apic: soft retmap …                     — Wave 17 return-surface map (kept)
  *   apic: soft return rate — Wave 19 ok/fail rate lamps
  *   apic: soft retcode    — Wave 19 retcode catalog
- *   apic: soft deepen …                     — wave=35 areas stamp
+ *   apic: soft deepen …                     — wave=36 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -101,7 +101,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE 35u
+#define APIC_SOFT_WAVE 36u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -1089,6 +1089,21 @@ kprintf("apic: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("apic: soft retpalace exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpalace stamp; Soft≠product)\n",
+        (unsigned)APIC_SOFT_WAVE);
+/*
+ * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: apic: soft rethold — Wave 36 return-hold honesty */
+kprintf("apic: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(rethold honesty; Soft≠product; not bar3)\n",
+        (unsigned)APIC_SOFT_WAVE);
+/* Grep: apic: soft retspire — Wave 36 exclusive spire stamp */
+kprintf("apic: soft retspire exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retspire stamp; Soft≠product)\n",
         (unsigned)APIC_SOFT_WAVE);
                             kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"

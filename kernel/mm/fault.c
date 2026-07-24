@@ -34,7 +34,7 @@
  *     honesty | inventory | class | cluster | cookie | serial |
  *     call | frame | cr3 | views | path | surfaces | deadline |
  *     return rate | retcode | return selftest | retmap | deepen | PASS
- *     deepen wave=37 stamp + surf= bitmask
+ *     deepen wave=38 stamp + surf= bitmask
  *   Call soft: doors-like Call shape after cookie mint (not product IPC)
  *   FRAME soft: expected-frame shape at view install; product_validate=0
  *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
@@ -93,8 +93,8 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 37 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 37u
+/* Wave 38 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 38u
 
 /*
  * Soft inventory area count (Wave 19 greppable categories for deepen stamp):
@@ -102,7 +102,7 @@
  * call | frame | cr3 | views | path | surfaces | deadline | deepen
  * (=14; PASS is close lamp)
  */
-#define FAULT_SOFT_AREAS 54u
+#define FAULT_SOFT_AREAS 56u
 
 /*
  * Soft surface bit lamps (Wave 19; surf=0x… on inventory/deepen lines).
@@ -1372,6 +1372,21 @@ kprintf("fault: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("fault: soft retgate exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retgate stamp; Soft≠product)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+/*
+ * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: fault: soft retmoat — Wave 38 return-moat honesty */
+kprintf("fault: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmoat honesty; Soft≠product; not bar3)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+/* Grep: fault: soft retower — Wave 38 exclusive tower stamp */
+kprintf("fault: soft retower exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retower stamp; Soft≠product)\n",
         (unsigned)FAULT_SOFT_WAVE);
                             kprintf("fault: soft deepen wave=%u areas=%u logs=%llu "
             "surf=0x%x call=%llu frame=%llu cr3=%llu "

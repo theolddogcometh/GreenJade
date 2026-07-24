@@ -27,7 +27,7 @@
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
  *   irq: soft return rate — Wave 19 ok/fail rate lamps
  *   irq: soft retcode    — Wave 19 retcode catalog
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=37 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=38 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
  *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
@@ -62,8 +62,8 @@ static int g_fReady;
 static int g_fInHandler;
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define IRQ_MSIX_SOFT_DEEPEN_AREAS 52u
-#define IRQ_MSIX_SOFT_DEEPEN_WAVE 37u
+#define IRQ_MSIX_SOFT_DEEPEN_AREAS 54u
+#define IRQ_MSIX_SOFT_DEEPEN_WAVE 38u
 
 /*
  * Wave 14 soft inventory sticky counters (wrap OK; never hard-gate).
@@ -914,11 +914,11 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("irq_msix: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=37 "
+                                    "never_blocks_m0=1 wave=38 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("irq_msix: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=37 "
+                                    "product_kernel=OPEN bar3=0 wave=38 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -927,11 +927,11 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("irq_msix: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=37 "
+                                    "never_blocks_m0=1 wave=38 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("irq_msix: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=37 "
+                                    "product_kernel=OPEN bar3=0 wave=38 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -940,15 +940,15 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("irq_msix: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=37 "
+                                    "never_blocks_m0=1 wave=38 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("irq_msix: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=37 "
+                                    "never_blocks_m0=1 wave=38 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("irq_msix: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=37 "
+                                    "product_kernel=OPEN bar3=0 wave=38 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -957,11 +957,11 @@ irq_msix_soft_inventory_log(const char *szVia)
  */
 /* Grep: irq_msix: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("irq_msix: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("irq_msix: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -970,11 +970,11 @@ kprintf("irq_msix: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: irq_msix: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("irq_msix: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("irq_msix: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -983,11 +983,11 @@ kprintf("irq_msix: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: irq_msix: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("irq_msix: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("irq_msix: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -996,11 +996,11 @@ kprintf("irq_msix: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: irq_msix: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("irq_msix: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("irq_msix: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -1009,11 +1009,11 @@ kprintf("irq_msix: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: irq_msix: soft rethold — Wave 36 return-hold honesty */
 kprintf("irq_msix: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("irq_msix: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -1022,12 +1022,25 @@ kprintf("irq_msix: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: irq_msix: soft retwall — Wave 37 return-wall honesty */
 kprintf("irq_msix: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=37 "
+        "never_blocks_m0=1 wave=38 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: irq_msix: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("irq_msix: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=37 "
+        "product_kernel=OPEN bar3=0 wave=38 "
         "(retgate stamp; Soft≠product)\n");
+/*
+ * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: irq_msix: soft retmoat — Wave 38 return-moat honesty */
+kprintf("irq_msix: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=38 "
+        "(retmoat honesty; Soft≠product; not bar3)\n");
+/* Grep: irq_msix: soft retower — Wave 38 exclusive tower stamp */
+kprintf("irq_msix: soft retower exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=38 "
+        "(retower stamp; Soft≠product)\n");
                             kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,

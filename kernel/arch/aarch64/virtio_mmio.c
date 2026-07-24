@@ -109,9 +109,9 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_SOFT_QNUM     8u
 #define VIRTIO_SOFT_ALIGN    4096u
 
-/* Wave 37 soft inventory stamp (file-local; never product gate). */
-#define VIRTIO_SOFT_WAVE 37u
-#define VIRTIO_SOFT_AREAS 49u
+/* Wave 38 soft inventory stamp (file-local; never product gate). */
+#define VIRTIO_SOFT_WAVE 38u
+#define VIRTIO_SOFT_AREAS 51u
 
 /*
  * Guest-side soft split virtqueue layout (OASIS public shape).
@@ -953,6 +953,21 @@ aarch64_uart_puts("aarch64: virtio: soft retgate exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 aarch64_uart_puts(" (retgate stamp; Soft!=product)\n");
+/*
+ * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: virtio: soft retmoat — Wave 38 return-moat honesty */
+aarch64_uart_puts("aarch64: virtio: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+aarch64_uart_puts(" (retmoat honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: virtio: soft retower — Wave 38 exclusive tower stamp */
+aarch64_uart_puts("aarch64: virtio: soft retower exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+aarch64_uart_puts(" (retower stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: virtio soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

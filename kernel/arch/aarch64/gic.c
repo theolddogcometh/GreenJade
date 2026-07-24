@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 37 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 37u
-#define GIC_SOFT_AREAS 48u
+/* Wave 38 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 38u
+#define GIC_SOFT_AREAS 50u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -955,6 +955,21 @@ aarch64_uart_puts("aarch64: gic: soft retgate exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retgate stamp; Soft!=product)\n");
+/*
+ * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retmoat — Wave 38 return-moat honesty */
+aarch64_uart_puts("aarch64: gic: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retmoat honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft retower — Wave 38 exclusive tower stamp */
+aarch64_uart_puts("aarch64: gic: soft retower exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retower stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

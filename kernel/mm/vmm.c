@@ -177,9 +177,9 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE 37u
+#define GJ_VMM_SOFT_WAVE 38u
 /* Catalog areas prior to deepen line (honesty..share). */
-#define GJ_VMM_SOFT_AREAS 64u
+#define GJ_VMM_SOFT_AREAS 66u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -586,7 +586,7 @@ higher_half_soft_inventory(void)
  *   vmm: soft retmap     — Wave 19 return-surface map
  *   vmm: soft return selftest — Wave 19 terminal return surface
  *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=37 …
+ *   vmm: soft deepen wave=38 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -1199,10 +1199,25 @@ kprintf("vmm: soft retgate exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retgate stamp; Soft≠product)\n",
         (unsigned)GJ_VMM_SOFT_WAVE);
+/*
+ * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: vmm: soft retmoat — Wave 38 return-moat honesty */
+kprintf("vmm: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmoat honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_VMM_SOFT_WAVE);
+/* Grep: vmm: soft retower — Wave 38 exclusive tower stamp */
+kprintf("vmm: soft retower exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retower stamp; Soft≠product)\n",
+        (unsigned)GJ_VMM_SOFT_WAVE);
                             kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
             "product_tib=0 bar3=OPEN "
-            "(Wave 37 exclusive; soft only; not product; not bar3; "
+            "(Wave 38 exclusive; soft only; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)GJ_VMM_SOFT_WAVE, cAreas,
             (unsigned)GJ_VMM_SOFT_AREAS, g_cSoftInvLogs, fHhdm, fTemplate,

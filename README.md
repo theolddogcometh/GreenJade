@@ -80,7 +80,7 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 
 **Bar3 honesty:** Bar3 means a real-DUT path where the Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`. Host/media staging, kernel smokes, and continuum soft gates are **not** bar3 completion. Client launch, title runs, and matrix fill are **open** — see [docs/STEAM_BAR3_STATUS.md](docs/STEAM_BAR3_STATUS.md).
 
-**Soft continuum high-water:** CREATE-ONLY libcgj graph parent wire **advancing toward 20700** soft only (honest `makefile_max` is a Makefile scan — verify with `./scripts/gj-continuum-makefile-snippet.sh --max`; may still report **20600** until parent wires (scan is source of truth; greppable **20700** when wired)). Wave 65 soft deepen surfaces **retgorgeangle**/**retshoulderangle** (CREATE-ONLY soft only). Product lamps remain **0**. Soft continuum **≠ bar3** and **≠ product complete**.
+**Soft continuum high-water:** CREATE-ONLY libcgj graph parent wire **advancing toward 20800** soft only (honest `makefile_max` is a Makefile scan — verify with `./scripts/gj-continuum-makefile-snippet.sh --max`; may still report **20700** until parent wires (scan is source of truth; greppable **20800** when wired)). Wave 66 soft deepen surfaces **retflankangle**/**retfaceangle** (CREATE-ONLY soft only). Product lamps remain **0**. Soft continuum **≠ bar3** and **≠ product complete**.
 
 **Still open:** real-hardware UEFI install + Steam client, Deck Top 50 (matrix remains **NOT-TRIED**), full multi-server confine product, full ≥ 1 TiB soak when host allows.
 

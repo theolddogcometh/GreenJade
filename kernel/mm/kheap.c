@@ -20,7 +20,7 @@
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
  *   - Wave 19: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=68 + PASS/NONE
+ *   - Path catalog + stats rollup + deepen wave=69 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=68 …
+ *   kheap: soft deepen wave=69 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -61,9 +61,9 @@
 #include <gj/vmm.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 68u
+#define KHEAP_SOFT_WAVE 69u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 116u
+#define KHEAP_SOFT_AREAS 118u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1426,11 +1426,11 @@ kprintf("kheap: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("kheap: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("kheap: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1440,11 +1440,11 @@ kprintf("kheap: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("kheap: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("kheap: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1454,11 +1454,11 @@ kprintf("kheap: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("kheap: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("kheap: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1467,11 +1467,11 @@ kprintf("kheap: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retsally — Wave 50 return-sally honesty */
 kprintf("kheap: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("kheap: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1480,11 +1480,11 @@ kprintf("kheap: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("kheap: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("kheap: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1494,11 +1494,11 @@ kprintf("kheap: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("kheap: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("kheap: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1507,11 +1507,11 @@ kprintf("kheap: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("kheap: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("kheap: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1520,11 +1520,11 @@ kprintf("kheap: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("kheap: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("kheap: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1533,11 +1533,11 @@ kprintf("kheap: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retflank — Wave 55 return-flank honesty */
 kprintf("kheap: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retface — Wave 55 exclusive face stamp */
 kprintf("kheap: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1546,11 +1546,11 @@ kprintf("kheap: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("kheap: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("kheap: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1559,11 +1559,11 @@ kprintf("kheap: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("kheap: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("kheap: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1573,11 +1573,11 @@ kprintf("kheap: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("kheap: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("kheap: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1587,11 +1587,11 @@ kprintf("kheap: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("kheap: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("kheap: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1601,11 +1601,11 @@ kprintf("kheap: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retplace — Wave 60 return-place honesty */
 kprintf("kheap: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("kheap: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1623,11 +1623,11 @@ kprintf("kheap: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("kheap: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("kheap: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1636,11 +1636,11 @@ kprintf("kheap: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("kheap: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("kheap: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1649,11 +1649,11 @@ kprintf("kheap: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("kheap: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("kheap: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1662,11 +1662,11 @@ kprintf("kheap: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: kheap: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("kheap: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: kheap: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("kheap: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retsallyport stamp; Soft≠product)\n");
  /*
   * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
@@ -1675,11 +1675,11 @@ kprintf("kheap: soft retsallyport exclusive=1 soft_ne_product=1 "
   */
  /* Grep: kheap: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
 kprintf("kheap: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retgorgeangle honesty; Soft≠product; not bar3)\n");
  /* Grep: kheap: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 kprintf("kheap: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retshoulderangle stamp; Soft≠product)\n");
  /*
   * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
@@ -1688,11 +1688,11 @@ kprintf("kheap: soft retshoulderangle exclusive=1 soft_ne_product=1 "
   */
  /* Grep: kheap: soft retflankangle — Wave 66 return-flankangle honesty */
  kprintf("kheap: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=68 "
+         "never_blocks_m0=1 wave=69 "
          "(retflankangle honesty; Soft≠product; not bar3)\n");
  /* Grep: kheap: soft retfaceangle — Wave 66 exclusive faceangle stamp */
  kprintf("kheap: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN bar3=0 wave=68 "
+         "product_kernel=OPEN bar3=0 wave=69 "
          "(retfaceangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
@@ -1701,11 +1701,11 @@ kprintf("kheap: soft retshoulderangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 kprintf("kheap: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retredanangle — Wave 67 exclusive redanangle stamp */
 kprintf("kheap: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1714,12 +1714,25 @@ kprintf("kheap: soft retredanangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 kprintf("kheap: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=68 "
+        "never_blocks_m0=1 wave=69 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 kprintf("kheap: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=68 "
+        "product_kernel=OPEN bar3=0 wave=69 "
         "(rettenailleangle stamp; Soft≠product)\n");
+/*
+ * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: kheap: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
+kprintf("kheap: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=69 "
+        "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
+/* Grep: kheap: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
+kprintf("kheap: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=69 "
+        "(retcoveredwayangle stamp; Soft≠product)\n");
                             kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
             "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "
             "free_max=%lu surf=0x%x product_tib=0 bar3=OPEN "

@@ -37,7 +37,7 @@
  *   GJUEFI1: soft retseal    — Wave 20 seal stamp (kept)
  *   GJUEFI1: soft retpulse   — Wave 21 return-pulse honesty
  *   GJUEFI1: soft retmark    — Wave 21 exclusive mark stamp
- *   GJUEFI1: soft deepen     — wave=113 stamp + area catalog
+ *   GJUEFI1: soft deepen     — wave=114 stamp + area catalog
  *   GJUEFI1: soft PASS       — header surface present (link-time soft)
  *
  * Loader contract (must not break):
@@ -58,8 +58,8 @@
 void kmain_uefi(struct gj_boot_info *pInfo);
 
 /* Wave 15 soft inventory stamp (observability only; never gates product). */
-#define GJ_UEFI_SOFT_WAVE 113u
-#define GJ_UEFI_SOFT_AREAS 206u /* inventory,path,hdr,entry,honesty,magic,
+#define GJ_UEFI_SOFT_WAVE 114u
+#define GJ_UEFI_SOFT_AREAS 208u /* inventory,path,hdr,entry,honesty,magic,
                                  * contract,flags,load,catalog,return,retmap,deepen */
 
 struct gj_uefi_hdr {
@@ -112,7 +112,7 @@ const struct gj_uefi_hdr g_GjUefiHdr = {
  */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftInventory[] =
-    "GJUEFI1: soft inventory wave=113 areas=116 "
+    "GJUEFI1: soft inventory wave=114 areas=118 "
     "magic=GJUEFI1 entry=kmain_uefi path=p_boot_1_product "
     "align=16 soft_never_gates=1";
 
@@ -163,14 +163,14 @@ const char g_szGjUefiSoftLoad[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftCatalog[] =
     "GJUEFI1: soft catalog inventory,path,hdr,entry,honesty,"
-    "magic,contract,flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS "
-    "wave=113 areas_expect=98 soft PASS";
+    "magic,contract,flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,deepen,PASS "
+    "wave=114 areas_expect=98 soft PASS";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftSurfaces[] =
-    "GJUEFI1: soft surfaces count=24 wave=113 "
+    "GJUEFI1: soft surfaces count=24 wave=114 "
     "names=inventory,path,hdr,entry,honesty,magic,contract,"
-    "flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS";
+    "flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,deepen,PASS";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftNote[] =
@@ -180,95 +180,95 @@ const char g_szGjUefiSoftNote[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftReturn[] =
     "GJUEFI1: soft return entry=kmain_uefi product_gate=0 "
-    "soft_never_gates=1 e_entry_unused=1 wave=113";
+    "soft_never_gates=1 e_entry_unused=1 wave=114";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmap[] =
     "GJUEFI1: soft retmap entry=kmain_uefi|handoff "
-    "product_gate=0 soft_never_gates=1 wave=113";
+    "product_gate=0 soft_never_gates=1 wave=114";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetclass[] =
     "GJUEFI1: soft retclass ok|fail|inval|nodev|busy|nomem "
-    "soft_only=1 product_gate=0 wave=113 "
+    "soft_only=1 product_gate=0 wave=114 "
     "(retclass taxonomy; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetlane[] =
     "GJUEFI1: soft retlane inv|selftest|rate|retcode|retmap|class "
-    "product_kernel=OPEN soft_ne_product=1 wave=113 "
+    "product_kernel=OPEN soft_ne_product=1 wave=114 "
     "(retlane catalog; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbound[] =
     "GJUEFI1: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbound honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetseal[] =
     "GJUEFI1: soft retseal exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retseal stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetphase[] =
     "GJUEFI1: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retphase honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbadge[] =
     "GJUEFI1: soft retbadge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retbadge stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettoken[] =
     "GJUEFI1: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(rettoken honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcrest[] =
     "GJUEFI1: soft retcrest exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcrest stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetvault[] =
     "GJUEFI1: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retvault honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbanner[] =
     "GJUEFI1: soft retbanner exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retbanner stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetledger[] =
     "GJUEFI1: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retledger honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbeacon[] =
     "GJUEFI1: soft retbeacon exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retbeacon stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcipher[] =
     "GJUEFI1: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcipher honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetflame[] =
     "GJUEFI1: soft retflame exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retflame stamp; Soft≠product)";
 
 /*
@@ -278,13 +278,13 @@ const char g_szGjUefiSoftRetflame[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetprism[] =
     "GJUEFI1: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retprism honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetforge[] =
     "GJUEFI1: soft retforge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retforge stamp; Soft≠product)";
 
 /*
@@ -294,13 +294,13 @@ const char g_szGjUefiSoftRetforge[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetshard[] =
     "GJUEFI1: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retshard honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcrown[] =
     "GJUEFI1: soft retcrown exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcrown stamp; Soft≠product)";
 
 /*
@@ -310,13 +310,13 @@ const char g_szGjUefiSoftRetcrown[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetglyph[] =
     "GJUEFI1: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retglyph honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetscepter[] =
     "GJUEFI1: soft retscepter exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retscepter stamp; Soft≠product)";
 
 /*
@@ -326,13 +326,13 @@ const char g_szGjUefiSoftRetscepter[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsigil[] =
     "GJUEFI1: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retsigil honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetemblem[] =
     "GJUEFI1: soft retemblem exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retemblem stamp; Soft≠product)";
 
 /*
@@ -342,13 +342,13 @@ const char g_szGjUefiSoftRetemblem[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetaegis[] =
     "GJUEFI1: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retaegis honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmantle[] =
     "GJUEFI1: soft retmantle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retmantle stamp; Soft≠product)";
 
 /*
@@ -358,13 +358,13 @@ const char g_szGjUefiSoftRetmantle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbulwark[] =
     "GJUEFI1: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbulwark honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpanoply[] =
     "GJUEFI1: soft retpanoply exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retpanoply stamp; Soft≠product)";
 
 /*
@@ -374,13 +374,13 @@ const char g_szGjUefiSoftRetpanoply[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbastion[] =
     "GJUEFI1: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbastion honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcitadel[] =
     "GJUEFI1: soft retcitadel exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcitadel stamp; Soft≠product)";
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -389,25 +389,25 @@ const char g_szGjUefiSoftRetcitadel[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetredoubt[] =
     "GJUEFI1: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retredoubt honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetkeep[] =
     "GJUEFI1: soft retkeep exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retkeep stamp; Soft≠product)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfortress[] =
     "GJUEFI1: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retfortress honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpalace[] =
     "GJUEFI1: soft retpalace exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retpalace stamp; Soft≠product)";
 
 /*
@@ -417,13 +417,13 @@ const char g_szGjUefiSoftRetpalace[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRethold[] =
     "GJUEFI1: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(rethold honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetspire[] =
     "GJUEFI1: soft retspire exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retspire stamp; Soft≠product)";
 
 /*
@@ -433,13 +433,13 @@ const char g_szGjUefiSoftRetspire[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetwall[] =
     "GJUEFI1: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retwall honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetgate[] =
     "GJUEFI1: soft retgate exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retgate stamp; Soft≠product)";
 
 /*
@@ -449,13 +449,13 @@ const char g_szGjUefiSoftRetgate[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmoat[] =
     "GJUEFI1: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retmoat honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetower[] =
     "GJUEFI1: soft retower exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retower stamp; Soft≠product)";
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -464,13 +464,13 @@ const char g_szGjUefiSoftRetower[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbarbican[] =
     "GJUEFI1: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbarbican honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetglacis[] =
     "GJUEFI1: soft retglacis exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retglacis stamp; Soft≠product)";
 
 /*
@@ -480,13 +480,13 @@ const char g_szGjUefiSoftRetglacis[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcurtain[] =
     "GJUEFI1: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcurtain honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetparapet[] =
     "GJUEFI1: soft retparapet exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retparapet stamp; Soft≠product)";
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
@@ -495,13 +495,13 @@ const char g_szGjUefiSoftRetparapet[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetravelin[] =
     "GJUEFI1: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retravelin honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetditch[] =
     "GJUEFI1: soft retditch exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retditch stamp; Soft≠product)";
 
 /*
@@ -511,13 +511,13 @@ const char g_szGjUefiSoftRetditch[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetportcullis[] =
     "GJUEFI1: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retportcullis honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbattlement[] =
     "GJUEFI1: soft retbattlement exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retbattlement stamp; Soft≠product)";
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
@@ -526,13 +526,13 @@ const char g_szGjUefiSoftRetbattlement[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmachicolation[] =
     "GJUEFI1: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retmachicolation honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetarrowslit[] =
     "GJUEFI1: soft retarrowslit exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retarrowslit stamp; Soft≠product)";
 
 /*
@@ -542,13 +542,13 @@ const char g_szGjUefiSoftRetarrowslit[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmerlon[] =
     "GJUEFI1: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retmerlon honesty; Soft≠product; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetembrasure[] =
     "GJUEFI1: soft retembrasure exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retembrasure stamp; Soft≠product)";
 
 /*
@@ -559,14 +559,14 @@ const char g_szGjUefiSoftRetembrasure[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetkeepgate[] =
     "GJUEFI1: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retkeepgate honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retouterward — Wave 45 exclusive outerward stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetouterward[] =
     "GJUEFI1: soft retouterward exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retouterward stamp; Soft≠product)";
 
 /*
@@ -577,14 +577,14 @@ const char g_szGjUefiSoftRetouterward[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbailey[] =
     "GJUEFI1: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbailey honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retpostern — Wave 46 exclusive postern stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpostern[] =
     "GJUEFI1: soft retpostern exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retpostern stamp; Soft≠product)";
 
 /*
@@ -595,14 +595,14 @@ const char g_szGjUefiSoftRetpostern[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetinnerward[] =
     "GJUEFI1: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retinnerward honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retdonjon — Wave 47 exclusive donjon stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetdonjon[] =
     "GJUEFI1: soft retdonjon exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retdonjon stamp; Soft≠product)";
 
 /*
@@ -613,14 +613,14 @@ const char g_szGjUefiSoftRetdonjon[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetchevaux[] =
     "GJUEFI1: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retchevaux honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retpalisade — Wave 48 exclusive palisade stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpalisade[] =
     "GJUEFI1: soft retpalisade exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retpalisade stamp; Soft≠product)";
 
 /*
@@ -631,14 +631,14 @@ const char g_szGjUefiSoftRetpalisade[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetglacisgate[] =
     "GJUEFI1: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retglacisgate honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retoutwork — Wave 49 exclusive outwork stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetoutwork[] =
     "GJUEFI1: soft retoutwork exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retoutwork stamp; Soft≠product)";
 
 /*
@@ -649,14 +649,14 @@ const char g_szGjUefiSoftRetoutwork[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsally[] =
     "GJUEFI1: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retsally honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcounterscarp[] =
     "GJUEFI1: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcounterscarp stamp; Soft≠product)";
 
 /*
@@ -667,14 +667,14 @@ const char g_szGjUefiSoftRetcounterscarp[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfosse[] =
     "GJUEFI1: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retfosse honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcoveredway[] =
     "GJUEFI1: soft retcoveredway exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcoveredway stamp; Soft≠product)";
 
 /*
@@ -685,14 +685,14 @@ const char g_szGjUefiSoftRetcoveredway[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettenaille[] =
     "GJUEFI1: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(rettenaille honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retdemilune — Wave 52 exclusive demilune stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetdemilune[] =
     "GJUEFI1: soft retdemilune exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retdemilune stamp; Soft≠product)";
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -703,7 +703,7 @@ const char g_szGjUefiSoftRetdemilune[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetlunette[] =
     "GJUEFI1: soft retlunette exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retlunette stamp; Soft≠product)";
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -713,14 +713,14 @@ const char g_szGjUefiSoftRetlunette[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcaponier[] =
     "GJUEFI1: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcaponier honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retredan — Wave 54 exclusive redan stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetredan[] =
     "GJUEFI1: soft retredan exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retredan stamp; Soft≠product)";
 
 /*
@@ -731,14 +731,14 @@ const char g_szGjUefiSoftRetredan[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetflank[] =
     "GJUEFI1: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retflank honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retface — Wave 55 exclusive face stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetface[] =
     "GJUEFI1: soft retface exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retface stamp; Soft≠product)";
 
 /*
@@ -749,14 +749,14 @@ const char g_szGjUefiSoftRetface[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetgorge[] =
     "GJUEFI1: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retgorge honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retshoulder — Wave 56 exclusive shoulder stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetshoulder[] =
     "GJUEFI1: soft retshoulder exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retshoulder stamp; Soft≠product)";
 
 /*
@@ -767,14 +767,14 @@ const char g_szGjUefiSoftRetshoulder[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetraverse[] =
     "GJUEFI1: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retraverse honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcasemate — Wave 57 exclusive casemate stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcasemate[] =
     "GJUEFI1: soft retcasemate exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcasemate stamp; Soft≠product)";
 
 /*
@@ -785,14 +785,14 @@ const char g_szGjUefiSoftRetcasemate[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetorillon[] =
     "GJUEFI1: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retorillon honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retbonnette — Wave 58 exclusive bonnette stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbonnette[] =
     "GJUEFI1: soft retbonnette exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retbonnette stamp; Soft≠product)";
 
 /*
@@ -803,14 +803,14 @@ const char g_szGjUefiSoftRetbonnette[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcrownwork[] =
     "GJUEFI1: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcrownwork honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft rethornwork — Wave 59 exclusive hornwork stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRethornwork[] =
     "GJUEFI1: soft rethornwork exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(rethornwork stamp; Soft≠product)";
 
 /*
@@ -821,14 +821,14 @@ const char g_szGjUefiSoftRethornwork[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetplace[] =
     "GJUEFI1: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retplace honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retenvelope — Wave 60 exclusive envelope stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetenvelope[] =
     "GJUEFI1: soft retenvelope exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retenvelope stamp; Soft≠product)";
 
 /*
@@ -839,14 +839,14 @@ const char g_szGjUefiSoftRetenvelope[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcounterguard[] =
     "GJUEFI1: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcounterguard honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcoveredface[] =
     "GJUEFI1: soft retcoveredface exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcoveredface stamp; Soft≠product)";
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -856,14 +856,14 @@ const char g_szGjUefiSoftRetcoveredface[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbastionface[] =
     "GJUEFI1: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retbastionface honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcurtainangle[] =
     "GJUEFI1: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcurtainangle stamp; Soft≠product)";
 
 /*
@@ -874,14 +874,14 @@ const char g_szGjUefiSoftRetcurtainangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetdoubletenaille[] =
     "GJUEFI1: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retdoubletenaille honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetplaceofarms[] =
     "GJUEFI1: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retplaceofarms stamp; Soft≠product)";
 
 /*
@@ -892,14 +892,14 @@ const char g_szGjUefiSoftRetplaceofarms[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetreentrant[] =
     "GJUEFI1: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retreentrant honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retsallyport — Wave 64 exclusive sallyport stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsallyport[] =
     "GJUEFI1: soft retsallyport exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retsallyport stamp; Soft≠product)";
 
 /*
@@ -910,14 +910,14 @@ const char g_szGjUefiSoftRetsallyport[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetgorgeangle[] =
     "GJUEFI1: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retgorgeangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetshoulderangle[] =
     "GJUEFI1: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retshoulderangle stamp; Soft≠product)";
 
 /*
@@ -928,14 +928,14 @@ const char g_szGjUefiSoftRetshoulderangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetflankangle[] =
     "GJUEFI1: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retflankangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retfaceangle — Wave 66 exclusive faceangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfaceangle[] =
     "GJUEFI1: soft retfaceangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retfaceangle stamp; Soft≠product)";
 
 /*
@@ -946,14 +946,14 @@ const char g_szGjUefiSoftRetfaceangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcaponierangle[] =
     "GJUEFI1: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retcaponierangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retredanangle — Wave 67 exclusive redanangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetredanangle[] =
     "GJUEFI1: soft retredanangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retredanangle stamp; Soft≠product)";
 
 /*
@@ -964,14 +964,14 @@ const char g_szGjUefiSoftRetredanangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetlunetteangle[] =
     "GJUEFI1: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retlunetteangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettenailleangle[] =
     "GJUEFI1: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(rettenailleangle stamp; Soft≠product)";
 
 /*
@@ -982,14 +982,14 @@ const char g_szGjUefiSoftRettenailleangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetdemiluneangle[] =
     "GJUEFI1: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=113 "
+    "never_blocks_m0=1 wave=114 "
     "(retdemiluneangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcoveredwayangle[] =
     "GJUEFI1: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=113 "
+    "product_kernel=OPEN bar3=0 wave=114 "
     "(retcoveredwayangle stamp; Soft≠product)";
 
 /*
@@ -999,12 +999,12 @@ const char g_szGjUefiSoftRetcoveredwayangle[] =
 /* Grep: GJUEFI1: soft retfosseangle — Wave 70 return-fosseangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfosseangle[] =
-    "GJUEFI1: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retfosseangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retfosseangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcounterscarple[] =
-    "GJUEFI1: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcounterscarple stamp; Soft≠product)";
+    "GJUEFI1: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retcounterscarple stamp; Soft≠product)";
 
 /*
  * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
@@ -1013,12 +1013,12 @@ const char g_szGjUefiSoftRetcounterscarple[] =
 /* Grep: GJUEFI1: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsallyportangle[] =
-    "GJUEFI1: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsallyportangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retsallyportangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetreentrantangle[] =
-    "GJUEFI1: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retreentrantangle stamp; Soft≠product)";
+    "GJUEFI1: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retreentrantangle stamp; Soft≠product)";
 
 
 
@@ -1037,338 +1037,346 @@ const char g_szGjUefiSoftRetreentrantangle[] =
 /* Grep: GJUEFI1: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetplaceofarmsangle[] =
-    "GJUEFI1: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retplaceofarmsangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retplaceofarmsangle honesty; Soft≠product; not bar3)";
 
 /* Grep: GJUEFI1: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetdoubletenailleangle[] =
-    "GJUEFI1: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retdoubletenailleangle stamp; Soft≠product)";
+    "GJUEFI1: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retdoubletenailleangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retcurtainface — Wave 73 return-curtainface honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcurtainface[] =
-    "GJUEFI1: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcurtainface honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retcurtainface honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbastionangle[] =
-    "GJUEFI1: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbastionangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbastionangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retglacisangle — Wave 74 return-glacisangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetglacisangle[] =
-    "GJUEFI1: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retglacisangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retglacisangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetparapetangle[] =
-    "GJUEFI1: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retparapetangle stamp; Soft≠product)";
+    "GJUEFI1: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retparapetangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retmoatangle — Wave 75 return-moatangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmoatangle[] =
-    "GJUEFI1: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmoatangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retmoatangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retowerangle — Wave 75 exclusive towerangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetowerangle[] =
-    "GJUEFI1: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retowerangle stamp; Soft≠product)";
+    "GJUEFI1: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retowerangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retgateangle — Wave 76 return-gateangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetgateangle[] =
-    "GJUEFI1: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retgateangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retgateangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retwallangle — Wave 76 exclusive wallangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetwallangle[] =
-    "GJUEFI1: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retwallangle stamp; Soft≠product)";
+    "GJUEFI1: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retwallangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retspireangle — Wave 77 return-spireangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetspireangle[] =
-    "GJUEFI1: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retspireangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retspireangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retholdangle — Wave 77 exclusive holdangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetholdangle[] =
-    "GJUEFI1: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retholdangle stamp; Soft≠product)";
+    "GJUEFI1: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retholdangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retpalaceangle — Wave 78 return-palaceangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpalaceangle[] =
-    "GJUEFI1: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retpalaceangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retpalaceangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfortressangle[] =
-    "GJUEFI1: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retfortressangle stamp; Soft≠product)";
+    "GJUEFI1: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retfortressangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retkeepangle — Wave 79 return-keepangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetkeepangle[] =
-    "GJUEFI1: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retkeepangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retkeepangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetredoubtangle[] =
-    "GJUEFI1: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retredoubtangle stamp; Soft≠product)";
+    "GJUEFI1: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retredoubtangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retcitadelangle — Wave 80 return-citadelangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcitadelangle[] =
-    "GJUEFI1: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcitadelangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retcitadelangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbastionkeep[] =
-    "GJUEFI1: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbastionkeep stamp; Soft≠product)";
+    "GJUEFI1: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbastionkeep stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpanoplyangle[] =
-    "GJUEFI1: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retpanoplyangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retpanoplyangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbulwarkangle[] =
-    "GJUEFI1: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbulwarkangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbulwarkangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retmantleangle — Wave 82 return-mantleangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmantleangle[] =
-    "GJUEFI1: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmantleangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retmantleangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetaegisangle[] =
-    "GJUEFI1: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retaegisangle stamp; Soft≠product)";
+    "GJUEFI1: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retaegisangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retemblemangle — Wave 83 return-emblemangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetemblemangle[] =
-    "GJUEFI1: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retemblemangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retemblemangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsigilangle[] =
-    "GJUEFI1: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retsigilangle stamp; Soft≠product)";
+    "GJUEFI1: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retsigilangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retscepterangle — Wave 84 return-scepterangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetscepterangle[] =
-    "GJUEFI1: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retscepterangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retscepterangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetglyphangle[] =
-    "GJUEFI1: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retglyphangle stamp; Soft≠product)";
+    "GJUEFI1: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retglyphangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retcrownangle — Wave 85 return-crownangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcrownangle[] =
-    "GJUEFI1: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcrownangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retcrownangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retshardangle — Wave 85 exclusive shardangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetshardangle[] =
-    "GJUEFI1: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retshardangle stamp; Soft≠product)";
+    "GJUEFI1: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retshardangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retforgeangle — Wave 86 return-forgeangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetforgeangle[] =
-    "GJUEFI1: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retforgeangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retforgeangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retprismangle — Wave 86 exclusive prismangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetprismangle[] =
-    "GJUEFI1: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retprismangle stamp; Soft≠product)";
+    "GJUEFI1: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retprismangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retflameangle — Wave 87 return-flameangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetflameangle[] =
-    "GJUEFI1: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retflameangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retflameangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcipherangle[] =
-    "GJUEFI1: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcipherangle stamp; Soft≠product)";
+    "GJUEFI1: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retcipherangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retbeaconangle — Wave 88 return-beaconangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbeaconangle[] =
-    "GJUEFI1: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbeaconangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retbeaconangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetledgerangle[] =
-    "GJUEFI1: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retledgerangle stamp; Soft≠product)";
+    "GJUEFI1: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retledgerangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retbannerangle — Wave 89 return-bannerangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbannerangle[] =
-    "GJUEFI1: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbannerangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retbannerangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetvaultangle[] =
-    "GJUEFI1: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retvaultangle stamp; Soft≠product)";
+    "GJUEFI1: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retvaultangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retcrestangle — Wave 90 return-crestangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcrestangle[] =
-    "GJUEFI1: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcrestangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retcrestangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettokenangle[] =
-    "GJUEFI1: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rettokenangle stamp; Soft≠product)";
+    "GJUEFI1: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (rettokenangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retbadgeangle — Wave 91 return-badgeangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbadgeangle[] =
-    "GJUEFI1: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbadgeangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retbadgeangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetphaseangle[] =
-    "GJUEFI1: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retphaseangle stamp; Soft≠product)";
+    "GJUEFI1: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retphaseangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retmarkangle — Wave 92 return-markangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmarkangle[] =
-    "GJUEFI1: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmarkangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retmarkangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpulseangle[] =
-    "GJUEFI1: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retpulseangle stamp; Soft≠product)";
+    "GJUEFI1: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retpulseangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retsealangle — Wave 93 return-sealangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsealangle[] =
-    "GJUEFI1: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsealangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retsealangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retboundangle — Wave 93 exclusive boundangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetboundangle[] =
-    "GJUEFI1: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retboundangle stamp; Soft≠product)";
+    "GJUEFI1: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retboundangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retstemangle — Wave 94 return-stemangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetstemangle[] =
-    "GJUEFI1: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retstemangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retstemangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbladeangle[] =
-    "GJUEFI1: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbladeangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbladeangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retchordangle — Wave 95 return-chordangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetchordangle[] =
-    "GJUEFI1: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retchordangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retchordangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retarcangle — Wave 95 exclusive arcangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetarcangle[] =
-    "GJUEFI1: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retarcangle stamp; Soft≠product)";
+    "GJUEFI1: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retarcangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retsectorangle — Wave 96 return-sectorangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsectorangle[] =
-    "GJUEFI1: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsectorangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retsectorangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetwedgeangle[] =
-    "GJUEFI1: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retwedgeangle stamp; Soft≠product)";
+    "GJUEFI1: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retwedgeangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retradiusangle — Wave 97 return-radiusangle honesty */
 const char g_szGjUefiSoftRetradiusangle[] =
-    "GJUEFI1: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retradiusangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retradiusangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
 const char g_szGjUefiSoftRetdiameterangle[] =
-    "GJUEFI1: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retdiameterangle stamp; Soft≠product)";
+    "GJUEFI1: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retdiameterangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retcircumangle — Wave 98 return-circumangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcircumangle[] =
-    "GJUEFI1: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcircumangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retcircumangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetellipseangle[] =
-    "GJUEFI1: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retellipseangle stamp; Soft≠product)";
+    "GJUEFI1: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retellipseangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft rethyperangle — Wave 99 return-hyperangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRethyperangle[] =
-    "GJUEFI1: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rethyperangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (rethyperangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetparabolaangle[] =
-    "GJUEFI1: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retparabolaangle stamp; Soft≠product)";
+    "GJUEFI1: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retparabolaangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retspiralangle — Wave 100 return-spiralangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetspiralangle[] =
-    "GJUEFI1: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retspiralangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retspiralangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft rethelixangle — Wave 100 exclusive helixangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRethelixangle[] =
-    "GJUEFI1: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rethelixangle stamp; Soft≠product)";
+    "GJUEFI1: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (rethelixangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft rettorusangle — Wave 101 return-torusangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettorusangle[] =
-    "GJUEFI1: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rettorusangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (rettorusangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retknotangle — Wave 101 exclusive knotangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetknotangle[] =
-    "GJUEFI1: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retknotangle stamp; Soft≠product)";
+    "GJUEFI1: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retknotangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmoebiusangle[] =
-    "GJUEFI1: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmoebiusangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retmoebiusangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetkleinangle[] =
-    "GJUEFI1: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retkleinangle stamp; Soft≠product)";
+    "GJUEFI1: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retkleinangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retprojectangle — Wave 103 return-projectangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetprojectangle[] =
-    "GJUEFI1: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retprojectangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retprojectangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetaffineangle[] =
-    "GJUEFI1: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retaffineangle stamp; Soft≠product)";
+    "GJUEFI1: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retaffineangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retlinearangle — Wave 104 return-linearangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetlinearangle[] =
-    "GJUEFI1: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retlinearangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retlinearangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbilinearangle[] =
-    "GJUEFI1: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbilinearangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbilinearangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetquadraticangle[] =
-    "GJUEFI1: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retquadraticangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retquadraticangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcubicangle[] =
-    "GJUEFI1: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcubicangle stamp; Soft≠product)";
+    "GJUEFI1: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retcubicangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retquarticangle — Wave 106 return-quarticangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetquarticangle[] =
-    "GJUEFI1: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retquarticangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retquarticangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetquinticangle[] =
-    "GJUEFI1: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retquinticangle stamp; Soft≠product)";
+    "GJUEFI1: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retquinticangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retsplineangle — Wave 107 return-splineangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetsplineangle[] =
-    "GJUEFI1: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsplineangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retsplineangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbezierangle[] =
-    "GJUEFI1: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbezierangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbezierangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft rethurmitangle — Wave 108 return-hermitangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRethurmitangle[] =
-    "GJUEFI1: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rethurmitangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (rethurmitangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetcatmullangle[] =
-    "GJUEFI1: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcatmullangle stamp; Soft≠product)";
+    "GJUEFI1: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retcatmullangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetnurbsangle[] =
-    "GJUEFI1: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retnurbsangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retnurbsangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetbsplineangle[] =
-    "GJUEFI1: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbsplineangle stamp; Soft≠product)";
+    "GJUEFI1: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retbsplineangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retmeshangle — Wave 110 return-meshangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetmeshangle[] =
-    "GJUEFI1: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmeshangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retmeshangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retgridangle — Wave 110 exclusive gridangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetgridangle[] =
-    "GJUEFI1: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retgridangle stamp; Soft≠product)";
+    "GJUEFI1: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retgridangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retvoxelangle — Wave 111 return-voxelangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetvoxelangle[] =
-    "GJUEFI1: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retvoxelangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retvoxelangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft rettexelangle — Wave 111 exclusive texelangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRettexelangle[] =
-    "GJUEFI1: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rettexelangle stamp; Soft≠product)";
+    "GJUEFI1: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (rettexelangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetfragmentangle[] =
-    "GJUEFI1: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retfragmentangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retfragmentangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetvertexangle[] =
-    "GJUEFI1: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retvertexangle stamp; Soft≠product)";
+    "GJUEFI1: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retvertexangle stamp; Soft≠product)";
 /* Grep: GJUEFI1: soft retshaderangle — Wave 113 return-shaderangle honesty */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetshaderangle[] =
-    "GJUEFI1: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retshaderangle honesty; Soft≠product; not bar3)";
+    "GJUEFI1: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retshaderangle honesty; Soft≠product; not bar3)";
 /* Grep: GJUEFI1: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetpipelineangle[] =
-    "GJUEFI1: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retpipelineangle stamp; Soft≠product)";
+    "GJUEFI1: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retpipelineangle stamp; Soft≠product)";
+/* Grep: GJUEFI1: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftRetframebufferangle[] =
+    "GJUEFI1: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=114 (retframebufferangle honesty; Soft≠product; not bar3)";
+/* Grep: GJUEFI1: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftRetswapchainangle[] =
+    "GJUEFI1: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=114 (retswapchainangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 35 exclusive complementary surfaces (kept) (never reshape primary).
@@ -1377,12 +1385,12 @@ const char g_szGjUefiSoftRetpipelineangle[] =
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftDeepen[] =
-    "GJUEFI1: soft deepen wave=113 areas=188 "
+    "GJUEFI1: soft deepen wave=114 areas=190 "
     "catalog=inventory,path,hdr,entry,honesty,magic,contract,"
-    "flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS "
+    "flags,load,catalog,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,retframebufferangle,retswapchainangle,deepen,PASS "
     "unit=uefi_entry.c only soft_never_gates=1 (soft; not bar3)";
 
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftPass[] =
-    "GJUEFI1: soft PASS wave=113 hdr=present entry=stamped "
+    "GJUEFI1: soft PASS wave=114 hdr=present entry=stamped "
     "align=16 (soft inventory; not bar3)";

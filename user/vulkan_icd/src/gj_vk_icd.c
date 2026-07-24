@@ -6,7 +6,7 @@
  * With GJ_VK_KERNEL_SMOKE: linked into the kernel (virtio-gpu + PMM).
  * Without it: stubs return failure so host builds only need vulkan_icd.c.
  *
- * Soft inventory (Wave 113 exclusive deepen; greppable; not bar3 GPU):
+ * Soft inventory (Wave 114 exclusive deepen; greppable; not bar3 GPU):
  *   gj_vk_icd: soft inventory wave=70 surfaces=16 pools=inst,dev,sc
  *   gj_vk_icd: soft deepen wave=70 areas=display,present,instance,device,
  *              swapchain,acquire,pixels,features,name,host,path,counts,note,area
@@ -20,10 +20,10 @@
 #define GJ_VK_DEV_MAGIC  0x44564a47u /* 'GJVD' */
 #define GJ_VK_SC_MAGIC   0x53564a47u /* 'GJVS' */
 
-/* Wave 113 exclusive soft inventory stamp. */
-/* Wave 113 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retshaderangle continuum_toward=25500 soft_ne_product=1 wave=113
- *   greppable: soft retpipelineangle exclusive=1 continuum_toward=25500 soft_ne_product=1 wave=113
+/* Wave 114 exclusive soft inventory stamp. */
+/* Wave 114 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retframebufferangle continuum_toward=25600 soft_ne_product=1 wave=114
+ *   greppable: soft retswapchainangle exclusive=1 continuum_toward=25600 soft_ne_product=1 wave=114
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -474,7 +474,7 @@ gj_vk_image_pixels(gj_vk_swapchain_t pSc, uint32_t u32Index)
 #endif /* GJ_VK_KERNEL_SMOKE */
 
 /*
- * Soft inventory blob (Wave 113). Shared host-stub + kernel smoke.
+ * Soft inventory blob (Wave 114). Shared host-stub + kernel smoke.
  * Grep: gj_vk_icd: soft inventory
  */
 static const char g_szGjVkIcdSoftInventory[] =
@@ -573,7 +573,7 @@ gj_vk_icd_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 113 exclusive). Grep: gj_vk_icd: soft honesty
+ * Cold soft honesty line (Wave 114 exclusive). Grep: gj_vk_icd: soft honesty
  */
 const char *
 gj_vk_icd_soft_honesty(void)

@@ -26,10 +26,10 @@
 # Full 1 TiB host soak remains OPEN until a real ≥1 TiB host path is claimed
 # elsewhere (HCL / matrix). Soft-SKIP paths never hard-fail this script.
 # ---------------------------------------------------------------------------
-# Wave 113 soft note (continuum / product side panel):
-#   Soft product-summary may note continuum high-water advancing toward M=25500.
-#   Honest scan may still report makefile_max=25400 until parent wires 25500.
-#   Soft deepen retshaderangle/retpipelineangle are CREATE-ONLY soft names only (≠ product).
+# Wave 114 soft note (continuum / product side panel):
+#   Soft product-summary may note continuum high-water advancing toward M=25600.
+#   Honest scan may still report makefile_max=25500 until parent wires 25600.
+#   Soft deepen retframebufferangle/retswapchainangle are CREATE-ONLY soft names only (≠ product).
 #   Soak_tib PASS still ≠ bar3 / Steam / Top-50 and ≠ continuum makefile_max wire.
 #   makefile_max remains an honest Makefile scan (never hard-coded here).
 #   Soft ≠ product complete; product lamps 0.
@@ -95,7 +95,7 @@ fi
 
 echo "gj-soak-large-ram: mem=$GJ_SOAK_MEM timeout=${GJ_SOAK_TIMEOUT}s log=$log"
 echo "gj-soak-large-ram: honesty  product ≥1 TiB full path OPEN (768G class only; Wave 10 soft)"
-echo "gj-soak-large-ram: honesty  Wave 113 soft  soak ≠ bar3/Top50; continuum makefile_max=scan (toward M=25500; may be 25400)"
+echo "gj-soak-large-ram: honesty  Wave 114 soft  soak ≠ bar3/Top50; continuum makefile_max=scan (toward M=25600; may be 25500)"
 
 # --- helpers ----------------------------------------------------------------
 # Parse size token like 768G / 512g / 1T / 65536M / bare bytes → KiB (integer).

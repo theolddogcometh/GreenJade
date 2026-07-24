@@ -3,14 +3,14 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Cap addressing v1.7 |
-| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 12 honesty; §9.5 Wave 43 soft continuum |
+| **Status** | **Accepted** for x86_64 product path (§§1–8); §9 Wave 12 honesty; §9.5 Wave 44 soft continuum |
 | **Handle ABI** | **Scheme A** — `u64` slot index + separate generation |
 | **Slot 0** | **Root meta** — **kernel ops only**; process + CNode identity; empty until bootstrap |
 | **Fault/pager** | **Region → memory object → pager**; PCB **default pager** fallback ([APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) §1) |
 | **CNode scope** | **One CNode per process** — all threads in that process **share** it |
 | **PROCESS** | Typed **task port** minted to parent on spawn — not root meta |
 | **Honesty (Wave 12)** | Soft cap surface ≠ product multi-server confine; **no bar3 claim** (§9) |
-| **Honesty (Wave 43)** | Soft continuum toward 18500 ≠ product; product lamps **0**; **no bar3 claim** (§9.5) |
+| **Honesty (Wave 44)** | Soft continuum toward 18600 ≠ product; product lamps **0**; **no bar3 claim** (§9.5) |
 | **Companion** | [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (game tier; overrides Apple on conflict) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
@@ -336,22 +336,22 @@ Soft cap surface and soft promise gates are **not** a claim that every server an
 - [TODO.md](TODO.md) — multi-server confine / CDT try-lock product / cap transfer open boxes  
 - [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) — soft surface ≠ product bar  
 
-### 9.5 Soft continuum note (Wave 43 · 2026-07-23)
+### 9.5 Soft continuum note (Wave 44 · 2026-07-23)
 
-**Additive only (Wave 43 exclusive for this file).** §9 Wave 12 soft-cap bounds stay in force. Soft deepen on non-w13 surfaces does **not** re-litigate Scheme A or close multi-server confine.
+**Additive only (Wave 44 exclusive for this file).** §9 Wave 12 soft-cap bounds stay in force. Soft deepen on non-w13 surfaces does **not** re-litigate Scheme A or close multi-server confine.
 
 | Soft surface | Bound |
 |--------------|--------|
-| Continuum high-water **advancing toward 18500** | Parent-wire CREATE-ONLY soft only — **not** product multi-server; **not** bar3 |
+| Continuum high-water **advancing toward 18600** | Parent-wire CREATE-ONLY soft only — **not** product multi-server; **not** bar3 |
 | Soft deepen (non-w13) | Honesty / bring-up only — **soft ≠ product complete** |
 | Product lamps | Remain **0** by design |
 | Deck Top 50 | **NOT-TRIED × 50** — no title PASS from this doc |
 | **bar3** | Still **OPEN** |
 
-**Hard stamp (Wave 43):** soft continuum toward **18500** ≠ product multi-server confine ≠ bar3. Soft cap surface still ≠ product multi-server. **No bar3 claim.** Product lamps **0**.
+**Hard stamp (Wave 44):** soft continuum toward **18600** ≠ product multi-server confine ≠ bar3. Soft cap surface still ≠ product multi-server. **No bar3 claim.** Product lamps **0**.
 
 ---
 
 *Accepted x86_64 capability addressing v1.7 — Scheme A, root meta, fault cookie / multi-page cluster, per-space fault lock.*  
 *§9 Wave 12 honesty (2026-07-23): soft cap surface ≠ product multi-server confine; **no bar3 claim**.*  
-*§9.5 Wave 43 soft continuum (2026-07-23): high-water **toward 18500 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*§9.5 Wave 44 soft continuum (2026-07-23): high-water **toward 18600 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*

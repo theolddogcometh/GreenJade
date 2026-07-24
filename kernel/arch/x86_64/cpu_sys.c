@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 43u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 44u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -939,6 +939,22 @@ kprintf("cpu: syscall: soft retmachicolation soft_only=1 product_gate=0 soft_ne_
 kprintf("cpu: syscall: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cpu: syscall: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("cpu: syscall: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+/* Grep: cpu: syscall: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("cpu: syscall: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
 
 

@@ -20,7 +20,7 @@
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
  *   - Wave 19: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=43 + PASS/NONE
+ *   - Path catalog + stats rollup + deepen wave=44 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=43 …
+ *   kheap: soft deepen wave=44 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -60,10 +60,10 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 43 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 43u
+/* Wave 44 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 44u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 66u
+#define KHEAP_SOFT_AREAS 68u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1369,6 +1369,22 @@ kprintf("kheap: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product
 kprintf("kheap: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)KHEAP_SOFT_WAVE);
+
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: kheap: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("kheap: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)KHEAP_SOFT_WAVE);
+/* Grep: kheap: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("kheap: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
         (unsigned)KHEAP_SOFT_WAVE);
 
 

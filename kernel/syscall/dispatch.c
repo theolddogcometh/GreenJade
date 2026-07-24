@@ -29,7 +29,7 @@
  *   "syscall: soft catalog …"     — surface catalog stamp
  *   "syscall: soft surfaces …"    — Wave 19 surface count lamp
  *   "syscall: soft note …"        — Wave 16 milestone note
- *   "syscall: soft deepen …"      — wave=43 area stamp
+ *   "syscall: soft deepen …"      — wave=44 area stamp
  *   "syscall: soft path …"        — surface catalog honesty
  *   "syscall: soft inventory PASS" / "syscall: soft PASS"
  * greppable: SYSCALL_ENTRY_SOFT_STATS / "syscall: soft"
@@ -47,9 +47,9 @@
 #include <gj/syscall.h>
 #include <gj/thread.h>
 
-/* Wave 43 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE 43u
-#define SYSCALL_SOFT_AREAS 66u
+/* Wave 44 soft inventory stamp + area count (greppable deepen). */
+#define SYSCALL_SOFT_WAVE 44u
+#define SYSCALL_SOFT_AREAS 68u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -356,7 +356,7 @@ entry_soft_inventory_log(void)
             SYSCALL_SOFT_AREAS, (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft note (Wave 20 deepen) */
-    kprintf("syscall: soft note milestone=wave43 exclusive=1 "
+    kprintf("syscall: soft note milestone=wave44 exclusive=1 "
             "soft_only=1 hybrid=OptionC not_bar3=1 "
             "disp=%llu native=%llu linux=%llu wave=%u\n",
             (unsigned long long)s.u64DispatchEnter,
@@ -384,7 +384,7 @@ entry_soft_inventory_log(void)
             (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft retmap — Wave 19 return-surface map */
-    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=43\n");
+    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
 
     /* Grep: syscall: soft deepen */
     /*
@@ -767,6 +767,22 @@ kprintf("syscall: soft retmachicolation soft_only=1 product_gate=0 soft_ne_produ
 kprintf("syscall: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)SYSCALL_SOFT_WAVE);
+
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: syscall: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("syscall: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)SYSCALL_SOFT_WAVE);
+/* Grep: syscall: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("syscall: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
         (unsigned)SYSCALL_SOFT_WAVE);
 
 

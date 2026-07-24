@@ -47,8 +47,8 @@ static u32 g_u32SocketcallHits;
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE 43u
-#define GJ_WOW64_SOFT_AREAS 60u
+#define GJ_WOW64_SOFT_WAVE 44u
+#define GJ_WOW64_SOFT_AREAS 62u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -229,7 +229,7 @@ soft_inventory_log(void)
             (unsigned)GJ_WOW64_SOFT_AREAS);
 
     /* Grep: wow64: soft note (Wave 20 deepen) */
-    kprintf("wow64: soft note milestone=wave43 exclusive=1 "
+    kprintf("wow64: soft note milestone=wave44 exclusive=1 "
             "soft_only=1 not_bar3=1 calls=%u map=%u wave=%u\n",
             g_u32Calls, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
@@ -240,7 +240,7 @@ soft_inventory_log(void)
             g_u32SoftAdjustNop, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft retmap — Wave 19 return-surface map */
-    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=43\n");
+    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=44\n");
 
     /* Grep: wow64: soft deepen wave */
     /*
@@ -625,10 +625,26 @@ kprintf("wow64: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "(retarrowslit stamp; Soft≠product)\n",
         (unsigned)GJ_WOW64_SOFT_WAVE);
 
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: wow64: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("wow64: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_WOW64_SOFT_WAVE);
+/* Grep: wow64: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("wow64: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
+        (unsigned)GJ_WOW64_SOFT_WAVE);
+
 
                             kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
-            "(Wave 43 exclusive; not bar3)\n",
+            "(Wave 44 exclusive; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,

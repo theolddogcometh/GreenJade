@@ -154,20 +154,20 @@ main(void)
         printf("netstackd: door-shaped sockets ok\n");
     }
 
-    /* Grep: netstackd: soft inventory (Wave 43 exclusive deepen; host smoke) */
-/* Wave 43 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retmachicolation continuum_toward=18500 soft_ne_product=1
- *   greppable: soft retarrowslit exclusive=1 continuum_toward=18500
+    /* Grep: netstackd: soft inventory (Wave 44 exclusive deepen; host smoke) */
+/* Wave 44 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmerlon continuum_toward=18600 soft_ne_product=1
+ *   greppable: soft retembrasure exclusive=1 continuum_toward=18600
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-    printf("netstackd: soft inventory tx=%u rx=%u echo=%u wave=43 "
+    printf("netstackd: soft inventory tx=%u rx=%u echo=%u wave=44 "
            "multi_server=0 confine=0\n",
            g_u32Tx, g_u32Rx, g_u32Echo);
-    printf("netstackd: soft deepen product_kernel=OPEN wave=43 areas=1 multi_server=0 "
+    printf("netstackd: soft deepen product_kernel=OPEN wave=44 areas=1 multi_server=0 "
            "confine=0 bar3=0\n");
     printf("netstackd: soft honesty multi_server=0 confine=0 bar3=0 "
-           "exclusive=1 soft=1 product_kernel=OPEN wave=43\n");
+           "exclusive=1 soft=1 product_kernel=OPEN wave=44\n");
 
     printf("netstackd: PASS\n");
     return 0;

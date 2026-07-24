@@ -40,7 +40,7 @@
  *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
  *   cap: cdt soft return selftest — Wave 19 terminal return surface
  *   cap: cdt soft retmap     — Wave 19 return-surface map
- *   cap: cdt soft deepen     — wave=43 areas stamp
+ *   cap: cdt soft deepen     — wave=44 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
  * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
@@ -52,9 +52,9 @@
 #include <gj/types.h>
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE 43u
+#define GJ_CDT_SOFT_WAVE 44u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_CDT_SOFT_AREAS 62u
+#define GJ_CDT_SOFT_AREAS 64u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -1471,6 +1471,22 @@ kprintf("cap: cdt: soft retmachicolation soft_only=1 product_gate=0 soft_ne_prod
 kprintf("cap: cdt: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)GJ_CDT_SOFT_WAVE);
+
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cap: cdt: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("cap: cdt: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_CDT_SOFT_WAVE);
+/* Grep: cap: cdt: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("cap: cdt: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
         (unsigned)GJ_CDT_SOFT_WAVE);
 
 

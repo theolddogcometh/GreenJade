@@ -16,7 +16,7 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
- * Wave 43 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ * Wave 44 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
  *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
  *   iommu: soft present    — DMAR/IVRS presence lamps
  *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
@@ -35,7 +35,7 @@
  *   iommu: soft return     — Wave 17 create/destroy return taxonomy
  *   iommu: soft return selftest — Wave 19 terminal return surface
  *   iommu: soft retmap     — Wave 19 return-surface map
- *   iommu: soft deepen     — wave=43 stamp + area count
+ *   iommu: soft deepen     — wave=44 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close;
@@ -64,10 +64,10 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 43 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE 43u
+/* Wave 44 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE 44u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 67u
+#define IOMMU_SOFT_AREAS 69u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -907,6 +907,22 @@ kprintf("iommu: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product
 kprintf("iommu: soft retarrowslit exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)IOMMU_SOFT_WAVE);
+
+/*
+ * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: iommu: soft retmerlon — Wave 44 return-merlon honesty */
+kprintf("iommu: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmerlon honesty; Soft≠product; not bar3)\n",
+        (unsigned)IOMMU_SOFT_WAVE);
+/* Grep: iommu: soft retembrasure — Wave 44 exclusive embrasure stamp */
+kprintf("iommu: soft retembrasure exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retembrasure stamp; Soft≠product)\n",
         (unsigned)IOMMU_SOFT_WAVE);
 
 

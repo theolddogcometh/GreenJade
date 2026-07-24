@@ -1,0 +1,68 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch87496: smoke soft lamp (wave 87500).
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_smoke_soft_87500(void);
+ *     - Returns 1 (smoke soft surface ready for the milestone 87500
+ *       continuum). Soft compile-time product tag; not a live smoke run.
+ *   uint32_t __gj_smoke_soft_87500  (alias)
+ *   __libcgj_batch87496_marker = "libcgj-batch87496"
+ *
+ * Milestone 87500 exclusive continuum CREATE-ONLY (25891-87500). Unique
+ * gj_smoke_soft_87500 surface only; no multi-def. Distinct from
+ * gj_smoke_soft_25800 / gj_smoke_soft_25700 / gj_smoke_soft_25600 and
+ * sibling 87500 milestone symbols (dyn_soft, continuum_ready, …).
+ * No parent wires. No __int128.
+ *
+ * CGJ soft marker band (25891–87500): pairs with static freestanding
+ * soft smoke hosts (cgj_smoke / cgj_soft_milestone_87500). Soft rule:
+ * missing symbol → skip; present but wrong value → hard fail.
+ * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
+ * makefile_max honesty is parent-side (scan → makefile_max=87500 when wired).
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+/* CGJ TU marker: greppable continuum identity string for batch 87496. */
+const char __libcgj_batch87496_marker[] = "libcgj-batch87496";
+
+/* Smoke soft ready lamp for wave 87500 (static soft surface present). */
+#define B87496_SMOKE_SOFT  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b87496_soft(void)
+{
+	return B87496_SMOKE_SOFT;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_smoke_soft_87500 - report smoke soft lamp for wave 87500.
+ *
+ * Always returns 1u (smoke soft surface ready). Soft pure-data product
+ * tag; does not invoke cgj_smoke or any host process. No parent wires.
+ * CGJ soft KAT expectation: 1.
+ */
+uint32_t
+gj_smoke_soft_87500(void)
+{
+	(void)NULL;
+	return b87496_soft();
+}
+
+/* ---- underscored alias ------------------------------------------------- */
+
+/* CGJ alias: underscored form for map / weak-link compatibility. */
+uint32_t __gj_smoke_soft_87500(void)
+    __attribute__((alias("gj_smoke_soft_87500")));

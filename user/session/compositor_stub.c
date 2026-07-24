@@ -22,7 +22,7 @@
  *
  * This stub only prints the product pointer; it does not open the door.
  *
- * Soft inventory (Wave 123 exclusive deepen — greppable):
+ * Soft inventory (Wave 124 exclusive deepen — greppable):
  *   session-compositor: soft deepen wave=70 …
  *   session-compositor: soft honesty multi_server=0 confine=0 bar3=0 …
  * Soft pointer only — never a bar3 / multi-server claim.
@@ -38,10 +38,10 @@ main(void)
     printf("session-compositor: door ops PRESENT..MAP_SCANOUT = 1..9 "
            "(stable)\n");
     printf("session-compositor: soft reclaim + multi-frame + free path\n");
-    /* Grep: session-compositor: soft deepen (Wave 123 exclusive) */
-/* Wave 123 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retlayerangle continuum_toward=26500 soft_ne_product=1 wave=123
- *   greppable: soft retcanvasangle exclusive=1 continuum_toward=26500 soft_ne_product=1 wave=123
+    /* Grep: session-compositor: soft deepen (Wave 124 exclusive) */
+/* Wave 124 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retbrushangle continuum_toward=26600 soft_ne_product=1 wave=124
+ *   greppable: soft retinkangle exclusive=1 continuum_toward=26600 soft_ne_product=1 wave=124
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

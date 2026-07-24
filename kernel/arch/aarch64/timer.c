@@ -53,7 +53,7 @@
  *   aarch64: timer tick soft PASS | FAIL
  *   aarch64: timer soft inventory wave=118 …
  *   aarch64: timer soft stats …
- *   aarch64: timer soft deepen wave=123 areas=…
+ *   aarch64: timer soft deepen wave=124 areas=…
  *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
  *   aarch64: timer soft return inv_ret=… product_kernel=OPEN
  *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
@@ -99,8 +99,8 @@ extern void aarch64_uart_put_hex(unsigned long v);
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
 
-/* Wave 45 soft inventory stamp (greppable wave=123). */
-#define TIMER_SOFT_WAVE 123u
+/* Wave 45 soft inventory stamp (greppable wave=124). */
+#define TIMER_SOFT_WAVE 124u
 
 /* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
 #define TIMER_SOFT_AREAS 207u
@@ -1577,6 +1577,10 @@ aarch64_uart_puts("aarch64: timer: soft retwindowangle exclusive=1 soft_ne_produ
 aarch64_uart_puts("aarch64: timer: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: timer: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 aarch64_uart_puts("aarch64: timer: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: aarch64: timer: soft retbrushangle — Wave 124 return-brushangle honesty */
+aarch64_uart_puts("aarch64: timer: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: timer: soft retinkangle — Wave 124 exclusive inkangle stamp */
+aarch64_uart_puts("aarch64: timer: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: timer soft deepen wave=");

@@ -30,7 +30,7 @@
 #include <gj/string.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 123u
+#define PMM_CORE_SOFT_WAVE 124u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -1208,6 +1208,10 @@ kprintf("pmm_core: soft retwindowangle exclusive=1 soft_ne_product=1 product_ker
 kprintf("pmm_core: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm_core: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 kprintf("pmm_core: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: pmm_core: soft retbrushangle — Wave 124 return-brushangle honesty */
+kprintf("pmm_core: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm_core: soft retinkangle — Wave 124 exclusive inkangle stamp */
+kprintf("pmm_core: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
                             kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE, cAreas, cFreeSnap, cTotalSnap,

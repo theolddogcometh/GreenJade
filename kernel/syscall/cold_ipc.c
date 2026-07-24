@@ -16,7 +16,7 @@
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=123 stamp
+ *   - soft deepen wave=124 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -66,7 +66,7 @@ static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE 123u
+#define GJ_COLD_SOFT_WAVE 124u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
 #define GJ_COLD_SOFT_AREAS 221u
 
@@ -1770,6 +1770,10 @@ kprintf("cold: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("cold: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 kprintf("cold: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: cold: soft retbrushangle — Wave 124 return-brushangle honesty */
+kprintf("cold: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: cold: soft retinkangle — Wave 124 exclusive inkangle stamp */
+kprintf("cold: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
                             kprintf("cold: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
             "(Wave 35 exclusive; soft inventory; not bar3)\n",

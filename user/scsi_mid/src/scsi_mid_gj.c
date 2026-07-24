@@ -15,7 +15,7 @@
  *     WRITE10/READ10 verify → illegal-LUN sense → REQUEST SENSE →
  *     SYNC → deepen probes → soft inventory → live path PASS
  *
- * Soft inventory (Wave 123 exclusive deepen — greppable "scsi_mid-gj: soft …"):
+ * Soft inventory (Wave 124 exclusive deepen — greppable "scsi_mid-gj: soft …"):
  *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=70 areas=10
  *   scsi_mid-gj: soft steps tur=… inq=… mode=… readcap=… write10=… read10=…
  *                rw=… lun=… sense=… sync=… multi=… lba=… evpd=… bits=…
@@ -39,10 +39,10 @@
 #define SOFT_SEC_SIZE 512u
 #define SOFT_SENSE_MAX 32u
 
-/* Wave stamp + inventory area count (Wave 123 exclusive deepen). */
-/* Wave 123 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retlayerangle continuum_toward=26500 soft_ne_product=1 wave=123
- *   greppable: soft retcanvasangle exclusive=1 continuum_toward=26500 soft_ne_product=1 wave=123
+/* Wave stamp + inventory area count (Wave 124 exclusive deepen). */
+/* Wave 124 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retbrushangle continuum_toward=26600 soft_ne_product=1 wave=124
+ *   greppable: soft retinkangle exclusive=1 continuum_toward=26600 soft_ne_product=1 wave=124
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -213,7 +213,7 @@ static unsigned g_uSoftIoFail;
 static int g_fSoftArmed;
 
 /*
- * Soft product inventory (Wave 123 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 124 exclusive deepen). Cumulative for this
  * process. greppable: scsi_mid-gj: soft …
  * Never hard-gates live path. Soft ≠ product multi-server confine.
  */
@@ -567,7 +567,7 @@ msg_soft_stats(void)
     msg(aLine);
 }
 
-/* ---- Soft inventory (Wave 123 exclusive deepen) -------------------------- */
+/* ---- Soft inventory (Wave 124 exclusive deepen) -------------------------- */
 
 /** Note one soft suite sub-step outcome (never hard-gates). */
 static void
@@ -598,7 +598,7 @@ soft_door_note(unsigned uBit, int fOk)
 }
 
 /**
- * Greppable soft inventory (Wave 123 exclusive deepen).
+ * Greppable soft inventory (Wave 124 exclusive deepen).
  * Prefix-stable markers (scsi_mid-gj: soft …):
  *   scsi_mid-gj: soft inventory  — ok/skip + door + wave/areas + log_n
  *   scsi_mid-gj: soft steps      — per-sub-step lamps + bits
@@ -806,7 +806,7 @@ soft_inventory_log(void)
         "(soft inventory; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: scsi_mid-gj: soft honesty (Wave 123 exclusive deepen).
+     * Grep: scsi_mid-gj: soft honesty (Wave 124 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("scsi_mid-gj: soft honesty multi_server=0 confine=0 bar3=0 "

@@ -39,7 +39,7 @@
  *            aarch64: exception soft surf …
  *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=123 …
+ *            aarch64: exception soft deepen wave=124 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -78,7 +78,7 @@
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE 123u
+#define EXC_SOFT_WAVE 124u
 #define EXC_SOFT_AREAS 212u
 
 extern void aarch64_uart_puts(const char *sz);
@@ -1323,6 +1323,10 @@ aarch64_uart_puts("aarch64: soft retwindowangle exclusive=1 soft_ne_product=1 pr
 aarch64_uart_puts("aarch64: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 aarch64_uart_puts("aarch64: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: aarch64: soft retbrushangle — Wave 124 return-brushangle honesty */
+aarch64_uart_puts("aarch64: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: soft retinkangle — Wave 124 exclusive inkangle stamp */
+aarch64_uart_puts("aarch64: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
 /* Grep: aarch64: exception soft deepen */

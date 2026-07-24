@@ -85,8 +85,8 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=123). */
-#define X2APIC_SOFT_DEEPEN_WAVE 123u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=124). */
+#define X2APIC_SOFT_DEEPEN_WAVE 124u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
 #define X2APIC_SOFT_DEEPEN_AREAS 189u
 
@@ -1720,6 +1720,10 @@ kprintf("x2apic: soft retwindowangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("x2apic: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 kprintf("x2apic: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: x2apic: soft retbrushangle — Wave 124 return-brushangle honesty */
+kprintf("x2apic: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: x2apic: soft retinkangle — Wave 124 exclusive inkangle stamp */
+kprintf("x2apic: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
                             kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

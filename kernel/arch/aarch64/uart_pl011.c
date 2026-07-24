@@ -31,7 +31,7 @@
  *   aarch64: uart soft inventory wave=118 …
  *   aarch64: uart soft program base=… peri=… cell=… spin_cap=…
  *   aarch64: uart soft stats …
- *   aarch64: uart soft deepen wave=123 areas=…
+ *   aarch64: uart soft deepen wave=124 areas=…
  *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=118
  *   aarch64: uart soft return inv_ret=… product_kernel=OPEN
  *   aarch64: uart soft honesty product_kernel=OPEN soft_only=1
@@ -104,8 +104,8 @@
 /* Soft hex-dump cap (early-console safety). */
 #define PL011_SOFT_DUMP_MAX 256u
 
-/* Wave 45 soft inventory stamp (greppable wave=123). */
-#define PL011_SOFT_WAVE 123u
+/* Wave 45 soft inventory stamp (greppable wave=124). */
+#define PL011_SOFT_WAVE 124u
 
 /* Soft deepen areas: chars,fr,lamps,ctrl,id,program,stats,path,honesty. */
 #define PL011_SOFT_AREAS 210u
@@ -1572,6 +1572,10 @@ aarch64_uart_puts("aarch64: uart: soft retwindowangle exclusive=1 soft_ne_produc
 aarch64_uart_puts("aarch64: uart: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: uart: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
 aarch64_uart_puts("aarch64: uart: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
+/* Grep: aarch64: uart: soft retbrushangle — Wave 124 return-brushangle honesty */
+aarch64_uart_puts("aarch64: uart: soft retbrushangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=124 (retbrushangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: uart: soft retinkangle — Wave 124 exclusive inkangle stamp */
+aarch64_uart_puts("aarch64: uart: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=124 (retinkangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: uart soft deepen wave=");

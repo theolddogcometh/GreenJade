@@ -1,0 +1,49 @@
+created=80 skipped=0
+# Range M=76100..80000 step 100 → 40 soft packages
+# Each package: cgj_soft_milestone_M.c + NOTES_milestone_M.txt
+# Shared body: _cgj_soft_m_template.inc (thin wrappers M=76500..80000)
+# Full inline form: M=76100..76400 (mirror 25800 KATs)
+# bar3=0 for all (gj_bar3_ready_M → 0)
+# Makefile not edited; CREATE-ONLY soft; not bar3 / product complete
+
+packages:
+  + cgj_soft_milestone_76100.c  NOTES_milestone_76100.txt
+  + cgj_soft_milestone_76200.c  NOTES_milestone_76200.txt
+  + cgj_soft_milestone_76300.c  NOTES_milestone_76300.txt
+  + cgj_soft_milestone_76400.c  NOTES_milestone_76400.txt
+  + cgj_soft_milestone_76500.c  NOTES_milestone_76500.txt
+  + cgj_soft_milestone_76600.c  NOTES_milestone_76600.txt
+  + cgj_soft_milestone_76700.c  NOTES_milestone_76700.txt
+  + cgj_soft_milestone_76800.c  NOTES_milestone_76800.txt
+  + cgj_soft_milestone_76900.c  NOTES_milestone_76900.txt
+  + cgj_soft_milestone_77000.c  NOTES_milestone_77000.txt
+  + cgj_soft_milestone_77100.c  NOTES_milestone_77100.txt
+  + cgj_soft_milestone_77200.c  NOTES_milestone_77200.txt
+  + cgj_soft_milestone_77300.c  NOTES_milestone_77300.txt
+  + cgj_soft_milestone_77400.c  NOTES_milestone_77400.txt
+  + cgj_soft_milestone_77500.c  NOTES_milestone_77500.txt
+  + cgj_soft_milestone_77600.c  NOTES_milestone_77600.txt
+  + cgj_soft_milestone_77700.c  NOTES_milestone_77700.txt
+  + cgj_soft_milestone_77800.c  NOTES_milestone_77800.txt
+  + cgj_soft_milestone_77900.c  NOTES_milestone_77900.txt
+  + cgj_soft_milestone_78000.c  NOTES_milestone_78000.txt
+  + cgj_soft_milestone_78100.c  NOTES_milestone_78100.txt
+  + cgj_soft_milestone_78200.c  NOTES_milestone_78200.txt
+  + cgj_soft_milestone_78300.c  NOTES_milestone_78300.txt
+  + cgj_soft_milestone_78400.c  NOTES_milestone_78400.txt
+  + cgj_soft_milestone_78500.c  NOTES_milestone_78500.txt
+  + cgj_soft_milestone_78600.c  NOTES_milestone_78600.txt
+  + cgj_soft_milestone_78700.c  NOTES_milestone_78700.txt
+  + cgj_soft_milestone_78800.c  NOTES_milestone_78800.txt
+  + cgj_soft_milestone_78900.c  NOTES_milestone_78900.txt
+  + cgj_soft_milestone_79000.c  NOTES_milestone_79000.txt
+  + cgj_soft_milestone_79100.c  NOTES_milestone_79100.txt
+  + cgj_soft_milestone_79200.c  NOTES_milestone_79200.txt
+  + cgj_soft_milestone_79300.c  NOTES_milestone_79300.txt
+  + cgj_soft_milestone_79400.c  NOTES_milestone_79400.txt
+  + cgj_soft_milestone_79500.c  NOTES_milestone_79500.txt
+  + cgj_soft_milestone_79600.c  NOTES_milestone_79600.txt
+  + cgj_soft_milestone_79700.c  NOTES_milestone_79700.txt
+  + cgj_soft_milestone_79800.c  NOTES_milestone_79800.txt
+  + cgj_soft_milestone_79900.c  NOTES_milestone_79900.txt
+  + cgj_soft_milestone_80000.c  NOTES_milestone_80000.txt

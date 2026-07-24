@@ -43,7 +43,7 @@
 /* Cap one poll burst so a stuck backend cannot spin the door forever. */
 #define GJ_INPUT_POLL_MAX 256u
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_INPUT_SOFT_WAVE 95u
+#define GJ_INPUT_SOFT_WAVE 96u
 
 static struct gj_input_event g_aRing[GJ_INPUT_RING];
 static u32 g_u32Head;
@@ -448,7 +448,7 @@ soft_inventory_log(void)
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
             "catalog,return,path,deepen "
-            "wave=%u areas_expect=76 soft PASS\n",
+            "wave=%u areas_expect=78 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
     cAreas++;
 
@@ -470,7 +470,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: input_hub: soft retmap — Wave 19 return-surface map */
-    kprintf("input_hub: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=95\n");
+    kprintf("input_hub: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=96\n");
 
     /* Grep: input_hub: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -799,7 +799,7 @@ soft_inventory_log(void)
             "push,pop,enqueue,drop,lazy,ready,ev,stats,query,ratio,"
             "balance,peaks,capacity,wrap,headroom,surface,terminal,"
             "catalog,return,path,deepen "
-            "wave=%u areas_expect=76 soft PASS\n",
+            "wave=%u areas_expect=78 soft PASS\n",
             GJ_INPUT_SOFT_WAVE);
 
     /* Grep: input: soft path */
@@ -1255,11 +1255,11 @@ kprintf("input: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("input: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("input: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1269,11 +1269,11 @@ kprintf("input: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("input: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("input: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1283,11 +1283,11 @@ kprintf("input: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("input: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("input: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1296,11 +1296,11 @@ kprintf("input: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retsally — Wave 50 return-sally honesty */
 kprintf("input: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("input: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1309,11 +1309,11 @@ kprintf("input: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("input: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("input: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1323,11 +1323,11 @@ kprintf("input: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("input: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("input: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1336,11 +1336,11 @@ kprintf("input: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("input: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("input: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1349,11 +1349,11 @@ kprintf("input: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("input: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("input: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1362,11 +1362,11 @@ kprintf("input: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retflank — Wave 55 return-flank honesty */
 kprintf("input: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retface — Wave 55 exclusive face stamp */
 kprintf("input: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1375,11 +1375,11 @@ kprintf("input: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("input: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("input: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1388,11 +1388,11 @@ kprintf("input: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("input: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("input: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1402,11 +1402,11 @@ kprintf("input: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("input: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("input: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1416,11 +1416,11 @@ kprintf("input: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("input: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("input: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1430,11 +1430,11 @@ kprintf("input: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retplace — Wave 60 return-place honesty */
 kprintf("input: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("input: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1452,11 +1452,11 @@ kprintf("input: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("input: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("input: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1465,11 +1465,11 @@ kprintf("input: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("input: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("input: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1478,11 +1478,11 @@ kprintf("input: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("input: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("input: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1491,11 +1491,11 @@ kprintf("input: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: input: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("input: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: input: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("input: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retsallyport stamp; Soft≠product)\n");
  /*
   * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
@@ -1504,11 +1504,11 @@ kprintf("input: soft retsallyport exclusive=1 soft_ne_product=1 "
   */
  /* Grep: input: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
 kprintf("input: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retgorgeangle honesty; Soft≠product; not bar3)\n");
  /* Grep: input: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 kprintf("input: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retshoulderangle stamp; Soft≠product)\n");
  /*
   * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
@@ -1517,11 +1517,11 @@ kprintf("input: soft retshoulderangle exclusive=1 soft_ne_product=1 "
   */
  /* Grep: input: soft retflankangle — Wave 66 return-flankangle honesty */
  kprintf("input: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=95 "
+         "never_blocks_m0=1 wave=96 "
          "(retflankangle honesty; Soft≠product; not bar3)\n");
  /* Grep: input: soft retfaceangle — Wave 66 exclusive faceangle stamp */
  kprintf("input: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN bar3=0 wave=95 "
+         "product_kernel=OPEN bar3=0 wave=96 "
          "(retfaceangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
@@ -1530,11 +1530,11 @@ kprintf("input: soft retshoulderangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 kprintf("input: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retredanangle — Wave 67 exclusive redanangle stamp */
 kprintf("input: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1543,11 +1543,11 @@ kprintf("input: soft retredanangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 kprintf("input: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 kprintf("input: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1556,11 +1556,11 @@ kprintf("input: soft rettenailleangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: input: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 kprintf("input: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=95 "
+        "never_blocks_m0=1 wave=96 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 kprintf("input: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=95 "
+        "product_kernel=OPEN bar3=0 wave=96 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
@@ -1568,120 +1568,124 @@ kprintf("input: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
  * Soft≠product; not bar3.
  */
 /* Grep: input: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("input: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retfosseangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retfosseangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("input: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retcounterscarple stamp; Soft≠product)\n");
+kprintf("input: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retcounterscarple stamp; Soft≠product)\n");
 /*
  * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: input: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("input: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retsallyportangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retsallyportangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("input: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retreentrantangle stamp; Soft≠product)\n");
+kprintf("input: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retreentrantangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: input: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("input: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("input: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retdoubletenailleangle stamp; Soft≠product)\n");
+kprintf("input: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retdoubletenailleangle stamp; Soft≠product)\n");
 /* Grep: input: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("input: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retcurtainface honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retcurtainface honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("input: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retbastionangle stamp; Soft≠product)\n");
+kprintf("input: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retbastionangle stamp; Soft≠product)\n");
 /* Grep: input: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("input: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retglacisangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retglacisangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("input: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retparapetangle stamp; Soft≠product)\n");
+kprintf("input: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retparapetangle stamp; Soft≠product)\n");
 /* Grep: input: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("input: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retmoatangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retmoatangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("input: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retowerangle stamp; Soft≠product)\n");
+kprintf("input: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retowerangle stamp; Soft≠product)\n");
 /* Grep: input: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("input: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retgateangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retgateangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("input: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retwallangle stamp; Soft≠product)\n");
+kprintf("input: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retwallangle stamp; Soft≠product)\n");
 /* Grep: input: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("input: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retspireangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retspireangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("input: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retholdangle stamp; Soft≠product)\n");
+kprintf("input: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retholdangle stamp; Soft≠product)\n");
 /* Grep: input: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("input: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retpalaceangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retpalaceangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("input: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retfortressangle stamp; Soft≠product)\n");
+kprintf("input: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retfortressangle stamp; Soft≠product)\n");
 /* Grep: input: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("input: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retkeepangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retkeepangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("input: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retredoubtangle stamp; Soft≠product)\n");
+kprintf("input: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retredoubtangle stamp; Soft≠product)\n");
 /* Grep: input: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("input: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retcitadelangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retcitadelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("input: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retbastionkeep stamp; Soft≠product)\n");
+kprintf("input: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retbastionkeep stamp; Soft≠product)\n");
 /* Grep: input: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("input: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("input: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retbulwarkangle stamp; Soft≠product)\n");
+kprintf("input: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retbulwarkangle stamp; Soft≠product)\n");
 /* Grep: input: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("input: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retmantleangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retmantleangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("input: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retaegisangle stamp; Soft≠product)\n");
+kprintf("input: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retaegisangle stamp; Soft≠product)\n");
 /* Grep: input: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("input: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retemblemangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retemblemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("input: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retsigilangle stamp; Soft≠product)\n");
+kprintf("input: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retsigilangle stamp; Soft≠product)\n");
 /* Grep: input: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("input: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retscepterangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retscepterangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("input: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retglyphangle stamp; Soft≠product)\n");
+kprintf("input: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retglyphangle stamp; Soft≠product)\n");
 /* Grep: input: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("input: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retcrownangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retcrownangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("input: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retshardangle stamp; Soft≠product)\n");
+kprintf("input: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retshardangle stamp; Soft≠product)\n");
 /* Grep: input: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("input: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retforgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retforgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("input: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retprismangle stamp; Soft≠product)\n");
+kprintf("input: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retprismangle stamp; Soft≠product)\n");
 /* Grep: input: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("input: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retflameangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retflameangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("input: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retcipherangle stamp; Soft≠product)\n");
+kprintf("input: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retcipherangle stamp; Soft≠product)\n");
 /* Grep: input: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("input: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retbeaconangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retbeaconangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("input: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retledgerangle stamp; Soft≠product)\n");
+kprintf("input: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retledgerangle stamp; Soft≠product)\n");
 /* Grep: input: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("input: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retbannerangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retbannerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("input: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retvaultangle stamp; Soft≠product)\n");
+kprintf("input: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retvaultangle stamp; Soft≠product)\n");
 /* Grep: input: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("input: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retcrestangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retcrestangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("input: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (rettokenangle stamp; Soft≠product)\n");
+kprintf("input: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (rettokenangle stamp; Soft≠product)\n");
 /* Grep: input: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("input: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retbadgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retbadgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("input: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retphaseangle stamp; Soft≠product)\n");
+kprintf("input: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retphaseangle stamp; Soft≠product)\n");
 /* Grep: input: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("input: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retmarkangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retmarkangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("input: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retpulseangle stamp; Soft≠product)\n");
+kprintf("input: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retpulseangle stamp; Soft≠product)\n");
 
 /* Grep: input: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("input: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retsealangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retsealangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("input: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retboundangle stamp; Soft≠product)\n");
+kprintf("input: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retboundangle stamp; Soft≠product)\n");
 /* Grep: input: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("input: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retstemangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retstemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("input: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retbladeangle stamp; Soft≠product)\n");
+kprintf("input: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retbladeangle stamp; Soft≠product)\n");
 /* Grep: input: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("input: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=95 (retchordangle honesty; Soft≠product; not bar3)\n");
+kprintf("input: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retchordangle honesty; Soft≠product; not bar3)\n");
 /* Grep: input: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("input: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=95 (retarcangle stamp; Soft≠product)\n");
+kprintf("input: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retarcangle stamp; Soft≠product)\n");
+/* Grep: input: soft retsectorangle — Wave 96 return-sectorangle honesty */
+kprintf("input: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=96 (retsectorangle honesty; Soft≠product; not bar3)\n");
+/* Grep: input: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
+kprintf("input: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=96 (retwedgeangle stamp; Soft≠product)\n");
                             kprintf("input: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u pushed=%u pop_hit=%u enqueue=%u "
             "desktop_product=OPEN soft_never_gates=1 (soft; not bar3)\n",

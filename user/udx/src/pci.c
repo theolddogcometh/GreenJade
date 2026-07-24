@@ -5,7 +5,7 @@
  * PCI driver surface: register, match, probe/remove/quiesce.
  * Host soft: 256-byte config image, BAR windows, inject/remove.
  *
- * Soft inventory (Wave 85 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 86 exclusive deepen; this unit only) —
  * greppable "udx: pci soft …":
  *   udx: pci soft inventory …
  *   udx: pci soft driver …
@@ -57,7 +57,7 @@ static struct udx_pci_driver *g_pPciDrivers;
 static struct udx_pci_bound  *g_pPciDevices;
 
 /*
- * Soft PCI product inventory (Wave 85 exclusive deepen).
+ * Soft PCI product inventory (Wave 86 exclusive deepen).
  * Cumulative for this process. greppable: udx: pci soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -175,7 +175,7 @@ pci_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft PCI inventory (Wave 85 exclusive deepen).
+ * Greppable soft PCI inventory (Wave 86 exclusive deepen).
  * Prefix-stable "udx: pci soft …" — never hard-gates; observation only.
  *
  * greppable: udx: pci soft
@@ -261,7 +261,7 @@ pci_soft_inventory_log(void)
                   UDX_PCI_SOFT_WAVE);
 
     /*
-     * Grep: udx: pci soft honesty (Wave 85 exclusive deepen).
+     * Grep: udx: pci soft honesty (Wave 86 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     pci_soft_emit("udx: pci soft honesty multi_server=0 confine=0 bar3=0 "
@@ -1186,8 +1186,8 @@ udx_pci_write_config_dword(struct udx_pci_dev *pPdev, int nWhere, u32 u32Val)
     return UDX_OK;
 }
 
-/* Wave 85 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retcrownangle continuum_toward=22700 soft_ne_product=1
- *   greppable: soft retshardangle exclusive=1 continuum_toward=22700
+/* Wave 86 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retforgeangle continuum_toward=22800 soft_ne_product=1
+ *   greppable: soft retprismangle exclusive=1 continuum_toward=22800
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

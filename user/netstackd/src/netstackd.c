@@ -154,10 +154,10 @@ main(void)
         printf("netstackd: door-shaped sockets ok\n");
     }
 
-    /* Grep: netstackd: soft inventory (Wave 79 exclusive deepen; host smoke) */
-/* Wave 79 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retkeepangle continuum_toward=22100 soft_ne_product=1
- *   greppable: soft retredoubtangle exclusive=1 continuum_toward=22100
+    /* Grep: netstackd: soft inventory (Wave 80 exclusive deepen; host smoke) */
+/* Wave 80 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retcitadelangle continuum_toward=22200 soft_ne_product=1
+ *   greppable: soft retbastionkeep exclusive=1 continuum_toward=22200
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

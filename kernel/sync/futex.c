@@ -65,7 +65,7 @@
  *   futex: soft ratio            — Wave 19 basis-point outcome rollup
  *   futex: soft surface          — Wave 19 area catalog
  *   futex: soft headroom         — Wave 19 free waiter/robust slots
- *   futex: soft deepen           — wave=70 areas stamp
+ *   futex: soft deepen           — wave=71 areas stamp
  * greppable: futex: soft
  * Soft only — does NOT claim product RR / full preemption complete.
  *
@@ -148,7 +148,7 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=70). */
+/* Wave 35 exclusive soft deepen stamp (greppable wave=71). */
 #define FUTEX_SOFT_DEEPEN_WAVE 61u
 /* Fixed greppable categories emitted under "futex: soft …". */
 #define FUTEX_SOFT_DEEPEN_AREAS 97u
@@ -375,7 +375,7 @@ futex_soft_note_claim(void)
  * Greppable soft wait/wake inventory + path/table/key/robust deepen.
  * Called from futex_init and once after first wait/wake activity.
  * Never allocates; safe from non-IRQ product paths.
- * Wave 19 exclusive: wave=70 stamp + claim/peak/g_fut/match/einval +
+ * Wave 19 exclusive: wave=71 stamp + claim/peak/g_fut/match/einval +
  * return/ret_surface/ratio/surface/headroom areas.
  * greppable: futex: soft wait inventory
  * greppable: futex: soft wake inventory
@@ -875,7 +875,7 @@ futex_soft_log(void)
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft retmap — Wave 19 return-surface map */
-    kprintf("futex: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=70\n");
+    kprintf("futex: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=71\n");
 
     /* Grep: futex: soft deepen wave (Wave 24 stamp) */
     /*
@@ -1035,11 +1035,11 @@ futex_soft_log(void)
                              */
                             /* Grep: futex: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("futex: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=70 "
+                                    "never_blocks_m0=1 wave=71 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: futex: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("futex: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=70 "
+                                    "product_kernel=OPEN bar3=0 wave=71 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -1048,11 +1048,11 @@ futex_soft_log(void)
                              */
                             /* Grep: futex: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("futex: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=70 "
+                                    "never_blocks_m0=1 wave=71 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: futex: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("futex: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=70 "
+                                    "product_kernel=OPEN bar3=0 wave=71 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -1061,15 +1061,15 @@ futex_soft_log(void)
                              */
                             /* Grep: futex: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("futex: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=70 "
+                                    "never_blocks_m0=1 wave=71 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: futex: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("futex: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=70 "
+                                    "never_blocks_m0=1 wave=71 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: futex: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("futex: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=70 "
+                                    "product_kernel=OPEN bar3=0 wave=71 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -1078,11 +1078,11 @@ futex_soft_log(void)
  */
 /* Grep: futex: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("futex: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("futex: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -1091,11 +1091,11 @@ kprintf("futex: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("futex: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("futex: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -1104,11 +1104,11 @@ kprintf("futex: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("futex: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("futex: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -1117,11 +1117,11 @@ kprintf("futex: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("futex: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("futex: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -1130,11 +1130,11 @@ kprintf("futex: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft rethold — Wave 36 return-hold honesty */
 kprintf("futex: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("futex: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -1143,11 +1143,11 @@ kprintf("futex: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retwall — Wave 37 return-wall honesty */
 kprintf("futex: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("futex: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -1156,11 +1156,11 @@ kprintf("futex: soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retmoat — Wave 38 return-moat honesty */
 kprintf("futex: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retower — Wave 38 exclusive tower stamp */
 kprintf("futex: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retower stamp; Soft≠product)\n");
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -1169,11 +1169,11 @@ kprintf("futex: soft retower exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retbarbican — Wave 39 return-barbican honesty */
 kprintf("futex: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbarbican honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retglacis — Wave 39 exclusive glacis stamp */
 kprintf("futex: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retglacis stamp; Soft≠product)\n");
 /*
  * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
@@ -1182,11 +1182,11 @@ kprintf("futex: soft retglacis exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retcurtain — Wave 40 return-curtain honesty */
 kprintf("futex: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcurtain honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retparapet — Wave 40 exclusive parapet stamp */
 kprintf("futex: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retparapet stamp; Soft≠product)\n");
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
@@ -1195,11 +1195,11 @@ kprintf("futex: soft retparapet exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retravelin — Wave 41 return-travelin honesty */
 kprintf("futex: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retditch — Wave 41 exclusive ditch stamp */
 kprintf("futex: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retditch stamp; Soft≠product)\n");
 /*
  * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
@@ -1208,11 +1208,11 @@ kprintf("futex: soft retditch exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retportcullis — Wave 42 return-portcullis honesty */
 kprintf("futex: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retportcullis honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retbattlement — Wave 42 exclusive battlement stamp */
 kprintf("futex: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retbattlement stamp; Soft≠product)\n");
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
@@ -1221,11 +1221,11 @@ kprintf("futex: soft retbattlement exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retmachicolation — Wave 43 return-machicolation honesty */
 kprintf("futex: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retmachicolation honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
 kprintf("futex: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retarrowslit stamp; Soft≠product)\n");
 
 /*
@@ -1235,11 +1235,11 @@ kprintf("futex: soft retarrowslit exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retmerlon — Wave 44 return-merlon honesty */
 kprintf("futex: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retmerlon honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retembrasure — Wave 44 exclusive embrasure stamp */
 kprintf("futex: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retembrasure stamp; Soft≠product)\n");
 
 /*
@@ -1249,11 +1249,11 @@ kprintf("futex: soft retembrasure exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retkeepgate — Wave 45 return-keepgate honesty */
 kprintf("futex: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retkeepgate honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retouterward — Wave 45 exclusive outerward stamp */
 kprintf("futex: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retouterward stamp; Soft≠product)\n");
 
 /*
@@ -1263,11 +1263,11 @@ kprintf("futex: soft retouterward exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retbailey — Wave 46 return-bailey honesty */
 kprintf("futex: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbailey honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retpostern — Wave 46 exclusive postern stamp */
 kprintf("futex: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retpostern stamp; Soft≠product)\n");
 
 /*
@@ -1277,11 +1277,11 @@ kprintf("futex: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("futex: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("futex: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1291,11 +1291,11 @@ kprintf("futex: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("futex: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("futex: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1305,11 +1305,11 @@ kprintf("futex: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("futex: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("futex: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1318,11 +1318,11 @@ kprintf("futex: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retsally — Wave 50 return-sally honesty */
 kprintf("futex: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("futex: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1331,11 +1331,11 @@ kprintf("futex: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("futex: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("futex: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1345,11 +1345,11 @@ kprintf("futex: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("futex: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("futex: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1358,11 +1358,11 @@ kprintf("futex: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("futex: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("futex: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1371,11 +1371,11 @@ kprintf("futex: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("futex: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("futex: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1384,11 +1384,11 @@ kprintf("futex: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retflank — Wave 55 return-flank honesty */
 kprintf("futex: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retface — Wave 55 exclusive face stamp */
 kprintf("futex: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1397,11 +1397,11 @@ kprintf("futex: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("futex: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("futex: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1410,11 +1410,11 @@ kprintf("futex: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("futex: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("futex: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1424,11 +1424,11 @@ kprintf("futex: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("futex: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("futex: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1438,11 +1438,11 @@ kprintf("futex: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("futex: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("futex: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1452,11 +1452,11 @@ kprintf("futex: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retplace — Wave 60 return-place honesty */
 kprintf("futex: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("futex: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1474,11 +1474,11 @@ kprintf("futex: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("futex: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("futex: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1487,11 +1487,11 @@ kprintf("futex: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("futex: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("futex: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1500,11 +1500,11 @@ kprintf("futex: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("futex: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("futex: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1513,11 +1513,11 @@ kprintf("futex: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: futex: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("futex: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: futex: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("futex: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retsallyport stamp; Soft≠product)\n");
  /*
   * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
@@ -1526,11 +1526,11 @@ kprintf("futex: soft retsallyport exclusive=1 soft_ne_product=1 "
   */
  /* Grep: futex: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
 kprintf("futex: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retgorgeangle honesty; Soft≠product; not bar3)\n");
  /* Grep: futex: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 kprintf("futex: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retshoulderangle stamp; Soft≠product)\n");
  /*
   * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
@@ -1539,11 +1539,11 @@ kprintf("futex: soft retshoulderangle exclusive=1 soft_ne_product=1 "
   */
  /* Grep: futex: soft retflankangle — Wave 66 return-flankangle honesty */
  kprintf("futex: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=70 "
+         "never_blocks_m0=1 wave=71 "
          "(retflankangle honesty; Soft≠product; not bar3)\n");
  /* Grep: futex: soft retfaceangle — Wave 66 exclusive faceangle stamp */
  kprintf("futex: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN bar3=0 wave=70 "
+         "product_kernel=OPEN bar3=0 wave=71 "
          "(retfaceangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
@@ -1552,11 +1552,11 @@ kprintf("futex: soft retshoulderangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 kprintf("futex: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retredanangle — Wave 67 exclusive redanangle stamp */
 kprintf("futex: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1565,11 +1565,11 @@ kprintf("futex: soft retredanangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 kprintf("futex: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 kprintf("futex: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1578,11 +1578,11 @@ kprintf("futex: soft rettenailleangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: futex: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 kprintf("futex: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 kprintf("futex: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
@@ -1590,9 +1590,18 @@ kprintf("futex: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
  * Soft≠product; not bar3.
  */
 /* Grep: futex: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("futex: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=70 (retfosseangle honesty; Soft≠product; not bar3)\n");
+kprintf("futex: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=71 (retfosseangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("futex: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=70 (retcounterscarple stamp; Soft≠product)\n");
+kprintf("futex: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=71 (retcounterscarple stamp; Soft≠product)\n");
+/*
+ * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: futex: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
+kprintf("futex: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=71 (retsallyportangle honesty; Soft≠product; not bar3)\n");
+/* Grep: futex: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
+kprintf("futex: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=71 (retreentrantangle stamp; Soft≠product)\n");
 
                             kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",

@@ -40,7 +40,7 @@
  *   virtio-gpu: soft honesty …      (Wave 15)
  *   virtio-gpu: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-gpu: soft retcode    — Wave 19 retcode catalog
- *   virtio-gpu: soft deepen wave=70 …
+ *   virtio-gpu: soft deepen wave=71 …
  *   virtio-gpu: soft PASS|NODEV|PARTIAL
  *   virtio-gpu: soft inventory PASS|NODEV|PARTIAL
  *
@@ -87,8 +87,8 @@
 #define VIRTIO_GPU_MAX_MEM_ENTRIES             256u
 
 /* Wave 35 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define GPU_SOFT_WAVE 70u
-#define GPU_SOFT_AREAS 132u
+#define GPU_SOFT_WAVE 71u
+#define GPU_SOFT_AREAS 134u
 
 /* ---- wire structs (packed, OASIS layout) --------------------------------- */
 struct virtio_gpu_ctrl_hdr {
@@ -1401,11 +1401,11 @@ kprintf("virtio-gpu: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("virtio-gpu: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("virtio-gpu: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1415,11 +1415,11 @@ kprintf("virtio-gpu: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("virtio-gpu: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("virtio-gpu: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1429,11 +1429,11 @@ kprintf("virtio-gpu: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("virtio-gpu: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("virtio-gpu: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1442,11 +1442,11 @@ kprintf("virtio-gpu: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retsally — Wave 50 return-sally honesty */
 kprintf("virtio-gpu: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("virtio-gpu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1455,11 +1455,11 @@ kprintf("virtio-gpu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("virtio-gpu: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("virtio-gpu: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1469,11 +1469,11 @@ kprintf("virtio-gpu: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("virtio-gpu: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("virtio-gpu: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1482,11 +1482,11 @@ kprintf("virtio-gpu: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("virtio-gpu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("virtio-gpu: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1495,11 +1495,11 @@ kprintf("virtio-gpu: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("virtio-gpu: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("virtio-gpu: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1508,11 +1508,11 @@ kprintf("virtio-gpu: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retflank — Wave 55 return-flank honesty */
 kprintf("virtio-gpu: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retface — Wave 55 exclusive face stamp */
 kprintf("virtio-gpu: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1521,11 +1521,11 @@ kprintf("virtio-gpu: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("virtio-gpu: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("virtio-gpu: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1534,11 +1534,11 @@ kprintf("virtio-gpu: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("virtio-gpu: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("virtio-gpu: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1548,11 +1548,11 @@ kprintf("virtio-gpu: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("virtio-gpu: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("virtio-gpu: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1562,11 +1562,11 @@ kprintf("virtio-gpu: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("virtio-gpu: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("virtio-gpu: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1576,11 +1576,11 @@ kprintf("virtio-gpu: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retplace — Wave 60 return-place honesty */
 kprintf("virtio-gpu: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("virtio-gpu: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1598,11 +1598,11 @@ kprintf("virtio-gpu: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("virtio-gpu: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("virtio-gpu: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1611,11 +1611,11 @@ kprintf("virtio-gpu: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("virtio-gpu: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("virtio-gpu: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1624,11 +1624,11 @@ kprintf("virtio-gpu: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("virtio-gpu: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("virtio-gpu: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1637,11 +1637,11 @@ kprintf("virtio-gpu: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: virtio-gpu: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("virtio-gpu: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: virtio-gpu: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("virtio-gpu: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retsallyport stamp; Soft≠product)\n");
  /*
   * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
@@ -1650,11 +1650,11 @@ kprintf("virtio-gpu: soft retsallyport exclusive=1 soft_ne_product=1 "
   */
  /* Grep: virtio-gpu: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
 kprintf("virtio-gpu: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retgorgeangle honesty; Soft≠product; not bar3)\n");
  /* Grep: virtio-gpu: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 kprintf("virtio-gpu: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retshoulderangle stamp; Soft≠product)\n");
  /*
   * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
@@ -1663,11 +1663,11 @@ kprintf("virtio-gpu: soft retshoulderangle exclusive=1 soft_ne_product=1 "
   */
  /* Grep: virtio-gpu: soft retflankangle — Wave 66 return-flankangle honesty */
  kprintf("virtio-gpu: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=70 "
+         "never_blocks_m0=1 wave=71 "
          "(retflankangle honesty; Soft≠product; not bar3)\n");
  /* Grep: virtio-gpu: soft retfaceangle — Wave 66 exclusive faceangle stamp */
  kprintf("virtio-gpu: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN bar3=0 wave=70 "
+         "product_kernel=OPEN bar3=0 wave=71 "
          "(retfaceangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
@@ -1676,11 +1676,11 @@ kprintf("virtio-gpu: soft retshoulderangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 kprintf("virtio-gpu: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retredanangle — Wave 67 exclusive redanangle stamp */
 kprintf("virtio-gpu: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1689,11 +1689,11 @@ kprintf("virtio-gpu: soft retredanangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 kprintf("virtio-gpu: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 kprintf("virtio-gpu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1702,11 +1702,11 @@ kprintf("virtio-gpu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-gpu: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 kprintf("virtio-gpu: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=70 "
+        "never_blocks_m0=1 wave=71 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 kprintf("virtio-gpu: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=70 "
+        "product_kernel=OPEN bar3=0 wave=71 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
@@ -1714,9 +1714,18 @@ kprintf("virtio-gpu: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
  * Soft≠product; not bar3.
  */
 /* Grep: virtio-gpu: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("virtio-gpu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=70 (retfosseangle honesty; Soft≠product; not bar3)\n");
+kprintf("virtio-gpu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=71 (retfosseangle honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-gpu: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("virtio-gpu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=70 (retcounterscarple stamp; Soft≠product)\n");
+kprintf("virtio-gpu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=71 (retcounterscarple stamp; Soft≠product)\n");
+/*
+ * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: virtio-gpu: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
+kprintf("virtio-gpu: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=71 (retsallyportangle honesty; Soft≠product; not bar3)\n");
+/* Grep: virtio-gpu: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
+kprintf("virtio-gpu: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=71 (retreentrantangle stamp; Soft≠product)\n");
 
                             kprintf("virtio-gpu: soft deepen wave=%u areas=%u via=%s ready=%u "
             "present=%u have_res=%u cmd_ok=%u log_n=%u "

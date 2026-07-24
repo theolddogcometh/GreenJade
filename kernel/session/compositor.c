@@ -50,7 +50,7 @@
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE 56u
+#define GJ_COMP_SOFT_WAVE 57u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -415,7 +415,7 @@ soft_inventory_log(void)
     kprintf("compositor: soft catalog honesty,inventory,init,present,batch,"
             "geom,paint,peaks,query,ratio,last,multi,backend,scanout,"
             "capacity,headroom,surface,return,catalog,path,deepen "
-            "wave=%u areas_expect=31 soft PASS\n",
+            "wave=%u areas_expect=33 soft PASS\n",
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
@@ -438,7 +438,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=56\n");
+    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=57\n");
 
     /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -878,11 +878,11 @@ kprintf("compositor: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("compositor: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("compositor: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -892,11 +892,11 @@ kprintf("compositor: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("compositor: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("compositor: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -906,11 +906,11 @@ kprintf("compositor: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("compositor: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("compositor: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -919,11 +919,11 @@ kprintf("compositor: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retsally — Wave 50 return-sally honesty */
 kprintf("compositor: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("compositor: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -932,11 +932,11 @@ kprintf("compositor: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("compositor: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("compositor: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -946,11 +946,11 @@ kprintf("compositor: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("compositor: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("compositor: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -959,11 +959,11 @@ kprintf("compositor: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("compositor: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("compositor: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -972,11 +972,11 @@ kprintf("compositor: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("compositor: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("compositor: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -985,11 +985,11 @@ kprintf("compositor: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retflank — Wave 55 return-flank honesty */
 kprintf("compositor: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retface — Wave 55 exclusive face stamp */
 kprintf("compositor: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -998,12 +998,26 @@ kprintf("compositor: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: compositor: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("compositor: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=56 "
+        "never_blocks_m0=1 wave=57 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("compositor: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=56 "
+        "product_kernel=OPEN bar3=0 wave=57 "
         "(retshoulder stamp; Soft≠product)\n");
+/*
+ * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: compositor: soft retraverse — Wave 57 return-traverse honesty */
+kprintf("compositor: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=57 "
+        "(retraverse honesty; Soft≠product; not bar3)\n");
+/* Grep: compositor: soft retcasemate — Wave 57 exclusive casemate stamp */
+kprintf("compositor: soft retcasemate exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=57 "
+        "(retcasemate stamp; Soft≠product)\n");
+
 
 
 

@@ -5,7 +5,7 @@
  * DMA helpers. Host: calloc identity cookies.
  * Freestanding: static slab (UDX_FS_DMA_SLOTS × UDX_FS_DMA_SLOT_CB).
  *
- * Soft inventory (Wave 56 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 57 exclusive deepen; this unit only) —
  * greppable "udx: dma soft …":
  *   udx: dma soft inventory …
  *   udx: dma soft alloc …
@@ -37,7 +37,7 @@ static struct udx_fs_dma_slot g_aFsDma[UDX_FS_DMA_SLOTS];
 #define UDX_DMA_SOFT_WAVE 55u
 
 /*
- * Soft DMA product inventory (Wave 56 exclusive deepen). Cumulative for
+ * Soft DMA product inventory (Wave 57 exclusive deepen). Cumulative for
  * this process. greppable: udx: dma soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -112,7 +112,7 @@ dma_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft DMA inventory (Wave 56 exclusive deepen).
+ * Greppable soft DMA inventory (Wave 57 exclusive deepen).
  * Prefix-stable "udx: dma soft …" — never hard-gates; observation only.
  *
  * greppable: udx: dma soft
@@ -194,7 +194,7 @@ dma_soft_inventory_log(void)
                   UDX_DMA_SOFT_WAVE);
 
     /*
-     * Grep: udx: dma soft honesty (Wave 56 exclusive deepen).
+     * Grep: udx: dma soft honesty (Wave 57 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     dma_soft_emit("udx: dma soft honesty multi_server=0 confine=0 bar3=0 "
@@ -406,8 +406,8 @@ udx_dma_sync_single_for_device(struct udx_device *pDev, udx_dma_addr_t dma,
     __asm__ volatile("mfence" ::: "memory");
 }
 
-/* Wave 56 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retgorge continuum_toward=19800 soft_ne_product=1
- *   greppable: soft retshoulder exclusive=1 continuum_toward=19800
+/* Wave 57 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retraverse continuum_toward=19900 soft_ne_product=1
+ *   greppable: soft retcasemate exclusive=1 continuum_toward=19900
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

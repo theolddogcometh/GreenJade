@@ -51,9 +51,9 @@
  *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
  *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
  *   aarch64: timer tick soft PASS | FAIL
- *   aarch64: timer soft inventory wave=56 …
+ *   aarch64: timer soft inventory wave=57 …
  *   aarch64: timer soft stats …
- *   aarch64: timer soft deepen wave=56 areas=…
+ *   aarch64: timer soft deepen wave=57 areas=…
  *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
  *   aarch64: timer soft return inv_ret=… product_kernel=OPEN
  *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
@@ -99,11 +99,11 @@ extern void aarch64_uart_put_hex(unsigned long v);
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
 
-/* Wave 45 soft inventory stamp (greppable wave=56). */
-#define TIMER_SOFT_WAVE 56u
+/* Wave 45 soft inventory stamp (greppable wave=57). */
+#define TIMER_SOFT_WAVE 57u
 
 /* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
-#define TIMER_SOFT_AREAS 79u
+#define TIMER_SOFT_AREAS 81u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cTimerSoftLogs;
@@ -1148,6 +1148,22 @@ aarch64_uart_puts("aarch64: timer: soft retshoulder exclusive=1 soft_ne_product=
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retshoulder stamp; Soft!=product)\n");
+/*
+ * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: timer: soft retraverse — Wave 57 return-traverse honesty */
+aarch64_uart_puts("aarch64: timer: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retraverse honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: timer: soft retcasemate — Wave 57 exclusive casemate stamp */
+aarch64_uart_puts("aarch64: timer: soft retcasemate exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retcasemate stamp; Soft!=product)\n");
+
 
 
 

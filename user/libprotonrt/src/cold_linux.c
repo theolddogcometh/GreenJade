@@ -36,7 +36,7 @@
  * owned fds; ioctl TTY/FIONREAD soft; fsync/madvise/flock no-op success.
  * No libc: freestanding only.
  *
- * Soft inventory (Wave 67 exclusive deepen; this unit only) — greppable:
+ * Soft inventory (Wave 68 exclusive deepen; this unit only) — greppable:
  *   "protonrt: soft …"
  *   "cold_linux: soft …"
  * Prefix-stable serial markers:
@@ -259,7 +259,7 @@ static char g_szCwd[8] = { '/', 0, 0, 0, 0, 0, 0, 0 };
 static uint64_t g_u64ClearChildTid;
 
 /*
- * Soft product inventory (Wave 67 exclusive deepen). Enter-only tallies.
+ * Soft product inventory (Wave 68 exclusive deepen). Enter-only tallies.
  * greppable: protonrt: soft … / cold_linux: soft …
  * Never rewrites syscall returns; diagnostics / smoke only.
  */
@@ -278,7 +278,7 @@ enum {
     COLD_SOFT_GRP_N
 };
 
-#define COLD_SOFT_WAVE 67u
+#define COLD_SOFT_WAVE 68u
 #define COLD_SOFT_AREAS    20u /* twin inventory + honesty per prefix family */
 #define COLD_SOFT_VER_MAJ  ((uint32_t)PROTON_RT_VERSION_MAJOR)
 #define COLD_SOFT_VER_MIN  ((uint32_t)PROTON_RT_VERSION_MINOR)
@@ -581,7 +581,7 @@ soft_fd_live_counts(uint32_t *pFree, uint32_t *pLive, uint32_t *pStdio,
 
 /**
  * Greppable soft protonrt / cold_linux inventory (product / smoke).
- * Twin prefixes so either agent grep works (Wave 67 exclusive deepen):
+ * Twin prefixes so either agent grep works (Wave 68 exclusive deepen):
  *   protonrt: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
  *             proc|uring|enosys|query|path|groups|last|open|deepen|wave …
  *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
@@ -715,10 +715,10 @@ soft_inventory_log(void)
             "hot=kernel cold=libprotonrt enter_only=1 ret_rewrite=0 "
             "(soft inventory; not bar3)\n");
 
-    /* Grep: protonrt: soft groups (Wave 67 deepen — all enters one line) */
-/* Wave 67 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retcaponierangle continuum_toward=20900 soft_ne_product=1
- *   greppable: soft retredanangle exclusive=1 continuum_toward=20900
+    /* Grep: protonrt: soft groups (Wave 68 deepen — all enters one line) */
+/* Wave 68 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retlunetteangle continuum_toward=21000 soft_ne_product=1
+ *   greppable: soft rettenailleangle exclusive=1 continuum_toward=21000
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -739,7 +739,7 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftEnterTotal,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: protonrt: soft last (Wave 67 deepen) */
+    /* Grep: protonrt: soft last (Wave 68 deepen) */
     kprintf("protonrt: soft last nr=%llu grp=%u enter_total=%llu "
             "enosys=%llu log_n=%llu wave=%u\n",
             (unsigned long long)g_u64SoftLastNr,
@@ -757,7 +757,7 @@ soft_inventory_log(void)
             "driver_host=OPEN bar3=OPEN product=0 soft=1 wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: protonrt: soft deepen wave (Wave 67 stamp) */
+    /* Grep: protonrt: soft deepen wave (Wave 68 stamp) */
     kprintf("protonrt: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=protonrt:_soft log_n=%llu "
             "(soft inventory; not bar3)\n",
@@ -771,7 +771,7 @@ soft_inventory_log(void)
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
     /*
-     * Grep: protonrt: soft honesty (Wave 67 exclusive deepen).
+     * Grep: protonrt: soft honesty (Wave 68 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     kprintf("protonrt: soft honesty multi_server=0 confine=0 bar3=0 "
@@ -876,7 +876,7 @@ soft_inventory_log(void)
             "hybrid=OptionC hot=kernel cold=libprotonrt enter_only=1 "
             "ret_rewrite=0 (soft inventory; not bar3)\n");
 
-    /* Grep: cold_linux: soft groups (Wave 67 deepen) */
+    /* Grep: cold_linux: soft groups (Wave 68 deepen) */
     kprintf("cold_linux: soft groups io=%llu fd_alloc=%llu stat=%llu "
             "namei=%llu id=%llu time=%llu poll=%llu sock=%llu proc=%llu "
             "uring=%llu other=%llu total=%llu wave=%u\n",
@@ -894,7 +894,7 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftEnterTotal,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft last (Wave 67 deepen) */
+    /* Grep: cold_linux: soft last (Wave 68 deepen) */
     kprintf("cold_linux: soft last nr=%llu grp=%u enter_total=%llu "
             "enosys=%llu log_n=%llu wave=%u\n",
             (unsigned long long)g_u64SoftLastNr,
@@ -904,12 +904,12 @@ soft_inventory_log(void)
             (unsigned long long)g_u64SoftLogN,
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft open (Wave 67 honesty) */
+    /* Grep: cold_linux: soft open (Wave 68 honesty) */
     kprintf("cold_linux: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
             "driver_host=OPEN bar3=OPEN product=0 soft=1 wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
-    /* Grep: cold_linux: soft deepen wave (Wave 67 stamp) */
+    /* Grep: cold_linux: soft deepen wave (Wave 68 stamp) */
     kprintf("cold_linux: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=cold_linux:_soft log_n=%llu "
             "(soft inventory; not bar3)\n",
@@ -922,7 +922,7 @@ soft_inventory_log(void)
             "(soft inventory; not bar3)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
-    /* Grep: cold_linux: soft honesty (Wave 67 exclusive deepen) */
+    /* Grep: cold_linux: soft honesty (Wave 68 exclusive deepen) */
     kprintf("cold_linux: soft honesty multi_server=0 confine=0 bar3=0 "
             "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
@@ -1018,7 +1018,7 @@ proton_rt_query(struct proton_rt_info *pOut)
                         PROTON_FEAT_EVENTFD | PROTON_FEAT_EPOLL |
                         PROTON_FEAT_PIPE | PROTON_FEAT_MEMFD;
     soft_inc(&g_u64SoftQueryOk);
-    /* Wave 67: one-shot greppable soft inventory after first query. */
+    /* Wave 68: one-shot greppable soft inventory after first query. */
     soft_inventory_maybe_once();
     return 0;
 }
@@ -1838,7 +1838,7 @@ protonrt_cold_linux(uint64_t u64Nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
     fd_table_init();
 
-    /* Wave 67 soft enter — never rewrites ret. greppable: protonrt: soft */
+    /* Wave 68 soft enter — never rewrites ret. greppable: protonrt: soft */
     u32Grp = soft_classify_nr(u64Nr);
     g_u64SoftLastNr = u64Nr;
     g_u32SoftLastGrp = u32Grp;

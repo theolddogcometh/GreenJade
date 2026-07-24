@@ -38,9 +38,9 @@
  *   aarch64: cpu soft regs pfr0=… isar0=… mmfr0=…
  *   aarch64: cpu soft path mrs=1 mmu=0 gic=0 timer=0 claim=0 product_kernel=OPEN
  *   aarch64: cpu soft inv el1=… el0_a64=… el1_a64=… tgran4=… ok=…
- *   aarch64: cpu soft inventory wave=67 …
+ *   aarch64: cpu soft inventory wave=68 …
  *   aarch64: cpu soft surf …
- *   aarch64: cpu soft deepen wave=67 areas=…
+ *   aarch64: cpu soft deepen wave=68 areas=…
  *   aarch64: cpu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: cpu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: cpu soft PASS | FAIL
@@ -96,9 +96,9 @@ extern void aarch64_uart_soft_selftest(void);
 #define DCZID_DZP_BIT (1ul << 4)
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define CPU_SOFT_WAVE 67u
+#define CPU_SOFT_WAVE 68u
 /* Areas: id,midr,mpidr,pfr,isar,mmfr,cache,extra,regs,path,inv,surf,honesty,deepen */
-#define CPU_SOFT_AREAS 107u
+#define CPU_SOFT_AREAS 109u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cCpuSoftLogs;
@@ -1280,12 +1280,25 @@ aarch64_uart_puts("aarch64: cpu: soft retfaceangle exclusive=1 soft_ne_product=1
  */
 /* Grep: aarch64: cpu: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 aarch64_uart_puts("aarch64: cpu: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=67 "
+        "never_blocks_m0=1 wave=68 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: cpu: soft retredanangle — Wave 67 exclusive redanangle stamp */
 aarch64_uart_puts("aarch64: cpu: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=67 "
+        "product_kernel=OPEN bar3=0 wave=68 "
         "(retredanangle stamp; Soft≠product)\n");
+/*
+ * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: cpu: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
+aarch64_uart_puts("aarch64: cpu: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=68 "
+        "(retlunetteangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: cpu: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
+aarch64_uart_puts("aarch64: cpu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=68 "
+        "(rettenailleangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: cpu soft deepen wave=");

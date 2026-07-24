@@ -22,7 +22,7 @@
  *   later reply into a freed slot — reply is then dropped; no hang. Server
  *   re-checks HasReq after wake if the client cancelled first.
  *
- * Soft door call inventory (Wave 31 exclusive deepen — this unit only):
+ * Soft door call inventory (Wave 32 exclusive deepen — this unit only):
  *   - inventory / call / recv / reply / lifecycle / cold / err / path / PASS
  *   - Call: enter / claim / reply / eio / etimedout / enosys / slot_wait /
  *     client_wait + outcome rollup
@@ -68,10 +68,10 @@
 #define DOOR_TAG_CLIENT 2u /* client waiting for a reply */
 #define DOOR_TAG_SLOT   3u /* contender waiting for single-flight slot */
 
-/* Wave 31 exclusive soft deepen stamp (greppable wave=31). */
-#define DOOR_SOFT_DEEPEN_WAVE 31u
+/* Wave 32 exclusive soft deepen stamp (greppable wave=32). */
+#define DOOR_SOFT_DEEPEN_WAVE 32u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define DOOR_SOFT_DEEPEN_AREAS 46u
+#define DOOR_SOFT_DEEPEN_AREAS 48u
 
 static struct gj_door g_doorCold;
 static int            g_fColdInited;
@@ -490,7 +490,7 @@ door_reply_soft_selfcheck(void)
 }
 
 /**
- * Greppable soft door call inventory (Wave 31 exclusive; product / smoke).
+ * Greppable soft door call inventory (Wave 32 exclusive; product / smoke).
  * Prefix-stable markers (door: soft …):
  *   door: soft inventory  — rollup enter/claim/reply + logs + wave
  *   door: soft call       — call path terminal arms + wait tallies
@@ -516,7 +516,7 @@ door_reply_soft_selfcheck(void)
  *   door: soft retmap     — Wave 19 return-surface map
  *   door: soft return selftest — Wave 19 terminal return surface
  *   door: soft retmap     — Wave 19 return-surface map
- *   door: soft deepen     — wave=31 areas stamp
+ *   door: soft deepen     — wave=32 areas stamp
  *   door: soft path       — honesty: soft ≠ bar3 / MIG REPLY product
  *   door: soft inventory PASS / door: soft PASS
  * Companion (not door: soft … prefix):
@@ -1075,11 +1075,11 @@ door_soft_inventory_log(const struct gj_door *pDoor)
                              */
                             /* Grep: door: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("door: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: door: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("door: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -1088,29 +1088,42 @@ door_soft_inventory_log(const struct gj_door *pDoor)
                              */
                             /* Grep: door: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: door: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("door: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
-                             * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: door: soft retaegis — Wave 31 return-aegis honesty */
+                            /* Grep: door: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("door: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: door: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("door: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
-                            /* Grep: door: soft retmantle — Wave 31 exclusive mantle stamp */
+                            /* Grep: door: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("door: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retmantle stamp; Soft≠product)\n");
+/*
+ * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: door: soft retbulwark — Wave 32 return-bulwark honesty */
+kprintf("door: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=32 "
+        "(retbulwark honesty; Soft≠product; not bar3)\n");
+/* Grep: door: soft retpanoply — Wave 32 exclusive panoply stamp */
+kprintf("door: soft retpanoply exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=32 "
+        "(retpanoply stamp; Soft≠product)\n");
                             kprintf("door: soft deepen wave=%u areas=%u call_enter=%lu "
             "recv_enter=%lu reply_enter=%lu reply_su_create=%lu "
             "ret_call_pos=%lu ret_call_neg=%lu ret_recv_ok=%lu "
@@ -1306,7 +1319,7 @@ door_cold_init(void)
             g_doorCold.u32Ready, g_doorCold.hdr.u32State);
     /* Soft REPLY single-use self-check (private scratch door; honesty only). */
     door_reply_soft_selfcheck();
-    /* Grep: door: soft (baseline inventory after cold init; wave=31) */
+    /* Grep: door: soft (baseline inventory after cold init; wave=32) */
     door_soft_inventory_log(&g_doorCold);
 }
 

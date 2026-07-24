@@ -51,9 +51,9 @@
  *             enable=… imask=… ist0=… ist1=… cval_ok=… cval_w=… cval_rb=…
  *             ctl_arm=… ctl_h0=… ctl_h1=… ctl_end=…
  *   aarch64: timer tick soft PASS | FAIL
- *   aarch64: timer soft inventory wave=31 …
+ *   aarch64: timer soft inventory wave=32 …
  *   aarch64: timer soft stats …
- *   aarch64: timer soft deepen wave=31 areas=…
+ *   aarch64: timer soft deepen wave=32 areas=…
  *   aarch64: timer soft path imask=1 irq_delivery=0 product_kernel=OPEN
  *   aarch64: timer soft return inv_ret=… product_kernel=OPEN
  *   aarch64: timer soft honesty product_kernel=OPEN soft_only=1
@@ -99,11 +99,11 @@ extern void aarch64_uart_put_hex(unsigned long v);
 /* Soft counter advance probe spin count (yield). */
 #define TIMER_SOFT_ADV_SPINS 10000u
 
-/* Wave 31 soft inventory stamp (greppable wave=31). */
-#define TIMER_SOFT_WAVE 31u
+/* Wave 32 soft inventory stamp (greppable wave=32). */
+#define TIMER_SOFT_WAVE 32u
 
 /* Soft deepen areas: freq,tick,inventory,stats,path,honesty. */
-#define TIMER_SOFT_AREAS 33u
+#define TIMER_SOFT_AREAS 35u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cTimerSoftLogs;
@@ -751,20 +751,35 @@ aarch64_uart_puts("aarch64: timer: soft retemblem exclusive=1 soft_ne_product=1 
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retemblem stamp; Soft!=product)\n");
 /*
- * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: timer: soft retaegis — Wave 31 return-aegis honesty */
+/* Grep: aarch64: timer: soft retaegis — Wave 31 return-aegis honesty (kept) */
 aarch64_uart_puts("aarch64: timer: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
                    "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retaegis honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: timer: soft retmantle — Wave 31 exclusive mantle stamp */
+/* Grep: aarch64: timer: soft retmantle — Wave 31 mantle stamp (kept) */
 aarch64_uart_puts("aarch64: timer: soft retmantle exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
 aarch64_uart_puts(" (retmantle stamp; Soft!=product)\n");
+/*
+ * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: timer: soft retbulwark — Wave 32 return-bulwark honesty */
+aarch64_uart_puts("aarch64: timer: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retbulwark honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: timer: soft retpanoply — Wave 32 exclusive panoply stamp */
+aarch64_uart_puts("aarch64: timer: soft retpanoply exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
+aarch64_uart_puts(" (retpanoply stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: timer soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -811,7 +826,7 @@ aarch64_uart_puts(" (retmantle stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: timer soft exclusive — Wave 31 exclusive deepen */
+    /* Grep: aarch64: timer soft exclusive — Wave 32 exclusive deepen */
     aarch64_uart_puts("aarch64: timer soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)TIMER_SOFT_WAVE);

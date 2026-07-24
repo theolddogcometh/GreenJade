@@ -18,7 +18,7 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 31 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 32 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
@@ -42,7 +42,7 @@
  *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
  *   notify: soft return selftest — Wave 19 terminal return surface
  *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=31 areas stamp
+ *   notify: soft deepen            — wave=32 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -76,10 +76,10 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 31 exclusive soft deepen stamp (greppable wave=31). */
-#define NOTIFY_SOFT_DEEPEN_WAVE 31u
+/* Wave 32 exclusive soft deepen stamp (greppable wave=32). */
+#define NOTIFY_SOFT_DEEPEN_WAVE 32u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
-#define NOTIFY_SOFT_DEEPEN_AREAS 46u
+#define NOTIFY_SOFT_DEEPEN_AREAS 48u
 
 /*
  * Soft path sticky counters (wrap OK; diagnostics only).
@@ -1006,11 +1006,11 @@ notify_soft_log(void)
                              */
                             /* Grep: notify: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("notify: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("notify: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -1019,29 +1019,42 @@ notify_soft_log(void)
                              */
                             /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("notify: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
-                             * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: notify: soft retaegis — Wave 31 return-aegis honesty */
+                            /* Grep: notify: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("notify: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: notify: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("notify: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=31 "
+                                    "never_blocks_m0=1 wave=32 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
-                            /* Grep: notify: soft retmantle — Wave 31 exclusive mantle stamp */
+                            /* Grep: notify: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("notify: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=31 "
+                                    "product_kernel=OPEN bar3=0 wave=32 "
                                     "(retmantle stamp; Soft≠product)\n");
+/*
+ * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: notify: soft retbulwark — Wave 32 return-bulwark honesty */
+kprintf("notify: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=32 "
+        "(retbulwark honesty; Soft≠product; not bar3)\n");
+/* Grep: notify: soft retpanoply — Wave 32 exclusive panoply stamp */
+kprintf("notify: soft retpanoply exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=32 "
+        "(retpanoply stamp; Soft≠product)\n");
                             kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
             "wait_enter=%lu multi_calls=%lu msix_init=%lu "
             "ret_wait_bits=%lu ret_wait_zero=%lu ret_inst_ok=%lu "

@@ -587,6 +587,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 
 | Date | Note |
 |------|------|
+| 2026-07-23 | **Wave 34 soft continuum (honesty only):** makefile target high-water **advancing toward 17600** (parent wires / CREATE-ONLY graph); honest scan may still report **makefile_max=17500** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 33 soft continuum (honesty only):** makefile target high-water **advancing toward 17500** (parent wires / CREATE-ONLY graph); honest scan may still report **makefile_max=17400** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 16 soft continuum (honesty only):** makefile target high-water **advancing toward 15800** (parent wires / CREATE-ONLY graph); honest scan may still report **makefile_max=15700** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-23 | **Wave 15 soft continuum (honesty only):** makefile target high-water **advancing toward 15700** (parent wires / CREATE-ONLY graph); honest scan may still report **makefile_max=15600** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |

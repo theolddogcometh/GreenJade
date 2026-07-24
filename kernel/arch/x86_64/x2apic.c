@@ -47,7 +47,7 @@
  *   x2apic: soft ratio       — probe/enable/icr/eoi path ratios
  *   x2apic: soft return rate — Wave 19 ok/fail rate lamps
  *   x2apic: soft retcode    — Wave 19 retcode catalog
- *   x2apic: soft deepen      — wave=115 areas stamp
+ *   x2apic: soft deepen      — wave=116 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   x2apic: soft return      — Wave 17 API return surfaces (kept)
  *   x2apic: soft return selftest — Wave 17 terminal return surface (kept)
@@ -85,10 +85,10 @@
 /* Soft inventory: per-CPU enable table size (matches g_aEnabled). */
 #define X2APIC_SOFT_CPU_SLOTS 16u
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=115). */
-#define X2APIC_SOFT_DEEPEN_WAVE 115u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=116). */
+#define X2APIC_SOFT_DEEPEN_WAVE 116u
 /* Fixed greppable categories emitted under "x2apic: soft …". */
-#define X2APIC_SOFT_DEEPEN_AREAS 175u
+#define X2APIC_SOFT_DEEPEN_AREAS 177u
 
 /* Soft ICR field masks (SDM ICR; decode only — never rewrites product ICR). */
 #define X2APIC_SOFT_ICR_DM_SHIFT     11u /* destination mode (phys/logical) */
@@ -939,11 +939,11 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("x2apic: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=115 "
+                                    "never_blocks_m0=1 wave=116 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("x2apic: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=115 "
+                                    "product_kernel=OPEN bar3=0 wave=116 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -952,11 +952,11 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("x2apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=115 "
+                                    "never_blocks_m0=1 wave=116 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("x2apic: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=115 "
+                                    "product_kernel=OPEN bar3=0 wave=116 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -965,15 +965,15 @@ x2apic_soft_inventory(void)
                              */
                             /* Grep: x2apic: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("x2apic: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=115 "
+                                    "never_blocks_m0=1 wave=116 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("x2apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=115 "
+                                    "never_blocks_m0=1 wave=116 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: x2apic: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("x2apic: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=115 "
+                                    "product_kernel=OPEN bar3=0 wave=116 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -982,11 +982,11 @@ x2apic_soft_inventory(void)
  */
 /* Grep: x2apic: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("x2apic: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("x2apic: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -995,11 +995,11 @@ kprintf("x2apic: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("x2apic: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("x2apic: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -1008,11 +1008,11 @@ kprintf("x2apic: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("x2apic: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("x2apic: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -1021,11 +1021,11 @@ kprintf("x2apic: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("x2apic: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("x2apic: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -1034,11 +1034,11 @@ kprintf("x2apic: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft rethold — Wave 36 return-hold honesty */
 kprintf("x2apic: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("x2apic: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -1047,11 +1047,11 @@ kprintf("x2apic: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retwall — Wave 37 return-wall honesty */
 kprintf("x2apic: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("x2apic: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -1060,11 +1060,11 @@ kprintf("x2apic: soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retmoat — Wave 38 return-moat honesty */
 kprintf("x2apic: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retower — Wave 38 exclusive tower stamp */
 kprintf("x2apic: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retower stamp; Soft≠product)\n");
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -1073,11 +1073,11 @@ kprintf("x2apic: soft retower exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retbarbican — Wave 39 return-barbican honesty */
 kprintf("x2apic: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retbarbican honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retglacis — Wave 39 exclusive glacis stamp */
 kprintf("x2apic: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retglacis stamp; Soft≠product)\n");
 /*
  * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
@@ -1086,11 +1086,11 @@ kprintf("x2apic: soft retglacis exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retcurtain — Wave 40 return-curtain honesty */
 kprintf("x2apic: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retcurtain honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retparapet — Wave 40 exclusive parapet stamp */
 kprintf("x2apic: soft retparapet exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retparapet stamp; Soft≠product)\n");
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
@@ -1099,11 +1099,11 @@ kprintf("x2apic: soft retparapet exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retravelin — Wave 41 return-travelin honesty */
 kprintf("x2apic: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retditch — Wave 41 exclusive ditch stamp */
 kprintf("x2apic: soft retditch exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retditch stamp; Soft≠product)\n");
 /*
  * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
@@ -1112,11 +1112,11 @@ kprintf("x2apic: soft retditch exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retportcullis — Wave 42 return-portcullis honesty */
 kprintf("x2apic: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retportcullis honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbattlement — Wave 42 exclusive battlement stamp */
 kprintf("x2apic: soft retbattlement exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retbattlement stamp; Soft≠product)\n");
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
@@ -1125,11 +1125,11 @@ kprintf("x2apic: soft retbattlement exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retmachicolation — Wave 43 return-machicolation honesty */
 kprintf("x2apic: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retmachicolation honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
 kprintf("x2apic: soft retarrowslit exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retarrowslit stamp; Soft≠product)\n");
 
 /*
@@ -1139,11 +1139,11 @@ kprintf("x2apic: soft retarrowslit exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retmerlon — Wave 44 return-merlon honesty */
 kprintf("x2apic: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retmerlon honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retembrasure — Wave 44 exclusive embrasure stamp */
 kprintf("x2apic: soft retembrasure exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retembrasure stamp; Soft≠product)\n");
 
 /*
@@ -1153,11 +1153,11 @@ kprintf("x2apic: soft retembrasure exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retkeepgate — Wave 45 return-keepgate honesty */
 kprintf("x2apic: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retkeepgate honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retouterward — Wave 45 exclusive outerward stamp */
 kprintf("x2apic: soft retouterward exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retouterward stamp; Soft≠product)\n");
 
 /*
@@ -1167,11 +1167,11 @@ kprintf("x2apic: soft retouterward exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retbailey — Wave 46 return-bailey honesty */
 kprintf("x2apic: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retbailey honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpostern — Wave 46 exclusive postern stamp */
 kprintf("x2apic: soft retpostern exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retpostern stamp; Soft≠product)\n");
 
 /*
@@ -1181,11 +1181,11 @@ kprintf("x2apic: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("x2apic: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("x2apic: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1195,11 +1195,11 @@ kprintf("x2apic: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("x2apic: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("x2apic: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1209,11 +1209,11 @@ kprintf("x2apic: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("x2apic: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("x2apic: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1222,11 +1222,11 @@ kprintf("x2apic: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retsally — Wave 50 return-sally honesty */
 kprintf("x2apic: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("x2apic: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1235,11 +1235,11 @@ kprintf("x2apic: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("x2apic: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("x2apic: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1249,11 +1249,11 @@ kprintf("x2apic: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("x2apic: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("x2apic: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1262,11 +1262,11 @@ kprintf("x2apic: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("x2apic: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("x2apic: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1275,11 +1275,11 @@ kprintf("x2apic: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("x2apic: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("x2apic: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1288,11 +1288,11 @@ kprintf("x2apic: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retflank — Wave 55 return-flank honesty */
 kprintf("x2apic: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retface — Wave 55 exclusive face stamp */
 kprintf("x2apic: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1301,11 +1301,11 @@ kprintf("x2apic: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("x2apic: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("x2apic: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1314,11 +1314,11 @@ kprintf("x2apic: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("x2apic: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("x2apic: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1328,11 +1328,11 @@ kprintf("x2apic: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("x2apic: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("x2apic: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1342,11 +1342,11 @@ kprintf("x2apic: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("x2apic: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("x2apic: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1356,11 +1356,11 @@ kprintf("x2apic: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retplace — Wave 60 return-place honesty */
 kprintf("x2apic: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("x2apic: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1378,11 +1378,11 @@ kprintf("x2apic: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("x2apic: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("x2apic: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1391,11 +1391,11 @@ kprintf("x2apic: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("x2apic: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("x2apic: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1404,11 +1404,11 @@ kprintf("x2apic: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("x2apic: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("x2apic: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1417,11 +1417,11 @@ kprintf("x2apic: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: x2apic: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("x2apic: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: x2apic: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("x2apic: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retsallyport stamp; Soft≠product)\n");
  /*
   * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
@@ -1430,11 +1430,11 @@ kprintf("x2apic: soft retsallyport exclusive=1 soft_ne_product=1 "
   */
  /* Grep: x2apic: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
 kprintf("x2apic: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retgorgeangle honesty; Soft≠product; not bar3)\n");
  /* Grep: x2apic: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
 kprintf("x2apic: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retshoulderangle stamp; Soft≠product)\n");
  /*
   * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
@@ -1443,11 +1443,11 @@ kprintf("x2apic: soft retshoulderangle exclusive=1 soft_ne_product=1 "
   */
  /* Grep: x2apic: soft retflankangle — Wave 66 return-flankangle honesty */
  kprintf("x2apic: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
-         "never_blocks_m0=1 wave=115 "
+         "never_blocks_m0=1 wave=116 "
          "(retflankangle honesty; Soft≠product; not bar3)\n");
  /* Grep: x2apic: soft retfaceangle — Wave 66 exclusive faceangle stamp */
  kprintf("x2apic: soft retfaceangle exclusive=1 soft_ne_product=1 "
-         "product_kernel=OPEN bar3=0 wave=115 "
+         "product_kernel=OPEN bar3=0 wave=116 "
          "(retfaceangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
@@ -1456,11 +1456,11 @@ kprintf("x2apic: soft retshoulderangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 kprintf("x2apic: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retredanangle — Wave 67 exclusive redanangle stamp */
 kprintf("x2apic: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1469,11 +1469,11 @@ kprintf("x2apic: soft retredanangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 kprintf("x2apic: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 kprintf("x2apic: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1482,11 +1482,11 @@ kprintf("x2apic: soft rettenailleangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: x2apic: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 kprintf("x2apic: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=115 "
+        "never_blocks_m0=1 wave=116 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 kprintf("x2apic: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=115 "
+        "product_kernel=OPEN bar3=0 wave=116 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
@@ -1494,200 +1494,204 @@ kprintf("x2apic: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
  * Soft≠product; not bar3.
  */
 /* Grep: x2apic: soft retfosseangle — Wave 70 return-fosseangle honesty */
-kprintf("x2apic: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retfosseangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-kprintf("x2apic: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retcounterscarple stamp; Soft≠product)\n");
+kprintf("x2apic: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcounterscarple stamp; Soft≠product)\n");
 /*
  * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: x2apic: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-kprintf("x2apic: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retsallyportangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-kprintf("x2apic: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retreentrantangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retreentrantangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: x2apic: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-kprintf("x2apic: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-kprintf("x2apic: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retdoubletenailleangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retdoubletenailleangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retcurtainface — Wave 73 return-curtainface honesty */
-kprintf("x2apic: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retcurtainface honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-kprintf("x2apic: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbastionangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbastionangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retglacisangle — Wave 74 return-glacisangle honesty */
-kprintf("x2apic: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retglacisangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-kprintf("x2apic: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retparapetangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retparapetangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retmoatangle — Wave 75 return-moatangle honesty */
-kprintf("x2apic: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retmoatangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retowerangle — Wave 75 exclusive towerangle stamp */
-kprintf("x2apic: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retowerangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retowerangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retgateangle — Wave 76 return-gateangle honesty */
-kprintf("x2apic: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retgateangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retwallangle — Wave 76 exclusive wallangle stamp */
-kprintf("x2apic: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retwallangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retwallangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retspireangle — Wave 77 return-spireangle honesty */
-kprintf("x2apic: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retspireangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retholdangle — Wave 77 exclusive holdangle stamp */
-kprintf("x2apic: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retholdangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retholdangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-kprintf("x2apic: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retpalaceangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-kprintf("x2apic: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retfortressangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retfortressangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retkeepangle — Wave 79 return-keepangle honesty */
-kprintf("x2apic: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retkeepangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-kprintf("x2apic: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retredoubtangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retredoubtangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-kprintf("x2apic: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retcitadelangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-kprintf("x2apic: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbastionkeep stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbastionkeep stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-kprintf("x2apic: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-kprintf("x2apic: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbulwarkangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbulwarkangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retmantleangle — Wave 82 return-mantleangle honesty */
-kprintf("x2apic: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retmantleangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-kprintf("x2apic: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retaegisangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retaegisangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retemblemangle — Wave 83 return-emblemangle honesty */
-kprintf("x2apic: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retemblemangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-kprintf("x2apic: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retsigilangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retsigilangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("x2apic: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retscepterangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("x2apic: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retglyphangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retglyphangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("x2apic: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retcrownangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("x2apic: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retshardangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retshardangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("x2apic: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retforgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("x2apic: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retprismangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retprismangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retflameangle — Wave 87 return-flameangle honesty */
-kprintf("x2apic: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retflameangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("x2apic: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retcipherangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcipherangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("x2apic: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retbeaconangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("x2apic: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retledgerangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retledgerangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("x2apic: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retbannerangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("x2apic: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retvaultangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvaultangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("x2apic: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retcrestangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("x2apic: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (rettokenangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rettokenangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("x2apic: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retbadgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("x2apic: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retphaseangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retphaseangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retmarkangle — Wave 92 return-markangle honesty */
-kprintf("x2apic: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retmarkangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("x2apic: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retpulseangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retpulseangle stamp; Soft≠product)\n");
 
 /* Grep: x2apic: soft retsealangle — Wave 93 return-sealangle honesty */
-kprintf("x2apic: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retsealangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("x2apic: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retboundangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retboundangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retstemangle — Wave 94 return-stemangle honesty */
-kprintf("x2apic: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retstemangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("x2apic: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbladeangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbladeangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retchordangle — Wave 95 return-chordangle honesty */
-kprintf("x2apic: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retchordangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("x2apic: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retarcangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retarcangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("x2apic: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retsectorangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("x2apic: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retwedgeangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retwedgeangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("x2apic: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retradiusangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("x2apic: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retdiameterangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retdiameterangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("x2apic: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retcircumangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("x2apic: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retellipseangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retellipseangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("x2apic: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (rethyperangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("x2apic: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retparabolaangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retparabolaangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("x2apic: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retspiralangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("x2apic: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (rethelixangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rethelixangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("x2apic: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (rettorusangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("x2apic: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retknotangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retknotangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("x2apic: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retmoebiusangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("x2apic: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retkleinangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retkleinangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("x2apic: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retprojectangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("x2apic: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retaffineangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retaffineangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("x2apic: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retlinearangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("x2apic: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbilinearangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbilinearangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("x2apic: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retquadraticangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("x2apic: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retcubicangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcubicangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("x2apic: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retquarticangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("x2apic: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retquinticangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retquinticangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("x2apic: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retsplineangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("x2apic: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbezierangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbezierangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("x2apic: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (rethurmitangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("x2apic: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retcatmullangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcatmullangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("x2apic: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retnurbsangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("x2apic: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retbsplineangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbsplineangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("x2apic: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retmeshangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("x2apic: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retgridangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retgridangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("x2apic: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retvoxelangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("x2apic: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (rettexelangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rettexelangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("x2apic: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retfragmentangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("x2apic: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retvertexangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvertexangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retshaderangle — Wave 113 return-shaderangle honesty */
-kprintf("x2apic: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retshaderangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
-kprintf("x2apic: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retpipelineangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retpipelineangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
-kprintf("x2apic: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retframebufferangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
-kprintf("x2apic: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retswapchainangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retswapchainangle stamp; Soft≠product)\n");
 /* Grep: x2apic: soft retpresentangle — Wave 115 return-presentangle honesty */
-kprintf("x2apic: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=115 (retpresentangle honesty; Soft≠product; not bar3)\n");
+kprintf("x2apic: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
-kprintf("x2apic: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=115 (retvsyncangle stamp; Soft≠product)\n");
+kprintf("x2apic: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvsyncangle stamp; Soft≠product)\n");
+/* Grep: x2apic: soft retfenceangle — Wave 116 return-fenceangle honesty */
+kprintf("x2apic: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product; not bar3)\n");
+/* Grep: x2apic: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
+kprintf("x2apic: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retsemaphoreangle stamp; Soft≠product)\n");
                             kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "
             "eoi=%lu note=%lu ok=1 skip=0 "

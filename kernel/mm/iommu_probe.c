@@ -16,7 +16,7 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
- * Wave 25 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ * Wave 26 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
  *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
  *   iommu: soft present    — DMAR/IVRS presence lamps
  *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
@@ -35,7 +35,7 @@
  *   iommu: soft return     — Wave 17 create/destroy return taxonomy
  *   iommu: soft return selftest — Wave 19 terminal return surface
  *   iommu: soft retmap     — Wave 19 return-surface map
- *   iommu: soft deepen     — wave=25 stamp + area count
+ *   iommu: soft deepen     — wave=26 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close;
@@ -64,10 +64,10 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 25 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE  25u
+/* Wave 26 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE  26u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 37u
+#define IOMMU_SOFT_AREAS 39u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -618,22 +618,37 @@ iommu_soft_inventory_log(void)
                     "(retbanner stamp; Soft≠product)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
             /*
-             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 25 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: iommu: soft retledger — Wave 25 return-ledger honesty */
+            /* Grep: iommu: soft retledger — Wave 25 return-ledger honesty (kept) */
             kprintf("iommu: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retledger honesty; Soft≠product; not bar3)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retbeacon — Wave 25 exclusive beacon stamp */
+            /* Grep: iommu: soft retbeacon — Wave 25 beacon stamp (kept) */
             kprintf("iommu: soft retbeacon exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
+            /*
+             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: iommu: soft retcipher — Wave 26 return-cipher honesty */
+            kprintf("iommu: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retcipher honesty; Soft≠product; not bar3)\n",
+                    (unsigned)IOMMU_SOFT_WAVE);
+            /* Grep: iommu: soft retflame — Wave 26 exclusive flame stamp */
+            kprintf("iommu: soft retflame exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retflame stamp; Soft≠product)\n",
+                    (unsigned)IOMMU_SOFT_WAVE);
     kprintf("iommu: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 25 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 26 exclusive; soft only; not product always-on IOMMU; "
             "not bar3; soft≠product)\n",
             (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
             g_cSoftInvLogs, (unsigned)u32Surf);

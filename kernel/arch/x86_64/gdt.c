@@ -51,7 +51,7 @@
  *   "gdt: soft retmap …" — Wave 17 return-surface map (kept)
  *   gdt: soft return rate — Wave 19 ok/fail rate lamps
  *   gdt: soft retcode    — Wave 19 retcode catalog
- *   "gdt: soft deepen …"   — wave=50 areas stamp
+ *   "gdt: soft deepen …"   — wave=51 areas stamp
  * Soft never hard-gates boot. No bar3 claim.
  * greppable: gdt: soft
  * greppable: gdt: soft deepen
@@ -148,7 +148,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE 50u   /* Wave 37 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE 51u   /* Wave 37 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -1161,11 +1161,11 @@ kprintf("gdt: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("gdt: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("gdt: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1175,11 +1175,11 @@ kprintf("gdt: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("gdt: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("gdt: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1189,11 +1189,11 @@ kprintf("gdt: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("gdt: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("gdt: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1202,12 +1202,25 @@ kprintf("gdt: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retsally — Wave 50 return-sally honesty */
 kprintf("gdt: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("gdt: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retcounterscarp stamp; Soft≠product)\n");
+/*
+ * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: gdt: soft retfosse — Wave 51 return-fosse honesty */
+kprintf("gdt: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=51 "
+        "(retfosse honesty; Soft≠product; not bar3)\n");
+/* Grep: gdt: soft retcoveredway — Wave 51 exclusive coveredway stamp */
+kprintf("gdt: soft retcoveredway exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=51 "
+        "(retcoveredway stamp; Soft≠product)\n");
 
 
 

@@ -56,9 +56,9 @@
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE 50u
+#define GJ_REVOKE_SOFT_WAVE 51u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_REVOKE_SOFT_AREAS 76u
+#define GJ_REVOKE_SOFT_AREAS 78u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -860,11 +860,11 @@ kprintf("cap: revoke: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cap: revoke: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("cap: revoke: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: cap: revoke: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("cap: revoke: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -874,11 +874,11 @@ kprintf("cap: revoke: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cap: revoke: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("cap: revoke: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: cap: revoke: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("cap: revoke: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -888,11 +888,11 @@ kprintf("cap: revoke: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cap: revoke: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("cap: revoke: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: cap: revoke: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("cap: revoke: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -901,12 +901,25 @@ kprintf("cap: revoke: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cap: revoke: soft retsally — Wave 50 return-sally honesty */
 kprintf("cap: revoke: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: cap: revoke: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("cap: revoke: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retcounterscarp stamp; Soft≠product)\n");
+/*
+ * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cap: revoke: soft retfosse — Wave 51 return-fosse honesty */
+kprintf("cap: revoke: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=51 "
+        "(retfosse honesty; Soft≠product; not bar3)\n");
+/* Grep: cap: revoke: soft retcoveredway — Wave 51 exclusive coveredway stamp */
+kprintf("cap: revoke: soft retcoveredway exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=51 "
+        "(retcoveredway stamp; Soft≠product)\n");
 
 
 

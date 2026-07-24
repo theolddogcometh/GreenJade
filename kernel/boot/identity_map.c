@@ -30,7 +30,7 @@
  * After CR3 load (serial already up on UEFI path), emit greppable soft markers
  * for identity install and the published gj_boot_info (GOP / memmap / handoff).
  *
- * Wave 50 exclusive soft deepen (this unit only — greppable "identity: soft …"):
+ * Wave 51 exclusive soft deepen (this unit only — greppable "identity: soft …"):
  *   identity: soft honesty    — bridge only; higher-half product OPEN
  *   identity: soft inventory  — pt/pd/leaf cover snapshot + wave stamp
  *   identity: soft layout     — PML4/PDPT/PD phys addresses
@@ -48,7 +48,7 @@
  *   identity: soft twin       — Wave 15 Multiboot boot.S twin note
  *   identity: soft install    — Wave 15 install counter surface
  *   identity: soft catalog    — Wave 19 area name rollup
- *   identity: soft deepen     — wave=50 stamp + area count
+ *   identity: soft deepen     — wave=51 stamp + area count
  *   identity: soft PASS|PARTIAL|FAIL …
  *   boot: identity soft PASS …
  *   boot: handoff soft … / boot: memmap soft … / boot: GOP soft …
@@ -90,7 +90,7 @@
 #define IDMAP_GIB           4u
 #define IDMAP_LEAF_FLAGS    (PTE_P | PTE_W | PTE_PS)
 #define IDMAP_LINK_FLAGS    (PTE_P | PTE_W)
-#define IDMAP_SOFT_WAVE 50u /* Wave 50 exclusive soft deepen stamp */
+#define IDMAP_SOFT_WAVE 51u /* Wave 51 exclusive soft deepen stamp */
 #define IDMAP_LEAVES_EXPECT (IDMAP_PD_COUNT * IDMAP_LEAVES_PER_PD)
 #define IDMAP_LEAF_BYTES    (1ull << IDMAP_LEAF_SHIFT)
 #define IDMAP_GIB_BYTES     (1ull << IDMAP_GIB_SHIFT)
@@ -438,7 +438,7 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
     cAreas++;
 
     /* Grep: identity: soft note (Wave 20 deepen) */
-    kprintf("identity: soft note milestone=wave50 exclusive=1 "
+    kprintf("identity: soft note milestone=wave51 exclusive=1 "
             "bridge_only=1 soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)IDMAP_SOFT_WAVE);
     cAreas++;
@@ -460,7 +460,7 @@ identity_soft_inventory(u64 u64Cr3Expect, u64 u64Cr3Read, u32 cLeavesBuilt)
     cAreas++;
 
     /* Grep: identity: soft retmap — Wave 19 return-surface map */
-    kprintf("identity: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=50\n");
+    kprintf("identity: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=51\n");
 
     /* Grep: identity: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -900,11 +900,11 @@ kprintf("identity: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: identity: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("identity: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: identity: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("identity: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -914,11 +914,11 @@ kprintf("identity: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: identity: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("identity: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: identity: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("identity: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -928,11 +928,11 @@ kprintf("identity: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: identity: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("identity: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: identity: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("identity: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -941,12 +941,25 @@ kprintf("identity: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: identity: soft retsally — Wave 50 return-sally honesty */
 kprintf("identity: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: identity: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("identity: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retcounterscarp stamp; Soft≠product)\n");
+/*
+ * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: identity: soft retfosse — Wave 51 return-fosse honesty */
+kprintf("identity: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=51 "
+        "(retfosse honesty; Soft≠product; not bar3)\n");
+/* Grep: identity: soft retcoveredway — Wave 51 exclusive coveredway stamp */
+kprintf("identity: soft retcoveredway exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=51 "
+        "(retcoveredway stamp; Soft≠product)\n");
 
 
 

@@ -42,7 +42,7 @@
  *   virtio-input: soft honesty …     (Wave 15)
  *   virtio-input: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-input: soft retcode    — Wave 19 retcode catalog
- *   virtio-input: soft deepen wave=50 …
+ *   virtio-input: soft deepen wave=51 …
  *   virtio-input: soft PASS|NODEV|PARTIAL
  *   virtio-input: soft inventory PASS|NODEV|PARTIAL
  *
@@ -89,8 +89,8 @@ struct virtio_input_absinfo_dev {
 #define VI_ABS_SOFT_MAX 32767
 
 /* Wave 35 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define VI_SOFT_WAVE 50u
-#define VI_SOFT_AREAS 93u
+#define VI_SOFT_WAVE 51u
+#define VI_SOFT_AREAS 95u
 
 static struct gj_virtio_dev *g_pIn;
 static struct gj_virtq       g_qEvent;
@@ -1269,11 +1269,11 @@ kprintf("virtio-input: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-input: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("virtio-input: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-input: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("virtio-input: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1283,11 +1283,11 @@ kprintf("virtio-input: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-input: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("virtio-input: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-input: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("virtio-input: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1297,11 +1297,11 @@ kprintf("virtio-input: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-input: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("virtio-input: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-input: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("virtio-input: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1310,12 +1310,25 @@ kprintf("virtio-input: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: virtio-input: soft retsally — Wave 50 return-sally honesty */
 kprintf("virtio-input: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=50 "
+        "never_blocks_m0=1 wave=51 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-input: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("virtio-input: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=50 "
+        "product_kernel=OPEN bar3=0 wave=51 "
         "(retcounterscarp stamp; Soft≠product)\n");
+/*
+ * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: virtio-input: soft retfosse — Wave 51 return-fosse honesty */
+kprintf("virtio-input: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=51 "
+        "(retfosse honesty; Soft≠product; not bar3)\n");
+/* Grep: virtio-input: soft retcoveredway — Wave 51 exclusive coveredway stamp */
+kprintf("virtio-input: soft retcoveredway exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=51 "
+        "(retcoveredway stamp; Soft≠product)\n");
 
 
 

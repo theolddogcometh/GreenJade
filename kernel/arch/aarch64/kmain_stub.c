@@ -17,9 +17,9 @@
  *   aarch64: kmain_stub soft enter
  *   aarch64: GIC PASS          (from aarch64_gic_init)
  *   aarch64: timer PASS        (from aarch64_timer_probe)
- *   aarch64: kmain_stub soft inventory wave=50 …
+ *   aarch64: kmain_stub soft inventory wave=51 …
  *   aarch64: kmain_stub soft surf …
- *   aarch64: kmain_stub soft deepen wave=50 areas=…
+ *   aarch64: kmain_stub soft deepen wave=51 areas=…
  *   aarch64: kmain_stub soft return product_kernel=OPEN …
  *   aarch64: kmain_stub soft path product_kernel=OPEN …
  *   aarch64: kmain_stub soft honesty product_kernel=OPEN …
@@ -34,10 +34,10 @@ void aarch64_uart_put_hex(unsigned long v);
 void aarch64_gic_init(void);
 void aarch64_timer_probe(void);
 
-/* Wave 50 soft inventory stamp (file-local; never product gate). */
-#define KMAIN_STUB_SOFT_WAVE 50u
+/* Wave 51 soft inventory stamp (file-local; never product gate). */
+#define KMAIN_STUB_SOFT_WAVE 51u
 /* Areas: enter,gic,timer,inventory,surf,return,path,honesty,deepen */
-#define KMAIN_STUB_SOFT_AREAS 67u
+#define KMAIN_STUB_SOFT_AREAS 69u
 
 void
 aarch64_kmain_stub(void)
@@ -576,6 +576,22 @@ aarch64_uart_puts("aarch64: soft retcounterscarp exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
 aarch64_uart_puts(" (retcounterscarp stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: soft retfosse — Wave 51 return-fosse honesty */
+aarch64_uart_puts("aarch64: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
+aarch64_uart_puts(" (retfosse honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retcoveredway — Wave 51 exclusive coveredway stamp */
+aarch64_uart_puts("aarch64: soft retcoveredway exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
+aarch64_uart_puts(" (retcoveredway stamp; Soft!=product)\n");
 
 
 

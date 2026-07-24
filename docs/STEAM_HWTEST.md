@@ -3,7 +3,7 @@
 **Bar3 status (product ceiling):** **OPEN.** Media path + host prep are **wired**.  
 **Soft stamp (2026-07-24 / Wave 101):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Continuum high-water **advancing toward 24300** soft only (honest scan may still report **makefile_max=24200** until parent wires). Soft deepen surfaces **rettorusangle**/**retknotangle** (CREATE-ONLY soft only). Product lamps **0**. **Soft ≠ bar3.** **Soft ≠ product complete.**  
 **Real-hw path:** **open** (DUT UEFI install → client launch → matrix fill still required).  
-**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **24200** if scan still **24200**).  
+**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **24300** if scan still **24200**).  
 Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  
 **Open:** real-DUT UEFI install → launch Steam client → Deck Top 50 matrix  
@@ -71,7 +71,7 @@ Host soft check (no download, always exit 0):
 |-------|--------|---------------|
 | Decades parent wire / soft gates **toward 24300** | **soft** | Graph/product soft stubs + milestone gates only (parallel-wave growth) |
 | Soft deepen **rettorusangle** / **retknotangle** | **soft** | Wave 101 CREATE-ONLY soft graph surface names only — **≠ product** / **≠ bar3** |
-| Honest `makefile_max` (scan) | **source of truth** | May still report **24000** (or less) until parent wires **24300**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
+| Honest `makefile_max` (scan) | **source of truth** | May still report **24200** (or less) until parent wires **24300**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
 | Implies Steam client / Top-50 | **no** | Soft continuum ≠ runtime ABI ≠ DUT launch |
 | Closes bar3 | **no** | **Soft ≠ bar3.** Product lamps **0**. Bar3 remains client-run + matrix open |
 

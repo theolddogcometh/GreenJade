@@ -295,7 +295,7 @@ soft_inventory_log(void)
             "product_kernel=OPEN soft_only=1 wave=70\n");
 
     /*
-     * Grep: init: soft rettorusangle — Wave 101 return-spiralangle honesty
+     * Grep: init: soft rettorusangle — Wave 101 return-torusangle honesty
      * Soft inventory only; continuum toward 24300; Soft≠product; not bar3.
      */
     gj_puts("init: soft rettorusangle soft_only=1 product_gate=0 "
@@ -303,7 +303,7 @@ soft_inventory_log(void)
             "(rettorusangle honesty; Soft!=product; not bar3)\n");
 
     /*
-     * Grep: init: soft retknotangle — Wave 101 exclusive helixangle stamp
+     * Grep: init: soft retknotangle — Wave 101 exclusive knotangle stamp
      * Soft inventory only; Soft≠product.
      */
     gj_puts("init: soft retknotangle exclusive=1 soft_ne_product=1 "

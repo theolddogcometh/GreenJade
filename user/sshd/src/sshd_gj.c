@@ -18,7 +18,7 @@
  *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
  *  11. live path PASS → soft inventory → daemon park
  *
- * Soft inventory (Wave 78 exclusive deepen) — honesty, not product SSH.
+ * Soft inventory (Wave 79 exclusive deepen) — honesty, not product SSH.
  * Diagnostics only; never hard-fails the live path. Greppable prefix:
  *   "sshd-gj: soft …"
  * Honesty: soft inventory ≠ product multi-server confine.
@@ -39,7 +39,7 @@
  *   sshd-gj: soft kdf PASS | soft kdf soft-skip
  *   sshd-gj: soft memeq PASS | soft memeq soft-skip
  *   sshd-gj: soft suite PASS | soft suite soft-skip
- * Soft inventory / path / stats (Wave 78; greppable "sshd-gj: soft …"):
+ * Soft inventory / path / stats (Wave 79; greppable "sshd-gj: soft …"):
  *   sshd-gj: soft honesty not-product-ssh …
  *   sshd-gj: soft inventory …
  *   sshd-gj: soft seq …
@@ -128,7 +128,7 @@ static uint32_t g_seq_c2s_tx, g_seq_c2s_rx;
 static int g_encrypted;
 
 /*
- * Soft product inventory (Wave 78). Cumulative milestone lamps + suite tallies.
+ * Soft product inventory (Wave 79). Cumulative milestone lamps + suite tallies.
  * Honesty-only — not a claim of OpenSSH-class product completeness.
  * Soft ≠ product multi-server confine.
  * greppable: sshd-gj: soft …
@@ -152,10 +152,10 @@ static uint32_t g_u32SoftSuiteN;   /* offline soft-suite sub-steps run */
 static uint32_t g_u32SoftSuiteBits;/* offline soft-suite bit lamps */
 static uint32_t g_u32SoftLogN;     /* inventory log emissions */
 
-/* Offline soft-suite bit lamps (Wave 78; never hard-gate). */
-/* Wave 78 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retpalaceangle continuum_toward=22000 soft_ne_product=1
- *   greppable: soft retfortressangle exclusive=1 continuum_toward=22000
+/* Offline soft-suite bit lamps (Wave 79; never hard-gate). */
+/* Wave 79 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retkeepangle continuum_toward=22100 soft_ne_product=1
+ *   greppable: soft retredoubtangle exclusive=1 continuum_toward=22100
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -738,7 +738,7 @@ do_service_soft(long fd_srv, long fd_cli)
 }
 
 /*
- * Greppable soft inventory + honesty (Wave 78 exclusive deepen).
+ * Greppable soft inventory + honesty (Wave 79 exclusive deepen).
  *   sshd-gj: soft honesty not-product-ssh …
  *   sshd-gj: soft inventory …
  *   sshd-gj: soft seq …
@@ -841,7 +841,7 @@ soft_inventory_log(void)
 	msg(aLine);
 	cAreas++;
 
-	/* Grep: sshd-gj: soft crypto (Wave 78 offline suite lamps) */
+	/* Grep: sshd-gj: soft crypto (Wave 79 offline suite lamps) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft crypto suite_ok=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftSuiteOk);
@@ -872,7 +872,7 @@ soft_inventory_log(void)
 	msg(aLine);
 	cAreas++;
 
-	/* Grep: sshd-gj: soft crypto (Wave 78 deepen legs continued) */
+	/* Grep: sshd-gj: soft crypto (Wave 79 deepen legs continued) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft crypto sha256=");
 	append_u(aLine, sizeof(aLine), &o,
@@ -900,7 +900,7 @@ soft_inventory_log(void)
 	msg(aLine);
 	cAreas++;
 
-	/* Grep: sshd-gj: soft kex (live-path KEX lamps, Wave 78) */
+	/* Grep: sshd-gj: soft kex (live-path KEX lamps, Wave 79) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft kex banner=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftBanner);
@@ -921,7 +921,7 @@ soft_inventory_log(void)
 	msg(aLine);
 	cAreas++;
 
-	/* Grep: sshd-gj: soft channel (post-NEWKEYS session lamps, Wave 78) */
+	/* Grep: sshd-gj: soft channel (post-NEWKEYS session lamps, Wave 79) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft channel service=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)g_u32SoftService);
@@ -991,7 +991,7 @@ soft_inventory_log(void)
 	msg(aLine);
 	cAreas++;
 
-	/* Grep: sshd-gj: soft deepen wave (Wave 78 stamp) */
+	/* Grep: sshd-gj: soft deepen wave (Wave 79 stamp) */
 	o = 0;
 	append_s(aLine, sizeof(aLine), &o, "sshd-gj: soft deepen wave=70 areas=");
 	append_u(aLine, sizeof(aLine), &o, (unsigned long)cAreas);
@@ -1006,7 +1006,7 @@ soft_inventory_log(void)
 	msg(aLine);
 
 	/*
-	 * Grep: sshd-gj: soft exclusive (Wave 78 exclusive deepen).
+	 * Grep: sshd-gj: soft exclusive (Wave 79 exclusive deepen).
 	 * Soft inventory ≠ product multi-server confine.
 	 */
 	msg("sshd-gj: soft exclusive multi_server=0 confine=0 bar3=0 "
@@ -1015,7 +1015,7 @@ soft_inventory_log(void)
 
 /*
  * Offline soft suite — pure local probes (no wire). Never hard-fails live path.
- * Wave 78 deepen: freestanding crypto/shape surface beyond the TCP smoke alone.
+ * Wave 79 deepen: freestanding crypto/shape surface beyond the TCP smoke alone.
  * greppable: sshd-gj: soft …
  */
 static void
@@ -1673,7 +1673,7 @@ _start(void)
 	}
 
 	/*
-	 * Wave 78 soft inventory: offline suite + honesty / path / stats.
+	 * Wave 79 soft inventory: offline suite + honesty / path / stats.
 	 * Greppable "sshd-gj: soft …" — not product SSH completeness.
 	 * Never hard-fails after live path PASS.
 	 */

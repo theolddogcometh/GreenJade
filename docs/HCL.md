@@ -107,7 +107,7 @@ Parallel waves **soft shipped** (kernel / media / continuum graph only). **Open 
 
 **Soft stamp (Wave 16, historical):** continuum high-water **advancing toward 15800** soft only (parent wires / CREATE-ONLY). Honest scan may still have reported **makefile_max=15700** until parent wires. Soft probes and continuum growth remain **≠ full HCL product**. **Soft ≠ product complete.** Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
 
-**Soft stamp (Wave 78):** continuum high-water **advancing toward 22000** soft only (parent wires / CREATE-ONLY). Honest scan may still report **makefile_max=21900** until parent wires — **do not hardcode false 22000**. Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. Soft probes and continuum growth remain **≠ full HCL product**. **Soft ≠ product complete.** Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
+**Soft stamp (Wave 79):** continuum high-water **advancing toward 22100** soft only (parent wires / CREATE-ONLY). Honest scan may still report **makefile_max=22000** until parent wires — **do not hardcode false 22100**. Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. Soft probes and continuum growth remain **≠ full HCL product**. **Soft ≠ product complete.** Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
 
 ### Soft probes ≠ full HCL product (Wave 9 honesty — retained)
 
@@ -150,26 +150,26 @@ HCL soft probes and continuum growth are **not** a product HCL certification:
 
 **Hard rule (Wave 14, historical):** never promote soft probes, continuum advancing toward **15600**, or media READY to “HCL product complete,” T1+ certified, product lamps > 0, or **bar3 closed**. Soft continuum ≠ full HCL product. Soft probes ≠ full HCL product. **Soft ≠ product complete.** Open bars below stay open.
 
-### Soft probes ≠ full HCL product (Wave 78 honesty)
+### Soft probes ≠ full HCL product (Wave 79 honesty)
 
-**Additive only.** Wave 9/12/14/16 tables and hard rules above stay historical ledger. This section is Wave 78 honesty: continuum high-water **advancing toward 22000** soft only (parent wires). Honest scan may still report **makefile_max=21900** — **do not hardcode false 22000**. Soft probes ≠ full HCL product. **Soft ≠ product complete.** Product lamps remain **0**. **bar3 remains OPEN.**
+**Additive only.** Wave 9/12/14/16 tables and hard rules above stay historical ledger. This section is Wave 79 honesty: continuum high-water **advancing toward 22100** soft only (parent wires). Honest scan may still report **makefile_max=22000** — **do not hardcode false 22100**. Soft probes ≠ full HCL product. **Soft ≠ product complete.** Product lamps remain **0**. **bar3 remains OPEN.**
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 22000** | CREATE-ONLY soft graph high-water advance (parent wires; scan may lag at 21900) | Runtime ABI product; Steam client; Deck Top 50; bar3; **full HCL product** |
-| Honest scan **makefile_max=21900** (when greppable prior tip) | Makefile wire truth until parent wires 22000 basenames | Claim that 21900 is greppable when scan still lags at prior tip |
+| Continuum **toward 22100** | CREATE-ONLY soft graph high-water advance (parent wires; scan may lag at 22000) | Runtime ABI product; Steam client; Deck Top 50; bar3; **full HCL product** |
+| Honest scan **makefile_max=22000** (when greppable prior tip) | Makefile wire truth until parent wires 22100 basenames | Claim that 22000 is greppable when scan still lags at prior tip |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Media `STATUS=READY` / `steam-bar3-check` | Host/media bootstrap inventory | Client launch; title try; HCL product bar |
 | Product lamps **0** | Soft score / bar3-ready stubs remain zero | Product-score claim |
 
-**Hard rule (Wave 78):** never promote soft probes, continuum advancing toward **22000**, or media READY to “HCL product complete,” T1+ certified, product lamps > 0, or **bar3 closed**. Soft continuum ≠ full HCL product. Soft probes ≠ full HCL product. **Soft ≠ product complete.** Open bars below stay open.
+**Hard rule (Wave 79):** never promote soft probes, continuum advancing toward **22100**, or media READY to “HCL product complete,” T1+ certified, product lamps > 0, or **bar3 closed**. Soft continuum ≠ full HCL product. Soft probes ≠ full HCL product. **Soft ≠ product complete.** Open bars below stay open.
 
-### Explicit non-claims (Wave 12/14 historical · Wave 78 restates)
+### Explicit non-claims (Wave 12/14 historical · Wave 79 restates)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Continuum high-water advancing toward **22000** (CREATE-ONLY parent wire)” | **Yes** — soft only |
-| “Honest scan may still be `makefile_max=21900` until parent wires 22000” | **Yes** — scan is source of truth |
+| “Continuum high-water advancing toward **22100** (CREATE-ONLY parent wire)” | **Yes** — soft only |
+| “Honest scan may still be `makefile_max=22000` until parent wires 22100” | **Yes** — scan is source of truth |
 | “Media `STATUS=READY` / steam-bar3-check inventory READY” | **Yes** — media bootstrap only |
 | “Soft probes / T0 CI greppable” | **Yes** — probe / virtual gate only |
 | “Full HCL product / T1+ certified real-hw matrix closed” | **No** |
@@ -180,7 +180,7 @@ HCL soft probes and continuum growth are **not** a product HCL certification:
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid` / `hda_client`
 - Residual **#UD** closed
-- Continuum high-water **advancing toward 22000** (soft graph only — not Steam client; parent-wire CREATE-ONLY; honest scan may still be **21900**; **not** full HCL product; Wave 14 historical target was **15600**)
+- Continuum high-water **advancing toward 22100** (soft graph only — not Steam client; parent-wire CREATE-ONLY; honest scan may still be **22000**; **not** full HCL product; Wave 14 historical target was **15600**)
 - **io_uring** soft surface shipped (`io_uring_min.c`; `linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`) — vfs_ram/kernel smoke, **not** game I/O
 - **GJ_MEM=768G** hierarchical `soak_tib` **PASS** on host class **≥1TiB** — product bar still **≥ 1 TiB** full path when host allows
 - **aarch64 M0 scaffold** smoke **PASS** (`make aarch64` / `aarch64-smoke`; shared C + PSCI smokes) — separate arch tree; not Deck/x86 product kernel
@@ -191,7 +191,7 @@ HCL soft probes and continuum growth are **not** a product HCL certification:
 
 ### Open bars (do not claim done)
 
-- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**; soft probes / continuum toward **22000** do **not** close)
+- **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` (**OPEN**; soft probes / continuum toward **22100** do **not** close)
 - Deck Top 50 title runs — all **NOT-TRIED** (no titles tried; claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
 - Steam/game audio / title matrix fill — **open** (blocked on bar3 client run)

@@ -23,7 +23,7 @@
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
  * Wave 35 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=64
+ *   serial: soft inventory … wave=65
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -47,7 +47,7 @@
  *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
  *   serial: soft return rate — Wave 19 ok/fail rate lamps
  *   serial: soft retcode    — Wave 19 retcode catalog
- *   serial: soft deepen …     — wave=64 areas stamp
+ *   serial: soft deepen …     — wave=65 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   serial: soft return …     — Wave 17 API return surfaces (kept)
  *   serial: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -123,7 +123,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 64u
+#define UART_SOFT_WAVE 65u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -1421,11 +1421,11 @@ kprintf("serial: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("serial: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("serial: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1435,11 +1435,11 @@ kprintf("serial: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("serial: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("serial: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1449,11 +1449,11 @@ kprintf("serial: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("serial: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("serial: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1462,11 +1462,11 @@ kprintf("serial: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retsally — Wave 50 return-sally honesty */
 kprintf("serial: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("serial: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1475,11 +1475,11 @@ kprintf("serial: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("serial: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("serial: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1489,11 +1489,11 @@ kprintf("serial: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("serial: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("serial: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1502,11 +1502,11 @@ kprintf("serial: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("serial: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("serial: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1515,11 +1515,11 @@ kprintf("serial: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("serial: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("serial: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1528,11 +1528,11 @@ kprintf("serial: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retflank — Wave 55 return-flank honesty */
 kprintf("serial: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retface — Wave 55 exclusive face stamp */
 kprintf("serial: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1541,11 +1541,11 @@ kprintf("serial: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("serial: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("serial: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1554,11 +1554,11 @@ kprintf("serial: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("serial: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("serial: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1568,11 +1568,11 @@ kprintf("serial: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("serial: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("serial: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1582,11 +1582,11 @@ kprintf("serial: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("serial: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("serial: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1596,11 +1596,11 @@ kprintf("serial: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retplace — Wave 60 return-place honesty */
 kprintf("serial: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("serial: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1618,11 +1618,11 @@ kprintf("serial: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("serial: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("serial: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retcoveredface stamp; Soft≠product)\n");
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
@@ -1631,11 +1631,11 @@ kprintf("serial: soft retcoveredface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retbastionface — Wave 62 return-bastionface honesty */
 kprintf("serial: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retbastionface honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
 kprintf("serial: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retcurtainangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
@@ -1644,11 +1644,11 @@ kprintf("serial: soft retcurtainangle exclusive=1 soft_ne_product=1 "
  */
 /* Grep: serial: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
 kprintf("serial: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retdoubletenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
 kprintf("serial: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retplaceofarms stamp; Soft≠product)\n");
  /*
   * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
@@ -1657,12 +1657,25 @@ kprintf("serial: soft retplaceofarms exclusive=1 soft_ne_product=1 "
   */
  /* Grep: serial: soft retreentrant — Wave 64 return-reentrant honesty */
 kprintf("serial: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=64 "
+        "never_blocks_m0=1 wave=65 "
         "(retreentrant honesty; Soft≠product; not bar3)\n");
  /* Grep: serial: soft retsallyport — Wave 64 exclusive sallyport stamp */
 kprintf("serial: soft retsallyport exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=64 "
+        "product_kernel=OPEN bar3=0 wave=65 "
         "(retsallyport stamp; Soft≠product)\n");
+ /*
+  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
+  * Return surfaces only — soft inventory; never hard-gates product paths.
+  * Soft≠product; not bar3.
+  */
+ /* Grep: serial: soft retgorgeangle — Wave 65 return-gorgeangle honesty */
+kprintf("serial: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=65 "
+        "(retgorgeangle honesty; Soft≠product; not bar3)\n");
+ /* Grep: serial: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp */
+kprintf("serial: soft retshoulderangle exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=65 "
+        "(retshoulderangle stamp; Soft≠product)\n");
                             kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"
             "lamps,stats,mcr,float,honesty,"

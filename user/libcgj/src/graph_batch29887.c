@@ -1,0 +1,86 @@
+/*
+ * SPDX-License-Identifier: MIT OR Apache-2.0
+ * Copyright (c) 2026 Project GreenJade contributors
+ *
+ * Desktop glibc graph batch29887: continuum tone soft unit + batch id.
+ *
+ * Surface (unique symbols):
+ *   uint32_t gj_batch_id_29887(void);
+ *     - Returns the compile-time graph batch number for this TU (29887).
+ *   uint32_t gj_tone_u_29887(void);
+ *     - Returns 1 (small unique soft helper for continuum fill).
+ *   uint32_t __gj_batch_id_29887  (alias)
+ *   uint32_t __gj_tone_u_29887  (alias)
+ *   __libcgj_batch29887_marker = "libcgj-batch29887"
+ *
+ * Exclusive continuum CREATE-ONLY (29876-29900 wave toward MILESTONE
+ * 29900). Unique surface only; no multi-def. Distinct from prior
+ * gj_batch_id_* and sibling soft units. No parent wires.
+ * No __int128.
+ *
+ * Soft continuum only: fill helpers are compile-time lamps, not runtime
+ * product probes. bar3 / product score remain open at milestone markers.
+ *
+ * Clean-room freestanding pure C (integer only). Compiles with
+ * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no
+ * libc. No third-party source copied.
+ */
+
+#include <stddef.h>
+#include <stdint.h>
+
+const char __libcgj_batch29887_marker[] = "libcgj-batch29887";
+
+/* Batch identity. */
+#define B29887_ID  29887u
+/* Soft unit lamp: always on (compile-time fill tag). */
+#define B29887_UNIT  1u
+
+/* ---- freestanding helpers ---------------------------------------------- */
+
+static uint32_t
+b29887_id(void)
+{
+	return B29887_ID;
+}
+
+static uint32_t
+b29887_tone(void)
+{
+	return B29887_UNIT;
+}
+
+/* ---- public surface ---------------------------------------------------- */
+
+/*
+ * gj_batch_id_29887 - soft continuum surface
+ *
+ * Always returns 29887u. Soft pure-data product tag. Does not call
+ * libc. No parent wires.
+ */
+uint32_t
+gj_batch_id_29887(void)
+{
+	(void)NULL;
+	return b29887_id();
+}
+
+/*
+ * gj_tone_u_29887 - small unique soft helper
+ *
+ * Always returns 1u. Soft pure-data product tag. Does not call
+ * libc. No parent wires.
+ */
+uint32_t
+gj_tone_u_29887(void)
+{
+	return b29887_tone();
+}
+
+/* ---- underscored aliases ----------------------------------------------- */
+
+uint32_t __gj_batch_id_29887(void)
+    __attribute__((alias("gj_batch_id_29887")));
+
+uint32_t __gj_tone_u_29887(void)
+    __attribute__((alias("gj_tone_u_29887")));

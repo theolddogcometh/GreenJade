@@ -4,8 +4,8 @@
  *
  * storaged — host POSIX software-image smoke (A1 CI path).
  *
- * Soft inventory (Wave 63 exclusive deepen — greppable "storaged: soft …"):
- *   storaged: soft inventory … / soft deepen wave=63 …
+ * Soft inventory (Wave 64 exclusive deepen — greppable "storaged: soft …"):
+ *   storaged: soft inventory … / soft deepen wave=64 …
  *   multi_server=0 confine=0; soft ≠ product multi-server confine; not bar3.
  *
  * Exercises door-shaped sector R/W against an in-process 32 KiB image so CI
@@ -399,20 +399,20 @@ main(void)
     cSoft++;
     printf("storaged: free soft ok soft_steps=%u\n", cSoft);
 
-    /* Grep: storaged: soft inventory (Wave 63 exclusive deepen) */
-/* Wave 63 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retdoubletenaille continuum_toward=20500 soft_ne_product=1
- *   greppable: soft retplaceofarms exclusive=1 continuum_toward=20500
+    /* Grep: storaged: soft inventory (Wave 64 exclusive deepen) */
+/* Wave 64 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retreentrant continuum_toward=20600 soft_ne_product=1
+ *   greppable: soft retsallyport exclusive=1 continuum_toward=20600
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
     printf("storaged: soft inventory soft_steps=%u sectors=%u io=%u "
-           "wave=63 multi_server=0 confine=0\n",
+           "wave=64 multi_server=0 confine=0\n",
            cSoft, (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);
-    printf("storaged: soft deepen product_kernel=OPEN wave=63 areas=1 multi_server=0 "
+    printf("storaged: soft deepen product_kernel=OPEN wave=64 areas=1 multi_server=0 "
            "confine=0 bar3=0\n");
     printf("storaged: soft honesty multi_server=0 confine=0 bar3=0 "
-           "exclusive=1 soft=1 product_kernel=OPEN wave=63\n");
+           "exclusive=1 soft=1 product_kernel=OPEN wave=64\n");
 
     printf("storaged: door-shaped multi-lba ok sectors=%u io=%u\n",
            (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);

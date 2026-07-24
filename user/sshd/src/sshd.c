@@ -351,19 +351,19 @@ main(int argc, char **argv)
 	}
 	printf("sshd: authorized_keys soft PASS\n");
 
-	/* Grep: sshd: soft inventory (Wave 63 exclusive deepen; host smoke) */
-/* Wave 63 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retdoubletenaille continuum_toward=20500 soft_ne_product=1
- *   greppable: soft retplaceofarms exclusive=1 continuum_toward=20500
+	/* Grep: sshd: soft inventory (Wave 64 exclusive deepen; host smoke) */
+/* Wave 64 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retreentrant continuum_toward=20600 soft_ne_product=1
+ *   greppable: soft retsallyport exclusive=1 continuum_toward=20600
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-	printf("sshd: soft inventory authorized_keys=1 kexinit=soft wave=63 "
+	printf("sshd: soft inventory authorized_keys=1 kexinit=soft wave=64 "
 	       "multi_server=0 confine=0\n");
-	printf("sshd: soft deepen product_kernel=OPEN wave=63 areas=1 multi_server=0 confine=0 "
+	printf("sshd: soft deepen product_kernel=OPEN wave=64 areas=1 multi_server=0 confine=0 "
 	       "bar3=0\n");
 	printf("sshd: soft honesty multi_server=0 confine=0 bar3=0 "
-	       "exclusive=1 soft=1 product_kernel=OPEN wave=63\n");
+	       "exclusive=1 soft=1 product_kernel=OPEN wave=64\n");
 
 	if (fListen) {
 		return run_listen_loop(nPort);

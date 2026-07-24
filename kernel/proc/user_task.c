@@ -24,7 +24,7 @@
  *   user: soft return …      (Wave 19 return-path catalog)
  *   user: soft ret_surface … (Wave 19 terminal return classes)
  *   user: soft surface …     (Wave 19 area catalog)
- *   user: soft deepen wave=52 …
+ *   user: soft deepen wave=53 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -65,7 +65,7 @@ static int g_fUserMapped;
 static int g_fPersMapped;
 
 /* ---- Soft map / enter counters (grep: user: soft …) Wave 19 ----------- */
-#define GJ_USER_SOFT_WAVE 52u
+#define GJ_USER_SOFT_WAVE 53u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -452,7 +452,7 @@ user_soft_inventory(const char *szVia)
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user_task: soft retmap — Wave 19 return-surface map */
-    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=52\n");
+    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=53\n");
 
     /* Grep: user_task: soft deepen */
     /*
@@ -892,11 +892,11 @@ kprintf("user_task: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("user_task: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("user_task: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -906,11 +906,11 @@ kprintf("user_task: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("user_task: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("user_task: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -920,11 +920,11 @@ kprintf("user_task: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("user_task: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("user_task: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -933,11 +933,11 @@ kprintf("user_task: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft retsally — Wave 50 return-sally honesty */
 kprintf("user_task: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("user_task: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -946,11 +946,11 @@ kprintf("user_task: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("user_task: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("user_task: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -960,12 +960,25 @@ kprintf("user_task: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: user_task: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("user_task: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: user_task: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("user_task: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdemilune stamp; Soft≠product)\n");
+/*
+ * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: user_task: soft retravelin — Wave 53 return-travelin honesty */
+kprintf("user_task: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=53 "
+        "(retravelin honesty; Soft≠product; not bar3)\n");
+/* Grep: user_task: soft retlunette — Wave 53 exclusive lunette stamp */
+kprintf("user_task: soft retlunette exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=53 "
+        "(retlunette stamp; Soft≠product)\n");
 
 
 

@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 52u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 53u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -996,11 +996,11 @@ kprintf("cpu: syscall: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("cpu: syscall: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("cpu: syscall: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1010,11 +1010,11 @@ kprintf("cpu: syscall: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("cpu: syscall: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("cpu: syscall: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1024,11 +1024,11 @@ kprintf("cpu: syscall: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("cpu: syscall: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("cpu: syscall: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1037,11 +1037,11 @@ kprintf("cpu: syscall: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft retsally — Wave 50 return-sally honesty */
 kprintf("cpu: syscall: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("cpu: syscall: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1050,11 +1050,11 @@ kprintf("cpu: syscall: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("cpu: syscall: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("cpu: syscall: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1064,12 +1064,25 @@ kprintf("cpu: syscall: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cpu: syscall: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("cpu: syscall: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: syscall: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("cpu: syscall: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdemilune stamp; Soft≠product)\n");
+/*
+ * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cpu: syscall: soft retravelin — Wave 53 return-travelin honesty */
+kprintf("cpu: syscall: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=53 "
+        "(retravelin honesty; Soft≠product; not bar3)\n");
+/* Grep: cpu: syscall: soft retlunette — Wave 53 exclusive lunette stamp */
+kprintf("cpu: syscall: soft retlunette exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=53 "
+        "(retlunette stamp; Soft≠product)\n");
 
 
 

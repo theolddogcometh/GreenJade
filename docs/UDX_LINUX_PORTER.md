@@ -8,7 +8,7 @@
 | **Code** | `user/udx/` |
 | **Build** | `make udx` → `build/libudx.a` · `make udx-example` |
 | **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 6, 16 · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) (games ICD uses GPU host; drivers stay UDX) |
-| **Honesty (Wave 52)** | Host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 19400** soft only; product lamps **0** (13) |
+| **Honesty (Wave 53)** | Host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 19500** soft only; product lamps **0** (13) |
 
 ---
 
@@ -206,16 +206,16 @@ make udx-example   # build/udx_skeleton
 
 ---
 
-## 13. Soft status / honesty bounds (Wave 52 · 2026-07-23)
+## 13. Soft status / honesty bounds (Wave 53 · 2026-07-23)
 
-**Additive only (Wave 52 exclusive for this file).** Porter contract 1–12 stay **Accepted**. This section is a Wave 52 honesty ledger: host/sim UDX soft path vs full GreenJade grants, multi-server product, and Steam **bar3**. Wave 47 soft-status text is superseded here under Wave 52 exclusive ownership of this file’s honesty ledger. It does **not** re-litigate the Linux-shaped API map or invent product driver completion.
+**Additive only (Wave 53 exclusive for this file).** Porter contract 1–12 stay **Accepted**. This section is a Wave 53 honesty ledger: host/sim UDX soft path vs full GreenJade grants, multi-server product, and Steam **bar3**. Wave 52 soft-status text is superseded here under Wave 53 exclusive ownership of this file’s honesty ledger. It does **not** re-litigate the Linux-shaped API map or invent product driver completion.
 
 | Item | State |
 |------|--------|
 | **UDX host soft path** | Present — `make udx` → `libudx.a`, host inject / fire_irq, skeleton example |
 | **Full GJ grants (PCI/IRQ/DMA)** | **Open** — see 12 Host vs Full GJ |
 | **Product multi-server confine** | **Open** — UDX soft path does **not** close multi-server confine product |
-| **Soft continuum** | High-water **advancing toward 19400** CREATE-ONLY parent wire only — **not** UDX product; **not** bar3 |
+| **Soft continuum** | High-water **advancing toward 19500** CREATE-ONLY parent wire only — **not** UDX product; **not** bar3 |
 | **Product lamps** | Remain **0** by design |
 | **bar3 / Steam client** | **Out of scope** for this doc — no claim; **bar3 remains OPEN** |
 
@@ -223,13 +223,13 @@ make udx-example   # build/udx_skeleton
 |--------------|------------|--------------------|
 | Host inject / `udx_host_fire_irq` / skeleton | Clean-room Linux-shaped porter develop path | Full GJ MMIO FRAME / IOMMU window / Notification product |
 | `make udx` / `libudx.a` | Host archive for porters | Multi-server confined driver host product |
-| Continuum **toward 19400** | Soft graph wire only | UDX product complete; Steam client; matrix fill |
+| Continuum **toward 19500** | Soft graph wire only | UDX product complete; Steam client; matrix fill |
 
-**Hard stamp (Wave 52):** UDX host soft path **≠** full GJ grants **≠** product multi-server **≠** bar3. Soft continuum **toward 19400** does **not** close UDX product. Product lamps **0**. **Soft ≠ product complete.**
+**Hard stamp (Wave 53):** UDX host soft path **≠** full GJ grants **≠** product multi-server **≠** bar3. Soft continuum **toward 19500** does **not** close UDX product. Product lamps **0**. **Soft ≠ product complete.**
 
-**Soft stamp (2026-07-23 / Wave 52):** UDX remains a **host/sim soft path** for clean-room Linux-shaped ports. Host inject ≠ product multi-server confine. Multi-server confine product path stays **open**. Continuum soft gates **≠** UDX product. **No bar3 claim.**
+**Soft stamp (2026-07-23 / Wave 53):** UDX remains a **host/sim soft path** for clean-room Linux-shaped ports. Host inject ≠ product multi-server confine. Multi-server confine product path stays **open**. Continuum soft gates **≠** UDX product. **No bar3 claim.**
 
-### Explicit non-claims (Wave 52)
+### Explicit non-claims (Wave 53)
 
 | Claim | Allowed? |
 |-------|----------|
@@ -237,10 +237,10 @@ make udx-example   # build/udx_skeleton
 | “Host soft path greppable (`make udx`, skeleton)” | **Yes** — host/sim only |
 | “Full GJ PCI/IRQ/DMA grants product-complete” | **No** |
 | “UDX soft path = multi-server confine closed” | **No** |
-| “Continuum toward 19400 closes UDX product or bar3” | **No** |
+| “Continuum toward 19500 closes UDX product or bar3” | **No** |
 | Any **bar3** closed claim from UDX alone | **No** |
 
 ---
 
 *UDX = Linux-shaped surface, DDI quiesce, GreenJade security underneath.*  
-*13 Wave 52 honesty (2026-07-23): host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 19400 soft only**; product lamps **0**; **soft ≠ product complete**.*
+*13 Wave 53 honesty (2026-07-23): host soft path ≠ full GJ grants / multi-server / bar3; continuum **toward 19500 soft only**; product lamps **0**; **soft ≠ product complete**.*

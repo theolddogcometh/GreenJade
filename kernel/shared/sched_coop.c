@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 52 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 53 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -22,7 +22,7 @@
  *   coop: soft path        — surface catalog + non-claims
  *   coop: soft geom        — Wave 19 max_thr/stack/frame geometry
  *   coop: soft return      — Wave 19 API return surfaces + product_kernel=OPEN
- *   coop: soft deepen      — wave=52 stamp + area count
+ *   coop: soft deepen      — wave=53 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
@@ -30,8 +30,8 @@
 #include <gj/sched_coop.h>
 #include <gj/string.h>
 
-/* Wave 52 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 52u
+/* Wave 53 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 53u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -777,11 +777,11 @@ kprintf("coop: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("coop: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("coop: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -791,11 +791,11 @@ kprintf("coop: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("coop: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("coop: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -805,11 +805,11 @@ kprintf("coop: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("coop: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("coop: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -818,11 +818,11 @@ kprintf("coop: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft retsally — Wave 50 return-sally honesty */
 kprintf("coop: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("coop: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -831,11 +831,11 @@ kprintf("coop: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("coop: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("coop: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -845,12 +845,25 @@ kprintf("coop: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: coop: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("coop: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("coop: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdemilune stamp; Soft≠product)\n");
+/*
+ * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: coop: soft retravelin — Wave 53 return-travelin honesty */
+kprintf("coop: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=53 "
+        "(retravelin honesty; Soft≠product; not bar3)\n");
+/* Grep: coop: soft retlunette — Wave 53 exclusive lunette stamp */
+kprintf("coop: soft retlunette exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=53 "
+        "(retlunette stamp; Soft≠product)\n");
 
 
 

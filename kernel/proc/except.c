@@ -34,7 +34,7 @@
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 52u
+#define GJ_EXCEPT_SOFT_WAVE 53u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -212,7 +212,7 @@ soft_inventory_log(void)
             GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft retmap — Wave 19 return-surface map */
-    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=52\n");
+    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=53\n");
 
     /* Grep: except: soft deepen */
     /*
@@ -652,11 +652,11 @@ kprintf("except: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("except: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("except: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -666,11 +666,11 @@ kprintf("except: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("except: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("except: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -680,11 +680,11 @@ kprintf("except: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("except: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("except: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -693,11 +693,11 @@ kprintf("except: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft retsally — Wave 50 return-sally honesty */
 kprintf("except: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("except: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -706,11 +706,11 @@ kprintf("except: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("except: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("except: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -720,12 +720,25 @@ kprintf("except: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: except: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("except: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=52 "
+        "never_blocks_m0=1 wave=53 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: except: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("except: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=52 "
+        "product_kernel=OPEN bar3=0 wave=53 "
         "(retdemilune stamp; Soft≠product)\n");
+/*
+ * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: except: soft retravelin — Wave 53 return-travelin honesty */
+kprintf("except: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=53 "
+        "(retravelin honesty; Soft≠product; not bar3)\n");
+/* Grep: except: soft retlunette — Wave 53 exclusive lunette stamp */
+kprintf("except: soft retlunette exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=53 "
+        "(retlunette stamp; Soft≠product)\n");
 
 
 

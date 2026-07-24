@@ -17,7 +17,7 @@
  *     (user vs ksmoke path). Diagnostics only; never hard-gate.
  *     greppable: native: soft stats
  *
- * Soft inventory (Wave 11/14 base + Wave 30 exclusive deepen; this unit only):
+ * Soft inventory (Wave 11/14 base + Wave 31 exclusive deepen; this unit only):
  *   native: soft inventory   — entry/handled/nosupport + caps + log_n
  *   native: soft stats       — aggregate rollup (legacy greppable line)
  *   native: soft outcome     — ok/err + GJ_ERR_* buckets
@@ -42,7 +42,7 @@
  *   native: soft notify      — NOTIFY_WAIT
  *   native: soft rates       — handled/nosupport/err basis points
  *   native: soft honesty     — hybrid open; not bar3
- *   native: soft deepen      — wave=30 area stamp
+ *   native: soft deepen      — wave=31 area stamp
  *   native: soft edge        — Wave 15 entries/null/handled combined
  *   native: soft share       — Wave 15 door/class share lamps
  *   native: soft catalog     — Wave 19 surface catalog stamp
@@ -95,7 +95,7 @@ extern struct gj_process *g_pLinuxProc;
 static struct gj_native_dispatch_stats g_nativeStats;
 
 /*
- * Wave 11/14 base + Wave 30 exclusive deepen (file-local; never hard-gates).
+ * Wave 11/14 base + Wave 31 exclusive deepen (file-local; never hard-gates).
  * Per-op tallies for multi-op GJ_SYS_* surfaces + inventory emission count.
  * greppable: native: soft …
  */
@@ -158,8 +158,8 @@ struct native_soft_deep {
 };
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define NATIVE_SOFT_WAVE  30u
-#define NATIVE_SOFT_AREAS 54u
+#define NATIVE_SOFT_WAVE 31u
+#define NATIVE_SOFT_AREAS 56u
 
 static struct native_soft_deep g_nativeDeep;
 /* One-shot multi-line inventory after first non-null dispatch (soft). */
@@ -528,12 +528,12 @@ native_soft_inventory_log(void)
             NATIVE_SOFT_AREAS, (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft note (Wave 20 deepen) */
-    kprintf("native: soft note milestone=wave30 exclusive=1 "
+    kprintf("native: soft note milestone=wave31 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft retmap — Wave 19 return-surface map */
-    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
+    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=31\n");
 
     /* Grep: native: soft deepen */
     /* Grep: native: soft edge (Wave 20 deepen) */
@@ -742,19 +742,39 @@ native_soft_inventory_log(void)
                                     "(retscepter stamp; Soft≠product)\n",
                                     (unsigned)NATIVE_SOFT_WAVE);
                                 /*
-                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: native: soft retsigil — Wave 30 return-sigil honesty */
+                            /* Grep: native: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("native: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retsigil honesty; Soft≠product; not bar3)\n",
                                     (unsigned)NATIVE_SOFT_WAVE);
-                            /* Grep: native: soft retemblem — Wave 30 exclusive emblem stamp */
+                            /* Grep: native: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("native: soft retemblem exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retemblem stamp; Soft≠product)\n",
+                                    (unsigned)NATIVE_SOFT_WAVE);
+                            /*
+                             * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: native: soft retaegis — Wave 31 return-aegis honesty */
+                            kprintf("native: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retaegis honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)NATIVE_SOFT_WAVE);
+                            /* Grep: native: soft retsigil — Wave 30 return-sigil honesty (kept) */
+                            kprintf("native: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)NATIVE_SOFT_WAVE);
+                            /* Grep: native: soft retmantle — Wave 31 exclusive mantle stamp */
+                            kprintf("native: soft retmantle exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)NATIVE_SOFT_WAVE);
                             kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "

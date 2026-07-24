@@ -12,7 +12,7 @@
  *   - bind EADDRINUSE when port taken without reuse
  *   - soft stats + live-table inventory (grep: "net: lo soft")
  *
- * Soft inventory (Wave 14 base; Wave 30 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14 base; Wave 31 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   Lifetime path / ring / sockopt tallies (struct net_lo_soft).
@@ -30,7 +30,7 @@
  *     net: lo soft ratio …      — Wave 15 occupancy / fail basis points
  *     net: lo soft headroom …   — Wave 15 free slots + log caps
  *     net: lo soft surface …    — Wave 15 area catalog
- *     net: lo soft deepen …     — wave=30 areas stamp
+ *     net: lo soft deepen …     — wave=31 areas stamp
  *     net: lo soft slot=…
  *     net: lo soft init|listen|accept|emfile …
  *     net: lo soft PASS …
@@ -321,7 +321,7 @@ lo_soft_print(int fForce)
             "stream=%u dgram=%u pending=%u rx_bytes=%u shut_rd=%u "
             "shut_wr=%u reuse=%u hwm=%llu max=%u fd_base=%u buf=%u "
             "backlog_max=%u logs=%u skip=%llu event_n=%u event_skip=%llu "
-            "wave=30\n",
+            "wave=31\n",
             cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
             cShutRd, cShutWr, cReuse,
             (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
@@ -333,7 +333,7 @@ lo_soft_print(int fForce)
     /* Grep: net_lo: soft inventory (twin prefix) */
     kprintf("net_lo: soft inventory used=%u free=%u listen=%u conn=%u "
             "stream=%u dgram=%u pending=%u rx_bytes=%u hwm=%llu max=%u "
-            "fd_base=%u buf=%u logs=%u wave=30\n",
+            "fd_base=%u buf=%u logs=%u wave=31\n",
             cUsed, cFree, cListen, cConn, cStream, cDgram, cPending, cRx,
             (unsigned long long)s.u64HwmUsed, (unsigned)NET_LO_MAX,
             (unsigned)NET_FD_BASE, (unsigned)NET_LO_BUF, g_soft.u32SoftLogN);
@@ -350,7 +350,7 @@ lo_soft_print(int fForce)
 
     /* Grep: net_lo: soft sock (twin) */
     kprintf("net_lo: soft sock ok=%llu fail=%llu inet=%llu unix=%llu "
-            "stream=%llu dgram=%llu hwm=%llu max=%u wave=30\n",
+            "stream=%llu dgram=%llu hwm=%llu max=%u wave=31\n",
             (unsigned long long)s.u64SockOk,
             (unsigned long long)s.u64SockFail,
             (unsigned long long)s.u64SockInet,
@@ -366,7 +366,7 @@ lo_soft_print(int fForce)
             (unsigned long long)s.u64EaddrInuse);
 
     /* Grep: net_lo: soft bind (twin) */
-    kprintf("net_lo: soft bind ok=%llu fail=%llu eaddr=%llu wave=30\n",
+    kprintf("net_lo: soft bind ok=%llu fail=%llu eaddr=%llu wave=31\n",
             (unsigned long long)s.u64BindOk,
             (unsigned long long)s.u64BindFail,
             (unsigned long long)s.u64EaddrInuse);
@@ -398,7 +398,7 @@ lo_soft_print(int fForce)
     /* Grep: net_lo: soft life (twin) */
     kprintf("net_lo: soft life listen=%llu conn=%llu conn_again=%llu "
             "conn_orphan=%llu accept=%llu accept_again=%llu "
-            "shut=%llu close=%llu close_half=%llu wave=30\n",
+            "shut=%llu close=%llu close_half=%llu wave=31\n",
             (unsigned long long)s.u64ListenOk,
             (unsigned long long)s.u64ConnOk,
             (unsigned long long)s.u64ConnAgain,
@@ -427,7 +427,7 @@ lo_soft_print(int fForce)
     /* Grep: net_lo: soft xfer (twin) */
     kprintf("net_lo: soft xfer send=%llu send_pipe=%llu send_self=%llu "
             "recv=%llu recv_again=%llu recv_eof=%llu tx=%llu rx=%llu "
-            "wave=30\n",
+            "wave=31\n",
             (unsigned long long)s.u64SendOk,
             (unsigned long long)s.u64SendPipe,
             (unsigned long long)s.u64SendSelf,
@@ -460,7 +460,7 @@ lo_soft_print(int fForce)
 
     /* Grep: net_lo: soft opt (twin) */
     kprintf("net_lo: soft opt set=%llu get=%llu reuse=%llu reusep=%llu "
-            "sndbuf=%llu rcvbuf=%llu linger=%llu noop=%llu wave=30\n",
+            "sndbuf=%llu rcvbuf=%llu linger=%llu noop=%llu wave=31\n",
             (unsigned long long)s.u64SetoptOk,
             (unsigned long long)s.u64GetoptOk,
             (unsigned long long)s.u64OptReuse,
@@ -480,7 +480,7 @@ lo_soft_print(int fForce)
 
     /* Grep: net_lo: soft name (twin) */
     kprintf("net_lo: soft name ok=%llu fail=%llu peer_ok=%llu "
-            "peer_fail=%llu wave=30\n",
+            "peer_fail=%llu wave=31\n",
             (unsigned long long)s.u64NameOk,
             (unsigned long long)s.u64NameFail,
             (unsigned long long)s.u64PeerOk,
@@ -496,7 +496,7 @@ lo_soft_print(int fForce)
 
     /* Grep: net_lo: soft ring (twin) */
     kprintf("net_lo: soft ring buf=%u push_full=%llu push_partial=%llu "
-            "rx_live=%u rcv_def=%u snd_def=%u wave=30\n",
+            "rx_live=%u rcv_def=%u snd_def=%u wave=31\n",
             (unsigned)NET_LO_BUF,
             (unsigned long long)s.u64PushFull,
             (unsigned long long)s.u64PushPartial, cRx,
@@ -563,7 +563,7 @@ lo_soft_print(int fForce)
     kprintf("net_lo: soft stats ops=%llu sock=%llu sock_fail=%llu "
             "bind=%llu eaddr=%llu listen=%llu conn=%llu conn_again=%llu "
             "conn_orphan=%llu accept=%llu send=%llu recv=%llu "
-            "close=%llu dumps=%llu skip=%llu wave=30\n",
+            "close=%llu dumps=%llu skip=%llu wave=31\n",
             (unsigned long long)s.u64Ops,
             (unsigned long long)s.u64SockOk,
             (unsigned long long)s.u64SockFail,
@@ -593,13 +593,13 @@ lo_soft_print(int fForce)
     kprintf("net_lo: soft path sock=af_inet|af_unix stream|dgram "
             "bind=eaddr_reuse listen=backlog_soft conn=pair|orphan|again "
             "accept=mint xfer=peer_ring|self_dgram shut=rd|wr|rdwr "
-            "opt=sol_socket_subset fd=%u..%u wave=30 "
+            "opt=sol_socket_subset fd=%u..%u wave=31 "
             "(soft inventory; not bar3)\n",
             (unsigned)NET_FD_BASE,
             (unsigned)(NET_FD_BASE + NET_LO_MAX - 1u));
 
     /*
-     * Wave 30 exclusive deepen (complementary; primary lines field-stable).
+     * Wave 31 exclusive deepen (complementary; primary lines field-stable).
      * greppable: net: lo soft ratio|headroom|surface|deepen
      */
     {
@@ -636,63 +636,63 @@ lo_soft_print(int fForce)
         }
         /* Grep: net: lo soft ratio */
         kprintf("net: lo soft ratio occ_bp=%u listen_bp=%u conn_bp=%u "
-                "sock_fail_bp=%u bind_fail_bp=%u used=%u free=%u wave=30\n",
+                "sock_fail_bp=%u bind_fail_bp=%u used=%u free=%u wave=31\n",
                 u32OccBp, u32ListenBp, u32ConnBp, u32SockFailBp,
                 u32BindFailBp, cUsed, cFree);
         /* Grep: net_lo: soft ratio (twin) */
         kprintf("net_lo: soft ratio occ_bp=%u listen_bp=%u conn_bp=%u "
-                "sock_fail_bp=%u bind_fail_bp=%u wave=30\n",
+                "sock_fail_bp=%u bind_fail_bp=%u wave=31\n",
                 u32OccBp, u32ListenBp, u32ConnBp, u32SockFailBp,
                 u32BindFailBp);
         /* Grep: net: lo soft headroom */
         kprintf("net: lo soft headroom free=%u free_head=%u max=%u "
                 "log_head=%u log_max=%u event_max=%u backlog_max=%u "
-                "wave=30\n",
+                "wave=31\n",
                 cFree, u32FreeHead, (u32)NET_LO_MAX, u32LogHead,
                 (u32)NET_LO_SOFT_LOG_MAX, (u32)NET_LO_SOFT_EVENT_MAX,
                 (u32)NET_LO_BACKLOG_MAX);
         /* Grep: net_lo: soft headroom (twin) */
         kprintf("net_lo: soft headroom free=%u free_head=%u max=%u "
-                "log_head=%u wave=30\n",
+                "log_head=%u wave=31\n",
                 cFree, u32FreeHead, (u32)NET_LO_MAX, u32LogHead);
         /* Grep: net: lo soft surface */
         kprintf("net: lo soft surface inventory,sock,bind,life,xfer,opt,"
                 "name,ring,stats,path,ratio,headroom,capacity,geom,"
-                "terminal,return,retmap,deepen,slot,PASS areas=24 wave=30\n");
+                "terminal,return,retmap,deepen,slot,PASS areas=26 wave=31\n");
         /* Grep: net_lo: soft surface (twin) */
         kprintf("net_lo: soft surface inventory,sock,bind,life,xfer,opt,"
                 "name,ring,stats,path,ratio,headroom,capacity,geom,"
-                "terminal,return,retmap,deepen,slot,PASS areas=24 wave=30\n");
+                "terminal,return,retmap,deepen,slot,PASS areas=26 wave=31\n");
         /* Grep: net: lo soft capacity — Wave 19 design-constant lamps. */
         kprintf("net: lo soft capacity max=%u backlog_max=%u "
-                "log_max=%u event_max=%u buf_def=1 wave=30\n",
+                "log_max=%u event_max=%u buf_def=1 wave=31\n",
                 (u32)NET_LO_MAX, (u32)NET_LO_BACKLOG_MAX,
                 (u32)NET_LO_SOFT_LOG_MAX, (u32)NET_LO_SOFT_EVENT_MAX);
         /* Grep: net_lo: soft capacity (twin) */
         kprintf("net_lo: soft capacity max=%u backlog_max=%u "
-                "log_max=%u wave=30\n",
+                "log_max=%u wave=31\n",
                 (u32)NET_LO_MAX, (u32)NET_LO_BACKLOG_MAX,
                 (u32)NET_LO_SOFT_LOG_MAX);
         /* Grep: net: lo soft geom — Wave 16 table geometry lamps. */
         kprintf("net: lo soft geom used=%u free=%u listen=%u conn=%u "
-                "max=%u free_head=%u wave=30\n",
+                "max=%u free_head=%u wave=31\n",
                 cUsed, cFree, cListen, cConn, (u32)NET_LO_MAX, u32FreeHead);
         /* Grep: net_lo: soft geom (twin) */
         kprintf("net_lo: soft geom used=%u free=%u listen=%u conn=%u "
-                "wave=30\n",
+                "wave=31\n",
                 cUsed, cFree, cListen, cConn);
         /* Grep: net: lo soft terminal — Wave 19 outcome rollup. */
         kprintf("net: lo soft terminal used=%u free=%u listen=%u conn=%u "
-                "logs=%u soft PASS wave=30\n",
+                "logs=%u soft PASS wave=31\n",
                 cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
         /* Grep: net_lo: soft terminal (twin) */
         kprintf("net_lo: soft terminal used=%u free=%u listen=%u conn=%u "
-                "soft PASS wave=30\n",
+                "soft PASS wave=31\n",
                 cUsed, cFree, cListen, cConn);
         /* Grep: net: lo soft return — Wave 19 API return surfaces */
         kprintf("net: lo soft return sock_ok=%llu sock_fail=%llu "
                 "bind_ok=%llu bind_fail=%llu send_ok=%llu recv_ok=%llu "
-                "close_ok=%llu used=%u free=%u product_loopback=OPEN wave=30\n",
+                "close_ok=%llu used=%u free=%u product_loopback=OPEN wave=31\n",
                 (unsigned long long)s.u64SockOk,
                 (unsigned long long)s.u64SockFail,
                 (unsigned long long)s.u64BindOk,
@@ -702,7 +702,7 @@ lo_soft_print(int fForce)
                 (unsigned long long)s.u64CloseOk, cUsed, cFree);
         /* Grep: net_lo: soft return (twin) */
         kprintf("net_lo: soft return sock_ok=%llu bind_ok=%llu send_ok=%llu "
-                "recv_ok=%llu used=%u product_loopback=OPEN wave=30\n",
+                "recv_ok=%llu used=%u product_loopback=OPEN wave=31\n",
                 (unsigned long long)s.u64SockOk,
                 (unsigned long long)s.u64BindOk,
                 (unsigned long long)s.u64SendOk,
@@ -866,39 +866,56 @@ lo_soft_print(int fForce)
                                  */
                                 /* Grep: net: lo: soft retglyph — Wave 29 return-glyph honesty (kept) */
                                 kprintf("net: lo: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=30 "
+                                        "never_blocks_m0=1 wave=31 "
                                         "(retglyph honesty; Soft≠product; not bar3)\n");
                                 /* Grep: net: lo: soft retscepter — Wave 29 scepter stamp (kept) */
                                 kprintf("net: lo: soft retscepter exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN bar3=0 wave=30 "
+                                        "product_kernel=OPEN bar3=0 wave=31 "
                                         "(retscepter stamp; Soft≠product)\n");
                                         /*
-                                 * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                                 * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
                                  * Return surfaces only — soft inventory; never hard-gates product paths.
                                  * Soft≠product; not bar3.
                                  */
-                                /* Grep: net: lo: soft retsigil — Wave 30 return-sigil honesty */
+                                /* Grep: net: lo: soft retsigil — Wave 30 return-sigil honesty (kept) */
                                 kprintf("net: lo: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                        "never_blocks_m0=1 wave=30 "
+                                        "never_blocks_m0=1 wave=31 "
                                         "(retsigil honesty; Soft≠product; not bar3)\n");
-                                /* Grep: net: lo: soft retemblem — Wave 30 exclusive emblem stamp */
+                                /* Grep: net: lo: soft retemblem — Wave 30 emblem stamp (kept) */
                                 kprintf("net: lo: soft retemblem exclusive=1 soft_ne_product=1 "
-                                        "product_kernel=OPEN bar3=0 wave=30 "
+                                        "product_kernel=OPEN bar3=0 wave=31 "
                                         "(retemblem stamp; Soft≠product)\n");
-                                kprintf("net: lo soft deepen wave=30 areas=26 used=%u free=%u "
+                                /*
+                                 * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                                 * Return surfaces only — soft inventory; never hard-gates product paths.
+                                 * Soft≠product; not bar3.
+                                 */
+                                /* Grep: net: lo: soft retaegis — Wave 31 return-aegis honesty */
+                                kprintf("net: lo: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
+                                        "never_blocks_m0=1 wave=31 "
+                                        "(retaegis honesty; Soft≠product; not bar3)\n");
+                                /* Grep: net: lo: soft retsigil — Wave 30 return-sigil honesty (kept) */
+                                kprintf("net: lo: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                        "never_blocks_m0=1 wave=31 "
+                                        "(retsigil honesty; Soft≠product; not bar3)\n");
+                                /* Grep: net: lo: soft retmantle — Wave 31 exclusive mantle stamp */
+                                kprintf("net: lo: soft retmantle exclusive=1 soft_ne_product=1 "
+                                        "product_kernel=OPEN bar3=0 wave=31 "
+                                        "(retmantle stamp; Soft≠product)\n");
+                                kprintf("net: lo soft deepen wave=31 areas=28 used=%u free=%u "
                 "listen=%u conn=%u logs=%u\n",
                 cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
         /* Grep: net_lo: soft retmap — Wave 19 return-surface map */
-    kprintf("net_lo: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
+    kprintf("net_lo: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=31\n");
 
     /* Grep: net_lo: soft deepen (twin) */
-        kprintf("net_lo: soft deepen wave=30 areas=26 used=%u free=%u "
+        kprintf("net_lo: soft deepen wave=31 areas=28 used=%u free=%u "
                 "listen=%u conn=%u logs=%u\n",
                 cUsed, cFree, cListen, cConn, g_soft.u32SoftLogN);
     }
 
     /* Grep: net: lo soft PASS */
-    kprintf("net: lo soft PASS wave=30 logs=%u skip=%llu event_n=%u "
+    kprintf("net: lo soft PASS wave=31 logs=%u skip=%llu event_n=%u "
             "event_skip=%llu max=%u event_max=%u force=%u slots=%u "
             "used=%u conn=%u "
             "(soft inventory only; not product gate)\n",
@@ -908,7 +925,7 @@ lo_soft_print(int fForce)
             fForce ? 1u : 0u, fSlots, cUsed, cConn);
 
     /* Grep: net_lo: soft PASS (twin) */
-    kprintf("net_lo: soft PASS wave=30 logs=%u skip=%llu event_n=%u "
+    kprintf("net_lo: soft PASS wave=31 logs=%u skip=%llu event_n=%u "
             "event_skip=%llu max=%u force=%u used=%u "
             "(soft inventory only; not product gate)\n",
             g_soft.u32SoftLogN, (unsigned long long)s.u64LogSkip,
@@ -950,7 +967,7 @@ lo_soft_print(int fForce)
                 (unsigned)(NET_FD_BASE + i));
         /* Grep: net_lo: soft slot (twin; force/first dumps only) */
         kprintf("net_lo: soft slot=%u type=%u port=%u listen=%u conn=%u "
-                "peer=%d rx=%u bl=%u pend=%u fd=%u wave=30\n",
+                "peer=%d rx=%u bl=%u pend=%u fd=%u wave=31\n",
                 i, (unsigned)g_aSocks[i].u8Type,
                 (unsigned)g_aSocks[i].u16Port,
                 (unsigned)g_aSocks[i].u8Listening,
@@ -1005,13 +1022,13 @@ net_lo_init(void)
     kprintf("net_lo: init (loopback + peer ring + sockopt/backlog soft)\n");
     /* Grep: net: lo soft init / net_lo: soft init */
     kprintf("net: lo soft init max=%u fd_base=%u buf=%u backlog_max=%u "
-            "rcv_def=%u snd_def=%u log_max=%u event_max=%u wave=30\n",
+            "rcv_def=%u snd_def=%u log_max=%u event_max=%u wave=31\n",
             (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
             (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
             (unsigned)NET_LO_RCVBUF_DEF, (unsigned)NET_LO_SNDBUF_DEF,
             (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX);
     kprintf("net_lo: soft init max=%u fd_base=%u buf=%u backlog_max=%u "
-            "log_max=%u event_max=%u wave=30\n",
+            "log_max=%u event_max=%u wave=31\n",
             (unsigned)NET_LO_MAX, (unsigned)NET_FD_BASE,
             (unsigned)NET_LO_BUF, (unsigned)NET_LO_BACKLOG_MAX,
             (unsigned)NET_LO_SOFT_LOG_MAX, (unsigned)NET_LO_SOFT_EVENT_MAX);
@@ -1092,7 +1109,7 @@ net_lo_socket(int nDomain, int nType, int nProto)
         kprintf("net: lo soft emfile max=%u ops=%llu used_hwm=%llu\n",
                 (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops,
                 (unsigned long long)g_soft.u64HwmUsed);
-        kprintf("net_lo: soft emfile max=%u ops=%llu wave=30\n",
+        kprintf("net_lo: soft emfile max=%u ops=%llu wave=31\n",
                 (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
     }
     lo_soft_maybe_log(1);
@@ -1184,7 +1201,7 @@ net_lo_listen(i64 i64Fd, int nBacklog)
                 (unsigned)g_aSocks[u32Slot].u8Type,
                 (unsigned long long)g_soft.u64Ops);
         kprintf("net_lo: soft listen fd=%lld port=%u backlog=%u "
-                "type=%u wave=30\n",
+                "type=%u wave=31\n",
                 (long long)i64Fd, (unsigned)g_aSocks[u32Slot].u16Port,
                 (unsigned)g_aSocks[u32Slot].u8Backlog,
                 (unsigned)g_aSocks[u32Slot].u8Type);
@@ -1313,7 +1330,7 @@ net_lo_accept(i64 i64Fd)
                         (unsigned)g_aSocks[u32Slot].u8Pending,
                         (unsigned long long)g_soft.u64Ops);
                 kprintf("net_lo: soft accept listen_fd=%lld new_fd=%u "
-                        "cli_slot=%d port=%u wave=30\n",
+                        "cli_slot=%d port=%u wave=31\n",
                         (long long)i64Fd, (unsigned)(NET_FD_BASE + i),
                         (int)i16Cli, (unsigned)g_aSocks[i].u16Port);
             }
@@ -1327,7 +1344,7 @@ net_lo_accept(i64 i64Fd)
         kprintf("net: lo soft emfile max=%u ops=%llu (accept mint)\n",
                 (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
         kprintf("net_lo: soft emfile max=%u ops=%llu (accept mint) "
-                "wave=30\n",
+                "wave=31\n",
                 (unsigned)NET_LO_MAX, (unsigned long long)g_soft.u64Ops);
     }
     lo_soft_maybe_log(1);

@@ -7,7 +7,7 @@
  * Soft cal observability: multi-sample bus_hz, spin/elapsed telemetry,
  * sticky status tags (GJ_APIC_CAL_*), greppable apic_cal_soft_log().
  *
- * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 30 exclusive deepen;
+ * Soft APIC inventory (Wave 10 base + Wave 12 path + Wave 31 exclusive deepen;
  * this unit only — greppable "apic: soft …"):
  *   apic: soft PASS|PARTIAL|UP|FAIL|NONE …  — primary verdict (Wave 10+)
  *   apic: soft inventory …                  — rollup catalog + wave tag
@@ -42,7 +42,7 @@
  *   apic: soft retmap …                     — Wave 17 return-surface map (kept)
  *   apic: soft return rate — Wave 19 ok/fail rate lamps
  *   apic: soft retcode    — Wave 19 retcode catalog
- *   apic: soft deepen …                     — wave=30 areas stamp
+ *   apic: soft deepen …                     — wave=31 areas stamp
  * Soft only: wrap-OK counters + kprintf; never hard-gates product paths.
  * Hot IRQ path bumps counters only — no kprintf from IRQ handlers.
  * greppable: apic: soft
@@ -101,7 +101,7 @@ static volatile u32        g_u32TlbExpect;
 #define APIC_CAL_WAIT_TICKS   5u /* 50 ms @ 100 Hz per sample */
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define APIC_SOFT_WAVE        30u
+#define APIC_SOFT_WAVE 31u
 #define APIC_SOFT_ICR_SPIN_MAX 1000000u
 
 static volatile u32 *g_pLapic;
@@ -129,7 +129,7 @@ static u32            g_u32HzProgrammed;
 
 /*
  * Soft inventory counters (file-local; wrap OK; diagnostics only).
- * Wave 10 base + Wave 12 path + Wave 30 exclusive deepen.
+ * Wave 10 base + Wave 12 path + Wave 31 exclusive deepen.
  * Hot IRQ path only bumps counters already present — no kprintf.
  * greppable: apic: soft
  * greppable: apic: soft stats
@@ -996,19 +996,39 @@ apic_soft_inventory(const char *szVia)
                                     "(retscepter stamp; Soft≠product)\n",
                                     (unsigned)APIC_SOFT_WAVE);
                                 /*
-                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: apic: soft retsigil — Wave 30 return-sigil honesty */
+                            /* Grep: apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retsigil honesty; Soft≠product; not bar3)\n",
                                     (unsigned)APIC_SOFT_WAVE);
-                            /* Grep: apic: soft retemblem — Wave 30 exclusive emblem stamp */
+                            /* Grep: apic: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("apic: soft retemblem exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retemblem stamp; Soft≠product)\n",
+                                    (unsigned)APIC_SOFT_WAVE);
+                            /*
+                             * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: apic: soft retaegis — Wave 31 return-aegis honesty */
+                            kprintf("apic: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retaegis honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)APIC_SOFT_WAVE);
+                            /* Grep: apic: soft retsigil — Wave 30 return-sigil honesty (kept) */
+                            kprintf("apic: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)APIC_SOFT_WAVE);
+                            /* Grep: apic: soft retmantle — Wave 31 exclusive mantle stamp */
+                            kprintf("apic: soft retmantle exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)APIC_SOFT_WAVE);
                             kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"

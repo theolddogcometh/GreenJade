@@ -14,7 +14,7 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 30 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 31 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
@@ -50,7 +50,7 @@
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE  30u
+#define GJ_COMP_SOFT_WAVE 31u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -66,7 +66,7 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 30 exclusive deepen). Cumulative unless noted
+ * Soft product inventory (Wave 31 exclusive deepen). Cumulative unless noted
  * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
@@ -415,7 +415,7 @@ soft_inventory_log(void)
     kprintf("compositor: soft catalog honesty,inventory,init,present,batch,"
             "geom,paint,peaks,query,ratio,last,multi,backend,scanout,"
             "capacity,headroom,surface,return,catalog,path,deepen "
-            "wave=%u areas_expect=23 soft PASS\n",
+            "wave=%u areas_expect=25 soft PASS\n",
             GJ_COMP_SOFT_WAVE);
     cAreas++;
 
@@ -438,7 +438,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=30\n");
+    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=31\n");
 
     /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -607,19 +607,39 @@ soft_inventory_log(void)
                                     "(retscepter stamp; Soft≠product)\n",
                                     (unsigned)GJ_COMP_SOFT_WAVE);
                                 /*
-                             * ---- Wave 30 exclusive complementary surfaces (never reshape primary).
+                             * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
                              * Return surfaces only — soft inventory; never hard-gates product paths.
                              * Soft≠product; not bar3.
                              */
-                            /* Grep: compositor: soft retsigil — Wave 30 return-sigil honesty */
+                            /* Grep: compositor: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("compositor: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
                                     "never_blocks_m0=1 wave=%u "
                                     "(retsigil honesty; Soft≠product; not bar3)\n",
                                     (unsigned)GJ_COMP_SOFT_WAVE);
-                            /* Grep: compositor: soft retemblem — Wave 30 exclusive emblem stamp */
+                            /* Grep: compositor: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("compositor: soft retemblem exclusive=1 soft_ne_product=1 "
                                     "product_kernel=OPEN bar3=0 wave=%u "
                                     "(retemblem stamp; Soft≠product)\n",
+                                    (unsigned)GJ_COMP_SOFT_WAVE);
+                            /*
+                             * ---- Wave 31 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: compositor: soft retaegis — Wave 31 return-aegis honesty */
+                            kprintf("compositor: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retaegis honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_COMP_SOFT_WAVE);
+                            /* Grep: compositor: soft retsigil — Wave 30 return-sigil honesty (kept) */
+                            kprintf("compositor: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
+                                    "never_blocks_m0=1 wave=%u "
+                                    "(retsigil honesty; Soft≠product; not bar3)\n",
+                                    (unsigned)GJ_COMP_SOFT_WAVE);
+                            /* Grep: compositor: soft retmantle — Wave 31 exclusive mantle stamp */
+                            kprintf("compositor: soft retmantle exclusive=1 soft_ne_product=1 "
+                                    "product_kernel=OPEN bar3=0 wave=%u "
+                                    "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)GJ_COMP_SOFT_WAVE);
                             kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "

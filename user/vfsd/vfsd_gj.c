@@ -23,7 +23,7 @@
  *   vfsd-gj: store LBA0 read soft PASS | soft-skip
  *   vfsd-gj: RELEASE free soft PASS | soft-skip  (post-RELEASE no-op)
  *
- * Soft inventory (Wave 30 exclusive deepen — greppable "vfsd-gj: soft …"):
+ * Soft inventory (Wave 31 exclusive deepen — greppable "vfsd-gj: soft …"):
  *   vfsd-gj: soft door start
  *   vfsd-gj: soft reclaim PASS | soft reclaim soft-skip
  *   vfsd-gj: soft bare PASS | soft bare soft-skip
@@ -39,16 +39,16 @@
  *   vfsd-gj: soft store read PASS | soft store read soft-skip
  *   vfsd-gj: soft free PASS | soft free soft-skip
  *   vfsd-gj: soft inventory door_ok=… door_skip=… store_ok=… store_skip=…
- *                free_ok=… free_skip=… wave=30
+ *                free_ok=… free_skip=… wave=31
  *   vfsd-gj: soft door reclaim=… bare=… writefd=… stat=… list=… seek_end=…
  *                seek_cur=… seekfd=… unlink=… stats=… bits=…
  *   vfsd-gj: soft store mirror=… read=… bits=…
  *   vfsd-gj: soft free release=… bits=…
  *   vfsd-gj: soft cache reclaim=… writefd=… seek=… unlink=… stat=… bits=… ok=…
  *   vfsd-gj: soft stats ok=… skip=… door_bits=… store_bits=… free_bits=…
- *   vfsd-gj: soft deepen wave=30 areas=… ok=… skip=…
+ *   vfsd-gj: soft deepen wave=31 areas=… ok=… skip=…
  *   vfsd-gj: soft path multi_server=0 confine=0 (soft; not bar3)
- *   vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=30
+ *   vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=31
  *   vfsd-gj: soft door PASS | soft door soft-skip
  * Diagnostics only — never hard-fail live path PASS; not a bar3 claim.
  * Honesty: soft inventory ≠ product multi-server confine.
@@ -137,21 +137,21 @@
 #define VFSD_SOFT_BIT_STATS    256u
 #define VFSD_SOFT_BIT_SEEK_END 512u
 
-/* Soft store path bits (Wave 30 inventory; LBA0 mirror + read). */
+/* Soft store path bits (Wave 31 inventory; LBA0 mirror + read). */
 #define VFSD_SOFT_STORE_MIRROR 1u
 #define VFSD_SOFT_STORE_READ   2u
 
-/* Soft free path bits (Wave 30 inventory; post-RELEASE no-op). */
+/* Soft free path bits (Wave 31 inventory; post-RELEASE no-op). */
 #define VFSD_SOFT_FREE_RELEASE 1u
 
-/* Soft inventory wave stamp (Wave 30 exclusive deepen). */
-#define VFSD_SOFT_WAVE         30u
+/* Soft inventory wave stamp (Wave 31 exclusive deepen). */
+#define VFSD_SOFT_WAVE         31u
 #define VFSD_SOFT_AREAS        8u  /* inventory door store free cache stats deepen path honesty */
 
 static unsigned g_uToken;
 
 /*
- * Wave 30 soft inventory tallies (file-local; wrap OK).
+ * Wave 31 soft inventory tallies (file-local; wrap OK).
  * greppable: vfsd-gj: soft …
  */
 static unsigned g_uSoftDoorBits;
@@ -264,7 +264,7 @@ buf_contains(const char *pHay, long cbHay, const char *szNeedle, unsigned cbNeed
     return 0;
 }
 
-/* Note one soft door sub-step into Wave 30 inventory counters. */
+/* Note one soft door sub-step into Wave 31 inventory counters. */
 static void
 soft_door_note(unsigned uBit, int fOk)
 {
@@ -278,7 +278,7 @@ soft_door_note(unsigned uBit, int fOk)
     }
 }
 
-/* Note one soft store sub-step into Wave 30 inventory counters. */
+/* Note one soft store sub-step into Wave 31 inventory counters. */
 static void
 soft_store_note(unsigned uBit, int fOk)
 {
@@ -292,7 +292,7 @@ soft_store_note(unsigned uBit, int fOk)
     }
 }
 
-/* Note one soft free sub-step into Wave 30 inventory counters. */
+/* Note one soft free sub-step into Wave 31 inventory counters. */
 static void
 soft_free_note(unsigned uBit, int fOk)
 {
@@ -307,7 +307,7 @@ soft_free_note(unsigned uBit, int fOk)
 }
 
 /*
- * Soft inventory dump (Wave 30 exclusive deepen).
+ * Soft inventory dump (Wave 31 exclusive deepen).
  * Greppable prefix: "vfsd-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
  * Honesty: soft ≠ product multi-server confine.
@@ -451,7 +451,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: vfsd-gj: soft deepen wave (Wave 30 stamp) */
+    /* Grep: vfsd-gj: soft deepen wave (Wave 31 stamp) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "vfsd-gj: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)VFSD_SOFT_WAVE);
@@ -466,24 +466,24 @@ soft_inventory_log(void)
     msg(aLine);
 
     /*
-     * Grep: vfsd-gj: soft path (Wave 30 honesty).
+     * Grep: vfsd-gj: soft path (Wave 31 honesty).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("vfsd-gj: soft path door=1 store=1 cache=1 multi_server=0 "
         "confine=0 (soft; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: vfsd-gj: soft honesty (Wave 30 exclusive deepen).
+     * Grep: vfsd-gj: soft honesty (Wave 31 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=30\n");
+        "exclusive=1 soft=1 product_kernel=OPEN wave=31\n");
 
     /*
-     * Grep: vfsd-gj: soft exclusive (Wave 30 exclusive deepen).
+     * Grep: vfsd-gj: soft exclusive (Wave 31 exclusive deepen).
      * Soft inventory ≠ product multi-server / continuum.
      */
-    msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=30 multi_server=0 confine=0 "
+    msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=31 multi_server=0 confine=0 "
         "bar3=0 userland=1 kernel=0 continuum=0\n");
 }
 
@@ -492,7 +492,7 @@ soft_inventory_log(void)
  * Never hard-fails: each step soft-skip on rejection / short I/O.
  * Leaves hard-path hello.txt content intact (only mutates soft.tmp).
  * Does not RELEASE / re-token CLAIM ownership (CLAIM PASS stays hard).
- * Tallies Wave 30 soft inventory (vfsd-gj: soft …).
+ * Tallies Wave 31 soft inventory (vfsd-gj: soft …).
  * Returns count of soft door sub-steps that greened (0..10).
  */
 static unsigned
@@ -664,7 +664,7 @@ soft_door_path(volatile unsigned *pCache)
      * 4) SEEKFD soft: reopen RDWR, SEEK END, WRITEFD patch, SEEK SET,
      *    soft SEEK_CUR probe, READFD full, verify patch at end.
      *    Soft-skip if door returns NOSUPPORT or any step fails.
-     *    Wave 30: greppable soft SEEK_END + soft SEEKFD dual markers.
+     *    Wave 31: greppable soft SEEK_END + soft SEEKFD dual markers.
      */
     if ((uBits & VFSD_SOFT_BIT_WRITEFD) != 0u) {
         hFd = gj_vfs(GJ_VFS_OP_OPEN, (long)(uintptr_t)szSoft,
@@ -833,7 +833,7 @@ soft_door_path(volatile unsigned *pCache)
     g_uSoftCacheOk = cOk;
 
     /*
-     * Door-local soft stats rollup (Wave 30 deepened fields).
+     * Door-local soft stats rollup (Wave 31 deepened fields).
      * Full store/free rollup is emitted later by soft_inventory_log.
      * Greppable: vfsd-gj: soft stats ok=… (prefix-stable).
      */
@@ -858,7 +858,7 @@ soft_door_path(volatile unsigned *pCache)
 /*
  * Optional store LBA0 super mirror + soft READ verify.
  * Ownership separate from VFS door; soft-skip when claim busy / short I/O.
- * Tallies Wave 30 soft store inventory (vfsd-gj: soft store …).
+ * Tallies Wave 31 soft store inventory (vfsd-gj: soft store …).
  */
 static void
 soft_store_lba0_mirror(void)
@@ -1110,7 +1110,7 @@ _start(void)
      * Soft free RELEASE: door already free → soft no-op (0).
      * Never hard-fails live path.
      * Dual: "RELEASE free soft …" + greppable "soft free …".
-     * Tallies Wave 30 soft free inventory.
+     * Tallies Wave 31 soft free inventory.
      */
     nRet = gj_vfs(GJ_VFS_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
     if (nRet == 0) {
@@ -1124,7 +1124,7 @@ _start(void)
     }
 
     /*
-     * Wave 30 soft inventory dump — greppable "vfsd-gj: soft …".
+     * Wave 31 soft inventory dump — greppable "vfsd-gj: soft …".
      * Pure observation after all soft door / store / free work.
      */
     soft_inventory_log();

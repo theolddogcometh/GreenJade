@@ -5,7 +5,7 @@
  * Host MMIO window table + inject helpers (UDX_HOST_LIBC).
  * Window table is also available freestanding for granted maps.
  *
- * Soft inventory (Wave 57 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 58 exclusive deepen; this unit only) —
  * greppable "udx: host soft …":
  *   udx: host soft inventory …
  *   udx: host soft window …
@@ -36,7 +36,7 @@
 
 #define UDX_HOST_WIN_MAX 64
 /* Soft wave stamp for greppable inventory lines. */
-#define UDX_HOST_SOFT_WAVE 55u
+#define UDX_HOST_SOFT_WAVE 58u
 
 struct udx_host_window {
     u64   u64Phys;
@@ -48,7 +48,7 @@ struct udx_host_window {
 static struct udx_host_window g_aWin[UDX_HOST_WIN_MAX];
 
 /*
- * Soft host window / BAR inventory (Wave 57 exclusive deepen).
+ * Soft host window / BAR inventory (Wave 58 exclusive deepen).
  * Cumulative for this process. greppable: udx: host soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -143,7 +143,7 @@ host_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft host inventory (Wave 57 exclusive deepen).
+ * Greppable soft host inventory (Wave 58 exclusive deepen).
  * Prefix-stable "udx: host soft …" — never hard-gates; observation only.
  *
  * greppable: udx: host soft
@@ -226,7 +226,7 @@ host_soft_inventory_log(void)
                    UDX_HOST_SOFT_WAVE);
 
     /*
-     * Grep: udx: host soft honesty (Wave 57 exclusive deepen).
+     * Grep: udx: host soft honesty (Wave 58 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     host_soft_emit("udx: host soft honesty multi_server=0 confine=0 bar3=0 "
@@ -717,8 +717,8 @@ udx_host_bar_memcpy_from(struct udx_pci_dev *pPdev, int nBar, u64 u64Off,
 
 /* pci inject / remove live in pci.c — declared in host.h */
 
-/* Wave 57 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retraverse continuum_toward=19900 soft_ne_product=1
- *   greppable: soft retcasemate exclusive=1 continuum_toward=19900
+/* Wave 58 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retorillon continuum_toward=20000 soft_ne_product=1
+ *   greppable: soft retbonnette exclusive=1 continuum_toward=20000
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

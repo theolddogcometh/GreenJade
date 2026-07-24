@@ -1359,9 +1359,9 @@ kprintf("identity: soft retkleinangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("identity: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: identity: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("identity: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: identity:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: identity: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("identity: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: identity:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: identity: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("identity: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("identity: soft deepen wave=%u areas=%u verdict=%s "
             "cover=%u leaves_ok=%u installs=%u log_n=%u "

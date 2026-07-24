@@ -679,7 +679,7 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Soft confine** | 13 greppable confine / promise surface — **not** product multi-server seal |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 24600**; honest scan may still report **makefile_max=24600** until parent wires — **not** product complete |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 24600**; honest scan may still report **makefile_max=24500** until parent wires — **not** product complete |
 | **Product lamps** | Soft bar3-ready / product-score stubs remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**; out of scope to close here |
 
@@ -691,7 +691,7 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 |-------|----------|
 | “Security core design **Accepted**” | **Yes** — this document 0–12 |
 | “Soft confine / soft cap / doors greppable” | **Yes** — with soft bound in 13.1 |
-| “Soft continuum high-water advancing toward **24600** (scan may still be 24600)” | **Yes** — soft only; scan is source of truth |
+| “Soft continuum high-water advancing toward **24600** (scan may still be 24500)” | **Yes** — soft only; scan is source of truth |
 | “Soft confine = product multi-server closed” | **No** |
 | “Soft continuum / product lamps close product DoD” | **No** — lamps remain **0**; soft ≠ product complete |
 | “Continuum soft gates / media `STATUS=READY` close bar3” | **No** |
@@ -711,5 +711,5 @@ Soft confine and soft promise gates are **not** a claim that every server and cl
 
 *Accepted security-first core design v1.7 — DEAD/gen first; mandatory deferred slot invalidate; SMP-safe revoke; Solaris-first.*  
 *13 Wave 13 honesty (historical): soft confine ≠ product multi-server; **no bar3 claim**.*  
-*14 Wave 104 honesty (2026-07-24): soft confine ≠ product multi-server; continuum toward **24600** soft only (scan may still be **24600**); product lamps **0**; **soft ≠ product complete**; **no bar3 claim**.*  
+*14 Wave 104 honesty (2026-07-24): soft confine ≠ product multi-server; continuum toward **24600** soft only (scan may still be **24500**); product lamps **0**; **soft ≠ product complete**; **no bar3 claim**.*  
 *Code: `kernel/include/gj/cap.h`, `kernel/cap/revoke.c`.*

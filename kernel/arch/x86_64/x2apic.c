@@ -1640,9 +1640,9 @@ kprintf("x2apic: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("x2apic: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: x2apic: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("x2apic: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: x2apic:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: x2apic: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("x2apic: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: x2apic:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: x2apic: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("x2apic: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("x2apic: soft deepen wave=%u areas=%u inv_log=%lu "
             "probe=%lu enable_ok=%lu icr_writes=%lu self=%lu "

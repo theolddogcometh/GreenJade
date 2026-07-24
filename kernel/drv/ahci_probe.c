@@ -1391,9 +1391,9 @@ kprintf("ahci: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("ahci: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("ahci: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: ahci:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: ahci: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("ahci: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: ahci:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: ahci: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("ahci: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "

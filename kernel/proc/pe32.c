@@ -1324,9 +1324,9 @@ kprintf("pe32: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("pe32: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: pe32: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("pe32: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: pe32:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: pe32: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("pe32: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: pe32:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: pe32: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("pe32: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("pe32: soft deepen wave=%u areas="
             "inventory,parse,stage,load,exec,int80,path,"

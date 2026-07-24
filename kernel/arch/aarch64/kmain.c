@@ -1273,9 +1273,9 @@ kprintf("aarch64: kmain: soft retkleinangle exclusive=1 soft_ne_product=1 produc
 kprintf("aarch64: kmain: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: kmain: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("aarch64: kmain: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: aarch64: kmain:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: aarch64: kmain: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("aarch64: kmain: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: aarch64: kmain:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: aarch64: kmain: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("aarch64: kmain: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("aarch64: kmain soft deepen wave=%u areas=%u "
             "catalog=inventory,bringup,shared,mem,stats,path,surf,return,honesty,exclusive,open "

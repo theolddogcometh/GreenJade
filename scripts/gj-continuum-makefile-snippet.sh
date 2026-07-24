@@ -39,10 +39,10 @@
 # (docs/userland soft stamps): retlinearangle / retbilinearangle (CREATE-ONLY soft
 # names only — not product). Until parent pastes those basenames into
 # CGJ_SRCS, ``--max`` may still report the prior high-water
-# (e.g. makefile_max=24600). **Scan is the source of truth** — do not
+# (e.g. makefile_max=24500). **Scan is the source of truth** — do not
 # hardcode a false makefile_max here or in side panels. Soft high-water
 # may be described as **advancing toward 24600** while the honest scan
-# remains at the prior tip.
+# remains at the prior tip (often makefile_max=24500).
 #
 # Verify anytime (stdout is greppable by product-summary side panels):
 #
@@ -211,8 +211,8 @@ makefile_max honesty:
   Wave 104 exclusive target decade: M=24600 (soft graph only — not bar3 /
   Steam client / Top-50 titles). Soft deepen surfaces: retlinearangle /
   retbilinearangle (CREATE-ONLY soft names only). Until parent wires 24501–24600,
-  --max may still report prior tip (e.g. makefile_max=24600). Soft high-water
-  may advance toward 24600 while scan remains at prior tip.
+  --max may still report prior tip (e.g. makefile_max=24500). Soft high-water
+  may advance toward 24600 while scan remains at prior tip (often 24500).
 
 Workflow:
   1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_24600.py)

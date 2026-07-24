@@ -1885,9 +1885,9 @@ kprintf("kheap: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("kheap: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("kheap: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: kheap:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: kheap: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("kheap: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: kheap:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: kheap: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("kheap: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
             "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "

@@ -1483,9 +1483,9 @@ kprintf("virtio-blk: soft retkleinangle exclusive=1 soft_ne_product=1 product_ke
 kprintf("virtio-blk: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: virtio-blk: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("virtio-blk: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: virtio-blk:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: virtio-blk: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("virtio-blk: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: virtio-blk:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: virtio-blk: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("virtio-blk: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("virtio-blk: soft deepen wave=%u areas=%u ready=%u io=%u "
             "err=%u log_n=%u\n",

@@ -1399,9 +1399,9 @@ kprintf("file_lock: soft retkleinangle exclusive=1 soft_ne_product=1 product_ker
 kprintf("file_lock: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: file_lock: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("file_lock: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: file_lock:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: file_lock: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("file_lock: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: file_lock:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: file_lock: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("file_lock: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("file_lock: soft deepen wave=104 areas=total,rate,deadlk,grant,,retclass,retlane"
             "catalog,capacity,headroom,surface,terminal,return,wait_peak,"

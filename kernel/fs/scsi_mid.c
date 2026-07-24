@@ -1713,9 +1713,9 @@ kprintf("scsi_mid: soft retkleinangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("scsi_mid: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: scsi_mid: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("scsi_mid: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: scsi_mid:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: scsi_mid: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("scsi_mid: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: scsi_mid:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: scsi_mid: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("scsi_mid: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("scsi_mid: soft deepen wave=104 areas=total,soft,sense,xfer,,retclass,retlane"
             "peak,last,honesty,capacity,headroom,surface,ratio,return logs=%u "

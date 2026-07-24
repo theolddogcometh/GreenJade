@@ -1880,9 +1880,9 @@ kprintf("serial: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("serial: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: serial: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("serial: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: serial:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: serial: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("serial: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: serial:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: serial: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("serial: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"

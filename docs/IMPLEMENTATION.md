@@ -780,20 +780,20 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 | Field | Value |
 |-------|--------|
 | **Wave** | GreenJade Wave 104 (soft continuum honesty) |
-| **Continuum** | makefile target high-water **advancing toward 24600** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=24600**; **do not hardcode false 24600**) |
+| **Continuum** | makefile target high-water **advancing toward 24600** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=24500**; **do not hardcode false 24600**) |
 | **Soft deepen surfaces** | **retlinearangle** / **retbilinearangle** (CREATE-ONLY soft graph names only — not product / not bar3) |
 | **bar3** | **OPEN** |
 | **Matrix** | **NOT-TRIED × 50** (no titles tried) |
 | **Product lamps** | **0** (soft stubs stay zero by design) |
 
-**Soft stamp (Wave 104):** continuum high-water **advancing toward 24600** soft only (parent wires). Soft deepen surfaces **retlinearangle** / **retbilinearangle** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=24600`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **24600** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
+**Soft stamp (Wave 104):** continuum high-water **advancing toward 24600** soft only (parent wires). Soft deepen surfaces **retlinearangle** / **retbilinearangle** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=24600`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **24500** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
 
 ### Soft continuum ≠ bar3 (Wave 104 honesty)
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
 | Continuum **toward 24600** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
-| Honest scan **makefile_max=24600** (prior tip when greppable) | Makefile wire truth until parent wires **24600** | Claim that **24600** is already greppable when scan lags |
+| Honest scan **makefile_max=24500** (prior tip when greppable) | Makefile wire truth until parent wires **24600** | Claim that **24600** is already greppable when scan lags |
 | Soft deepen **retlinearangle** / **retbilinearangle** | Wave 104 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
@@ -820,7 +820,7 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
 - Soft continuum growth toward **24600** — **soft only**; does **not** close bar3; product lamps stay **0**
 
-**Bar3 remains OPEN.** Wave 104 honesty: continuum **advancing toward 24600 soft only**; scan may still be **24600**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+**Bar3 remains OPEN.** Wave 104 honesty: continuum **advancing toward 24600 soft only**; scan may still be **24500**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
 
 ### Related honesty surfaces
 
@@ -831,5 +831,5 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-*Wave 104 soft continuum (2026-07-24): high-water **advancing toward 24600 soft only**; soft deepen **retlinearangle**/**retbilinearangle**; honest scan may still be **24600**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 104 soft continuum (2026-07-24): high-water **advancing toward 24600 soft only**; soft deepen **retlinearangle**/**retbilinearangle**; honest scan may still be **24500**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
 

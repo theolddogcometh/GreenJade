@@ -2052,9 +2052,9 @@ kprintf("vtd: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OP
 kprintf("vtd: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: vtd: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("vtd: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: vtd:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: vtd: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("vtd: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: vtd:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: vtd: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("vtd: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("vtd: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
             "(Wave 43 exclusive; soft only; not product always-on IOMMU; "

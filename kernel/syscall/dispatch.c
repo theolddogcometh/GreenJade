@@ -1283,9 +1283,9 @@ kprintf("syscall: soft retkleinangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("syscall: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("syscall: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: syscall:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: syscall: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("syscall: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: syscall:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: syscall: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("syscall: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
             "prefix=syscall:soft "

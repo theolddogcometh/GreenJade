@@ -1641,9 +1641,9 @@ kprintf("process: bootstrap seal: soft retkleinangle exclusive=1 soft_ne_product
 kprintf("process: bootstrap seal: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("process: bootstrap seal: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: process: bootstrap seal:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: process: bootstrap seal: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("process: bootstrap seal: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: process: bootstrap seal:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: process: bootstrap seal: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("process: bootstrap seal: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
             "logs=%u emits=%llu rate_limited=%llu "

@@ -28,7 +28,7 @@
 # ---------------------------------------------------------------------------
 # Wave 104 soft note (continuum / product side panel):
 #   Soft product-summary may note continuum high-water advancing toward M=24600.
-#   Honest scan may still report makefile_max=24600 until parent wires 24600.
+#   Honest scan may still report makefile_max=24500 until parent wires 24600.
 #   Soft deepen retlinearangle/retbilinearangle are CREATE-ONLY soft names only (≠ product).
 #   Soak_tib PASS still ≠ bar3 / Steam / Top-50 and ≠ continuum makefile_max wire.
 #   makefile_max remains an honest Makefile scan (never hard-coded here).
@@ -95,7 +95,7 @@ fi
 
 echo "gj-soak-large-ram: mem=$GJ_SOAK_MEM timeout=${GJ_SOAK_TIMEOUT}s log=$log"
 echo "gj-soak-large-ram: honesty  product ≥1 TiB full path OPEN (768G class only; Wave 10 soft)"
-echo "gj-soak-large-ram: honesty  Wave 104 soft  soak ≠ bar3/Top50; continuum makefile_max=scan (toward M=24600; may be 24600)"
+echo "gj-soak-large-ram: honesty  Wave 104 soft  soak ≠ bar3/Top50; continuum makefile_max=scan (toward M=24600; may be 24500)"
 
 # --- helpers ----------------------------------------------------------------
 # Parse size token like 768G / 512g / 1T / 65536M / bare bytes → KiB (integer).

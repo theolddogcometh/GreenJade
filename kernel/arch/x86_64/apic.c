@@ -1726,9 +1726,9 @@ kprintf("apic: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("apic: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: apic: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("apic: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: apic:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: apic: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("apic: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: apic:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: apic: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("apic: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("apic: soft deepen wave=%u areas="
             "inventory,timer,cal,ipi,tlb,vectors,mode,stats,last,"

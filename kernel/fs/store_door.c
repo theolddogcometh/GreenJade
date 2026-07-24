@@ -1239,9 +1239,9 @@ kprintf("store_door: soft retkleinangle exclusive=1 soft_ne_product=1 product_ke
 kprintf("store_door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: store_door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("store_door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: store_door:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: store_door: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("store_door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: store_door:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: store_door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("store_door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                                 kprintf("store_door: soft deepen wave=104 areas=151 calls=%u rw=%u "
                 "ok=%u fail_like=%u logs=%u\n",

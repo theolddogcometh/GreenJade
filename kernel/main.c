@@ -7178,6 +7178,10 @@ kprintf("soft: retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN b
 kprintf("soft: retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("soft: retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
+/* Grep: soft: retlinearangle — Wave 104 return-linearangle honesty */
+kprintf("soft: retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
+/* Grep: soft: retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+kprintf("soft: retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
 
 /* Grep: soft: deepen wave */
         kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "

@@ -1566,9 +1566,9 @@ kprintf("elf_load: soft retkleinangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("elf_load: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: elf_load: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("elf_load: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: elf_load:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: elf_load: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("elf_load: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: elf_load:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: elf_load: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("elf_load: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("elf_load: soft deepen wave=%u via=%s load_ok=%u probe_ok=%u "
             "reloc_hits=%u so_live=%u handoff=%u verify=%u log_n=%u "

@@ -1337,9 +1337,9 @@ kprintf("compositor: soft retkleinangle exclusive=1 soft_ne_product=1 product_ke
 kprintf("compositor: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: compositor: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("compositor: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: compositor:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: compositor: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("compositor: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: compositor:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: compositor: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("compositor: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "

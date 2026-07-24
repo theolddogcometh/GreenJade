@@ -2592,9 +2592,9 @@ kprintf("memobj: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("memobj: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: memobj: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("memobj: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: memobj:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: memobj: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("memobj: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: memobj:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: memobj: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("memobj: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("memobj: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "pool=%u named=%u map_ok=%u create_ok=%u multi_peak=%u "

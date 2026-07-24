@@ -1445,9 +1445,9 @@ kprintf("session_door: soft retkleinangle exclusive=1 soft_ne_product=1 product_
 kprintf("session_door: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: session_door: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("session_door: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: session_door:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: session_door: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("session_door: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: session_door:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: session_door: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("session_door: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("session_door: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u owned=%u presents_user=%u claims=%u multi=%u "

@@ -1669,9 +1669,9 @@ kprintf("cpu: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OP
 kprintf("cpu: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: cpu: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("cpu: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: cpu:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: cpu: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("cpu: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: cpu:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: cpu: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("cpu: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                                 kprintf("cpu: soft deepen wave=104 areas=149 online=%u static=%u "
                 "dyn=%u oom=%u reject=%u logs=%u\n",

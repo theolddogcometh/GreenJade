@@ -1690,9 +1690,9 @@ kprintf("vfs_ram: soft retkleinangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("vfs_ram: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: vfs_ram: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("vfs_ram: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: vfs_ram:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: vfs_ram: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("vfs_ram: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: vfs_ram:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: vfs_ram: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("vfs_ram: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                                 kprintf("vfs_ram: soft deepen wave=104 areas=155 seeded=%u files=%u "
                 "fds=%u ok=%u fail=%u logs=%u\n",

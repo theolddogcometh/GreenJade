@@ -1736,9 +1736,9 @@ kprintf("futex: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("futex: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("futex: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: futex:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: futex: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("futex: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: futex:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: futex: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("futex: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",

@@ -1289,6 +1289,14 @@ const char g_szGjUefiSoftRetprojectangle[] =
 __attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
 const char g_szGjUefiSoftRetaffineangle[] =
     "GJUEFI1: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)";
+/* Grep: GJUEFI1: soft retlinearangle — Wave 104 return-linearangle honesty */
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftRetlinearangle[] =
+    "GJUEFI1: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)";
+/* Grep: GJUEFI1: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+__attribute__((section(".rodata.gj_uefi"), used, aligned(8)))
+const char g_szGjUefiSoftRetbilinearangle[] =
+    "GJUEFI1: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 35 exclusive complementary surfaces (kept) (never reshape primary).

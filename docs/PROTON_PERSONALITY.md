@@ -422,7 +422,7 @@ In-tree path when landed: `user/libprotonrt/`.
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Soft PE / Proton path** | Partial / greppable PE32, WoW64, `libprotonrt`, personality door, A0–A1 kernel/userspace smokes — **bring-up honesty only** |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 24600**; honest scan may still report **makefile_max=24600** until parent wires |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 24600**; honest scan may still report **makefile_max=24500** until parent wires |
 | **Product lamps** | Soft bar3-ready / product-score stubs remain **0** by design — **soft ≠ product complete** |
 | **Open (product)** | Real Steam **client** on DUT; out-of-tree Proton-class runtime against titles; matrix leave **NOT-TRIED** |
 | **bar3** | Steam **client** launch on real DUT + Deck Top 50 rows can leave `NOT-TRIED` — see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
@@ -435,12 +435,12 @@ In-tree path when landed: `user/libprotonrt/`.
 |----------------------------|------------------------------|-----------------------|--------------|-------------------------------|
 | `pe32: * PASS` / `wow64: *` / `libprotonrt` / `protonrt-user` / A0–A1 soft smokes | Soft only | **No** | **No** | **No** |
 | Host Steam media inventory **READY** (`steam-bar3-check`) | **No** | **No** | **No** | **No** |
-| Continuum high-water **toward 24600** (scan may still be **24600**) | **No** | **No** | **No** | **No** |
+| Continuum high-water **toward 24600** (scan may still be **24500**) | **No** | **No** | **No** | **No** |
 | Product lamps **0** | **No** | **No** | **No** | **No** |
 | Kernel smokes (io_uring min, 768G soak, aarch64 M0, hybrid ABI) | **No** | **No** | **No** | **No** |
 | This document **Accepted** (v1.6) + Wave 10/13/15 honesty | Decisions / honesty only | Decisions / honesty only | **No** | **No** |
 
-**Hard rule (Wave 104):** never promote greppable soft PE smokes, media `STATUS=READY`, continuum soft gates (toward **24600** or prior tip **24600**), product lamps, or design **Accepted** alone to “bar3 closed,” “Steam client runs,” “Proton titles work,” product complete, or any Deck Top 50 row off **NOT-TRIED**.
+**Hard rule (Wave 104):** never promote greppable soft PE smokes, media `STATUS=READY`, continuum soft gates (toward **24600** or prior tip **24500**), product lamps, or design **Accepted** alone to “bar3 closed,” “Steam client runs,” “Proton titles work,” product complete, or any Deck Top 50 row off **NOT-TRIED**.
 
 **Wave 104 formula:** **soft PE / Proton path ≠ bar3.** Soft continuum ≠ product complete. Product lamps **0**. Matrix **NOT-TRIED × 50**.
 
@@ -450,7 +450,7 @@ In-tree path when landed: `user/libprotonrt/`.
 |-------|----------|
 | “Proton personality v1.6 **Accepted**” | **Yes** — this document 0–9 |
 | “Soft PE / WoW64 / libprotonrt / protonrt-user smokes greppable” | **Yes** — with soft bound |
-| “Continuum high-water advancing toward **24600** soft only (scan may still be 24600)” | **Yes** — soft only |
+| “Continuum high-water advancing toward **24600** soft only (scan may still be 24500)” | **Yes** — soft only |
 | “Soft PE / Proton path = bar3 closed” | **No** — **soft PE/Proton path ≠ bar3** |
 | “Product lamps lit / product complete from continuum or PE soft smokes” | **No** — lamps remain **0** |
 | “Steam client launched on GreenJade” | **No** — bar3 client path remains **OPEN** |
@@ -472,4 +472,4 @@ In-tree path when landed: `user/libprotonrt/`.
 *Proton personality v1.6 **Accepted** — Deck Top 50 focus; clean-room Linux ABI grows with the matrix; no GPL; priorities unchanged.*  
 *Wave 10 honesty (10, historical): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**.*  
 *Wave 13 honesty (11, historical): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*  
-*Wave 104 honesty (12): **soft PE / Proton path ≠ bar3**; continuum toward **24600** soft only (scan may still be **24600**); product lamps **0**; **soft ≠ product complete**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*
+*Wave 104 honesty (12): **soft PE / Proton path ≠ bar3**; continuum toward **24600** soft only (scan may still be **24500**); product lamps **0**; **soft ≠ product complete**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*

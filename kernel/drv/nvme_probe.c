@@ -1509,9 +1509,9 @@ kprintf("nvme: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("nvme: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: nvme: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("nvme: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: nvme:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: nvme: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("nvme: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: nvme:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: nvme: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("nvme: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("nvme: soft deepen wave=%u areas=%u via=%s cap_ok=%u vs_ok=%u "
             "found=%u identify_ok=%u map_fail=%u no_bar=%u ok=%u "

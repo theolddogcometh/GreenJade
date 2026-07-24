@@ -1218,9 +1218,9 @@ kprintf("spawn: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("spawn: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 kprintf("spawn: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retaffineangle stamp; Soft≠product)\n");
-/* Grep: spawn:soft retlinearangle — Wave 104 return-linearangle honesty */
+/* Grep: spawn: soft retlinearangle — Wave 104 return-linearangle honesty */
 kprintf("spawn: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=104 (retlinearangle honesty; Soft≠product; not bar3)\n");
-/* Grep: spawn:soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
+/* Grep: spawn: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 kprintf("spawn: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=104 (retbilinearangle stamp; Soft≠product)\n");
                             kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
             "live=%u peak=%u mint_soft=%u mint_soft_bad=%u teardown=%u "

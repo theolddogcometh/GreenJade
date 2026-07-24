@@ -7,7 +7,7 @@
 | **Production freezes** | [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) 1–4 |
 | **Model** | **Option C:** kernel hot paths + **doors** cold personality thread |
 | **License** | Clean-room dual **MIT OR Apache-2.0** only — **no GPL / no Linux source** |
-| **Honesty (Wave 80)** | Soft continuum toward 22200 ≠ product / bar3; product lamps **0** (5) |
+| **Honesty (Wave 81)** | Soft continuum toward 22300 ≠ product / bar3; product lamps **0** (5) |
 | **Companion** | [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) · [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 ---
@@ -100,7 +100,7 @@ This section is additive honesty only. It does **not** change Option C architect
 | **Hybrid ABI (this doc)** | Option C design + kernel hot/cold dispatch skeleton (swapgs, doors cold path, hot subset) | Steam client runs; full Linux userspace; **bar3 closed** |
 | **Hot/cold SYSCALL map** | Documented dispatch; some hot paths + cold door stand-in | Every glibc/Steam Runtime NR implemented end-to-end |
 | **io_uring min rings** | Kernel soft surface: setup / enter / register (+ related smokes when greppable) | Full game / title I/O path; Steam Runtime I/O complete |
-| **Continuum graph** | Clean-room CREATE-ONLY soft gates; high-water **advancing toward 22200** soft only (parent wires; tree may lag; growth ≠ runtime ABI) | Client launch; Deck Top 50 matrix fill; bar3 done; product complete |
+| **Continuum graph** | Clean-room CREATE-ONLY soft gates; high-water **advancing toward 22300** soft only (parent wires; tree may lag; growth ≠ runtime ABI) | Client launch; Deck Top 50 matrix fill; bar3 done; product complete |
 | **Product lamps** | Soft score / bar3-ready stubs remain **0** by design | Any product-score claim |
 | **Deck Top 50** | Product **targeting** only ([PROTON_PERSONALITY.md](PROTON_PERSONALITY.md)) | Any title **PASS** or off **NOT-TRIED** |
 
@@ -109,11 +109,11 @@ This section is additive honesty only. It does **not** change Option C architect
 1. Hybrid ABI progress is **soft surface** — kernel smoke / design acceptance — not a Steam product claim.
 2. **Bar3 remains OPEN** until real-DUT Steam **client** launch + matrix work; see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).
 3. **io_uring min rings ≠ full game I/O.** Do not promote ring setup smokes to title or client I/O readiness.
-4. Continuum high-water **advancing toward 22200** is **soft graph growth only** (parent wires / CREATE-ONLY). Soft deepen on non-w13 surfaces. Targeting or advancing toward 22200 does **not** close bar3, light product lamps, or imply Deck Top 50 progress. **Soft ≠ product complete.**
+4. Continuum high-water **advancing toward 22300** is **soft graph growth only** (parent wires / CREATE-ONLY). Soft deepen on non-w13 surfaces. Targeting or advancing toward 22300 does **not** close bar3, light product lamps, or imply Deck Top 50 progress. **Soft ≠ product complete.**
 5. **No Deck Top 50 title claims** from this document, hybrid ABI smokes, continuum gates, or io_uring soft PASS alone. Matrix claim level stays **targeting only** until titles are actually tried. Product lamps remain **0**.
 
 **License / project tone (unchanged):** clean-room dual **MIT OR Apache-2.0**; no GPL import; no Linux kernel source; depth driven by product need, not by pasting foreign trees.
 
 ---
 
-*v1.5 — hybrid + production freezes + Wave 80 soft-surface honesty (bar3 open; continuum toward 22200 soft; product lamps 0; soft ≠ product complete; io_uring min ≠ game I/O; no Deck Top 50 claims).*
+*v1.5 — hybrid + production freezes + Wave 81 soft-surface honesty (bar3 open; continuum toward 22300 soft; product lamps 0; soft ≠ product complete; io_uring min ≠ game I/O; no Deck Top 50 claims).*

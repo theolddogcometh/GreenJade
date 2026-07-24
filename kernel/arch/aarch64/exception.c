@@ -1229,6 +1229,10 @@ aarch64_uart_puts("aarch64: soft retellipseangle exclusive=1 soft_ne_product=1 p
 aarch64_uart_puts("aarch64: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=100 (rethyperangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
 aarch64_uart_puts("aarch64: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=100 (retparabolaangle stamp; Soft≠product)\n");
+/* Grep: aarch64: soft retspiralangle — Wave 100 return-spiralangle honesty */
+aarch64_uart_puts("aarch64: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=100 (retspiralangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: soft rethelixangle — Wave 100 exclusive helixangle stamp */
+aarch64_uart_puts("aarch64: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=100 (rethelixangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
 /* Grep: aarch64: exception soft deepen */

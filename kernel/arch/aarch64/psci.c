@@ -74,8 +74,8 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 #define PSCI_SOFT_FEAT_COUNT      8u
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 69u
-#define PSCI_SOFT_AREAS 107u
+#define PSCI_SOFT_WAVE 70u
+#define PSCI_SOFT_AREAS 109u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -1166,11 +1166,11 @@ aarch64_uart_puts("aarch64: psci: soft retfaceangle exclusive=1 soft_ne_product=
  */
 /* Grep: aarch64: psci: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 aarch64_uart_puts("aarch64: psci: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=69 "
+        "never_blocks_m0=1 wave=70 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: psci: soft retredanangle — Wave 67 exclusive redanangle stamp */
 aarch64_uart_puts("aarch64: psci: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=69 "
+        "product_kernel=OPEN bar3=0 wave=70 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1179,11 +1179,11 @@ aarch64_uart_puts("aarch64: psci: soft retredanangle exclusive=1 soft_ne_product
  */
 /* Grep: aarch64: psci: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 aarch64_uart_puts("aarch64: psci: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=69 "
+        "never_blocks_m0=1 wave=70 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: psci: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 aarch64_uart_puts("aarch64: psci: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=69 "
+        "product_kernel=OPEN bar3=0 wave=70 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1192,12 +1192,22 @@ aarch64_uart_puts("aarch64: psci: soft rettenailleangle exclusive=1 soft_ne_prod
  */
 /* Grep: aarch64: psci: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 aarch64_uart_puts("aarch64: psci: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=69 "
+        "never_blocks_m0=1 wave=70 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: psci: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 aarch64_uart_puts("aarch64: psci: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=69 "
+        "product_kernel=OPEN bar3=0 wave=70 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
+/*
+ * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft retfosseangle — Wave 70 return-fosseangle honesty */
+aarch64_uart_puts("aarch64: psci: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=70 (retfosseangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: psci: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
+aarch64_uart_puts("aarch64: psci: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=70 (retcounterscarple stamp; Soft≠product)\n");
+
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: psci soft deepen wave=");

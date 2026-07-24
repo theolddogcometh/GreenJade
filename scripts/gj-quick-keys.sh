@@ -16,10 +16,10 @@
 #   serial: soft verify PASS|FAIL|idle   (x86 COM1; serial.c)
 #   aarch64: kmain soft PASS             (kmain phase summary)
 #   linux: nr class soft PASS|PARTIAL|NONE  (linux_dispatch NR table)
-# Soft companions (Wave 69 exclusive — info only, never hard-fail):
-#   continuum high-water toward 21100; makefile_max=21100 when greppable (soft ≠ bar3)
-#   (scan is source of truth; do not hardcode 21100 if scan still 21000; 21000 prior tip when N>=21000)
-#   soft deepen retdemiluneangle/retcoveredwayangle (CREATE-ONLY soft names only)
+# Soft companions (Wave 70 exclusive — info only, never hard-fail):
+#   continuum high-water toward 21200; makefile_max=21200 when greppable (soft ≠ bar3)
+#   (scan is source of truth; do not hardcode 21200 if scan still 21100; 21100 prior tip when N>=21100)
+#   soft deepen retfosseangle/retcounterscarple (CREATE-ONLY soft names only)
 #   product lamps 0; soft ≠ product complete
 #   bar3 OPEN stamp (client launch + Deck Top 50 still NOT-TRIED)
 #
@@ -116,15 +116,15 @@ info_check "serial soft verify" 'serial: soft verify'
 info_check "kmain soft"         'aarch64: kmain soft PASS|kmain soft PASS'
 info_check "nr class soft"      'linux: nr class soft'
 
-# --- Wave 69 soft companions (never increments miss; hard keys stay hard) ---
-# Continuum high-water toward 21100; greppable 21100 only when N>=21100; 21000 prior tip when N>=21000.
-# Scan is source of truth — do not hardcode false makefile_max if still 21000.
+# --- Wave 70 soft companions (never increments miss; hard keys stay hard) ---
+# Continuum high-water toward 21200; greppable 21200 only when N>=21200; 21100 prior tip when N>=21100.
+# Scan is source of truth — do not hardcode false makefile_max if still 21100.
 # Bar3 open stamp: media READY ≠ client run ≠ Top-50; always OPEN honesty.
-echo "  --- continuum / bar3 soft (wave 69) ---"
+echo "  --- continuum / bar3 soft (wave 70) ---"
+info_check "makefile_max=21200 (log)" 'makefile_max=21200'
 info_check "makefile_max=21100 (log)" 'makefile_max=21100'
-info_check "makefile_max=21000 (log)" 'makefile_max=21000'
 info_check "ubar3open / bar3=0 (log)" 'ubar3open|bar3=0|bar3:[[:space:]]*OPEN|bar3 OPEN'
-# Host continuum scan: stamp makefile_max=21100 greppable only when N>=21100.
+# Host continuum scan: stamp makefile_max=21200 greppable only when N>=21200.
 if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   mx_line=$(bash "$ROOT/scripts/gj-continuum-makefile-snippet.sh" --max 2>/dev/null || true)
   mx_line=${mx_line//$'\r'/}
@@ -136,21 +136,21 @@ if [[ -f "$ROOT/scripts/gj-continuum-makefile-snippet.sh" ]]; then
   fi
   if [[ -n "${_mx_n:-}" ]]; then
     echo "  info: continuum high-water  makefile_max=$_mx_n  (CREATE-ONLY soft graph)"
-    if [[ "$_mx_n" -ge 21100 ]]; then
-      echo "  info: continuum high-water  makefile_max=21100 greppable  (soft graph ≠ bar3)"
-    elif [[ "$_mx_n" -ge 21000 ]]; then
-      echo "  info: continuum high-water  makefile_max=21000 greppable  (prior tip; soft ≠ product)"
-      echo "  info: continuum high-water  makefile_max=21100  (absent; tree max=$_mx_n; scan=truth)"
+    if [[ "$_mx_n" -ge 21200 ]]; then
+      echo "  info: continuum high-water  makefile_max=21200 greppable  (soft graph ≠ bar3)"
+    elif [[ "$_mx_n" -ge 21100 ]]; then
+      echo "  info: continuum high-water  makefile_max=21100 greppable  (prior tip; soft ≠ product)"
+      echo "  info: continuum high-water  makefile_max=21200  (absent; tree max=$_mx_n; scan=truth)"
     else
-      echo "  info: continuum high-water  makefile_max=21100  (absent; tree max=$_mx_n; scan=truth)"
+      echo "  info: continuum high-water  makefile_max=21200  (absent; tree max=$_mx_n; scan=truth)"
     fi
   else
     echo "  info: continuum high-water  makefile_max=(unparsed)"
   fi
   echo "  info: continuum honesty  soft graph wire ≠ bar3 client / Top50 titles"
   echo "  info: continuum honesty  soft ≠ product complete; product lamps 0"
-  echo "  info: continuum wave 69  target decade M=21100 (CREATE-ONLY soft; parent paste wires)"
-  echo "  info: continuum soft deepen  retdemiluneangle/retcoveredwayangle (CREATE-ONLY soft ≠ product)"
+  echo "  info: continuum wave 70  target decade M=21200 (CREATE-ONLY soft; parent paste wires)"
+  echo "  info: continuum soft deepen  retfosseangle/retcounterscarple (CREATE-ONLY soft ≠ product)"
 else
   echo "  info: continuum makefile_max=(helper missing)"
 fi

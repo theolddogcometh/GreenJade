@@ -37,7 +37,7 @@
  *   virtio-scsi: soft oasis …        (Wave 15)
  *   virtio-scsi: soft return rate — Wave 19 ok/fail rate lamps
  *   virtio-scsi: soft retcode    — Wave 19 retcode catalog
- *   virtio-scsi: soft deepen wave=27 …
+ *   virtio-scsi: soft deepen wave=28 …
  *   virtio-scsi: soft PASS|SOFT|PARTIAL|NODEV
  *   virtio-scsi: soft inventory PASS|SOFT|PARTIAL|NODEV
  *
@@ -86,9 +86,9 @@
 /* Product kind marker from virtio_pci kind_from_device (scsi modern/transitional). */
 #define VIRTIO_SCSI_KIND 6u
 
-/* Wave 27 exclusive soft deepen stamp (inventory only; never hard-gates). */
-#define SCSI_SOFT_WAVE  27u
-#define SCSI_SOFT_AREAS 50u
+/* Wave 28 exclusive soft deepen stamp (inventory only; never hard-gates). */
+#define SCSI_SOFT_WAVE  28u
+#define SCSI_SOFT_AREAS 52u
 
 /* ---- OASIS request / response shapes (clean-room public layout) ---------- */
 
@@ -681,20 +681,35 @@ scsi_soft_inventory(const char *szVia)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)SCSI_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: virtio-scsi: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: virtio-scsi: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("virtio-scsi: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)SCSI_SOFT_WAVE);
-                    /* Grep: virtio-scsi: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: virtio-scsi: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("virtio-scsi: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)SCSI_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: virtio-scsi: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("virtio-scsi: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)SCSI_SOFT_WAVE);
+                            /* Grep: virtio-scsi: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("virtio-scsi: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)SCSI_SOFT_WAVE);
     kprintf("virtio-scsi: soft deepen wave=%u areas=%u via=%s ready=%u "
             "soft=%u io=%u ctrl=%u ev=%u log_n=%u "
             "(soft inventory only; not bar3)\n",

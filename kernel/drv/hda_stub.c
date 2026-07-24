@@ -37,7 +37,7 @@
  *   hda: soft honesty     — bar3/Steam/PipeWire non-claims
  *   hda: soft return rate — Wave 19 ok/fail rate lamps
  *   hda: soft retcode    — Wave 19 retcode catalog
- *   hda: soft deepen      — wave=27 areas stamp
+ *   hda: soft deepen      — wave=28 areas stamp
  *   hda: soft ratio       — Wave 16 stream occupancy lamps
  *   hda: soft headroom    — Wave 16 free stream slots
  *   hda: soft surface     — Wave 16 area catalog
@@ -162,8 +162,8 @@ static u32 g_u32SoftInventoryLogs;
 static u32 g_u32SoftProbeLogs;
 static u32 g_u32SoftSmokeLogs;
 /* Wave 15 deepen area count (fixed greppable categories in inventory log). */
-#define HDA_SOFT_DEEPEN_AREAS 43u
-#define HDA_SOFT_DEEPEN_WAVE  27u
+#define HDA_SOFT_DEEPEN_AREAS 45u
+#define HDA_SOFT_DEEPEN_WAVE  28u
 
 static void hda_soft_inventory_log(const char *szVia);
 
@@ -2596,20 +2596,35 @@ hda_soft_inventory_log(const char *szVia)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)HDA_SOFT_DEEPEN_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: hda: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: hda: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("hda: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)HDA_SOFT_DEEPEN_WAVE);
-                    /* Grep: hda: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: hda: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("hda: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)HDA_SOFT_DEEPEN_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: hda: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("hda: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+                            /* Grep: hda: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("hda: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)HDA_SOFT_DEEPEN_WAVE);
     kprintf("hda: soft deepen wave=%u areas=%u via=%s present=%u mmio=%u "
             "hw_corb=%u stream_dma=%u codec_prog=%u open=%u run=%u "
             "ok=1 skip=0\n",
@@ -3032,20 +3047,35 @@ hda_multi_stream_smoke(void)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)HDA_SOFT_DEEPEN_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: hda: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: hda: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("hda: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)HDA_SOFT_DEEPEN_WAVE);
-                    /* Grep: hda: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: hda: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("hda: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)HDA_SOFT_DEEPEN_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: hda: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("hda: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)HDA_SOFT_DEEPEN_WAVE);
+                            /* Grep: hda: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("hda: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)HDA_SOFT_DEEPEN_WAVE);
     kprintf("hda: soft deepen PASS wave=%u areas=%u codec_hits=%u "
             "mix_underrun=%u\n",
             (unsigned)HDA_SOFT_DEEPEN_WAVE, (unsigned)HDA_SOFT_DEEPEN_AREAS,

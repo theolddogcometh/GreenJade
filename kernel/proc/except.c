@@ -12,7 +12,7 @@
  *   take:     soft claim pending; resume path separate (EXCEPT_TAG_FAULT)
  * One-slot port (product: queue / SEH chain). Pure C freestanding.
  *
- * Soft product inventory (Wave 27 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 28 exclusive deepen; this unit only):
  *   - Register / unregister / deliver / take / drop / wait / resume tallies
  *   - Fail-closed + one-slot overwrite + wake budget diagnostics
  *   - Wave 15: rebind, wait-race self-wake, handler/count query, smoke, deepen
@@ -34,7 +34,7 @@
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 27u
+#define GJ_EXCEPT_SOFT_WAVE 28u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -212,7 +212,7 @@ soft_inventory_log(void)
             GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft retmap — Wave 19 return-surface map */
-    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=27\n");
+    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=28\n");
 
     /* Grep: except: soft deepen */
     /*
@@ -336,20 +336,35 @@ soft_inventory_log(void)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)GJ_EXCEPT_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: except: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: except: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("except: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)GJ_EXCEPT_SOFT_WAVE);
-                    /* Grep: except: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: except: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("except: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)GJ_EXCEPT_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: except: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("except: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)GJ_EXCEPT_SOFT_WAVE);
+                            /* Grep: except: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("except: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)GJ_EXCEPT_SOFT_WAVE);
     kprintf("except: soft deepen wave=%u bind=%u del_ok=%u take=%u drop=%u "
             "overwrite=%u thr0=%u rebind=%u race=%u logs=%u "
             "(soft inventory only; not product gate)\n",

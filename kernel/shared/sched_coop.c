@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 27 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 28 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -22,7 +22,7 @@
  *   coop: soft path        — surface catalog + non-claims
  *   coop: soft geom        — Wave 19 max_thr/stack/frame geometry
  *   coop: soft return      — Wave 19 API return surfaces + product_kernel=OPEN
- *   coop: soft deepen      — wave=27 stamp + area count
+ *   coop: soft deepen      — wave=28 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
@@ -30,8 +30,8 @@
 #include <gj/sched_coop.h>
 #include <gj/string.h>
 
-/* Wave 27 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 27u
+/* Wave 28 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 28u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -293,7 +293,7 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
             (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
             (unsigned)COOP_SOFT_WAVE);
 
-    /* Grep: coop: soft exclusive — Wave 27 exclusive deepen */
+    /* Grep: coop: soft exclusive — Wave 28 exclusive deepen */
     kprintf("coop: soft exclusive wave=%u multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 preemptive=0 smp=0\n",
             (unsigned)COOP_SOFT_WAVE);
@@ -461,20 +461,35 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)COOP_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: coop: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: coop: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("coop: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)COOP_SOFT_WAVE);
-                    /* Grep: coop: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: coop: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("coop: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)COOP_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: coop: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("coop: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)COOP_SOFT_WAVE);
+                            /* Grep: coop: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("coop: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)COOP_SOFT_WAVE);
     kprintf("coop: soft deepen wave=%u areas=%u max_thr=%u stack=%u "
             "logs=%u surf=0x%x\n",
             (unsigned)COOP_SOFT_WAVE, cAreas,

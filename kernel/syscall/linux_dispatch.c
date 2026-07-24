@@ -5,7 +5,7 @@
  * Hybrid Option C: hot table / cold personality (doors) / ENOSYS.
  * Pure C11 clean-room Linux x86_64 surface — no GPL source.
  *
- * Soft inventory (Wave 12/14 base + Wave 27 exclusive deepen; this unit):
+ * Soft inventory (Wave 12/14 base + Wave 28 exclusive deepen; this unit):
  *   "linux: nr class soft …"     — table inventory + runtime (legacy + deepen)
  *   "linux: dispatch soft …"     — twin path/API tallies (agent-friendly)
  *
@@ -52,7 +52,7 @@ static struct gj_linux_nr_class_stats g_class;
 static int g_fNrClassLive;
 
 /*
- * Soft product inventory (Wave 12/14 base + Wave 27 exclusive deepen).
+ * Soft product inventory (Wave 12/14 base + Wave 28 exclusive deepen).
  * File-local path tallies. Cumulative unless noted; wrap OK; never hard-gates.
  * greppable: linux: nr class soft … / linux: dispatch soft …
  */
@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE  27u
-#define LINUX_DISPATCH_SOFT_AREAS 50u
+#define LINUX_DISPATCH_SOFT_WAVE  28u
+#define LINUX_DISPATCH_SOFT_AREAS 52u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -388,7 +388,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: nr class soft note (Wave 20 deepen) */
-    kprintf("linux: nr class soft note milestone=wave27 exclusive=1 "
+    kprintf("linux: nr class soft note milestone=wave28 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -531,20 +531,35 @@ soft_dispatch_deepen_log(void)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)LINUX_DISPATCH_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: linux: nr class: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: linux: nr class: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("linux: nr class: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
-                    /* Grep: linux: nr class: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: linux: nr class: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("linux: nr class: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: linux: nr class: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("linux: nr class: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+                            /* Grep: linux: nr class: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("linux: nr class: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)LINUX_DISPATCH_SOFT_WAVE);
     kprintf("linux: nr class soft deepen wave=%u areas=%u live=%u "
             "table=%u class=%u log_n=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS,
@@ -668,7 +683,7 @@ soft_dispatch_deepen_log(void)
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
     /* Grep: linux: dispatch soft note (Wave 20 deepen) */
-    kprintf("linux: dispatch soft note milestone=wave27 exclusive=1 "
+    kprintf("linux: dispatch soft note milestone=wave28 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
 
@@ -808,20 +823,35 @@ soft_dispatch_deepen_log(void)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)LINUX_DISPATCH_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: linux: dispatch: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: linux: dispatch: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("linux: dispatch: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
-                    /* Grep: linux: dispatch: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: linux: dispatch: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("linux: dispatch: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: linux: dispatch: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("linux: dispatch: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)LINUX_DISPATCH_SOFT_WAVE);
+                            /* Grep: linux: dispatch: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("linux: dispatch: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)LINUX_DISPATCH_SOFT_WAVE);
     kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "
             "table=%u hot=%u cold=%u none=%u log_n=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS,
@@ -1569,6 +1599,6 @@ gj_linux_nr_class_soft_log(void)
             (unsigned long long)g_class.u64LastNr,
             (unsigned long long)g_class.u64LastRet);
 
-    /* Wave 12 + Wave 27 exclusive deepen (additive; never hard-gates). */
+    /* Wave 12 + Wave 28 exclusive deepen (additive; never hard-gates). */
     soft_dispatch_deepen_log();
 }

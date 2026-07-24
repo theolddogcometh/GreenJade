@@ -520,7 +520,7 @@ ld-gj: $(LD_GJ_ELF)
 # CREATE-ONLY freestanding pure-C TUs: user/libcgj/src/graph_batchN.c
 # land first; parent pastes paths into CGJ_SRCS (this list). High-water
 # is the numeric max basename already listed — not hard-coded elsewhere:
-#   makefile_max=16900
+#   makefile_max=17000
 # Verify: ./scripts/gj-continuum-makefile-snippet.sh --max
 # Soft graph only — not bar3, not Deck Top-50 title runs, not product
 # score (gj_bar3_ready_15500 / gj_product_score_15500 remain 0 by design).
@@ -17504,11 +17504,111 @@ user/libcgj/src/graph_batch16897.c \
 user/libcgj/src/graph_batch16898.c \
 user/libcgj/src/graph_batch16899.c \
 user/libcgj/src/graph_batch16900.c \
+user/libcgj/src/graph_batch16901.c \
+user/libcgj/src/graph_batch16902.c \
+user/libcgj/src/graph_batch16903.c \
+user/libcgj/src/graph_batch16904.c \
+user/libcgj/src/graph_batch16905.c \
+user/libcgj/src/graph_batch16906.c \
+user/libcgj/src/graph_batch16907.c \
+user/libcgj/src/graph_batch16908.c \
+user/libcgj/src/graph_batch16909.c \
+user/libcgj/src/graph_batch16910.c \
+user/libcgj/src/graph_batch16911.c \
+user/libcgj/src/graph_batch16912.c \
+user/libcgj/src/graph_batch16913.c \
+user/libcgj/src/graph_batch16914.c \
+user/libcgj/src/graph_batch16915.c \
+user/libcgj/src/graph_batch16916.c \
+user/libcgj/src/graph_batch16917.c \
+user/libcgj/src/graph_batch16918.c \
+user/libcgj/src/graph_batch16919.c \
+user/libcgj/src/graph_batch16920.c \
+user/libcgj/src/graph_batch16921.c \
+user/libcgj/src/graph_batch16922.c \
+user/libcgj/src/graph_batch16923.c \
+user/libcgj/src/graph_batch16924.c \
+user/libcgj/src/graph_batch16925.c \
+user/libcgj/src/graph_batch16926.c \
+user/libcgj/src/graph_batch16927.c \
+user/libcgj/src/graph_batch16928.c \
+user/libcgj/src/graph_batch16929.c \
+user/libcgj/src/graph_batch16930.c \
+user/libcgj/src/graph_batch16931.c \
+user/libcgj/src/graph_batch16932.c \
+user/libcgj/src/graph_batch16933.c \
+user/libcgj/src/graph_batch16934.c \
+user/libcgj/src/graph_batch16935.c \
+user/libcgj/src/graph_batch16936.c \
+user/libcgj/src/graph_batch16937.c \
+user/libcgj/src/graph_batch16938.c \
+user/libcgj/src/graph_batch16939.c \
+user/libcgj/src/graph_batch16940.c \
+user/libcgj/src/graph_batch16941.c \
+user/libcgj/src/graph_batch16942.c \
+user/libcgj/src/graph_batch16943.c \
+user/libcgj/src/graph_batch16944.c \
+user/libcgj/src/graph_batch16945.c \
+user/libcgj/src/graph_batch16946.c \
+user/libcgj/src/graph_batch16947.c \
+user/libcgj/src/graph_batch16948.c \
+user/libcgj/src/graph_batch16949.c \
+user/libcgj/src/graph_batch16950.c \
+user/libcgj/src/graph_batch16951.c \
+user/libcgj/src/graph_batch16952.c \
+user/libcgj/src/graph_batch16953.c \
+user/libcgj/src/graph_batch16954.c \
+user/libcgj/src/graph_batch16955.c \
+user/libcgj/src/graph_batch16956.c \
+user/libcgj/src/graph_batch16957.c \
+user/libcgj/src/graph_batch16958.c \
+user/libcgj/src/graph_batch16959.c \
+user/libcgj/src/graph_batch16960.c \
+user/libcgj/src/graph_batch16961.c \
+user/libcgj/src/graph_batch16962.c \
+user/libcgj/src/graph_batch16963.c \
+user/libcgj/src/graph_batch16964.c \
+user/libcgj/src/graph_batch16965.c \
+user/libcgj/src/graph_batch16966.c \
+user/libcgj/src/graph_batch16967.c \
+user/libcgj/src/graph_batch16968.c \
+user/libcgj/src/graph_batch16969.c \
+user/libcgj/src/graph_batch16970.c \
+user/libcgj/src/graph_batch16971.c \
+user/libcgj/src/graph_batch16972.c \
+user/libcgj/src/graph_batch16973.c \
+user/libcgj/src/graph_batch16974.c \
+user/libcgj/src/graph_batch16975.c \
+user/libcgj/src/graph_batch16976.c \
+user/libcgj/src/graph_batch16977.c \
+user/libcgj/src/graph_batch16978.c \
+user/libcgj/src/graph_batch16979.c \
+user/libcgj/src/graph_batch16980.c \
+user/libcgj/src/graph_batch16981.c \
+user/libcgj/src/graph_batch16982.c \
+user/libcgj/src/graph_batch16983.c \
+user/libcgj/src/graph_batch16984.c \
+user/libcgj/src/graph_batch16985.c \
+user/libcgj/src/graph_batch16986.c \
+user/libcgj/src/graph_batch16987.c \
+user/libcgj/src/graph_batch16988.c \
+user/libcgj/src/graph_batch16989.c \
+user/libcgj/src/graph_batch16990.c \
+user/libcgj/src/graph_batch16991.c \
+user/libcgj/src/graph_batch16992.c \
+user/libcgj/src/graph_batch16993.c \
+user/libcgj/src/graph_batch16994.c \
+user/libcgj/src/graph_batch16995.c \
+user/libcgj/src/graph_batch16996.c \
+user/libcgj/src/graph_batch16997.c \
+user/libcgj/src/graph_batch16998.c \
+user/libcgj/src/graph_batch16999.c \
+user/libcgj/src/graph_batch17000.c \
 	user/libcgj/src/rand48.c \
 	user/libcgj/src/ether.c \
 	user/libcgj/src/sysv_ipc.c \
 	user/libcgj/src/graph_batch3.c
-# End CGJ_SRCS. Continuum soft high-water: graph_batch16900.c ⇒ makefile_max=16900.
+# End CGJ_SRCS. Continuum soft high-water: graph_batch17000.c ⇒ makefile_max=17000.
 # (Trailing non-batch TUs above: rand48/ether/sysv_ipc + legacy graph_batch3.c.)
 CGJ_ASMS := user/libcgj/src/setjmp.S
 CGJ_OBJS := $(patsubst user/libcgj/src/%.c,$(BUILD)/user/libcgj/src/%.o,$(CGJ_SRCS)) \

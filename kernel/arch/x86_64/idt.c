@@ -37,7 +37,7 @@
  *   idt: soft ratio …     — install/reject/verify/band path ratios
  *   idt: soft return rate — Wave 19 ok/fail rate lamps
  *   idt: soft retcode    — Wave 19 retcode catalog
- *   idt: soft deepen …    — wave=27 areas stamp
+ *   idt: soft deepen …    — wave=28 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   idt: soft return …    — Wave 17 API return surfaces (kept)
  *   idt: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -106,7 +106,7 @@ static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define IDT_SOFT_WAVE 27u
+#define IDT_SOFT_WAVE 28u
 
 /*
  * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
@@ -934,20 +934,35 @@ idt_soft_inventory_print(void)
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)IDT_SOFT_WAVE);
                     /*
-                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
                      * Return surfaces only — soft inventory; never hard-gates product paths.
                      * Soft≠product; not bar3.
                      */
-                    /* Grep: idt: soft retprism — Wave 27 return-prism honesty */
+                    /* Grep: idt: soft retprism — Wave 27 return-prism honesty (kept) */
                     kprintf("idt: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
                             "never_blocks_m0=1 wave=%u "
                             "(retprism honesty; Soft≠product; not bar3)\n",
                             (unsigned)IDT_SOFT_WAVE);
-                    /* Grep: idt: soft retforge — Wave 27 exclusive forge stamp */
+                    /* Grep: idt: soft retforge — Wave 27 forge stamp (kept) */
                     kprintf("idt: soft retforge exclusive=1 soft_ne_product=1 "
                             "product_kernel=OPEN bar3=0 wave=%u "
                             "(retforge stamp; Soft≠product)\n",
                             (unsigned)IDT_SOFT_WAVE);
+                            /*
+                             * ---- Wave 28 exclusive complementary surfaces (never reshape primary).
+                             * Return surfaces only — soft inventory; never hard-gates product paths.
+                             * Soft≠product; not bar3.
+                             */
+                            /* Grep: idt: soft retshard — Wave 28 return-shard honesty */
+                            kprintf("idt: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
+                                "never_blocks_m0=1 wave=%u "
+                                "(retshard honesty; Soft≠product; not bar3)\n",
+                                (unsigned)IDT_SOFT_WAVE);
+                            /* Grep: idt: soft retcrown — Wave 28 exclusive crown stamp */
+                            kprintf("idt: soft retcrown exclusive=1 soft_ne_product=1 "
+                                "product_kernel=OPEN bar3=0 wave=%u "
+                                "(retcrown stamp; Soft≠product)\n",
+                                (unsigned)IDT_SOFT_WAVE);
     kprintf("idt: soft deepen wave=%u areas="
             "inventory,present,layout,contract,bands,type,span,"
             "vectors,entry,last,stats,path,program,verify,"

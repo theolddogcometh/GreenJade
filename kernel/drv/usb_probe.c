@@ -23,7 +23,7 @@
  *   usb: soft honesty    — bar3/HID/rings non-claims
  *   usb: soft return rate — Wave 19 ok/fail rate lamps
  *   usb: soft retcode    — Wave 19 retcode catalog
- *   usb: soft deepen     — wave=26 areas stamp
+ *   usb: soft deepen     — wave=27 areas stamp
  *   usb: soft ratio      — Wave 16 identify/BAR occupancy
  *   usb: soft headroom   — Wave 16 map/bar head
  *   usb: soft surface    — Wave 16 area catalog
@@ -53,7 +53,7 @@
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
 #define USB_SOFT_DEEPEN_AREAS 35u
-#define USB_SOFT_DEEPEN_WAVE  26u
+#define USB_SOFT_DEEPEN_WAVE  27u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -605,20 +605,35 @@ usb_soft_inventory(const char *szVia, u32 cFound, u32 cUhci, u32 cOhci,
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)USB_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: usb: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: usb: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("usb: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)USB_SOFT_DEEPEN_WAVE);
-            /* Grep: usb: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: usb: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("usb: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)USB_SOFT_DEEPEN_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: usb: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("usb: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)USB_SOFT_DEEPEN_WAVE);
+                    /* Grep: usb: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("usb: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)USB_SOFT_DEEPEN_WAVE);
     kprintf("usb: soft deepen wave=%u areas=%u via=%s found=%u xhci=%u "
             "identify_ok=%u map_fail=%u bar_empty=%u ok=%u skip=%u\n",
             (unsigned)USB_SOFT_DEEPEN_WAVE, (unsigned)USB_SOFT_DEEPEN_AREAS,

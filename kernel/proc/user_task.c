@@ -11,7 +11,7 @@
  *   pers  code  @ GJ_PERS_CODE_VA   (0x0120_0000)
  *   pers  stack @ GJ_PERS_STACK_TOP (0x0130_0000, grows down)
  *
- * Soft product inventory (Wave 26 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 27 exclusive deepen; this unit only):
  * greppable: "user: soft …" | "user_task: soft …"
  *   user: soft inventory …
  *   user: soft stats …
@@ -24,7 +24,7 @@
  *   user: soft return …      (Wave 19 return-path catalog)
  *   user: soft ret_surface … (Wave 19 terminal return classes)
  *   user: soft surface …     (Wave 19 area catalog)
- *   user: soft deepen wave=26 …
+ *   user: soft deepen wave=27 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -65,7 +65,7 @@ static int g_fUserMapped;
 static int g_fPersMapped;
 
 /* ---- Soft map / enter counters (grep: user: soft …) Wave 19 ----------- */
-#define GJ_USER_SOFT_WAVE 26u
+#define GJ_USER_SOFT_WAVE 27u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -257,13 +257,13 @@ user_soft_inventory(const char *szVia)
     /* Grep: user: soft ret_surface — Wave 19 terminal return classes */
     kprintf("user: soft ret_surface map=ring3_ok|ring3_fail|pers_ok|pers_fail "
             "enter=ok|skip soft=ok|bad layout|as|install|stack=fail "
-            "recheck=pass|fail product_kernel=OPEN areas=15 wave=%u\n",
+            "recheck=pass|fail product_kernel=OPEN areas=17 wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user: soft surface — Wave 19 area catalog */
     kprintf("user: soft surface inventory,stats,map,layout,enter,recheck,"
             "catalog,va,path,return,ret_surface,surface,deepen "
-            "areas=15 wave=%u\n",
+            "areas=17 wave=%u\n",
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user: soft deepen */
@@ -373,20 +373,35 @@ user_soft_inventory(const char *szVia)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: user: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: user: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("user: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: user: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("user: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: user: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("user: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)GJ_USER_SOFT_WAVE);
+                    /* Grep: user: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("user: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)GJ_USER_SOFT_WAVE);
     kprintf("user: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
             "enter_ok=%u soft=%u soft_bad=%u logs=%u "
             "(soft inventory only; not product gate)\n",
@@ -422,7 +437,7 @@ user_soft_inventory(const char *szVia)
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user_task: soft retmap — Wave 19 return-surface map */
-    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=26\n");
+    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=27\n");
 
     /* Grep: user_task: soft deepen */
     /*
@@ -531,20 +546,35 @@ user_soft_inventory(const char *szVia)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: user_task: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: user_task: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("user_task: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
-            /* Grep: user_task: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: user_task: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("user_task: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)GJ_USER_SOFT_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: user_task: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("user_task: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)GJ_USER_SOFT_WAVE);
+                    /* Grep: user_task: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("user_task: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)GJ_USER_SOFT_WAVE);
     kprintf("user_task: soft deepen wave=%u via=%s ring3_ok=%u pers_ok=%u "
             "enter_ok=%u soft=%u soft_bad=%u logs=%u "
             "(soft inventory only; not product gate)\n",

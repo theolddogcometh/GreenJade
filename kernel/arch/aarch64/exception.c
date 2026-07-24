@@ -22,7 +22,7 @@
  *   aarch64: exception soft daif=… i_held=… el=…
  *   aarch64: exception soft PASS | FAIL
  *
- * Soft inventory deepen (Wave 26 exclusive; this unit only):
+ * Soft inventory deepen (Wave 27 exclusive; this unit only):
  *   Multi-line greppable areas under "aarch64: exception soft …":
  *     inventory | vbar | class | counts | daif | banks | gates | path | deepen
  *   Banks soft: CurrentEL SP_ELx / SP_EL0 / Lower AArch64 / Lower AArch32
@@ -39,7 +39,7 @@
  *            aarch64: exception soft surf …
  *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=26 …
+ *            aarch64: exception soft deepen wave=27 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -77,9 +77,9 @@
 #define EXC_SOFT_DAIF_A_BIT     (1ul << 8)
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
-/* Wave 26 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE   26u
-#define EXC_SOFT_AREAS 28u
+/* Wave 27 soft inventory stamp (file-local; never product gate). */
+#define EXC_SOFT_WAVE   27u
+#define EXC_SOFT_AREAS 30u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -422,20 +422,35 @@ aarch64_uart_puts("aarch64: soft retbeacon exclusive=1 soft_ne_product=1 "
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retbeacon stamp; Soft!=product)\n");
 /*
- * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: soft retcipher — Wave 26 return-cipher honesty */
+/* Grep: aarch64: soft retcipher — Wave 26 return-cipher honesty (kept) */
 aarch64_uart_puts("aarch64: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
               "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retcipher honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: soft retflame — Wave 26 exclusive flame stamp */
+/* Grep: aarch64: soft retflame — Wave 26 flame stamp (kept) */
 aarch64_uart_puts("aarch64: soft retflame exclusive=1 soft_ne_product=1 "
               "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retflame stamp; Soft!=product)\n");
+/*
+ * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: soft retprism — Wave 27 return-prism honesty */
+aarch64_uart_puts("aarch64: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+              "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retprism honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retforge — Wave 27 exclusive forge stamp */
+aarch64_uart_puts("aarch64: soft retforge exclusive=1 soft_ne_product=1 "
+              "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retforge stamp; Soft!=product)\n");
 /* Grep: aarch64: exception soft deepen */
     aarch64_uart_puts("aarch64: exception soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
@@ -451,7 +466,7 @@ aarch64_uart_puts(" (retflame stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: exception soft exclusive — Wave 26 exclusive deepen */
+    /* Grep: aarch64: exception soft exclusive — Wave 27 exclusive deepen */
     aarch64_uart_puts("aarch64: exception soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);

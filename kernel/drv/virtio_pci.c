@@ -78,7 +78,7 @@ static struct gj_virtio_dev g_aDevs[GJ_VIRTIO_MAX_DEVS];
 static u32                  g_cDevs;
 
 /* Wave 20 deepen stamp (greppable wave= / areas=). */
-#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  26u
+#define VIRTIO_PCI_SOFT_DEEPEN_WAVE  27u
 #define VIRTIO_PCI_SOFT_DEEPEN_AREAS 44u
 
 /*
@@ -650,20 +650,35 @@ soft_inventory_log(void)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: virtio-pci: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: virtio-pci: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("virtio-pci: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
-            /* Grep: virtio-pci: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: virtio-pci: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("virtio-pci: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: virtio-pci: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("virtio-pci: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+                    /* Grep: virtio-pci: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("virtio-pci: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
     kprintf("virtio-pci: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,
@@ -976,20 +991,35 @@ soft_inventory_log(void)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: virtio: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: virtio: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("virtio: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
-            /* Grep: virtio: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: virtio: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("virtio: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: virtio: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("virtio: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
+                    /* Grep: virtio: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("virtio: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE);
     kprintf("virtio: soft deepen wave=%u areas=%u found=%u modern=%u "
             "setup_ok=%u q_ok=%u log_n=%u\n",
             (unsigned)VIRTIO_PCI_SOFT_DEEPEN_WAVE,

@@ -16,7 +16,7 @@
  *        QueueReady stays 0 — no real DMA.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 11 base + Wave 26 exclusive deepen; this unit only —
+ * Soft inventory (Wave 11 base + Wave 27 exclusive deepen; this unit only —
  * greppable "aarch64: virtio soft …")
  * -------------------------------------------------------------------------
  * Soft scan: slot count + base/stride + magic/dev tallies after probe.
@@ -109,9 +109,9 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_SOFT_QNUM     8u
 #define VIRTIO_SOFT_ALIGN    4096u
 
-/* Wave 26 soft inventory stamp (file-local; never product gate). */
-#define VIRTIO_SOFT_WAVE   26u
-#define VIRTIO_SOFT_AREAS 29u
+/* Wave 27 soft inventory stamp (file-local; never product gate). */
+#define VIRTIO_SOFT_WAVE   27u
+#define VIRTIO_SOFT_AREAS 31u
 
 /*
  * Guest-side soft split virtqueue layout (OASIS public shape).
@@ -774,20 +774,35 @@ aarch64_uart_puts("aarch64: virtio: soft retbeacon exclusive=1 soft_ne_product=1
 aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 aarch64_uart_puts(" (retbeacon stamp; Soft!=product)\n");
 /*
- * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: virtio: soft retcipher — Wave 26 return-cipher honesty */
+/* Grep: aarch64: virtio: soft retcipher — Wave 26 return-cipher honesty (kept) */
 aarch64_uart_puts("aarch64: virtio: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
               "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 aarch64_uart_puts(" (retcipher honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: virtio: soft retflame — Wave 26 exclusive flame stamp */
+/* Grep: aarch64: virtio: soft retflame — Wave 26 flame stamp (kept) */
 aarch64_uart_puts("aarch64: virtio: soft retflame exclusive=1 soft_ne_product=1 "
               "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 aarch64_uart_puts(" (retflame stamp; Soft!=product)\n");
+/*
+ * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: virtio: soft retprism — Wave 27 return-prism honesty */
+aarch64_uart_puts("aarch64: virtio: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+              "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+aarch64_uart_puts(" (retprism honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: virtio: soft retforge — Wave 27 exclusive forge stamp */
+aarch64_uart_puts("aarch64: virtio: soft retforge exclusive=1 soft_ne_product=1 "
+              "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
+aarch64_uart_puts(" (retforge stamp; Soft!=product)\n");
 aarch64_uart_puts("aarch64: virtio soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -802,7 +817,7 @@ aarch64_uart_puts("aarch64: virtio soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: virtio soft exclusive — Wave 26 exclusive deepen */
+    /* Grep: aarch64: virtio soft exclusive — Wave 27 exclusive deepen */
     aarch64_uart_puts("aarch64: virtio soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);

@@ -18,7 +18,7 @@
  * to NOTIFY_SOFT_MULTI_MAX; each waiter CAS-claims matching badge bits.
  *
  * Soft product inventory (file-local sticky counters; never hard-gate).
- * Wave 26 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 27 exclusive deepen — greppable prefix-stable serial markers
  * (notify: soft …); diagnostics only, never hard-gate product:
  *   notify: soft inventory         — multi_max + path catalog at init/log
  *   notify: soft pulse inventory   — pulse/OR/wake catalog + counters
@@ -42,7 +42,7 @@
  *   notify: soft retcode           — Wave 17 observed badge/status retcode catalog
  *   notify: soft return selftest — Wave 19 terminal return surface
  *   notify: soft retmap     — Wave 19 return-surface map
- *   notify: soft deepen            — wave=26 areas stamp
+ *   notify: soft deepen            — wave=27 areas stamp
  *   notify: soft path              — G-NOTIFY invariants + honesty claim
  *   notify: soft stats             — aggregate path counters
  *   notify: soft pulse hit         — pulse delivered to live object
@@ -76,8 +76,8 @@
 static struct gj_notify g_msixNotify;
 static int              g_fMsixInited;
 
-/* Wave 26 exclusive soft deepen stamp (greppable wave=26). */
-#define NOTIFY_SOFT_DEEPEN_WAVE  26u
+/* Wave 27 exclusive soft deepen stamp (greppable wave=27). */
+#define NOTIFY_SOFT_DEEPEN_WAVE  27u
 /* +return selftest|retmap over Wave 17 return rate|retcode. */
 #define NOTIFY_SOFT_DEEPEN_AREAS 40u
 
@@ -955,20 +955,35 @@ notify_soft_log(void)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: notify: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: notify: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("notify: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
-            /* Grep: notify: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: notify: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("notify: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: notify: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("notify: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
+                    /* Grep: notify: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("notify: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)NOTIFY_SOFT_DEEPEN_WAVE);
     kprintf("notify: soft deepen wave=%u areas=%u pulse_enter=%lu "
             "wait_enter=%lu multi_calls=%lu msix_init=%lu "
             "ret_wait_bits=%lu ret_wait_zero=%lu ret_inst_ok=%lu "

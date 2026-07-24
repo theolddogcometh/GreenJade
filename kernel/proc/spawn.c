@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 26u
+#define GJ_SPAWN_SOFT_WAVE 27u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -309,17 +309,17 @@ soft_inventory_log(const char *szVia)
     kprintf("spawn: soft ret_surface spawn=ok|fail "
             "deny=null|full|as|mint|thr mint=ok|fail|soft|soft_bad "
             "kill=ok|idem wait=ok|again from_cap=hit|miss teardown "
-            "product_kernel=OPEN areas=17 wave=%u\n",
+            "product_kernel=OPEN areas=19 wave=%u\n",
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft surface — Wave 19 area catalog */
     kprintf("spawn: soft surface inventory,stats,spawn,mint,kill,wait,"
             "from_cap,teardown,lifecycle,capacity,path,return,ret_surface,"
-            "surface,deepen areas=17 wave=%u\n",
+            "surface,deepen areas=19 wave=%u\n",
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=26\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=27\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -428,20 +428,35 @@ soft_inventory_log(const char *szVia)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)GJ_SPAWN_SOFT_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: spawn: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: spawn: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("spawn: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_SPAWN_SOFT_WAVE);
-            /* Grep: spawn: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: spawn: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("spawn: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)GJ_SPAWN_SOFT_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: spawn: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("spawn: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)GJ_SPAWN_SOFT_WAVE);
+                    /* Grep: spawn: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("spawn: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)GJ_SPAWN_SOFT_WAVE);
     kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
             "live=%u peak=%u mint_soft=%u mint_soft_bad=%u teardown=%u "
             "logs=%u (soft inventory only; not product gate)\n",

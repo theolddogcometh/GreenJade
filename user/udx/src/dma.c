@@ -5,7 +5,7 @@
  * DMA helpers. Host: calloc identity cookies.
  * Freestanding: static slab (UDX_FS_DMA_SLOTS × UDX_FS_DMA_SLOT_CB).
  *
- * Soft inventory (Wave 26 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 27 exclusive deepen; this unit only) —
  * greppable "udx: dma soft …":
  *   udx: dma soft inventory …
  *   udx: dma soft alloc …
@@ -37,7 +37,7 @@ static struct udx_fs_dma_slot g_aFsDma[UDX_FS_DMA_SLOTS];
 #define UDX_DMA_SOFT_WAVE 25u
 
 /*
- * Soft DMA product inventory (Wave 26 exclusive deepen). Cumulative for
+ * Soft DMA product inventory (Wave 27 exclusive deepen). Cumulative for
  * this process. greppable: udx: dma soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -112,7 +112,7 @@ dma_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft DMA inventory (Wave 26 exclusive deepen).
+ * Greppable soft DMA inventory (Wave 27 exclusive deepen).
  * Prefix-stable "udx: dma soft …" — never hard-gates; observation only.
  *
  * greppable: udx: dma soft
@@ -194,7 +194,7 @@ dma_soft_inventory_log(void)
                   UDX_DMA_SOFT_WAVE);
 
     /*
-     * Grep: udx: dma soft honesty (Wave 26 exclusive deepen).
+     * Grep: udx: dma soft honesty (Wave 27 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     dma_soft_emit("udx: dma soft honesty multi_server=0 confine=0 bar3=0 "

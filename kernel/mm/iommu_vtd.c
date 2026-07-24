@@ -11,7 +11,7 @@
  * Optional DRHD MMIO program when ACPI DMAR provides a base.
  * Not derived from Linux intel-iommu or any GPL VT-d driver.
  *
- * Wave 26 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
+ * Wave 27 exclusive soft deepen (this unit only — greppable "vtd: soft …"):
  *   vtd: soft inventory  — tables/pages/ctx/domains/feat rollup
  *   vtd: soft tables     — root/context/SLPT identity construct
  *   vtd: soft cap        — CAP/ECAP MMIO or synthetic soft
@@ -34,7 +34,7 @@
  *   vtd: soft return     — Wave 17 attach/domain return taxonomy
  *   vtd: soft return selftest — Wave 19 terminal return surface
  *   vtd: soft retmap     — Wave 19 return-surface map
- *   vtd: soft deepen     — wave=26 stamp + area count
+ *   vtd: soft deepen     — wave=27 stamp + area count
  *   vtd: soft OPEN       — always-on product IOMMU OPEN honesty
  *   vtd: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW product close;
@@ -99,10 +99,10 @@
 /* Soft domain attach slots (BDF → DID); independent of window table */
 #define VTD_SOFT_ATTACH_MAX 32u
 
-/* Wave 26 soft inventory stamp (file-local; never product gate). */
-#define VTD_SOFT_WAVE  26u
+/* Wave 27 soft inventory stamp (file-local; never product gate). */
+#define VTD_SOFT_WAVE  27u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define VTD_SOFT_AREAS 42u
+#define VTD_SOFT_AREAS 44u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1262,22 +1262,37 @@ vtd_soft_inventory_log(void)
                     "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)VTD_SOFT_WAVE);
             /*
-             * ---- Wave 26 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 26 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: vtd: soft retcipher — Wave 26 return-cipher honesty */
+            /* Grep: vtd: soft retcipher — Wave 26 return-cipher honesty (kept) */
             kprintf("vtd: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retcipher honesty; Soft≠product; not bar3)\n",
                     (unsigned)VTD_SOFT_WAVE);
-            /* Grep: vtd: soft retflame — Wave 26 exclusive flame stamp */
+            /* Grep: vtd: soft retflame — Wave 26 flame stamp (kept) */
             kprintf("vtd: soft retflame exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retflame stamp; Soft≠product)\n",
                     (unsigned)VTD_SOFT_WAVE);
+                    /*
+                     * ---- Wave 27 exclusive complementary surfaces (never reshape primary).
+                     * Return surfaces only — soft inventory; never hard-gates product paths.
+                     * Soft≠product; not bar3.
+                     */
+                    /* Grep: vtd: soft retprism — Wave 27 return-prism honesty */
+                    kprintf("vtd: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
+                            "never_blocks_m0=1 wave=%u "
+                            "(retprism honesty; Soft≠product; not bar3)\n",
+                            (unsigned)VTD_SOFT_WAVE);
+                    /* Grep: vtd: soft retforge — Wave 27 exclusive forge stamp */
+                    kprintf("vtd: soft retforge exclusive=1 soft_ne_product=1 "
+                            "product_kernel=OPEN bar3=0 wave=%u "
+                            "(retforge stamp; Soft≠product)\n",
+                            (unsigned)VTD_SOFT_WAVE);
     kprintf("vtd: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 26 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 27 exclusive; soft only; not product always-on IOMMU; "
             "not bar3; soft≠product)\n",
             (unsigned)VTD_SOFT_WAVE, (unsigned)VTD_SOFT_AREAS, g_cSoftInvLogs,
             (unsigned)u32Surf);

@@ -19,7 +19,7 @@
  *   READ(10), WRITE(10), SYNCHRONIZE CACHE(10). LUN 0 only;
  *   illegal LUN / opcode / LBA → CHECK + fixed sense.
  *
- * Soft inventory (Wave 74 exclusive deepen — this unit only):
+ * Soft inventory (Wave 75 exclusive deepen — this unit only):
  *   - Soft submit enter/ok/fail; per-op ok; deny catalog; LUN honesty
  *   - Product door INQUIRY path tracked separate from soft INQUIRY
  *   greppable: "scsi_mid: soft …" via scsi_mid_soft_inventory_log()
@@ -83,7 +83,7 @@ static uint8_t g_aSoftUnitSense[SCSI_MID_SENSE_MAX];
 static uint8_t g_u8SoftUnitSenseLen;
 
 /*
- * Soft product inventory (Wave 74 exclusive deepen). File-local tallies.
+ * Soft product inventory (Wave 75 exclusive deepen). File-local tallies.
  * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft …
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  */
@@ -874,13 +874,13 @@ scsi_mid_submit(struct scsi_io *pIo)
 }
 
 /*
- * Wave 74 exclusive soft inventory dump (product library path).
+ * Wave 75 exclusive soft inventory dump (product library path).
  * Greppable prefix: "scsi_mid: soft …"
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  * Never hard-gates submit / live path. Host uses printf; freestanding
  * uses gj_debug_log when SCSI_HAS_SYS.
  *
- * Exported without header change (Wave 74 exclusive; host server declares).
+ * Exported without header change (Wave 75 exclusive; host server declares).
  */
 void
 scsi_mid_soft_inventory_log(void)
@@ -1030,10 +1030,10 @@ scsi_mid_soft_inventory_log(void)
            "(soft inventory; not bar3)\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
-    /* Grep: scsi_mid: soft honesty (Wave 74 exclusive deepen) */
-/* Wave 74 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retglacisangle continuum_toward=21600 soft_ne_product=1
- *   greppable: soft retparapetangle exclusive=1 continuum_toward=21600
+    /* Grep: scsi_mid: soft honesty (Wave 75 exclusive deepen) */
+/* Wave 75 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmoatangle continuum_toward=21700 soft_ne_product=1
+ *   greppable: soft retowerangle exclusive=1 continuum_toward=21700
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

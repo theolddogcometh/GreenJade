@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 58 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 58u
-#define GIC_SOFT_AREAS 86u
+/* Wave 59 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 59u
+#define GIC_SOFT_AREAS 88u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -1279,6 +1279,22 @@ aarch64_uart_puts("aarch64: gic: soft retbonnette exclusive=1 soft_ne_product=1 
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retbonnette stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retcrownwork — Wave 59 return-crownwork honesty */
+aarch64_uart_puts("aarch64: gic: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retcrownwork honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft rethornwork — Wave 59 exclusive hornwork stamp */
+aarch64_uart_puts("aarch64: gic: soft rethornwork exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (rethornwork stamp; Soft!=product)\n");
 
 
 

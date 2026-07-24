@@ -34,7 +34,7 @@
  *     honesty | inventory | class | cluster | cookie | serial |
  *     call | frame | cr3 | views | path | surfaces | deadline |
  *     return rate | retcode | return selftest | retmap | deepen | PASS
- *     deepen wave=47 stamp + surf= bitmask
+ *     deepen wave=48 stamp + surf= bitmask
  *   Call soft: doors-like Call shape after cookie mint (not product IPC)
  *   FRAME soft: expected-frame shape at view install; product_validate=0
  *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
@@ -93,8 +93,8 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 47 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 47u
+/* Wave 48 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 48u
 
 /*
  * Soft inventory area count (Wave 19 greppable categories for deepen stamp):
@@ -102,7 +102,7 @@
  * call | frame | cr3 | views | path | surfaces | deadline | deepen
  * (=14; PASS is close lamp)
  */
-#define FAULT_SOFT_AREAS 70u
+#define FAULT_SOFT_AREAS 72u
 
 /*
  * Soft surface bit lamps (Wave 19; surf=0x… on inventory/deepen lines).
@@ -1520,12 +1520,26 @@ kprintf("fault: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: fault: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("fault: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: fault: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("fault: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: fault: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("fault: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: fault: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("fault: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 47 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 47u
-#define GIC_SOFT_AREAS 64u
+/* Wave 48 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 48u
+#define GIC_SOFT_AREAS 66u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -1109,6 +1109,22 @@ aarch64_uart_puts("aarch64: gic: soft retdonjon exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retdonjon stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retchevaux — Wave 48 return-chevaux honesty */
+aarch64_uart_puts("aarch64: gic: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retchevaux honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft retpalisade — Wave 48 exclusive palisade stamp */
+aarch64_uart_puts("aarch64: gic: soft retpalisade exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retpalisade stamp; Soft!=product)\n");
 
 
 

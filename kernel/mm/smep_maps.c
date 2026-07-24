@@ -27,7 +27,7 @@
  *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   "smep: soft deepen …"     wave=47 stamp + area count
+ *   "smep: soft deepen …"     wave=48 stamp + area count
  *   "smep: soft lamps …"      CR4/CPUID readiness lamps
  *   "smep: soft band …"       Wave 15 user-band geometry
  *   "smep: soft surfaces …"   Wave 19 return-surface catalog
@@ -82,11 +82,11 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
-/* Wave 47 soft inventory stamp (file-local; never product gate). */
-#define SMEP_SOFT_WAVE 47u
+/* Wave 48 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 48u
 
 /* Soft inventory greppable area count (honesty..gmap; deepen excluded). */
-#define SMEP_SOFT_AREAS 70u
+#define SMEP_SOFT_AREAS 72u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -378,7 +378,7 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   smep: soft deepen     — wave=47 stamp + area count
+ *   smep: soft deepen     — wave=48 stamp + area count
  *   smep: soft lamps      — CR4/CPUID readiness lamps
  *   smep: soft surfaces   — Wave 19 return-surface catalog
  *   smep: soft walk       — Wave 17 PML4 walk surface
@@ -1108,12 +1108,26 @@ kprintf("smep: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: smep: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("smep: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: smep: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("smep: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: smep: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("smep: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: smep: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("smep: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

@@ -29,7 +29,7 @@
  *   pe32: soft return      — Wave 19 pipeline return-path catalog
  *   pe32: soft ret_surface — Wave 19 terminal return classes
  *   pe32: soft surface     — Wave 19 area catalog
- *   pe32: soft deepen      — wave=47 areas stamp
+ *   pe32: soft deepen      — wave=48 areas stamp
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Note: existing "pe32: soft-iretq PASS" (hyphen) stays stable and separate.
  */
@@ -58,7 +58,7 @@
 #define OPT_PE32P  0x20bu
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define PE32_SOFT_WAVE 47u
+#define PE32_SOFT_WAVE 48u
 
 static u32
 rd32(const u8 *p)
@@ -425,7 +425,7 @@ pe32_soft_inventory_log(const char *szVia)
             (unsigned)PE32_SOFT_WAVE);
 
     /* Grep: pe32: soft retmap — Wave 19 return-surface map */
-    kprintf("pe32: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=47\n");
+    kprintf("pe32: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=48\n");
 
     /* Grep: pe32: soft deepen */
     /*
@@ -865,12 +865,26 @@ kprintf("pe32: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: pe32: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("pe32: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: pe32: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("pe32: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: pe32: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("pe32: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: pe32: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("pe32: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

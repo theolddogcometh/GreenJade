@@ -36,7 +36,7 @@
  *   boot: soft validate      — Wave 15 handoff validity classify
  *   boot: soft identity      — Wave 15 identity-bridge note (separate unit)
  *   boot: soft catalog       — Wave 19 area name rollup
- *   boot: soft deepen        — wave=47 stamp + area count
+ *   boot: soft deepen        — wave=48 stamp + area count
  *   boot: soft mb2           — PASS|SKIP|REJECT|PARTIAL tag walk
  *   boot: soft mb2 tag       — per-class tag counts
  *   boot: soft mb2 mmap      — first mmap tag entry inventory
@@ -868,7 +868,7 @@ boot_info_soft_mb2_log(const struct gj_boot_info *pInfo)
 }
 
 /* Wave 35 exclusive soft deepen stamp (this unit only). */
-#define BI_SOFT_WAVE 47u
+#define BI_SOFT_WAVE 48u
 
 /*
  * Wave 15: greppable boot: soft … deepen surface (handoff/memmap/gop/flags
@@ -1264,7 +1264,7 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
     cAreas++;
 
     /* Grep: boot: soft note (Wave 20 deepen) */
-    kprintf("boot: soft note milestone=wave47 exclusive=1 "
+    kprintf("boot: soft note milestone=wave48 exclusive=1 "
             "soft_only=1 not_bar3=1 handoff=%s source=%u wave=%u\n",
             szHandoff, (unsigned)u32Source, (unsigned)BI_SOFT_WAVE);
     cAreas++;
@@ -1286,7 +1286,7 @@ boot_info_soft_wave_log(const struct gj_boot_info *pInfo,
     cAreas++;
 
     /* Grep: boot: soft retmap — Wave 19 return-surface map */
-    kprintf("boot: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=47\n");
+    kprintf("boot: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=48\n");
 
     /* Grep: boot: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -1726,12 +1726,26 @@ kprintf("boot: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: boot: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("boot: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: boot: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("boot: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: boot: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("boot: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: boot: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("boot: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

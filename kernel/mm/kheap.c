@@ -20,7 +20,7 @@
  *   - Ops: allocs / frees / grow / split / best_fit / null_free
  *   - Design / freelist walk / grow / scrub / lamps (Wave 15)
  *   - Wave 19: surfaces / magic / return / header return surfaces
- *   - Path catalog + stats rollup + deepen wave=47 + PASS/NONE
+ *   - Path catalog + stats rollup + deepen wave=48 + PASS/NONE
  *   greppable: "kheap: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ product.
  *
@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=47 …
+ *   kheap: soft deepen wave=48 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -60,10 +60,10 @@
 #include <gj/string.h>
 #include <gj/vmm.h>
 
-/* Wave 47 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 47u
+/* Wave 48 soft inventory stamp (file-local; never product gate). */
+#define KHEAP_SOFT_WAVE 48u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 74u
+#define KHEAP_SOFT_AREAS 76u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1426,12 +1426,26 @@ kprintf("kheap: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: kheap: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("kheap: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("kheap: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: kheap: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("kheap: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: kheap: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("kheap: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

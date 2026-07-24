@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 47u
+#define GJ_SPAWN_SOFT_WAVE 48u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -319,7 +319,7 @@ soft_inventory_log(const char *szVia)
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=47\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=48\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -759,12 +759,26 @@ kprintf("spawn: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("spawn: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=47 "
+        "never_blocks_m0=1 wave=48 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("spawn: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=47 "
+        "product_kernel=OPEN bar3=0 wave=48 "
         "(retdonjon stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: spawn: soft retchevaux — Wave 48 return-chevaux honesty */
+kprintf("spawn: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=48 "
+        "(retchevaux honesty; Soft≠product; not bar3)\n");
+/* Grep: spawn: soft retpalisade — Wave 48 exclusive palisade stamp */
+kprintf("spawn: soft retpalisade exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=48 "
+        "(retpalisade stamp; Soft≠product)\n");
 
 
 

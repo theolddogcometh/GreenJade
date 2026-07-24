@@ -15,9 +15,9 @@
 #   product-summary      scripts/gj-product-summary.sh when present
 #   live-iso artifact    presence only (build via make live-iso separately)
 #   nvme CAP             already soft (RHEL QEMU splits)
-#   continuum high-water via product-summary (Wave 47: toward M=18900;
+#   continuum high-water via product-summary (Wave 48: toward M=19000;
 #     greppable 18500 only when scan says so — not a hard gate; ≠ bar3/Top50;
-#     soft deepen retinnerward/retdonjon CREATE-ONLY only; soft ≠ product complete;
+#     soft deepen retchevaux/retpalisade CREATE-ONLY only; soft ≠ product complete;
 #     product lamps 0; do not hardcode false max)
 #
 # Contrast:
@@ -361,10 +361,10 @@ case "$ud_n" in
 esac
 echo "  soft info: TRAP #UD count=$ud_n (Multiboot)"
 # Soft product-summary panel when helper is present
-# (Wave 47: continuum high-water side panel notes toward M=18900; greppable
-#  18900 when scan ≥18900, prior tip 18800 when ≥18800 — hard gates stay hard; soft graph ≠ product bar)
+# (Wave 48: continuum high-water side panel notes toward M=19000; greppable
+#  19000 when scan ≥19000, prior tip 18900 when ≥18900 — hard gates stay hard; soft graph ≠ product bar)
 if [ -x scripts/gj-product-summary.sh ] || [ -f scripts/gj-product-summary.sh ]; then
-    echo "  --- gj-product-summary (soft; wave 47 continuum side panel) ---"
+    echo "  --- gj-product-summary (soft; wave 48 continuum side panel) ---"
     bash scripts/gj-product-summary.sh "$log_mb" 2>/dev/null || true
 fi
 

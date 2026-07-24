@@ -771,56 +771,56 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-## Progress note — GreenJade Wave 47 soft continuum (2026-07-23)
+## Progress note — GreenJade Wave 48 soft continuum (2026-07-23)
 
-**Additive only (Wave 47 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41 soft stamps above stay historical ledger (Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 47 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+**Additive only (Wave 48 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41 soft stamps above stay historical ledger (Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 48 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
 
-### Soft stamp (Wave 47)
+### Soft stamp (Wave 48)
 
 | Field | Value |
 |-------|--------|
-| **Wave** | GreenJade Wave 47 (soft continuum honesty) |
-| **Continuum** | makefile target high-water **advancing toward 18900** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=18800**; **do not hardcode false 18900**) |
-| **Soft deepen surfaces** | **retinnerward** / **retdonjon** (CREATE-ONLY soft graph names only — not product / not bar3) |
+| **Wave** | GreenJade Wave 48 (soft continuum honesty) |
+| **Continuum** | makefile target high-water **advancing toward 19000** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=18900**; **do not hardcode false 19000**) |
+| **Soft deepen surfaces** | **retchevaux** / **retpalisade** (CREATE-ONLY soft graph names only — not product / not bar3) |
 | **bar3** | **OPEN** |
 | **Matrix** | **NOT-TRIED × 50** (no titles tried) |
 | **Product lamps** | **0** (soft stubs stay zero by design) |
 
-**Soft stamp (Wave 47):** continuum high-water **advancing toward 18900** soft only (parent wires). Soft deepen surfaces **retinnerward** / **retdonjon** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=18900`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **18800** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
+**Soft stamp (Wave 48):** continuum high-water **advancing toward 19000** soft only (parent wires). Soft deepen surfaces **retchevaux** / **retpalisade** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=19000`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **18900** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
 
-### Soft continuum ≠ bar3 (Wave 47 honesty)
+### Soft continuum ≠ bar3 (Wave 48 honesty)
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 18900** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
-| Honest scan **makefile_max=18800** (when still tip) | Makefile wire truth until parent wires **18900** | Claim that **18900** is already greppable when scan lags |
-| Soft deepen **retinnerward** / **retdonjon** | Wave 47 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
+| Continuum **toward 19000** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Honest scan **makefile_max=18900** (when still tip) | Makefile wire truth until parent wires **18900** | Claim that **18900** is already greppable when scan lags |
+| Soft deepen **retchevaux** / **retpalisade** | Wave 48 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
 | Product lamps **0** | Soft score / bar3-ready stubs remain zero | Any product-score claim |
 
-**Hard rule:** never promote continuum advancing toward **18900**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
+**Hard rule:** never promote continuum advancing toward **19000**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
 
-### Explicit non-claims (Wave 47)
+### Explicit non-claims (Wave 48)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Continuum high-water advancing toward **18900** (parent wire soft)” | **Yes** — soft only |
-| “Honest scan still `makefile_max=18800` until parent wires 18900” | **Yes** — scan is source of truth |
-| “Soft continuum toward 18900 = Steam client / Top-50 / product score” | **No** |
-| “Product lamps lit / product complete from Wave 47 soft deepen” | **No** — lamps remain **0** |
-| “bar3 closed by continuum toward 18900 / media READY / kernel soft gates” | **No** |
+| “Continuum high-water advancing toward **19000** (parent wire soft)” | **Yes** — soft only |
+| “Honest scan still `makefile_max=18900` until parent wires 19000” | **Yes** — scan is source of truth |
+| “Soft continuum toward 19000 = Steam client / Top-50 / product score” | **No** |
+| “Product lamps lit / product complete from Wave 48 soft deepen” | **No** — lamps remain **0** |
+| “bar3 closed by continuum toward 19000 / media READY / kernel soft gates” | **No** |
 | “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
 | Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
 
-### Open (unchanged by Wave 47)
+### Open (unchanged by Wave 48)
 
 - **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
 - Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
-- Soft continuum growth toward **18900** — **soft only**; does **not** close bar3; product lamps stay **0**
+- Soft continuum growth toward **19000** — **soft only**; does **not** close bar3; product lamps stay **0**
 
-**Bar3 remains OPEN.** Wave 47 honesty: continuum **advancing toward 18900 soft only**; scan may still be **18800**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+**Bar3 remains OPEN.** Wave 48 honesty: continuum **advancing toward 19000 soft only**; scan may still be **18900**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
 
 ### Related honesty surfaces
 
@@ -831,5 +831,5 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-*Wave 47 soft continuum (2026-07-23): high-water **advancing toward 18900 soft only**; soft deepen **retinnerward**/**retdonjon**; honest scan may still be **18800**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 48 soft continuum (2026-07-23): high-water **advancing toward 19000 soft only**; soft deepen **retchevaux**/**retpalisade**; honest scan may still be **18900**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
 

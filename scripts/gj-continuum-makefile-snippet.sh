@@ -9,18 +9,18 @@
 # ----------------------------------
 # GreenJade grows the clean-room libcgj *graph continuum* as CREATE-ONLY
 # freestanding pure-C TUs (user/libcgj/src/graph_batchN.c). A continuum
-# *decade* is a closed batch range ending at a milestone M (e.g. M=23000
-# → exclusive wave 22901–23000). Soft host probes
+# *decade* is a closed batch range ending at a milestone M (e.g. M=23100
+# → exclusive wave 23001–23100). Soft host probes
 # (user/libcgj/tests/cgj_soft_milestone_M.c) KAT the decade marker lamps
 # only; identity/fill bands are structural unique surfaces.
 #
 # This script is the **parent paste half** of that workflow:
 #
 #   1. CREATE-ONLY sources land first (generators / exclusive agents).
-#      Example generator for the 23000 wave (Wave 88 exclusive continuum track):
-#        user/libcgj/src/_gen_milestone_23000.py
-#        python3 user/libcgj/src/_gen_milestone_23000.py --dry-run
-#      (prior Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
+#      Example generator for the 23100 wave (Wave 89 exclusive continuum track):
+#        user/libcgj/src/_gen_milestone_23100.py
+#        python3 user/libcgj/src/_gen_milestone_23100.py --dry-run
+#      (prior Wave 88: _gen_milestone_23000.py / M=23000; Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
 #   2. Parent wires CGJ_SRCS by pasting this helper's stdout into the
 #      Makefile (this script never writes the Makefile itself).
 #   3. Rebuild libcgj; optional soft milestone host probes.
@@ -31,17 +31,17 @@
 # already referenced in the Makefile (grep scan). It is not hard-coded,
 # not a Steam readiness claim, and not advanced by this helper alone.
 # The scan has **no artificial cap** — it correctly reports through
-# graph_batch23000.c (and beyond) once those basenames are wired.
+# graph_batch23100.c (and beyond) once those basenames are wired.
 #
-# Wave 88 soft note (23000-era): the exclusive target decade is M=23000
-# (CREATE-ONLY 22901–23000; extension identity 22901–22950 ahead of the
+# Wave 89 soft note (23100-era): the exclusive target decade is M=23100
+# (CREATE-ONLY 23001–23100; extension identity 23001–23050 ahead of the
 # decade identity/fill/marker bands). Soft deepen surfaces this wave
-# (docs/userland soft stamps): retbeaconangle / retledgerangle (CREATE-ONLY soft
+# (docs/userland soft stamps): retbannerangle / retvaultangle (CREATE-ONLY soft
 # names only — not product). Until parent pastes those basenames into
 # CGJ_SRCS, ``--max`` may still report the prior high-water
-# (e.g. makefile_max=22900). **Scan is the source of truth** — do not
+# (e.g. makefile_max=23000). **Scan is the source of truth** — do not
 # hardcode a false makefile_max here or in side panels. Soft high-water
-# may be described as **advancing toward 23000** while the honest scan
+# may be described as **advancing toward 23100** while the honest scan
 # remains at the prior tip.
 #
 # Verify anytime (stdout is greppable by product-summary side panels):
@@ -50,20 +50,20 @@
 #   # → makefile_max=N   (honest scan; greppable when N reaches the era)
 #
 # Do **not** document or assert a higher max than the Makefile scan
-# reports. Soft graph growth through graph_batch23000.c is **not** bar3,
-# not Deck Top-50 title runs, and not product score (gj_bar3_ready_23000
-# and gj_product_score_23000 remain 0 by design). Soft ≠ product complete.
+# reports. Soft graph growth through graph_batch23100.c is **not** bar3,
+# not Deck Top-50 title runs, and not product score (gj_bar3_ready_23100
+# and gj_product_score_23100 remain 0 by design). Soft ≠ product complete.
 #
-# Decade paste hygiene (23000-era / Wave 88 example)
+# Decade paste hygiene (23100-era / Wave 89 example)
 # ------------------------------------------------
-# After CREATE-ONLY wave 22901–23000 exists on disk:
+# After CREATE-ONLY wave 23001–23100 exists on disk:
 #
 #   # Prefer exist-only so missing TUs never produce dead Makefile lines:
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 22901 23000
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 22951 23000
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 23001 23100
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 23051 23100
 #
 #   # Or explicit full decade after confirming all TUs present:
-#   ./scripts/gj-continuum-makefile-snippet.sh 22901 23000
+#   ./scripts/gj-continuum-makefile-snippet.sh 23001 23100
 #
 #   # After a prior wire, emit the next N lines past honest makefile_max:
 #   ./scripts/gj-continuum-makefile-snippet.sh --next 100
@@ -76,23 +76,24 @@
 #   fill       [M-24, M-10]   gj_batch_id_N + unique soft unit helper
 #   markers    [M-9,  M]      decade soft-gate lamps (host probe surface)
 #
-# For M=23000 that is extension identity 22901–22950, decade identity
-# 22951–22975, fill 22976–22990, markers 22991–23000. Prior decade M=22900: identity 22851–22875, fill 22876–22890, markers 22891–22900. Prior decade M=22800: identity 22751–22775, fill 22776–22790, markers 22791–22800. Prior decade M=22700: identity 22651–22675, fill 22676–22690, markers 22691–22700. Prior decade M=22500: identity 22451–22475, fill 22476–22490, markers 22491–22500. Prior decade M=22400: identity 22351–22375, fill 22376–22390, markers 22391–22400. Prior decade
+# For M=23100 that is extension identity 23001–23050, decade identity
+# 23051–23075, fill 23076–23090, markers 23091–23100. Prior decade M=23000: identity 22951–22975, fill 22976–22990, markers 22991–23000. Prior decade M=22900: identity 22851–22875, fill 22876–22890, markers 22891–22900. Prior decade M=22800: identity 22751–22775, fill 22776–22790, markers 22791–22800. Prior decade M=22700: identity 22651–22675, fill 22676–22690, markers 22691–22700. Prior decade M=22500: identity 22451–22475, fill 22476–22490, markers 22491–22500. Prior decade M=22400: identity 22351–22375, fill 22376–22390, markers 22391–22400. Prior decade
 # M=22300: identity 22251–22275, fill 22276–22290, markers 22291–22300.
-# See _gen_milestone_23000.py module docstring (when present) and
+# See _gen_milestone_23100.py module docstring (when present) and
 # user/libcgj/tests/NOTES_milestone_22300.txt
 #   user/libcgj/tests/NOTES_milestone_22700.txt
 #   user/libcgj/tests/NOTES_milestone_22800.txt
 #   user/libcgj/tests/NOTES_milestone_22900.txt
-#   user/libcgj/tests/NOTES_milestone_23000.txt (when present).
+#   user/libcgj/tests/NOTES_milestone_23000.txt
+#   user/libcgj/tests/NOTES_milestone_23100.txt (when present).
 #
 # Usage:
 #   ./scripts/gj-continuum-makefile-snippet.sh 17051 17100
-#   ./scripts/gj-continuum-makefile-snippet.sh 22901 23000
+#   ./scripts/gj-continuum-makefile-snippet.sh 23001 23100
 #   ./scripts/gj-continuum-makefile-snippet.sh --next 100
 #   ./scripts/gj-continuum-makefile-snippet.sh --next          # default decade 100
 #   ./scripts/gj-continuum-makefile-snippet.sh --max           # print makefile_max only
-#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 22901 23000
+#   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 23001 23100
 #
 # Options:
 #   --next [N]       emit N lines after highest graph_batch* in Makefile (default 100)
@@ -114,8 +115,8 @@
 #
 # Example paste target (end of CGJ_SRCS before rand48.c):
 #   user/libcgj/src/graph_batch22800.c \   ← prior high-water (if still tip)
-#   user/libcgj/src/graph_batch22901.c \   ← Wave 88 helper output starts here
-#   … through graph_batch23000.c once CREATE-ONLY + parent wire land
+#   user/libcgj/src/graph_batch23001.c \   ← Wave 89 helper output starts here
+#   … through graph_batch23100.c once CREATE-ONLY + parent wire land
 #
 # Non-claims (keep soft continuum honest)
 # ---------------------------------------
@@ -134,7 +135,8 @@
 #   user/libcgj/src/_gen_milestone_22600.py   (prior Wave 84 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_22500.py   (prior Wave 83 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_22400.py   (prior Wave 82 CREATE-ONLY emitter, when present)
-#   user/libcgj/src/_gen_milestone_23000.py   (Wave 88 CREATE-ONLY emitter, when present)
+#   user/libcgj/src/_gen_milestone_23100.py   (Wave 89 CREATE-ONLY emitter, when present)
+#   user/libcgj/src/_gen_milestone_23000.py   (prior Wave 88 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_22800.py   (prior Wave 86 CREATE-ONLY emitter, when present)
 #   user/libcgj/tests/NOTES_milestone_22200.txt
 #   user/libcgj/tests/NOTES_milestone_22100.txt
@@ -142,6 +144,7 @@
 #   user/libcgj/tests/NOTES_milestone_22700.txt
 #   user/libcgj/tests/NOTES_milestone_22500.txt
 #   user/libcgj/tests/NOTES_milestone_23000.txt
+#   user/libcgj/tests/NOTES_milestone_23100.txt
 #   user/libcgj/tests/cgj_soft_milestone_22200.c
 #   user/libcgj/tests/cgj_soft_milestone_22100.c
 #   user/libcgj/tests/cgj_soft_milestone_22300.c
@@ -149,6 +152,7 @@
 #   user/libcgj/tests/cgj_soft_milestone_22500.c
 #   user/libcgj/tests/cgj_soft_milestone_22800.c
 #   user/libcgj/tests/cgj_soft_milestone_23000.c
+#   user/libcgj/tests/cgj_soft_milestone_23100.c
 #   docs/GLIBC_COMPAT.md   (graph continuum status)
 #   docs/STEAM_HWTEST.md    (continuum soft scope)
 #   scripts/gj-product-summary.sh  (side panel: continuum makefile_max=…)
@@ -180,21 +184,22 @@ Emit paste-ready CGJ_SRCS lines:
 
 makefile_max honesty:
   --max scans the Makefile for the highest graph_batchN.c already wired.
-  Scan has no artificial cap (supports through graph_batch23000.c and beyond).
+  Scan has no artificial cap (supports through graph_batch23100.c and beyond).
   High-water is whatever the scan prints (source of truth) — do not hardcode.
-  Wave 88 exclusive target decade: M=23000 (soft graph only — not bar3 /
-  Steam client / Top-50 titles). Soft deepen surfaces: retbeaconangle /
-  retledgerangle (CREATE-ONLY soft names only). Until parent wires 22901–23000,
-  --max may still report prior tip (e.g. makefile_max=22900). Soft high-water
-  may advance toward 23000 while scan remains at prior tip.
+  Wave 89 exclusive target decade: M=23100 (soft graph only — not bar3 /
+  Steam client / Top-50 titles). Soft deepen surfaces: retbannerangle /
+  retvaultangle (CREATE-ONLY soft names only). Until parent wires 23001–23100,
+  --max may still report prior tip (e.g. makefile_max=23000). Soft high-water
+  may advance toward 23100 while scan remains at prior tip.
 
 Workflow:
-  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_23000.py)
+  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_23100.py)
   2. Paste this helper's stdout into CGJ_SRCS (before rand48.c etc.)
   3. Rebuild libcgj; optional cgj_soft_milestone_*.c host probes
 
-Decade bands for milestone M=23000 (docs only; helper emits paths only):
-  extension 22901-22950 | identity 22951-22975 | fill 22976-22990 | markers 22991-23000
+Decade bands for milestone M=23100 (docs only; helper emits paths only):
+  extension 23001-23050 | identity 23051-23075 | fill 23076-23090 | markers 23091-23100
+  (prior M=23000: identity 22951-22975 | fill 22976-22990 | markers 22991-23000)
   (prior M=22900: identity 22851-22875 | fill 22876-22890 | markers 22891-22900)
   (prior M=22800: identity 22751-22775 | fill 22776-22790 | markers 22791-22800)
   (prior M=22700: identity 22651-22675 | fill 22676-22690 | markers 22691-22700)
@@ -216,7 +221,7 @@ Env:
 
 Examples:
   ./scripts/gj-continuum-makefile-snippet.sh --max
-  ./scripts/gj-continuum-makefile-snippet.sh --exist-only 22901 23000
+  ./scripts/gj-continuum-makefile-snippet.sh --exist-only 23001 23100
   ./scripts/gj-continuum-makefile-snippet.sh --next 100
 EOF
 }

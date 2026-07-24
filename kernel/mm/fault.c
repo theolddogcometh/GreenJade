@@ -34,7 +34,7 @@
  *     honesty | inventory | class | cluster | cookie | serial |
  *     call | frame | cr3 | views | path | surfaces | deadline |
  *     return rate | retcode | return selftest | retmap | deepen | PASS
- *     deepen wave=41 stamp + surf= bitmask
+ *     deepen wave=42 stamp + surf= bitmask
  *   Call soft: doors-like Call shape after cookie mint (not product IPC)
  *   FRAME soft: expected-frame shape at view install; product_validate=0
  *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
@@ -93,8 +93,8 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 41 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 41u
+/* Wave 42 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 42u
 
 /*
  * Soft inventory area count (Wave 19 greppable categories for deepen stamp):
@@ -1433,6 +1433,21 @@ kprintf("fault: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("fault: soft retditch exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retditch stamp; Soft≠product)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+/*
+ * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: fault: soft retportcullis — Wave 42 return-portcullis honesty */
+kprintf("fault: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retportcullis honesty; Soft≠product; not bar3)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+/* Grep: fault: soft retbattlement — Wave 42 exclusive battlement stamp */
+kprintf("fault: soft retbattlement exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retbattlement stamp; Soft≠product)\n",
         (unsigned)FAULT_SOFT_WAVE);
 
                             kprintf("fault: soft deepen wave=%u areas=%u logs=%llu "

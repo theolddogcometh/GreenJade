@@ -17,9 +17,9 @@
  *   aarch64: kmain_stub soft enter
  *   aarch64: GIC PASS          (from aarch64_gic_init)
  *   aarch64: timer PASS        (from aarch64_timer_probe)
- *   aarch64: kmain_stub soft inventory wave=41 …
+ *   aarch64: kmain_stub soft inventory wave=42 …
  *   aarch64: kmain_stub soft surf …
- *   aarch64: kmain_stub soft deepen wave=41 areas=…
+ *   aarch64: kmain_stub soft deepen wave=42 areas=…
  *   aarch64: kmain_stub soft return product_kernel=OPEN …
  *   aarch64: kmain_stub soft path product_kernel=OPEN …
  *   aarch64: kmain_stub soft honesty product_kernel=OPEN …
@@ -34,8 +34,8 @@ void aarch64_uart_put_hex(unsigned long v);
 void aarch64_gic_init(void);
 void aarch64_timer_probe(void);
 
-/* Wave 41 soft inventory stamp (file-local; never product gate). */
-#define KMAIN_STUB_SOFT_WAVE 41u
+/* Wave 42 soft inventory stamp (file-local; never product gate). */
+#define KMAIN_STUB_SOFT_WAVE 42u
 /* Areas: enter,gic,timer,inventory,surf,return,path,honesty,deepen */
 #define KMAIN_STUB_SOFT_AREAS 51u
 
@@ -435,6 +435,21 @@ aarch64_uart_puts("aarch64: soft retditch exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
 aarch64_uart_puts(" (retditch stamp; Soft!=product)\n");
+/*
+ * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: soft retportcullis — Wave 42 return-portcullis honesty */
+aarch64_uart_puts("aarch64: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
+aarch64_uart_puts(" (retportcullis honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retbattlement — Wave 42 exclusive battlement stamp */
+aarch64_uart_puts("aarch64: soft retbattlement exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
+aarch64_uart_puts(" (retbattlement stamp; Soft!=product)\n");
 
 /* Grep: aarch64: kmain_stub soft deepen */
     aarch64_uart_puts("aarch64: kmain_stub soft deepen wave=");

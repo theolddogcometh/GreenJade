@@ -39,7 +39,7 @@
  *            aarch64: exception soft surf …
  *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=41 …
+ *            aarch64: exception soft deepen wave=42 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -77,8 +77,8 @@
 #define EXC_SOFT_DAIF_A_BIT     (1ul << 8)
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
-/* Wave 41 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE 41u
+/* Wave 42 soft inventory stamp (file-local; never product gate). */
+#define EXC_SOFT_WAVE 42u
 #define EXC_SOFT_AREAS 54u
 
 extern void aarch64_uart_puts(const char *sz);
@@ -661,6 +661,21 @@ aarch64_uart_puts("aarch64: soft retditch exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retditch stamp; Soft!=product)\n");
+/*
+ * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: soft retportcullis — Wave 42 return-portcullis honesty */
+aarch64_uart_puts("aarch64: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retportcullis honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retbattlement — Wave 42 exclusive battlement stamp */
+aarch64_uart_puts("aarch64: soft retbattlement exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retbattlement stamp; Soft!=product)\n");
 
 /* Grep: aarch64: exception soft deepen */
     aarch64_uart_puts("aarch64: exception soft deepen wave=");

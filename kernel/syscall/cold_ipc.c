@@ -16,7 +16,7 @@
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=41 stamp
+ *   - soft deepen wave=42 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -65,8 +65,8 @@ static u64 g_u64RegQueue;
 static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
-/* Wave 41 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE 41u
+/* Wave 42 soft inventory stamp (file-local; never product gate). */
+#define GJ_COLD_SOFT_WAVE 42u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
 #define GJ_COLD_SOFT_AREAS 63u
 
@@ -446,7 +446,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft note (Wave 20 deepen) */
-    kprintf("cold_ipc: soft note milestone=wave41 exclusive=1 "
+    kprintf("cold_ipc: soft note milestone=wave42 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -460,7 +460,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft retmap — Wave 19 return-surface map */
-    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=41\n");
+    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=42\n");
 
     /* Grep: cold_ipc: soft deepen wave (Wave 15 stamp) */
     /*
@@ -780,7 +780,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold: soft note (Wave 20 deepen) */
-    kprintf("cold: soft note milestone=wave41 exclusive=1 "
+    kprintf("cold: soft note milestone=wave42 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -1144,6 +1144,21 @@ kprintf("cold: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("cold: soft retditch exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retditch stamp; Soft≠product)\n",
+        (unsigned)GJ_COLD_SOFT_WAVE);
+/*
+ * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cold: soft retportcullis — Wave 42 return-portcullis honesty */
+kprintf("cold: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retportcullis honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_COLD_SOFT_WAVE);
+/* Grep: cold: soft retbattlement — Wave 42 exclusive battlement stamp */
+kprintf("cold: soft retbattlement exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retbattlement stamp; Soft≠product)\n",
         (unsigned)GJ_COLD_SOFT_WAVE);
 
                             kprintf("cold: soft deepen wave=%u areas=%u logs=%u "

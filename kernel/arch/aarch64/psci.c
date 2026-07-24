@@ -73,8 +73,8 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 41 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 41u
+/* Wave 42 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE 42u
 #define PSCI_SOFT_AREAS 53u
 
 /* Set by exception path when recovering a PSCI probe trap. */
@@ -766,6 +766,21 @@ aarch64_uart_puts("aarch64: psci: soft retditch exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retditch stamp; Soft!=product)\n");
+/*
+ * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft retportcullis — Wave 42 return-portcullis honesty */
+aarch64_uart_puts("aarch64: psci: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retportcullis honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: psci: soft retbattlement — Wave 42 exclusive battlement stamp */
+aarch64_uart_puts("aarch64: psci: soft retbattlement exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retbattlement stamp; Soft!=product)\n");
 
     aarch64_uart_puts("aarch64: psci soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);

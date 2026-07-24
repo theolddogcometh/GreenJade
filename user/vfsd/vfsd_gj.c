@@ -23,7 +23,7 @@
  *   vfsd-gj: store LBA0 read soft PASS | soft-skip
  *   vfsd-gj: RELEASE free soft PASS | soft-skip  (post-RELEASE no-op)
  *
- * Soft inventory (Wave 111 exclusive deepen — greppable "vfsd-gj: soft …"):
+ * Soft inventory (Wave 112 exclusive deepen — greppable "vfsd-gj: soft …"):
  *   vfsd-gj: soft door start
  *   vfsd-gj: soft reclaim PASS | soft reclaim soft-skip
  *   vfsd-gj: soft bare PASS | soft bare soft-skip
@@ -138,9 +138,9 @@
 #define VFSD_SOFT_BIT_SEEK_END 512u
 
 /* Soft store path bits (Wave 111 inventory; LBA0 mirror + read). */
-/* Wave 111 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retvoxelangle continuum_toward=25300 soft_ne_product=1 wave=111
- *   greppable: soft rettexelangle exclusive=1 continuum_toward=25300 soft_ne_product=1 wave=111
+/* Wave 112 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retfragmentangle continuum_toward=25400 soft_ne_product=1 wave=112
+ *   greppable: soft retvertexangle exclusive=1 continuum_toward=25400 soft_ne_product=1 wave=112
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -150,14 +150,14 @@
 /* Soft free path bits (Wave 111 inventory; post-RELEASE no-op). */
 #define VFSD_SOFT_FREE_RELEASE 1u
 
-/* Soft inventory wave stamp (Wave 111 exclusive deepen). */
+/* Soft inventory wave stamp (Wave 112 exclusive deepen). */
 #define VFSD_SOFT_WAVE 70u
 #define VFSD_SOFT_AREAS        8u  /* inventory door store free cache stats deepen path honesty */
 
 static unsigned g_uToken;
 
 /*
- * Wave 111 soft inventory tallies (file-local; wrap OK).
+ * Wave 112 soft inventory tallies (file-local; wrap OK).
  * greppable: vfsd-gj: soft …
  */
 static unsigned g_uSoftDoorBits;
@@ -313,7 +313,7 @@ soft_free_note(unsigned uBit, int fOk)
 }
 
 /*
- * Soft inventory dump (Wave 111 exclusive deepen).
+ * Soft inventory dump (Wave 112 exclusive deepen).
  * Greppable prefix: "vfsd-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
  * Honesty: soft ≠ product multi-server confine.
@@ -479,14 +479,14 @@ soft_inventory_log(void)
         "confine=0 (soft; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: vfsd-gj: soft honesty (Wave 111 exclusive deepen).
+     * Grep: vfsd-gj: soft honesty (Wave 112 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
     /*
-     * Grep: vfsd-gj: soft exclusive (Wave 111 exclusive deepen).
+     * Grep: vfsd-gj: soft exclusive (Wave 112 exclusive deepen).
      * Soft inventory ≠ product multi-server / continuum.
      */
     msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=70 multi_server=0 confine=0 "
@@ -498,7 +498,7 @@ soft_inventory_log(void)
  * Never hard-fails: each step soft-skip on rejection / short I/O.
  * Leaves hard-path hello.txt content intact (only mutates soft.tmp).
  * Does not RELEASE / re-token CLAIM ownership (CLAIM PASS stays hard).
- * Tallies Wave 111 soft inventory (vfsd-gj: soft …).
+ * Tallies Wave 112 soft inventory (vfsd-gj: soft …).
  * Returns count of soft door sub-steps that greened (0..10).
  */
 static unsigned
@@ -864,7 +864,7 @@ soft_door_path(volatile unsigned *pCache)
 /*
  * Optional store LBA0 super mirror + soft READ verify.
  * Ownership separate from VFS door; soft-skip when claim busy / short I/O.
- * Tallies Wave 111 soft store inventory (vfsd-gj: soft store …).
+ * Tallies Wave 112 soft store inventory (vfsd-gj: soft store …).
  */
 static void
 soft_store_lba0_mirror(void)
@@ -1116,7 +1116,7 @@ _start(void)
      * Soft free RELEASE: door already free → soft no-op (0).
      * Never hard-fails live path.
      * Dual: "RELEASE free soft …" + greppable "soft free …".
-     * Tallies Wave 111 soft free inventory.
+     * Tallies Wave 112 soft free inventory.
      */
     nRet = gj_vfs(GJ_VFS_OP_RELEASE, (long)VFSD_TOKEN, 0, 0);
     if (nRet == 0) {
@@ -1130,7 +1130,7 @@ _start(void)
     }
 
     /*
-     * Wave 111 soft inventory dump — greppable "vfsd-gj: soft …".
+     * Wave 112 soft inventory dump — greppable "vfsd-gj: soft …".
      * Pure observation after all soft door / store / free work.
      */
     soft_inventory_log();

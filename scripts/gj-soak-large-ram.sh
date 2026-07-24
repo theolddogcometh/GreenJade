@@ -26,10 +26,10 @@
 # Full 1 TiB host soak remains OPEN until a real ≥1 TiB host path is claimed
 # elsewhere (HCL / matrix). Soft-SKIP paths never hard-fail this script.
 # ---------------------------------------------------------------------------
-# Wave 111 soft note (continuum / product side panel):
-#   Soft product-summary may note continuum high-water advancing toward M=25300.
-#   Honest scan may still report makefile_max=25200 until parent wires 25300.
-#   Soft deepen retvoxelangle/rettexelangle are CREATE-ONLY soft names only (≠ product).
+# Wave 112 soft note (continuum / product side panel):
+#   Soft product-summary may note continuum high-water advancing toward M=25400.
+#   Honest scan may still report makefile_max=25300 until parent wires 25400.
+#   Soft deepen retfragmentangle/retvertexangle are CREATE-ONLY soft names only (≠ product).
 #   Soak_tib PASS still ≠ bar3 / Steam / Top-50 and ≠ continuum makefile_max wire.
 #   makefile_max remains an honest Makefile scan (never hard-coded here).
 #   Soft ≠ product complete; product lamps 0.

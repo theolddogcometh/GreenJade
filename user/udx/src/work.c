@@ -5,7 +5,7 @@
  * Workqueue (schedule_work analogue). Host: FIFO list drained in udx_run.
  * cancel/pending for remove/quiesce soft path.
  *
- * Soft SPSC ownership protocol (Wave 111 exclusive deepen; this unit only):
+ * Soft SPSC ownership protocol (Wave 112 exclusive deepen; this unit only):
  * The in-process work FIFO is the soft stand-in for security core 6
  * zero-copy ring handoff (producer publishes filled slots; consumer
  * claims, processes, releases free slots). Greppable prefix:
@@ -22,7 +22,7 @@
  * owner phase / SPSC / backpressure / reset) without claiming shared
  * pages, map grants, or a multi-process driver-host product.
  *
- * Honesty (Wave 111): soft observation only — multi-process driver-host
+ * Honesty (Wave 112): soft observation only — multi-process driver-host
  * SPSC product remains OPEN. greppable: udx: spsc soft open
  */
 #include "udx_internal.h"
@@ -35,10 +35,10 @@
 #include <stdio.h>
 #endif
 
-/* Soft wave stamp + greppable area count (Wave 111 exclusive deepen). */
-/* Wave 111 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retvoxelangle continuum_toward=25300 soft_ne_product=1 wave=111
- *   greppable: soft rettexelangle exclusive=1 continuum_toward=25300 soft_ne_product=1 wave=111
+/* Soft wave stamp + greppable area count (Wave 112 exclusive deepen). */
+/* Wave 112 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retfragmentangle continuum_toward=25400 soft_ne_product=1 wave=112
+ *   greppable: soft retvertexangle exclusive=1 continuum_toward=25400 soft_ne_product=1 wave=112
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -298,7 +298,7 @@ spsc_soft_inventory_log(void)
         UDX_SPSC_SOFT_WAVE);
 
     /*
-     * Grep: udx: spsc soft honesty (Wave 111 exclusive deepen).
+     * Grep: udx: spsc soft honesty (Wave 112 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     spsc_soft_emit(

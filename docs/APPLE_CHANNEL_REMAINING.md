@@ -8,7 +8,7 @@
 | **Conflict rule** | **Proton personality wins** over this document when they conflict — [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) 0.1 — **does not** change Security→Performance→Portability→Readability |
 | **Completion** | Isolation/doors/JIT production freezes in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
 | **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) · [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
-| **Honesty (Wave 60)** | Soft shipped ≠ remaining open / bar3; continuum **toward 20200** soft only; product lamps **0** (20) |
+| **Honesty (Wave 61)** | Soft shipped ≠ remaining open / bar3; continuum **toward 20300** soft only; product lamps **0** (20) |
 
 GreenJade law still wins: caps, security-first, pure C, dual MIT/Apache, no GPL, no ambient root.
 
@@ -398,17 +398,17 @@ Solaris remaining doc stays authoritative for untyped ladder, CDT, CNode lock or
 
 ---
 
-## 20. Honesty refresh — soft shipped vs remaining open (Wave 60 · 2026-07-24)
+## 20. Honesty refresh — soft shipped vs remaining open (Wave 61 · 2026-07-24)
 
-**Additive only (Wave 60 exclusive for this file).** Scope: tree status relative to **this document’s** decisions (1–19).  
+**Additive only (Wave 61 exclusive for this file).** Scope: tree status relative to **this document’s** decisions (1–19).  
 **Not a product claim.** Design **Accepted** ≠ desktop product complete. Parallel-wave soft surfaces and greppable smokes **do not** close Deck / Steam / TiB product bars.  
-**Proton personality** still overrides this channel on conflict. Open bars stay open. Wave 60 20 ledger text is superseded here under Wave 60 exclusive ownership of this file’s honesty ledger.
+**Proton personality** still overrides this channel on conflict. Open bars stay open. Wave 61 20 ledger text is superseded here under Wave 61 exclusive ownership of this file’s honesty ledger.
 
 | Stamp | Meaning here |
 |-------|----------------|
 | **Design Accepted** | Normative judgment in this doc (unchanged by soft code) |
 | **Soft shipped** | Kernel / session / header surface exists, greppable, often smoke-covered — **bring-up / interim only** |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 20200** soft only — **not** Apple product close |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 20300** soft only — **not** Apple product close |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **Open** | Full production path, rights enforcement, or product bar still missing or incomplete |
 
@@ -448,19 +448,19 @@ Solaris remaining doc stays authoritative for untyped ladder, CDT, CNode lock or
 | **14 Name service restart** | Sticky bootstrap + supervised restart / PEER_DEAD resolve — **open** (P2). |
 | **15 Firmware blobs** | Out-of-tree load + hash allowlist policy — **open** (P2). |
 | **18 interactive proof** | Keyboard → compositor → pixel as **product** desktop proof — not closed by soft present/smoke. |
-| **Non-Apple product bars** (out of channel, listed so they are not smuggled) | **bar3** Steam client on DUT — **OPEN**; Deck Top 50 title rows — **NOT-TRIED × 50**; product RAM **≥ 1 TiB** full path — **open** (768G soak ≠ TiB bar). Soft continuum **toward 20200** / media READY ≠ client. Product lamps remain **0**. |
+| **Non-Apple product bars** (out of channel, listed so they are not smuggled) | **bar3** Steam client on DUT — **OPEN**; Deck Top 50 title rows — **NOT-TRIED × 50**; product RAM **≥ 1 TiB** full path — **open** (768G soak ≠ TiB bar). Soft continuum **toward 20300** / media READY ≠ client. Product lamps remain **0**. |
 
-**Hard stamp (Wave 60):** soft shipped Apple-channel surface **≠** remaining open closed **≠** bar3. Soft continuum **toward 20200** does **not** close Apple product paths. Product lamps **0**. **Soft ≠ product complete.**
+**Hard stamp (Wave 61):** soft shipped Apple-channel surface **≠** remaining open closed **≠** bar3. Soft continuum **toward 20300** does **not** close Apple product paths. Product lamps **0**. **Soft ≠ product complete.**
 
-### Explicit non-claims (Wave 60)
+### Explicit non-claims (Wave 61)
 
 - Soft greppable `PASS` lines (memobj, futex, qos, sessiond live, CapJit, except port smoke, etc.) are **agent / bring-up honesty**, not “Apple desktop shipped.”
 - This document’s **Accepted** status remains **design judgment** under GreenJade law; it does **not** promote matrix rows or close bar3.
 - Isolation / doors / JIT **production freezes** stay in [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md); this 20 does not re-freeze them.
-- Continuum high-water **toward 20200** is CREATE-ONLY soft graph only — **not** Apple channel product complete; product lamps stay **0**.
-- Wave 60 honesty does **not** invent title PASS or close any remaining-open row above.
+- Continuum high-water **toward 20300** is CREATE-ONLY soft graph only — **not** Apple channel product complete; product lamps stay **0**.
+- Wave 61 honesty does **not** invent title PASS or close any remaining-open row above.
 
 ---
 
 *Accepted Apple-channel decisions v1.1 — task ports, VM objects/views, QoS, session, match→grant. **Proton personality overrides this doc on conflict.***  
-*20 Wave 60 honesty (2026-07-24): soft shipped vs remaining open; continuum **toward 20200 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*
+*20 Wave 61 honesty (2026-07-24): soft shipped vs remaining open; continuum **toward 20300 soft only**; product lamps **0**; **soft ≠ product complete**; **no product claim**.*

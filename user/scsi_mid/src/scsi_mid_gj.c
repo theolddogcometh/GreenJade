@@ -15,8 +15,8 @@
  *     WRITE10/READ10 verify → illegal-LUN sense → REQUEST SENSE →
  *     SYNC → deepen probes → soft inventory → live path PASS
  *
- * Soft inventory (Wave 60 exclusive deepen — greppable "scsi_mid-gj: soft …"):
- *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=60 areas=10
+ * Soft inventory (Wave 61 exclusive deepen — greppable "scsi_mid-gj: soft …"):
+ *   scsi_mid-gj: soft inventory ok=… skip=… soft_ok=… door_ok=… wave=61 areas=10
  *   scsi_mid-gj: soft steps tur=… inq=… mode=… readcap=… write10=… read10=…
  *                rw=… lun=… sense=… sync=… multi=… lba=… evpd=… bits=…
  *   scsi_mid-gj: soft lun / multi / lba / evpd / door / geometry / deepen / path
@@ -39,18 +39,18 @@
 #define SOFT_SEC_SIZE 512u
 #define SOFT_SENSE_MAX 32u
 
-/* Wave stamp + inventory area count (Wave 60 exclusive deepen). */
-/* Wave 60 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retplace continuum_toward=20200 soft_ne_product=1
- *   greppable: soft retenvelope exclusive=1 continuum_toward=20200
+/* Wave stamp + inventory area count (Wave 61 exclusive deepen). */
+/* Wave 61 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retcounterguard continuum_toward=20300 soft_ne_product=1
+ *   greppable: soft retcoveredface exclusive=1 continuum_toward=20300
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-#define SCSI_SOFT_WAVE 60u
+#define SCSI_SOFT_WAVE 61u
 #define SCSI_SOFT_AREAS 11u
 /* areas: suite steps lun multi lba evpd door geometry deepen path */
 
-/* Soft suite sub-step bits (Wave 60 greppable steps line). */
+/* Soft suite sub-step bits (Wave 61 greppable steps line). */
 #define SOFT_S_TUR     (1u << 0)
 #define SOFT_S_INQ     (1u << 1)
 #define SOFT_S_MODE    (1u << 2)
@@ -213,7 +213,7 @@ static unsigned g_uSoftIoFail;
 static int g_fSoftArmed;
 
 /*
- * Soft product inventory (Wave 60 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 61 exclusive deepen). Cumulative for this
  * process. greppable: scsi_mid-gj: soft …
  * Never hard-gates live path. Soft ≠ product multi-server confine.
  */
@@ -567,7 +567,7 @@ msg_soft_stats(void)
     msg(aLine);
 }
 
-/* ---- Soft inventory (Wave 60 exclusive deepen) -------------------------- */
+/* ---- Soft inventory (Wave 61 exclusive deepen) -------------------------- */
 
 /** Note one soft suite sub-step outcome (never hard-gates). */
 static void
@@ -598,7 +598,7 @@ soft_door_note(unsigned uBit, int fOk)
 }
 
 /**
- * Greppable soft inventory (Wave 60 exclusive deepen).
+ * Greppable soft inventory (Wave 61 exclusive deepen).
  * Prefix-stable markers (scsi_mid-gj: soft …):
  *   scsi_mid-gj: soft inventory  — ok/skip + door + wave/areas + log_n
  *   scsi_mid-gj: soft steps      — per-sub-step lamps + bits
@@ -608,7 +608,7 @@ soft_door_note(unsigned uBit, int fOk)
  *   scsi_mid-gj: soft evpd       — EVPD reject honesty lamp
  *   scsi_mid-gj: soft door       — product door soft lamps (INQUIRY separate)
  *   scsi_mid-gj: soft geometry   — soft LUN geometry
- *   scsi_mid-gj: soft deepen     — wave=60 stamp
+ *   scsi_mid-gj: soft deepen     — wave=61 stamp
  *   scsi_mid-gj: soft path       — honesty: soft LUN ≠ product door INQUIRY
  *   scsi_mid-gj: soft inventory PASS
  *
@@ -802,22 +802,22 @@ soft_inventory_log(void)
      */
     msg("scsi_mid-gj: soft path soft_lun=1 door=1 product_inq=door "
         "soft_inq=soft lun_honest=soft multi=soft lba=soft evpd=soft "
-        "multi_server=0 confine=0 wave=60 "
+        "multi_server=0 confine=0 wave=61 "
         "(soft inventory; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: scsi_mid-gj: soft honesty (Wave 60 exclusive deepen).
+     * Grep: scsi_mid-gj: soft honesty (Wave 61 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("scsi_mid-gj: soft honesty multi_server=0 confine=0 bar3=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=60\n");
+        "exclusive=1 soft=1 product_kernel=OPEN wave=61\n");
 
     /* Soft lamp only — never a product / bar3 gate. */
     msg("scsi_mid-gj: soft inventory PASS\n");
 }
 
 /**
- * Wave 60 deepen probes on the soft LUN (multi-block, illegal LBA, EVPD).
+ * Wave 61 deepen probes on the soft LUN (multi-block, illegal LBA, EVPD).
  * Always soft — never hard-fails the live path.
  */
 static void
@@ -1025,7 +1025,7 @@ run_soft_path(void)
         msg("scsi_mid-gj: soft SYNC soft-skip\n");
     }
 
-    /* 8. Wave 60 deepen probes (multi / LBA / EVPD) — always soft. */
+    /* 8. Wave 61 deepen probes (multi / LBA / EVPD) — always soft. */
     soft_deepen_probes();
 
     msg_soft_stats();

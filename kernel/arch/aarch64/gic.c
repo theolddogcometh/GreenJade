@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 60 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 60u
-#define GIC_SOFT_AREAS 90u
+/* Wave 61 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 61u
+#define GIC_SOFT_AREAS 92u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -1319,6 +1319,22 @@ aarch64_uart_puts(" (retenvelope stamp; Soft!=product)\n");
 
 
 
+
+/*
+ * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retcounterguard — Wave 61 return-counterguard honesty */
+aarch64_uart_puts("aarch64: gic: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retcounterguard honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft retcoveredface — Wave 61 exclusive coveredface stamp */
+aarch64_uart_puts("aarch64: gic: soft retcoveredface exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retcoveredface stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

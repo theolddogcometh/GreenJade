@@ -25,14 +25,14 @@
  *   process: soft return …  (Wave 19 return-path catalog)
  *   process: soft ret_surface … (Wave 19 terminal return classes)
  *   process: soft surface … (Wave 19 area catalog)
- *   process: soft deepen wave=60 …
+ *   process: soft deepen wave=61 …
  *   process: soft PASS|PARTIAL
- *   Apple §13 bootstrap seal checklist (wave=60 stamp):
+ *   Apple §13 bootstrap seal checklist (wave=61 stamp):
  *     process: bootstrap seal soft …
  *     process: seal checklist …
- *     process: bootstrap seal soft deepen wave=60 …
- *   G-PROC-5 death tallies (wave=60 stamp):
- *     process: death … / process: death deepen wave=60 …
+ *     process: bootstrap seal soft deepen wave=61 …
+ *   G-PROC-5 death tallies (wave=61 stamp):
+ *     process: death … / process: death deepen wave=61 …
  *
  * Honesty: soft inventory only — not product multi-server seal, not Apple §13
  * closed, not bar3. Death cleanup ≠ bootstrap seal product.
@@ -50,9 +50,9 @@
 #include <gj/vmm.h>
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
-#define GJ_PROCESS_SOFT_WAVE 60u
-#define GJ_PROCESS_SOFT_AREAS 101u /* greppable inventory area count */
-#define GJ_SEAL_SOFT_WAVE 60u /* Apple s13 seal checklist stamp */
+#define GJ_PROCESS_SOFT_WAVE 61u
+#define GJ_PROCESS_SOFT_AREAS 103u /* greppable inventory area count */
+#define GJ_SEAL_SOFT_WAVE 61u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
 /* Forward: wait table lives later; soft census snapshots used/zombie/free. */
@@ -303,7 +303,7 @@ process_soft_inventory(const char *szVia)
             GJ_PROCESS_SOFT_WAVE);
 
     /* Grep: process: soft retmap — Wave 19 return-surface map */
-    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=60\n");
+    kprintf("process: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=61\n");
 
     /* Grep: process: soft deepen */
     /*
@@ -1182,11 +1182,11 @@ kprintf("process: bootstrap seal: soft retpostern exclusive=1 soft_ne_product=1 
  */
 /* Grep: process: bootstrap seal: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("process: bootstrap seal: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("process: bootstrap seal: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1196,11 +1196,11 @@ kprintf("process: bootstrap seal: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: process: bootstrap seal: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("process: bootstrap seal: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("process: bootstrap seal: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1210,11 +1210,11 @@ kprintf("process: bootstrap seal: soft retpalisade exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("process: bootstrap seal: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("process: bootstrap seal: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1223,11 +1223,11 @@ kprintf("process: bootstrap seal: soft retoutwork exclusive=1 soft_ne_product=1 
  */
 /* Grep: process: bootstrap seal: soft retsally — Wave 50 return-sally honesty */
 kprintf("process: bootstrap seal: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("process: bootstrap seal: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1236,11 +1236,11 @@ kprintf("process: bootstrap seal: soft retcounterscarp exclusive=1 soft_ne_produ
  */
 /* Grep: process: bootstrap seal: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("process: bootstrap seal: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("process: bootstrap seal: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1250,11 +1250,11 @@ kprintf("process: bootstrap seal: soft retcoveredway exclusive=1 soft_ne_product
  */
 /* Grep: process: bootstrap seal: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("process: bootstrap seal: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("process: bootstrap seal: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1263,11 +1263,11 @@ kprintf("process: bootstrap seal: soft retdemilune exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("process: bootstrap seal: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("process: bootstrap seal: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1276,11 +1276,11 @@ kprintf("process: bootstrap seal: soft retlunette exclusive=1 soft_ne_product=1 
  */
 /* Grep: process: bootstrap seal: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("process: bootstrap seal: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("process: bootstrap seal: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1289,11 +1289,11 @@ kprintf("process: bootstrap seal: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: process: bootstrap seal: soft retflank — Wave 55 return-flank honesty */
 kprintf("process: bootstrap seal: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retface — Wave 55 exclusive face stamp */
 kprintf("process: bootstrap seal: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1302,11 +1302,11 @@ kprintf("process: bootstrap seal: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: process: bootstrap seal: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("process: bootstrap seal: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("process: bootstrap seal: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1315,11 +1315,11 @@ kprintf("process: bootstrap seal: soft retshoulder exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("process: bootstrap seal: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("process: bootstrap seal: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1329,11 +1329,11 @@ kprintf("process: bootstrap seal: soft retcasemate exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("process: bootstrap seal: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("process: bootstrap seal: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1343,11 +1343,11 @@ kprintf("process: bootstrap seal: soft retbonnette exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("process: bootstrap seal: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("process: bootstrap seal: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1357,11 +1357,11 @@ kprintf("process: bootstrap seal: soft rethornwork exclusive=1 soft_ne_product=1
  */
 /* Grep: process: bootstrap seal: soft retplace — Wave 60 return-place honesty */
 kprintf("process: bootstrap seal: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: process: bootstrap seal: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("process: bootstrap seal: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1371,6 +1371,20 @@ kprintf("process: bootstrap seal: soft retenvelope exclusive=1 soft_ne_product=1
 
 
 
+
+/*
+ * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: process: bootstrap seal: soft retcounterguard — Wave 61 return-counterguard honesty */
+kprintf("process: bootstrap seal: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=61 "
+        "(retcounterguard honesty; Soft≠product; not bar3)\n");
+/* Grep: process: bootstrap seal: soft retcoveredface — Wave 61 exclusive coveredface stamp */
+kprintf("process: bootstrap seal: soft retcoveredface exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=61 "
+        "(retcoveredface stamp; Soft≠product)\n");
                             kprintf("process: bootstrap seal soft deepen wave=%u via=%s "
             "logs=%u emits=%llu rate_limited=%llu "
             "(not product-complete; no bar3)\n",

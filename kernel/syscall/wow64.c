@@ -47,8 +47,8 @@ static u32 g_u32SocketcallHits;
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE 60u
-#define GJ_WOW64_SOFT_AREAS 94u
+#define GJ_WOW64_SOFT_WAVE 61u
+#define GJ_WOW64_SOFT_AREAS 96u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -229,7 +229,7 @@ soft_inventory_log(void)
             (unsigned)GJ_WOW64_SOFT_AREAS);
 
     /* Grep: wow64: soft note (Wave 20 deepen) */
-    kprintf("wow64: soft note milestone=wave60 exclusive=1 "
+    kprintf("wow64: soft note milestone=wave61 exclusive=1 "
             "soft_only=1 not_bar3=1 calls=%u map=%u wave=%u\n",
             g_u32Calls, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
@@ -240,7 +240,7 @@ soft_inventory_log(void)
             g_u32SoftAdjustNop, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft retmap — Wave 19 return-surface map */
-    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=60\n");
+    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=61\n");
 
     /* Grep: wow64: soft deepen wave */
     /*
@@ -680,11 +680,11 @@ kprintf("wow64: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("wow64: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("wow64: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -694,11 +694,11 @@ kprintf("wow64: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("wow64: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("wow64: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -708,11 +708,11 @@ kprintf("wow64: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("wow64: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("wow64: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -721,11 +721,11 @@ kprintf("wow64: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retsally — Wave 50 return-sally honesty */
 kprintf("wow64: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("wow64: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -734,11 +734,11 @@ kprintf("wow64: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("wow64: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("wow64: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -748,11 +748,11 @@ kprintf("wow64: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("wow64: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("wow64: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -761,11 +761,11 @@ kprintf("wow64: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("wow64: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("wow64: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -774,11 +774,11 @@ kprintf("wow64: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("wow64: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("wow64: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -787,11 +787,11 @@ kprintf("wow64: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retflank — Wave 55 return-flank honesty */
 kprintf("wow64: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retface — Wave 55 exclusive face stamp */
 kprintf("wow64: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -800,11 +800,11 @@ kprintf("wow64: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("wow64: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("wow64: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -813,11 +813,11 @@ kprintf("wow64: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("wow64: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("wow64: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -827,11 +827,11 @@ kprintf("wow64: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("wow64: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("wow64: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -841,11 +841,11 @@ kprintf("wow64: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("wow64: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("wow64: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -855,11 +855,11 @@ kprintf("wow64: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: wow64: soft retplace — Wave 60 return-place honesty */
 kprintf("wow64: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: wow64: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("wow64: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -869,9 +869,23 @@ kprintf("wow64: soft retenvelope exclusive=1 soft_ne_product=1 "
 
 
 
+
+/*
+ * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: wow64: soft retcounterguard — Wave 61 return-counterguard honesty */
+kprintf("wow64: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=61 "
+        "(retcounterguard honesty; Soft≠product; not bar3)\n");
+/* Grep: wow64: soft retcoveredface — Wave 61 exclusive coveredface stamp */
+kprintf("wow64: soft retcoveredface exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=61 "
+        "(retcoveredface stamp; Soft≠product)\n");
                             kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
-            "(Wave 60 exclusive; not bar3)\n",
+            "(Wave 61 exclusive; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,

@@ -17,7 +17,7 @@
  * Soft null free: free(NULL) is no-op (count unchanged).
  * Soft invariant: free ≤ total, non-zero total, pool geometry coherent.
  * Soft stats: gate sum + free ratio + log tally (Wave 19).
- * Soft deepen: area catalog stamp wave=60.
+ * Soft deepen: area catalog stamp wave=61.
  * Soft return: selftest/inventory return surfaces (Wave 19).
  * Soft path honesty: order-0 shared core only; not ≥1 TiB hierarchical.
  * Soft honesty: aarch64 product kernel remains OPEN (soft scaffold only).
@@ -29,12 +29,12 @@
  *   aarch64: pmm soft step free0=… free1=… free2=… drop=… restore=…
  *   aarch64: pmm soft inv free=… total=… pool_pages=… self=… multi=…
  *             lifo=… step=… null=… inv=…
- *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=60
- *   aarch64: pmm soft inventory wave=60 …
- *   aarch64: pmm soft deepen wave=60 areas=…
- *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=60
+ *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=61
+ *   aarch64: pmm soft inventory wave=61 …
+ *   aarch64: pmm soft deepen wave=61 areas=…
+ *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=61
  *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
- *             product_kernel=OPEN wave=60
+ *             product_kernel=OPEN wave=61
  *   aarch64: pmm soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: pmm soft PASS | FAIL
  *
@@ -62,11 +62,11 @@ extern char __kernel_end[];
 #define PMM_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ull
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
 
-/* Wave 45 soft inventory stamp (greppable wave=60). */
-#define PMM_SOFT_WAVE 60u
+/* Wave 45 soft inventory stamp (greppable wave=61). */
+#define PMM_SOFT_WAVE 61u
 
 /* Soft deepen areas: pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen. */
-#define PMM_SOFT_AREAS 89u
+#define PMM_SOFT_AREAS 91u
 
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
@@ -966,11 +966,11 @@ kprintf("aarch64: pmm: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("aarch64: pmm: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("aarch64: pmm: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -980,11 +980,11 @@ kprintf("aarch64: pmm: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("aarch64: pmm: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("aarch64: pmm: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -994,11 +994,11 @@ kprintf("aarch64: pmm: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("aarch64: pmm: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("aarch64: pmm: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1007,11 +1007,11 @@ kprintf("aarch64: pmm: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retsally — Wave 50 return-sally honesty */
 kprintf("aarch64: pmm: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("aarch64: pmm: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1020,11 +1020,11 @@ kprintf("aarch64: pmm: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("aarch64: pmm: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("aarch64: pmm: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1034,11 +1034,11 @@ kprintf("aarch64: pmm: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("aarch64: pmm: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("aarch64: pmm: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1047,11 +1047,11 @@ kprintf("aarch64: pmm: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("aarch64: pmm: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("aarch64: pmm: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1060,11 +1060,11 @@ kprintf("aarch64: pmm: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("aarch64: pmm: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("aarch64: pmm: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1073,11 +1073,11 @@ kprintf("aarch64: pmm: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retflank — Wave 55 return-flank honesty */
 kprintf("aarch64: pmm: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retface — Wave 55 exclusive face stamp */
 kprintf("aarch64: pmm: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1086,11 +1086,11 @@ kprintf("aarch64: pmm: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("aarch64: pmm: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("aarch64: pmm: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1099,11 +1099,11 @@ kprintf("aarch64: pmm: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("aarch64: pmm: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("aarch64: pmm: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1113,11 +1113,11 @@ kprintf("aarch64: pmm: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("aarch64: pmm: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("aarch64: pmm: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1127,11 +1127,11 @@ kprintf("aarch64: pmm: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("aarch64: pmm: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("aarch64: pmm: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1141,11 +1141,11 @@ kprintf("aarch64: pmm: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: aarch64: pmm: soft retplace — Wave 60 return-place honesty */
 kprintf("aarch64: pmm: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=60 "
+        "never_blocks_m0=1 wave=61 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("aarch64: pmm: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=60 "
+        "product_kernel=OPEN bar3=0 wave=61 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1155,6 +1155,20 @@ kprintf("aarch64: pmm: soft retenvelope exclusive=1 soft_ne_product=1 "
 
 
 
+
+/*
+ * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: pmm: soft retcounterguard — Wave 61 return-counterguard honesty */
+kprintf("aarch64: pmm: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=61 "
+        "(retcounterguard honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: pmm: soft retcoveredface — Wave 61 exclusive coveredface stamp */
+kprintf("aarch64: pmm: soft retcoveredface exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=61 "
+        "(retcoveredface stamp; Soft≠product)\n");
                             kprintf("aarch64: pmm soft deepen wave=%u areas=%u "
             "catalog=pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen "
             "logs=%u soft_only=1\n",

@@ -17,7 +17,7 @@
  * (setup/enter/register + vfs_ram SQE depth). It is not async title I/O,
  * not bar3, and not a Deck Top-50 claim.
  *
- * Soft inventory (Wave 14 base + Wave 23 exclusive deepen) — greppable "io_uring: soft …":
+ * Soft inventory (Wave 14 base + Wave 24 exclusive deepen) — greppable "io_uring: soft …":
  *   io_uring: soft inventory   — pool/depth caps + call rollup + wave
  *   io_uring: soft setup       — setup ok/enomem/efault tallies
  *   io_uring: soft enter       — enter/submit/inject/eagain tallies
@@ -31,7 +31,7 @@
  *   io_uring: soft rates       — Wave 15 setup/enter/sqe share
  *   io_uring: soft last        — Wave 15 live pool snapshot lamps
  *   io_uring: soft catalog     — Wave 15 surface catalog stamp
- *   io_uring: soft deepen      — wave=23 areas stamp
+ *   io_uring: soft deepen      — wave=24 areas stamp
  *   io_uring: soft inventory PASS / soft PASS
  * greppable: io_uring: soft
  *
@@ -273,13 +273,13 @@ static struct gj_io_uring_ring g_aRing[GJ_IORING_MAX];
 static i64 g_aRingFd[GJ_IORING_MAX];
 static int g_fInited;
 
-/* Wave 23 soft inventory stamp (file-local; never product gate). */
-#define GJ_IORING_SOFT_WAVE  23u
+/* Wave 24 soft inventory stamp (file-local; never product gate). */
+#define GJ_IORING_SOFT_WAVE  24u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_IORING_SOFT_AREAS 30u
+#define GJ_IORING_SOFT_AREAS 32u
 
 /*
- * Soft product inventory (Wave 23 exclusive deepen). File-local sticky
+ * Soft product inventory (Wave 24 exclusive deepen). File-local sticky
  * counters; wrap OK; diagnostics only — never hard-gate setup/enter/register.
  * greppable: io_uring: soft
  */
@@ -426,7 +426,7 @@ ioring_soft_scan(void)
 }
 
 /**
- * Greppable soft inventory (Wave 23 exclusive deepen). Prefix "io_uring: soft …".
+ * Greppable soft inventory (Wave 24 exclusive deepen). Prefix "io_uring: soft …".
  * Pure observation — never gates min-rings smoke PASS.
  * Honesty: min rings ≠ full game I/O (soft scaffold only).
  *
@@ -639,7 +639,7 @@ ioring_soft_log(void)
             (unsigned)GJ_IORING_SOFT_AREAS, (unsigned)GJ_IORING_SOFT_WAVE);
 
     /* Grep: io_uring: soft note (Wave 20 deepen) */
-    kprintf("io_uring: soft note milestone=wave23 exclusive=1 "
+    kprintf("io_uring: soft note milestone=wave24 exclusive=1 "
             "min_rings=1 full_game_io=0 soft_only=1 not_bar3=1 "
             "wave=%u\n",
             (unsigned)GJ_IORING_SOFT_WAVE);
@@ -658,7 +658,7 @@ ioring_soft_log(void)
 
 /* Grep: io_uring: soft deepen wave (Wave 15 stamp) */
     /* Grep: io_uring: soft retmap — Wave 19 return-surface map */
-    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=23\n");
+    kprintf("io_uring: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
 
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
@@ -721,23 +721,38 @@ ioring_soft_log(void)
                     "(retbadge stamp; Soft≠product)\n",
                     (unsigned)GJ_IORING_SOFT_WAVE);
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
             */
-            /* Grep: io_uring: soft rettoken — Wave 23 return-token honesty */
+            /* Grep: io_uring: soft rettoken — Wave 23 return-token honesty (kept) */
             kprintf("io_uring: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(rettoken honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_IORING_SOFT_WAVE);
-            /* Grep: io_uring: soft retcrest — Wave 23 exclusive crest stamp */
+            /* Grep: io_uring: soft retcrest — Wave 23 crest stamp (kept) */
             kprintf("io_uring: soft retcrest exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)GJ_IORING_SOFT_WAVE);
+            /*
+             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: io_uring: soft retvault — Wave 24 return-vault honesty */
+            kprintf("io_uring: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retvault honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_IORING_SOFT_WAVE);
+            /* Grep: io_uring: soft retbanner — Wave 24 exclusive banner stamp */
+            kprintf("io_uring: soft retbanner exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)GJ_IORING_SOFT_WAVE);
     kprintf("io_uring: soft deepen wave=%u areas=%u logs=%lu "
             "used=%u mapped=%u setup_ok=%lu enter_ok=%lu sqe_exec=%lu "
-            "(Wave 23 exclusive; min rings soft scaffold; not product game I/O; "
+            "(Wave 24 exclusive; min rings soft scaffold; not product game I/O; "
             "not bar3)\n",
             (unsigned)GJ_IORING_SOFT_WAVE,
             (unsigned)GJ_IORING_SOFT_AREAS,

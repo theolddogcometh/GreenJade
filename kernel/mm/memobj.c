@@ -11,7 +11,7 @@
  *   USER map flags    — memobj_sanitize_user_prot always forces U
  *   named lifecycle   — publish/unlink independent of last map
  *
- * Soft memobj inventory (Wave 23 exclusive deepen):
+ * Soft memobj inventory (Wave 24 exclusive deepen):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
  *   - Live pool / named / pages / mapped snaps; pool+named+pages+mapped peaks
  *   - Kind / flags / multi-map / idle live snaps (pool walk)
@@ -20,7 +20,7 @@
  *   - AS ensure + wine-shm soft path tallies + honesty path catalog
  *   - Design / lookup / page_pa / share / reclaim / lamps (Wave 15)
  *   - Wave 19: surfaces / window / prot / OPEN return surfaces
- *   - Stats rollup + deepen wave=23 stamp + PASS/PARTIAL/INIT/NONE
+ *   - Stats rollup + deepen wave=24 stamp + PASS/PARTIAL/INIT/NONE
  *   greppable: "memobj: soft …"
  *   Soft ≠ product.
  *
@@ -31,7 +31,7 @@
  *   memobj: soft path | stats | surfaces | window | prot | OPEN
  *   memobj: soft return selftest — Wave 19 terminal return surface
  *   memobj: soft retmap     — Wave 19 return-surface map
- *   memobj: soft deepen wave=23
+ *   memobj: soft deepen wave=24
  *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
@@ -64,10 +64,10 @@ struct memobj_named_slot {
 
 static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
 
-/* Wave 23 soft inventory stamp (file-local; never product gate). */
-#define MEMOBJ_SOFT_WAVE 23u
+/* Wave 24 soft inventory stamp (file-local; never product gate). */
+#define MEMOBJ_SOFT_WAVE 24u
 /* Catalog areas prior to deepen (honesty..OPEN). Soft ≠ product. */
-#define MEMOBJ_SOFT_AREAS 40u
+#define MEMOBJ_SOFT_AREAS 42u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1321,7 +1321,7 @@ soft_inventory_scan(void)
  *   memobj: soft window     — Wave 17 user VA window geometry
  *   memobj: soft prot       — Wave 17 sanitize prot surface
  *   memobj: soft OPEN       — Wave 17 FILE/product OPEN honesty
- *   memobj: soft deepen     — wave=23 stamp + area count
+ *   memobj: soft deepen     — wave=24 stamp + area count
  *   memobj: soft PASS|PARTIAL|INIT|NONE | inventory PASS
  * greppable: memobj: soft
  * Honesty: soft inventory only — not product / not bar3 / not 1TiB product /
@@ -1757,24 +1757,39 @@ soft_inventory_log(void)
                     "(retbadge stamp; Soft≠product)\n",
                     (unsigned)MEMOBJ_SOFT_WAVE);
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
             */
-            /* Grep: memobj: soft rettoken — Wave 23 return-token honesty */
+            /* Grep: memobj: soft rettoken — Wave 23 return-token honesty (kept) */
             kprintf("memobj: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(rettoken honesty; Soft≠product; not bar3)\n",
                     (unsigned)MEMOBJ_SOFT_WAVE);
-            /* Grep: memobj: soft retcrest — Wave 23 exclusive crest stamp */
+            /* Grep: memobj: soft retcrest — Wave 23 crest stamp (kept) */
             kprintf("memobj: soft retcrest exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)MEMOBJ_SOFT_WAVE);
+            /*
+             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: memobj: soft retvault — Wave 24 return-vault honesty */
+            kprintf("memobj: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retvault honesty; Soft≠product; not bar3)\n",
+                    (unsigned)MEMOBJ_SOFT_WAVE);
+            /* Grep: memobj: soft retbanner — Wave 24 exclusive banner stamp */
+            kprintf("memobj: soft retbanner exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)MEMOBJ_SOFT_WAVE);
     kprintf("memobj: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "pool=%u named=%u map_ok=%u create_ok=%u multi_peak=%u "
             "surf=0x%x product_tib=0 bar3=OPEN file_kind=OPEN "
-            "(Wave 23 exclusive; soft; not product; not bar3; "
+            "(Wave 24 exclusive; soft; not product; not bar3; "
             "not 1TiB product; soft≠product)\n",
             (unsigned)MEMOBJ_SOFT_WAVE, cAreas, (unsigned)MEMOBJ_SOFT_AREAS,
             g_u32SoftInvSamples, g_u32SoftPoolUsed, g_u32SoftNamedUsed, cMapOk,

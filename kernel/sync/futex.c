@@ -24,7 +24,7 @@
  *                  (grep: futex: robust set/get/exit)
  *
  * Soft wait/wake inventory (file-local sticky counters; never hard-gate).
- * Wave 23 exclusive deepen — greppable prefix-stable serial markers
+ * Wave 24 exclusive deepen — greppable prefix-stable serial markers
  * (futex: soft …); diagnostics only, never hard-gate product:
  *   futex: soft wait inventory   — capacity + path catalog at init
  *   futex: soft wake inventory   — wake/bitset/timer/cancel catalog at init
@@ -65,7 +65,7 @@
  *   futex: soft ratio            — Wave 19 basis-point outcome rollup
  *   futex: soft surface          — Wave 19 area catalog
  *   futex: soft headroom         — Wave 19 free waiter/robust slots
- *   futex: soft deepen           — wave=23 areas stamp
+ *   futex: soft deepen           — wave=24 areas stamp
  * greppable: futex: soft
  * Soft only — does NOT claim product RR / full preemption complete.
  *
@@ -148,8 +148,8 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 23 exclusive soft deepen stamp (greppable wave=23). */
-#define FUTEX_SOFT_DEEPEN_WAVE  23u
+/* Wave 24 exclusive soft deepen stamp (greppable wave=24). */
+#define FUTEX_SOFT_DEEPEN_WAVE  24u
 /* Fixed greppable categories emitted under "futex: soft …". */
 #define FUTEX_SOFT_DEEPEN_AREAS 43u
 
@@ -375,7 +375,7 @@ futex_soft_note_claim(void)
  * Greppable soft wait/wake inventory + path/table/key/robust deepen.
  * Called from futex_init and once after first wait/wake activity.
  * Never allocates; safe from non-IRQ product paths.
- * Wave 19 exclusive: wave=23 stamp + claim/peak/g_fut/match/einval +
+ * Wave 19 exclusive: wave=24 stamp + claim/peak/g_fut/match/einval +
  * return/ret_surface/ratio/surface/headroom areas.
  * greppable: futex: soft wait inventory
  * greppable: futex: soft wake inventory
@@ -875,9 +875,9 @@ futex_soft_log(void)
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 
     /* Grep: futex: soft retmap — Wave 19 return-surface map */
-    kprintf("futex: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=23\n");
+    kprintf("futex: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
 
-    /* Grep: futex: soft deepen wave (Wave 23 stamp) */
+    /* Grep: futex: soft deepen wave (Wave 24 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -939,19 +939,34 @@ futex_soft_log(void)
                     "(retbadge stamp; Soft≠product)\n",
                     (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
             */
-            /* Grep: futex: soft rettoken — Wave 23 return-token honesty */
+            /* Grep: futex: soft rettoken — Wave 23 return-token honesty (kept) */
             kprintf("futex: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(rettoken honesty; Soft≠product; not bar3)\n",
                     (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
-            /* Grep: futex: soft retcrest — Wave 23 exclusive crest stamp */
+            /* Grep: futex: soft retcrest — Wave 23 crest stamp (kept) */
             kprintf("futex: soft retcrest exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retcrest stamp; Soft≠product)\n",
+                    (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: futex: soft retvault — Wave 24 return-vault honesty */
+            kprintf("futex: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retvault honesty; Soft≠product; not bar3)\n",
+                    (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
+            /* Grep: futex: soft retbanner — Wave 24 exclusive banner stamp */
+            kprintf("futex: soft retbanner exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbanner stamp; Soft≠product)\n",
                     (unsigned)FUTEX_SOFT_DEEPEN_WAVE);
     kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",

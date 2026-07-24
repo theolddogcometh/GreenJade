@@ -26,7 +26,7 @@
  *   Inventory wave stamp → 16; areas → 15. Primary PASS|counters|probe|slot
  *   lines stay field-stable. Soft ≠ bar3 / multi-CPU product gate.
  *
- * Wave 23 exclusive soft deepen (this unit only — greppable "cpu: soft …"):
+ * Wave 24 exclusive soft deepen (this unit only — greppable "cpu: soft …"):
  *   cpu: soft return|ret_surface|surface|deepen  — deepen publish return classes
  *   Inventory wave stamp → 17; areas → 16. Primary PASS|counters|probe|slot
  *   lines stay field-stable. product_kernel=OPEN. Soft ≠ bar3 gate.
@@ -743,7 +743,7 @@ cpu_soft_log(void)
         /* Grep: cpu: soft inventory */
         kprintf("cpu: soft inventory verdict=%s online=%u static=%u dyn=%u "
                 "dyn_alloc=%u oom=%u reject=%u idem=%u max_id=%u "
-                "gs_sane=%u walk_match=%u logs=%u wave=23\n",
+                "gs_sane=%u walk_match=%u logs=%u wave=24\n",
                 szVerdict, stSoft.u32Online, stSoft.u32StaticOnline,
                 stSoft.u32DynOnline, stSoft.u32DynAlloc, stSoft.u32Oom,
                 stSoft.u32Reject, stSoft.u32Idempotent,
@@ -795,12 +795,12 @@ cpu_soft_log(void)
         /* Grep: cpu: soft ratio (Wave 15/17) */
         kprintf("cpu: soft ratio pool_occ_bp=%u static_occ_bp=%u "
                 "dyn_occ_bp=%u reject_bp=%u oom_bp=%u hhdm_bp=%u "
-                "ident_bp=%u publish_ok_bp=%u wave=23\n",
+                "ident_bp=%u publish_ok_bp=%u wave=24\n",
                 u32PoolOccBp, u32StaticOccBp, u32DynOccBp, u32RejectBp,
                 u32OomBp, u32HhdmBp, u32IdentBp, u32PublishOkBp);
         /* Grep: cpu: soft headroom (Wave 15/17) */
         kprintf("cpu: soft headroom static=%u dyn=%u dyn_ceil=%u "
-                "max_cpus=%u online=%u max_id=%u wave=23\n",
+                "max_cpus=%u online=%u max_id=%u wave=24\n",
                 u32StaticHead, u32DynHead, u32DynCeil, stSoft.u32MaxCpus,
                 stSoft.u32Online, stSoft.u32MaxOnlineId);
         /*
@@ -812,7 +812,7 @@ cpu_soft_log(void)
                 "idem=%u reject=%u reject_bsp=%u reject_oob=%u "
                 "zero_pages=%u null_va=%u oom=%u gs_init=%u bsp_init=%u "
                 "id_mis=%u walk_match=%u gs_sane=%u dyn_alloc=%u "
-                "dyn_hhdm=%u dyn_ident=%u product_kernel=OPEN wave=23\n",
+                "dyn_hhdm=%u dyn_ident=%u product_kernel=OPEN wave=24\n",
                 g_u32SoftPublishStatic, g_u32SoftPublishDyn,
                 stSoft.u32Idempotent, stSoft.u32Reject, g_u32SoftRejectBsp,
                 g_u32SoftRejectOob, g_u32SoftZeroPages, g_u32SoftNullVa,
@@ -822,13 +822,13 @@ cpu_soft_log(void)
         /* Grep: cpu: soft ret_surface — Wave 19 terminal return classes */
         kprintf("cpu: soft ret_surface publish=static|dyn|idem "
                 "reject=bsp|oob|zero|null|oom gs=init|sane|walk "
-                "dyn=alloc|hhdm|ident product_kernel=OPEN areas=17 wave=23\n");
+                "dyn=alloc|hhdm|ident product_kernel=OPEN areas=17 wave=24\n");
         /* Grep: cpu: soft surface (Wave 19 area catalog) */
         kprintf("cpu: soft surface inventory,pool,publish,reject_class,"
                 "dyn,gs,layout,path,ratio,headroom,return,ret_surface,"
-                "deepen,counters,probe,slot areas=17 wave=23\n");
+                "deepen,counters,probe,slot areas=17 wave=24\n");
         /* Grep: cpu: soft retmap — Wave 19 return-surface map */
-    kprintf("cpu: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=23\n");
+    kprintf("cpu: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
 
     /* Grep: cpu: soft deepen */
         /*
@@ -838,11 +838,11 @@ cpu_soft_log(void)
          */
         /* Grep: cpu: soft retclass — Wave 19 return-class taxonomy (kept) */
         kprintf("cpu: soft retclass ok|fail|inval|nodev|busy|nomem "
-                "soft_only=1 product_gate=0 wave=23 "
+                "soft_only=1 product_gate=0 wave=24 "
                 "(retclass taxonomy; Soft≠product; not bar3)\n");
         /* Grep: cpu: soft retlane — Wave 19 return-lane catalog (kept) */
         kprintf("cpu: soft retlane inv|selftest|rate|retcode|retmap|class "
-                "product_kernel=OPEN soft_ne_product=1 wave=23 "
+                "product_kernel=OPEN soft_ne_product=1 wave=24 "
                 "(retlane catalog; Soft≠product)\n");
         /*
          * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
@@ -851,11 +851,11 @@ cpu_soft_log(void)
          */
         /* Grep: cpu: soft retbound — Wave 20 return-bound honesty (kept) */
         kprintf("cpu: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                "never_blocks_m0=1 wave=23 "
+                "never_blocks_m0=1 wave=24 "
                 "(retbound honesty; Soft≠product; not bar3)\n");
         /* Grep: cpu: soft retseal — Wave 20 seal stamp (kept) */
         kprintf("cpu: soft retseal exclusive=1 soft_ne_product=1 "
-                "product_kernel=OPEN bar3=0 wave=23 "
+                "product_kernel=OPEN bar3=0 wave=24 "
                 "(retseal stamp; Soft≠product)\n");
                 /*
                  * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
@@ -864,11 +864,11 @@ cpu_soft_log(void)
                 */
                 /* Grep: cpu: soft retpulse — Wave 21 return-pulse honesty (kept) */
                 kprintf("cpu: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(retpulse honesty; Soft≠product; not bar3)\n");
                 /* Grep: cpu: soft retmark — Wave 21 mark stamp (kept) */
                 kprintf("cpu: soft retmark exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retmark stamp; Soft≠product)\n");
                 /*
                  * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
@@ -877,26 +877,39 @@ cpu_soft_log(void)
                 */
                 /* Grep: cpu: soft retphase — Wave 22 return-phase honesty (kept) */
                 kprintf("cpu: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(retphase honesty; Soft≠product; not bar3)\n");
                 /* Grep: cpu: soft retbadge — Wave 22 badge stamp (kept) */
                 kprintf("cpu: soft retbadge exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retbadge stamp; Soft≠product)\n");
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
                 */
-                /* Grep: cpu: soft rettoken — Wave 23 return-token honesty */
+                /* Grep: cpu: soft rettoken — Wave 23 return-token honesty (kept) */
                 kprintf("cpu: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(rettoken honesty; Soft≠product; not bar3)\n");
-                /* Grep: cpu: soft retcrest — Wave 23 exclusive crest stamp */
+                /* Grep: cpu: soft retcrest — Wave 23 crest stamp (kept) */
                 kprintf("cpu: soft retcrest exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retcrest stamp; Soft≠product)\n");
-        kprintf("cpu: soft deepen wave=23 areas=19 online=%u static=%u "
+                /*
+                 * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+                 * Return surfaces only — soft inventory; never hard-gates product paths.
+                 * Soft≠product; not bar3.
+                 */
+                /* Grep: cpu: soft retvault — Wave 24 return-vault honesty */
+                kprintf("cpu: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                        "never_blocks_m0=1 wave=24 "
+                        "(retvault honesty; Soft≠product; not bar3)\n");
+                /* Grep: cpu: soft retbanner — Wave 24 exclusive banner stamp */
+                kprintf("cpu: soft retbanner exclusive=1 soft_ne_product=1 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
+                        "(retbanner stamp; Soft≠product)\n");
+        kprintf("cpu: soft deepen wave=24 areas=19 online=%u static=%u "
                 "dyn=%u oom=%u reject=%u logs=%u\n",
                 stSoft.u32Online, stSoft.u32StaticOnline,
                 stSoft.u32DynOnline, stSoft.u32Oom, stSoft.u32Reject,

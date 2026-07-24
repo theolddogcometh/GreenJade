@@ -34,7 +34,7 @@
  *   - Path catalog + xfer ceiling + backend live snapshot
  *   - Wave 14: per-op enter, peak lba/cb, copy path, catalog, PASS
  *   - Wave 15 base: ratio|headroom|surface|deepen
- *   - Wave 19 exclusive: capacity|geom|terminal|return|retmap (wave=23 areas=19)
+ *   - Wave 19 exclusive: capacity|geom|terminal|return|retmap (wave=24 areas=19)
  *   greppable: "store_door: soft …"
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  *
@@ -192,7 +192,7 @@ store_soft_note_err(i64 i64R)
 /**
  * Greppable soft store inventory (product / smoke). Wave 12 base; Wave 14 deepen.
  *   store_door: soft inventory calls=… rw=… claims=… reclaims=…
- *        ring_calls=… owned=… map_va=0x… token=… wave=23
+ *        ring_calls=… owned=… map_va=0x… token=… wave=24
  *   store_door: soft own claim=… reclaim=… release=… release_free=…
  *        claim_inval=… claim_busy=… release_inval=…
  *   store_door: soft meta stats=… stats_inval=… stats_fault=… cap=…
@@ -229,7 +229,7 @@ store_soft_inventory_log(void)
     /* Grep: store_door: soft inventory */
     kprintf("store_door: soft inventory calls=%u rw=%u claims=%u "
             "reclaims=%u ring_calls=%u owned=%u map_va=0x%lx token=0x%x "
-            "logs=%u wave=23\n",
+            "logs=%u wave=24\n",
             g_u32Calls, g_u32DoorRw, g_u32Claims, g_u32Reclaims,
             g_u32RingCalls, u32Owned, (unsigned long)g_u64RingMapVa,
             g_u32OwnerToken, g_u32SoftLogs);
@@ -297,7 +297,7 @@ store_soft_inventory_log(void)
      */
     /* Grep: store_door: soft total */
     kprintf("store_door: soft total ok=%u fail_like=%u calls=%u logs=%u "
-            "unknown=%u not_init=%u wave=23\n",
+            "unknown=%u not_init=%u wave=24\n",
             g_u32SoftOk,
             g_u32SoftInval + g_u32SoftNodev + g_u32SoftBusy + g_u32SoftFault +
                 g_u32SoftIo + g_u32SoftNosupport,
@@ -330,17 +330,17 @@ store_soft_inventory_log(void)
     /* Grep: store_door: soft catalog */
     kprintf("store_door: soft catalog xfer_max=%u sector=%u "
             "ops=claim,release,stats,cap,read,write,queue,flush,"
-            "export,map,kick,ring_state wave=23\n",
+            "export,map,kick,ring_state wave=24\n",
             (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR);
 
     /* Grep: store_door: soft path */
     kprintf("store_door: soft path claim=storaged rw=blk|scsi "
             "ring=export|map|kick|state reclaim=idempotent "
             "map_remap=soft_reclaim flush=soft_ok "
-            "wave=23 (soft inventory; not bar3)\n");
+            "wave=24 (soft inventory; not bar3)\n");
 
     /*
-     * Wave 23 exclusive deepen (complementary; primary lines field-stable).
+     * Wave 24 exclusive deepen (complementary; primary lines field-stable).
      * greppable: store_door: soft ratio|headroom|surface|deepen
      */
     {
@@ -363,42 +363,42 @@ store_soft_inventory_log(void)
         }
         /* Grep: store_door: soft ratio */
         kprintf("store_door: soft ratio ok_bp=%u fail_bp=%u owned_rw_bp=%u "
-                "rw=%u claims=%u logs=%u wave=23\n",
+                "rw=%u claims=%u logs=%u wave=24\n",
                 u32OkBp, u32FailBp, u32OwnedBp, g_u32DoorRw, g_u32Claims,
                 g_u32SoftLogs);
         /* Grep: store_door: soft headroom */
         kprintf("store_door: soft headroom xfer_max=%u sector=%u q_free=%u "
-                "blk=%u scsi=%u wave=23\n",
+                "blk=%u scsi=%u wave=24\n",
                 (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR, u32QFree,
                 u32Blk, u32Scsi);
         /* Grep: store_door: soft surface */
         kprintf("store_door: soft surface inventory,own,meta,rw,ring,xfer,"
                 "last,err,backend,total,ops,peak,copy,catalog,ratio,"
-                "headroom,capacity,geom,terminal,return,retmap,deepen areas=19 wave=23\n");
+                "headroom,capacity,geom,terminal,return,retmap,deepen areas=19 wave=24\n");
         /* Grep: store_door: soft capacity — Wave 19 design-constant lamps. */
         kprintf("store_door: soft capacity xfer_max=%u sector=%u "
-                "claim_reclaim=1 map_remap=1 flush_soft=1 ring=1 wave=23\n",
+                "claim_reclaim=1 map_remap=1 flush_soft=1 ring=1 wave=24\n",
                 (u32)STORE_XFER_MAX, (u32)GJ_VIRTIO_BLK_SECTOR);
         /* Grep: store_door: soft geom — Wave 19 backend geometry lamps. */
         kprintf("store_door: soft geom blk=%u scsi=%u q_free=%u "
-                "owned=%u map_va=0x%lx wave=23\n",
+                "owned=%u map_va=0x%lx wave=24\n",
                 u32Blk, u32Scsi, u32QFree, u32Owned,
                 (unsigned long)g_u64RingMapVa);
         /* Grep: store_door: soft terminal — Wave 19 outcome rollup. */
         kprintf("store_door: soft terminal ok=%u fail_like=%u rw=%u "
-                "claims=%u blk=%u scsi=%u soft PASS wave=23\n",
+                "claims=%u blk=%u scsi=%u soft PASS wave=24\n",
                 g_u32SoftOk, u32FailLike, g_u32DoorRw, g_u32Claims,
                 u32Blk, u32Scsi);
         /* Grep: store_door: soft return — Wave 19 API return surfaces */
         kprintf("store_door: soft return ok=%u inval=%u nodev=%u busy=%u "
                 "fault=%u io=%u nosupport=%u not_init=%u claims=%u "
-                "rw=%u product_storaged=OPEN wave=23\n",
+                "rw=%u product_storaged=OPEN wave=24\n",
                 g_u32SoftOk, g_u32SoftInval, g_u32SoftNodev, g_u32SoftBusy,
                 g_u32SoftFault, g_u32SoftIo, g_u32SoftNosupport, g_u32SoftNotInit,
                 g_u32Claims, g_u32DoorRw);
 
         /* Grep: store_door: soft retmap — Wave 19 return-surface map */
-    kprintf("store_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=23\n");
+    kprintf("store_door: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
 
     /* Grep: store_door: soft deepen */
         /*
@@ -408,11 +408,11 @@ store_soft_inventory_log(void)
          */
         /* Grep: store_door: soft retclass — Wave 19 return-class taxonomy (kept) */
         kprintf("store_door: soft retclass ok|fail|inval|nodev|busy|nomem "
-                "soft_only=1 product_gate=0 wave=23 "
+                "soft_only=1 product_gate=0 wave=24 "
                 "(retclass taxonomy; Soft≠product; not bar3)\n");
         /* Grep: store_door: soft retlane — Wave 19 return-lane catalog (kept) */
         kprintf("store_door: soft retlane inv|selftest|rate|retcode|retmap|class "
-                "product_kernel=OPEN soft_ne_product=1 wave=23 "
+                "product_kernel=OPEN soft_ne_product=1 wave=24 "
                 "(retlane catalog; Soft≠product)\n");
         /*
          * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
@@ -421,11 +421,11 @@ store_soft_inventory_log(void)
          */
         /* Grep: store_door: soft retbound — Wave 20 return-bound honesty (kept) */
         kprintf("store_door: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-                "never_blocks_m0=1 wave=23 "
+                "never_blocks_m0=1 wave=24 "
                 "(retbound honesty; Soft≠product; not bar3)\n");
         /* Grep: store_door: soft retseal — Wave 20 seal stamp (kept) */
         kprintf("store_door: soft retseal exclusive=1 soft_ne_product=1 "
-                "product_kernel=OPEN bar3=0 wave=23 "
+                "product_kernel=OPEN bar3=0 wave=24 "
                 "(retseal stamp; Soft≠product)\n");
                 /*
                  * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
@@ -434,11 +434,11 @@ store_soft_inventory_log(void)
                 */
                 /* Grep: store_door: soft retpulse — Wave 21 return-pulse honesty (kept) */
                 kprintf("store_door: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(retpulse honesty; Soft≠product; not bar3)\n");
                 /* Grep: store_door: soft retmark — Wave 21 mark stamp (kept) */
                 kprintf("store_door: soft retmark exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retmark stamp; Soft≠product)\n");
                 /*
                  * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
@@ -447,26 +447,39 @@ store_soft_inventory_log(void)
                 */
                 /* Grep: store_door: soft retphase — Wave 22 return-phase honesty (kept) */
                 kprintf("store_door: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(retphase honesty; Soft≠product; not bar3)\n");
                 /* Grep: store_door: soft retbadge — Wave 22 badge stamp (kept) */
                 kprintf("store_door: soft retbadge exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retbadge stamp; Soft≠product)\n");
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
                 */
-                /* Grep: store_door: soft rettoken — Wave 23 return-token honesty */
+                /* Grep: store_door: soft rettoken — Wave 23 return-token honesty (kept) */
                 kprintf("store_door: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                        "never_blocks_m0=1 wave=23 "
+                        "never_blocks_m0=1 wave=24 "
                         "(rettoken honesty; Soft≠product; not bar3)\n");
-                /* Grep: store_door: soft retcrest — Wave 23 exclusive crest stamp */
+                /* Grep: store_door: soft retcrest — Wave 23 crest stamp (kept) */
                 kprintf("store_door: soft retcrest exclusive=1 soft_ne_product=1 "
-                        "product_kernel=OPEN bar3=0 wave=23 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
                         "(retcrest stamp; Soft≠product)\n");
-        kprintf("store_door: soft deepen wave=23 areas=21 calls=%u rw=%u "
+                /*
+                 * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+                 * Return surfaces only — soft inventory; never hard-gates product paths.
+                 * Soft≠product; not bar3.
+                 */
+                /* Grep: store_door: soft retvault — Wave 24 return-vault honesty */
+                kprintf("store_door: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                        "never_blocks_m0=1 wave=24 "
+                        "(retvault honesty; Soft≠product; not bar3)\n");
+                /* Grep: store_door: soft retbanner — Wave 24 exclusive banner stamp */
+                kprintf("store_door: soft retbanner exclusive=1 soft_ne_product=1 "
+                        "product_kernel=OPEN bar3=0 wave=24 "
+                        "(retbanner stamp; Soft≠product)\n");
+        kprintf("store_door: soft deepen wave=24 areas=21 calls=%u rw=%u "
                 "ok=%u fail_like=%u logs=%u\n",
                 g_u32Calls, g_u32DoorRw, g_u32SoftOk, u32FailLike,
                 g_u32SoftLogs);
@@ -477,9 +490,9 @@ store_soft_inventory_log(void)
      * Grep: store_door: soft inventory PASS | store_door: soft PASS
      */
     kprintf("store_door: soft inventory PASS calls=%u logs=%u blk=%u "
-            "scsi=%u wave=23\n",
+            "scsi=%u wave=24\n",
             g_u32Calls, g_u32SoftLogs, u32Blk, u32Scsi);
-    kprintf("store_door: soft PASS calls=%u wave=23\n", g_u32Calls);
+    kprintf("store_door: soft PASS calls=%u wave=24\n", g_u32Calls);
 }
 
 /**
@@ -631,7 +644,7 @@ store_door_init(void)
     /* Backends may probe later; report readiness snapshot for bring-up. */
     kprintf("store_door: init xfer_max=%u blk=%d scsi=%d\n", STORE_XFER_MAX,
             virtio_blk_ready() ? 1 : 0, scsi_mid_ready() ? 1 : 0);
-    /* Grep: store_door: soft (baseline inventory after init; wave=23) */
+    /* Grep: store_door: soft (baseline inventory after init; wave=24) */
     store_soft_inventory_log();
 }
 

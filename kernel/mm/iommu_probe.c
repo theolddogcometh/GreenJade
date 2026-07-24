@@ -16,7 +16,7 @@
  * Honesty: soft software window table only — not full cap-typed window
  * object product (P-DMA-2 remaining: create_window as true window cap).
  *
- * Wave 23 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
+ * Wave 24 exclusive soft deepen (this unit only — greppable "iommu: soft …"):
  *   iommu: soft inventory  — presence/vendor/units/windows/denies rollup
  *   iommu: soft present    — DMAR/IVRS presence lamps
  *   iommu: soft dmar       — DRHD/RMRR/ATSR/RHSA/other structure counts
@@ -35,7 +35,7 @@
  *   iommu: soft return     — Wave 17 create/destroy return taxonomy
  *   iommu: soft return selftest — Wave 19 terminal return surface
  *   iommu: soft retmap     — Wave 19 return-surface map
- *   iommu: soft deepen     — wave=23 stamp + area count
+ *   iommu: soft deepen     — wave=24 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close;
@@ -64,10 +64,10 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 23 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE  23u
+/* Wave 24 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE  24u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 33u
+#define IOMMU_SOFT_AREAS 35u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -526,7 +526,7 @@ iommu_soft_inventory_log(void)
             "product=OPEN wave=%u soft PASS\n",
             (unsigned)IOMMU_SOFT_WAVE);
 
-    /* Grep: iommu: soft deepen wave (Wave 23 stamp) */
+    /* Grep: iommu: soft deepen wave (Wave 24 stamp) */
     /*
      * ---- Wave 19 complementary surfaces (kept) (never reshape primary).
      * Return surfaces only — soft inventory; never hard-gates product paths.
@@ -588,22 +588,37 @@ iommu_soft_inventory_log(void)
                     "(retbadge stamp; Soft≠product)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
             */
-            /* Grep: iommu: soft rettoken — Wave 23 return-token honesty */
+            /* Grep: iommu: soft rettoken — Wave 23 return-token honesty (kept) */
             kprintf("iommu: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(rettoken honesty; Soft≠product; not bar3)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
-            /* Grep: iommu: soft retcrest — Wave 23 exclusive crest stamp */
+            /* Grep: iommu: soft retcrest — Wave 23 crest stamp (kept) */
             kprintf("iommu: soft retcrest exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)IOMMU_SOFT_WAVE);
+            /*
+             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: iommu: soft retvault — Wave 24 return-vault honesty */
+            kprintf("iommu: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retvault honesty; Soft≠product; not bar3)\n",
+                    (unsigned)IOMMU_SOFT_WAVE);
+            /* Grep: iommu: soft retbanner — Wave 24 exclusive banner stamp */
+            kprintf("iommu: soft retbanner exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)IOMMU_SOFT_WAVE);
     kprintf("iommu: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
-            "(Wave 23 exclusive; soft only; not product always-on IOMMU; "
+            "(Wave 24 exclusive; soft only; not product always-on IOMMU; "
             "not bar3; soft≠product)\n",
             (unsigned)IOMMU_SOFT_WAVE, (unsigned)IOMMU_SOFT_AREAS,
             g_cSoftInvLogs, (unsigned)u32Surf);

@@ -146,7 +146,7 @@ static u32 g_u32SoftGenSample;    /* file_lock_wake_gen samples */
 static u32 g_u32SoftLogN;         /* soft inventory emissions */
 static u8  g_fSoftOnce;           /* one-shot after first activity */
 
-/* Wave 23 exclusive soft deepen — complementary path tallies. */
+/* Wave 24 exclusive soft deepen — complementary path tallies. */
 static u32 g_u32SoftWaitPeak;     /* peak live waiters */
 static u32 g_u32SoftDeadlkProbe;  /* soft_deadlock probes */
 static u32 g_u32SoftDeadlkHit;    /* soft_deadlock true */
@@ -220,7 +220,7 @@ file_lock_init(void)
     g_u32SoftGenSample = 0;
     g_u32SoftLogN = 0;
     g_fSoftOnce = 0;
-    /* Wave 23 exclusive soft deepen tallies. */
+    /* Wave 24 exclusive soft deepen tallies. */
     g_u32SoftWaitPeak = 0;
     g_u32SoftDeadlkProbe = 0;
     g_u32SoftDeadlkHit = 0;
@@ -297,7 +297,7 @@ soft_deny_note(u32 *pu32Bucket)
 }
 
 /**
- * Greppable soft lock inventory (product / smoke; Wave 23 exclusive deepen).
+ * Greppable soft lock inventory (product / smoke; Wave 24 exclusive deepen).
  * Primary field-stable lines (Wave 8):
  *   file_lock: soft held=… free=… peak=… waiters=… gen=…
  *   file_lock: soft deny=… eagain=… deadlk=… nolck=… set_ok=… unlk_ok=…
@@ -416,7 +416,7 @@ soft_inventory_log(void)
      * Wave 15 bumps wave stamp + adds total/rate/deadlk/grant/catalog/deepen.
      */
     /* Grep: file_lock: soft inventory */
-    kprintf("file_lock: soft inventory wave=23 slots=%u waiters_max=%u "
+    kprintf("file_lock: soft inventory wave=24 slots=%u waiters_max=%u "
             "wake_budget=%u deadlk_depth=%u held=%u free=%u peak=%u "
             "waiters=%u gen=%u occ_pct=%u deny_bp=%u log_n=%u "
             "count_sample=%u gen_sample=%u "
@@ -490,11 +490,11 @@ soft_inventory_log(void)
             u32Rd, u32Wr, u32Eof, g_u32SoftSetRd, g_u32SoftSetWr, u32Held);
 
     /*
-     * Wave 23 exclusive deepen (complementary; never reshapes primary lines).
+     * Wave 24 exclusive deepen (complementary; never reshapes primary lines).
      */
     /* Grep: file_lock: soft total */
     kprintf("file_lock: soft total set_ok=%u unlk_ok=%u deny=%u get=%u "
-            "block=%u wake=%u logs=%u wave=23\n",
+            "block=%u wake=%u logs=%u wave=24\n",
             u32SetOk, u32UnlkOk, u32Deny, u32Get, u32Block, u32Wake,
             g_u32SoftLogN);
 
@@ -506,7 +506,7 @@ soft_inventory_log(void)
 
     /* Grep: file_lock: soft deadlk */
     kprintf("file_lock: soft deadlk probe=%u hit=%u deny=%u depth=%u "
-            "last_deny=%u wave=23\n",
+            "last_deny=%u wave=24\n",
             g_u32SoftDeadlkProbe, g_u32SoftDeadlkHit, u32Deadlk,
             GJ_FLOCK_DEADLOCK_DEPTH, g_u32SoftLastDenyCode);
 
@@ -518,25 +518,25 @@ soft_inventory_log(void)
 
     /* Grep: file_lock: soft catalog */
     kprintf("file_lock: soft catalog slots=%u waiters_max=%u wake_budget=%u "
-            "deadlk_depth=%u tag=%u eof_sent=-1 wave=23\n",
+            "deadlk_depth=%u tag=%u eof_sent=-1 wave=24\n",
             GJ_FLOCK_MAX, GJ_FLOCK_MAX_WAITERS, GJ_FLOCK_SOFT_WAKE_MAX,
             GJ_FLOCK_DEADLOCK_DEPTH, GJ_FLOCK_TAG_WAITER);
 
     /* Grep: file_lock: soft capacity — Wave 19 design-constant lamps. */
     kprintf("file_lock: soft capacity slots=%u waiters_max=%u "
-            "wake_budget=%u deadlk_depth=%u multi_waiter=1 wave=23\n",
+            "wake_budget=%u deadlk_depth=%u multi_waiter=1 wave=24\n",
             GJ_FLOCK_MAX, GJ_FLOCK_MAX_WAITERS, GJ_FLOCK_SOFT_WAKE_MAX,
             GJ_FLOCK_DEADLOCK_DEPTH);
 
     /* Grep: file_lock: soft headroom — Wave 19 live slack lamps. */
     kprintf("file_lock: soft headroom free=%u held=%u peak=%u "
-            "waiters=%u wait_free=%u wait_peak=%u occ_pct=%u wave=23\n",
+            "waiters=%u wait_free=%u wait_peak=%u occ_pct=%u wave=24\n",
             u32Free, u32Held, u32Peak, u32Wait, u32WaitFree, u32WaitPeak,
             u32OccPct);
 
     /* Grep: file_lock: soft surface — Wave 19 surface bit lamps. */
     kprintf("file_lock: soft surface held=%u waiters=%u deny=%u set_ok=%u "
-            "block=%u wake=%u surf=0x%x wave=23\n",
+            "block=%u wake=%u surf=0x%x wave=24\n",
             u32Held != 0u ? 1u : 0u, u32Wait != 0u ? 1u : 0u,
             u32Deny != 0u ? 1u : 0u, u32SetOk != 0u ? 1u : 0u,
             u32Block != 0u ? 1u : 0u, u32Wake != 0u ? 1u : 0u,
@@ -546,19 +546,19 @@ soft_inventory_log(void)
 
     /* Grep: file_lock: soft terminal — Wave 19 outcome rollup. */
     kprintf("file_lock: soft terminal set_ok=%u unlk_ok=%u deny=%u get=%u "
-            "block=%u wake=%u soft PASS wave=23\n",
+            "block=%u wake=%u soft PASS wave=24\n",
             u32SetOk, u32UnlkOk, u32Deny, u32Get, u32Block, u32Wake);
 
     /* Grep: file_lock: soft return — Wave 19 API return surfaces */
     kprintf("file_lock: soft return set_ok=%u unlk_ok=%u get=%u get_hit=%u "
             "eagain=%u edeadlk=%u enolck=%u block=%u wake=%u "
-            "release_fd=%u release_pid=%u product_flock=OPEN wave=23\n",
+            "release_fd=%u release_pid=%u product_flock=OPEN wave=24\n",
             u32SetOk, u32UnlkOk, u32Get, u32GetHit,
             u32Eagain, u32Deadlk, u32Nolck, u32Block, u32Wake,
             u32RelFd, u32RelPid);
 
     /* Grep: file_lock: soft retmap — Wave 19 return-surface map */
-    kprintf("file_lock: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=23\n");
+    kprintf("file_lock: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
 
     /* Grep: file_lock: soft deepen */
     /*
@@ -568,11 +568,11 @@ soft_inventory_log(void)
      */
     /* Grep: file_lock: soft retclass — Wave 19 return-class taxonomy (kept) */
     kprintf("file_lock: soft retclass ok|fail|inval|nodev|busy|nomem "
-            "soft_only=1 product_gate=0 wave=23 "
+            "soft_only=1 product_gate=0 wave=24 "
             "(retclass taxonomy; Soft≠product; not bar3)\n");
     /* Grep: file_lock: soft retlane — Wave 19 return-lane catalog (kept) */
     kprintf("file_lock: soft retlane inv|selftest|rate|retcode|retmap|class "
-            "product_kernel=OPEN soft_ne_product=1 wave=23 "
+            "product_kernel=OPEN soft_ne_product=1 wave=24 "
             "(retlane catalog; Soft≠product)\n");
     /*
      * ---- Wave 20 complementary surfaces (kept) (never reshape primary).
@@ -581,11 +581,11 @@ soft_inventory_log(void)
      */
     /* Grep: file_lock: soft retbound — Wave 20 return-bound honesty (kept) */
     kprintf("file_lock: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-            "never_blocks_m0=1 wave=23 "
+            "never_blocks_m0=1 wave=24 "
             "(retbound honesty; Soft≠product; not bar3)\n");
     /* Grep: file_lock: soft retseal — Wave 20 seal stamp (kept) */
     kprintf("file_lock: soft retseal exclusive=1 soft_ne_product=1 "
-            "product_kernel=OPEN bar3=0 wave=23 "
+            "product_kernel=OPEN bar3=0 wave=24 "
             "(retseal stamp; Soft≠product)\n");
             /*
              * ---- Wave 21 complementary surfaces (kept) (never reshape primary).
@@ -594,11 +594,11 @@ soft_inventory_log(void)
             */
             /* Grep: file_lock: soft retpulse — Wave 21 return-pulse honesty (kept) */
             kprintf("file_lock: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=23 "
+                    "never_blocks_m0=1 wave=24 "
                     "(retpulse honesty; Soft≠product; not bar3)\n");
             /* Grep: file_lock: soft retmark — Wave 21 mark stamp (kept) */
             kprintf("file_lock: soft retmark exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN bar3=0 wave=23 "
+                    "product_kernel=OPEN bar3=0 wave=24 "
                     "(retmark stamp; Soft≠product)\n");
             /*
              * ---- Wave 22 complementary surfaces (kept) (never reshape primary).
@@ -607,29 +607,42 @@ soft_inventory_log(void)
             */
             /* Grep: file_lock: soft retphase — Wave 22 return-phase honesty (kept) */
             kprintf("file_lock: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=23 "
+                    "never_blocks_m0=1 wave=24 "
                     "(retphase honesty; Soft≠product; not bar3)\n");
             /* Grep: file_lock: soft retbadge — Wave 22 badge stamp (kept) */
             kprintf("file_lock: soft retbadge exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN bar3=0 wave=23 "
+                    "product_kernel=OPEN bar3=0 wave=24 "
                     "(retbadge stamp; Soft≠product)\n");
 /*
- * ---- Wave 23 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 23 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
             */
-            /* Grep: file_lock: soft rettoken — Wave 23 return-token honesty */
+            /* Grep: file_lock: soft rettoken — Wave 23 return-token honesty (kept) */
             kprintf("file_lock: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-                    "never_blocks_m0=1 wave=23 "
+                    "never_blocks_m0=1 wave=24 "
                     "(rettoken honesty; Soft≠product; not bar3)\n");
-            /* Grep: file_lock: soft retcrest — Wave 23 exclusive crest stamp */
+            /* Grep: file_lock: soft retcrest — Wave 23 crest stamp (kept) */
             kprintf("file_lock: soft retcrest exclusive=1 soft_ne_product=1 "
-                    "product_kernel=OPEN bar3=0 wave=23 "
+                    "product_kernel=OPEN bar3=0 wave=24 "
                     "(retcrest stamp; Soft≠product)\n");
-    kprintf("file_lock: soft deepen wave=23 areas=total,rate,deadlk,grant,,retclass,retlane"
+            /*
+             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: file_lock: soft retvault — Wave 24 return-vault honesty */
+            kprintf("file_lock: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=24 "
+                    "(retvault honesty; Soft≠product; not bar3)\n");
+            /* Grep: file_lock: soft retbanner — Wave 24 exclusive banner stamp */
+            kprintf("file_lock: soft retbanner exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=24 "
+                    "(retbanner stamp; Soft≠product)\n");
+    kprintf("file_lock: soft deepen wave=24 areas=total,rate,deadlk,grant,,retclass,retlane"
             "catalog,capacity,headroom,surface,terminal,return,wait_peak,"
             "wake_zero logs=%u "
-            "(Wave 23 exclusive; advisory soft inventory; not bar3)\n",
+            "(Wave 24 exclusive; advisory soft inventory; not bar3)\n",
             g_u32SoftLogN);
 
     /* Grep: file_lock: soft path */
@@ -637,7 +650,7 @@ soft_inventory_log(void)
             "get=conflict_probe block=thread_block+schedule "
             "wake=multi_budget coalesce=adjacent_same_type "
             "split=FLOCK_CONFLICT_SPLIT multi=FLOCK_SOFT_MULTI_WAITER "
-            "deadlk=FLOCK_SOFT_DEADLOCK soft_honesty=soft wave=23 "
+            "deadlk=FLOCK_SOFT_DEADLOCK soft_honesty=soft wave=24 "
             "(advisory soft inventory; not bar3)\n");
 }
 

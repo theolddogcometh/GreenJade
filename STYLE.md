@@ -159,6 +159,6 @@ Order: own module header, `gj/*`, freestanding system.
 - `GJ_DEBUG` gates verbose logs
 - Panic paths must not return
 
-## Soft inventory / honesty stamps (Wave 92)
+## Soft inventory / honesty stamps (Wave 95)
 
-Greppable soft inventory comments and honesty ledgers in headers/docs are **bring-up observability only** (e.g. `*: soft inventory …`). They do **not** light product lamps, close Steam **bar3**, or promote Deck Top 50 rows. Continuum high-water **advancing toward 23400** is CREATE-ONLY soft graph parent wire (Wave 92 soft deepen surfaces **retmarkangle**/**retpulseangle**) — **soft ≠ product complete**.
+Greppable soft inventory comments and honesty ledgers in headers/docs are **bring-up observability only** (e.g. `*: soft inventory …`). They do **not** light product lamps, close Steam **bar3**, or promote Deck Top 50 rows. Continuum high-water **advancing toward 23700** is CREATE-ONLY soft graph parent wire (Wave 95 soft deepen surfaces **retchordangle**/**retarcangle**) — **soft ≠ product complete**.

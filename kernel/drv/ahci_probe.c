@@ -22,7 +22,7 @@
  *   ahci: soft path       — honesty: probe/soft only; no engines / no AE
  *   ahci: soft return rate — Wave 19 ok/fail rate lamps
  *   ahci: soft retcode    — Wave 19 retcode catalog
- *   ahci: soft deepen     — wave=39 areas stamp
+ *   ahci: soft deepen     — wave=40 areas stamp
  *   ahci: soft ratio      — Wave 15 port/ncs occupancy
  *   ahci: soft headroom   — Wave 15 NP vs PI head
  *   ahci: soft surface    — Wave 16 area catalog
@@ -103,8 +103,8 @@
 #define AHCI_BOHC_BB   (1u << 4) /* BIOS Busy */
 
 /* Wave 20 deepen area count (fixed greppable categories in inventory log). */
-#define AHCI_SOFT_DEEPEN_AREAS 58u
-#define AHCI_SOFT_DEEPEN_WAVE 39u
+#define AHCI_SOFT_DEEPEN_AREAS 60u
+#define AHCI_SOFT_DEEPEN_WAVE 40u
 
 /* Soft inventory emission tallies (wrap OK; never hard-gate). */
 static u32 g_u32SoftInvLogs;
@@ -690,11 +690,11 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
                              */
                             /* Grep: ahci: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("ahci: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=39 "
+                                    "never_blocks_m0=1 wave=40 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: ahci: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("ahci: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=39 "
+                                    "product_kernel=OPEN bar3=0 wave=40 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -703,11 +703,11 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
                              */
                             /* Grep: ahci: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("ahci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=39 "
+                                    "never_blocks_m0=1 wave=40 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: ahci: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("ahci: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=39 "
+                                    "product_kernel=OPEN bar3=0 wave=40 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -716,15 +716,15 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
                              */
                             /* Grep: ahci: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("ahci: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=39 "
+                                    "never_blocks_m0=1 wave=40 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: ahci: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("ahci: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=39 "
+                                    "never_blocks_m0=1 wave=40 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: ahci: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("ahci: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=39 "
+                                    "product_kernel=OPEN bar3=0 wave=40 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
@@ -733,11 +733,11 @@ ahci_soft_inventory(const char *szVia, u32 u32Cap, u32 u32Ghc, u32 u32Is,
  */
 /* Grep: ahci: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("ahci: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("ahci: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retpanoply stamp; Soft≠product)\n");
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
@@ -746,11 +746,11 @@ kprintf("ahci: soft retpanoply exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retbastion — Wave 33 return-bastion honesty (kept) */
 kprintf("ahci: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retbastion honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retcitadel — Wave 33 citadel stamp (kept) */
 kprintf("ahci: soft retcitadel exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retcitadel stamp; Soft≠product)\n");
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -759,11 +759,11 @@ kprintf("ahci: soft retcitadel exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retredoubt — Wave 34 return-redoubt honesty */
 kprintf("ahci: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retredoubt honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retkeep — Wave 34 exclusive keep stamp */
 kprintf("ahci: soft retkeep exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retkeep stamp; Soft≠product)\n");
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -772,11 +772,11 @@ kprintf("ahci: soft retkeep exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retfortress — Wave 35 return-fortress honesty */
 kprintf("ahci: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retfortress honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retpalace — Wave 35 exclusive palace stamp */
 kprintf("ahci: soft retpalace exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retpalace stamp; Soft≠product)\n");
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -785,11 +785,11 @@ kprintf("ahci: soft retpalace exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft rethold — Wave 36 return-hold honesty */
 kprintf("ahci: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(rethold honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retspire — Wave 36 exclusive spire stamp */
 kprintf("ahci: soft retspire exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retspire stamp; Soft≠product)\n");
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
@@ -798,11 +798,11 @@ kprintf("ahci: soft retspire exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retwall — Wave 37 return-wall honesty */
 kprintf("ahci: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retwall honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retgate — Wave 37 exclusive gate stamp */
 kprintf("ahci: soft retgate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retgate stamp; Soft≠product)\n");
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -811,11 +811,11 @@ kprintf("ahci: soft retgate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retmoat — Wave 38 return-moat honesty */
 kprintf("ahci: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retmoat honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retower — Wave 38 exclusive tower stamp */
 kprintf("ahci: soft retower exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retower stamp; Soft≠product)\n");
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -824,12 +824,25 @@ kprintf("ahci: soft retower exclusive=1 soft_ne_product=1 "
  */
 /* Grep: ahci: soft retbarbican — Wave 39 return-barbican honesty */
 kprintf("ahci: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=39 "
+        "never_blocks_m0=1 wave=40 "
         "(retbarbican honesty; Soft≠product; not bar3)\n");
 /* Grep: ahci: soft retglacis — Wave 39 exclusive glacis stamp */
 kprintf("ahci: soft retglacis exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=39 "
+        "product_kernel=OPEN bar3=0 wave=40 "
         "(retglacis stamp; Soft≠product)\n");
+/*
+ * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: ahci: soft retcurtain — Wave 40 return-curtain honesty */
+kprintf("ahci: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=40 "
+        "(retcurtain honesty; Soft≠product; not bar3)\n");
+/* Grep: ahci: soft retparapet — Wave 40 exclusive parapet stamp */
+kprintf("ahci: soft retparapet exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=40 "
+        "(retparapet stamp; Soft≠product)\n");
                             kprintf("ahci: soft deepen wave=%u areas=%u via=%s cap_ok=%u ports=%u "
             "found=%u identify_ok=%u map_fail=%u no_abar=%u ok=%u "
             "skip=%u\n",

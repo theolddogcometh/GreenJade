@@ -23,7 +23,7 @@
  * Grep: cap: cdt pool — alloc/free pool churn
  * Grep: cap:quota — flat + soft hierarchical charge/refund
  *
- * Soft inventory (Wave 39 exclusive deepen; this unit only):
+ * Soft inventory (Wave 40 exclusive deepen; this unit only):
  *   cap: cdt soft honesty    — ≠ GJ_CAP_REPLY product / full CDT mutex
  *   cap: cdt soft inventory  — pool/slots/quota + resolve/trylock rollup
  *   cap: cdt soft resolve    — ok/inval/noent/stale/live_fail path tallies
@@ -40,7 +40,7 @@
  *   cap: cdt soft retcode    — Wave 17 observed gj_status retcode catalog
  *   cap: cdt soft return selftest — Wave 19 terminal return surface
  *   cap: cdt soft retmap     — Wave 19 return-surface map
- *   cap: cdt soft deepen     — wave=39 areas stamp
+ *   cap: cdt soft deepen     — wave=40 areas stamp
  *   cap: cdt soft PASS|FAIL / cap: cdt soft inventory PASS|FAIL
  * Honesty: soft inventory only — not GJ_CAP_REPLY product (MIG install),
  * not full CDT mutex/turnstile product; Soft ≠ MIG REPLY product; bar3 OPEN.
@@ -52,9 +52,9 @@
 #include <gj/types.h>
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_CDT_SOFT_WAVE 39u
+#define GJ_CDT_SOFT_WAVE 40u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_CDT_SOFT_AREAS 58u
+#define GJ_CDT_SOFT_AREAS 60u
 
 static void cdt_edge_free_if_pool(struct gj_cdt_edge *pEdge);
 static void cdt_soft_tally_install(struct gj_cnode *pCnode,
@@ -1411,6 +1411,21 @@ kprintf("cap: cdt: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1
 kprintf("cap: cdt: soft retglacis exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retglacis stamp; Soft≠product)\n",
+        (unsigned)GJ_CDT_SOFT_WAVE);
+/*
+ * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cap: cdt: soft retcurtain — Wave 40 return-curtain honesty */
+kprintf("cap: cdt: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retcurtain honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_CDT_SOFT_WAVE);
+/* Grep: cap: cdt: soft retparapet — Wave 40 exclusive parapet stamp */
+kprintf("cap: cdt: soft retparapet exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retparapet stamp; Soft≠product)\n",
         (unsigned)GJ_CDT_SOFT_WAVE);
                             kprintf("cap: cdt soft deepen wave=%u areas=%u pool_used=%u "
             "res_ok=%u try_ok=%u inst_ok=%u mint_ok=%u copy_ok=%u "

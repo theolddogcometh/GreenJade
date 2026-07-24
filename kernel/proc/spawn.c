@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 39u
+#define GJ_SPAWN_SOFT_WAVE 40u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -319,7 +319,7 @@ soft_inventory_log(const char *szVia)
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=39\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=40\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -642,6 +642,21 @@ kprintf("spawn: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("spawn: soft retglacis exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retglacis stamp; Soft≠product)\n",
+        (unsigned)GJ_SPAWN_SOFT_WAVE);
+/*
+ * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: spawn: soft retcurtain — Wave 40 return-curtain honesty */
+kprintf("spawn: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retcurtain honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_SPAWN_SOFT_WAVE);
+/* Grep: spawn: soft retparapet — Wave 40 exclusive parapet stamp */
+kprintf("spawn: soft retparapet exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retparapet stamp; Soft≠product)\n",
         (unsigned)GJ_SPAWN_SOFT_WAVE);
                             kprintf("spawn: soft deepen wave=%u via=%s enter=%u ok=%u fail=%u "
             "live=%u peak=%u mint_soft=%u mint_soft_bad=%u teardown=%u "

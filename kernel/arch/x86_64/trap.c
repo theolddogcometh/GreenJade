@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE 39u
+#define TRAP_SOFT_WAVE 40u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -919,6 +919,21 @@ kprintf("trap: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("trap: soft retglacis exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retglacis stamp; Soft≠product)\n",
+        (unsigned)TRAP_SOFT_WAVE);
+/*
+ * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: trap: soft retcurtain — Wave 40 return-curtain honesty */
+kprintf("trap: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retcurtain honesty; Soft≠product; not bar3)\n",
+        (unsigned)TRAP_SOFT_WAVE);
+/* Grep: trap: soft retparapet — Wave 40 exclusive parapet stamp */
+kprintf("trap: soft retparapet exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retparapet stamp; Soft≠product)\n",
         (unsigned)TRAP_SOFT_WAVE);
                             kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"

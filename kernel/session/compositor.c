@@ -50,7 +50,7 @@
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE 39u
+#define GJ_COMP_SOFT_WAVE 40u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -438,7 +438,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=39\n");
+    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=40\n");
 
     /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -761,6 +761,21 @@ kprintf("compositor: soft retbarbican soft_only=1 product_gate=0 soft_ne_product
 kprintf("compositor: soft retglacis exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retglacis stamp; Soft≠product)\n",
+        (unsigned)GJ_COMP_SOFT_WAVE);
+/*
+ * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: compositor: soft retcurtain — Wave 40 return-curtain honesty */
+kprintf("compositor: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retcurtain honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_COMP_SOFT_WAVE);
+/* Grep: compositor: soft retparapet — Wave 40 exclusive parapet stamp */
+kprintf("compositor: soft retparapet exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retparapet stamp; Soft≠product)\n",
         (unsigned)GJ_COMP_SOFT_WAVE);
                             kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "

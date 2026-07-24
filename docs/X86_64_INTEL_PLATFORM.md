@@ -7,13 +7,13 @@
 | **Scope** | How GreenJade **uses Intel-class PC/server hardware** — not OS philosophy |
 | **OS design** | Still [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md), [CAP_ADDRESSING.md](CAP_ADDRESSING.md), [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) |
 | **Heritage** | Intel SDM / platform firmware / VT-d / Linux-oriented platform practice — **under GreenJade law** |
-| **Honesty** | **2026-07-24 Wave 89** — soft vs product IOMMU/platform open (14); continuum **toward 23100** soft only; product lamps **0**; **no product claim**; **no bar3 claim** |
+| **Honesty** | **2026-07-24 Wave 90** — soft vs product IOMMU/platform open (14); continuum **toward 23200** soft only; product lamps **0**; **no product claim**; **no bar3 claim** |
 
 This profile does **not** replace Solaris-first OS design or L4-style capabilities. It defines the **platform contract** for x86_64 machines (especially Intel, and compatible AMD where noted).
 
 **Soft stamp (Wave 9, historical):** greppable IOMMU / VT-d / platform smokes on tree are **bring-up honesty only**. They do **not** close production DMA policy (P-DMA-*), full platform product, or Steam **bar3**.
 
-**Soft stamp (Wave 89):** same soft-vs-product platform bound restated under Wave 89 exclusive ownership of this file’s honesty ledger. Continuum high-water **advancing toward 23100** soft only (CREATE-ONLY parent wire). Product lamps remain **0**. Soft platform ≠ product complete ≠ bar3. See 14.
+**Soft stamp (Wave 90):** same soft-vs-product platform bound restated under Wave 90 exclusive ownership of this file’s honesty ledger. Continuum high-water **advancing toward 23200** soft only (CREATE-ONLY parent wire). Product lamps remain **0**. Soft platform ≠ product complete ≠ bar3. See 14.
 
 ---
 
@@ -183,16 +183,16 @@ Profile: x86_64-intel-desktop / workstation
 
 ---
 
-## 14. Honesty refresh — soft vs product (Wave 89 · 2026-07-24)
+## 14. Honesty refresh — soft vs product (Wave 90 · 2026-07-24)
 
-**Additive only (Wave 89 exclusive for this file).** Profile rules in 1–13 stay **Accepted** (normative platform contract). This section is a Wave 89 honesty ledger: what is **soft** on the tree vs what remains **open** for product IOMMU / platform. It does **not** re-litigate architecture or weaken P-DMA production defaults. Wave 89 14 ledger text is superseded here as the same honesty formula under Wave 89 exclusive ownership of this file.
+**Additive only (Wave 90 exclusive for this file).** Profile rules in 1–13 stay **Accepted** (normative platform contract). This section is a Wave 90 honesty ledger: what is **soft** on the tree vs what remains **open** for product IOMMU / platform. It does **not** re-litigate architecture or weaken P-DMA production defaults. Wave 90 14 ledger text is superseded here as the same honesty formula under Wave 90 exclusive ownership of this file.
 
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Accepted** | Normative platform rule frozen for x86_64 product path — ship toward these rules |
 | **Soft** | Partial / greppable / bring-up path exists; **not** full product close of the rule |
 | **Open** | Rule accepted; code / enforcement / product path still incomplete or not default |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 23100** soft only |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 23200** soft only |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
 
@@ -204,14 +204,14 @@ Profile: x86_64-intel-desktop / workstation
 | `iommu: enforce PASS` / software window table | **No** (software enforce ≠ production hardware default) | **No** | **No** |
 | `iommu: vtd * PASS` (tables, TE path, identity grant soft) | **No** | **No** | **No** |
 | Dev/QEMU soft-allow missing IOMMU (P-DMA-5) | **No** — explicit **non**-production | **No** | **No** |
-| Continuum high-water **toward 23100** CREATE-ONLY | **No** | **No** | **No** |
+| Continuum high-water **toward 23200** CREATE-ONLY | **No** | **No** | **No** |
 | Host Steam media inventory **READY** | **No** | **No** | **No** |
 | Kernel smokes (virtio T0, HDA, io_uring min, 768G soak, aarch64 M0) | **No** | **No** (may soft-touch related surfaces) | **No** |
 | Profile **Accepted** in this file | Decisions only | Decisions only | **No** |
 
-**Hard rule:** never claim “product IOMMU closed,” “no open bus-master product default shipped,” “platform product complete,” product lamps > 0, bar3 closed, or Deck Top 50 title PASS from greppable `iommu:*` / soft continuum toward **23100** / media `STATUS=READY` / design **Accepted** alone. **Soft ≠ product complete.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — this profile does not promote those rows.
+**Hard rule:** never claim “product IOMMU closed,” “no open bus-master product default shipped,” “platform product complete,” product lamps > 0, bar3 closed, or Deck Top 50 title PASS from greppable `iommu:*` / soft continuum toward **23200** / media `STATUS=READY` / design **Accepted** alone. **Soft ≠ product complete.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — this profile does not promote those rows.
 
-**Hard stamp (Wave 89):** soft IOMMU/platform **≠** product close. Soft continuum **toward 23100** ≠ product platform ≠ bar3. Product lamps **0**. **No bar3 claim.**
+**Hard stamp (Wave 90):** soft IOMMU/platform **≠** product close. Soft continuum **toward 23200** ≠ product platform ≠ bar3. Product lamps **0**. **No bar3 claim.**
 
 ### 14.2 IOMMU / DMA ledger (normative → ship honesty)
 
@@ -236,30 +236,30 @@ Profile: x86_64-intel-desktop / workstation
 | **Hardening (10)** | NX / SMEP / SMAP / W^X soft enforcement paths | KASLR product; CET tier-2 later (unchanged) |
 | **Drivers (P-DRV)** | T0 virtio + UDX host soft; live embeds | T1+ HCL product matrix; no GPL Intel Linux import (unchanged law) |
 
-### 14.4 Explicit non-claims (Wave 89)
+### 14.4 Explicit non-claims (Wave 90)
 
 | Claim | Allowed? |
 |-------|----------|
 | “x86_64 Intel platform profile **Accepted**” | **Yes** — this document 1–13 |
 | “Soft IOMMU probe / enforce / VT-d TE greppable” | **Yes** — with soft bound (14.2) |
-| “Soft continuum high-water advancing toward **23100** (CREATE-ONLY)” | **Yes** — soft only |
+| “Soft continuum high-water advancing toward **23200** (CREATE-ONLY)” | **Yes** — soft only |
 | “Product IOMMU / no open bus-master production default closed” | **No** |
 | “P-DMA-5 soft-allow is production default” | **No** — explicitly non-production |
 | “Continuum / media READY / kernel smokes close platform product” | **No** |
 | “Product lamps lit / product complete from soft platform or continuum” | **No** — lamps remain **0** |
 | “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
 | “bar3 closed” | **No** — **bar3 remains OPEN** (client + matrix) |
-| “Wave 89 honesty closes bar3 or platform product” | **No** — honesty refresh only |
+| “Wave 90 honesty closes bar3 or platform product” | **No** — honesty refresh only |
 
 ### 14.5 Related honesty surfaces
 
 - [SOLARIS_STYLE_REMAINING.md](SOLARIS_STYLE_REMAINING.md) 12 / 19 — IOMMU API design + remaining ledger  
-- [HCL.md](HCL.md) — T0 VT-d soft row; continuum toward 23100; open bars  
+- [HCL.md](HCL.md) — T0 VT-d soft row; continuum toward 23200; open bars  
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
 - [TODO.md](TODO.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md) — coding boxes / soft stamp  
-- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9.5 — continuum toward 23100 soft  
+- [CAP_ADDRESSING.md](CAP_ADDRESSING.md) 9.5 — continuum toward 23200 soft  
 
 ---
 
 *Normative x86_64 Intel-class platform profile for Project GreenJade.*  
-*Wave 89 honesty (14): soft IOMMU/platform ≠ product close; continuum **toward 23100 soft only**; product lamps **0**; production no open bus-master still **open**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 90 honesty (14): soft IOMMU/platform ≠ product close; continuum **toward 23200 soft only**; product lamps **0**; production no open bus-master still **open**; **soft ≠ product complete**; **bar3 remains OPEN**.*

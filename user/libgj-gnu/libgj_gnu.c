@@ -32,7 +32,7 @@
  *   greppable: GJ_GNU_SOFT_SURFACE
  *   greppable: GJ_GNU_SOFT_NOTE
  *
- * Soft inventory (Wave 89 exclusive deepen):
+ * Soft inventory (Wave 90 exclusive deepen):
  *   libgj-gnu: soft inventory wave=70 surfaces=12 caps=0xf stamp=GNU1
  *   libgj-gnu: soft deepen wave=70 areas=export,stamp,caps,get,id,probe,
  *              touch,inventory,wave,surface,path,note
@@ -54,10 +54,10 @@
 #define GJ_GNU_SOFT_CAP_TOUCH   ((uint32_t)0x8u)
 #define GJ_GNU_SOFT_CAP_MASK    ((uint32_t)0xfu)
 
-/* Wave 89 exclusive soft inventory stamp. */
-/* Wave 89 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retbannerangle continuum_toward=23100 soft_ne_product=1
- *   greppable: soft retvaultangle exclusive=1 continuum_toward=23100
+/* Wave 90 exclusive soft inventory stamp. */
+/* Wave 90 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retcrestangle continuum_toward=23200 soft_ne_product=1
+ *   greppable: soft rettokenangle exclusive=1 continuum_toward=23200
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -98,7 +98,7 @@ static const char g_szGnuSoftInventory[] =
     "multi_server=0 confine=0 bar3=0";
 
 /*
- * Wave 89 soft deepen stamp.
+ * Wave 90 soft deepen stamp.
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
@@ -118,14 +118,14 @@ static const char g_szGnuSoftPath[] =
     "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
 /*
- * Soft honesty line (Wave 89 exclusive).
+ * Soft honesty line (Wave 90 exclusive).
  * Grep: libgj-gnu: soft honesty
  */
 static const char g_szGnuSoftHonesty[] =
     "libgj-gnu: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70";
 
-/* Soft area name catalog (Wave 89; cold only). */
+/* Soft area name catalog (Wave 90; cold only). */
 static const char *const g_apszGnuSoftAreas[] = {
     "export",
     "stamp",
@@ -206,7 +206,7 @@ gj_gnu_soft_touch(void)
 }
 
 /*
- * Cold soft inventory accessor (Wave 89).
+ * Cold soft inventory accessor (Wave 90).
  * greppable: GJ_GNU_SOFT_INVENTORY
  * Grep: libgj-gnu: soft inventory
  */
@@ -218,7 +218,7 @@ gj_gnu_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 89).
+ * Cold soft deepen stamp (Wave 90).
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
@@ -241,7 +241,7 @@ gj_gnu_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 89 exclusive).
+ * Cold soft honesty line (Wave 90 exclusive).
  * Grep: libgj-gnu: soft honesty
  */
 const char *
@@ -272,7 +272,7 @@ gj_gnu_soft_surface_count(void)
 }
 
 /*
- * Soft area catalog size (Wave 89 deepen areas).
+ * Soft area catalog size (Wave 90 deepen areas).
  * Grep: libgj-gnu: soft areas=
  */
 uint32_t
@@ -340,7 +340,7 @@ gj_gnu_soft_note_counts(uint32_t *pGet, uint32_t *pId, uint32_t *pProbe,
 }
 
 /*
- * Soft note extend (Wave 89): deepen + path call counters.
+ * Soft note extend (Wave 90): deepen + path call counters.
  * Grep: libgj-gnu: soft note
  */
 void

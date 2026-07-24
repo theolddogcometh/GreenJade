@@ -771,56 +771,56 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-## Progress note — GreenJade Wave 84 soft continuum (2026-07-24)
+## Progress note — GreenJade Wave 85 soft continuum (2026-07-24)
 
-**Additive only (Wave 84 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41/67/68/69/70/71/72/73/74/75/76/77/78 soft stamps above stay historical ledger (Wave 83 high-water was **toward 22500** / soft deepen **retemblemangle**/**retsigilangle**; Wave 82 high-water was **toward 22400** / soft deepen **retmantleangle**/**retaegisangle**; Wave 81 high-water was **toward 22400** / soft deepen **retpanoplyangle**/**retbulwarkangle**; Wave 80 high-water was **toward 22200** / soft deepen **retcitadelangle**/**retbastionkeep**; Wave 79 high-water was **toward 22100** / soft deepen **retkeepangle**/**retredoubtangle**; Wave 78 high-water was **toward 22000** / soft deepen **retpalaceangle**/**retfortressangle**; Wave 77 high-water was **toward 21900** / soft deepen **retspireangle**/**retholdangle**; Wave 76 high-water was **toward 21800** / soft deepen **retgateangle**/**retwallangle**; Wave 75 high-water was **toward 21700** / soft deepen **retmoatangle**/**retowerangle**; Wave 74 high-water was **toward 21600** / soft deepen **retglacisangle**/**retparapetangle**; Wave 73 high-water was **toward 21500** / soft deepen **retcurtainface**/**retbastionangle**; Wave 72 high-water was **toward 21400** / soft deepen **retplaceofarmsangle**/**retdoubletenailleangle**; Wave 71 high-water was **toward 21300** / soft deepen **retsallyportangle**/**retreentrantangle**; Wave 70 high-water was **toward 21200** / soft deepen **retfosseangle**/**retcounterscarple**; Wave 69 high-water was **toward 21100** / soft deepen **retdemiluneangle**/**retcoveredwayangle**; Wave 68 high-water was **toward 21000** / soft deepen **retlunetteangle**/**rettenailleangle**; Wave 67 high-water was **toward 20900** / soft deepen **retcaponierangle**/**retredanangle**; Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 84 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
+**Additive only (Wave 85 exclusive for this file).** Prior progress rows and Wave 10/12/14/16/17/38/40/41/67/68/69/70/71/72/73/74/75/76/77/78 soft stamps above stay historical ledger (Wave 84 high-water was **toward 22600** / soft deepen **retscepterangle**/**retglyphangle**; Wave 83 high-water was **toward 22500** / soft deepen **retemblemangle**/**retsigilangle**; Wave 82 high-water was **toward 22400** / soft deepen **retmantleangle**/**retaegisangle**; Wave 81 high-water was **toward 22400** / soft deepen **retpanoplyangle**/**retbulwarkangle**; Wave 80 high-water was **toward 22200** / soft deepen **retcitadelangle**/**retbastionkeep**; Wave 79 high-water was **toward 22100** / soft deepen **retkeepangle**/**retredoubtangle**; Wave 78 high-water was **toward 22000** / soft deepen **retpalaceangle**/**retfortressangle**; Wave 77 high-water was **toward 21900** / soft deepen **retspireangle**/**retholdangle**; Wave 76 high-water was **toward 21800** / soft deepen **retgateangle**/**retwallangle**; Wave 75 high-water was **toward 21700** / soft deepen **retmoatangle**/**retowerangle**; Wave 74 high-water was **toward 21600** / soft deepen **retglacisangle**/**retparapetangle**; Wave 73 high-water was **toward 21500** / soft deepen **retcurtainface**/**retbastionangle**; Wave 72 high-water was **toward 21400** / soft deepen **retplaceofarmsangle**/**retdoubletenailleangle**; Wave 71 high-water was **toward 21300** / soft deepen **retsallyportangle**/**retreentrantangle**; Wave 70 high-water was **toward 21200** / soft deepen **retfosseangle**/**retcounterscarple**; Wave 69 high-water was **toward 21100** / soft deepen **retdemiluneangle**/**retcoveredwayangle**; Wave 68 high-water was **toward 21000** / soft deepen **retlunetteangle**/**rettenailleangle**; Wave 67 high-water was **toward 20900** / soft deepen **retcaponierangle**/**retredanangle**; Wave 41 high-water was **toward 18300** / soft deepen **retravelin**/**retditch**). This section is Wave 85 honesty: soft continuum deepen toward the next parent-wire high-water. It does **not** re-litigate M0–product DoD, close any product bar, or promote Deck Top 50 rows.
 
-### Soft stamp (Wave 84)
+### Soft stamp (Wave 85)
 
 | Field | Value |
 |-------|--------|
-| **Wave** | GreenJade Wave 84 (soft continuum honesty) |
-| **Continuum** | makefile target high-water **advancing toward 22600** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=22500**; **do not hardcode false 22600**) |
-| **Soft deepen surfaces** | **retscepterangle** / **retglyphangle** (CREATE-ONLY soft graph names only — not product / not bar3) |
+| **Wave** | GreenJade Wave 85 (soft continuum honesty) |
+| **Continuum** | makefile target high-water **advancing toward 22700** — **soft only** (parent wires / CREATE-ONLY graph; honest scan may still show prior tip **makefile_max=22600**; **do not hardcode false 22700**) |
+| **Soft deepen surfaces** | **retcrownangle** / **retshardangle** (CREATE-ONLY soft graph names only — not product / not bar3) |
 | **bar3** | **OPEN** |
 | **Matrix** | **NOT-TRIED × 50** (no titles tried) |
 | **Product lamps** | **0** (soft stubs stay zero by design) |
 
-**Soft stamp (Wave 84):** continuum high-water **advancing toward 22600** soft only (parent wires). Soft deepen surfaces **retscepterangle** / **retglyphangle** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=22600`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **22500** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
+**Soft stamp (Wave 85):** continuum high-water **advancing toward 22700** soft only (parent wires). Soft deepen surfaces **retcrownangle** / **retshardangle** are CREATE-ONLY soft graph names only. **Do not hardcode false `makefile_max=22700`** if `./scripts/gj-continuum-makefile-snippet.sh --max` still reports prior tip **22600** until parent wires (scan is source of truth). **Soft ≠ product complete.** Soft continuum ≠ runtime ABI product ≠ Steam **client** launch. Product lamps remain **0**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.** multi_server=0 confine=0 lamps 0.
 
-### Soft continuum ≠ bar3 (Wave 84 honesty)
+### Soft continuum ≠ bar3 (Wave 85 honesty)
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 22600** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
-| Honest scan **makefile_max=22500** (prior tip when greppable) | Makefile wire truth until parent wires **22600** | Claim that **22600** is already greppable when scan lags |
-| Soft deepen **retscepterangle** / **retglyphangle** | Wave 84 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
+| Continuum **toward 22700** | CREATE-ONLY soft graph high-water advance (libcgj parent wire) | Runtime ABI product; Steam client; Deck Top 50; bar3 closed |
+| Honest scan **makefile_max=22600** (prior tip when greppable) | Makefile wire truth until parent wires **22700** | Claim that **22700** is already greppable when scan lags |
+| Soft deepen **retcrownangle** / **retshardangle** | Wave 85 CREATE-ONLY soft graph surface names | Product complete; product lamps lit; bar3 |
 | Soft deepen | Honesty / bring-up surface deepen | Product complete; product lamps lit |
 | Host media `STATUS=READY` / `steam-bar3-check` | Bootstrap inventory on media | Client launch; title try |
 | Product lamps **0** | Soft score / bar3-ready stubs remain zero | Any product-score claim |
 
-**Hard rule:** never promote continuum advancing toward **22600**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
+**Hard rule:** never promote continuum advancing toward **22700**, media READY, soft deepen, or soft ship gates to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Soft continuum ≠ bar3. **Soft ≠ product complete.** Never hardcode a false `makefile_max` higher than the Makefile scan.
 
-### Explicit non-claims (Wave 84)
+### Explicit non-claims (Wave 85)
 
 | Claim | Allowed? |
 |-------|----------|
-| “Continuum high-water advancing toward **22600** (parent wire soft)” | **Yes** — soft only |
-| “Honest scan still `makefile_max=22500` until parent wires 22600” | **Yes** — scan is source of truth |
-| “Soft continuum toward 22600 = Steam client / Top-50 / product score” | **No** |
-| “Product lamps lit / product complete from Wave 84 soft deepen” | **No** — lamps remain **0** |
-| “bar3 closed by continuum toward 22600 / media READY / kernel soft gates” | **No** |
+| “Continuum high-water advancing toward **22700** (parent wire soft)” | **Yes** — soft only |
+| “Honest scan still `makefile_max=22600` until parent wires 22700” | **Yes** — scan is source of truth |
+| “Soft continuum toward 22700 = Steam client / Top-50 / product score” | **No** |
+| “Product lamps lit / product complete from Wave 85 soft deepen” | **No** — lamps remain **0** |
+| “bar3 closed by continuum toward 22700 / media READY / kernel soft gates” | **No** |
 | “Deck Top 50 titles tried / PASS from this stamp” | **No** — matrix stays **NOT-TRIED** |
 | Any **bar3** closed claim from IMPLEMENTATION soft stamp alone | **No** |
 
-### Open (unchanged by Wave 84)
+### Open (unchanged by Wave 85)
 
 - **bar3** — Steam **client** launch on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN**
 - Deck Top 50 title runs — all **NOT-TRIED** (claim **targeting only**)
 - Product RAM **≥ 1 TiB** full path — **open** when host allows (768G soak ≠ TiB bar)
-- Soft continuum growth toward **22600** — **soft only**; does **not** close bar3; product lamps stay **0**
+- Soft continuum growth toward **22700** — **soft only**; does **not** close bar3; product lamps stay **0**
 
-**Bar3 remains OPEN.** Wave 84 honesty: continuum **advancing toward 22600 soft only**; scan may still be **22500**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
+**Bar3 remains OPEN.** Wave 85 honesty: continuum **advancing toward 22700 soft only**; scan may still be **22600**; soft deepen ≠ product complete; product lamps **0**; soft continuum ≠ bar3; **no false PASS**.
 
 ### Related honesty surfaces
 
@@ -831,5 +831,5 @@ Hierarchical **free_range** + **768G soak_tib** **PASS**; product **≥ 1 TiB*
 
 ---
 
-*Wave 84 soft continuum (2026-07-24): high-water **advancing toward 22600 soft only**; soft deepen **retscepterangle**/**retglyphangle**; honest scan may still be **22500**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*Wave 85 soft continuum (2026-07-24): high-water **advancing toward 22700 soft only**; soft deepen **retcrownangle**/**retshardangle**; honest scan may still be **22600**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
 

@@ -61,7 +61,7 @@
  *   MAIR soft — Attr0 device / Attr1 normal pack match
  *   SCTLR soft lamps — M/C/I after enable
  *   L1 soft — valid block / attr / OA for [0] device + [1] normal
- * Soft deepen: area catalog + wave=84 stamp
+ * Soft deepen: area catalog + wave=85 stamp
  * Soft path honesty: identity scaffold only — product_kernel=OPEN
  * Greppable:
  *   aarch64: mmu PASS
@@ -71,9 +71,9 @@
  *   aarch64: mmu soft mair=… attr0=… attr1=… match=…
  *   aarch64: mmu soft sctlr=… m=… c=… i=…
  *   aarch64: mmu soft l1 d0_ok=… d1_ok=… map_ok=…
- *   aarch64: mmu soft inventory wave=84 …
- *   aarch64: mmu soft deepen wave=84 areas=…
- *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=84
+ *   aarch64: mmu soft inventory wave=85 …
+ *   aarch64: mmu soft deepen wave=85 areas=…
+ *   aarch64: mmu soft path identity=1 product_kernel=OPEN wave=85
  *   aarch64: mmu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: mmu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: mmu soft PASS | FAIL
@@ -119,11 +119,11 @@ extern void *aarch64_pmm_alloc(void);
 #define MMU_SOFT_PAGE_16K  16384ul
 #define MMU_SOFT_PAGE_64K  65536ul
 
-/* Wave 45 soft inventory stamp (greppable wave=84). */
-#define MMU_SOFT_WAVE 84u
+/* Wave 45 soft inventory stamp (greppable wave=85). */
+#define MMU_SOFT_WAVE 85u
 
 /* Soft deepen area count: page,ttbr,mair,sctlr,l1,path,honesty. */
-#define MMU_SOFT_AREAS 137u
+#define MMU_SOFT_AREAS 139u
 
 /* TTBR BADDR is page-aligned; low 12 bits are reserved/ASID for soft compare. */
 #define TTBR_BADDR_MASK (~0xffful)
@@ -1272,11 +1272,11 @@ aarch64_uart_puts("aarch64: mmu: soft retfaceangle exclusive=1 soft_ne_product=1
  */
 /* Grep: aarch64: mmu: soft retcaponierangle — Wave 67 return-caponierangle honesty */
 aarch64_uart_puts("aarch64: mmu: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=84 "
+        "never_blocks_m0=1 wave=85 "
         "(retcaponierangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retredanangle — Wave 67 exclusive redanangle stamp */
 aarch64_uart_puts("aarch64: mmu: soft retredanangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=84 "
+        "product_kernel=OPEN bar3=0 wave=85 "
         "(retredanangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
@@ -1285,11 +1285,11 @@ aarch64_uart_puts("aarch64: mmu: soft retredanangle exclusive=1 soft_ne_product=
  */
 /* Grep: aarch64: mmu: soft retlunetteangle — Wave 68 return-lunetteangle honesty */
 aarch64_uart_puts("aarch64: mmu: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=84 "
+        "never_blocks_m0=1 wave=85 "
         "(retlunetteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp */
 aarch64_uart_puts("aarch64: mmu: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=84 "
+        "product_kernel=OPEN bar3=0 wave=85 "
         "(rettenailleangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
@@ -1298,11 +1298,11 @@ aarch64_uart_puts("aarch64: mmu: soft rettenailleangle exclusive=1 soft_ne_produ
  */
 /* Grep: aarch64: mmu: soft retdemiluneangle — Wave 69 return-demiluneangle honesty */
 aarch64_uart_puts("aarch64: mmu: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=84 "
+        "never_blocks_m0=1 wave=85 "
         "(retdemiluneangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp */
 aarch64_uart_puts("aarch64: mmu: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=84 "
+        "product_kernel=OPEN bar3=0 wave=85 "
         "(retcoveredwayangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
@@ -1310,75 +1310,79 @@ aarch64_uart_puts("aarch64: mmu: soft retcoveredwayangle exclusive=1 soft_ne_pro
  * Soft≠product; not bar3.
  */
 /* Grep: aarch64: mmu: soft retfosseangle — Wave 70 return-fosseangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retfosseangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retfosseangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retcounterscarple — Wave 70 exclusive counterscarple stamp */
-aarch64_uart_puts("aarch64: mmu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retcounterscarple stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retcounterscarple stamp; Soft≠product)\n");
 /*
  * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: aarch64: mmu: soft retsallyportangle — Wave 71 return-sallyportangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retsallyportangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retsallyportangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retreentrantangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retreentrantangle stamp; Soft≠product)\n");
 /*
  * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
 /* Grep: aarch64: mmu: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retplaceofarmsangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retdoubletenailleangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retdoubletenailleangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retcurtainface — Wave 73 return-curtainface honesty */
-aarch64_uart_puts("aarch64: mmu: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retcurtainface honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retcurtainface honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retbastionangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retbastionangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retglacisangle — Wave 74 return-glacisangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retglacisangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retglacisangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retparapetangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retparapetangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retmoatangle — Wave 75 return-moatangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retmoatangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retmoatangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retowerangle — Wave 75 exclusive towerangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retowerangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retowerangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retgateangle — Wave 76 return-gateangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retgateangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retgateangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retwallangle — Wave 76 exclusive wallangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retwallangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retwallangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retspireangle — Wave 77 return-spireangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retspireangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retspireangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retholdangle — Wave 77 exclusive holdangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retholdangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retholdangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retpalaceangle — Wave 78 return-palaceangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retpalaceangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retpalaceangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retfortressangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retfortressangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retkeepangle — Wave 79 return-keepangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retkeepangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retkeepangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retredoubtangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retredoubtangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retcitadelangle — Wave 80 return-citadelangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retcitadelangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retcitadelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
-aarch64_uart_puts("aarch64: mmu: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retbastionkeep stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retbastionkeep stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retpanoplyangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retbulwarkangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retbulwarkangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retmantleangle — Wave 82 return-mantleangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retmantleangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retmantleangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retaegisangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retaegisangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retemblemangle — Wave 83 return-emblemangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retemblemangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retemblemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retsigilangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retsigilangle stamp; Soft≠product)\n");
 /* Grep: aarch64: mmu: soft retscepterangle — Wave 84 return-scepterangle honesty */
-aarch64_uart_puts("aarch64: mmu: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=84 (retscepterangle honesty; Soft≠product; not bar3)\n");
+aarch64_uart_puts("aarch64: mmu: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retscepterangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: mmu: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
-aarch64_uart_puts("aarch64: mmu: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=84 (retglyphangle stamp; Soft≠product)\n");
+aarch64_uart_puts("aarch64: mmu: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retglyphangle stamp; Soft≠product)\n");
+/* Grep: aarch64: mmu: soft retcrownangle — Wave 85 return-crownangle honesty */
+aarch64_uart_puts("aarch64: mmu: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=85 (retcrownangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: mmu: soft retshardangle — Wave 85 exclusive shardangle stamp */
+aarch64_uart_puts("aarch64: mmu: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=85 (retshardangle stamp; Soft≠product)\n");
 
 aarch64_uart_put_hex((unsigned long)MMU_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");

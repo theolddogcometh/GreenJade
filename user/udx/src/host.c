@@ -5,7 +5,7 @@
  * Host MMIO window table + inject helpers (UDX_HOST_LIBC).
  * Window table is also available freestanding for granted maps.
  *
- * Soft inventory (Wave 108 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 109 exclusive deepen; this unit only) —
  * greppable "udx: host soft …":
  *   udx: host soft inventory …
  *   udx: host soft window …
@@ -48,7 +48,7 @@ struct udx_host_window {
 static struct udx_host_window g_aWin[UDX_HOST_WIN_MAX];
 
 /*
- * Soft host window / BAR inventory (Wave 108 exclusive deepen).
+ * Soft host window / BAR inventory (Wave 109 exclusive deepen).
  * Cumulative for this process. greppable: udx: host soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -143,7 +143,7 @@ host_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft host inventory (Wave 108 exclusive deepen).
+ * Greppable soft host inventory (Wave 109 exclusive deepen).
  * Prefix-stable "udx: host soft …" — never hard-gates; observation only.
  *
  * greppable: udx: host soft
@@ -226,7 +226,7 @@ host_soft_inventory_log(void)
                    UDX_HOST_SOFT_WAVE);
 
     /*
-     * Grep: udx: host soft honesty (Wave 108 exclusive deepen).
+     * Grep: udx: host soft honesty (Wave 109 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     host_soft_emit("udx: host soft honesty multi_server=0 confine=0 bar3=0 "
@@ -717,8 +717,8 @@ udx_host_bar_memcpy_from(struct udx_pci_dev *pPdev, int nBar, u64 u64Off,
 
 /* pci inject / remove live in pci.c — declared in host.h */
 
-/* Wave 108 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft rethurmitangle continuum_toward=25000 soft_ne_product=1 wave=108
- *   greppable: soft retcatmullangle exclusive=1 continuum_toward=25000 soft_ne_product=1 wave=108
+/* Wave 109 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retnurbsangle continuum_toward=25100 soft_ne_product=1 wave=109
+ *   greppable: soft retbsplineangle exclusive=1 continuum_toward=25100 soft_ne_product=1 wave=109
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

@@ -19,7 +19,7 @@
  *   gj_so_get_export — function return of current export (JUMP_SLOT target)
  *   gj_so_sysv_hash  — classic ELF SysV name hash (DT_HASH algorithm)
  *
- * Soft deepen surface (Wave 108 exclusive; extra dynsyms enrich DT_HASH
+ * Soft deepen surface (Wave 109 exclusive; extra dynsyms enrich DT_HASH
  * buckets/chains; never hard-fail; greppable markers below):
  *   greppable: GJ_SO_SOFT_EXPORT_CANON
  *   greppable: GJ_SO_SOFT_INIT_RESTORE
@@ -37,7 +37,7 @@
  *   greppable: libgj-so: soft deepen wave=70
  * Soft batches live under src/ (unwired). Diagnostics only — not bar3.
  *
- * Soft inventory (Wave 108 exclusive deepen):
+ * Soft inventory (Wave 109 exclusive deepen):
  *   libgj-so: soft inventory wave=70 surfaces=12 caps=0x1f stamp=SYSV
  *   libgj-so: soft deepen wave=70 areas=export,init,get,hash,stamp,caps,
  *              probe,touch,path,inventory,wave,note
@@ -60,7 +60,7 @@
 #define GJ_SO_SOFT_CAP_HASH     ((uint32_t)0x10u)
 #define GJ_SO_SOFT_CAP_MASK     ((uint32_t)0x1fu)
 
-/* Wave 108 soft inventory stamp (source greppable; not a smoke contract). */
+/* Wave 109 soft inventory stamp (source greppable; not a smoke contract). */
 #define GJ_SO_SOFT_WAVE 70u
 #define GJ_SO_SOFT_AREAS        12u
 #define GJ_SO_SOFT_SURFACES     12u
@@ -102,7 +102,7 @@ static const char g_szSoSoftInventory[] =
     "deepen=wave17 hot_path=clean multi_server=0 confine=0 bar3=0";
 
 /*
- * Wave 108 soft deepen stamp.
+ * Wave 109 soft deepen stamp.
  * Grep: libgj-so: soft deepen
  * greppable: GJ_SO_SOFT_DEEPEN / libgj-so: soft deepen wave=70
  */
@@ -111,7 +111,7 @@ static const char g_szSoSoftDeepen[] =
     "export,init,get,hash,stamp,caps,probe,touch,path,inventory,wave,note "
     "product_export=0x42 soft_stamp=SYSV hot_path=clean "
     "multi_server=0 confine=0 bar3=0 "
-    "rethurmitangle=1 retcatmullangle=1 continuum_toward=25000 soft_ne_product=1 wave=108";
+    "retnurbsangle=1 retbsplineangle=1 continuum_toward=25100 soft_ne_product=1 wave=109";
 
 /*
  * Soft path honesty line.
@@ -124,16 +124,16 @@ static const char g_szSoSoftPath[] =
     "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
 /*
- * Soft honesty line (Wave 108 exclusive).
+ * Soft honesty line (Wave 109 exclusive).
  * Grep: libgj-so: soft honesty
- * Grep: libgj-so: soft rethurmitangle / retcatmullangle (CREATE-ONLY soft ≠ product)
+ * Grep: libgj-so: soft retnurbsangle / retbsplineangle (CREATE-ONLY soft ≠ product)
  */
 static const char g_szSoSoftHonesty[] =
     "libgj-so: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70 "
-    "rethurmitangle=1 retcatmullangle=1 continuum_toward=25000 soft_ne_product=1 wave=108";
+    "retnurbsangle=1 retbsplineangle=1 continuum_toward=25100 soft_ne_product=1 wave=109";
 
-/* Soft area name catalog (Wave 108; cold only). */
+/* Soft area name catalog (Wave 109; cold only). */
 static const char *const g_apszSoSoftAreas[] = {
 	"export",
 	"init",
@@ -268,7 +268,7 @@ gj_so_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 108). Grep: libgj-so: soft deepen
+ * Cold soft deepen stamp (Wave 109). Grep: libgj-so: soft deepen
  */
 const char *
 gj_so_soft_deepen(void)
@@ -288,7 +288,7 @@ gj_so_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 108 exclusive). Grep: libgj-so: soft honesty
+ * Cold soft honesty line (Wave 109 exclusive). Grep: libgj-so: soft honesty
  */
 const char *
 gj_so_soft_honesty(void)
@@ -296,7 +296,7 @@ gj_so_soft_honesty(void)
 	return g_szSoSoftHonesty;
 }
 
-/* Cold soft inventory: Wave 108 stamp. Grep: libgj-so: soft wave= */
+/* Cold soft inventory: Wave 109 stamp. Grep: libgj-so: soft wave= */
 unsigned
 gj_so_soft_wave(void)
 {

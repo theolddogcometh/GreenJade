@@ -33,9 +33,9 @@
 #include <gj/types.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define ENTRY_BRIDGE_SOFT_WAVE 120u
+#define ENTRY_BRIDGE_SOFT_WAVE 122u
 /* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
-#define ENTRY_BRIDGE_SOFT_AREAS 206u
+#define ENTRY_BRIDGE_SOFT_AREAS 210u
 
 /*
  * Soft edge tallies (wrap OK). Diagnostics only — does not alter route.
@@ -1146,6 +1146,14 @@ kprintf("entry_bridge: soft reteventangle exclusive=1 soft_ne_product=1 product_
 kprintf("entry_bridge: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: entry_bridge: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 kprintf("entry_bridge: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: entry_bridge: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("entry_bridge: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: entry_bridge: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("entry_bridge: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: entry_bridge: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("entry_bridge: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: entry_bridge: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("entry_bridge: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("entry_bridge: soft deepen wave=%u areas=%u enter=%lu "
             "route=%lu logs=%lu "
             "(Wave 92 exclusive; not bar3)\n",

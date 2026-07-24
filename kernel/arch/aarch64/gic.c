@@ -161,8 +161,8 @@
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 120u
-#define GIC_SOFT_AREAS 206u
+#define GIC_SOFT_WAVE 122u
+#define GIC_SOFT_AREAS 210u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -1665,6 +1665,14 @@ aarch64_uart_puts("aarch64: gic: soft reteventangle exclusive=1 soft_ne_product=
 aarch64_uart_puts("aarch64: gic: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: gic: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 aarch64_uart_puts("aarch64: gic: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: aarch64: gic: soft retstreamangle — Wave 121 return-streamangle honesty */
+aarch64_uart_puts("aarch64: gic: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: gic: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+aarch64_uart_puts("aarch64: gic: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: aarch64: gic: soft retframeangle — Wave 122 return-frameangle honesty */
+aarch64_uart_puts("aarch64: gic: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: gic: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+aarch64_uart_puts("aarch64: gic: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");

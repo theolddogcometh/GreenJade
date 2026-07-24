@@ -1,0 +1,9 @@
+Notes — continuum milestone 68400 soft host gates
+=================================================
+CREATE-ONLY soft package (mirror 25800; bar3=0):
+  - NOTES_milestone_68400.txt / cgj_soft_milestone_68400.c
+Markers graph_batch68391.c … graph_batch68400.c
+gj_bar3_ready_68400 → 0; gj_product_score_68400 → 0; greens/continuum/smoke/dyn → 1
+tag/wave/batch/graph → 68400. Fill 68376–68390; identity 68351–68375.
+Soft: missing→skip; wrong→fail. Parent wire makefile_max to 68400.
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_68400 user/libcgj/tests/cgj_soft_milestone_68400.c -ldl

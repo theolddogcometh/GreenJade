@@ -31,7 +31,7 @@
  *   memobj: soft path | stats | surfaces | window | prot | OPEN
  *   memobj: soft return selftest — Wave 19 terminal return surface
  *   memobj: soft retmap     — Wave 19 return-surface map
- *   memobj: soft deepen wave=120
+ *   memobj: soft deepen wave=122
  *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
@@ -65,9 +65,9 @@ struct memobj_named_slot {
 static struct memobj_named_slot g_aNamed[GJ_NAMED_MAX];
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define MEMOBJ_SOFT_WAVE 120u
+#define MEMOBJ_SOFT_WAVE 122u
 /* Catalog areas prior to deepen (honesty..OPEN). Soft ≠ product. */
-#define MEMOBJ_SOFT_AREAS 224u
+#define MEMOBJ_SOFT_AREAS 228u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -2664,6 +2664,10 @@ kprintf("memobj: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("memobj: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
 /* Grep: memobj: soft retpacketangle — Wave 121 exclusive packetangle stamp */
 kprintf("memobj: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: memobj: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("memobj: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: memobj: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("memobj: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("memobj: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "pool=%u named=%u map_ok=%u create_ok=%u multi_peak=%u "
             "surf=0x%x product_tib=0 bar3=OPEN file_kind=OPEN "

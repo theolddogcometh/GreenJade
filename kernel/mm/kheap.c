@@ -49,7 +49,7 @@
  *   kheap: soft header …     (Wave 17 block header geometry)
  *   kheap: soft return selftest — Wave 19 terminal return surface
  *   kheap: soft retmap     — Wave 19 return-surface map
- *   kheap: soft deepen wave=120 …
+ *   kheap: soft deepen wave=122 …
  *   kheap: soft PASS | NONE | inventory PASS
  */
 #include <gj/config.h>
@@ -61,9 +61,9 @@
 #include <gj/vmm.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define KHEAP_SOFT_WAVE 120u
+#define KHEAP_SOFT_WAVE 122u
 /* Catalog areas prior to deepen (honesty..header). Soft ≠ product. */
-#define KHEAP_SOFT_AREAS 218u
+#define KHEAP_SOFT_AREAS 222u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -1957,6 +1957,10 @@ kprintf("kheap: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("kheap: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
 /* Grep: kheap: soft retpacketangle — Wave 121 exclusive packetangle stamp */
 kprintf("kheap: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: kheap: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("kheap: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: kheap: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("kheap: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("kheap: soft deepen wave=%u areas=%u catalog=%u logs=%lu "
             "init=%d used=%lu free=%lu soft_frag=%lu free_min=%lu "
             "free_max=%lu surf=0x%x product_tib=0 bar3=OPEN "

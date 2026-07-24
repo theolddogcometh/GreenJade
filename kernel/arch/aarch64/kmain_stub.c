@@ -19,7 +19,7 @@
  *   aarch64: timer PASS        (from aarch64_timer_probe)
  *   aarch64: kmain_stub soft inventory wave=118 …
  *   aarch64: kmain_stub soft surf …
- *   aarch64: kmain_stub soft deepen wave=120 areas=…
+ *   aarch64: kmain_stub soft deepen wave=122 areas=…
  *   aarch64: kmain_stub soft return product_kernel=OPEN …
  *   aarch64: kmain_stub soft path product_kernel=OPEN …
  *   aarch64: kmain_stub soft honesty product_kernel=OPEN …
@@ -35,9 +35,9 @@ void aarch64_gic_init(void);
 void aarch64_timer_probe(void);
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define KMAIN_STUB_SOFT_WAVE 120u
+#define KMAIN_STUB_SOFT_WAVE 122u
 /* Areas: enter,gic,timer,inventory,surf,return,path,honesty,deepen */
-#define KMAIN_STUB_SOFT_AREAS 203u
+#define KMAIN_STUB_SOFT_AREAS 205u
 
 void
 aarch64_kmain_stub(void)
@@ -1085,6 +1085,14 @@ aarch64_uart_puts("aarch64: soft reteventangle exclusive=1 soft_ne_product=1 pro
 aarch64_uart_puts("aarch64: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 aarch64_uart_puts("aarch64: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: aarch64: soft retstreamangle — Wave 121 return-streamangle honesty */
+aarch64_uart_puts("aarch64: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+aarch64_uart_puts("aarch64: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: aarch64: soft retframeangle — Wave 122 return-frameangle honesty */
+aarch64_uart_puts("aarch64: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+aarch64_uart_puts("aarch64: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
 /* Grep: aarch64: kmain_stub soft deepen */

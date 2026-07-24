@@ -110,8 +110,8 @@ extern void aarch64_uart_put_hex(unsigned long v);
 #define VIRTIO_SOFT_ALIGN    4096u
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define VIRTIO_SOFT_WAVE 120u
-#define VIRTIO_SOFT_AREAS 207u
+#define VIRTIO_SOFT_WAVE 122u
+#define VIRTIO_SOFT_AREAS 211u
 
 /*
  * Guest-side soft split virtqueue layout (OASIS public shape).
@@ -1663,6 +1663,14 @@ aarch64_uart_puts("aarch64: virtio: soft reteventangle exclusive=1 soft_ne_produ
 aarch64_uart_puts("aarch64: virtio: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: virtio: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 aarch64_uart_puts("aarch64: virtio: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: aarch64: virtio: soft retstreamangle — Wave 121 return-streamangle honesty */
+aarch64_uart_puts("aarch64: virtio: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: virtio: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+aarch64_uart_puts("aarch64: virtio: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: aarch64: virtio: soft retframeangle — Wave 122 return-frameangle honesty */
+aarch64_uart_puts("aarch64: virtio: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: virtio: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+aarch64_uart_puts("aarch64: virtio: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)VIRTIO_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: virtio soft deepen wave=");

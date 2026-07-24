@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE 120u
-#define GJ_LINUX_HOT_SOFT_AREAS 219u
+#define GJ_LINUX_HOT_SOFT_WAVE 122u
+#define GJ_LINUX_HOT_SOFT_AREAS 223u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -1346,6 +1346,14 @@ kprintf("linux: hot: soft reteventangle exclusive=1 soft_ne_product=1 product_ke
 kprintf("linux: hot: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 kprintf("linux: hot: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: linux: hot: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("linux: hot: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: hot: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("linux: hot: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: linux: hot: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("linux: hot: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: hot: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("linux: hot: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
             "(Wave 92 exclusive; not bar3)\n",

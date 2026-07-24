@@ -158,8 +158,8 @@ struct native_soft_deep {
 };
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define NATIVE_SOFT_WAVE 120u
-#define NATIVE_SOFT_AREAS 226u
+#define NATIVE_SOFT_WAVE 122u
+#define NATIVE_SOFT_AREAS 230u
 
 static struct native_soft_deep g_nativeDeep;
 /* One-shot multi-line inventory after first non-null dispatch (soft). */
@@ -1540,6 +1540,14 @@ kprintf("native: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("native: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: native: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 kprintf("native: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: native: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("native: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: native: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("native: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: native: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("native: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: native: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("native: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "
             "surfaces=inventory,stats,outcome,class,door,reserved,copy,"

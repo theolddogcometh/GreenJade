@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE 120u
-#define LINUX_DISPATCH_SOFT_AREAS 226u
+#define LINUX_DISPATCH_SOFT_WAVE 122u
+#define LINUX_DISPATCH_SOFT_AREAS 230u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -1666,6 +1666,14 @@ kprintf("linux: dispatch: soft reteventangle exclusive=1 soft_ne_product=1 produ
 kprintf("linux: dispatch: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: dispatch: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
 kprintf("linux: dispatch: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: linux: dispatch: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("linux: dispatch: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: dispatch: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("linux: dispatch: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: linux: dispatch: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("linux: dispatch: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: dispatch: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("linux: dispatch: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "
             "table=%u hot=%u cold=%u none=%u log_n=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS,

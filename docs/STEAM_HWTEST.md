@@ -1,9 +1,9 @@
 # Steam on hardware-test media (options 2 + 3)
 
 **Bar3 status (product ceiling):** **OPEN.** Media path + host prep are **wired**.  
-**Soft stamp (2026-07-24 / Wave 120):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Continuum high-water **advancing toward 26200** soft only (honest scan may still report **makefile_max=26100** until parent wires). Soft deepen surfaces **retchannelangle**/**retmailboxangle** (CREATE-ONLY soft only). Product lamps **0**. **Soft ≠ bar3.** **Soft ≠ product complete.**  
+**Soft stamp (2026-07-24 / Wave 122):** host inventory **READY** via `./scripts/steam-bar3-check.sh` (stage/rootfs STATUS agree) — **media only**. Continuum high-water **advancing toward 26400** soft only (honest scan may still report **makefile_max=26300** until parent wires). Soft deepen surfaces **retframeangle**/**retwindowangle** (CREATE-ONLY soft only). Product lamps **0**. **Soft ≠ bar3.** **Soft ≠ product complete.**  
 **Real-hw path:** **open** (DUT UEFI install → client launch → matrix fill still required).  
-**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **26200** if scan still prior tip **26100**).  
+**Kernel/surface done does not equal bar3 client run.** Continuum soft graph growth is CREATE-ONLY only (verify `./scripts/gj-continuum-makefile-snippet.sh --max`; do not hardcode false **26400** if scan still prior tip **26300**).  
 Parallel waves (soft ship only): continuum decades, **io_uring** min rings + mmap/SQE soft smoke, **768G** hierarchical soak, aarch64 M0 scaffold (+ shared C / PSCI smokes), HDA multi-stream kernel, live sshd/scsi_mid — **none** close bar3.  
 Kernel large-RAM **768G soak** (`pmm` / hierarchical freelist path) is **shipped PASS** — still not a Steam client claim.  
 **Open:** real-DUT UEFI install → launch Steam client → Deck Top 50 matrix  
@@ -58,24 +58,24 @@ Host soft check (no download, always exit 0):
 | Product **sshd** live at boot | **done** | `sshd.elf` embed; TCP **:22**; `sshd: live spawn PASS` |
 | **scsi_mid** live embed | **done** | `scsi_mid.elf` boot spawn; `GJ_SYS_SCSI` + virtio-scsi path |
 | **HDA multi-stream (kernel)** | **PASS** | SD0 DMA + multi-stream mixer; `hda: multi-stream mixer PASS` — **kernel only** |
-| Graph continuum **toward 26200** | **soft** | high-water **advancing toward 26200** (scan may still be **26100**); CREATE-ONLY soft gates; **soft ≠ bar3** client run |
+| Graph continuum **toward 26400** | **soft** | high-water **advancing toward 26400** (scan may still be **26300**); CREATE-ONLY soft gates; **soft ≠ bar3** client run |
 | **io_uring** min rings + mmap/SQE soft | **PASS** | Kernel smokes (`linux: io_uring min rings PASS`, `mmap PASS`, `SQE I/O PASS`); vfs_ram / soft surface — **not** game I/O |
 | Kernel large-RAM **768G soak** | **PASS** | Hierarchical freelist + `soak_tib` at 768G; **not** full 1 TiB host path; **not** Steam |
 | **aarch64 M0 scaffold** | **smoke PASS** | `make aarch64` / `aarch64-smoke`; shared C + PSCI smokes; separate arch tree — **not** Deck/x86 path |
 | GPU/session A1 (virtio-gpu 2D + ICD) | **partial** | Compositor/ICD smokes green on QEMU; not SteamUI |
 | libcgj / ld-gj growth | **in progress** | Clean-room glibc-shaped surface expanding; not full Steam Runtime |
 
-### Continuum toward 26200 (soft — honest scope)
+### Continuum toward 26400 (soft — honest scope)
 
 | Claim | Status | Honesty bound |
 |-------|--------|---------------|
-| Decades parent wire / soft gates **toward 26200** | **soft** | Graph/product soft stubs + milestone gates only (parallel-wave growth) |
-| Soft deepen **retchannelangle** / **retmailboxangle** | **soft** | Wave 120 CREATE-ONLY soft graph surface names only — **≠ product** / **≠ bar3** |
-| Honest `makefile_max` (scan) | **source of truth** | May still report **26100** (or less) until parent wires **26200**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
+| Decades parent wire / soft gates **toward 26400** | **soft** | Graph/product soft stubs + milestone gates only (parallel-wave growth) |
+| Soft deepen **retframeangle** / **retwindowangle** | **soft** | Wave 122 CREATE-ONLY soft graph surface names only — **≠ product** / **≠ bar3** |
+| Honest `makefile_max` (scan) | **source of truth** | May still report **26300** (or less) until parent wires **26400**; verify `./scripts/gj-continuum-makefile-snippet.sh --max` |
 | Implies Steam client / Top-50 | **no** | Soft continuum ≠ runtime ABI ≠ DUT launch |
 | Closes bar3 | **no** | **Soft ≠ bar3.** Product lamps **0**. Bar3 remains client-run + matrix open |
 
-Continuum growth is **clean-room surface expansion**. Soft high-water **toward 26200** is a graph milestone, not a Steam readiness claim. **Soft ≠ product complete.**
+Continuum growth is **clean-room surface expansion**. Soft high-water **toward 26400** is a graph milestone, not a Steam readiness claim. **Soft ≠ product complete.**
 
 ### Kernel large-RAM 768G soak (shipped — honest scope)
 

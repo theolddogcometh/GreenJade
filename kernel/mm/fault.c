@@ -94,7 +94,7 @@
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 120u
+#define FAULT_SOFT_WAVE 122u
 
 /*
  * Soft inventory area count (Wave 19 greppable categories for deepen stamp):
@@ -102,7 +102,7 @@
  * call | frame | cr3 | views | path | surfaces | deadline | deepen
  * (=14; PASS is close lamp)
  */
-#define FAULT_SOFT_AREAS 212u
+#define FAULT_SOFT_AREAS 216u
 
 /*
  * Soft surface bit lamps (Wave 19; surf=0x… on inventory/deepen lines).
@@ -2051,6 +2051,10 @@ kprintf("fault: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("fault: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
 /* Grep: fault: soft retpacketangle — Wave 121 exclusive packetangle stamp */
 kprintf("fault: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+/* Grep: fault: soft retframeangle — Wave 122 return-frameangle honesty */
+kprintf("fault: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
+/* Grep: fault: soft retwindowangle — Wave 122 exclusive windowangle stamp */
+kprintf("fault: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
                             kprintf("fault: soft deepen wave=%u areas=%u logs=%llu "
             "surf=0x%x call=%llu frame=%llu cr3=%llu "
             "product_call=0 product_frame=0 product_cr3_map=0 "

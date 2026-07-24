@@ -4,7 +4,7 @@
  *
  * Freestanding sessiond — session door ownership live path:
  *   CLAIM → DISPLAY_INFO → PRESENT_FB → soft health → RELEASE →
- *   soft free → soft inventory (Wave 120) → ownership path PASS
+ *   soft free → soft inventory (Wave 122) → ownership path PASS
  * Built as user ELF for embed/spawn (kernel/proc/sessiond_embed.S).
  * Host A1 smoke remains sessiond.c (libc).
  *
@@ -26,7 +26,7 @@
  *   sessiond-gj: soft PRESENT_FB PASS | soft PRESENT soft-skip
  *   sessiond-gj: free soft | free RELEASE soft
  *
- * Soft inventory (Wave 120 exclusive deepen — greppable "sessiond-gj: soft …"):
+ * Soft inventory (Wave 122 exclusive deepen — greppable "sessiond-gj: soft …"):
  *   sessiond-gj: soft inventory health_ok=… health_skip=… free_ok=… free_skip=…
  *                flags_ok=… stats_snap=… areas=… wave=70
  *   sessiond-gj: soft health display=… map=… input=… reclaim=… stats=…
@@ -106,9 +106,9 @@
 #define SESS_SOFT_POP_CAP 64u
 
 /* Soft health sub-step bits (Wave 10 inventory; Wave 111 still tallies). */
-/* Wave 120 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retchannelangle continuum_toward=26200 soft_ne_product=1 wave=120
- *   greppable: soft retmailboxangle exclusive=1 continuum_toward=26200 soft_ne_product=1 wave=120
+/* Wave 122 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retframeangle continuum_toward=26400 soft_ne_product=1 wave=122
+ *   greppable: soft retwindowangle exclusive=1 continuum_toward=26400 soft_ne_product=1 wave=122
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -138,9 +138,9 @@
 #define SOFT_FLG_RECLAIM (1u << 5)
 #define SOFT_FLG_DROP    (1u << 6)
 
-/* Wave 120 soft inventory area count (fixed greppable categories). */
+/* Wave 122 soft inventory area count (fixed greppable categories). */
 #define SOFT_INV_AREAS  12u
-/* Soft inventory wave stamp (Wave 120 exclusive deepen). */
+/* Soft inventory wave stamp (Wave 122 exclusive deepen). */
 #define SOFT_INV_WAVE   61u
 
 /* Matches kernel struct gj_input_event layout (type, code, value). */
@@ -153,7 +153,7 @@ struct sess_input_ev {
 static unsigned g_uToken;
 
 /*
- * Soft inventory tallies (Wave 120 exclusive deepen).
+ * Soft inventory tallies (Wave 122 exclusive deepen).
  * Wrap-OK counters; diagnostics only — never gate ownership path PASS.
  * greppable: sessiond-gj: soft
  */
@@ -412,7 +412,7 @@ soft_stats_snap(const unsigned *aSt)
     }
 }
 
-/* Soft: refresh display-vs-map geometry match lamp (Wave 120). */
+/* Soft: refresh display-vs-map geometry match lamp (Wave 122). */
 static void
 soft_geom_refresh(void)
 {
@@ -426,7 +426,7 @@ soft_geom_refresh(void)
 }
 
 /*
- * Soft inventory dump (Wave 120 exclusive deepen).
+ * Soft inventory dump (Wave 122 exclusive deepen).
  * Greppable prefix: "sessiond-gj: soft …"
  * Pure observation — always soft; never gates ownership path PASS.
  * Honesty: soft ≠ product multi-server confine.
@@ -602,7 +602,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft geom (Wave 120) */
+    /* Grep: sessiond-gj: soft geom (Wave 122) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft geom disp_w=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_uSoftDispW);
@@ -620,7 +620,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft present (Wave 120) */
+    /* Grep: sessiond-gj: soft present (Wave 122) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft present interim=");
     append_u(aLine, sizeof(aLine), &o,
@@ -645,7 +645,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft input (Wave 120) */
+    /* Grep: sessiond-gj: soft input (Wave 122) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft input drained=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftDrained);
@@ -660,7 +660,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: sessiond-gj: soft reclaim (Wave 120) */
+    /* Grep: sessiond-gj: soft reclaim (Wave 122) */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o, "sessiond-gj: soft reclaim claim=");
     append_u(aLine, sizeof(aLine), &o,
@@ -697,7 +697,7 @@ soft_inventory_log(void)
         "(soft; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: sessiond-gj: soft honesty (Wave 120 exclusive deepen).
+     * Grep: sessiond-gj: soft honesty (Wave 122 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 "
@@ -735,7 +735,7 @@ fb_fill(unsigned char *pFb, unsigned char b, unsigned char g, unsigned char r)
  * Soft-decode STATS flags after ownership / multi-frame work.
  * Emits ready / input-ready / ownership / user-fb / multi-frame / reclaim
  * markers when the corresponding door bits are set. Never hard-fails.
- * Tallies Wave 120 soft flag inventory (sessiond-gj: soft flags …).
+ * Tallies Wave 122 soft flag inventory (sessiond-gj: soft flags …).
  * Returns number of soft markers that counted as success.
  */
 static unsigned
@@ -796,7 +796,7 @@ soft_stats_flags(const unsigned *aSt)
  *   same-token CLAIM reclaim, STATS ownership/ready/user-fb/reclaim flags,
  *   interim PRESENT, second PRESENT_FB tint, multi-frame STATS recheck.
  * Never aborts the hard ownership path.
- * Tallies Wave 120 soft inventory (sessiond-gj: soft …).
+ * Tallies Wave 122 soft inventory (sessiond-gj: soft …).
  */
 static void
 soft_health(unsigned char *pFb)
@@ -1071,7 +1071,7 @@ _start(void)
      * Soft free path: RELEASE when already free is 0 (door contract).
      * Confirm STATS no longer owned — never fails ownership path PASS.
      * Wave 111 deepen: also soft-probe MAP_SCANOUT + DISPLAY_INFO unowned.
-     * Tallies Wave 120 soft free inventory (sessiond-gj: soft free …).
+     * Tallies Wave 122 soft free inventory (sessiond-gj: soft free …).
      */
     {
         unsigned long u64Va = 0;
@@ -1137,7 +1137,7 @@ _start(void)
     }
 
     /*
-     * Wave 120 exclusive soft inventory rollup (greppable "sessiond-gj: soft …").
+     * Wave 122 exclusive soft inventory rollup (greppable "sessiond-gj: soft …").
      * Emitted after all soft sub-paths; never gates ownership path PASS.
      */
     soft_inventory_log();

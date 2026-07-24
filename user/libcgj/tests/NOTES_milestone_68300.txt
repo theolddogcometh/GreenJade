@@ -1,0 +1,32 @@
+Notes — continuum milestone 68300 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package:
+  - user/libcgj/tests/NOTES_milestone_68300.txt
+  - user/libcgj/tests/cgj_soft_milestone_68300.c
+
+Markers: graph_batch68291.c … graph_batch68300.c. Mirror 25800; bar3=0.
+
+MILESTONE 68300 (batches 68291–68300)
+------------------------------------
+gj_shell_green_68300           1   graph_batch68291.c
+gj_libcgj_green_68300          1   graph_batch68292.c
+gj_bar3_ready_68300            0   graph_batch68293.c  (bar3 open)
+gj_product_score_68300         0   graph_batch68294.c
+gj_continuum_ready_68300       1   graph_batch68295.c
+gj_smoke_soft_68300            1   graph_batch68296.c
+gj_dyn_soft_68300              1   graph_batch68297.c
+gj_milestone_tag_68300         68300 graph_batch68298.c
+gj_continuum_wave_68300        68300 graph_batch68299.c
+gj_batch_id_68300 / gj_graph_milestone_68300  68300  graph_batch68300.c
+
+Fill 68276–68290; identity 68251–68275.
+Soft rule: missing → skip; present but wrong → hard fail.
+bar3 remains open (gj_bar3_ready_68300 == 0).
+
+Manual:
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_68300 \
+  user/libcgj/tests/cgj_soft_milestone_68300.c -ldl
+./build/cgj_soft_milestone_68300

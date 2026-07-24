@@ -1,0 +1,58 @@
+Notes — continuum milestone 68200 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_68200.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_68200.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch68191.c … graph_batch68200.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS). Mirror 25800; bar3=0.
+
+Harness: cgj_smoke.c / cgj_dyn_smoke.c / prior soft decades /
+  NEW cgj_soft_milestone_68200.c (not Makefile-auto).
+
+MILESTONE 68200 marker surfaces (batches 68191–68200)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_68200           1          graph_batch68191.c
+gj_libcgj_green_68200          1          graph_batch68192.c
+gj_bar3_ready_68200            0          graph_batch68193.c  (bar3 open)
+gj_product_score_68200         0          graph_batch68194.c  (score open)
+gj_continuum_ready_68200       1          graph_batch68195.c
+gj_smoke_soft_68200            1          graph_batch68196.c
+gj_dyn_soft_68200              1          graph_batch68197.c
+gj_milestone_tag_68200         68200      graph_batch68198.c
+gj_continuum_wave_68200        68200      graph_batch68199.c
+gj_batch_id_68200              68200      graph_batch68200.c
+gj_graph_milestone_68200       68200      graph_batch68200.c
+
+Fill continuum (batches 68176–68190); identity (batches 68151–68175).
+Soft rule: missing → skip; present but wrong → hard fail.
+Soft gates only; bar3 remains open (gj_bar3_ready_68200 == 0).
+
+Parent wiring: graph_batch68151.c … graph_batch68200.c into CGJ_SRCS when
+advancing makefile_max to 68200; libc.map may lag GLIBC_2.2.5 globals.
+
+Manual run
+----------
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_68200 \
+  user/libcgj/tests/cgj_soft_milestone_68200.c -ldl
+./build/cgj_soft_milestone_68200
+
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M68200_DIRECT \
+  -o build/cgj_soft_milestone_68200_direct \
+  user/libcgj/tests/cgj_soft_milestone_68200.c \
+  user/libcgj/src/graph_batch68191.c \
+  user/libcgj/src/graph_batch68192.c \
+  user/libcgj/src/graph_batch68193.c \
+  user/libcgj/src/graph_batch68194.c \
+  user/libcgj/src/graph_batch68195.c \
+  user/libcgj/src/graph_batch68196.c \
+  user/libcgj/src/graph_batch68197.c \
+  user/libcgj/src/graph_batch68198.c \
+  user/libcgj/src/graph_batch68199.c \
+  user/libcgj/src/graph_batch68200.c
+./build/cgj_soft_milestone_68200_direct

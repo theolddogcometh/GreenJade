@@ -8,7 +8,7 @@
  * Hybrid SYSCALL uses this table; soft thunk zero-extends and fixes mmap2
  * pgoff / socketcall demux for pure-C paths without hardware compat CS.
  *
- * Soft inventory (Wave 14 base; Wave 24 exclusive deepen) —
+ * Soft inventory (Wave 14 base; Wave 25 exclusive deepen) —
  * greppable "wow64: soft …":
  *   wow64: soft inventory …
  *   wow64: soft map …
@@ -47,8 +47,8 @@ static u32 g_u32SocketcallHits;
  * Areas: inventory|map|thunk|adjust|personality|path|rates|honesty|
  *        last|surfaces|catalog|note|deepen|PASS
  */
-#define GJ_WOW64_SOFT_WAVE  24u
-#define GJ_WOW64_SOFT_AREAS 28u
+#define GJ_WOW64_SOFT_WAVE  25u
+#define GJ_WOW64_SOFT_AREAS 30u
 
 static u32 g_u32SoftTranslateEnter; /* wow64_translate_nr entries */
 static u32 g_u32SoftTranslateNull;  /* translate with pOutNr == NULL */
@@ -229,7 +229,7 @@ soft_inventory_log(void)
             (unsigned)GJ_WOW64_SOFT_AREAS);
 
     /* Grep: wow64: soft note (Wave 20 deepen) */
-    kprintf("wow64: soft note milestone=wave24 exclusive=1 "
+    kprintf("wow64: soft note milestone=wave25 exclusive=1 "
             "soft_only=1 not_bar3=1 calls=%u map=%u wave=%u\n",
             g_u32Calls, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
@@ -240,7 +240,7 @@ soft_inventory_log(void)
             g_u32SoftAdjustNop, g_u32MapHits, (unsigned)GJ_WOW64_SOFT_WAVE);
 
     /* Grep: wow64: soft retmap — Wave 19 return-surface map */
-    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
+    kprintf("wow64: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=25\n");
 
     /* Grep: wow64: soft deepen wave */
     /*
@@ -319,23 +319,38 @@ soft_inventory_log(void)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)GJ_WOW64_SOFT_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: wow64: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: wow64: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("wow64: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_WOW64_SOFT_WAVE);
-            /* Grep: wow64: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: wow64: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("wow64: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
                     (unsigned)GJ_WOW64_SOFT_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: wow64: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("wow64: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_WOW64_SOFT_WAVE);
+            /* Grep: wow64: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("wow64: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
+                    (unsigned)GJ_WOW64_SOFT_WAVE);
     kprintf("wow64: soft deepen wave=%u areas=%u calls=%u map=%u "
             "thunk=%u adjust=%u logs=%u "
-            "(Wave 24 exclusive; not bar3)\n",
+            "(Wave 25 exclusive; not bar3)\n",
             (unsigned)GJ_WOW64_SOFT_WAVE,
             (unsigned)GJ_WOW64_SOFT_AREAS,
             g_u32Calls, g_u32MapHits, g_u32ThunkHits,

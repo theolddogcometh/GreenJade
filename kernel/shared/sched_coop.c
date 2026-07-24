@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 24 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 25 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -22,7 +22,7 @@
  *   coop: soft path        — surface catalog + non-claims
  *   coop: soft geom        — Wave 19 max_thr/stack/frame geometry
  *   coop: soft return      — Wave 19 API return surfaces + product_kernel=OPEN
- *   coop: soft deepen      — wave=24 stamp + area count
+ *   coop: soft deepen      — wave=25 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
@@ -30,8 +30,8 @@
 #include <gj/sched_coop.h>
 #include <gj/string.h>
 
-/* Wave 24 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 24u
+/* Wave 25 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 25u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -293,7 +293,7 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
             (unsigned)GJ_COOP_MAX_THR, (unsigned)GJ_COOP_STACK,
             (unsigned)COOP_SOFT_WAVE);
 
-    /* Grep: coop: soft exclusive — Wave 24 exclusive deepen */
+    /* Grep: coop: soft exclusive — Wave 25 exclusive deepen */
     kprintf("coop: soft exclusive wave=%u multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 preemptive=0 smp=0\n",
             (unsigned)COOP_SOFT_WAVE);
@@ -416,19 +416,34 @@ coop_soft_inventory(int fPass, unsigned cAreas, u32 u32Surf)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)COOP_SOFT_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: coop: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: coop: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("coop: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)COOP_SOFT_WAVE);
-            /* Grep: coop: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: coop: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("coop: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)COOP_SOFT_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: coop: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("coop: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)COOP_SOFT_WAVE);
+            /* Grep: coop: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("coop: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)COOP_SOFT_WAVE);
     kprintf("coop: soft deepen wave=%u areas=%u max_thr=%u stack=%u "
             "logs=%u surf=0x%x\n",

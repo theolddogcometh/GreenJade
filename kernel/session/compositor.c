@@ -14,7 +14,7 @@
  * Soft multi-frame: single physical buffer + soft 0/1 index + frame gen;
  * present_n batches up to GJ_COMP_MULTI_MAX flips for multi-frame smokes.
  *
- * Soft product inventory (Wave 24 exclusive deepen; this unit only):
+ * Soft product inventory (Wave 25 exclusive deepen; this unit only):
  *   - soft return: API return-surface catalog (product_*=OPEN)
  *   - soft retmap: Wave 19 return-surface map (ok|fail|… classes)
  *   - Init path: enter / ok / idem / fail_gpu / fail_pmm / fail_hhdm /
@@ -50,7 +50,7 @@
 #define GJ_COMP_MIN_H      32u
 #define GJ_COMP_BPP        4u /* BGRA */
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_COMP_SOFT_WAVE  24u
+#define GJ_COMP_SOFT_WAVE  25u
 
 static gj_paddr_t g_paScanout;
 static void      *g_pScanout;
@@ -66,7 +66,7 @@ static int        g_fLoggedPresent; /* quiet hot path after first success */
 static int        g_fLoggedMulti;   /* quiet multi-frame soft once */
 
 /*
- * Soft product inventory (Wave 24 exclusive deepen). Cumulative unless noted
+ * Soft product inventory (Wave 25 exclusive deepen). Cumulative unless noted
  * live/peak. greppable: compositor: soft …
  */
 static u32 g_u32SoftInitEnter;     /* session_compositor_init entries */
@@ -438,7 +438,7 @@ soft_inventory_log(void)
     cAreas++;
 
     /* Grep: compositor: soft retmap — Wave 19 return-surface map */
-    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=24\n");
+    kprintf("compositor: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=25\n");
 
     /* Grep: compositor: soft deepen — Wave 20 stamp + area count. */
     /*
@@ -517,19 +517,34 @@ soft_inventory_log(void)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)GJ_COMP_SOFT_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: compositor: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: compositor: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("compositor: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)GJ_COMP_SOFT_WAVE);
-            /* Grep: compositor: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: compositor: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("compositor: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)GJ_COMP_SOFT_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: compositor: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("compositor: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)GJ_COMP_SOFT_WAVE);
+            /* Grep: compositor: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("compositor: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)GJ_COMP_SOFT_WAVE);
     kprintf("compositor: soft deepen wave=%u areas=%u verdict=%s "
             "ready=%u presents=%u multi=%u gen=%u init_ok=%u batch_ok=%u "

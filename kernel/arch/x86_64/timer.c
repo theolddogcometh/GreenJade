@@ -18,7 +18,7 @@
  * remains PARTIAL when the hardware path is incomplete (xAPIC timer
  * handoff alone ≠ complete x2APIC ICR/timer replace).
  *
- * Soft timer inventory (Wave 10 base + Wave 13 path + Wave 24 exclusive deepen;
+ * Soft timer inventory (Wave 10 base + Wave 13 path + Wave 25 exclusive deepen;
  * this unit only — greppable "timer: soft …"):
  *   timer: soft inventory     — ready/src/hz/quantum + surface catalog + wave
  *   timer: soft mono          — coarse/soft mono delta + pit/apic tick axes
@@ -104,7 +104,7 @@
 #define PIC_EOI     0x20
 
 /* Soft inventory wave stamp (this unit exclusive deepen; never hard-gates). */
-#define TIMER_SOFT_WAVE 24u
+#define TIMER_SOFT_WAVE 25u
 
 /* Soft surface bit lamps (Wave 15+ catalog; software-only claims). */
 #define TIMER_SOFT_SURF_MONO       (1u << 0)
@@ -1255,19 +1255,34 @@ timer_soft_inventory_log(void)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)TIMER_SOFT_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: timer: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: timer: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("timer: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)TIMER_SOFT_WAVE);
-            /* Grep: timer: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: timer: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("timer: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)TIMER_SOFT_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: timer: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("timer: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)TIMER_SOFT_WAVE);
+            /* Grep: timer: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("timer: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)TIMER_SOFT_WAVE);
     kprintf("timer: soft deepen wave=%u areas=inventory,mono,preempt,,retclass,retlane"
             "source,apic_mono,path,handoff,interpolate,"

@@ -9,7 +9,7 @@
  *
  * greppable: MSI-X table soft path
  *
- * Soft inventory (Wave 14/15 base; Wave 24 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 25 exclusive deepen; this unit only):
  * greppable: "pci: soft …" | "msix: soft …"
  *   pci: soft inventory … / msix: soft inventory …  — geometry + tallies + wave
  *   pci: soft table …     / msix: soft table …      — entry0 + soft geometry
@@ -23,7 +23,7 @@
  *   pci: soft path …      / msix: soft path …       — honesty non-claim
  *   pci: soft return rate — Wave 19 ok/fail rate lamps
  *   pci: soft retcode    — Wave 19 retcode catalog
- *   pci: soft deepen …    / msix: soft deepen …     — wave=24 areas stamp
+ *   pci: soft deepen …    / msix: soft deepen …     — wave=25 areas stamp
  *   pci: soft ratio …     / msix: soft ratio …      — Wave 15 prog/mask bp
  *   pci: soft headroom …  / msix: soft headroom …   — Wave 15 free entries
  *   pci: soft surface …   / msix: soft surface …    — Wave 16 area catalog
@@ -743,19 +743,34 @@ pci_msix_soft_inventory(const char *szVia)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: pci: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: pci: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("pci: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: pci: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: pci: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("pci: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: pci: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("pci: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
+            /* Grep: pci: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("pci: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)PCI_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("pci: soft deepen wave=%u areas=%u via=%s ready=%u "
             "prog_live=%u fire=%u hw_prog=%u ok=1 skip=0\n",

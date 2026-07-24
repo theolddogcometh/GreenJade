@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE    24u
+#define TRAP_SOFT_WAVE    25u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -675,19 +675,34 @@ trap_soft_inventory_log(void)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)TRAP_SOFT_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: trap: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: trap: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("trap: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)TRAP_SOFT_WAVE);
-            /* Grep: trap: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: trap: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("trap: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)TRAP_SOFT_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: trap: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("trap: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)TRAP_SOFT_WAVE);
+            /* Grep: trap: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("trap: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)TRAP_SOFT_WAVE);
     kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"

@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14/15 base; Wave 24 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 25 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -27,7 +27,7 @@
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
  *   irq: soft return rate — Wave 19 ok/fail rate lamps
  *   irq: soft retcode    — Wave 19 retcode catalog
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=24 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=25 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
  *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
@@ -469,19 +469,34 @@ irq_msix_soft_inventory_log(const char *szVia)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: irq: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: irq: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("irq: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: irq: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: irq: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("irq: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: irq: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("irq: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+            /* Grep: irq: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("irq: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("irq: soft deepen wave=%u areas=%u via=%s ready=%u live=%u "
             "soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
@@ -773,19 +788,34 @@ irq_msix_soft_inventory_log(const char *szVia)
                     "(retcrest stamp; Soft≠product)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
             /*
-             * ---- Wave 24 exclusive complementary surfaces (never reshape primary).
+             * ---- Wave 24 complementary surfaces (kept) (never reshape primary).
              * Return surfaces only — soft inventory; never hard-gates product paths.
              * Soft≠product; not bar3.
              */
-            /* Grep: irq_msix: soft retvault — Wave 24 return-vault honesty */
+            /* Grep: irq_msix: soft retvault — Wave 24 return-vault honesty (kept) */
             kprintf("irq_msix: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
                     "never_blocks_m0=1 wave=%u "
                     "(retvault honesty; Soft≠product; not bar3)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
-            /* Grep: irq_msix: soft retbanner — Wave 24 exclusive banner stamp */
+            /* Grep: irq_msix: soft retbanner — Wave 24 banner stamp (kept) */
             kprintf("irq_msix: soft retbanner exclusive=1 soft_ne_product=1 "
                     "product_kernel=OPEN bar3=0 wave=%u "
                     "(retbanner stamp; Soft≠product)\n",
+                    (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+            /*
+             * ---- Wave 25 exclusive complementary surfaces (never reshape primary).
+             * Return surfaces only — soft inventory; never hard-gates product paths.
+             * Soft≠product; not bar3.
+             */
+            /* Grep: irq_msix: soft retledger — Wave 25 return-ledger honesty */
+            kprintf("irq_msix: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
+                    "never_blocks_m0=1 wave=%u "
+                    "(retledger honesty; Soft≠product; not bar3)\n",
+                    (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+            /* Grep: irq_msix: soft retbeacon — Wave 25 exclusive beacon stamp */
+            kprintf("irq_msix: soft retbeacon exclusive=1 soft_ne_product=1 "
+                    "product_kernel=OPEN bar3=0 wave=%u "
+                    "(retbeacon stamp; Soft≠product)\n",
                     (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
     kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",

@@ -62,7 +62,7 @@
 #define SFMASK_DEFAULT 0x257fdull
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define GJ_CPU_SYSCALL_SOFT_WAVE 42u
+#define GJ_CPU_SYSCALL_SOFT_WAVE 43u
 
 /* Soft RFLAGS IF used on enter_user / enter_user32 paths. */
 #define GJ_CPU_SOFT_RFLAGS_IF 0x200ull
@@ -925,6 +925,22 @@ kprintf("cpu: syscall: soft retbattlement exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retbattlement stamp; Soft≠product)\n",
         (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+/*
+ * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cpu: syscall: soft retmachicolation — Wave 43 return-machicolation honesty */
+kprintf("cpu: syscall: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmachicolation honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+/* Grep: cpu: syscall: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
+kprintf("cpu: syscall: soft retarrowslit exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE);
+
 
                             kprintf("cpu: syscall soft deepen wave=%u ready=%u live=%u "
             "inits=%u enter64=%u enter32=%u verify_ok=%u inv_logs=%u "
@@ -932,7 +948,7 @@ kprintf("cpu: syscall: soft retbattlement exclusive=1 soft_ne_product=1 "
             "enter,verify,expect,path,geom,msr,flags,init,capacity,"
             "exclusive,claim,ratio,honesty,return,return_selftest,retmap,"
             "return_rate,retcode "
-            "(Wave 42 exclusive; soft only; not bar3)\n",
+            "(Wave 43 exclusive; soft only; not bar3)\n",
             (unsigned)GJ_CPU_SYSCALL_SOFT_WAVE,
             (unsigned)(g_fSyscallReady ? 1u : 0u),
             (unsigned)(g_fSoftSnapLive ? 1u : 0u), g_u32SoftInits,

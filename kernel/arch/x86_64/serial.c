@@ -23,7 +23,7 @@
  *
  * Greppable (product / smoke inventory — Wave 10 base + Wave 13 path +
  * Wave 35 exclusive deepen, prefix-stable):
- *   serial: soft inventory … wave=42
+ *   serial: soft inventory … wave=43
  *   serial: soft program port=… div=… lcr=… mcr=… fcr=… ier=… baud=38400
  *   serial: soft inits=… chars=… spinmax=… thrwait=… txfull=… poll=… getc=…
  *   serial: soft port=0x… ier=0x… lcr=0x… mcr=0x… lsr=0x… msr=0x… iir=0x…
@@ -47,7 +47,7 @@
  *   serial: soft err …        — LSR error lamp rollup (oe/pe/fe/bi/err)
  *   serial: soft return rate — Wave 19 ok/fail rate lamps
  *   serial: soft retcode    — Wave 19 retcode catalog
- *   serial: soft deepen …     — wave=42 areas stamp
+ *   serial: soft deepen …     — wave=43 areas stamp
  * Wave 17 complementary surfaces (kept) (never reshape primary fields):
  *   serial: soft return …     — Wave 17 API return surfaces (kept)
  *   serial: soft return selftest … — Wave 17 terminal return surface (kept)
@@ -123,7 +123,7 @@
 #define UART_IIR_ID_MASK 0x0eu
 
 /* Soft Wave stamp (greppable inventory only; never hard-gates boot). */
-#define UART_SOFT_WAVE 42u
+#define UART_SOFT_WAVE 43u
 
 /* Product soft baud label (115200/3 → 38400; divisor program 0x0003). */
 #define UART_SOFT_BAUD 38400u
@@ -1350,6 +1350,22 @@ kprintf("serial: soft retbattlement exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retbattlement stamp; Soft≠product)\n",
         (unsigned)UART_SOFT_WAVE);
+/*
+ * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: serial: soft retmachicolation — Wave 43 return-machicolation honesty */
+kprintf("serial: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmachicolation honesty; Soft≠product; not bar3)\n",
+        (unsigned)UART_SOFT_WAVE);
+/* Grep: serial: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
+kprintf("serial: soft retarrowslit exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)UART_SOFT_WAVE);
+
 
                             kprintf("serial: soft deepen wave=%u areas=inventory,program,inits,,retclass,retlane"
             "port,div,msr,thr,iir,path,expect,verify,"

@@ -104,7 +104,7 @@
 #define PIC_EOI     0x20
 
 /* Soft inventory wave stamp (this unit exclusive deepen; never hard-gates). */
-#define TIMER_SOFT_WAVE 42u
+#define TIMER_SOFT_WAVE 43u
 
 /* Soft surface bit lamps (Wave 15+ catalog; software-only claims). */
 #define TIMER_SOFT_SURF_MONO       (1u << 0)
@@ -1545,6 +1545,22 @@ kprintf("timer: soft retbattlement exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retbattlement stamp; Soft≠product)\n",
         (unsigned)TIMER_SOFT_WAVE);
+/*
+ * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: timer: soft retmachicolation — Wave 43 return-machicolation honesty */
+kprintf("timer: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmachicolation honesty; Soft≠product; not bar3)\n",
+        (unsigned)TIMER_SOFT_WAVE);
+/* Grep: timer: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
+kprintf("timer: soft retarrowslit exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)TIMER_SOFT_WAVE);
+
 
                             kprintf("timer: soft deepen wave=%u areas=inventory,mono,preempt,,retclass,retlane"
             "source,apic_mono,path,handoff,interpolate,"

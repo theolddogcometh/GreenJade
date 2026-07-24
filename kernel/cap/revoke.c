@@ -56,9 +56,9 @@
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE 42u
+#define GJ_REVOKE_SOFT_WAVE 43u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
-#define GJ_REVOKE_SOFT_AREAS 60u
+#define GJ_REVOKE_SOFT_AREAS 62u
 
 struct gj_revoke_qent {
     struct gj_obj_hdr *pObj;
@@ -789,6 +789,22 @@ kprintf("cap: revoke: soft retbattlement exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retbattlement stamp; Soft≠product)\n",
         (unsigned)GJ_REVOKE_SOFT_WAVE);
+/*
+ * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cap: revoke: soft retmachicolation — Wave 43 return-machicolation honesty */
+kprintf("cap: revoke: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmachicolation honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_REVOKE_SOFT_WAVE);
+/* Grep: cap: revoke: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
+kprintf("cap: revoke: soft retarrowslit exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)GJ_REVOKE_SOFT_WAVE);
+
 
                             kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "

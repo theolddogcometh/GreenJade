@@ -5,7 +5,7 @@
  * Cooperative RR scheduler core for shared aarch64 product.
  * Stack frames built for AArch64 AAPCS64 (x29/x30 + entry).
  *
- * Wave 42 exclusive soft deepen (this unit only — greppable "coop: soft …"):
+ * Wave 43 exclusive soft deepen (this unit only — greppable "coop: soft …"):
  *   coop: soft honesty     — cooperative only; no preemption/SMP claim
  *   coop: soft inventory   — slots/states/cur/next_id/stack snapshot
  *   coop: soft slots       — UNUSED/RUNNABLE/RUNNING/EXITED counts
@@ -22,7 +22,7 @@
  *   coop: soft path        — surface catalog + non-claims
  *   coop: soft geom        — Wave 19 max_thr/stack/frame geometry
  *   coop: soft return      — Wave 19 API return surfaces + product_kernel=OPEN
- *   coop: soft deepen      — wave=42 stamp + area count
+ *   coop: soft deepen      — wave=43 stamp + area count
  *   coop: soft PASS|FAIL / coop: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not preemptive product sched / not bar3.
  */
@@ -30,8 +30,8 @@
 #include <gj/sched_coop.h>
 #include <gj/string.h>
 
-/* Wave 42 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 42u
+/* Wave 43 soft inventory stamp (file-local; never product gate). */
+#define COOP_SOFT_WAVE 43u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -706,6 +706,22 @@ kprintf("coop: soft retbattlement exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retbattlement stamp; Soft≠product)\n",
         (unsigned)COOP_SOFT_WAVE);
+/*
+ * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: coop: soft retmachicolation — Wave 43 return-machicolation honesty */
+kprintf("coop: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retmachicolation honesty; Soft≠product; not bar3)\n",
+        (unsigned)COOP_SOFT_WAVE);
+/* Grep: coop: soft retarrowslit — Wave 43 exclusive arrowslit stamp */
+kprintf("coop: soft retarrowslit exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retarrowslit stamp; Soft≠product)\n",
+        (unsigned)COOP_SOFT_WAVE);
+
 
                             kprintf("coop: soft deepen wave=%u areas=%u max_thr=%u stack=%u "
             "logs=%u surf=0x%x\n",

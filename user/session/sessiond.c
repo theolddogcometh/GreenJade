@@ -7,9 +7,9 @@
  *   PRESENT, DISPLAY_INFO, INPUT_POLL, INPUT_POP, STATS,
  *   PRESENT_FB, CLAIM, RELEASE, MAP_SCANOUT
  * Host CI simulates the same present + input fanout protocol shapes.
- * Freestanding live path: sessiond_gj.c (Wave 42 soft inventory exclusive).
+ * Freestanding live path: sessiond_gj.c (Wave 43 soft inventory exclusive).
  * Host A1 here is libc soft-shape only — soft ≠ product multi-server confine.
- * Soft honesty: multi_server=0 confine=0 bar3=0 (Wave 42 exclusive deepen).
+ * Soft honesty: multi_server=0 confine=0 bar3=0 (Wave 43 exclusive deepen).
  *
  * Smoke markers (prefix-stable; scripts/smoke-all.sh greps sessiond: PASS):
  *   sessiond: PRESENT_FB path PASS
@@ -404,19 +404,19 @@ main(void)
 
     printf("sessiond: compositor path PASS\n");
     /*
-     * Grep: sessiond: soft deepen / soft honesty (Wave 42 exclusive).
+     * Grep: sessiond: soft deepen / soft honesty (Wave 43 exclusive).
      * Host A1 soft inventory only — soft ≠ product multi-server confine.
      */
-    printf("sessiond: soft deepen product_kernel=OPEN wave=42 areas=1 multi_server=0 "
+    printf("sessiond: soft deepen product_kernel=OPEN wave=43 areas=1 multi_server=0 "
            "confine=0 bar3=0 exclusive=1\n");
     printf("sessiond: soft honesty multi_server=0 confine=0 bar3=0 "
-           "exclusive=1 soft=1 product_kernel=OPEN wave=42\n");
+           "exclusive=1 soft=1 product_kernel=OPEN wave=43\n");
     printf("sessiond: PASS\n");
     return 0;
 }
 
-/* Wave 42 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retportcullis continuum_toward=18400 soft_ne_product=1
- *   greppable: soft retbattlement exclusive=1 continuum_toward=18400
+/* Wave 43 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmachicolation continuum_toward=18500 soft_ne_product=1
+ *   greppable: soft retarrowslit exclusive=1 continuum_toward=18500
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

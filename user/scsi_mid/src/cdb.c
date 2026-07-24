@@ -19,7 +19,7 @@
  *   READ(10), WRITE(10), SYNCHRONIZE CACHE(10). LUN 0 only;
  *   illegal LUN / opcode / LBA → CHECK + fixed sense.
  *
- * Soft inventory (Wave 42 exclusive deepen — this unit only):
+ * Soft inventory (Wave 43 exclusive deepen — this unit only):
  *   - Soft submit enter/ok/fail; per-op ok; deny catalog; LUN honesty
  *   - Product door INQUIRY path tracked separate from soft INQUIRY
  *   greppable: "scsi_mid: soft …" via scsi_mid_soft_inventory_log()
@@ -83,7 +83,7 @@ static uint8_t g_aSoftUnitSense[SCSI_MID_SENSE_MAX];
 static uint8_t g_u8SoftUnitSenseLen;
 
 /*
- * Soft product inventory (Wave 42 exclusive deepen). File-local tallies.
+ * Soft product inventory (Wave 43 exclusive deepen). File-local tallies.
  * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft …
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  */
@@ -874,13 +874,13 @@ scsi_mid_submit(struct scsi_io *pIo)
 }
 
 /*
- * Wave 42 exclusive soft inventory dump (product library path).
+ * Wave 43 exclusive soft inventory dump (product library path).
  * Greppable prefix: "scsi_mid: soft …"
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  * Never hard-gates submit / live path. Host uses printf; freestanding
  * uses gj_debug_log when SCSI_HAS_SYS.
  *
- * Exported without header change (Wave 42 exclusive; host server declares).
+ * Exported without header change (Wave 43 exclusive; host server declares).
  */
 void
 scsi_mid_soft_inventory_log(void)
@@ -961,12 +961,12 @@ scsi_mid_soft_inventory_log(void)
     }
     (void)gj_debug_log(
         "scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
-        "lun_honest=soft multi_server=0 confine=0 wave=42 "
+        "lun_honest=soft multi_server=0 confine=0 wave=43 "
         "(soft inventory; not bar3)\n",
         138);
     (void)gj_debug_log(
         "scsi_mid: soft honesty multi_server=0 confine=0 bar3=0 "
-        "exclusive=1 soft=1 product_kernel=OPEN wave=42\n",
+        "exclusive=1 soft=1 product_kernel=OPEN wave=43\n",
         82);
     (void)gj_debug_log("scsi_mid: soft inventory PASS\n", 30);
 #undef MID_INV_EMIT
@@ -1030,10 +1030,10 @@ scsi_mid_soft_inventory_log(void)
            "(soft inventory; not bar3)\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
-    /* Grep: scsi_mid: soft honesty (Wave 42 exclusive deepen) */
-/* Wave 42 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retportcullis continuum_toward=18400 soft_ne_product=1
- *   greppable: soft retbattlement exclusive=1 continuum_toward=18400
+    /* Grep: scsi_mid: soft honesty (Wave 43 exclusive deepen) */
+/* Wave 43 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retmachicolation continuum_toward=18500 soft_ne_product=1
+ *   greppable: soft retarrowslit exclusive=1 continuum_toward=18500
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

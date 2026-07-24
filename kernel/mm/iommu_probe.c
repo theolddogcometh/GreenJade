@@ -35,7 +35,7 @@
  *   iommu: soft return     — Wave 17 create/destroy return taxonomy
  *   iommu: soft return selftest — Wave 19 terminal return surface
  *   iommu: soft retmap     — Wave 19 return-surface map
- *   iommu: soft deepen     — wave=61 stamp + area count
+ *   iommu: soft deepen     — wave=62 stamp + area count
  *   iommu: soft OPEN       — always-on product IOMMU OPEN honesty
  *   iommu: soft PASS | soft inventory PASS
  * Soft deepen ≠ product always-on IOMMU claim; not bar3; not HW-first close;
@@ -64,10 +64,10 @@
 #define IOMMU_DMAR_RHSA  3u
 /* ANDD=4, SATC=5, SIDP=6 treated as "other" for soft inventory */
 
-/* Wave 61 soft inventory stamp (file-local; never product gate). */
-#define IOMMU_SOFT_WAVE 61u
+/* Wave 62 soft inventory stamp (file-local; never product gate). */
+#define IOMMU_SOFT_WAVE 62u
 /* Fixed greppable categories for deepen stamp (inventory…return + W16 axes). */
-#define IOMMU_SOFT_AREAS 103u
+#define IOMMU_SOFT_AREAS 105u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -964,11 +964,11 @@ kprintf("iommu: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("iommu: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("iommu: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -978,11 +978,11 @@ kprintf("iommu: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("iommu: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("iommu: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -992,11 +992,11 @@ kprintf("iommu: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("iommu: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("iommu: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1005,11 +1005,11 @@ kprintf("iommu: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retsally — Wave 50 return-sally honesty */
 kprintf("iommu: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("iommu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1018,11 +1018,11 @@ kprintf("iommu: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("iommu: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("iommu: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1032,11 +1032,11 @@ kprintf("iommu: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("iommu: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("iommu: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1045,11 +1045,11 @@ kprintf("iommu: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("iommu: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("iommu: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retlunette stamp; Soft≠product)\n");
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
@@ -1058,11 +1058,11 @@ kprintf("iommu: soft retlunette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retcaponier — Wave 54 return-caponier honesty */
 kprintf("iommu: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retcaponier honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retredan — Wave 54 exclusive redan stamp */
 kprintf("iommu: soft retredan exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retredan stamp; Soft≠product)\n");
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
@@ -1071,11 +1071,11 @@ kprintf("iommu: soft retredan exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retflank — Wave 55 return-flank honesty */
 kprintf("iommu: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retflank honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retface — Wave 55 exclusive face stamp */
 kprintf("iommu: soft retface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retface stamp; Soft≠product)\n");
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
@@ -1084,11 +1084,11 @@ kprintf("iommu: soft retface exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retgorge — Wave 56 return-gorge honesty */
 kprintf("iommu: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retgorge honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retshoulder — Wave 56 exclusive shoulder stamp */
 kprintf("iommu: soft retshoulder exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retshoulder stamp; Soft≠product)\n");
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
@@ -1097,11 +1097,11 @@ kprintf("iommu: soft retshoulder exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retraverse — Wave 57 return-traverse honesty */
 kprintf("iommu: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retraverse honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retcasemate — Wave 57 exclusive casemate stamp */
 kprintf("iommu: soft retcasemate exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retcasemate stamp; Soft≠product)\n");
 
 /*
@@ -1111,11 +1111,11 @@ kprintf("iommu: soft retcasemate exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retorillon — Wave 58 return-orillon honesty */
 kprintf("iommu: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retorillon honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retbonnette — Wave 58 exclusive bonnette stamp */
 kprintf("iommu: soft retbonnette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retbonnette stamp; Soft≠product)\n");
 
 /*
@@ -1125,11 +1125,11 @@ kprintf("iommu: soft retbonnette exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retcrownwork — Wave 59 return-crownwork honesty */
 kprintf("iommu: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retcrownwork honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft rethornwork — Wave 59 exclusive hornwork stamp */
 kprintf("iommu: soft rethornwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(rethornwork stamp; Soft≠product)\n");
 
 /*
@@ -1139,11 +1139,11 @@ kprintf("iommu: soft rethornwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retplace — Wave 60 return-place honesty */
 kprintf("iommu: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retplace honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retenvelope — Wave 60 exclusive envelope stamp */
 kprintf("iommu: soft retenvelope exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retenvelope stamp; Soft≠product)\n");
 
 
@@ -1161,12 +1161,25 @@ kprintf("iommu: soft retenvelope exclusive=1 soft_ne_product=1 "
  */
 /* Grep: iommu: soft retcounterguard — Wave 61 return-counterguard honesty */
 kprintf("iommu: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=61 "
+        "never_blocks_m0=1 wave=62 "
         "(retcounterguard honesty; Soft≠product; not bar3)\n");
 /* Grep: iommu: soft retcoveredface — Wave 61 exclusive coveredface stamp */
 kprintf("iommu: soft retcoveredface exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=61 "
+        "product_kernel=OPEN bar3=0 wave=62 "
         "(retcoveredface stamp; Soft≠product)\n");
+/*
+ * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: iommu: soft retbastionface — Wave 62 return-bastionface honesty */
+kprintf("iommu: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=62 "
+        "(retbastionface honesty; Soft≠product; not bar3)\n");
+/* Grep: iommu: soft retcurtainangle — Wave 62 exclusive curtainangle stamp */
+kprintf("iommu: soft retcurtainangle exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=62 "
+        "(retcurtainangle stamp; Soft≠product)\n");
                             kprintf("iommu: soft deepen wave=%u areas=%u logs=%u surf=0x%x "
             "(Wave 43 exclusive; soft only; not product always-on IOMMU; "
             "not bar3; soft≠product)\n",

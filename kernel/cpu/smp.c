@@ -2225,7 +2225,15 @@ kprintf("smp: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("smp: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: smp: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("smp: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
-                                kprintf("smp: soft deepen wave=119 areas=175 verdict=%s tried=%u "
+/* Grep: smp: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("smp: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: smp: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("smp: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: smp: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("smp: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: smp: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("smp: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
+                                kprintf("smp: soft deepen wave=121 areas=179 verdict=%s tried=%u "
                 "ok=%u timeout=%u skipped=%u online=%u cap=%u logs=%u\n",
                 szVerdict, stSoft.u32Tried, stSoft.u32Ok, stSoft.u32Timeout,
                 stSoft.u32Skipped, stSoft.u32Online, stSoft.u32Cap,

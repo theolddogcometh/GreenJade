@@ -31,7 +31,7 @@
  *   aarch64: uart soft inventory wave=118 …
  *   aarch64: uart soft program base=… peri=… cell=… spin_cap=…
  *   aarch64: uart soft stats …
- *   aarch64: uart soft deepen wave=119 areas=…
+ *   aarch64: uart soft deepen wave=120 areas=…
  *   aarch64: uart soft path polled=1 irq=0 product_kernel=OPEN wave=118
  *   aarch64: uart soft return inv_ret=… product_kernel=OPEN
  *   aarch64: uart soft honesty product_kernel=OPEN soft_only=1
@@ -104,8 +104,8 @@
 /* Soft hex-dump cap (early-console safety). */
 #define PL011_SOFT_DUMP_MAX 256u
 
-/* Wave 45 soft inventory stamp (greppable wave=119). */
-#define PL011_SOFT_WAVE 119u
+/* Wave 45 soft inventory stamp (greppable wave=120). */
+#define PL011_SOFT_WAVE 120u
 
 /* Soft deepen areas: chars,fr,lamps,ctrl,id,program,stats,path,honesty. */
 #define PL011_SOFT_AREAS 206u
@@ -1556,6 +1556,10 @@ aarch64_uart_puts("aarch64: uart: soft retatomicangle exclusive=1 soft_ne_produc
 aarch64_uart_puts("aarch64: uart: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: uart: soft reteventangle — Wave 119 exclusive eventangle stamp */
 aarch64_uart_puts("aarch64: uart: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: aarch64: uart: soft retchannelangle — Wave 120 return-channelangle honesty */
+aarch64_uart_puts("aarch64: uart: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: uart: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+aarch64_uart_puts("aarch64: uart: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)PL011_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: uart soft deepen wave=");

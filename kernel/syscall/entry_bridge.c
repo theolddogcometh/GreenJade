@@ -33,7 +33,7 @@
 #include <gj/types.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define ENTRY_BRIDGE_SOFT_WAVE 119u
+#define ENTRY_BRIDGE_SOFT_WAVE 120u
 /* inventory|path|rates|honesty|last|surfaces|note|catalog|deepen|PASS */
 #define ENTRY_BRIDGE_SOFT_AREAS 206u
 
@@ -1142,6 +1142,10 @@ kprintf("entry_bridge: soft retatomicangle exclusive=1 soft_ne_product=1 product
 kprintf("entry_bridge: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: entry_bridge: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("entry_bridge: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: entry_bridge: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("entry_bridge: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: entry_bridge: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("entry_bridge: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
                             kprintf("entry_bridge: soft deepen wave=%u areas=%u enter=%lu "
             "route=%lu logs=%lu "
             "(Wave 92 exclusive; not bar3)\n",

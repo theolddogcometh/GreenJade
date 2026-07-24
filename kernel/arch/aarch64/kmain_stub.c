@@ -19,7 +19,7 @@
  *   aarch64: timer PASS        (from aarch64_timer_probe)
  *   aarch64: kmain_stub soft inventory wave=118 …
  *   aarch64: kmain_stub soft surf …
- *   aarch64: kmain_stub soft deepen wave=119 areas=…
+ *   aarch64: kmain_stub soft deepen wave=120 areas=…
  *   aarch64: kmain_stub soft return product_kernel=OPEN …
  *   aarch64: kmain_stub soft path product_kernel=OPEN …
  *   aarch64: kmain_stub soft honesty product_kernel=OPEN …
@@ -35,7 +35,7 @@ void aarch64_gic_init(void);
 void aarch64_timer_probe(void);
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define KMAIN_STUB_SOFT_WAVE 119u
+#define KMAIN_STUB_SOFT_WAVE 120u
 /* Areas: enter,gic,timer,inventory,surf,return,path,honesty,deepen */
 #define KMAIN_STUB_SOFT_AREAS 203u
 
@@ -1081,6 +1081,10 @@ aarch64_uart_puts("aarch64: soft retatomicangle exclusive=1 soft_ne_product=1 pr
 aarch64_uart_puts("aarch64: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: soft reteventangle — Wave 119 exclusive eventangle stamp */
 aarch64_uart_puts("aarch64: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: aarch64: soft retchannelangle — Wave 120 return-channelangle honesty */
+aarch64_uart_puts("aarch64: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+aarch64_uart_puts("aarch64: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)KMAIN_STUB_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
 /* Grep: aarch64: kmain_stub soft deepen */

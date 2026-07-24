@@ -158,7 +158,7 @@ struct native_soft_deep {
 };
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define NATIVE_SOFT_WAVE 119u
+#define NATIVE_SOFT_WAVE 120u
 #define NATIVE_SOFT_AREAS 226u
 
 static struct native_soft_deep g_nativeDeep;
@@ -1536,6 +1536,10 @@ kprintf("native: soft retatomicangle exclusive=1 soft_ne_product=1 product_kerne
 kprintf("native: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: native: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("native: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: native: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("native: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: native: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("native: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
                             kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "
             "surfaces=inventory,stats,outcome,class,door,reserved,copy,"

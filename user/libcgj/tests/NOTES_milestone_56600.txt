@@ -7,7 +7,7 @@ Coherent soft package (untracked / new soft only):
   - user/libcgj/tests/NOTES_milestone_56600.txt   (this file)
   - user/libcgj/tests/cgj_soft_milestone_56600.c  (host dyn + direct KATs)
 
-libcgj continuum markers (graph_batch25791.c … graph_batch56600.c) are
+libcgj continuum markers (graph_batch56591.c … graph_batch56600.c) are
 product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
 soft probe only document and soft-gate them.
 
@@ -136,30 +136,30 @@ New CREATE-ONLY soft host probe:
 Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
 only). Build manually as documented in the .c file header.
 
-MILESTONE 56600 marker surfaces (batches 25791–56600)
+MILESTONE 56600 marker surfaces (batches 56591–56600)
 -----------------------------------------------------
 Symbol                         Expected   Source TU
 -----------------------------  ---------  --------------------
-gj_shell_green_56600           1          graph_batch25791.c
-gj_libcgj_green_56600          1          graph_batch25792.c
-gj_bar3_ready_56600            0          graph_batch25793.c  (bar3 open)
-gj_product_score_56600         0          graph_batch25794.c  (score open)
-gj_continuum_ready_56600       1          graph_batch25795.c
-gj_smoke_soft_56600            1          graph_batch25796.c
-gj_dyn_soft_56600              1          graph_batch25797.c
-gj_milestone_tag_56600         56600      graph_batch25798.c
-gj_continuum_wave_56600        56600      graph_batch25799.c
+gj_shell_green_56600           1          graph_batch56591.c
+gj_libcgj_green_56600          1          graph_batch56592.c
+gj_bar3_ready_56600            0          graph_batch56593.c  (bar3 open)
+gj_product_score_56600         0          graph_batch56594.c  (score open)
+gj_continuum_ready_56600       1          graph_batch56595.c
+gj_smoke_soft_56600            1          graph_batch56596.c
+gj_dyn_soft_56600              1          graph_batch56597.c
+gj_milestone_tag_56600         56600      graph_batch56598.c
+gj_continuum_wave_56600        56600      graph_batch56599.c
 gj_batch_id_56600              56600      graph_batch56600.c
 gj_graph_milestone_56600       56600      graph_batch56600.c
 __libcgj_batch20NNN_marker     string     matching batch TU
 
-Fill continuum (batches 25776–25790, not soft-probed here)
+Fill continuum (batches 56576–56590, not soft-probed here)
 ---------------------------------------------------------
 Each TU exports unique gj_batch_id_N plus a small unique soft unit
 helper (wave_fill / slot_a / … / anchor). Soft rule for this NOTES
-file remains decade markers 25791–56600 only.
+file remains decade markers 56591–56600 only.
 
-Identity continuum (batches 25751–25775, not soft-probed here)
+Identity continuum (batches 56551–56575, not soft-probed here)
 -------------------------------------------------------------
 Each TU exports unique gj_batch_id_N + gj_graph_milestone_N.
 
@@ -167,7 +167,7 @@ Soft rule: missing → skip; present but wrong → hard fail.
 
 Parent wiring (outside this soft exclusive scope)
 -------------------------------------------------
-1. Wire graph_batch25751.c … graph_batch56600.c into CGJ_SRCS when
+1. Wire graph_batch56551.c … graph_batch56600.c into CGJ_SRCS when
    advancing makefile_max to 56600 (CREATE-ONLY wave lands first).
 2. libc.map may lag milestone 56600 globals; add 56600 symbols under
    GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
@@ -189,14 +189,14 @@ cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_56600 \
 cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M56600_DIRECT \
   -o build/cgj_soft_milestone_56600_direct \
   user/libcgj/tests/cgj_soft_milestone_56600.c \
-  user/libcgj/src/graph_batch25791.c \
-  user/libcgj/src/graph_batch25792.c \
-  user/libcgj/src/graph_batch25793.c \
-  user/libcgj/src/graph_batch25794.c \
-  user/libcgj/src/graph_batch25795.c \
-  user/libcgj/src/graph_batch25796.c \
-  user/libcgj/src/graph_batch25797.c \
-  user/libcgj/src/graph_batch25798.c \
-  user/libcgj/src/graph_batch25799.c \
+  user/libcgj/src/graph_batch56591.c \
+  user/libcgj/src/graph_batch56592.c \
+  user/libcgj/src/graph_batch56593.c \
+  user/libcgj/src/graph_batch56594.c \
+  user/libcgj/src/graph_batch56595.c \
+  user/libcgj/src/graph_batch56596.c \
+  user/libcgj/src/graph_batch56597.c \
+  user/libcgj/src/graph_batch56598.c \
+  user/libcgj/src/graph_batch56599.c \
   user/libcgj/src/graph_batch56600.c
 ./build/cgj_soft_milestone_56600_direct

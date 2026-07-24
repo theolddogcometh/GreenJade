@@ -201,7 +201,7 @@
  *           uwave20 (product v1.76 Wave 42 exclusive soft deepen kept)
  *           uwave21 (product v1.77 Wave 43 exclusive soft deepen kept)
  *           uwave22 (product v1.78 Wave 82 exclusive soft deepen kept)
- *           uwave23 (product v1.80 Wave 119 exclusive soft deepen)
+ *           uwave23 (product v1.80 Wave 120 exclusive soft deepen)
  *           (satadd/satsub/wrapadd/wrapsub already exist; wrapsub skipped)
  *           (bitrev exists as 32-bit hex v0.37; bitrev32u is decimal low-32)
  *           (bswap16 skipped as bare name: bswap/bswap32/bswap64 cover family;
@@ -393,7 +393,7 @@
  *            uwave20 prints 1 (Wave 42 exclusive soft deepen stamp kept);
  *            uwave21 prints 1 (Wave 43 exclusive soft deepen stamp kept);
  *            uwave22 prints 1 (Wave 82 exclusive soft deepen stamp kept);
- *            uwave23 prints 1 (Wave 119 exclusive soft deepen stamp);
+ *            uwave23 prints 1 (Wave 120 exclusive soft deepen stamp);
  *            free exclusive names; soft facts only; soft ≠ bar3)
  *           (help/version soft banners Wave 111 honesty: help prints
  *            GreenJade soft product + shell=native vfs door + soft=1 +
@@ -15208,12 +15208,12 @@ cmd_uwave22(void)
 }
 
 /*
- * uwave23 — print 1 (Wave 119 exclusive soft deepen stamp) (product v1.80).
+ * uwave23 — print 1 (Wave 120 exclusive soft deepen stamp) (product v1.80).
  * Soft fact only: user-daemon soft inventory wave high-water is 23.
  * Free exclusive name; soft facts only; soft ≠ bar3.
  * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
- * Soft deepen surfaces: retqueueangle / reteventangle (CREATE-ONLY soft only).
- * Continuum toward 26100; soft ≠ product complete; product lamps 0.
+ * Soft deepen surfaces: retchannelangle / retmailboxangle (CREATE-ONLY soft only).
+ * Continuum toward 26200; soft ≠ product complete; product lamps 0.
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave23
  */
@@ -15226,7 +15226,7 @@ cmd_uwave23(void)
 
 /*
  * umulticonfine — print 0 (soft ≠ product multi-server confine) (product v1.70).
- * Wave 119 honesty one-liner. Soft inventory greps ≠ multi-server product.
+ * Wave 120 honesty one-liner. Soft inventory greps ≠ multi-server product.
  * Free exclusive name; soft facts only; does not claim bar3 close.
  * Usage: umulticonfine
  */
@@ -15238,10 +15238,10 @@ cmd_umulticonfine(void)
 }
 
 /*
- * udaemonsoft — print soft daemon inventory honesty (product v1.76 Wave 119).
+ * udaemonsoft — print soft daemon inventory honesty (product v1.76 Wave 120).
  * Greppable soft inventory for live logs. Soft facts only; never bar3.
  * Honesty: soft ≠ product multi-server confine; product_kernel=OPEN.
- * Soft deepen: retqueueangle / reteventangle (CREATE-ONLY soft ≠ product).
+ * Soft deepen: retchannelangle / retmailboxangle (CREATE-ONLY soft ≠ product).
  * Usage: udaemonsoft
  */
 static int
@@ -15263,12 +15263,12 @@ cmd_udaemonsoft(void)
         "product_kernel=OPEN\n");
     out("greenjade-shell: soft open multi_server=0 confine=0 bar3=0 "
         "product_kernel=OPEN soft_only=1 wave=70\n");
-    /* Grep: greenjade-shell: soft retqueueangle / reteventangle (Wave 119) */
-    out("greenjade-shell: soft retqueueangle soft_only=1 product_gate=0 "
-        "soft_ne_product=1 continuum_toward=26100 wave=119 (retqueueangle honesty; "
+    /* Grep: greenjade-shell: soft retchannelangle / retmailboxangle (Wave 120) */
+    out("greenjade-shell: soft retchannelangle soft_only=1 product_gate=0 "
+        "soft_ne_product=1 continuum_toward=26200 wave=120 (retchannelangle honesty; "
         "Soft!=product; not bar3)\n");
-    out("greenjade-shell: soft reteventangle exclusive=1 soft_ne_product=1 "
-        "continuum_toward=26100 wave=119 (reteventangle stamp; Soft!=product)\n");
+    out("greenjade-shell: soft retmailboxangle exclusive=1 soft_ne_product=1 "
+        "continuum_toward=26200 wave=120 (retmailboxangle stamp; Soft!=product)\n");
     return 0;
 }
 
@@ -19771,7 +19771,7 @@ _start(void)
         "uwave21",
         /* product v1.78 Wave 82: exclusive soft deepen stamp kept */
         "uwave22",
-        /* product v1.80 Wave 119: exclusive soft deepen stamp */
+        /* product v1.80 Wave 120: exclusive soft deepen stamp */
         "uwave23",
         "version",
         "install",

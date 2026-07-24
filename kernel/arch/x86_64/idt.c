@@ -106,7 +106,7 @@ static struct gj_idt_gate_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 /* Soft inventory wave stamp (this unit exclusive deepen). */
-#define IDT_SOFT_WAVE 119u
+#define IDT_SOFT_WAVE 120u
 
 /*
  * Wave 10+ deepen lamps (file-local; refresh with inventory walk).
@@ -1773,6 +1773,10 @@ kprintf("idt: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("idt: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: idt: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("idt: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: idt: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("idt: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: idt: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("idt: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
                             kprintf("idt: soft deepen wave=%u areas="
             "inventory,present,layout,contract,bands,type,span,"
             "vectors,entry,last,stats,path,program,verify,"

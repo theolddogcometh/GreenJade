@@ -148,10 +148,10 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=119). */
-#define FUTEX_SOFT_DEEPEN_WAVE 119u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=120). */
+#define FUTEX_SOFT_DEEPEN_WAVE 120u
 /* Fixed greppable categories emitted under "futex: soft …". */
-#define FUTEX_SOFT_DEEPEN_AREAS 179u
+#define FUTEX_SOFT_DEEPEN_AREAS 181u
 
 /*
  * Soft wait/wake sticky counters (wrap OK; diagnostics only).
@@ -1800,6 +1800,14 @@ kprintf("futex: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel
 kprintf("futex: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("futex: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: futex: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("futex: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: futex: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("futex: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: futex: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("futex: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: futex: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("futex: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
                             kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE,

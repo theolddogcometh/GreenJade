@@ -48,7 +48,7 @@
 #include <gj/thread.h>
 
 /* Wave 45 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE 119u
+#define SYSCALL_SOFT_WAVE 120u
 #define SYSCALL_SOFT_AREAS 216u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
@@ -1347,6 +1347,10 @@ kprintf("syscall: soft retatomicangle exclusive=1 soft_ne_product=1 product_kern
 kprintf("syscall: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("syscall: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: syscall: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("syscall: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: syscall: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("syscall: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
                             kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
             "prefix=syscall:soft "
             "surfaces=inventory,stats,bridge,route,personality,bind,"

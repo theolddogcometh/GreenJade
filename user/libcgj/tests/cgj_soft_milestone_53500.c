@@ -111,7 +111,7 @@
  *
  * Notes for parent wiring (outside this soft exclusive scope):
  *   - Sources graph_batch53491.c … graph_batch53500.c (and fill
- *     25776–25790 / identity 25751–25775) are CREATE-ONLY; wire into
+ *     53476–53490 / identity 53451–53475) are CREATE-ONLY; wire into
  *     CGJ_SRCS when parent advances makefile_max to 53500.
  *   - libc.map may lag milestone 53500 globals; add 53500 symbols to the
  *     GLIBC_2.2.5 global list so dyn dlsym can see them.

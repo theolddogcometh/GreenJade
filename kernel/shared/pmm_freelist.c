@@ -30,7 +30,7 @@
 #include <gj/string.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 119u
+#define PMM_CORE_SOFT_WAVE 120u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -1192,6 +1192,14 @@ kprintf("pmm_core: soft retatomicangle exclusive=1 soft_ne_product=1 product_ker
 kprintf("pmm_core: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: pmm_core: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("pmm_core: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: pmm_core: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("pmm_core: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm_core: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("pmm_core: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: pmm_core: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("pmm_core: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: pmm_core: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("pmm_core: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
                             kprintf("pmm_core: soft deepen wave=%u areas=%u free=%u total=%u "
             "logs=%u\n",
             (unsigned)PMM_CORE_SOFT_WAVE, cAreas, cFreeSnap, cTotalSnap,

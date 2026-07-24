@@ -16,7 +16,7 @@
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=119 stamp
+ *   - soft deepen wave=120 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -66,7 +66,7 @@ static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE 119u
+#define GJ_COLD_SOFT_WAVE 120u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
 #define GJ_COLD_SOFT_AREAS 215u
 
@@ -1754,6 +1754,10 @@ kprintf("cold: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("cold: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("cold: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: cold: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("cold: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: cold: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("cold: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
                             kprintf("cold: soft deepen wave=%u areas=%u logs=%u "
             "svc_bound=%u doors_usable=%u queue_usable=%u submits=%llu "
             "(Wave 35 exclusive; soft inventory; not bar3)\n",

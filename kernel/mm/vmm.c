@@ -177,7 +177,7 @@ static u32 g_cHhSoftDebtNotes;    /* higher-half soft debt line emissions */
 #define GJ_VMM_PML4_SLOTS          512u
 /* Soft product user VA band floor (matches destroy/clone filters). */
 #define GJ_VMM_SOFT_USER_FLOOR     0x0000000000800000ull
-#define GJ_VMM_SOFT_WAVE 119u
+#define GJ_VMM_SOFT_WAVE 120u
 /* Catalog areas prior to deepen line (honesty..share). */
 #define GJ_VMM_SOFT_AREAS 222u
 
@@ -586,7 +586,7 @@ higher_half_soft_inventory(void)
  *   vmm: soft retmap     — Wave 19 return-surface map
  *   vmm: soft return selftest — Wave 19 terminal return surface
  *   vmm: soft retmap     — Wave 19 return-surface map
- *   vmm: soft deepen wave=119 …
+ *   vmm: soft deepen wave=120 …
  *   vmm: soft PASS | vmm: soft inventory PASS
  *   vmm: higher-half soft …   (readiness lamps; move OPEN)
  * greppable: vmm: soft
@@ -1869,6 +1869,14 @@ kprintf("vmm: soft retatomicangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("vmm: soft retqueueangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=119 (retqueueangle honesty; Soft≠product; not bar3)\n");
 /* Grep: vmm: soft reteventangle — Wave 119 exclusive eventangle stamp */
 kprintf("vmm: soft reteventangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=119 (reteventangle stamp; Soft≠product)\n");
+/* Grep: vmm: soft retchannelangle — Wave 120 return-channelangle honesty */
+kprintf("vmm: soft retchannelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=120 (retchannelangle honesty; Soft≠product; not bar3)\n");
+/* Grep: vmm: soft retmailboxangle — Wave 120 exclusive mailboxangle stamp */
+kprintf("vmm: soft retmailboxangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=120 (retmailboxangle stamp; Soft≠product)\n");
+/* Grep: vmm: soft retstreamangle — Wave 121 return-streamangle honesty */
+kprintf("vmm: soft retstreamangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=121 (retstreamangle honesty; Soft≠product; not bar3)\n");
+/* Grep: vmm: soft retpacketangle — Wave 121 exclusive packetangle stamp */
+kprintf("vmm: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=121 (retpacketangle stamp; Soft≠product)\n");
                             kprintf("vmm: soft deepen wave=%u areas=%u catalog=%u logs=%u "
             "hhdm=%d template=%d as_live=%u cow_live=%u surf=0x%x "
             "product_tib=0 bar3=OPEN "

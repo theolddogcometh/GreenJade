@@ -587,6 +587,7 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 
 | Date | Note |
 |------|------|
+| 2026-07-24 | **Wave 72 soft continuum (honesty only):** makefile target high-water **advancing toward 21400** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retplaceofarmsangle**/**retdoubletenailleangle** (CREATE-ONLY soft only); honest scan may still report **makefile_max=21300** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-24 | **Wave 71 soft continuum (honesty only):** makefile target high-water **advancing toward 21300** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retsallyportangle**/**retreentrantangle** (CREATE-ONLY soft only); honest scan may still report **makefile_max=21200** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-24 | **Wave 70 soft continuum (honesty only):** makefile target high-water **advancing toward 21200** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retfosseangle**/**retcounterscarple** (CREATE-ONLY soft only); honest scan may still report **makefile_max=21100** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 

@@ -13,7 +13,7 @@
  *   Host identity    — seeded product key + HMAC-SHA256 of exchange hash H
  *   Soft self-check  — RFC 8439 §2.5.2 Poly1305 test vector at hostkey init
  *
- * Soft inventory (Wave 45 exclusive deepen — greppable when hostkey init runs
+ * Soft inventory (Wave 46 exclusive deepen — greppable when hostkey init runs
  * via sshd-gj: soft crypto …). multi_server=0 confine=0; soft ≠ product
  * multi-server confine; not bar3. This unit is freestanding pure C only.
  *
@@ -26,22 +26,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Wave 45 exclusive soft inventory stamp (observability; never hard-gates). */
-/* Wave 45 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retkeepgate continuum_toward=18700 soft_ne_product=1
- *   greppable: soft retouterward exclusive=1 continuum_toward=18700
+/* Wave 46 exclusive soft inventory stamp (observability; never hard-gates). */
+/* Wave 46 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retbailey continuum_toward=18800 soft_ne_product=1
+ *   greppable: soft retpostern exclusive=1 continuum_toward=18800
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
-#define SSH_CRYPTO_SOFT_WAVE 37u
+#define SSH_CRYPTO_SOFT_WAVE 46u
 
-/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=45 multi_server=0 confine=0 */
+/* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=46 multi_server=0 confine=0 */
 static const char g_szSshCryptoSoftDeepen[] =
-	"ssh_crypto: soft deepen product_kernel=OPEN wave=45 multi_server=0 confine=0 "
+	"ssh_crypto: soft deepen product_kernel=OPEN wave=46 multi_server=0 confine=0 "
 	"bar3=0 exclusive=1 soft=1\n";
 static const char g_szSshCryptoSoftHonesty[] =
 	"ssh_crypto: soft honesty multi_server=0 confine=0 bar3=0 "
-	"exclusive=1 soft=1 product_kernel=OPEN wave=45\n";
+	"exclusive=1 soft=1 product_kernel=OPEN wave=46\n";
 
 /* ---- SHA-256 (FIPS 180-4) ----------------------------------------------- */
 
@@ -868,7 +868,7 @@ gj_ssh_poly1305_selfcheck(void)
 	uint8_t aTag[16];
 
 	gj_ssh_poly1305(aKey, aMsg, sizeof(aMsg) - 1, aTag);
-	/* Soft inventory touch (Wave 45): keep greppable strings live. */
+	/* Soft inventory touch (Wave 46): keep greppable strings live. */
 	if (g_szSshCryptoSoftDeepen[0] == '\0' ||
 	    g_szSshCryptoSoftHonesty[0] == '\0' ||
 	    SSH_CRYPTO_SOFT_WAVE == 0u) {

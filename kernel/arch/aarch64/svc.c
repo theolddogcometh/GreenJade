@@ -58,9 +58,9 @@
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
 
-/* Wave 45 soft inventory stamp (file-local; never product gate). */
-#define SVC_SOFT_WAVE 45u
-#define SVC_SOFT_AREAS 59u
+/* Wave 46 soft inventory stamp (file-local; never product gate). */
+#define SVC_SOFT_WAVE 46u
+#define SVC_SOFT_AREAS 61u
 
 /* ESR_EL1 EC field [31:26] */
 #define ESR_EC_SHIFT 26
@@ -1091,6 +1091,22 @@ aarch64_uart_puts("aarch64: svc: soft retouterward exclusive=1 soft_ne_product=1
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
 aarch64_uart_puts(" (retouterward stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: svc: soft retbailey — Wave 46 return-bailey honesty */
+aarch64_uart_puts("aarch64: svc: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (retbailey honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: svc: soft retpostern — Wave 46 exclusive postern stamp */
+aarch64_uart_puts("aarch64: svc: soft retpostern exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)SVC_SOFT_WAVE);
+aarch64_uart_puts(" (retpostern stamp; Soft!=product)\n");
 
 
 

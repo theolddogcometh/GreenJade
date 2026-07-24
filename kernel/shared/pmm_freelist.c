@@ -5,7 +5,7 @@
  * Shared freestanding order-0 freelist (GJ_ARCH_* product).
  * Identity-mapped PA pool only — no HHDM, no hierarchical orders.
  *
- * Wave 45 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
+ * Wave 46 exclusive soft deepen (this unit only — greppable "pmm_core: soft …"):
  *   pmm_core: soft honesty   — order-0 only; no hierarchy/HHDM/zones claim
  *   pmm_core: soft inventory — free/total/base/limit/page_size snapshot
  *   pmm_core: soft pool      — span, head presence, free<=total lamp
@@ -21,7 +21,7 @@
  *   pmm_core: soft path      — surface catalog + product non-claims
  *   pmm_core: soft geom      — Wave 19 page/span geometry
  *   pmm_core: soft return    — Wave 19 API return surfaces + product_kernel=OPEN
- *   pmm_core: soft deepen    — wave=45 stamp + area count
+ *   pmm_core: soft deepen    — wave=46 stamp + area count
  *   pmm_core: soft PASS|FAIL / pmm_core: soft inventory PASS|FAIL
  * Honesty: soft inventory only — not hierarchical pmm / not 1 TiB product.
  */
@@ -29,8 +29,8 @@
 #include <gj/pmm_core.h>
 #include <gj/string.h>
 
-/* Wave 45 soft inventory stamp (file-local; never product gate). */
-#define PMM_CORE_SOFT_WAVE 45u
+/* Wave 46 soft inventory stamp (file-local; never product gate). */
+#define PMM_CORE_SOFT_WAVE 46u
 
 struct pmm_core_node {
     struct pmm_core_node *pNext;
@@ -644,6 +644,22 @@ kprintf("pmm_core: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1
 kprintf("pmm_core: soft retouterward exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retouterward stamp; Soft≠product)\n",
+        (unsigned)PMM_CORE_SOFT_WAVE);
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: pmm_core: soft retbailey — Wave 46 return-bailey honesty */
+kprintf("pmm_core: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbailey honesty; Soft≠product; not bar3)\n",
+        (unsigned)PMM_CORE_SOFT_WAVE);
+/* Grep: pmm_core: soft retpostern — Wave 46 exclusive postern stamp */
+kprintf("pmm_core: soft retpostern exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpostern stamp; Soft≠product)\n",
         (unsigned)PMM_CORE_SOFT_WAVE);
 
 

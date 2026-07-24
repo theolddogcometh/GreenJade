@@ -34,7 +34,7 @@
  *     honesty | inventory | class | cluster | cookie | serial |
  *     call | frame | cr3 | views | path | surfaces | deadline |
  *     return rate | retcode | return selftest | retmap | deepen | PASS
- *     deepen wave=45 stamp + surf= bitmask
+ *     deepen wave=46 stamp + surf= bitmask
  *   Call soft: doors-like Call shape after cookie mint (not product IPC)
  *   FRAME soft: expected-frame shape at view install; product_validate=0
  *   CR3 soft: map-under-space shape; product_map=0; no CR3 switch
@@ -93,8 +93,8 @@
 /* Rate-limit cluster expand per-event soft lines (totals still free). */
 #define FAULT_CLUSTER_SOFT_LOG_MAX 8u
 
-/* Wave 45 soft inventory stamp (file-local; never product gate). */
-#define FAULT_SOFT_WAVE 45u
+/* Wave 46 soft inventory stamp (file-local; never product gate). */
+#define FAULT_SOFT_WAVE 46u
 
 /*
  * Soft inventory area count (Wave 19 greppable categories for deepen stamp):
@@ -102,7 +102,7 @@
  * call | frame | cr3 | views | path | surfaces | deadline | deepen
  * (=14; PASS is close lamp)
  */
-#define FAULT_SOFT_AREAS 66u
+#define FAULT_SOFT_AREAS 68u
 
 /*
  * Soft surface bit lamps (Wave 19; surf=0x… on inventory/deepen lines).
@@ -1495,6 +1495,22 @@ kprintf("fault: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("fault: soft retouterward exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retouterward stamp; Soft≠product)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: fault: soft retbailey — Wave 46 return-bailey honesty */
+kprintf("fault: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbailey honesty; Soft≠product; not bar3)\n",
+        (unsigned)FAULT_SOFT_WAVE);
+/* Grep: fault: soft retpostern — Wave 46 exclusive postern stamp */
+kprintf("fault: soft retpostern exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpostern stamp; Soft≠product)\n",
         (unsigned)FAULT_SOFT_WAVE);
 
 

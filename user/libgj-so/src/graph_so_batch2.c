@@ -17,7 +17,7 @@
  * Soft only; decls also in include/gj_so.h. Marker values match
  * GJ_SO_BATCH2_EXPORT_A_VALUE (0x422) / _B_VALUE (0x423) there.
  *
- * Soft surface (unwired; Wave 45 exclusive deepen):
+ * Soft surface (unwired; Wave 46 exclusive deepen):
  *   gj_so_batch2_export_a / _b — distinct data markers (0x422 / 0x423)
  *   gj_so_batch2_soft_stamp    — soft companion stamp ('B2s2')
  *   gj_so_batch2_init          — restores both markers + stamp
@@ -26,7 +26,7 @@
  *   gj_so_batch2_chain_find    — soft linear chain probe by name hash slot
  *   gj_so_batch2_soft_get      — soft XOR id (read-only)
  *   gj_so_batch2_soft_probe    — soft check + careful restore
- *   gj_so_batch2_soft_wave     — Wave 45 stamp (40)
+ *   gj_so_batch2_soft_wave     — Wave 46 stamp (40)
  *   gj_so_batch2_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_SO_BATCH2_SOFT_MARKER
@@ -34,7 +34,7 @@
  * greppable: GJ_SO_BATCH2_SOFT_GET
  * greppable: GJ_SO_BATCH2_SOFT_PROBE
  * greppable: GJ_SO_BATCH2_SOFT_STAMP
- * greppable: libgj-so: soft batch2 wave=45
+ * greppable: libgj-so: soft batch2 wave=46
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -43,11 +43,11 @@
 #define GJ_SO_BATCH2_EXPORT_A_VALUE  ((uint64_t)0x422)
 #define GJ_SO_BATCH2_EXPORT_B_VALUE  ((uint64_t)0x423)
 #define GJ_SO_BATCH2_STAMP_CANON     ((uint64_t)0x42327332ull) /* 'B2s2' */
-#define GJ_SO_BATCH2_SOFT_WAVE       40u
+#define GJ_SO_BATCH2_SOFT_WAVE 46u
 
-/* greppable: libgj-so: soft batch2 wave=45 */
+/* greppable: libgj-so: soft batch2 wave=46 */
 static const char g_szSoBatch2SoftInventory[] =
-	"libgj-so: soft batch2 wave=45 areas=9 "
+	"libgj-so: soft batch2 wave=46 areas=9 "
 	"export_a,export_b,stamp,init,id,chain_next,chain_find,get,probe "
 	"marker_a=0x422 marker_b=0x423 stamp=B2s2 freestanding=1 "
 	"multi_server=0 confine=0 bar3=0";
@@ -153,7 +153,7 @@ gj_so_batch2_soft_probe(void)
 	return 1;
 }
 
-/* Cold soft inventory: Wave 45 stamp. Grep: libgj-so: soft batch2 wave= */
+/* Cold soft inventory: Wave 46 stamp. Grep: libgj-so: soft batch2 wave= */
 unsigned
 gj_so_batch2_soft_wave(void)
 {

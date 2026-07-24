@@ -24,7 +24,7 @@
  *   user: soft return …      (Wave 19 return-path catalog)
  *   user: soft ret_surface … (Wave 19 terminal return classes)
  *   user: soft surface …     (Wave 19 area catalog)
- *   user: soft deepen wave=45 …
+ *   user: soft deepen wave=46 …
  *   user: soft path …
  *   user: soft PASS|PARTIAL
  *   user: ring3 map soft | user: personality map soft (post-map observe)
@@ -65,7 +65,7 @@ static int g_fUserMapped;
 static int g_fPersMapped;
 
 /* ---- Soft map / enter counters (grep: user: soft …) Wave 19 ----------- */
-#define GJ_USER_SOFT_WAVE 45u
+#define GJ_USER_SOFT_WAVE 46u
 
 static u32 g_cRing3MapOk;
 static u32 g_cRing3MapFail;
@@ -452,7 +452,7 @@ user_soft_inventory(const char *szVia)
             GJ_USER_SOFT_WAVE);
 
     /* Grep: user_task: soft retmap — Wave 19 return-surface map */
-    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
+    kprintf("user_task: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=46\n");
 
     /* Grep: user_task: soft deepen */
     /*
@@ -867,6 +867,22 @@ kprintf("user_task: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=
 kprintf("user_task: soft retouterward exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_USER_SOFT_WAVE);
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: user_task: soft retbailey — Wave 46 return-bailey honesty */
+kprintf("user_task: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbailey honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_USER_SOFT_WAVE);
+/* Grep: user_task: soft retpostern — Wave 46 exclusive postern stamp */
+kprintf("user_task: soft retpostern exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpostern stamp; Soft≠product)\n",
         (unsigned)GJ_USER_SOFT_WAVE);
 
 

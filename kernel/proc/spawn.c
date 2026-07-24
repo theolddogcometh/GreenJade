@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 45u
+#define GJ_SPAWN_SOFT_WAVE 46u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -315,11 +315,11 @@ soft_inventory_log(const char *szVia)
     /* Grep: spawn: soft surface — Wave 19 area catalog */
     kprintf("spawn: soft surface inventory,stats,spawn,mint,kill,wait,"
             "from_cap,teardown,lifecycle,capacity,path,return,ret_surface,"
-            "surface,deepen areas=25 wave=%u\n",
+            "surface,deepen areas=27 wave=%u\n",
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=46\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -734,6 +734,22 @@ kprintf("spawn: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("spawn: soft retouterward exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_SPAWN_SOFT_WAVE);
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: spawn: soft retbailey — Wave 46 return-bailey honesty */
+kprintf("spawn: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbailey honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_SPAWN_SOFT_WAVE);
+/* Grep: spawn: soft retpostern — Wave 46 exclusive postern stamp */
+kprintf("spawn: soft retpostern exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpostern stamp; Soft≠product)\n",
         (unsigned)GJ_SPAWN_SOFT_WAVE);
 
 

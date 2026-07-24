@@ -34,7 +34,7 @@
  * Cumulative path tallies (diagnostics only; wrap OK). Not per-PCB.
  * greppable: except: soft …
  */
-#define GJ_EXCEPT_SOFT_WAVE 45u
+#define GJ_EXCEPT_SOFT_WAVE 46u
 
 static u32 g_u32SoftInit;          /* except_port_init entries */
 static u32 g_u32SoftRegEnter;      /* register entries (incl thr0) */
@@ -208,11 +208,11 @@ soft_inventory_log(void)
     /* Grep: except: soft surface — Wave 19 area catalog */
     kprintf("except: soft surface inventory,register,deliver,take,drop,"
             "wait,resume,query,smoke,capacity,path,return,ret_surface,"
-            "surface,deepen areas=25 wave=%u\n",
+            "surface,deepen areas=27 wave=%u\n",
             GJ_EXCEPT_SOFT_WAVE);
 
     /* Grep: except: soft retmap — Wave 19 return-surface map */
-    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=45\n");
+    kprintf("except: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=46\n");
 
     /* Grep: except: soft deepen */
     /*
@@ -627,6 +627,22 @@ kprintf("except: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("except: soft retouterward exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retouterward stamp; Soft≠product)\n",
+        (unsigned)GJ_EXCEPT_SOFT_WAVE);
+
+/*
+ * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: except: soft retbailey — Wave 46 return-bailey honesty */
+kprintf("except: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbailey honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_EXCEPT_SOFT_WAVE);
+/* Grep: except: soft retpostern — Wave 46 exclusive postern stamp */
+kprintf("except: soft retpostern exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retpostern stamp; Soft≠product)\n",
         (unsigned)GJ_EXCEPT_SOFT_WAVE);
 
 

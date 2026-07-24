@@ -30,7 +30,7 @@
  *   netstackd-gj: RING_STATE soft PASS | soft-skip
  *   netstackd-gj: soft door PASS | soft door soft-skip
  *   netstackd-gj: RELEASE free soft PASS | soft-skip
- * Soft inventory (Wave 103 exclusive deepen — greppable "netstackd-gj: soft …"):
+ * Soft inventory (Wave 104 exclusive deepen — greppable "netstackd-gj: soft …"):
  *   netstackd-gj: soft inventory ok=… skip=… bits=0x… ring_mapped=…
  *                free_rel=… wave=70
  *   netstackd-gj: soft door reclaim=… poll=… stats=… qinfo=… dgram=…
@@ -108,10 +108,10 @@
 #define GJ_SOFT_BIT_REMAP    (1u << 7)
 #define GJ_SOFT_BIT_KICK     (1u << 8)
 #define GJ_SOFT_BIT_RINGST   (1u << 9)
-/* Soft free-path bit (Wave 103 inventory; post-RELEASE no-op). */
-/* Wave 103 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retprojectangle continuum_toward=24500 soft_ne_product=1 wave=103
- *   greppable: soft retaffineangle exclusive=1 continuum_toward=24500 soft_ne_product=1 wave=103
+/* Soft free-path bit (Wave 104 inventory; post-RELEASE no-op). */
+/* Wave 104 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retlinearangle continuum_toward=24600 soft_ne_product=1 wave=104
+ *   greppable: soft retbilinearangle exclusive=1 continuum_toward=24600 soft_ne_product=1 wave=104
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -120,7 +120,7 @@
 #define GJ_SOFT_DOOR_MAX     10u
 /* Soft inventory greppable area count (inventory…path + deepen). */
 #define GJ_SOFT_AREAS        11u
-/* Wave stamp for greppable soft inventory lines (Wave 103 exclusive). */
+/* Wave stamp for greppable soft inventory lines (Wave 104 exclusive). */
 #define GJ_SOFT_WAVE 70u
 
 _Static_assert(GJ_MULTI_CB > GJ_TCP_MSS,
@@ -177,7 +177,7 @@ struct vq_avail {
 
 /*
  * Soft-door bookkeeping (filled while CLAIM held; never hard-fails).
- * Wave 103 inventory tallies: ok/skip + door lamps + free bit + snapshots.
+ * Wave 104 inventory tallies: ok/skip + door lamps + free bit + snapshots.
  */
 struct soft_ctx {
     unsigned uBits;      /* GJ_SOFT_BIT_* door suite mask */
@@ -269,7 +269,7 @@ append_hex(char *aLine, unsigned cb, unsigned *po, unsigned long u)
     }
 }
 
-/* Wave 103: 0/1 lamp from soft door bit mask. */
+/* Wave 104: 0/1 lamp from soft door bit mask. */
 static unsigned
 soft_lamp(unsigned uBits, unsigned uMask)
 {
@@ -277,7 +277,7 @@ soft_lamp(unsigned uBits, unsigned uMask)
 }
 
 /*
- * Soft inventory dump (Wave 103 exclusive deepen).
+ * Soft inventory dump (Wave 104 exclusive deepen).
  * Greppable prefix: "netstackd-gj: soft …"
  * Pure observation — always soft; never gates live path PASS.
  *
@@ -459,7 +459,7 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     aLine[o] = '\0';
     msg(aLine);
 
-    /* Grep: netstackd-gj: soft deepen wave (Wave 103 stamp) */
+    /* Grep: netstackd-gj: soft deepen wave (Wave 104 stamp) */
     o = 0;
     append_s(aLine, sizeof(aLine), &o, "netstackd-gj: soft deepen wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)GJ_SOFT_WAVE);
@@ -484,7 +484,7 @@ soft_inventory_log(const struct soft_ctx *pSoft)
         "(soft inventory; not bar3; soft != product multi-server confine)\n");
 
     /*
-     * Grep: netstackd-gj: soft honesty (Wave 103 exclusive deepen).
+     * Grep: netstackd-gj: soft honesty (Wave 104 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("netstackd-gj: soft honesty multi_server=0 confine=0 bar3=0 "
@@ -937,7 +937,7 @@ soft_door_path(struct soft_ctx *pSoft, unsigned token,
     /*
      * Soft inventory (greppable "netstackd-gj: soft …") — always emit after
      * sub-steps so smoke can tally door/eth/queue/ring/rx without hard FAIL.
-     * free_rel may still be 0 here; final Wave 103 rollup re-emits after free.
+     * free_rel may still be 0 here; final Wave 104 rollup re-emits after free.
      */
     soft_inventory_log(pSoft);
 
@@ -1106,7 +1106,7 @@ _start(void)
      * Soft free RELEASE: door already free → soft no-op (0).
      * Never hard-fails live path (mirrors vfsd RELEASE free soft).
      * Dual markers: legacy RELEASE free soft + greppable soft free-release.
-     * Wave 103: also stamp uFreeBits and re-emit soft inventory (free_rel).
+     * Wave 104: also stamp uFreeBits and re-emit soft inventory (free_rel).
      */
     if (gj_net(GJ_NET_OP_RELEASE, (long)token, 0, 0) == 0) {
         soft.fFreeRel = 1;
@@ -1118,7 +1118,7 @@ _start(void)
         msg("netstackd-gj: RELEASE free soft-skip\n");
         msg("netstackd-gj: soft free-release soft-skip\n");
     }
-    /* Final Wave 103 soft inventory rollup (includes free_rel / free bits). */
+    /* Final Wave 104 soft inventory rollup (includes free_rel / free bits). */
     soft_inventory_log(&soft);
 
     /* Hard live path: DGRAM RECV green (prefix-stable; smoke-all greps). */

@@ -4,7 +4,7 @@
  *
  * storaged — host POSIX software-image smoke (A1 CI path).
  *
- * Soft inventory (Wave 104 exclusive deepen — greppable "storaged: soft …"):
+ * Soft inventory (Wave 105 exclusive deepen — greppable "storaged: soft …"):
  *   storaged: soft inventory … / soft deepen wave=70 …
  *   multi_server=0 confine=0; soft ≠ product multi-server confine; not bar3.
  *
@@ -399,10 +399,10 @@ main(void)
     cSoft++;
     printf("storaged: free soft ok soft_steps=%u\n", cSoft);
 
-    /* Grep: storaged: soft inventory (Wave 104 exclusive deepen) */
-/* Wave 104 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retlinearangle continuum_toward=24600 soft_ne_product=1 wave=104
- *   greppable: soft retbilinearangle exclusive=1 continuum_toward=24600 soft_ne_product=1 wave=104
+    /* Grep: storaged: soft inventory (Wave 105 exclusive deepen) */
+/* Wave 105 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retquadraticangle continuum_toward=24700 soft_ne_product=1 wave=105
+ *   greppable: soft retcubicangle exclusive=1 continuum_toward=24700 soft_ne_product=1 wave=105
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

@@ -34,7 +34,7 @@
  *   init: soft deepen product_kernel=OPEN wave=70 areas=… multi_server=0 confine=0 bar3=0
  *   init: soft exclusive product_kernel=OPEN wave=70 multi_server=0 confine=0 bar3=0 userland=1
  *
- * Soft deepen Wave 104 (never hard-fails boot; exclusive soft inventory):
+ * Soft deepen Wave 105 (never hard-fails boot; exclusive soft inventory):
  *   - libgj string/memory helpers (strcmp/memcpy/itoa/memmove/strstr/…)
  *   - CLOCK_REALTIME + clock_getres + clock_nanosleep(0)
  *   - fstat / arch_prctl GET_FS/GS / futex WAKE / brk grow query
@@ -148,7 +148,7 @@ soft_note(long i64R, unsigned *pOk, unsigned *pMiss)
 /*
  * Emit greppable soft inventory lines (prefix "init: soft ").
  * Pure observation — always soft; does not gate abi PASS.
- * Wave 104: ids/clocks/fds/rlimit + path honesty + deepen wave stamp.
+ * Wave 105: ids/clocks/fds/rlimit + path honesty + deepen wave stamp.
  * Honesty: soft ≠ product multi-server confine.
  */
 static void
@@ -212,28 +212,28 @@ soft_inventory_log(void)
                       (unsigned long)g_cSoftLinkMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft ids (Wave 104) */
+    /* Grep: init: soft ids (Wave 105) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft ids ok=%u miss=%u\n",
                       (unsigned long)g_cSoftIdOk,
                       (unsigned long)g_cSoftIdMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft clocks (Wave 104) */
+    /* Grep: init: soft clocks (Wave 105) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft clocks ok=%u miss=%u\n",
                       (unsigned long)g_cSoftClockOk,
                       (unsigned long)g_cSoftClockMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft fds (Wave 104) */
+    /* Grep: init: soft fds (Wave 105) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft fds ok=%u miss=%u\n",
                       (unsigned long)g_cSoftFdOk,
                       (unsigned long)g_cSoftFdMiss);
     gj_puts(aLine);
 
-    /* Grep: init: soft rlimit (Wave 104) */
+    /* Grep: init: soft rlimit (Wave 105) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft rlimit ok=%u miss=%u\n",
                       (unsigned long)g_cSoftRlimOk,
@@ -260,20 +260,20 @@ soft_inventory_log(void)
     gj_puts(aLine);
 
     /*
-     * Grep: init: soft path (Wave 104 honesty).
+     * Grep: init: soft path (Wave 105 honesty).
      * Soft inventory only — not multi-server confine product.
      */
     gj_puts("init: soft path soft=1 bar3=0 multi_server=0 confine=0 "
             "wave=70\n");
 
     /*
-     * Grep: init: soft honesty (Wave 104 exclusive deepen).
+     * Grep: init: soft honesty (Wave 105 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     gj_puts("init: soft honesty multi_server=0 confine=0 bar3=0 "
             "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
-    /* Grep: init: soft deepen wave (Wave 104 stamp) */
+    /* Grep: init: soft deepen wave (Wave 105 stamp) */
     (void)gj_snprintf(aLine, sizeof(aLine),
                       "init: soft deepen wave=70 areas=%u "
                       "multi_server=0 confine=0 bar3=0 product_kernel=OPEN\n",
@@ -281,33 +281,33 @@ soft_inventory_log(void)
     gj_puts(aLine);
 
     /*
-     * Grep: init: soft exclusive (Wave 104 exclusive deepen).
+     * Grep: init: soft exclusive (Wave 105 exclusive deepen).
      * Soft inventory ≠ product multi-server confine / continuum.
      */
     gj_puts("init: soft exclusive product_kernel=OPEN wave=70 multi_server=0 confine=0 "
             "bar3=0 userland=1 kernel=0 continuum=0 product_kernel=OPEN\n");
 
     /*
-     * Grep: init: soft open (Wave 104 open-lamp rollup).
+     * Grep: init: soft open (Wave 105 open-lamp rollup).
      * product_kernel=OPEN; soft ≠ product multi-server confine.
      */
     gj_puts("init: soft open multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 wave=70\n");
 
     /*
-     * Grep: init: soft retlinearangle — Wave 104 return-linearangle honesty
-     * Soft inventory only; continuum toward 24600; Soft≠product; not bar3.
+     * Grep: init: soft retquadraticangle — Wave 105 return-quadraticangle honesty
+     * Soft inventory only; continuum toward 24700; Soft≠product; not bar3.
      */
-    gj_puts("init: soft retlinearangle soft_only=1 product_gate=0 "
-            "soft_ne_product=1 continuum_toward=24600 wave=104 "
-            "(retlinearangle honesty; Soft!=product; not bar3)\n");
+    gj_puts("init: soft retquadraticangle soft_only=1 product_gate=0 "
+            "soft_ne_product=1 continuum_toward=24700 wave=105 "
+            "(retquadraticangle honesty; Soft!=product; not bar3)\n");
 
     /*
-     * Grep: init: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp
+     * Grep: init: soft retcubicangle — Wave 105 exclusive cubicangle stamp
      * Soft inventory only; Soft≠product.
      */
-    gj_puts("init: soft retbilinearangle exclusive=1 soft_ne_product=1 "
-            "continuum_toward=24600 wave=104 (retbilinearangle stamp; Soft!=product)\n");
+    gj_puts("init: soft retcubicangle exclusive=1 soft_ne_product=1 "
+            "continuum_toward=24700 wave=105 (retcubicangle stamp; Soft!=product)\n");
 }
 
 /* Linux mmap errno band: return is -errno in [-4095, -1] on failure. */

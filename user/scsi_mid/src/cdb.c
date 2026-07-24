@@ -19,7 +19,7 @@
  *   READ(10), WRITE(10), SYNCHRONIZE CACHE(10). LUN 0 only;
  *   illegal LUN / opcode / LBA → CHECK + fixed sense.
  *
- * Soft inventory (Wave 101 exclusive deepen — this unit only):
+ * Soft inventory (Wave 103 exclusive deepen — this unit only):
  *   - Soft submit enter/ok/fail; per-op ok; deny catalog; LUN honesty
  *   - Product door INQUIRY path tracked separate from soft INQUIRY
  *   greppable: "scsi_mid: soft …" via scsi_mid_soft_inventory_log()
@@ -83,7 +83,7 @@ static uint8_t g_aSoftUnitSense[SCSI_MID_SENSE_MAX];
 static uint8_t g_u8SoftUnitSenseLen;
 
 /*
- * Soft product inventory (Wave 101 exclusive deepen). File-local tallies.
+ * Soft product inventory (Wave 103 exclusive deepen). File-local tallies.
  * greppable via scsi_mid_soft_inventory_log(): scsi_mid: soft …
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  */
@@ -874,13 +874,13 @@ scsi_mid_submit(struct scsi_io *pIo)
 }
 
 /*
- * Wave 101 exclusive soft inventory dump (product library path).
+ * Wave 103 exclusive soft inventory dump (product library path).
  * Greppable prefix: "scsi_mid: soft …"
  * Soft LUN honesty remains soft; product door INQUIRY path separate.
  * Never hard-gates submit / live path. Host uses printf; freestanding
  * uses gj_debug_log when SCSI_HAS_SYS.
  *
- * Exported without header change (Wave 101 exclusive; host server declares).
+ * Exported without header change (Wave 103 exclusive; host server declares).
  */
 void
 scsi_mid_soft_inventory_log(void)
@@ -1030,10 +1030,10 @@ scsi_mid_soft_inventory_log(void)
            "(soft inventory; not bar3)\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
-    /* Grep: scsi_mid: soft honesty (Wave 101 exclusive deepen) */
-/* Wave 101 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft rettorusangle continuum_toward=24300 soft_ne_product=1 wave=101
- *   greppable: soft retknotangle exclusive=1 continuum_toward=24300 soft_ne_product=1 wave=101
+    /* Grep: scsi_mid: soft honesty (Wave 103 exclusive deepen) */
+/* Wave 103 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retprojectangle continuum_toward=24500 soft_ne_product=1 wave=103
+ *   greppable: soft retaffineangle exclusive=1 continuum_toward=24500 soft_ne_product=1 wave=103
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

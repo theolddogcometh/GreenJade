@@ -39,7 +39,7 @@
  *            aarch64: exception soft surf …
  *            aarch64: exception soft return inv_ret=… product_kernel=OPEN
  *            aarch64: exception soft honesty product_kernel=OPEN
- *            aarch64: exception soft deepen wave=62 …
+ *            aarch64: exception soft deepen wave=63 …
  *
  * Freestanding pure C; no GPL Linux arch paste. No NEON/FP —
  * general-regs-only for this TU (CPACR FP/SIMD not enabled at EL1 soft).
@@ -78,8 +78,8 @@
 #define EXC_SOFT_DAIF_D_BIT     (1ul << 9)
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define EXC_SOFT_WAVE 62u
-#define EXC_SOFT_AREAS 94u
+#define EXC_SOFT_WAVE 63u
+#define EXC_SOFT_AREAS 96u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -996,6 +996,21 @@ aarch64_uart_puts("aarch64: soft retcurtainangle exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
 aarch64_uart_puts(" (retcurtainangle stamp; Soft!=product)\n");
+/*
+ * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft!=product; not bar3.
+ */
+/* Grep: aarch64: soft retdoubletenaille — Wave 63 return-doubletenaille honesty */
+aarch64_uart_puts("aarch64: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retdoubletenaille honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: soft retplaceofarms — Wave 63 exclusive placeofarms stamp */
+aarch64_uart_puts("aarch64: soft retplaceofarms exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);
+aarch64_uart_puts(" (retplaceofarms stamp; Soft!=product)\n");
 /* Grep: aarch64: exception soft deepen */
     aarch64_uart_puts("aarch64: exception soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)EXC_SOFT_WAVE);

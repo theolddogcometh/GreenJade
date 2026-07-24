@@ -911,18 +911,18 @@ Wired exclusive CREATE-ONLY continuum product soft stubs through `graph_batch153
 
 Also on tree (kernel/media soft, not bar3 / not full glibc): 768G hierarchical soak; media Steam path wired; host soft check READY\|SKELETON\|MISSING.
 
-## Status note — 2026-07-24 (Wave 72 soft continuum)
+## Status note — 2026-07-24 (Wave 73 soft continuum)
 
-**Additive honesty (Wave 72 exclusive for this file).** Wave 11 / Wave 14 notes above stay historical ledger. Soft deepen on non-w13 surfaces only.
+**Additive honesty (Wave 73 exclusive for this file).** Wave 11 / Wave 14 notes above stay historical ledger. Soft deepen on non-w13 surfaces only.
 
 | Claim surface | What it is | What it is **not** |
 |---------------|------------|--------------------|
-| Continuum soft graph | CREATE-ONLY freestanding TUs; parent wires advancing makefile high-water **toward 21400** | Full GNU glibc product; drop-in behavioral parity; Steam/Proton runtime complete |
-| High-water **toward 21400** | Soft target advance via parent wires (tree may still report prior decade; verify `./scripts/gj-continuum-makefile-snippet.sh --max`) | Bar3 closed; Deck Top 50 tried; host-glibc replacement finished; product complete |
-| Soft deepen **retplaceofarmsangle** / **retdoubletenailleangle** | Wave 72 CREATE-ONLY soft graph surface names (docs/scripts/userland soft stamps) | Product glibc; bar3; product lamps lit |
+| Continuum soft graph | CREATE-ONLY freestanding TUs; parent wires advancing makefile high-water **toward 21500** | Full GNU glibc product; drop-in behavioral parity; Steam/Proton runtime complete |
+| High-water **toward 21500** | Soft target advance via parent wires (tree may still report prior decade; verify `./scripts/gj-continuum-makefile-snippet.sh --max`) | Bar3 closed; Deck Top 50 tried; host-glibc replacement finished; product complete |
+| Soft deepen **retcurtainface** / **retbastionangle** | Wave 73 CREATE-ONLY soft graph surface names (docs/scripts/userland soft stamps) | Product glibc; bar3; product lamps lit |
 | libcgj / `libc.so.6` product ELF | Clean-room **glibc-shaped** bring-up + growing symbol surface | Shipped GNU glibc; “full glibc” claim |
 | Product lamps | Soft stubs (`gj_bar3_ready_*` / `gj_product_score_*` class) remain **0** by design | Any product-score or bar3-ready claim |
 
-**Continuum soft ≠ full glibc product.** Wave 72 soft continuum / parent-wire growth **toward 21400** (soft deepen **retplaceofarmsangle**/**retdoubletenailleangle**) does **not** make libcgj a full glibc and does **not** close Option C host-glibc / Steam graphs. **Soft ≠ product complete.**
+**Continuum soft ≠ full glibc product.** Wave 73 soft continuum / parent-wire growth **toward 21500** (soft deepen **retcurtainface**/**retbastionangle**) does **not** make libcgj a full glibc and does **not** close Option C host-glibc / Steam graphs. **Soft ≠ product complete.**
 
 **bar3 still open** (Steam **client** launch + Deck Top 50 title runs; matrix **NOT-TRIED × 50**). Product lamps remain **0**. Soft continuum, media `STATUS=READY`, and kernel smokes are **not** bar3 completion.

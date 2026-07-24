@@ -6105,7 +6105,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         u32 cSerial;
         u32 cWow64;
         /* Wave 62 soft inventory stamp (file-local; never product gate). */
-        enum { MAIN_SOFT_SMOKE_WAVE = 112u, MAIN_SOFT_SMOKE_AREAS = 202u };
+        enum { MAIN_SOFT_SMOKE_WAVE = 113u, MAIN_SOFT_SMOKE_AREAS = 204u };
 
         kprintf("soft: stats smoke begin wave=%u areas=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
@@ -6174,7 +6174,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         kprintf("soft: surfaces count=%u "
                 "names=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,deepen,PASS wave=%u\n",
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS wave=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_AREAS,
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
@@ -6182,7 +6182,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         kprintf("soft: catalog wave=%u areas=%u "
                 "surfaces=begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,deepen,PASS\n",
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE,
                 (unsigned)MAIN_SOFT_SMOKE_AREAS);
 
@@ -6205,7 +6205,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         /* Grep: soft: retmap — Wave 19 return-surface map */
         kprintf("soft: retmap begin,cpu,timer,serial,native,linux_nr,entry,"
                 "inventory,path,capacity,surfaces,catalog,note,honesty,"
-                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,deepen,PASS "
+                "return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,retportcullis,retbattlement,retmachicolation,retarrowslit,retmerlon,retembrasure,retkeepgate,retouterward,retbailey,retpostern,retinnerward,retdonjon,retchevaux,retpalisade,retglacisgate,retoutwork,retsally,retcounterscarp,retfosse,retcoveredway,rettenaille,retdemilune,retravelin,retlunette,retcaponier,retredan,retflank,retface,retgorge,retshoulder,retraverse,retcasemate,retorillon,retbonnette,retcrownwork,rethornwork,retplace,retenvelope,retcounterguard,retcoveredface,retbastionface,retcurtainangle,retdoubletenaille,retplaceofarms,retreentrant,retsallyport,retgorgeangle,retshoulderangle,retflankangle,retfaceangle,retcaponierangle,retredanangle,retlunetteangle,rettenailleangle,retdemiluneangle,retcoveredwayangle,retfosseangle,retcounterscarple,retsallyportangle,retreentrantangle,retplaceofarmsangle,retdoubletenailleangle,retcurtainface,retbastionangle,retglacisangle,retparapetangle,retmoatangle,retowerangle,retgateangle,retwallangle,retspireangle,retholdangle,retpalaceangle,retfortressangle,retkeepangle,retredoubtangle,retcitadelangle,retbastionkeep,retpanoplyangle,retbulwarkangle,retmantleangle,retaegisangle,retemblemangle,retsigilangle,retscepterangle,retglyphangle,retcrownangle,retshardangle,retforgeangle,retprismangle,retflameangle,retcipherangle,retbeaconangle,retledgerangle,retbannerangle,retvaultangle,retcrestangle,rettokenangle,retbadgeangle,retphaseangle,retmarkangle,retpulseangle,retsealangle,retboundangle,retstemangle,retbladeangle,retchordangle,retarcangle,retsectorangle,retwedgeangle,retradiusangle,retdiameterangle,retcircumangle,retellipseangle,rethyperangle,retparabolaangle,retspiralangle,rethelixangle,rettorusangle,retknotangle,retmoebiusangle,retkleinangle,retprojectangle,retaffineangle,retlinearangle,retbilinearangle,retquadraticangle,retcubicangle,retquarticangle,retquinticangle,retsplineangle,retbezierangle,rethurmitangle,retcatmullangle,retnurbsangle,retbsplineangle,retmeshangle,retgridangle,retvoxelangle,rettexelangle,retfragmentangle,retvertexangle,retshaderangle,retpipelineangle,deepen,PASS "
                 "product_gate=0 never_blocks_m0=1 wave=%u\n",
                 (unsigned)MAIN_SOFT_SMOKE_WAVE);
 
@@ -7099,121 +7099,125 @@ kprintf("soft: retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never
 kprintf("soft: retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=%u (retsigilangle stamp; Soft≠product)\n",
         (unsigned)MAIN_SOFT_SMOKE_WAVE);
 /* Grep: soft: retscepterangle — Wave 84 return-scepterangle honesty */
-kprintf("soft: retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retscepterangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retscepterangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retglyphangle — Wave 84 exclusive glyphangle stamp */
-kprintf("soft: retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retglyphangle stamp; Soft≠product)\n");
+kprintf("soft: retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retglyphangle stamp; Soft≠product)\n");
 /* Grep: soft: retcrownangle — Wave 85 return-crownangle honesty */
-kprintf("soft: retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retcrownangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcrownangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retshardangle — Wave 85 exclusive shardangle stamp */
-kprintf("soft: retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retshardangle stamp; Soft≠product)\n");
+kprintf("soft: retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retshardangle stamp; Soft≠product)\n");
 /* Grep: soft: retforgeangle — Wave 86 return-forgeangle honesty */
-kprintf("soft: retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retforgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retforgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retprismangle — Wave 86 exclusive prismangle stamp */
-kprintf("soft: retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retprismangle stamp; Soft≠product)\n");
+kprintf("soft: retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retprismangle stamp; Soft≠product)\n");
 /* Grep: soft: retflameangle — Wave 87 return-flameangle honesty */
-kprintf("soft: retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retflameangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retflameangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retcipherangle — Wave 87 exclusive cipherangle stamp */
-kprintf("soft: retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retcipherangle stamp; Soft≠product)\n");
+kprintf("soft: retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcipherangle stamp; Soft≠product)\n");
 /* Grep: soft: retbeaconangle — Wave 88 return-beaconangle honesty */
-kprintf("soft: retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retbeaconangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbeaconangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retledgerangle — Wave 88 exclusive ledgerangle stamp */
-kprintf("soft: retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retledgerangle stamp; Soft≠product)\n");
+kprintf("soft: retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retledgerangle stamp; Soft≠product)\n");
 /* Grep: soft: retbannerangle — Wave 89 return-bannerangle honesty */
-kprintf("soft: retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retbannerangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbannerangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retvaultangle — Wave 89 exclusive vaultangle stamp */
-kprintf("soft: retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retvaultangle stamp; Soft≠product)\n");
+kprintf("soft: retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retvaultangle stamp; Soft≠product)\n");
 /* Grep: soft: retcrestangle — Wave 90 return-crestangle honesty */
-kprintf("soft: retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retcrestangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcrestangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: rettokenangle — Wave 90 exclusive tokenangle stamp */
-kprintf("soft: rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (rettokenangle stamp; Soft≠product)\n");
+kprintf("soft: rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rettokenangle stamp; Soft≠product)\n");
 /* Grep: soft: retbadgeangle — Wave 91 return-badgeangle honesty */
-kprintf("soft: retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retbadgeangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retbadgeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retphaseangle — Wave 91 exclusive phaseangle stamp */
-kprintf("soft: retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retphaseangle stamp; Soft≠product)\n");
+kprintf("soft: retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retphaseangle stamp; Soft≠product)\n");
 /* Grep: soft: retmarkangle — Wave 92 return-markangle honesty */
-kprintf("soft: retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retmarkangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmarkangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retpulseangle — Wave 92 exclusive pulseangle stamp */
-kprintf("soft: retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retpulseangle stamp; Soft≠product)\n");
+kprintf("soft: retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retpulseangle stamp; Soft≠product)\n");
 /* Grep: soft: retsealangle — Wave 93 return-sealangle honesty */
-kprintf("soft: retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retsealangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsealangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retboundangle — Wave 93 exclusive boundangle stamp */
-kprintf("soft: retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retboundangle stamp; Soft≠product)\n");
+kprintf("soft: retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retboundangle stamp; Soft≠product)\n");
 /* Grep: soft: retstemangle — Wave 94 return-stemangle honesty */
-kprintf("soft: retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retstemangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retstemangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retbladeangle — Wave 94 exclusive bladeangle stamp */
-kprintf("soft: retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retbladeangle stamp; Soft≠product)\n");
+kprintf("soft: retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbladeangle stamp; Soft≠product)\n");
 /* Grep: soft: retchordangle — Wave 95 return-chordangle honesty */
-kprintf("soft: retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retchordangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retchordangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retarcangle — Wave 95 exclusive arcangle stamp */
-kprintf("soft: retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retarcangle stamp; Soft≠product)\n");
+kprintf("soft: retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retarcangle stamp; Soft≠product)\n");
 /* Grep: soft: retsectorangle — Wave 96 return-sectorangle honesty */
-kprintf("soft: retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retsectorangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsectorangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retwedgeangle — Wave 96 exclusive wedgeangle stamp */
-kprintf("soft: retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retwedgeangle stamp; Soft≠product)\n");
+kprintf("soft: retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retwedgeangle stamp; Soft≠product)\n");
 /* Grep: soft: retradiusangle — Wave 97 return-radiusangle honesty */
-kprintf("soft: retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retradiusangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retradiusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retdiameterangle — Wave 97 exclusive diameterangle stamp */
-kprintf("soft: retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retdiameterangle stamp; Soft≠product)\n");
+kprintf("soft: retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retdiameterangle stamp; Soft≠product)\n");
 /* Grep: soft: retcircumangle — Wave 98 return-circumangle honesty */
-kprintf("soft: retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retcircumangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retcircumangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retellipseangle — Wave 98 exclusive ellipseangle stamp */
-kprintf("soft: retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retellipseangle stamp; Soft≠product)\n");
+kprintf("soft: retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retellipseangle stamp; Soft≠product)\n");
 /* Grep: soft: rethyperangle — Wave 99 return-hyperangle honesty */
-kprintf("soft: rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (rethyperangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rethyperangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retparabolaangle — Wave 99 exclusive parabolaangle stamp */
-kprintf("soft: retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retparabolaangle stamp; Soft≠product)\n");
+kprintf("soft: retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retparabolaangle stamp; Soft≠product)\n");
 /* Grep: soft: retspiralangle — Wave 100 return-spiralangle honesty */
-kprintf("soft: retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retspiralangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retspiralangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: rethelixangle — Wave 100 exclusive helixangle stamp */
-kprintf("soft: rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (rethelixangle stamp; Soft≠product)\n");
+kprintf("soft: rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rethelixangle stamp; Soft≠product)\n");
 /* Grep: soft: rettorusangle — Wave 101 return-torusangle honesty */
-kprintf("soft: rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (rettorusangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rettorusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retknotangle — Wave 101 exclusive knotangle stamp */
-kprintf("soft: retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retknotangle stamp; Soft≠product)\n");
+kprintf("soft: retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retknotangle stamp; Soft≠product)\n");
 /* Grep: soft: retmoebiusangle — Wave 102 return-moebiusangle honesty */
-kprintf("soft: retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retmoebiusangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmoebiusangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retkleinangle — Wave 102 exclusive kleinangle stamp */
-kprintf("soft: retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retkleinangle stamp; Soft≠product)\n");
+kprintf("soft: retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retkleinangle stamp; Soft≠product)\n");
 /* Grep: soft: retprojectangle — Wave 103 return-projectangle honesty */
-kprintf("soft: retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retprojectangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retprojectangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retaffineangle — Wave 103 exclusive affineangle stamp */
-kprintf("soft: retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retaffineangle stamp; Soft≠product)\n");
+kprintf("soft: retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retaffineangle stamp; Soft≠product)\n");
 /* Grep: soft: retlinearangle — Wave 104 return-linearangle honesty */
-kprintf("soft: retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retlinearangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retlinearangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retbilinearangle — Wave 104 exclusive bilinearangle stamp */
-kprintf("soft: retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retbilinearangle stamp; Soft≠product)\n");
+kprintf("soft: retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbilinearangle stamp; Soft≠product)\n");
 /* Grep: soft: retquadraticangle — Wave 105 return-quadraticangle honesty */
-kprintf("soft: retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retquadraticangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retquadraticangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retcubicangle — Wave 105 exclusive cubicangle stamp */
-kprintf("soft: retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retcubicangle stamp; Soft≠product)\n");
+kprintf("soft: retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcubicangle stamp; Soft≠product)\n");
 /* Grep: soft: retquarticangle — Wave 106 return-quarticangle honesty */
-kprintf("soft: retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retquarticangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retquarticangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retquinticangle — Wave 106 exclusive quinticangle stamp */
-kprintf("soft: retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retquinticangle stamp; Soft≠product)\n");
+kprintf("soft: retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retquinticangle stamp; Soft≠product)\n");
 /* Grep: soft: retsplineangle — Wave 107 return-splineangle honesty */
-kprintf("soft: retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retsplineangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retsplineangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retbezierangle — Wave 107 exclusive bezierangle stamp */
-kprintf("soft: retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retbezierangle stamp; Soft≠product)\n");
+kprintf("soft: retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbezierangle stamp; Soft≠product)\n");
 /* Grep: soft: rethurmitangle — Wave 108 return-hermitangle honesty */
-kprintf("soft: rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (rethurmitangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (rethurmitangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retcatmullangle — Wave 108 exclusive catmullangle stamp */
-kprintf("soft: retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retcatmullangle stamp; Soft≠product)\n");
+kprintf("soft: retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retcatmullangle stamp; Soft≠product)\n");
 /* Grep: soft: retnurbsangle — Wave 109 return-nurbsangle honesty */
-kprintf("soft: retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retnurbsangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retnurbsangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retbsplineangle — Wave 109 exclusive bsplineangle stamp */
-kprintf("soft: retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retbsplineangle stamp; Soft≠product)\n");
+kprintf("soft: retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retbsplineangle stamp; Soft≠product)\n");
 /* Grep: soft: retmeshangle — Wave 110 return-meshangle honesty */
-kprintf("soft: retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retmeshangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retmeshangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retgridangle — Wave 110 exclusive gridangle stamp */
-kprintf("soft: retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retgridangle stamp; Soft≠product)\n");
+kprintf("soft: retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retgridangle stamp; Soft≠product)\n");
 /* Grep: soft: retvoxelangle — Wave 111 return-voxelangle honesty */
-kprintf("soft: retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retvoxelangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retvoxelangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: rettexelangle — Wave 111 exclusive texelangle stamp */
-kprintf("soft: rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (rettexelangle stamp; Soft≠product)\n");
+kprintf("soft: rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (rettexelangle stamp; Soft≠product)\n");
 /* Grep: soft: retfragmentangle — Wave 112 return-fragmentangle honesty */
-kprintf("soft: retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=112 (retfragmentangle honesty; Soft≠product; not bar3)\n");
+kprintf("soft: retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retfragmentangle honesty; Soft≠product; not bar3)\n");
 /* Grep: soft: retvertexangle — Wave 112 exclusive vertexangle stamp */
-kprintf("soft: retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=112 (retvertexangle stamp; Soft≠product)\n");
+kprintf("soft: retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retvertexangle stamp; Soft≠product)\n");
+/* Grep: soft: retshaderangle — Wave 113 return-shaderangle honesty */
+kprintf("soft: retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=113 (retshaderangle honesty; Soft≠product; not bar3)\n");
+/* Grep: soft: retpipelineangle — Wave 113 exclusive pipelineangle stamp */
+kprintf("soft: retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=113 (retpipelineangle stamp; Soft≠product)\n");
 
 /* Grep: soft: deepen wave */
         kprintf("soft: deepen wave=%u areas=%u hit=%u wow64_calls=%u "

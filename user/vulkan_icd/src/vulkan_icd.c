@@ -9,7 +9,7 @@
  *   "vk: QueuePresentKHR", "vk: QueueSubmit", "vk_icd: negotiate"
  * Do not change those substrings without updating the smoke harness.
  *
- * Soft inventory (Wave 112 exclusive deepen; greppable; not bar3 GPU):
+ * Soft inventory (Wave 113 exclusive deepen; greppable; not bar3 GPU):
  *   vk_icd: soft inventory wave=70 negotiate=… present=… submit=… acquire=…
  *   vk_icd: soft deepen wave=70 areas=negotiate,instance,device,swapchain,
  *           acquire,present,submit,lookup,host,path,counts,features,note,crc
@@ -1015,7 +1015,7 @@ static uint32_t g_u32HostPresents;
 static uint32_t g_u32HostPresentCrc;
 
 /*
- * Wave 112 soft inventory counters (file-local; wrap OK; never hard-gate).
+ * Wave 113 soft inventory counters (file-local; wrap OK; never hard-gate).
  * Grep: vk_icd: soft
  */
 #define VK_ICD_SOFT_WAVE 70u
@@ -1048,7 +1048,7 @@ vk_icd_soft_inc(volatile uint32_t *pCtr)
 }
 
 /*
- * Soft inventory blob (Wave 112). Grep: vk_icd: soft inventory
+ * Soft inventory blob (Wave 113). Grep: vk_icd: soft inventory
  */
 static const char g_szVkIcdSoftInventory[] =
     "vk_icd: soft inventory wave=70 surfaces=10 areas=14 "
@@ -1087,9 +1087,9 @@ static const char g_szVkIcdSoftHonesty[] =
     "soft=1 product_kernel=OPEN wave=70";
 
 /* Soft area name catalog (Wave 111; cold only). */
-/* Wave 112 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retfragmentangle continuum_toward=25400 soft_ne_product=1 wave=112
- *   greppable: soft retvertexangle exclusive=1 continuum_toward=25400 soft_ne_product=1 wave=112
+/* Wave 113 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retshaderangle continuum_toward=25500 soft_ne_product=1 wave=113
+ *   greppable: soft retpipelineangle exclusive=1 continuum_toward=25500 soft_ne_product=1 wave=113
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -1207,7 +1207,7 @@ gj_vk_icd_loader_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 112 exclusive). Grep: vk_icd: soft honesty
+ * Cold soft honesty line (Wave 113 exclusive). Grep: vk_icd: soft honesty
  */
 const char *
 gj_vk_icd_loader_soft_honesty(void)

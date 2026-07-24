@@ -5,7 +5,7 @@
  * UDX runtime core: init / run / exit / printk.
  * Product markers (greppable): GREENJADE_UDX, UDX_PRODUCT.
  *
- * Soft inventory (Wave 112 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 113 exclusive deepen; this unit only) —
  * greppable "udx: soft …":
  *   udx: soft inventory …
  *   udx: soft lifecycle …
@@ -27,7 +27,7 @@
  * Pure observation; never gates host skeleton PASS or freestanding path.
  * Soft ≠ skeleton PASS. greppable: udx: soft
  *
- * Honesty (Wave 112): UDX kernel notify multi-process SPSC product remains
+ * Honesty (Wave 113): UDX kernel notify multi-process SPSC product remains
  * OPEN — this file only catalogs the soft core surface; product close is
  * M4.2 / security core 6 multi-process driver-host (not here).
  */
@@ -53,7 +53,7 @@ static u32 g_u32UdxStop;
 static u32 g_u32UdxInited;
 
 /*
- * Soft product inventory (Wave 112 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 113 exclusive deepen). Cumulative for this
  * process unless noted live/peak/last. greppable: udx: soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -139,7 +139,7 @@ soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft inventory (Wave 112 exclusive deepen).
+ * Greppable soft inventory (Wave 113 exclusive deepen).
  * Prefix-stable "udx: soft …" — never hard-gates; observation only.
  *
  *   udx: soft inventory  — cumulative API + run rollup
@@ -307,7 +307,7 @@ soft_inventory_log(void)
               UDX_SOFT_WAVE, UDX_SOFT_AREAS);
 
     /*
-     * Grep: udx: soft honesty (Wave 112 exclusive deepen).
+     * Grep: udx: soft honesty (Wave 113 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     soft_emit("udx: soft honesty multi_server=0 confine=0 bar3=0 "
@@ -315,17 +315,17 @@ soft_inventory_log(void)
               UDX_SOFT_WAVE);
 
     /*
-     * Grep: udx: soft retfragmentangle — Wave 112 return-fragmentangle honesty
-     * Grep: udx: soft retvertexangle — Wave 112 exclusive vertexangle stamp
-     * CREATE-ONLY soft names; continuum toward 25400; Soft≠product.
+     * Grep: udx: soft retshaderangle — Wave 113 return-shaderangle honesty
+     * Grep: udx: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp
+     * CREATE-ONLY soft names; continuum toward 25500; Soft≠product.
      */
-    soft_emit("udx: soft retfragmentangle soft_only=1 product_gate=0 "
-              "soft_ne_product=1 continuum_toward=25400 wave=%u "
-              "(retfragmentangle honesty; Soft!=product; not bar3)\n",
+    soft_emit("udx: soft retshaderangle soft_only=1 product_gate=0 "
+              "soft_ne_product=1 continuum_toward=25500 wave=%u "
+              "(retshaderangle honesty; Soft!=product; not bar3)\n",
               UDX_SOFT_WAVE);
-    soft_emit("udx: soft retvertexangle exclusive=1 soft_ne_product=1 "
-              "continuum_toward=25400 wave=%u "
-              "(retvertexangle stamp; Soft!=product)\n",
+    soft_emit("udx: soft retpipelineangle exclusive=1 soft_ne_product=1 "
+              "continuum_toward=25500 wave=%u "
+              "(retpipelineangle stamp; Soft!=product)\n",
               UDX_SOFT_WAVE);
 }
 
@@ -357,7 +357,7 @@ udx_init(void)
     /* Greppable product markers — see user/udx/README.md */
     udx_printk("udx: init %s %s v%s (Linux-porter surface)\n",
                UDX_PRODUCT_NAME, UDX_PRODUCT_TAG, UDX_PRODUCT_VERSION);
-    /* Wave 112 soft inventory baseline (greppable udx: soft …). */
+    /* Wave 113 soft inventory baseline (greppable udx: soft …). */
     soft_inventory_log();
     return UDX_OK;
 }
@@ -477,7 +477,7 @@ udx_run(void)
     soft_inc(&g_u32SoftFlush);
     soft_inc(&g_u32SoftFinalFlush);
     udx_work_flush();
-    /* Wave 112 soft run snapshot (greppable udx: soft …). */
+    /* Wave 113 soft run snapshot (greppable udx: soft …). */
     soft_inventory_log();
 }
 

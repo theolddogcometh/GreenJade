@@ -23,8 +23,8 @@
  *   gj_gnu_batch1_soft_get    — soft read of marker
  *   gj_gnu_batch1_soft_probe  — soft check + careful restore
  *
- * Soft surface (Wave 73 exclusive deepen):
- *   gj_gnu_batch1_soft_wave      — Wave 73 stamp (40)
+ * Soft surface (Wave 74 exclusive deepen):
+ *   gj_gnu_batch1_soft_wave      — Wave 74 stamp (40)
  *   gj_gnu_batch1_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_GNU_BATCH1_SOFT_MARKER
@@ -99,7 +99,7 @@ gj_gnu_batch1_soft_probe(void)
     return 1;
 }
 
-/* Cold soft inventory: Wave 73 stamp. Grep: libgj-gnu: soft batch1 wave= */
+/* Cold soft inventory: Wave 74 stamp. Grep: libgj-gnu: soft batch1 wave= */
 unsigned
 gj_gnu_batch1_soft_wave(void)
 {

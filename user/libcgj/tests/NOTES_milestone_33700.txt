@@ -1,0 +1,281 @@
+Notes — continuum milestone 33700 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_33700.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_33700.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch33691.c … graph_batch33700.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them.
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c                 static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
+  - cgj_soft_milestone_14500.c  prior decade soft probe
+  - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14700.c  prior decade soft probe
+  - cgj_soft_milestone_14800.c  prior decade soft probe
+  - cgj_soft_milestone_14900.c  prior decade soft probe
+  - cgj_soft_milestone_15000.c  prior decade soft probe
+  - cgj_soft_milestone_15100.c  prior decade soft probe
+  - cgj_soft_milestone_15200.c  prior decade soft probe
+  - cgj_soft_milestone_15300.c  prior decade soft probe
+  - cgj_soft_milestone_15400.c  prior decade soft probe
+  - cgj_soft_milestone_15500.c  prior decade soft probe
+  - cgj_soft_milestone_15600.c  prior decade soft probe
+  - cgj_soft_milestone_15700.c  prior decade soft probe
+  - cgj_soft_milestone_15800.c  prior decade soft probe
+  - cgj_soft_milestone_15900.c  prior decade soft probe
+  - cgj_soft_milestone_16000.c  prior decade soft probe
+  - cgj_soft_milestone_16100.c  prior decade soft probe
+  - cgj_soft_milestone_16200.c  prior decade soft probe
+  - cgj_soft_milestone_16300.c  prior decade soft probe
+  - cgj_soft_milestone_16400.c  prior decade soft probe
+  - cgj_soft_milestone_16500.c  prior decade soft probe
+  - cgj_soft_milestone_16600.c  prior decade soft probe
+  - cgj_soft_milestone_16700.c  prior decade soft probe
+  - cgj_soft_milestone_16800.c  prior decade soft probe
+  - cgj_soft_milestone_16900.c  prior decade soft probe
+  - cgj_soft_milestone_17000.c  prior decade soft probe
+  - cgj_soft_milestone_17100.c  prior decade soft probe
+  - cgj_soft_milestone_17200.c  prior decade soft probe
+  - cgj_soft_milestone_17300.c  prior decade soft probe
+  - cgj_soft_milestone_17400.c  prior decade soft probe
+  - cgj_soft_milestone_17500.c  prior decade soft probe
+  - cgj_soft_milestone_17600.c  prior decade soft probe
+  - cgj_soft_milestone_17700.c  prior decade soft probe
+  - cgj_soft_milestone_17800.c  prior decade soft probe
+  - cgj_soft_milestone_17900.c  prior decade soft probe
+  - cgj_soft_milestone_18000.c  prior decade soft probe
+  - cgj_soft_milestone_18100.c  prior decade soft probe
+  - cgj_soft_milestone_18200.c  prior decade soft probe
+  - cgj_soft_milestone_18300.c  prior decade soft probe
+  - cgj_soft_milestone_18400.c  prior decade soft probe
+  - cgj_soft_milestone_18500.c  prior decade soft probe
+  - cgj_soft_milestone_18600.c  prior decade soft probe
+  - cgj_soft_milestone_18700.c  prior decade soft probe
+  - cgj_soft_milestone_18800.c  prior decade soft probe
+  - cgj_soft_milestone_18900.c  prior decade soft probe
+  - cgj_soft_milestone_19000.c  prior decade soft probe
+  - cgj_soft_milestone_19100.c  prior decade soft probe
+  - cgj_soft_milestone_19200.c  prior decade soft probe
+  - cgj_soft_milestone_19300.c  prior decade soft probe
+  - cgj_soft_milestone_19400.c  prior decade soft probe
+  - cgj_soft_milestone_19500.c  prior decade soft probe
+  - cgj_soft_milestone_19600.c  prior decade soft probe
+  - cgj_soft_milestone_19700.c  prior decade soft probe
+  - cgj_soft_milestone_19800.c  prior decade soft probe
+  - cgj_soft_milestone_19900.c  prior decade soft probe
+  - cgj_soft_milestone_20000.c  prior decade soft probe
+  - cgj_soft_milestone_20100.c  prior decade soft probe
+  - cgj_soft_milestone_20200.c  prior decade soft probe
+  - cgj_soft_milestone_20300.c  prior decade soft probe
+  - cgj_soft_milestone_20400.c  prior decade soft probe
+  - cgj_soft_milestone_20500.c  prior decade soft probe
+  - cgj_soft_milestone_20600.c  prior decade soft probe
+  - cgj_soft_milestone_20700.c  prior decade soft probe
+  - cgj_soft_milestone_20800.c  prior decade soft probe
+  - cgj_soft_milestone_20900.c  prior decade soft probe
+  - cgj_soft_milestone_21000.c  prior decade soft probe
+  - cgj_soft_milestone_21100.c  prior decade soft probe
+  - cgj_soft_milestone_21200.c  prior decade soft probe
+  - cgj_soft_milestone_21300.c  prior decade soft probe
+  - cgj_soft_milestone_21400.c  prior decade soft probe
+  - cgj_soft_milestone_21500.c  prior decade soft probe
+  - cgj_soft_milestone_21600.c  prior decade soft probe
+  - cgj_soft_milestone_21700.c  prior decade soft probe
+  - cgj_soft_milestone_21800.c  prior decade soft probe
+  - cgj_soft_milestone_21900.c  prior decade soft probe
+  - cgj_soft_milestone_22000.c  prior decade soft probe
+  - cgj_soft_milestone_22100.c  prior decade soft probe
+  - cgj_soft_milestone_22200.c  prior decade soft probe
+  - cgj_soft_milestone_22300.c  prior decade soft probe
+  - cgj_soft_milestone_22400.c  prior decade soft probe
+  - cgj_soft_milestone_22500.c  prior decade soft probe
+  - cgj_soft_milestone_22600.c  prior decade soft probe
+  - cgj_soft_milestone_22700.c  prior decade soft probe
+  - cgj_soft_milestone_22800.c  prior decade soft probe
+  - cgj_soft_milestone_22900.c  prior decade soft probe
+  - cgj_soft_milestone_23000.c  prior decade soft probe
+  - cgj_soft_milestone_23100.c  prior decade soft probe
+  - cgj_soft_milestone_23200.c  prior decade soft probe
+  - cgj_soft_milestone_23300.c  prior decade soft probe
+  - cgj_soft_milestone_23400.c  prior decade soft probe
+  - cgj_soft_milestone_23500.c  prior decade soft probe
+  - cgj_soft_milestone_23600.c  prior decade soft probe
+  - cgj_soft_milestone_23700.c  prior decade soft probe
+  - cgj_soft_milestone_23800.c  prior decade soft probe
+  - cgj_soft_milestone_23900.c  prior decade soft probe
+  - cgj_soft_milestone_24000.c  prior decade soft probe
+  - cgj_soft_milestone_24100.c  prior decade soft probe
+  - cgj_soft_milestone_24200.c  prior decade soft probe
+  - cgj_soft_milestone_24300.c  prior decade soft probe
+  - cgj_soft_milestone_24400.c  prior decade soft probe
+  - cgj_soft_milestone_24500.c  prior decade soft probe
+  - cgj_soft_milestone_24600.c  prior decade soft probe
+  - cgj_soft_milestone_24700.c  prior decade soft probe
+  - cgj_soft_milestone_24800.c  prior decade soft probe
+  - cgj_soft_milestone_24900.c  prior decade soft probe
+  - cgj_soft_milestone_25000.c  prior decade soft probe
+  - cgj_soft_milestone_25100.c  prior decade soft probe
+  - cgj_soft_milestone_25200.c  prior decade soft probe
+  - cgj_soft_milestone_25300.c  prior decade soft probe
+  - cgj_soft_milestone_25400.c  prior decade soft probe
+  - cgj_soft_milestone_25500.c  prior decade soft probe
+  - cgj_soft_milestone_25600.c  prior decade soft probe
+  - cgj_soft_milestone_25700.c  prior decade soft probe
+  - cgj_soft_milestone_25800.c  prior decade soft probe
+  - cgj_soft_milestone_25900.c  prior decade soft probe
+  - cgj_soft_milestone_26000.c  prior decade soft probe
+  - cgj_soft_milestone_26100.c  prior decade soft probe
+  - cgj_soft_milestone_26200.c  prior decade soft probe
+  - cgj_soft_milestone_26300.c  prior decade soft probe
+  - cgj_soft_milestone_26400.c  prior decade soft probe
+  - cgj_soft_milestone_26500.c  prior decade soft probe
+  - cgj_soft_milestone_26600.c  prior decade soft probe
+  - cgj_soft_milestone_26700.c  prior decade soft probe
+  - cgj_soft_milestone_26800.c  prior decade soft probe
+  - cgj_soft_milestone_26900.c  prior decade soft probe
+  - cgj_soft_milestone_27000.c  prior decade soft probe
+  - cgj_soft_milestone_27100.c  prior decade soft probe
+  - cgj_soft_milestone_27200.c  prior decade soft probe
+  - cgj_soft_milestone_27300.c  prior decade soft probe
+  - cgj_soft_milestone_27400.c  prior decade soft probe
+  - cgj_soft_milestone_27500.c  prior decade soft probe
+  - cgj_soft_milestone_27600.c  prior decade soft probe
+  - cgj_soft_milestone_27700.c  prior decade soft probe
+  - cgj_soft_milestone_27800.c  prior decade soft probe
+  - cgj_soft_milestone_27900.c  prior decade soft probe
+  - cgj_soft_milestone_28000.c  prior decade soft probe
+  - cgj_soft_milestone_28100.c  prior decade soft probe
+  - cgj_soft_milestone_28200.c  prior decade soft probe
+  - cgj_soft_milestone_28300.c  prior decade soft probe
+  - cgj_soft_milestone_28400.c  prior decade soft probe
+  - cgj_soft_milestone_28500.c  prior decade soft probe
+  - cgj_soft_milestone_28600.c  prior decade soft probe
+  - cgj_soft_milestone_28700.c  prior decade soft probe
+  - cgj_soft_milestone_28800.c  prior decade soft probe
+  - cgj_soft_milestone_28900.c  prior decade soft probe
+  - cgj_soft_milestone_29000.c  prior decade soft probe
+  - cgj_soft_milestone_29100.c  prior decade soft probe
+  - cgj_soft_milestone_29200.c  prior decade soft probe
+  - cgj_soft_milestone_29300.c  prior decade soft probe
+  - cgj_soft_milestone_29400.c  prior decade soft probe
+  - cgj_soft_milestone_29500.c  prior decade soft probe
+  - cgj_soft_milestone_29600.c  prior decade soft probe
+  - cgj_soft_milestone_29700.c  prior decade soft probe
+  - cgj_soft_milestone_29800.c  prior decade soft probe
+  - cgj_soft_milestone_29900.c  prior decade soft probe
+  - cgj_soft_milestone_30000.c  prior decade soft probe
+  - cgj_soft_milestone_30100.c  prior decade soft probe
+  - cgj_soft_milestone_30200.c  prior decade soft probe
+  - cgj_soft_milestone_30300.c  prior decade soft probe
+  - cgj_soft_milestone_30400.c  prior decade soft probe
+  - cgj_soft_milestone_30500.c  prior decade soft probe
+  - cgj_soft_milestone_30600.c  prior decade soft probe
+  - cgj_soft_milestone_30700.c  prior decade soft probe
+  - cgj_soft_milestone_30800.c  prior decade soft probe
+  - cgj_soft_milestone_30900.c  prior decade soft probe
+  - cgj_soft_milestone_31000.c  prior decade soft probe
+  - cgj_soft_milestone_31100.c  prior decade soft probe
+  - cgj_soft_milestone_31200.c  prior decade soft probe
+  - cgj_soft_milestone_31300.c  prior decade soft probe
+  - cgj_soft_milestone_31400.c  prior decade soft probe
+  - cgj_soft_milestone_31500.c  prior decade soft probe
+  - cgj_soft_milestone_31600.c  prior decade soft probe
+  - cgj_soft_milestone_31700.c  prior decade soft probe
+  - cgj_soft_milestone_31800.c  prior decade soft probe
+  - cgj_soft_milestone_31900.c  prior decade soft probe
+  - cgj_soft_milestone_32000.c  prior decade soft probe
+  - cgj_soft_milestone_32100.c  prior decade soft probe
+  - cgj_soft_milestone_32200.c  prior decade soft probe
+  - cgj_soft_milestone_32300.c  prior decade soft probe
+  - cgj_soft_milestone_32400.c  prior decade soft probe
+  - cgj_soft_milestone_32500.c  prior decade soft probe
+  - cgj_soft_milestone_32600.c  prior decade soft probe
+  - cgj_soft_milestone_32700.c  prior decade soft probe
+  - cgj_soft_milestone_32800.c  prior decade soft probe
+  - cgj_soft_milestone_32900.c  prior decade soft probe
+  - cgj_soft_milestone_33000.c  prior decade soft probe
+  - cgj_soft_milestone_33100.c  prior decade soft probe
+  - cgj_soft_milestone_33200.c  prior decade soft probe
+  - cgj_soft_milestone_33300.c  prior decade soft probe
+  - cgj_soft_milestone_33400.c  prior decade soft probe
+  - cgj_soft_milestone_33500.c  prior decade soft probe
+  - cgj_soft_milestone_33600.c  prior decade soft probe
+
+New CREATE-ONLY soft host probe:
+  - cgj_soft_milestone_33700.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 33700 marker surfaces (batches 33691–33700)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_33700           1          graph_batch33691.c
+gj_libcgj_green_33700          1          graph_batch33692.c
+gj_bar3_ready_33700            0          graph_batch33693.c  (bar3 open)
+gj_product_score_33700         0          graph_batch33694.c  (score open)
+gj_continuum_ready_33700       1          graph_batch33695.c
+gj_smoke_soft_33700            1          graph_batch33696.c
+gj_dyn_soft_33700              1          graph_batch33697.c
+gj_milestone_tag_33700         33700      graph_batch33698.c
+gj_continuum_wave_33700        33700      graph_batch33699.c
+gj_batch_id_33700              33700      graph_batch33700.c
+gj_graph_milestone_33700       33700      graph_batch33700.c
+__libcgj_batch20NNN_marker     string     matching batch TU
+
+Fill continuum (batches 33676–33690, not soft-probed here)
+---------------------------------------------------------
+Each TU exports unique gj_batch_id_N plus a small unique soft unit
+helper (wave_fill / slot_a / … / anchor). Soft rule for this NOTES
+file remains decade markers 33691–33700 only.
+
+Identity continuum (batches 33651–33675, not soft-probed here)
+-------------------------------------------------------------
+Each TU exports unique gj_batch_id_N + gj_graph_milestone_N.
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. Wire graph_batch33651.c … graph_batch33700.c into CGJ_SRCS when
+   advancing makefile_max to 33700 (CREATE-ONLY wave lands first).
+2. libc.map may lag milestone 33700 globals; add 33700 symbols under
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
+5. Soft gates only; bar3 remains open (gj_bar3_ready_33700 == 0).
+
+Manual run
+----------
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_33700 \
+  user/libcgj/tests/cgj_soft_milestone_33700.c -ldl
+./build/cgj_soft_milestone_33700
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M33700_DIRECT \
+  -o build/cgj_soft_milestone_33700_direct \
+  user/libcgj/tests/cgj_soft_milestone_33700.c \
+  user/libcgj/src/graph_batch33691.c \
+  user/libcgj/src/graph_batch33692.c \
+  user/libcgj/src/graph_batch33693.c \
+  user/libcgj/src/graph_batch33694.c \
+  user/libcgj/src/graph_batch33695.c \
+  user/libcgj/src/graph_batch33696.c \
+  user/libcgj/src/graph_batch33697.c \
+  user/libcgj/src/graph_batch33698.c \
+  user/libcgj/src/graph_batch33699.c \
+  user/libcgj/src/graph_batch33700.c
+./build/cgj_soft_milestone_33700_direct

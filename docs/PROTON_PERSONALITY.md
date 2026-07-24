@@ -9,7 +9,7 @@
 | **Doc precedence** | **Proton overrides Apple-channel** on conflict (§0.1) — still **below** project law & security core |
 | **Priorities** | Still **Security → Performance → Portability → Readability** — games do not reorder ranks |
 | **Not** | SteamOS distro port · importing GPL · loading Linux `.ko` · ambient root for anti-cheat |
-| **Honesty** | **2026-07-23 Wave 40** — soft PE / Proton path ≠ bar3 (§10–§11 historical · §12); continuum toward **18200** soft only; lamps **0**; **no title PASS**; **no bar3 claim** |
+| **Honesty** | **2026-07-23 Wave 41** — soft PE / Proton path ≠ bar3 (§10–§11 historical · §12); continuum toward **18300** soft only; lamps **0**; **no title PASS**; **no bar3 claim** |
 | **Companion** | [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) · [GREENJADE_KERNEL_SPEC.md](GREENJADE_KERNEL_SPEC.md) · [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
 **Acceptance trail:** v1.4 Deck Top 50 · v1.5 clean-room Linux ABI OK · **v1.6** re-applies Proton + Deck Top 50 as the focused product path under that license rule.
@@ -18,7 +18,7 @@
 
 **Soft stamp (Wave 13, historical):** same soft PE / Proton bound restated — greppable PE32 / WoW64 / `libprotonrt` / `protonrt-user` / A0–A1 smokes remain **soft PE/Proton path only**. Soft PE / Proton path **≠ bar3**. **No title PASS.** **No bar3 claim.** See §11.
 
-**Soft stamp (Wave 40):** soft PE / Proton path **≠ bar3** restated. Soft continuum high-water **advancing toward 18200** (honest scan may still be **makefile_max=18100**) is **not** a title try and **not** product complete. Product lamps remain **0**. Matrix **NOT-TRIED × 50**. **No title PASS.** **No bar3 claim.** See §12.
+**Soft stamp (Wave 41):** soft PE / Proton path **≠ bar3** restated. Soft continuum high-water **advancing toward 18300** (honest scan may still be **makefile_max=18200**) is **not** a title try and **not** product complete. Product lamps remain **0**. Matrix **NOT-TRIED × 50**. **No title PASS.** **No bar3 claim.** See §12.
 
 ---
 
@@ -277,7 +277,7 @@ In-tree path when landed: `user/libprotonrt/`.
 | vs SteamOS | Distro port out; ABI compatibility in |
 | Anti-cheat | Userspace/GJ agent + PASS-OFFLINE; no `.ko` |
 | Critical path | A0→A1 from M2, not deferred forever |
-| Soft PE / Proton path | **≠ bar3** — greppable smokes only; matrix stays **NOT-TRIED** (§10–§11 historical · §12 Wave 40) |
+| Soft PE / Proton path | **≠ bar3** — greppable smokes only; matrix stays **NOT-TRIED** (§10–§11 historical · §12 Wave 41) |
 
 ---
 
@@ -415,19 +415,19 @@ In-tree path when landed: `user/libprotonrt/`.
 
 
 
-## 12. Honesty refresh — soft PE / Proton path ≠ bar3 (Wave 40 · 2026-07-23)
+## 12. Honesty refresh — soft PE / Proton path ≠ bar3 (Wave 41 · 2026-07-23)
 
-**Additive only (Wave 40 exclusive for this file).** Product facts (§0), precedence (§0.1), architecture (§§1–8), one-page summary (§9), and the Wave 10/13 honesty ledgers (§10–§11) stay **Accepted** / historical. This section is Wave 40 honesty only: reaffirm that greppable **soft PE / Proton** bring-up is **not** Steam **bar3**, that soft continuum toward **18200** does **not** move Deck Top 50 rows, and that product lamps remain **0**. It does **not** re-litigate architecture, license, §0.0 priorities, or invent title PASS.
+**Additive only (Wave 41 exclusive for this file).** Product facts (§0), precedence (§0.1), architecture (§§1–8), one-page summary (§9), and the Wave 10/13 honesty ledgers (§10–§11) stay **Accepted** / historical. This section is Wave 41 honesty only: reaffirm that greppable **soft PE / Proton** bring-up is **not** Steam **bar3**, that soft continuum toward **18300** does **not** move Deck Top 50 rows, and that product lamps remain **0**. It does **not** re-litigate architecture, license, §0.0 priorities, or invent title PASS.
 
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Soft PE / Proton path** | Partial / greppable PE32, WoW64, `libprotonrt`, personality door, A0–A1 kernel/userspace smokes — **bring-up honesty only** |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 18200**; honest scan may still report **makefile_max=18100** until parent wires |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire **advancing toward 18300**; honest scan may still report **makefile_max=18200** until parent wires |
 | **Product lamps** | Soft bar3-ready / product-score stubs remain **0** by design — **soft ≠ product complete** |
 | **Open (product)** | Real Steam **client** on DUT; out-of-tree Proton-class runtime against titles; matrix leave **NOT-TRIED** |
 | **bar3** | Steam **client** launch on real DUT + Deck Top 50 rows can leave `NOT-TRIED` — see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 
-**Hard stamp (Wave 40):** **soft PE / Proton path ≠ bar3.** Soft continuum toward **18200** ≠ bar3 and ≠ product complete. Greppable soft PE surfaces do **not** close bar3, launch the Steam client, or promote any matrix row off **NOT-TRIED**. Product lamps remain **0**.
+**Hard stamp (Wave 41):** **soft PE / Proton path ≠ bar3.** Soft continuum toward **18300** ≠ bar3 and ≠ product complete. Greppable soft PE surfaces do **not** close bar3, launch the Steam client, or promote any matrix row off **NOT-TRIED**. Product lamps remain **0**.
 
 ### 12.1 Soft PE / Proton path still does not close bar3
 
@@ -435,35 +435,35 @@ In-tree path when landed: `user/libprotonrt/`.
 |----------------------------|------------------------------|-----------------------|--------------|-------------------------------|
 | `pe32: * PASS` / `wow64: *` / `libprotonrt` / `protonrt-user` / A0–A1 soft smokes | Soft only | **No** | **No** | **No** |
 | Host Steam media inventory **READY** (`steam-bar3-check`) | **No** | **No** | **No** | **No** |
-| Continuum high-water **toward 18200** (scan may still be **18100**) | **No** | **No** | **No** | **No** |
+| Continuum high-water **toward 18300** (scan may still be **18200**) | **No** | **No** | **No** | **No** |
 | Product lamps **0** | **No** | **No** | **No** | **No** |
 | Kernel smokes (io_uring min, 768G soak, aarch64 M0, hybrid ABI) | **No** | **No** | **No** | **No** |
 | This document **Accepted** (v1.6) + Wave 10/13/15 honesty | Decisions / honesty only | Decisions / honesty only | **No** | **No** |
 
-**Hard rule (Wave 40):** never promote greppable soft PE smokes, media `STATUS=READY`, continuum soft gates (toward **18200** or prior tip **18100**), product lamps, or design **Accepted** alone to “bar3 closed,” “Steam client runs,” “Proton titles work,” product complete, or any Deck Top 50 row off **NOT-TRIED**.
+**Hard rule (Wave 41):** never promote greppable soft PE smokes, media `STATUS=READY`, continuum soft gates (toward **18300** or prior tip **18200**), product lamps, or design **Accepted** alone to “bar3 closed,” “Steam client runs,” “Proton titles work,” product complete, or any Deck Top 50 row off **NOT-TRIED**.
 
-**Wave 40 formula:** **soft PE / Proton path ≠ bar3.** Soft continuum ≠ product complete. Product lamps **0**. Matrix **NOT-TRIED × 50**.
+**Wave 41 formula:** **soft PE / Proton path ≠ bar3.** Soft continuum ≠ product complete. Product lamps **0**. Matrix **NOT-TRIED × 50**.
 
-### 12.2 Explicit non-claims (Wave 40)
+### 12.2 Explicit non-claims (Wave 41)
 
 | Claim | Allowed? |
 |-------|----------|
 | “Proton personality v1.6 **Accepted**” | **Yes** — this document §§0–9 |
 | “Soft PE / WoW64 / libprotonrt / protonrt-user smokes greppable” | **Yes** — with soft bound |
-| “Continuum high-water advancing toward **18200** soft only (scan may still be 18100)” | **Yes** — soft only |
+| “Continuum high-water advancing toward **18300** soft only (scan may still be 18200)” | **Yes** — soft only |
 | “Soft PE / Proton path = bar3 closed” | **No** — **soft PE/Proton path ≠ bar3** |
 | “Product lamps lit / product complete from continuum or PE soft smokes” | **No** — lamps remain **0** |
 | “Steam client launched on GreenJade” | **No** — bar3 client path remains **OPEN** |
 | “Deck Top 50 titles tried / PASS from PE or A0–A1 soft smokes” | **No** — matrix stays **NOT-TRIED × 50** until real client + title runs |
 | “Media READY / continuum / hybrid ABI closes Proton product or bar3” | **No** |
-| “Wave 40 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
+| “Wave 41 honesty closes bar3 or any matrix row” | **No** — honesty refresh only |
 
-**Bar3 remains OPEN** (client + matrix). Soft PE / Proton path is real bring-up work and may unblock later A0→A1 engineering — it is **not** a bar3 or Top 50 claim. Wave 40 does **not** invent title PASS.
+**Bar3 remains OPEN** (client + matrix). Soft PE / Proton path is real bring-up work and may unblock later A0→A1 engineering — it is **not** a bar3 or Top 50 claim. Wave 41 does **not** invent title PASS.
 
 ### 12.3 Related honesty surfaces
 
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ client run ≠ Top-50  
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Wave 40 continuum toward 18200 soft stamp  
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) — Wave 41 continuum toward 18300 soft stamp  
 - [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — title rows (**NOT-TRIED**)  
 - §10–§11 above — Wave 10/13 historical soft PE / Proton ≠ bar3 ledgers  
 
@@ -472,4 +472,4 @@ In-tree path when landed: `user/libprotonrt/`.
 *Proton personality v1.6 **Accepted** — Deck Top 50 focus; clean-room Linux ABI grows with the matrix; no GPL; priorities unchanged.*  
 *Wave 10 honesty (§10, historical): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**.*  
 *Wave 13 honesty (§11, historical): **soft PE / Proton path ≠ bar3**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*  
-*Wave 40 honesty (§12): **soft PE / Proton path ≠ bar3**; continuum toward **18200** soft only (scan may still be **18100**); product lamps **0**; **soft ≠ product complete**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*
+*Wave 41 honesty (§12): **soft PE / Proton path ≠ bar3**; continuum toward **18300** soft only (scan may still be **18200**); product lamps **0**; **soft ≠ product complete**; matrix **NOT-TRIED × 50**; **bar3 remains OPEN**; **no title PASS**.*

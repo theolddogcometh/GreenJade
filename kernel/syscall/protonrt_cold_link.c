@@ -81,7 +81,7 @@ static u8  g_u8DeathSoftOnce;
 static struct gj_expose_soft_ent g_aExposeSoft[GJ_EXPOSE_SOFT_MAX];
 
 /* Wave 15 soft inventory stamp (file-local; never product gate). */
-#define GJ_PROTONRT_SOFT_WAVE 40u
+#define GJ_PROTONRT_SOFT_WAVE 41u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
 #define GJ_PROTONRT_SOFT_AREAS 63u
 
@@ -460,7 +460,7 @@ protonrt_soft_inventory_log(void)
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft note (Wave 20 deepen) */
-    kprintf("protonrt: soft note milestone=wave40 exclusive=1 "
+    kprintf("protonrt: soft note milestone=wave41 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
@@ -484,7 +484,7 @@ protonrt_soft_inventory_log(void)
             (unsigned)GJ_PROTONRT_SOFT_WAVE);
 
     /* Grep: protonrt: soft retmap — Wave 19 return-surface map */
-    kprintf("protonrt: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=40\n");
+    kprintf("protonrt: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=41\n");
 
     /* Grep: protonrt: soft deepen wave (Wave 24 stamp) */
     /*
@@ -1084,6 +1084,22 @@ kprintf("cold_link: soft retparapet exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retparapet stamp; Soft≠product)\n",
         (unsigned)GJ_PROTONRT_SOFT_WAVE);
+/*
+ * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cold_link: soft retravelin — Wave 41 return-travelin honesty */
+kprintf("cold_link: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retravelin honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_PROTONRT_SOFT_WAVE);
+/* Grep: cold_link: soft retditch — Wave 41 exclusive ditch stamp */
+kprintf("cold_link: soft retditch exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retditch stamp; Soft≠product)\n",
+        (unsigned)GJ_PROTONRT_SOFT_WAVE);
+
                             kprintf("cold_link: soft deepen wave=%u areas=%u logs=%llu enter=%llu "
             "(Wave 35 exclusive; cold link soft; not bar3)\n",
             (unsigned)GJ_PROTONRT_SOFT_WAVE,

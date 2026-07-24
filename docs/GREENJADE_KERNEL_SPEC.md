@@ -13,7 +13,7 @@
 | **Coding docs** | [IMPLEMENTATION.md](IMPLEMENTATION.md) · [TODO.md](TODO.md) |
 | **Priority order** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
 | **Product scope** | **General-purpose desktop**; adoption games = **Deck Top 50** (§0.5.2) |
-| **Honesty (Wave 40)** | Soft ship / continuum **toward 18200** ≠ product DoD / bar3; product lamps **0**; **no product claim** (§23) |
+| **Honesty (Wave 41)** | Soft ship / continuum **toward 18300** ≠ product DoD / bar3; product lamps **0**; **no product claim** (§23) |
 
 | **Firmware** | **UEFI** (primary); legacy BIOS only as best-effort if ever |
 | **Hardware bar** | **>1 TiB RAM**, **multi-CPU/SMP**, **SAS/SCSI** storage path |
@@ -836,43 +836,43 @@ No “must match Linux by importing Linux.”
 
 - **Live daemons:** `sessiond` / `netstackd` / `sshd` / `storaged` / `vfsd` / shell / `scsi_mid`
 - Residual **#UD** closed
-- Parallel soft waves: continuum high-water **advancing toward 18200** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **18100**) until the next decade is wired)
+- Parallel soft waves: continuum high-water **advancing toward 18300** (CREATE-ONLY soft graph / parent wire only — not client run; honest `makefile_max` is a Makefile scan and may still report prior tip (e.g. **18200**) until the next decade is wired)
 - Product lamps remain **0** by design (soft continuum ≠ product complete)
 - **bar3 still open** (Steam client / Deck Top 50 title runs; matrix NOT-TRIED × 50)
 
 ---
 
-## 23. Honesty bounds — soft ship ≠ product DoD / bar3 (Wave 40 · 2026-07-23)
+## 23. Honesty bounds — soft ship ≠ product DoD / bar3 (Wave 41 · 2026-07-23)
 
-**Additive only (Wave 40 exclusive for this file).** Project law (§0), product bars, architecture, and the rest of this sheet stay normative. This section is a Wave 40 honesty ledger only: greppable soft ship and continuum growth do **not** close product DoD or Steam **bar3**. It does **not** reorder §0.0, invent title PASS, or claim multi-server product complete.
+**Additive only (Wave 41 exclusive for this file).** Project law (§0), product bars, architecture, and the rest of this sheet stay normative. This section is a Wave 41 honesty ledger only: greppable soft ship and continuum growth do **not** close product DoD or Steam **bar3**. It does **not** reorder §0.0, invent title PASS, or claim multi-server product complete.
 
 | Term | Meaning on this document |
 |------|--------------------------|
 | **Soft ship** | Greppable kernel/media/continuum bring-up on tree — honesty only |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18200** soft only |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 18300** soft only |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **OPEN** |
 
 | Soft surface | What it is | What it is **not** |
 |--------------|------------|--------------------|
-| Continuum **toward 18200** | CREATE-ONLY soft graph high-water advance (parent wires) | Runtime ABI product; Steam client; matrix fill; product lamps lit |
+| Continuum **toward 18300** | CREATE-ONLY soft graph high-water advance (parent wires) | Runtime ABI product; Steam client; matrix fill; product lamps lit |
 | Live embeds / soft smokes | Bring-up / skeleton honesty | Full multi-server product DoD; bar3 closed |
 | Design freeze / this sheet | Normative law + architecture | Product complete; titles tried |
 
-**Hard stamp (Wave 40):** soft ship / continuum **toward 18200** ≠ product DoD ≠ bar3. Product lamps **0**. **Soft ≠ product complete.** Matrix stays **NOT-TRIED × 50**.
+**Hard stamp (Wave 41):** soft ship / continuum **toward 18300** ≠ product DoD ≠ bar3. Product lamps **0**. **Soft ≠ product complete.** Matrix stays **NOT-TRIED × 50**.
 
 **Hard rule:** never promote continuum soft gates, media READY, or design text alone to “bar3 closed,” Deck Top 50 `PASS`, product lamps > 0, or product DoD complete. Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md).
 
-### Explicit non-claims (Wave 40)
+### Explicit non-claims (Wave 41)
 
 | Claim | Allowed? |
 |-------|----------|
 | “Architecture / project law as stated in this sheet” | **Yes** — design law |
-| “Soft continuum high-water advancing toward **18200** (CREATE-ONLY)” | **Yes** — soft only |
+| “Soft continuum high-water advancing toward **18300** (CREATE-ONLY)” | **Yes** — soft only |
 | “Product lamps lit / product DoD closed from soft continuum” | **No** |
 | “bar3 closed / Deck Top 50 leave NOT-TRIED from this sheet alone” | **No** |
 
 ---
 
 *End of spec sheet v0.13 — design complete freeze; Deck Top 50; clean-room Linux ABI; no GPL source; priorities unchanged.*  
-*§23 Wave 40 honesty (2026-07-23): soft ship / continuum **toward 18200 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*
+*§23 Wave 41 honesty (2026-07-23): soft ship / continuum **toward 18300 soft only**; product lamps **0**; **soft ≠ product complete**; **bar3 remains OPEN**.*

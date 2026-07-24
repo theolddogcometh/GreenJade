@@ -10,7 +10,7 @@
  *
  * Soft string helper inventory (Wave 9 exclusive; Wave 20 deepen; greppable;
  * hot path clean):
- *   string: soft inventory helpers=14 groups=2 wave=40
+ *   string: soft inventory helpers=14 groups=2 wave=41
  *   string: soft mem memset memcpy memmove memcmp memchr
  *   string: soft str strlen strnlen strcmp strncmp strlcpy strlcat
  *            strchr strrchr strstr
@@ -26,7 +26,7 @@
  *   string: soft return …    (Wave 20 API return surfaces)
  *   string: soft retbound …  (Wave 20 return-bound honesty (kept))
  *   string: soft retseal …   (Wave 20 seal stamp (kept))
- *   string: soft deepen wave=40 areas=49 …
+ *   string: soft deepen wave=41 areas=51 …
  *
  * Call counts intentionally omitted: memset/memcpy/etc. stay freestanding
  * early-boot hot path with no counter traffic. Inventory is source + rodata
@@ -35,8 +35,8 @@
  */
 #include <gj/string.h>
 
-/* Wave 40 soft inventory stamp (file-local; never product gate). */
-#define STRING_SOFT_WAVE 40u
+/* Wave 41 soft inventory stamp (file-local; never product gate). */
+#define STRING_SOFT_WAVE 41u
 
 /*
  * Soft inventory area count (fixed greppable categories for deepen stamp):
@@ -46,9 +46,9 @@
  *   rettoken | retcrest | retvault | retbanner | retledger | retbeacon |
  *   retcipher | retflame | retprism | retforge | retshard | retcrown | retglyph | retscepter |
  *   retsigil | retemblem | retaegis | retmantle | retbulwark | retpanoply |
- *   retbastion | retcitadel | retredoubt | retkeep | retfortress | retpalace | rethold | retspire | retwall | retgate | retmoat | retower | retbarbican | retglacis | retcurtain | retparapet | deepen
+ *   retbastion | retcitadel | retredoubt | retkeep | retfortress | retpalace | rethold | retspire | retwall | retgate | retmoat | retower | retbarbican | retglacis | retcurtain | retparapet | retravelin | retditch | deepen
  */
-#define STRING_SOFT_AREAS 65u
+#define STRING_SOFT_AREAS 67u
 
 enum {
     STRING_SOFT_HELPERS = 14,
@@ -61,7 +61,7 @@ enum {
  * Grep: string: soft
  */
 static const char g_szStringSoftInventory[] =
-    "string: soft inventory helpers=14 groups=2 wave=40 "
+    "string: soft inventory helpers=14 groups=2 wave=41 "
     "mem=memset,memcpy,memmove,memcmp,memchr "
     "str=strlen,strnlen,strcmp,strncmp,strlcpy,strlcat,strchr,strrchr,strstr "
     "policy=freestanding,pure_c,no_heap,no_locale,no_io "
@@ -69,140 +69,140 @@ static const char g_szStringSoftInventory[] =
 
 static const char g_szStringSoftMem[] =
     "string: soft mem memset,memcpy,memmove,memcmp,memchr count=5 "
-    "group=mem wave=40";
+    "group=mem wave=41";
 
 static const char g_szStringSoftStr[] =
     "string: soft str strlen,strnlen,strcmp,strncmp,strlcpy,strlcat,"
-    "strchr,strrchr,strstr count=9 group=str wave=40";
+    "strchr,strrchr,strstr count=9 group=str wave=41";
 
 static const char g_szStringSoftGroups[] =
-    "string: soft groups mem=5 str=9 total=14 wave=40";
+    "string: soft groups mem=5 str=9 total=14 wave=41";
 
 static const char g_szStringSoftPolicy[] =
     "string: soft policy freestanding pure_c no_heap no_locale no_io "
-    "early_boot=1 counters=0 wave=40";
+    "early_boot=1 counters=0 wave=41";
 
 static const char g_szStringSoftCounts[] =
     "string: soft counts none hot_path=clean reason=early_boot "
-    "wave=40 (intentional; helpers stay cold of tallies)";
+    "wave=41 (intentional; helpers stay cold of tallies)";
 
 static const char g_szStringSoftPath[] =
     "string: soft path claim=freestanding mem=5 str=9 helpers=14 "
     "counts=none hot_path=clean no_heap=1 no_locale=1 no_io=1 "
-    "early_boot=1 wave=40 (soft inventory; not libc)";
+    "early_boot=1 wave=41 (soft inventory; not libc)";
 
 static const char g_szStringSoftDeepen[] =
-    "string: soft deepen wave=40 areas=49 helpers=14 mem=5 str=9 "
+    "string: soft deepen wave=41 areas=51 helpers=14 mem=5 str=9 "
     "return=1 retmap=1 retclass=1 retlane=1 retbound=1 retseal=1 retpulse=1 "
-    "retmark=1 retphase=1 retbadge=1 rettoken=1 retcrest=1 retvault=1 retbanner=1 retledger=1 retbeacon=1 retcipher=1 retflame=1 retprism=1 retforge=1 retshard=1 retcrown=1 retglyph=1 retscepter=1 retsigil=1 retemblem=1 retaegis=1 retmantle=1 retbulwark=1 retpanoply=1 retbastion=1 retcitadel=1 retredoubt=1 retkeep=1 retfortress=1 retpalace=1 rethold=1 retspire=1 retwall=1 retgate=1 retmoat=1 retower=1 retbarbican=1 retglacis=1 retcurtain=1 retparapet=1 "
-    "counts=none hot_path=clean (Wave 40 exclusive; soft only)";
+    "retmark=1 retphase=1 retbadge=1 rettoken=1 retcrest=1 retvault=1 retbanner=1 retledger=1 retbeacon=1 retcipher=1 retflame=1 retprism=1 retforge=1 retshard=1 retcrown=1 retglyph=1 retscepter=1 retsigil=1 retemblem=1 retaegis=1 retmantle=1 retbulwark=1 retpanoply=1 retbastion=1 retcitadel=1 retredoubt=1 retkeep=1 retfortress=1 retpalace=1 rethold=1 retspire=1 retwall=1 retgate=1 retmoat=1 retower=1 retbarbican=1 retglacis=1 retcurtain=1 retparapet=1 retravelin=1 retditch=1 "
+    "counts=none hot_path=clean (Wave 41 exclusive; soft only)";
 
 static const char g_szStringSoftHotPath[] =
-    "string: soft hot_path clean counters=0 early_boot=1 wave=40";
+    "string: soft hot_path clean counters=0 early_boot=1 wave=41";
 
 static const char g_szStringSoftCatalog[] =
     "string: soft catalog helpers=14 mem=5 str=9 areas=35 "
-    "idx=mem0..4,str0..8 hot_path=clean wave=40";
+    "idx=mem0..4,str0..8 hot_path=clean wave=41";
 
 static const char g_szStringSoftHonesty[] =
     "string: soft honesty freestanding=1 pure_c=1 no_heap=1 "
     "no_locale=1 no_io=1 counters=0 not_libc=1 soft_only=1 "
-    "wave=40 (soft inventory; not bar3)";
+    "wave=41 (soft inventory; not bar3)";
 
 static const char g_szStringSoftSurfaces[] =
     "string: soft surfaces count=26 "
     "names=inventory,mem,str,groups,policy,counts,path,catalog,"
-    "honesty,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,deepen wave=40";
+    "honesty,surfaces,note,return,retmap,retclass,retlane,retbound,retseal,retpulse,retmark,retphase,retbadge,rettoken,retcrest,retvault,retbanner,retledger,retbeacon,retcipher,retflame,retprism,retforge,retshard,retcrown,retglyph,retscepter,retsigil,retemblem,retaegis,retmantle,retbulwark,retpanoply,retbastion,retcitadel,retredoubt,retkeep,retfortress,retpalace,rethold,retspire,retwall,retgate,retmoat,retower,retbarbican,retglacis,retcurtain,retparapet,retravelin,retditch,deepen wave=41";
 
 static const char g_szStringSoftNote[] =
-    "string: soft note milestone=wave40 exclusive=1 "
-    "helpers=14 mem=5 str=9 hot_path=clean soft_only=1 wave=40";
+    "string: soft note milestone=wave41 exclusive=1 "
+    "helpers=14 mem=5 str=9 hot_path=clean soft_only=1 wave=41";
 
 static const char g_szStringSoftReturn[] =
     "string: soft return helpers=14 mem=5 str=9 counts=none "
-    "product_gate=0 hot_path=clean wave=40";
+    "product_gate=0 hot_path=clean wave=41";
 
 static const char g_szStringSoftRetmap[] =
-    "string: soft retmap mem=ptr|void str=size|cmp|chr product_gate=0 hot_path=clean wave=40";
+    "string: soft retmap mem=ptr|void str=size|cmp|chr product_gate=0 hot_path=clean wave=41";
 
 static const char g_szStringSoftRetclass[] =
     "string: soft retclass ok|fail|inval|nodev|busy|nomem "
-    "soft_only=1 product_gate=0 wave=40 "
+    "soft_only=1 product_gate=0 wave=41 "
     "(retclass taxonomy; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetlane[] =
     "string: soft retlane inv|selftest|rate|retcode|retmap|class "
-    "product_kernel=OPEN soft_ne_product=1 wave=40 "
+    "product_kernel=OPEN soft_ne_product=1 wave=41 "
     "(retlane catalog; Soft≠product)";
 
 static const char g_szStringSoftRetbound[] =
     "string: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retbound honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetseal[] =
     "string: soft retseal exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retseal stamp; Soft≠product)";
 
 static const char g_szStringSoftRetpulse[] =
     "string: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retpulse honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetmark[] =
     "string: soft retmark exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retmark stamp; Soft≠product)";
 
 static const char g_szStringSoftRetphase[] =
     "string: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retphase honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetbadge[] =
     "string: soft retbadge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retbadge stamp; Soft≠product)";
 
 static const char g_szStringSoftRettoken[] =
     "string: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(rettoken honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetcrest[] =
     "string: soft retcrest exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retcrest stamp; Soft≠product)";
 
 static const char g_szStringSoftRetvault[] =
     "string: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retvault honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetbanner[] =
     "string: soft retbanner exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retbanner stamp; Soft≠product)";
 
 static const char g_szStringSoftRetledger[] =
     "string: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retledger honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetbeacon[] =
     "string: soft retbeacon exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retbeacon stamp; Soft≠product)";
 
 static const char g_szStringSoftRetcipher[] =
     "string: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retcipher honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetflame[] =
     "string: soft retflame exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retflame stamp; Soft≠product)";
 
 /*
@@ -211,12 +211,12 @@ static const char g_szStringSoftRetflame[] =
  */
 static const char g_szStringSoftRetprism[] =
     "string: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retprism honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetforge[] =
     "string: soft retforge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retforge stamp; Soft≠product)";
 
 /*
@@ -225,12 +225,12 @@ static const char g_szStringSoftRetforge[] =
  */
 static const char g_szStringSoftRetshard[] =
     "string: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retshard honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetcrown[] =
     "string: soft retcrown exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retcrown stamp; Soft≠product)";
 
 /*
@@ -239,12 +239,12 @@ static const char g_szStringSoftRetcrown[] =
  */
 static const char g_szStringSoftRetglyph[] =
     "string: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retglyph honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetscepter[] =
     "string: soft retscepter exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retscepter stamp; Soft≠product)";
 
 /*
@@ -253,12 +253,12 @@ static const char g_szStringSoftRetscepter[] =
  */
 static const char g_szStringSoftRetsigil[] =
     "string: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retsigil honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetemblem[] =
     "string: soft retemblem exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retemblem stamp; Soft≠product)";
 
 /*
@@ -267,12 +267,12 @@ static const char g_szStringSoftRetemblem[] =
  */
 static const char g_szStringSoftRetaegis[] =
     "string: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retaegis honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetmantle[] =
     "string: soft retmantle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retmantle stamp; Soft≠product)";
 
 /*
@@ -281,12 +281,12 @@ static const char g_szStringSoftRetmantle[] =
  */
 static const char g_szStringSoftRetbulwark[] =
     "string: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retbulwark honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetpanoply[] =
     "string: soft retpanoply exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retpanoply stamp; Soft≠product)";
 
 /*
@@ -295,12 +295,12 @@ static const char g_szStringSoftRetpanoply[] =
  */
 static const char g_szStringSoftRetbastion[] =
     "string: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retbastion honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetcitadel[] =
     "string: soft retcitadel exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retcitadel stamp; Soft≠product)";
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
@@ -308,12 +308,12 @@ static const char g_szStringSoftRetcitadel[] =
  */
 static const char g_szStringSoftRetredoubt[] =
     "string: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retredoubt honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetkeep[] =
     "string: soft retkeep exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retkeep stamp; Soft≠product)";
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
@@ -321,12 +321,12 @@ static const char g_szStringSoftRetkeep[] =
  */
 static const char g_szStringSoftRetfortress[] =
     "string: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retfortress honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetpalace[] =
     "string: soft retpalace exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retpalace stamp; Soft≠product)";
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
@@ -334,12 +334,12 @@ static const char g_szStringSoftRetpalace[] =
  */
 static const char g_szStringSoftRethold[] =
     "string: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(rethold honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetspire[] =
     "string: soft retspire exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retspire stamp; Soft≠product)";
 
 /*
@@ -348,12 +348,12 @@ static const char g_szStringSoftRetspire[] =
  */
 static const char g_szStringSoftRetwall[] =
     "string: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retwall honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetgate[] =
     "string: soft retgate exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retgate stamp; Soft≠product)";
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
@@ -361,12 +361,12 @@ static const char g_szStringSoftRetgate[] =
  */
 static const char g_szStringSoftRetmoat[] =
     "string: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retmoat honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetower[] =
     "string: soft retower exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retower stamp; Soft≠product)";
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
@@ -374,12 +374,12 @@ static const char g_szStringSoftRetower[] =
  */
 static const char g_szStringSoftRetbarbican[] =
     "string: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retbarbican honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetglacis[] =
     "string: soft retglacis exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retglacis stamp; Soft≠product)";
 
 /*
@@ -388,13 +388,28 @@ static const char g_szStringSoftRetglacis[] =
  */
 static const char g_szStringSoftRetcurtain[] =
     "string: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
-    "never_blocks_m0=1 wave=40 "
+    "never_blocks_m0=1 wave=41 "
     "(retcurtain honesty; Soft≠product; not bar3)";
 
 static const char g_szStringSoftRetparapet[] =
     "string: soft retparapet exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=40 "
+    "product_kernel=OPEN bar3=0 wave=41 "
     "(retparapet stamp; Soft≠product)";
+/*
+ * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
+ * Soft rodata only — Soft≠product; not bar3.
+ */
+static const char g_szStringSoftRetravelin[] =
+    "string: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+    "never_blocks_m0=1 wave=41 "
+    "(retravelin honesty; Soft≠product; not bar3)";
+
+static const char g_szStringSoftRetditch[] =
+    "string: soft retditch exclusive=1 soft_ne_product=1 "
+    "product_kernel=OPEN bar3=0 wave=41 "
+    "(retditch stamp; Soft≠product)";
+
+
 
 
 
@@ -554,7 +569,7 @@ string_soft_path(void)
     return g_szStringSoftPath;
 }
 
-/* Cold: greppable "string: soft deepen wave=40 …" line. */
+/* Cold: greppable "string: soft deepen wave=41 …" line. */
 const char *
 string_soft_deepen(void)
 {
@@ -890,33 +905,47 @@ string_soft_retower(void)
     return g_szStringSoftRetower;
 }
 
-/* Cold: greppable "string: soft retbarbican …" line (Wave 40 exclusive). */
+/* Cold: greppable "string: soft retbarbican …" line (Wave 41 exclusive). */
 const char *
 string_soft_retbarbican(void)
 {
     return g_szStringSoftRetbarbican;
 }
 
-/* Cold: greppable "string: soft retglacis …" line (Wave 40 exclusive). */
+/* Cold: greppable "string: soft retglacis …" line (Wave 41 exclusive). */
 const char *
 string_soft_retglacis(void)
 {
     return g_szStringSoftRetglacis;
 }
 
-/* Cold: greppable "string: soft retcurtain …" line (Wave 40 exclusive). */
+/* Cold: greppable "string: soft retcurtain …" line (Wave 41 exclusive). */
 const char *
 string_soft_retcurtain(void)
 {
     return g_szStringSoftRetcurtain;
 }
 
-/* Cold: greppable "string: soft retparapet …" line (Wave 40 exclusive). */
+/* Cold: greppable "string: soft retparapet …" line (Wave 41 exclusive). */
 const char *
 string_soft_retparapet(void)
 {
     return g_szStringSoftRetparapet;
 }
+/* Cold: greppable "string: soft retravelin …" line (Wave 41 exclusive). */
+const char *
+string_soft_retravelin(void)
+{
+    return g_szStringSoftRetravelin;
+}
+
+/* Cold: greppable "string: soft retditch …" line (Wave 41 exclusive). */
+const char *
+string_soft_retditch(void)
+{
+    return g_szStringSoftRetditch;
+}
+
 
 
 /*
@@ -1191,4 +1220,4 @@ strstr(const char *szHay, const char *szNeedle)
     return NULL;
 }
 
-/* string: soft inventory end helpers=14 counts=none hot_path=clean wave=40 areas=25 */
+/* string: soft inventory end helpers=14 counts=none hot_path=clean wave=41 areas=25 */

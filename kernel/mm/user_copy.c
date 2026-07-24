@@ -28,7 +28,7 @@
  *   "user_copy: soft stats …"     aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   "user_copy: soft deepen …"    wave=40 stamp + area count
+ *   "user_copy: soft deepen …"    wave=41 stamp + area count
  *   "user_copy: soft lamps …"     SMAP/STAC readiness lamps
  *   "user_copy: soft window …"    Wave 15 user VA / max copy geometry
  *   "user_copy: soft surfaces …"  Wave 19 return-surface catalog
@@ -52,8 +52,8 @@
 #define GJ_USER_PTE_U   (1ull << 2)
 #define GJ_USER_PTE_COW (1ull << 9) /* software COW leaf (vmm PTE_COW) */
 
-/* Wave 40 soft inventory stamp (file-local; never product gate). */
-#define USER_COPY_SOFT_WAVE 40u
+/* Wave 41 soft inventory stamp (file-local; never product gate). */
+#define USER_COPY_SOFT_WAVE 41u
 
 /* Soft inventory greppable area count (honesty..OPEN; deepen excluded). */
 #define USER_COPY_SOFT_AREAS 62u
@@ -149,7 +149,7 @@ static void user_copy_soft_note_chunked(size_t cb, u64 u64Chunks);
  *   user_copy: soft stats      — aggregate rollup
  *   user_copy: soft return selftest — Wave 19 terminal return surface
  *   user_copy: soft retmap     — Wave 19 return-surface map
- *   user_copy: soft deepen     — wave=40 stamp + areas
+ *   user_copy: soft deepen     — wave=41 stamp + areas
  *   user_copy: soft lamps      — SMAP readiness lamps
  *   user_copy: soft surfaces   — Wave 19 return-surface catalog
  *   user_copy: soft return     — Wave 17 ok/fault/inval return taxonomy
@@ -864,6 +864,22 @@ kprintf("user_copy: soft retparapet exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retparapet stamp; Soft≠product)\n",
         (unsigned)USER_COPY_SOFT_WAVE);
+/*
+ * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: user_copy: soft retravelin — Wave 41 return-travelin honesty */
+kprintf("user_copy: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retravelin honesty; Soft≠product; not bar3)\n",
+        (unsigned)USER_COPY_SOFT_WAVE);
+/* Grep: user_copy: soft retditch — Wave 41 exclusive ditch stamp */
+kprintf("user_copy: soft retditch exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retditch stamp; Soft≠product)\n",
+        (unsigned)USER_COPY_SOFT_WAVE);
+
                             kprintf("user_copy: soft deepen wave=%u areas=%u logs=%llu "
             "catalog=%u smap=%llu surf=0x%x "
             "(Wave 35 exclusive; not product SEH; not bar3; soft≠product)\n",

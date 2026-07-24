@@ -56,7 +56,7 @@
 #define GJ_REVOKE_R2_SOFT_RETRY_MAX 3u
 
 /* Wave 20 deepen stamp (file-local; never hard-gates). */
-#define GJ_REVOKE_SOFT_WAVE 40u
+#define GJ_REVOKE_SOFT_WAVE 41u
 /* +return selftest|retmap over Wave 17 return rate|retcode */
 #define GJ_REVOKE_SOFT_AREAS 60u
 
@@ -759,6 +759,22 @@ kprintf("cap: revoke: soft retparapet exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retparapet stamp; Soft≠product)\n",
         (unsigned)GJ_REVOKE_SOFT_WAVE);
+/*
+ * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cap: revoke: soft retravelin — Wave 41 return-travelin honesty */
+kprintf("cap: revoke: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retravelin honesty; Soft≠product; not bar3)\n",
+        (unsigned)GJ_REVOKE_SOFT_WAVE);
+/* Grep: cap: revoke: soft retditch — Wave 41 exclusive ditch stamp */
+kprintf("cap: revoke: soft retditch exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retditch stamp; Soft≠product)\n",
+        (unsigned)GJ_REVOKE_SOFT_WAVE);
+
                             kprintf("cap: revoke soft deepen wave=%u areas=%u pending=%u "
             "spins_avoided=%u retries=%u slots_cleared=%u "
             "begin_ok=%u reclaim_ok=%u walk_pos=%u def_pos=%u "

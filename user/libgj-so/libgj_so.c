@@ -19,7 +19,7 @@
  *   gj_so_get_export — function return of current export (JUMP_SLOT target)
  *   gj_so_sysv_hash  — classic ELF SysV name hash (DT_HASH algorithm)
  *
- * Soft deepen surface (Wave 40 exclusive; extra dynsyms enrich DT_HASH
+ * Soft deepen surface (Wave 41 exclusive; extra dynsyms enrich DT_HASH
  * buckets/chains; never hard-fail; greppable markers below):
  *   greppable: GJ_SO_SOFT_EXPORT_CANON
  *   greppable: GJ_SO_SOFT_INIT_RESTORE
@@ -34,12 +34,12 @@
  *   greppable: GJ_SO_SOFT_DEEPEN
  *   greppable: GJ_SO_SOFT_PATH
  *   greppable: GJ_SO_SOFT_NOTE
- *   greppable: libgj-so: soft deepen wave=40
+ *   greppable: libgj-so: soft deepen wave=41
  * Soft batches live under src/ (unwired). Diagnostics only — not bar3.
  *
- * Soft inventory (Wave 40 exclusive deepen):
- *   libgj-so: soft inventory wave=40 surfaces=12 caps=0x1f stamp=SYSV
- *   libgj-so: soft deepen wave=40 areas=export,init,get,hash,stamp,caps,
+ * Soft inventory (Wave 41 exclusive deepen):
+ *   libgj-so: soft inventory wave=41 surfaces=12 caps=0x1f stamp=SYSV
+ *   libgj-so: soft deepen wave=41 areas=export,init,get,hash,stamp,caps,
  *              probe,touch,path,inventory,wave,note
  *   libgj-so: soft path hash=sysv soname=libgj-so.so.1 bar3=0
  */
@@ -60,7 +60,7 @@
 #define GJ_SO_SOFT_CAP_HASH     ((uint32_t)0x10u)
 #define GJ_SO_SOFT_CAP_MASK     ((uint32_t)0x1fu)
 
-/* Wave 40 soft inventory stamp (source greppable; not a smoke contract). */
+/* Wave 41 soft inventory stamp (source greppable; not a smoke contract). */
 #define GJ_SO_SOFT_WAVE         40u
 #define GJ_SO_SOFT_AREAS        12u
 #define GJ_SO_SOFT_SURFACES     12u
@@ -93,7 +93,7 @@ static volatile uint32_t g_u32SoftPathN;
  */
 static const char g_szSoSoftInventory[] =
     "libgj-so: soft inventory export=0x42 hash=sysv "
-    "stamp=SYSV caps=0x1f areas=12 wave=40 surfaces=12 "
+    "stamp=SYSV caps=0x1f areas=12 wave=41 surfaces=12 "
     "symbols=gj_so_export,gj_so_init,gj_so_get_export,gj_so_sysv_hash,"
     "gj_so_soft_stamp,gj_so_soft_caps,gj_so_soft_get,gj_so_soft_id,"
     "gj_so_soft_probe,gj_so_soft_touch,gj_so_soft_inventory,"
@@ -102,16 +102,16 @@ static const char g_szSoSoftInventory[] =
     "deepen=wave17 hot_path=clean multi_server=0 confine=0 bar3=0";
 
 /*
- * Wave 40 soft deepen stamp.
+ * Wave 41 soft deepen stamp.
  * Grep: libgj-so: soft deepen
- * greppable: GJ_SO_SOFT_DEEPEN / libgj-so: soft deepen wave=40
+ * greppable: GJ_SO_SOFT_DEEPEN / libgj-so: soft deepen wave=41
  */
 static const char g_szSoSoftDeepen[] =
-    "libgj-so: soft deepen wave=40 areas=12 "
+    "libgj-so: soft deepen wave=41 areas=12 "
     "export,init,get,hash,stamp,caps,probe,touch,path,inventory,wave,note "
     "product_export=0x42 soft_stamp=SYSV hot_path=clean "
     "multi_server=0 confine=0 bar3=0 "
-    "retcurtain=1 retparapet=1 continuum_toward=18200";
+    "retravelin=1 retditch=1 continuum_toward=18300";
 
 /*
  * Soft path honesty line.
@@ -124,16 +124,16 @@ static const char g_szSoSoftPath[] =
     "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
 /*
- * Soft honesty line (Wave 40 exclusive).
+ * Soft honesty line (Wave 41 exclusive).
  * Grep: libgj-so: soft honesty
- * Grep: libgj-so: soft retcurtain / retparapet (CREATE-ONLY soft ≠ product)
+ * Grep: libgj-so: soft retravelin / retditch (CREATE-ONLY soft ≠ product)
  */
 static const char g_szSoSoftHonesty[] =
     "libgj-so: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
-    "soft=1 product_kernel=OPEN wave=40 "
-    "retcurtain=1 retparapet=1 continuum_toward=18200 soft_ne_product=1";
+    "soft=1 product_kernel=OPEN wave=41 "
+    "retravelin=1 retditch=1 continuum_toward=18300 soft_ne_product=1";
 
-/* Soft area name catalog (Wave 40; cold only). */
+/* Soft area name catalog (Wave 41; cold only). */
 static const char *const g_apszSoSoftAreas[] = {
 	"export",
 	"init",
@@ -258,7 +258,7 @@ gj_so_soft_touch(void)
  * Cold soft inventory accessor — not used by any product resolve path.
  * Returns the greppable "libgj-so: soft …" product line (NUL-terminated).
  * Grep: libgj-so: soft inventory
- * greppable: libgj-so: soft deepen wave=40
+ * greppable: libgj-so: soft deepen wave=41
  */
 const char *
 gj_so_soft_inventory(void)
@@ -268,7 +268,7 @@ gj_so_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 40). Grep: libgj-so: soft deepen
+ * Cold soft deepen stamp (Wave 41). Grep: libgj-so: soft deepen
  */
 const char *
 gj_so_soft_deepen(void)
@@ -288,7 +288,7 @@ gj_so_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 40 exclusive). Grep: libgj-so: soft honesty
+ * Cold soft honesty line (Wave 41 exclusive). Grep: libgj-so: soft honesty
  */
 const char *
 gj_so_soft_honesty(void)
@@ -296,7 +296,7 @@ gj_so_soft_honesty(void)
 	return g_szSoSoftHonesty;
 }
 
-/* Cold soft inventory: Wave 40 stamp. Grep: libgj-so: soft wave= */
+/* Cold soft inventory: Wave 41 stamp. Grep: libgj-so: soft wave= */
 unsigned
 gj_so_soft_wave(void)
 {

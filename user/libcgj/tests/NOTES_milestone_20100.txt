@@ -1,0 +1,145 @@
+Notes — continuum milestone 20100 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_20100.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_20100.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch20091.c … graph_batch20100.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them.
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c                 static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
+  - cgj_soft_milestone_14500.c  prior decade soft probe
+  - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14700.c  prior decade soft probe
+  - cgj_soft_milestone_14800.c  prior decade soft probe
+  - cgj_soft_milestone_14900.c  prior decade soft probe
+  - cgj_soft_milestone_15000.c  prior decade soft probe
+  - cgj_soft_milestone_15100.c  prior decade soft probe
+  - cgj_soft_milestone_15200.c  prior decade soft probe
+  - cgj_soft_milestone_15300.c  prior decade soft probe
+  - cgj_soft_milestone_15400.c  prior decade soft probe
+  - cgj_soft_milestone_15500.c  prior decade soft probe
+  - cgj_soft_milestone_15600.c  prior decade soft probe
+  - cgj_soft_milestone_15700.c  prior decade soft probe
+  - cgj_soft_milestone_15800.c  prior decade soft probe
+  - cgj_soft_milestone_15900.c  prior decade soft probe
+  - cgj_soft_milestone_16000.c  prior decade soft probe
+  - cgj_soft_milestone_16100.c  prior decade soft probe
+  - cgj_soft_milestone_16200.c  prior decade soft probe
+  - cgj_soft_milestone_16300.c  prior decade soft probe
+  - cgj_soft_milestone_16400.c  prior decade soft probe
+  - cgj_soft_milestone_16500.c  prior decade soft probe
+  - cgj_soft_milestone_16600.c  prior decade soft probe
+  - cgj_soft_milestone_16700.c  prior decade soft probe
+  - cgj_soft_milestone_16800.c  prior decade soft probe
+  - cgj_soft_milestone_16900.c  prior decade soft probe
+  - cgj_soft_milestone_17000.c  prior decade soft probe
+  - cgj_soft_milestone_17100.c  prior decade soft probe
+  - cgj_soft_milestone_17200.c  prior decade soft probe
+  - cgj_soft_milestone_17300.c  prior decade soft probe
+  - cgj_soft_milestone_17400.c  prior decade soft probe
+  - cgj_soft_milestone_17500.c  prior decade soft probe
+  - cgj_soft_milestone_17600.c  prior decade soft probe
+  - cgj_soft_milestone_17700.c  prior decade soft probe
+  - cgj_soft_milestone_17800.c  prior decade soft probe
+  - cgj_soft_milestone_17900.c  prior decade soft probe
+  - cgj_soft_milestone_18000.c  prior decade soft probe
+  - cgj_soft_milestone_18100.c  prior decade soft probe
+  - cgj_soft_milestone_18200.c  prior decade soft probe
+  - cgj_soft_milestone_18300.c  prior decade soft probe
+  - cgj_soft_milestone_18400.c  prior decade soft probe
+  - cgj_soft_milestone_18500.c  prior decade soft probe
+  - cgj_soft_milestone_18600.c  prior decade soft probe
+  - cgj_soft_milestone_18700.c  prior decade soft probe
+  - cgj_soft_milestone_18800.c  prior decade soft probe
+  - cgj_soft_milestone_18900.c  prior decade soft probe
+  - cgj_soft_milestone_19000.c  prior decade soft probe
+  - cgj_soft_milestone_19100.c  prior decade soft probe
+  - cgj_soft_milestone_19200.c  prior decade soft probe
+  - cgj_soft_milestone_19300.c  prior decade soft probe
+  - cgj_soft_milestone_19400.c  prior decade soft probe
+  - cgj_soft_milestone_19500.c  prior decade soft probe
+  - cgj_soft_milestone_19600.c  prior decade soft probe
+  - cgj_soft_milestone_19700.c  prior decade soft probe
+  - cgj_soft_milestone_19800.c  prior decade soft probe
+  - cgj_soft_milestone_19900.c  prior decade soft probe
+  - cgj_soft_milestone_20000.c  prior decade soft probe
+
+New CREATE-ONLY soft host probe:
+  - cgj_soft_milestone_20100.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 20100 marker surfaces (batches 20091–20100)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_20100           1          graph_batch20091.c
+gj_libcgj_green_20100          1          graph_batch20092.c
+gj_bar3_ready_20100            0          graph_batch20093.c  (bar3 open)
+gj_product_score_20100         0          graph_batch20094.c  (score open)
+gj_continuum_ready_20100       1          graph_batch20095.c
+gj_smoke_soft_20100            1          graph_batch20096.c
+gj_dyn_soft_20100              1          graph_batch20097.c
+gj_milestone_tag_20100         20100      graph_batch20098.c
+gj_continuum_wave_20100        20100      graph_batch20099.c
+gj_batch_id_20100              20100      graph_batch20100.c
+gj_graph_milestone_20100       20100      graph_batch20100.c
+__libcgj_batch20NNN_marker     string     matching batch TU
+
+Fill continuum (batches 20076–20090, not soft-probed here)
+---------------------------------------------------------
+Each TU exports unique gj_batch_id_N plus a small unique soft unit
+helper (wave_fill / slot_a / … / anchor). Soft rule for this NOTES
+file remains decade markers 20091–20100 only.
+
+Identity continuum (batches 20051–20075, not soft-probed here)
+-------------------------------------------------------------
+Each TU exports unique gj_batch_id_N + gj_graph_milestone_N.
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. Wire graph_batch19951.c … graph_batch20100.c into CGJ_SRCS when
+   advancing makefile_max to 20100 (CREATE-ONLY wave lands first).
+2. libc.map may lag milestone 20100 globals; add 20100 symbols under
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
+5. Soft gates only; bar3 remains open (gj_bar3_ready_20100 == 0).
+
+Manual run
+----------
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_20100 \
+  user/libcgj/tests/cgj_soft_milestone_20100.c -ldl
+./build/cgj_soft_milestone_20100
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M20100_DIRECT \
+  -o build/cgj_soft_milestone_20100_direct \
+  user/libcgj/tests/cgj_soft_milestone_20100.c \
+  user/libcgj/src/graph_batch20091.c \
+  user/libcgj/src/graph_batch20092.c \
+  user/libcgj/src/graph_batch20093.c \
+  user/libcgj/src/graph_batch20094.c \
+  user/libcgj/src/graph_batch20095.c \
+  user/libcgj/src/graph_batch20096.c \
+  user/libcgj/src/graph_batch20097.c \
+  user/libcgj/src/graph_batch20098.c \
+  user/libcgj/src/graph_batch20099.c \
+  user/libcgj/src/graph_batch20100.c
+./build/cgj_soft_milestone_20100_direct

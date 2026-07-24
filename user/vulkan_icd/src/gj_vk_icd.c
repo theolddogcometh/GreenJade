@@ -6,7 +6,7 @@
  * With GJ_VK_KERNEL_SMOKE: linked into the kernel (virtio-gpu + PMM).
  * Without it: stubs return failure so host builds only need vulkan_icd.c.
  *
- * Soft inventory (Wave 77 exclusive deepen; greppable; not bar3 GPU):
+ * Soft inventory (Wave 78 exclusive deepen; greppable; not bar3 GPU):
  *   gj_vk_icd: soft inventory wave=70 surfaces=16 pools=inst,dev,sc
  *   gj_vk_icd: soft deepen wave=70 areas=display,present,instance,device,
  *              swapchain,acquire,pixels,features,name,host,path,counts,note,area
@@ -20,10 +20,10 @@
 #define GJ_VK_DEV_MAGIC  0x44564a47u /* 'GJVD' */
 #define GJ_VK_SC_MAGIC   0x53564a47u /* 'GJVS' */
 
-/* Wave 77 exclusive soft inventory stamp. */
-/* Wave 77 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retspireangle continuum_toward=21900 soft_ne_product=1
- *   greppable: soft retholdangle exclusive=1 continuum_toward=21900
+/* Wave 78 exclusive soft inventory stamp. */
+/* Wave 78 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retpalaceangle continuum_toward=22000 soft_ne_product=1
+ *   greppable: soft retfortressangle exclusive=1 continuum_toward=22000
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -474,7 +474,7 @@ gj_vk_image_pixels(gj_vk_swapchain_t pSc, uint32_t u32Index)
 #endif /* GJ_VK_KERNEL_SMOKE */
 
 /*
- * Soft inventory blob (Wave 77). Shared host-stub + kernel smoke.
+ * Soft inventory blob (Wave 78). Shared host-stub + kernel smoke.
  * Grep: gj_vk_icd: soft inventory
  */
 static const char g_szGjVkIcdSoftInventory[] =
@@ -514,7 +514,7 @@ static const char g_szGjVkIcdSoftHonesty[] =
     "gj_vk_icd: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70";
 
-/* Soft area name catalog (Wave 77; cold only). */
+/* Soft area name catalog (Wave 78; cold only). */
 static const char *const g_apszGjVkIcdSoftAreas[] = {
     "display",
     "present",
@@ -573,7 +573,7 @@ gj_vk_icd_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 77 exclusive). Grep: gj_vk_icd: soft honesty
+ * Cold soft honesty line (Wave 78 exclusive). Grep: gj_vk_icd: soft honesty
  */
 const char *
 gj_vk_icd_soft_honesty(void)

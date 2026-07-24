@@ -5,7 +5,7 @@
 | **Document** | Remaining decisions v1.2 |
 | **Status** | **Accepted** — Solaris-first judgment under GreenJade law |
 | **Persona** | “What would a Sun kernel engineer ship?” |
-| **Honesty** | **2026-07-24 Wave 77** — remaining (design→code) vs soft ship (19); continuum **toward 21900** soft only; product lamps **0**; **no bar3 claim** |
+| **Honesty** | **2026-07-24 Wave 78** — remaining (design→code) vs soft ship (19); continuum **toward 22000** soft only; product lamps **0**; **no bar3 claim** |
 | **Companion** | [CAP_ADDRESSING.md](CAP_ADDRESSING.md) · [SECURITY_CORE_DESIGN.md](SECURITY_CORE_DESIGN.md) · [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) |
 
 GreenJade law still wins: caps, security-first, pure C, dual MIT/Apache, no GPL, no ambient root.  
@@ -15,7 +15,7 @@ Where Solaris had no caps, we keep **L4/seL4 mechanics** but **Solaris ergonomic
 
 **Soft stamp (Wave 8, historical):** parallel continuum / kernel / media soft gates on tree do **not** close this channel’s remaining implementation work, and do **not** close Steam **bar3**.
 
-**Soft stamp (Wave 77):** same remaining-vs-soft bound restated under Wave 77 exclusive ownership of this file’s honesty ledger. Continuum high-water **advancing toward 21900** soft only. Product lamps remain **0**. Soft ship ≠ remaining closed ≠ bar3. See 19.
+**Soft stamp (Wave 78):** same remaining-vs-soft bound restated under Wave 78 exclusive ownership of this file’s honesty ledger. Continuum high-water **advancing toward 22000** soft only. Product lamps remain **0**. Soft ship ≠ remaining closed ≠ bar3. See 19.
 
 ---
 
@@ -395,16 +395,16 @@ Not derived from child’s root meta (kernel ops only). Parent `wait`/`kill` use
 
 ---
 
-## 19. Honesty refresh — remaining vs soft (Wave 77 · 2026-07-24)
+## 19. Honesty refresh — remaining vs soft (Wave 78 · 2026-07-24)
 
-**Additive only (Wave 77 exclusive for this file).** Design decisions in 1–18 stay **Accepted**. This section is a Wave 77 honesty ledger: what is still **remaining** to implement to product strength vs what is only **soft** on the tree. It does **not** re-litigate architecture. Wave 77 19 ledger text is superseded here as the same honesty formula under Wave 77 exclusive ownership of this file.
+**Additive only (Wave 78 exclusive for this file).** Design decisions in 1–18 stay **Accepted**. This section is a Wave 78 honesty ledger: what is still **remaining** to implement to product strength vs what is only **soft** on the tree. It does **not** re-litigate architecture. Wave 78 19 ledger text is superseded here as the same honesty formula under Wave 78 exclusive ownership of this file.
 
 | Term | Meaning in this document |
 |------|--------------------------|
 | **Accepted** | Design frozen for Solaris channel — ship toward these rules |
 | **Soft** | Partial / greppable / bring-up path exists; not full product close of the decision |
 | **Remaining** | Decision accepted; code/product path still open or incomplete |
-| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 21900** soft only |
+| **Soft continuum** | CREATE-ONLY libcgj graph parent wire; high-water **advancing toward 22000** soft only |
 | **Product lamps** | Soft score / bar3-ready continuum stubs — remain **0** by design |
 | **bar3** | Steam **client** on DUT + Deck Top 50 leave `NOT-TRIED` — **out of scope to claim here** |
 
@@ -412,15 +412,15 @@ Not derived from child’s root meta (kernel ops only). Parent `wait`/`kill` use
 
 | Soft surface (parallel waves / host) | Closes Solaris remaining? | Closes bar3? |
 |--------------------------------------|---------------------------|--------------|
-| Continuum high-water **toward 21900** CREATE-ONLY graph decades | **No** | **No** |
+| Continuum high-water **toward 22000** CREATE-ONLY graph decades | **No** | **No** |
 | Host Steam media inventory **READY** (`steam-bar3-check`) | **No** | **No** |
 | Kernel smokes (doors timeout/peer, cap mint/CDT soft, io_uring min, HDA multi-stream, 768G soak, aarch64 M0) | **No** (may soft-touch related surfaces) | **No** |
 | Live embeds (sessiond / netstackd / sshd / storaged / vfsd / shell / scsi_mid / hda_client) | **No** (product skeleton ≠ full 1–18) | **No** |
 | Design freeze in this file | Decisions only | **No** |
 
-**Hard rule:** never claim bar3 closed, Deck Top 50 title PASS, product lamps > 0, or “Solaris remaining done” from continuum soft gates (toward **21900**), media `STATUS=READY`, or design **Accepted** alone. **Soft ≠ product complete.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this channel does not promote those rows.
+**Hard rule:** never claim bar3 closed, Deck Top 50 title PASS, product lamps > 0, or “Solaris remaining done” from continuum soft gates (toward **22000**), media `STATUS=READY`, or design **Accepted** alone. **Soft ≠ product complete.** Matrix honesty lives in [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) / [matrix/deck-top50-2026-07-19.md](../matrix/deck-top50-2026-07-19.md) — this channel does not promote those rows.
 
-**Hard stamp (Wave 77):** soft ship **≠** Solaris remaining closed **≠** bar3. Soft continuum **toward 21900** is CREATE-ONLY parent wire only. Product lamps **0**. **No bar3 claim.**
+**Hard stamp (Wave 78):** soft ship **≠** Solaris remaining closed **≠** bar3. Soft continuum **toward 22000** is CREATE-ONLY parent wire only. Product lamps **0**. **No bar3 claim.**
 
 ### 19.2 Per-decision ledger (design Accepted → ship honesty)
 
@@ -443,28 +443,28 @@ Not derived from child’s root meta (kernel ops only). Parent `wait`/`kill` use
 | **16** Spawn PROCESS cap | Kernel mint task port | Parent PROCESS mint on spawn live | Rights matrix + self-port rules fully per Apple 3 |
 | **17–18** Avoid / order | Sun pragmatism | Implementation order partially started (process/CNode/doors/virtio soft) | Finish order without ambient fork, permanent pager map-any, or STREAMS |
 
-### 19.3 Explicit non-claims (Wave 77)
+### 19.3 Explicit non-claims (Wave 78)
 
 | Claim | Allowed? |
 |-------|----------|
 | “Solaris channel design **Accepted**” | **Yes** — this document |
 | “Soft CDT / doors / IOMMU / fault policy greppable” | **Yes** — with soft bound |
-| “Soft continuum high-water advancing toward **21900** (CREATE-ONLY)” | **Yes** — soft only |
+| “Soft continuum high-water advancing toward **22000** (CREATE-ONLY)” | **Yes** — soft only |
 | “All 1–18 product-complete” | **No** |
-| “Continuum toward 21900 closes Solaris remaining” | **No** |
+| “Continuum toward 22000 closes Solaris remaining” | **No** |
 | “Product lamps lit / product complete from soft continuum” | **No** — lamps remain **0** |
 | “Media READY / soft smokes close bar3” | **No** |
 | “Deck Top 50 titles tried / PASS from this doc” | **No** — matrix stays **NOT-TRIED** until real client runs |
-| “Wave 77 honesty closes remaining or bar3” | **No** — honesty refresh only |
+| “Wave 78 honesty closes remaining or bar3” | **No** — honesty refresh only |
 
-**Bar3 remains OPEN** (client + matrix). This Wave 77 edit is honesty-only on the Solaris remaining ledger: soft ship ≠ remaining closed; continuum **toward 21900 soft only**; product lamps **0**.
+**Bar3 remains OPEN** (client + matrix). This Wave 78 edit is honesty-only on the Solaris remaining ledger: soft ship ≠ remaining closed; continuum **toward 22000 soft only**; product lamps **0**.
 
 ### 19.4 Related honesty surfaces
 
 - [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) — bar3 OPEN; READY ≠ NOT-TRIED  
 - [TODO.md](TODO.md) — coding boxes (M2 CDT try-lock, set_pager full path, fault→pager Call, cap transfer, PI)  
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) · [HCL.md](HCL.md) — parallel soft stamp; continuum toward 21900; open bars  
+- [IMPLEMENTATION.md](IMPLEMENTATION.md) · [HCL.md](HCL.md) — parallel soft stamp; continuum toward 22000; open bars  
 - [X86_64_INTEL_PLATFORM.md](X86_64_INTEL_PLATFORM.md) 14 — soft IOMMU/platform ≠ product  
 - [APPLE_CHANNEL_REMAINING.md](APPLE_CHANNEL_REMAINING.md) 20 — soft shipped vs remaining open  
 
-*Wave 77 channel Solaris: keep Accepted decisions; ship remaining product paths; never promote soft continuum **toward 21900** or media READY to bar3 or “remaining closed.” Product lamps **0**. **Soft ≠ product complete**.*
+*Wave 78 channel Solaris: keep Accepted decisions; ship remaining product paths; never promote soft continuum **toward 22000** or media READY to bar3 or “remaining closed.” Product lamps **0**. **Soft ≠ product complete**.*

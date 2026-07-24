@@ -17,7 +17,7 @@
  * Soft only; decls also in include/gj_so.h. Marker values match
  * GJ_SO_BATCH2_EXPORT_A_VALUE (0x422) / _B_VALUE (0x423) there.
  *
- * Soft surface (unwired; Wave 77 exclusive deepen):
+ * Soft surface (unwired; Wave 78 exclusive deepen):
  *   gj_so_batch2_export_a / _b — distinct data markers (0x422 / 0x423)
  *   gj_so_batch2_soft_stamp    — soft companion stamp ('B2s2')
  *   gj_so_batch2_init          — restores both markers + stamp
@@ -26,7 +26,7 @@
  *   gj_so_batch2_chain_find    — soft linear chain probe by name hash slot
  *   gj_so_batch2_soft_get      — soft XOR id (read-only)
  *   gj_so_batch2_soft_probe    — soft check + careful restore
- *   gj_so_batch2_soft_wave     — Wave 77 stamp (40)
+ *   gj_so_batch2_soft_wave     — Wave 78 stamp (40)
  *   gj_so_batch2_soft_inventory — greppable cold inventory line
  *
  * greppable: GJ_SO_BATCH2_SOFT_MARKER
@@ -153,7 +153,7 @@ gj_so_batch2_soft_probe(void)
 	return 1;
 }
 
-/* Cold soft inventory: Wave 77 stamp. Grep: libgj-so: soft batch2 wave= */
+/* Cold soft inventory: Wave 78 stamp. Grep: libgj-so: soft batch2 wave= */
 unsigned
 gj_so_batch2_soft_wave(void)
 {

@@ -31,7 +31,7 @@
 #include <gj/string.h>
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define COOP_SOFT_WAVE 122u
+#define COOP_SOFT_WAVE 123u
 
 struct gj_coop_thr {
     u8  u8State;
@@ -1312,6 +1312,10 @@ kprintf("coop: soft retpacketangle exclusive=1 soft_ne_product=1 product_kernel=
 kprintf("coop: soft retframeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=122 (retframeangle honesty; Soft≠product; not bar3)\n");
 /* Grep: coop: soft retwindowangle — Wave 122 exclusive windowangle stamp */
 kprintf("coop: soft retwindowangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=122 (retwindowangle stamp; Soft≠product)\n");
+/* Grep: coop: soft retlayerangle — Wave 123 return-layerangle honesty */
+kprintf("coop: soft retlayerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=123 (retlayerangle honesty; Soft≠product; not bar3)\n");
+/* Grep: coop: soft retcanvasangle — Wave 123 exclusive canvasangle stamp */
+kprintf("coop: soft retcanvasangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=123 (retcanvasangle stamp; Soft≠product)\n");
                             kprintf("coop: soft deepen wave=%u areas=%u max_thr=%u stack=%u "
             "logs=%u surf=0x%x\n",
             (unsigned)COOP_SOFT_WAVE, cAreas,

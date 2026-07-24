@@ -9,7 +9,7 @@
  * soft underrun + mono + reclaim + reject + bits8 + idle + closed +
  * zerotick). Soft steps never hard-fail the live path.
  *
- * Soft inventory (Wave 122 exclusive deepen):
+ * Soft inventory (Wave 123 exclusive deepen):
  *   - Cumulative soft sub-step ok/skip; door open/write/start/tick/stats
  *   - Soft played-byte sum; underrun / reject / mono / reclaim lamps
  *   - Per-step lamps (multi/partial/…/bits8/idle/closed/zerotick)
@@ -127,7 +127,7 @@
 #define HDA_SOFT_BITS8_BYTES  (HDA_SOFT_BITS8_FRAMES * HDA_BITS8_BYTES_PER_FRAME)
 
 /*
- * Wave stamp + inventory area count (Wave 122 exclusive deepen).
+ * Wave stamp + inventory area count (Wave 123 exclusive deepen).
  * Areas: suite door played inventory steps miss last deepen path
  *        ops first peak format ratio honesty
  */
@@ -135,9 +135,9 @@
 #define HDA_SOFT_AREAS  15u
 
 /* Soft suite sub-step bits (Wave 111 greppable steps line). */
-/* Wave 122 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retframeangle continuum_toward=26400 soft_ne_product=1 wave=122
- *   greppable: soft retwindowangle exclusive=1 continuum_toward=26400 soft_ne_product=1 wave=122
+/* Wave 123 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retlayerangle continuum_toward=26500 soft_ne_product=1 wave=123
+ *   greppable: soft retcanvasangle exclusive=1 continuum_toward=26500 soft_ne_product=1 wave=123
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -162,7 +162,7 @@ enum {
 };
 
 /*
- * Soft product inventory (Wave 122 exclusive deepen). Cumulative for this
+ * Soft product inventory (Wave 123 exclusive deepen). Cumulative for this
  * process. greppable: hda_client: soft … / hda-gj: soft …
  * Never hard-gates live path.
  */
@@ -458,7 +458,7 @@ soft_note_step(int fOk)
 }
 
 /*
- * Greppable soft inventory (Wave 122 exclusive deepen).
+ * Greppable soft inventory (Wave 123 exclusive deepen).
  * Twin prefixes for product/agent greps:
  *   hda_client: soft suite|door|played|inventory|steps|miss|last|first|
  *               peak|ops|format|ratio|deepen|path|honesty …
@@ -1641,7 +1641,7 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 122 exclusive soft door deepen. */
+    /* Wave 123 exclusive soft door deepen. */
     fStep = soft_bits8_format();
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
@@ -1658,7 +1658,7 @@ soft_suite(void)
     soft_note_step(fStep);
     cOk += (unsigned)fStep;
 
-    /* Wave 122 soft inventory — greppable hda_client: soft / hda-gj: soft. */
+    /* Wave 123 soft inventory — greppable hda_client: soft / hda-gj: soft. */
     soft_inventory_log();
 
     if (cOk > 0u) {

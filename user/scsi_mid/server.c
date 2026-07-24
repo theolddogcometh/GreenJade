@@ -10,11 +10,11 @@
  * Arms the userspace soft LUN and walks a mid-policy sequence:
  *   soft_init → TUR → INQUIRY → READ_CAP → WRITE10/READ10 verify →
  *   illegal LUN sense → REQUEST SENSE → SYNC → deepen probes →
- *   soft inventory (Wave 54) → stats
+ *   soft inventory (Wave 55) → stats
  *
- * Soft inventory (Wave 54 exclusive deepen — greppable):
+ * Soft inventory (Wave 55 exclusive deepen — greppable):
  *   scsi_mid-server: soft inventory …
- *   scsi_mid-server: soft deepen wave=54 …
+ *   scsi_mid-server: soft deepen wave=55 …
  *   scsi_mid: soft …              (via scsi_mid_soft_inventory_log)
  * Soft LUN honesty remains soft; product door INQUIRY path is separate
  * (host has no door — soft INQUIRY only).
@@ -30,10 +30,10 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Wave 54 soft inventory surface from cdb.c (no public header change). */
-/* Wave 54 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retcaponier continuum_toward=19600 soft_ne_product=1
- *   greppable: soft retredan exclusive=1 continuum_toward=19600
+/* Wave 55 soft inventory surface from cdb.c (no public header change). */
+/* Wave 55 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retflank continuum_toward=19700 soft_ne_product=1
+ *   greppable: soft retface exclusive=1 continuum_toward=19700
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -209,7 +209,7 @@ main(void)
     }
 
     /*
-     * Wave 54 deepen probes (always soft for inventory; hard fail host smoke
+     * Wave 55 deepen probes (always soft for inventory; hard fail host smoke
      * only if core mid already failed — deepen misses stay soft-skip).
      */
     /* Multi-block WRITE10/READ10 at LBA 4, 2 blocks. */
@@ -285,7 +285,7 @@ main(void)
         fFail = 1;
     }
 
-    /* Wave 54 soft inventory — library + host skeleton surfaces. */
+    /* Wave 55 soft inventory — library + host skeleton surfaces. */
     scsi_mid_soft_inventory_log();
 
     /* Grep: scsi_mid-server: soft inventory */
@@ -308,7 +308,7 @@ main(void)
            "(soft inventory; not bar3)\n",
            (unsigned)SOFT_HOST_WAVE);
 
-    /* Grep: scsi_mid-server: soft honesty (Wave 54 exclusive deepen) */
+    /* Grep: scsi_mid-server: soft honesty (Wave 55 exclusive deepen) */
     printf("scsi_mid-server: soft honesty multi_server=0 confine=0 bar3=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
            (unsigned)SOFT_HOST_WAVE);

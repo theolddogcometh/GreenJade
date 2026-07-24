@@ -58,7 +58,7 @@
  * bits remain, and SPI capacity covers UART/virtio0 INTIDs.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 36 exclusive; this unit only)
+ * Soft inventory deepen (Wave 37 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: gic soft …" under fixed areas:
  *   inventory | dist | cpuif | spi | ppi | iar | gates | path | deepen
@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 36 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 36u
-#define GIC_SOFT_AREAS 46u
+/* Wave 37 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 37u
+#define GIC_SOFT_AREAS 48u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -940,6 +940,21 @@ aarch64_uart_puts("aarch64: gic: soft retspire exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retspire stamp; Soft!=product)\n");
+/*
+ * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retwall — Wave 37 return-wall honesty */
+aarch64_uart_puts("aarch64: gic: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retwall honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft retgate — Wave 37 exclusive gate stamp */
+aarch64_uart_puts("aarch64: gic: soft retgate exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retgate stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

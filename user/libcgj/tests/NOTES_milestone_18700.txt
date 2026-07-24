@@ -1,0 +1,125 @@
+Notes — continuum milestone 18700 soft host gates
+=================================================
+
+Scope (CREATE-ONLY soft; Makefile not edited from this wave)
+------------------------------------------------------------
+Coherent soft package (untracked / new soft only):
+  - user/libcgj/tests/NOTES_milestone_18700.txt   (this file)
+  - user/libcgj/tests/cgj_soft_milestone_18700.c  (host dyn + direct KATs)
+
+libcgj continuum markers (graph_batch18691.c … graph_batch18700.c) are
+product tree TUs (CREATE-ONLY until parent wires CGJ_SRCS); this NOTES +
+soft probe only document and soft-gate them.
+
+Harness
+-------
+Existing host harness:
+  - cgj_smoke.c                 static freestanding + weak continuum soft gates
+  - cgj_dyn_smoke.c             host dlopen product libc.so.6 soft KATs
+  - cgj_soft_milestone_14500.c  prior decade soft probe
+  - cgj_soft_milestone_14600.c  prior decade soft probe
+  - cgj_soft_milestone_14700.c  prior decade soft probe
+  - cgj_soft_milestone_14800.c  prior decade soft probe
+  - cgj_soft_milestone_14900.c  prior decade soft probe
+  - cgj_soft_milestone_15000.c  prior decade soft probe
+  - cgj_soft_milestone_15100.c  prior decade soft probe
+  - cgj_soft_milestone_15200.c  prior decade soft probe
+  - cgj_soft_milestone_15300.c  prior decade soft probe
+  - cgj_soft_milestone_15400.c  prior decade soft probe
+  - cgj_soft_milestone_15500.c  prior decade soft probe
+  - cgj_soft_milestone_15600.c  prior decade soft probe
+  - cgj_soft_milestone_15700.c  prior decade soft probe
+  - cgj_soft_milestone_15800.c  prior decade soft probe
+  - cgj_soft_milestone_15900.c  prior decade soft probe
+  - cgj_soft_milestone_16000.c  prior decade soft probe
+  - cgj_soft_milestone_16100.c  prior decade soft probe
+  - cgj_soft_milestone_16200.c  prior decade soft probe
+  - cgj_soft_milestone_16300.c  prior decade soft probe
+  - cgj_soft_milestone_16400.c  prior decade soft probe
+  - cgj_soft_milestone_16500.c  prior decade soft probe
+  - cgj_soft_milestone_16600.c  prior decade soft probe
+  - cgj_soft_milestone_16700.c  prior decade soft probe
+  - cgj_soft_milestone_16800.c  prior decade soft probe
+  - cgj_soft_milestone_16900.c  prior decade soft probe
+  - cgj_soft_milestone_17000.c  prior decade soft probe
+  - cgj_soft_milestone_17100.c  prior decade soft probe
+  - cgj_soft_milestone_17200.c  prior decade soft probe
+  - cgj_soft_milestone_17300.c  prior decade soft probe
+  - cgj_soft_milestone_17400.c  prior decade soft probe
+  - cgj_soft_milestone_17500.c  prior decade soft probe
+  - cgj_soft_milestone_17600.c  prior decade soft probe
+  - cgj_soft_milestone_17700.c  prior decade soft probe
+  - cgj_soft_milestone_17800.c  prior decade soft probe
+  - cgj_soft_milestone_17900.c  prior decade soft probe
+  - cgj_soft_milestone_18000.c  prior decade soft probe
+
+New CREATE-ONLY soft host probe:
+  - cgj_soft_milestone_18700.c
+
+Not auto-picked by Makefile (explicit CGJ_SMOKE / CGJ_DYN_SMOKE targets
+only). Build manually as documented in the .c file header.
+
+MILESTONE 18700 marker surfaces (batches 18691–18700)
+-----------------------------------------------------
+Symbol                         Expected   Source TU
+-----------------------------  ---------  --------------------
+gj_shell_green_18700           1          graph_batch18691.c
+gj_libcgj_green_18700          1          graph_batch18692.c
+gj_bar3_ready_18700            0          graph_batch18693.c  (bar3 open)
+gj_product_score_18700         0          graph_batch18694.c  (score open)
+gj_continuum_ready_18700       1          graph_batch18695.c
+gj_smoke_soft_18700            1          graph_batch18696.c
+gj_dyn_soft_18700              1          graph_batch18697.c
+gj_milestone_tag_18700         18700      graph_batch18698.c
+gj_continuum_wave_18700        18700      graph_batch18699.c
+gj_batch_id_18700              18700      graph_batch18700.c
+gj_graph_milestone_18700       18700      graph_batch18700.c
+__libcgj_batch18NNN_marker     string     matching batch TU
+
+Fill continuum (batches 18676–18690, not soft-probed here)
+---------------------------------------------------------
+Each TU exports unique gj_batch_id_N plus a small unique soft unit
+helper (wave_fill / slot_a / … / anchor). Soft rule for this NOTES
+file remains decade markers 18691–18700 only.
+
+Identity continuum (batches 18651–18675, not soft-probed here)
+-------------------------------------------------------------
+Each TU exports unique gj_batch_id_N + gj_graph_milestone_N.
+
+Soft rule: missing → skip; present but wrong → hard fail.
+
+Parent wiring (outside this soft exclusive scope)
+-------------------------------------------------
+1. Wire graph_batch18551.c … graph_batch18700.c into CGJ_SRCS when
+   advancing makefile_max to 18700 (CREATE-ONLY wave lands first).
+2. libc.map may lag milestone 18700 globals; add 18700 symbols under
+   GLIBC_2.2.5 global so dyn dlsym can resolve them (host dyn soft
+   currently skip-if-missing when map/export lags).
+3. Rebuild: make libcgj  (or product SO + archive).
+4. Optional fold into cgj_dyn_smoke.c / cgj_smoke.c continuum soft
+   blocks once map exports are present (host smokes deepened carefully
+   with skip-if-missing decade lamps).
+5. Soft gates only; bar3 remains open (gj_bar3_ready_18700 == 0).
+
+Manual run
+----------
+# Dyn soft (product libc.so.6; soft-skip if symbols not exported yet):
+cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_18700 \
+  user/libcgj/tests/cgj_soft_milestone_18700.c -ldl
+./build/cgj_soft_milestone_18700
+
+# Direct hard KAT (link pure continuum TUs; no version map needed):
+cc -std=c11 -Wall -Wextra -O2 -DCGJ_SOFT_M18700_DIRECT \
+  -o build/cgj_soft_milestone_18700_direct \
+  user/libcgj/tests/cgj_soft_milestone_18700.c \
+  user/libcgj/src/graph_batch18691.c \
+  user/libcgj/src/graph_batch18692.c \
+  user/libcgj/src/graph_batch18693.c \
+  user/libcgj/src/graph_batch18694.c \
+  user/libcgj/src/graph_batch18695.c \
+  user/libcgj/src/graph_batch18696.c \
+  user/libcgj/src/graph_batch18697.c \
+  user/libcgj/src/graph_batch18698.c \
+  user/libcgj/src/graph_batch18699.c \
+  user/libcgj/src/graph_batch18700.c
+./build/cgj_soft_milestone_18700_direct

@@ -42,7 +42,7 @@
  *   native: soft notify      — NOTIFY_WAIT
  *   native: soft rates       — handled/nosupport/err basis points
  *   native: soft honesty     — hybrid open; not bar3
- *   native: soft deepen      — wave=36 area stamp
+ *   native: soft deepen      — wave=37 area stamp
  *   native: soft edge        — Wave 15 entries/null/handled combined
  *   native: soft share       — Wave 15 door/class share lamps
  *   native: soft catalog     — Wave 19 surface catalog stamp
@@ -158,8 +158,8 @@ struct native_soft_deep {
 };
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define NATIVE_SOFT_WAVE 36u
-#define NATIVE_SOFT_AREAS 66u
+#define NATIVE_SOFT_WAVE 37u
+#define NATIVE_SOFT_AREAS 68u
 
 static struct native_soft_deep g_nativeDeep;
 /* One-shot multi-line inventory after first non-null dispatch (soft). */
@@ -528,12 +528,12 @@ native_soft_inventory_log(void)
             NATIVE_SOFT_AREAS, (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft note (Wave 20 deepen) */
-    kprintf("native: soft note milestone=wave36 exclusive=1 "
+    kprintf("native: soft note milestone=wave37 exclusive=1 "
             "soft_only=1 not_bar3=1 wave=%u\n",
             (unsigned)NATIVE_SOFT_WAVE);
 
     /* Grep: native: soft retmap — Wave 19 return-surface map */
-    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=36\n");
+    kprintf("native: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=37\n");
 
     /* Grep: native: soft deepen */
     /* Grep: native: soft edge (Wave 20 deepen) */
@@ -850,6 +850,21 @@ kprintf("native: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("native: soft retspire exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retspire stamp; Soft≠product)\n",
+        (unsigned)NATIVE_SOFT_WAVE);
+/*
+ * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: native: soft retwall — Wave 37 return-wall honesty */
+kprintf("native: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retwall honesty; Soft≠product; not bar3)\n",
+        (unsigned)NATIVE_SOFT_WAVE);
+/* Grep: native: soft retgate — Wave 37 exclusive gate stamp */
+kprintf("native: soft retgate exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retgate stamp; Soft≠product)\n",
         (unsigned)NATIVE_SOFT_WAVE);
                             kprintf("native: soft deepen wave=%u areas=%u ok=1 "
             "prefix=native:soft "

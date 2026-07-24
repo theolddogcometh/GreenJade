@@ -27,7 +27,7 @@
  *   "smep: soft stats …"      aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   "smep: soft deepen …"     wave=36 stamp + area count
+ *   "smep: soft deepen …"     wave=37 stamp + area count
  *   "smep: soft lamps …"      CR4/CPUID readiness lamps
  *   "smep: soft band …"       Wave 15 user-band geometry
  *   "smep: soft surfaces …"   Wave 19 return-surface catalog
@@ -82,11 +82,11 @@
 /* Canonical sign-extend mask for bit 47 (4-level paging). */
 #define CANON_SIGN_MASK 0xffff000000000000ull
 
-/* Wave 36 soft inventory stamp (file-local; never product gate). */
-#define SMEP_SOFT_WAVE 36u
+/* Wave 37 soft inventory stamp (file-local; never product gate). */
+#define SMEP_SOFT_WAVE 37u
 
 /* Soft inventory greppable area count (honesty..gmap; deepen excluded). */
-#define SMEP_SOFT_AREAS 52u
+#define SMEP_SOFT_AREAS 54u
 
 /*
  * Wave 19 return-surface bit lamps (surf=0x… on soft surfaces/deepen).
@@ -378,7 +378,7 @@ smep_soft_map_note_leaf(u64 u64Entry, u64 u64Va, u64 u64Cb, int fKernelHalf,
  *   smep: soft stats      — aggregate counters (mirror of g_stats)
  *   smep: soft return selftest — Wave 19 terminal return surface
  *   smep: soft retmap     — Wave 19 return-surface map
- *   smep: soft deepen     — wave=36 stamp + area count
+ *   smep: soft deepen     — wave=37 stamp + area count
  *   smep: soft lamps      — CR4/CPUID readiness lamps
  *   smep: soft surfaces   — Wave 19 return-surface catalog
  *   smep: soft walk       — Wave 17 PML4 walk surface
@@ -945,6 +945,21 @@ kprintf("smep: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
 kprintf("smep: soft retspire exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retspire stamp; Soft≠product)\n",
+        (unsigned)SMEP_SOFT_WAVE);
+/*
+ * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: smep: soft retwall — Wave 37 return-wall honesty */
+kprintf("smep: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retwall honesty; Soft≠product; not bar3)\n",
+        (unsigned)SMEP_SOFT_WAVE);
+/* Grep: smep: soft retgate — Wave 37 exclusive gate stamp */
+kprintf("smep: soft retgate exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retgate stamp; Soft≠product)\n",
         (unsigned)SMEP_SOFT_WAVE);
                             kprintf("smep: soft deepen wave=%u areas=%u via=%s logs=%lu "
             "catalog=%u residual_u=%lu surf=0x%x "

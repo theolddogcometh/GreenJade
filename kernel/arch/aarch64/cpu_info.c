@@ -6,7 +6,7 @@
  * (QEMU virt). Pure freestanding C; MRS system registers only.
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 36 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 37 exclusive deepen; this unit only — greppable
  * "aarch64: cpu soft …")
  * -------------------------------------------------------------------------
  * Soft-read ID_AA64* / CTR / DCZID / CLIDR / DFR0 and emit greppable
@@ -38,9 +38,9 @@
  *   aarch64: cpu soft regs pfr0=… isar0=… mmfr0=…
  *   aarch64: cpu soft path mrs=1 mmu=0 gic=0 timer=0 claim=0 product_kernel=OPEN
  *   aarch64: cpu soft inv el1=… el0_a64=… el1_a64=… tgran4=… ok=…
- *   aarch64: cpu soft inventory wave=36 …
+ *   aarch64: cpu soft inventory wave=37 …
  *   aarch64: cpu soft surf …
- *   aarch64: cpu soft deepen wave=36 areas=…
+ *   aarch64: cpu soft deepen wave=37 areas=…
  *   aarch64: cpu soft return inv_ret=… product_kernel=OPEN
  *   aarch64: cpu soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: cpu soft PASS | FAIL
@@ -95,10 +95,10 @@ extern void aarch64_uart_soft_selftest(void);
 #define DCZID_BS_MASK 0xful
 #define DCZID_DZP_BIT (1ul << 4)
 
-/* Wave 36 soft inventory stamp (file-local; never product gate). */
-#define CPU_SOFT_WAVE 36u
+/* Wave 37 soft inventory stamp (file-local; never product gate). */
+#define CPU_SOFT_WAVE 37u
 /* Areas: id,midr,mpidr,pfr,isar,mmfr,cache,extra,regs,path,inv,surf,honesty,deepen */
-#define CPU_SOFT_AREAS 49u
+#define CPU_SOFT_AREAS 51u
 
 /* Soft inventory emit counter (Wave 19 stats). */
 static unsigned g_cCpuSoftLogs;
@@ -805,6 +805,21 @@ aarch64_uart_puts("aarch64: cpu: soft retspire exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
 aarch64_uart_puts(" (retspire stamp; Soft!=product)\n");
+/*
+ * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: cpu: soft retwall — Wave 37 return-wall honesty */
+aarch64_uart_puts("aarch64: cpu: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
+aarch64_uart_puts(" (retwall honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: cpu: soft retgate — Wave 37 exclusive gate stamp */
+aarch64_uart_puts("aarch64: cpu: soft retgate exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
+aarch64_uart_puts(" (retgate stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: cpu soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)CPU_SOFT_WAVE);
     aarch64_uart_puts(" areas=");

@@ -16,7 +16,7 @@
  *   - Submit path hits (service/doors/queue) + outcome counters
  *   - Attach / stats / gen-mismatch lamps (Wave 15 deepen)
  *   - rates / honesty / catalog / PASS (Wave 15 deepen)
- *   - soft deepen wave=51 stamp
+ *   - soft deepen wave=52 stamp
  *   Never hard-gates; diagnostics only (wrap OK).
  * Greppable twin prefixes (product / agent greps):
  *   "cold_ipc: soft …"
@@ -65,10 +65,10 @@ static u64 g_u64RegQueue;
 static u64 g_u64UnregQueue;
 static u64 g_u64ModeChanges;
 
-/* Wave 51 soft inventory stamp (file-local; never product gate). */
-#define GJ_COLD_SOFT_WAVE 51u
+/* Wave 52 soft inventory stamp (file-local; never product gate). */
+#define GJ_COLD_SOFT_WAVE 52u
 /* Soft inventory area count (fixed greppable categories for deepen stamp). */
-#define GJ_COLD_SOFT_AREAS 81u
+#define GJ_COLD_SOFT_AREAS 83u
 
 /*
  * Soft product inventory (Wave 35 exclusive deepen). Cumulative unless noted live.
@@ -446,7 +446,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft note (Wave 20 deepen) */
-    kprintf("cold_ipc: soft note milestone=wave51 exclusive=1 "
+    kprintf("cold_ipc: soft note milestone=wave52 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -460,7 +460,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold_ipc: soft retmap — Wave 19 return-surface map */
-    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=51\n");
+    kprintf("cold_ipc: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=52\n");
 
     /* Grep: cold_ipc: soft deepen wave (Wave 15 stamp) */
     /*
@@ -780,7 +780,7 @@ soft_inventory_log(void)
             (unsigned)GJ_COLD_SOFT_AREAS, (unsigned)GJ_COLD_SOFT_WAVE);
 
     /* Grep: cold: soft note (Wave 20 deepen) */
-    kprintf("cold: soft note milestone=wave51 exclusive=1 "
+    kprintf("cold: soft note milestone=wave52 exclusive=1 "
             "soft_only=1 not_bar3=1 submits=%llu logs=%u wave=%u\n",
             (unsigned long long)g_u64Submits, g_u32SoftLogN,
             (unsigned)GJ_COLD_SOFT_WAVE);
@@ -1231,11 +1231,11 @@ kprintf("cold: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cold: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("cold: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("cold: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1245,11 +1245,11 @@ kprintf("cold: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cold: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("cold: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("cold: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1259,11 +1259,11 @@ kprintf("cold: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cold: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("cold: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("cold: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1272,11 +1272,11 @@ kprintf("cold: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cold: soft retsally — Wave 50 return-sally honesty */
 kprintf("cold: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("cold: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1285,12 +1285,26 @@ kprintf("cold: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: cold: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("cold: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: cold: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("cold: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcoveredway stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: cold: soft rettenaille — Wave 52 return-tenaille honesty */
+kprintf("cold: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=52 "
+        "(rettenaille honesty; Soft≠product; not bar3)\n");
+/* Grep: cold: soft retdemilune — Wave 52 exclusive demilune stamp */
+kprintf("cold: soft retdemilune exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=52 "
+        "(retdemilune stamp; Soft≠product)\n");
 
 
 

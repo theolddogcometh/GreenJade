@@ -73,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 51 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 51u
-#define PSCI_SOFT_AREAS 71u
+/* Wave 52 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE 52u
+#define PSCI_SOFT_AREAS 73u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -923,6 +923,22 @@ aarch64_uart_puts("aarch64: psci: soft retcoveredway exclusive=1 soft_ne_product
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retcoveredway stamp; Soft!=product)\n");
+
+/*
+ * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft rettenaille — Wave 52 return-tenaille honesty */
+aarch64_uart_puts("aarch64: psci: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (rettenaille honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: psci: soft retdemilune — Wave 52 exclusive demilune stamp */
+aarch64_uart_puts("aarch64: psci: soft retdemilune exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retdemilune stamp; Soft!=product)\n");
 
 
 

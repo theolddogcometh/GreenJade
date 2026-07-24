@@ -449,14 +449,14 @@ main(int argc, char **argv)
     if (fPass) {
         udx_printk("my_drv: host demo done\n");
         /*
-         * Grep: udx: skeleton soft deepen (Wave 51 exclusive).
+         * Grep: udx: skeleton soft deepen (Wave 52 exclusive).
          * Soft inventory only — never gates skeleton PASS product claim.
          * multi_server=0 confine=0 bar3=0.
          */
-        udx_printk("udx: skeleton soft deepen wave=51 areas=1 "
+        udx_printk("udx: skeleton soft deepen wave=52 areas=1 "
                    "multi_server=0 confine=0 bar3=0 exclusive=1\n");
         udx_printk("udx: skeleton soft honesty multi_server=0 confine=0 "
-                   "bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=51\n");
+                   "bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=52\n");
         udx_printk("udx: skeleton PASS\n");
         return 0;
     }
@@ -483,8 +483,8 @@ udx_skeleton_freestanding_register(void)
 
 #endif /* UDX_HOST_LIBC */
 
-/* Wave 51 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retfosse continuum_toward=19300 soft_ne_product=1
- *   greppable: soft retcoveredway exclusive=1 continuum_toward=19300
+/* Wave 52 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft rettenaille continuum_toward=19400 soft_ne_product=1
+ *   greppable: soft retdemilune exclusive=1 continuum_toward=19400
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

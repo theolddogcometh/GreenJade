@@ -95,8 +95,8 @@ enum {
  *        live|path|stats|rates|honesty|catalog|deepen|PASS
  */
 #define GJ_LINUX_HOT_SOFT_HANDLERS 105u
-#define GJ_LINUX_HOT_SOFT_WAVE 51u
-#define GJ_LINUX_HOT_SOFT_AREAS 85u
+#define GJ_LINUX_HOT_SOFT_WAVE 52u
+#define GJ_LINUX_HOT_SOFT_AREAS 87u
 
 struct linux_hot_soft {
     u64 aEnter[HOT_SOFT_GRP_N]; /* per-group handler entries */
@@ -352,7 +352,7 @@ hot_soft_inventory_log(void)
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE);
 
     /* Grep: linux: hot soft note (Wave 20 deepen) */
-    kprintf("linux: hot soft note milestone=wave51 exclusive=1 "
+    kprintf("linux: hot soft note milestone=wave52 exclusive=1 "
             "soft_only=1 not_bar3=1 handlers=%u enter=%lu wave=%u\n",
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,
             (unsigned long)s.u64EnterTotal,
@@ -819,11 +819,11 @@ kprintf("linux: hot: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: linux: hot: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("linux: hot: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("linux: hot: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -833,11 +833,11 @@ kprintf("linux: hot: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: linux: hot: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("linux: hot: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("linux: hot: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -847,11 +847,11 @@ kprintf("linux: hot: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: linux: hot: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("linux: hot: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("linux: hot: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -860,11 +860,11 @@ kprintf("linux: hot: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: linux: hot: soft retsally — Wave 50 return-sally honesty */
 kprintf("linux: hot: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("linux: hot: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -873,19 +873,33 @@ kprintf("linux: hot: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: linux: hot: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("linux: hot: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: hot: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("linux: hot: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcoveredway stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: linux: hot: soft rettenaille — Wave 52 return-tenaille honesty */
+kprintf("linux: hot: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=52 "
+        "(rettenaille honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: hot: soft retdemilune — Wave 52 exclusive demilune stamp */
+kprintf("linux: hot: soft retdemilune exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=52 "
+        "(retdemilune stamp; Soft≠product)\n");
 
 
 
 
                             kprintf("linux: hot soft deepen wave=%u areas=%u handlers=%u "
             "groups=%u enter=%lu logs=%lu "
-            "(Wave 51 exclusive; not bar3)\n",
+            "(Wave 52 exclusive; not bar3)\n",
             (unsigned)GJ_LINUX_HOT_SOFT_WAVE,
             (unsigned)GJ_LINUX_HOT_SOFT_AREAS,
             (unsigned)GJ_LINUX_HOT_SOFT_HANDLERS,

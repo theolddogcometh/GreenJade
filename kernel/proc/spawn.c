@@ -57,7 +57,7 @@ static u32 g_cMintSoftBad;   /* soft post-mint verify FAIL */
  * Soft product inventory (Wave 20 deepen). Cumulative unless noted live/peak.
  * greppable: spawn: soft …
  */
-#define GJ_SPAWN_SOFT_WAVE 51u
+#define GJ_SPAWN_SOFT_WAVE 52u
 
 static u32 g_u32SoftSpawnEnter;      /* process_spawn entries */
 static u32 g_u32SoftDenyNull;        /* null parent / args / entry */
@@ -319,7 +319,7 @@ soft_inventory_log(const char *szVia)
             GJ_SPAWN_SOFT_WAVE);
 
     /* Grep: spawn: soft retmap — Wave 19 return-surface map */
-    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=51\n");
+    kprintf("spawn: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=52\n");
 
     /* Grep: spawn: soft deepen */
     /*
@@ -759,11 +759,11 @@ kprintf("spawn: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("spawn: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("spawn: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -773,11 +773,11 @@ kprintf("spawn: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("spawn: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("spawn: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -787,11 +787,11 @@ kprintf("spawn: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("spawn: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("spawn: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -800,11 +800,11 @@ kprintf("spawn: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retsally — Wave 50 return-sally honesty */
 kprintf("spawn: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("spawn: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -813,12 +813,26 @@ kprintf("spawn: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: spawn: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("spawn: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=51 "
+        "never_blocks_m0=1 wave=52 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: spawn: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("spawn: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=51 "
+        "product_kernel=OPEN bar3=0 wave=52 "
         "(retcoveredway stamp; Soft≠product)\n");
+
+/*
+ * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: spawn: soft rettenaille — Wave 52 return-tenaille honesty */
+kprintf("spawn: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=52 "
+        "(rettenaille honesty; Soft≠product; not bar3)\n");
+/* Grep: spawn: soft retdemilune — Wave 52 exclusive demilune stamp */
+kprintf("spawn: soft retdemilune exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=52 "
+        "(retdemilune stamp; Soft≠product)\n");
 
 
 

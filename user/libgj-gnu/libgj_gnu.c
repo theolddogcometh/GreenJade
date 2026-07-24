@@ -32,7 +32,7 @@
  *   greppable: GJ_GNU_SOFT_SURFACE
  *   greppable: GJ_GNU_SOFT_NOTE
  *
- * Soft inventory (Wave 114 exclusive deepen):
+ * Soft inventory (Wave 115 exclusive deepen):
  *   libgj-gnu: soft inventory wave=70 surfaces=12 caps=0xf stamp=GNU1
  *   libgj-gnu: soft deepen wave=70 areas=export,stamp,caps,get,id,probe,
  *              touch,inventory,wave,surface,path,note
@@ -54,10 +54,10 @@
 #define GJ_GNU_SOFT_CAP_TOUCH   ((uint32_t)0x8u)
 #define GJ_GNU_SOFT_CAP_MASK    ((uint32_t)0xfu)
 
-/* Wave 114 exclusive soft inventory stamp. */
-/* Wave 114 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retframebufferangle continuum_toward=25600 soft_ne_product=1 wave=114
- *   greppable: soft retswapchainangle exclusive=1 continuum_toward=25600 soft_ne_product=1 wave=114
+/* Wave 115 exclusive soft inventory stamp. */
+/* Wave 115 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retpresentangle continuum_toward=25700 soft_ne_product=1 wave=115
+ *   greppable: soft retvsyncangle exclusive=1 continuum_toward=25700 soft_ne_product=1 wave=115
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -98,7 +98,7 @@ static const char g_szGnuSoftInventory[] =
     "multi_server=0 confine=0 bar3=0";
 
 /*
- * Wave 114 soft deepen stamp.
+ * Wave 115 soft deepen stamp.
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
@@ -118,7 +118,7 @@ static const char g_szGnuSoftPath[] =
     "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
 /*
- * Soft honesty line (Wave 114 exclusive).
+ * Soft honesty line (Wave 115 exclusive).
  * Grep: libgj-gnu: soft honesty
  */
 static const char g_szGnuSoftHonesty[] =
@@ -206,7 +206,7 @@ gj_gnu_soft_touch(void)
 }
 
 /*
- * Cold soft inventory accessor (Wave 114).
+ * Cold soft inventory accessor (Wave 115).
  * greppable: GJ_GNU_SOFT_INVENTORY
  * Grep: libgj-gnu: soft inventory
  */
@@ -218,7 +218,7 @@ gj_gnu_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 114).
+ * Cold soft deepen stamp (Wave 115).
  * greppable: GJ_GNU_SOFT_DEEPEN
  * Grep: libgj-gnu: soft deepen
  */
@@ -241,7 +241,7 @@ gj_gnu_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 114 exclusive).
+ * Cold soft honesty line (Wave 115 exclusive).
  * Grep: libgj-gnu: soft honesty
  */
 const char *
@@ -340,7 +340,7 @@ gj_gnu_soft_note_counts(uint32_t *pGet, uint32_t *pId, uint32_t *pProbe,
 }
 
 /*
- * Soft note extend (Wave 114): deepen + path call counters.
+ * Soft note extend (Wave 115): deepen + path call counters.
  * Grep: libgj-gnu: soft note
  */
 void

@@ -5,7 +5,7 @@
  * Freestanding string/memory helpers for libgj userspace.
  * Pure C11. Dual-licensed MIT OR Apache-2.0.
  *
- * Soft freestanding helpers inventory (Wave 114 exclusive deepen; greppable;
+ * Soft freestanding helpers inventory (Wave 115 exclusive deepen; greppable;
  * hot path clean):
  *   libgj: soft inventory helpers=42 groups=10 wave=70 areas=16
  *   libgj: soft length  gj_strlen gj_strnlen
@@ -37,10 +37,10 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-/* Wave 114 exclusive soft deepen stamp (greppable wave=70). */
-/* Wave 114 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retframebufferangle continuum_toward=25600 soft_ne_product=1 wave=114
- *   greppable: soft retswapchainangle exclusive=1 continuum_toward=25600 soft_ne_product=1 wave=114
+/* Wave 115 exclusive soft deepen stamp (greppable wave=70). */
+/* Wave 115 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retpresentangle continuum_toward=25700 soft_ne_product=1 wave=115
+ *   greppable: soft retvsyncangle exclusive=1 continuum_toward=25700 soft_ne_product=1 wave=115
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 
@@ -70,7 +70,7 @@ static const char g_szLibgjSoftInventory[] =
     "counts=none hot_path=clean accessors=area,policy,honesty bar3=0";
 
 /*
- * Wave 114 soft deepen stamp (rodata companion).
+ * Wave 115 soft deepen stamp (rodata companion).
  * Grep: libgj: soft deepen
  */
 static const char g_szLibgjSoftDeepen[] =
@@ -89,7 +89,7 @@ static const char g_szLibgjSoftPath[] =
     "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
 
 /*
- * Wave 114 exclusive honesty line (static).
+ * Wave 115 exclusive honesty line (static).
  * Grep: libgj: soft honesty
  */
 static const char g_szLibgjSoftHonesty[] =
@@ -227,7 +227,7 @@ gj_string_soft_inventory(void)
 }
 
 /*
- * Cold soft deepen stamp (Wave 114). Grep: libgj: soft deepen
+ * Cold soft deepen stamp (Wave 115). Grep: libgj: soft deepen
  */
 const char *
 gj_string_soft_deepen(void)
@@ -245,7 +245,7 @@ gj_string_soft_path(void)
 }
 
 /*
- * Cold soft honesty line (Wave 114 exclusive). Grep: libgj: soft honesty
+ * Cold soft honesty line (Wave 115 exclusive). Grep: libgj: soft honesty
  * Soft inventory ≠ product multi-server confine; never a bar3 claim.
  */
 const char *

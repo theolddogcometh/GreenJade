@@ -9,18 +9,18 @@
 # ----------------------------------
 # GreenJade grows the clean-room libcgj *graph continuum* as CREATE-ONLY
 # freestanding pure-C TUs (user/libcgj/src/graph_batchN.c). A continuum
-# *decade* is a closed batch range ending at a milestone M (e.g. M=25600
-# → exclusive wave 25501–25600). Soft host probes
+# *decade* is a closed batch range ending at a milestone M (e.g. M=25700
+# → exclusive wave 25601–25700). Soft host probes
 # (user/libcgj/tests/cgj_soft_milestone_M.c) KAT the decade marker lamps
 # only; identity/fill bands are structural unique surfaces.
 #
 # This script is the **parent paste half** of that workflow:
 #
 #   1. CREATE-ONLY sources land first (generators / exclusive agents).
-#      Example generator for the 25600 wave (Wave 114 exclusive continuum track):
-#        user/libcgj/src/_gen_milestone_25600.py
-#        python3 user/libcgj/src/_gen_milestone_25600.py --dry-run
-#      (prior Wave 113: _gen_milestone_25500.py / M=25500; prior Wave 112: _gen_milestone_25400.py / M=25400; prior Wave 111: _gen_milestone_25300.py / M=25300; prior Wave 110: _gen_milestone_25200.py / M=25200; prior Wave 109: _gen_milestone_25100.py / M=25100; prior Wave 108: _gen_milestone_25000.py / M=25000; prior Wave 106: _gen_milestone_24800.py / M=24800; prior Wave 105: _gen_milestone_24700.py / M=24700; prior Wave 104: _gen_milestone_24600.py / M=24600; Wave 102: _gen_milestone_24500.py / M=24500; Wave 101: _gen_milestone_24300.py / M=24300; Wave 100: _gen_milestone_24200.py / M=24200; Wave 99: _gen_milestone_24100.py / M=24100; Wave 98: _gen_milestone_24000.py / M=24000; Wave 97: _gen_milestone_23900.py / M=23900; Wave 96: _gen_milestone_23800.py / M=23800; Wave 95: _gen_milestone_23700.py / M=23700; Wave 94: _gen_milestone_23600.py / M=23600; Wave 93: _gen_milestone_23500.py / M=23500; Wave 92: _gen_milestone_23400.py / M=23400; Wave 91: _gen_milestone_23300.py / M=23300; Wave 90: _gen_milestone_23200.py / M=23200; Wave 89: _gen_milestone_23100.py / M=23100; Wave 88: _gen_milestone_23000.py / M=23000; Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
+#      Example generator for the 25700 wave (Wave 115 exclusive continuum track):
+#        user/libcgj/src/_gen_milestone_25700.py
+#        python3 user/libcgj/src/_gen_milestone_25700.py --dry-run
+#      (prior Wave 114: _gen_milestone_25600.py / M=25600; prior Wave 113: _gen_milestone_25500.py / M=25500; prior Wave 112: _gen_milestone_25400.py / M=25400; prior Wave 111: _gen_milestone_25300.py / M=25300; prior Wave 110: _gen_milestone_25200.py / M=25200; prior Wave 109: _gen_milestone_25100.py / M=25100; prior Wave 108: _gen_milestone_25000.py / M=25000; prior Wave 106: _gen_milestone_24800.py / M=24800; prior Wave 105: _gen_milestone_24700.py / M=24700; prior Wave 104: _gen_milestone_24600.py / M=24600; Wave 102: _gen_milestone_24500.py / M=24500; Wave 101: _gen_milestone_24300.py / M=24300; Wave 100: _gen_milestone_24200.py / M=24200; Wave 99: _gen_milestone_24100.py / M=24100; Wave 98: _gen_milestone_24000.py / M=24000; Wave 97: _gen_milestone_23900.py / M=23900; Wave 96: _gen_milestone_23800.py / M=23800; Wave 95: _gen_milestone_23700.py / M=23700; Wave 94: _gen_milestone_23600.py / M=23600; Wave 93: _gen_milestone_23500.py / M=23500; Wave 92: _gen_milestone_23400.py / M=23400; Wave 91: _gen_milestone_23300.py / M=23300; Wave 90: _gen_milestone_23200.py / M=23200; Wave 89: _gen_milestone_23100.py / M=23100; Wave 88: _gen_milestone_23000.py / M=23000; Wave 86: _gen_milestone_22800.py / M=22800; Wave 85: _gen_milestone_22700.py / M=22700; Wave 84: _gen_milestone_22600.py / M=22600; Wave 83: _gen_milestone_22500.py / M=22500; Wave 82: _gen_milestone_22400.py / M=22400; Wave 81: _gen_milestone_22300.py / M=22300)
 #   2. Parent wires CGJ_SRCS by pasting this helper's stdout into the
 #      Makefile (this script never writes the Makefile itself).
 #   3. Rebuild libcgj; optional soft milestone host probes.
@@ -31,18 +31,18 @@
 # already referenced in the Makefile (grep scan). It is not hard-coded,
 # not a Steam readiness claim, and not advanced by this helper alone.
 # The scan has **no artificial cap** — it correctly reports through
-# graph_batch25600.c (and beyond) once those basenames are wired.
+# graph_batch25700.c (and beyond) once those basenames are wired.
 #
-# Wave 114 soft note (25600-era): the exclusive target decade is M=25600
-# (CREATE-ONLY 25501–25600; extension identity 25501–25550 ahead of the
+# Wave 115 soft note (25700-era): the exclusive target decade is M=25700
+# (CREATE-ONLY 25601–25700; extension identity 25601-25650 ahead of the
 # decade identity/fill/marker bands). Soft deepen surfaces this wave
-# (docs/userland soft stamps): retframebufferangle / retswapchainangle (CREATE-ONLY soft
+# (docs/userland soft stamps): retpresentangle / retvsyncangle (CREATE-ONLY soft
 # names only — not product). Until parent pastes those basenames into
 # CGJ_SRCS, ``--max`` may still report the prior high-water
-# (e.g. makefile_max=25500). **Scan is the source of truth** — do not
+# (e.g. makefile_max=25600). **Scan is the source of truth** — do not
 # hardcode a false makefile_max here or in side panels. Soft high-water
-# may be described as **advancing toward 25600** while the honest scan
-# remains at the prior tip (often makefile_max=25500).
+# may be described as **advancing toward 25700** while the honest scan
+# remains at the prior tip (often makefile_max=25600).
 #
 # Verify anytime (stdout is greppable by product-summary side panels):
 #
@@ -50,13 +50,13 @@
 #   # → makefile_max=N   (honest scan; greppable when N reaches the era)
 #
 # Do **not** document or assert a higher max than the Makefile scan
-# reports. Soft graph growth through graph_batch25600.c is **not** bar3,
+# reports. Soft graph growth through graph_batch25700.c is **not** bar3,
 # not Deck Top-50 title runs, and not product score (gj_bar3_ready_25600
 # and gj_product_score_25600 remain 0 by design). Soft ≠ product complete.
 #
-# Decade paste hygiene (25600-era / Wave 114 example)
+# Decade paste hygiene (25700-era / Wave 115 example)
 # ------------------------------------------------
-# After CREATE-ONLY wave 25501–25600 exists on disk:
+# After CREATE-ONLY wave 25601–25700 exists on disk:
 #
 #   # Prefer exist-only so missing TUs never produce dead Makefile lines:
 #   ./scripts/gj-continuum-makefile-snippet.sh --exist-only 25501 25600
@@ -76,10 +76,10 @@
 #   fill       [M-24, M-10]   gj_batch_id_N + unique soft unit helper
 #   markers    [M-9,  M]      decade soft-gate lamps (host probe surface)
 #
-# For M=25600 that is extension identity 25501–25550, decade identity
+# For M=25700 that is extension identity 25601-25650, decade identity
 # 25551–25575, fill 25576–25590, markers 25591–25600. Prior decade M=25500: identity 25451–25475, fill 25476–25490, markers 25491–25500. Prior decade M=25400: identity 25351–25375, fill 25376–25390, markers 25391–25400. Prior decade M=25300: identity 25251–25275, fill 25276–25290, markers 25291–25300. Prior decade M=25200: identity 25151–25175, fill 25176–25190, markers 25191–25200. Prior decade M=25100: identity 25051–25075, fill 25076–25090, markers 25091–25100. Prior decade M=25000: identity 24951–24975, fill 24976–24990, markers 24991–25000. Prior decade M=24800: identity 24751–24775, fill 24776–24790, markers 24791–24800. Prior decade M=24700: identity 24651–24675, fill 24676–24690, markers 24691–24700. Prior decade M=24600: identity 24551–24575, fill 24576–24590, markers 24591–24600. Prior decade M=24500: identity 24451–24475, fill 24476–24490, markers 24491–24500. Prior decade M=24400: identity 24351–24375, fill 24376–24390, markers 24391–24400. Prior decade M=24300: identity 24251–24275, fill 24276–24290, markers 24291–24300. Prior decade M=24200: identity 24151–24175, fill 24176–24190, markers 24191–24200. Prior decade M=24100: identity 24051–24075, fill 24076–24090, markers 24091–24100. Prior decade M=23800: identity 23651–23675, fill 23676–23690, markers 23691–23700. Prior decade M=23600: identity 23551–23575, fill 23576–23590, markers 23591–23600. Prior decade M=23500: identity 23451–23475, fill 23476–23490, markers 23491–23500. Prior decade M=23400: identity 23351–23375, fill 23376–23390, markers 23391–23400. Prior decade M=23300: identity 23251–23275, fill 23276–23290, markers 23291–23300. Prior decade M=23200: identity 23151–23175, fill 23176–23190, markers 23191–23200. Prior decade M=23000: identity 22951–22975, fill 22976–22990, markers 22991–23000. Prior decade M=22900: identity 22851–22875, fill 22876–22890, markers 22891–22900. Prior decade M=22800: identity 22751–22775, fill 22776–22790, markers 22791–22800. Prior decade M=22700: identity 22651–22675, fill 22676–22690, markers 22691–22700. Prior decade M=22500: identity 22451–22475, fill 22476–22490, markers 22491–22500. Prior decade M=22400: identity 22351–22375, fill 22376–22390, markers 22391–22400. Prior decade
 # M=22300: identity 22251–22275, fill 22276–22290, markers 22291–22300.
-# See _gen_milestone_25600.py module docstring (when present) and
+# See _gen_milestone_25700.py module docstring (when present) and
 # user/libcgj/tests/NOTES_milestone_22300.txt
 #   user/libcgj/tests/NOTES_milestone_22700.txt
 #   user/libcgj/tests/NOTES_milestone_22800.txt
@@ -121,8 +121,8 @@
 #
 # Example paste target (end of CGJ_SRCS before rand48.c):
 #   user/libcgj/src/graph_batch25500.c \   ← prior high-water (if still tip)
-#   user/libcgj/src/graph_batch25501.c \   ← Wave 114 helper output starts here
-#   … through graph_batch25600.c once CREATE-ONLY + parent wire land
+#   user/libcgj/src/graph_batch25601.c \   ← Wave 115 helper output starts here
+#   … through graph_batch25700.c once CREATE-ONLY + parent wire land
 #
 # Non-claims (keep soft continuum honest)
 # ---------------------------------------
@@ -141,7 +141,7 @@
 #   user/libcgj/src/_gen_milestone_22600.py   (prior Wave 84 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_22500.py   (prior Wave 83 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_22400.py   (prior Wave 82 CREATE-ONLY emitter, when present)
-#   user/libcgj/src/_gen_milestone_25600.py   (Wave 114 CREATE-ONLY emitter, when present)
+#   user/libcgj/src/_gen_milestone_25700.py   (Wave 115 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_25500.py   (prior Wave 113 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_25300.py   (prior Wave 111 CREATE-ONLY emitter, when present)
 #   user/libcgj/src/_gen_milestone_25200.py   (prior Wave 110 CREATE-ONLY emitter, when present)
@@ -211,22 +211,22 @@ Emit paste-ready CGJ_SRCS lines:
 
 makefile_max honesty:
   --max scans the Makefile for the highest graph_batchN.c already wired.
-  Scan has no artificial cap (supports through graph_batch25600.c and beyond).
+  Scan has no artificial cap (supports through graph_batch25700.c and beyond).
   High-water is whatever the scan prints (source of truth) — do not hardcode.
-  Wave 114 exclusive target decade: M=25600 (soft graph only — not bar3 /
-  Steam client / Top-50 titles). Soft deepen surfaces: retframebufferangle /
-  retswapchainangle (CREATE-ONLY soft names only). Until parent wires 25501–25600,
-  --max may still report prior tip (e.g. makefile_max=25500). Soft high-water
-  may advance toward 25600 while scan remains at prior tip (often 25500).
+  Wave 115 exclusive target decade: M=25700 (soft graph only — not bar3 /
+  Steam client / Top-50 titles). Soft deepen surfaces: retpresentangle /
+  retvsyncangle (CREATE-ONLY soft names only). Until parent wires 25601–25700,
+  --max may still report prior tip (e.g. makefile_max=25600). Soft high-water
+  may advance toward 25700 while scan remains at prior tip (often 25600).
 
 Workflow:
-  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_25600.py)
+  1. Land CREATE-ONLY TUs (e.g. user/libcgj/src/_gen_milestone_25700.py)
   2. Paste this helper's stdout into CGJ_SRCS (before rand48.c etc.)
   3. Rebuild libcgj; optional cgj_soft_milestone_*.c host probes
 
-Decade bands for milestone M=25600 (docs only; helper emits paths only):
-  extension 25501-25550 | identity 25551-25575 | fill 25576-25590 | markers 25591-25600
-    (prior M=25500: identity 25451-25475 | fill 25476-25490 | markers 25491-25500)
+Decade bands for milestone M=25700 (docs only; helper emits paths only):
+  extension 25601-25650 | identity 25651-25675 | fill 25676-25690 | markers 25691-25700
+    (prior M=25600: identity 25551-25575 | fill 25576-25590 | markers 25591-25600; prior M=25500: identity 25451-25475 | fill 25476-25490 | markers 25491-25500)
     (prior M=25400: identity 25351-25375 | fill 25376-25390 | markers 25391-25400)
     (prior M=25300: identity 25251-25275 | fill 25276-25290 | markers 25291-25300)
     (prior M=25200: identity 25151-25175 | fill 25176-25190 | markers 25191-25200)

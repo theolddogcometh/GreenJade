@@ -215,7 +215,7 @@ static struct gj_trap_stats g_trapStats;
  * greppable: trap: soft
  */
 #define TRAP_SOFT_LOG_MAX 12u
-#define TRAP_SOFT_WAVE 32u
+#define TRAP_SOFT_WAVE 33u
 
 static u32 g_u32SoftLogged;      /* greppable dump emissions */
 static u64 g_u64SoftSkip;        /* soft log suppressed at cap (milestone) */
@@ -800,19 +800,34 @@ trap_soft_inventory_log(void)
                                     "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)TRAP_SOFT_WAVE);
 /*
- * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
-/* Grep: trap: soft retbulwark — Wave 32 return-bulwark honesty */
+/* Grep: trap: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("trap: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
         "never_blocks_m0=1 wave=%u "
         "(retbulwark honesty; Soft≠product; not bar3)\n",
         (unsigned)TRAP_SOFT_WAVE);
-/* Grep: trap: soft retpanoply — Wave 32 exclusive panoply stamp */
+/* Grep: trap: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("trap: soft retpanoply exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpanoply stamp; Soft≠product)\n",
+        (unsigned)TRAP_SOFT_WAVE);
+/*
+ * ---- Wave 33 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: trap: soft retbastion — Wave 33 return-bastion honesty */
+kprintf("trap: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbastion honesty; Soft≠product; not bar3)\n",
+        (unsigned)TRAP_SOFT_WAVE);
+/* Grep: trap: soft retcitadel — Wave 33 exclusive citadel stamp */
+kprintf("trap: soft retcitadel exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retcitadel stamp; Soft≠product)\n",
         (unsigned)TRAP_SOFT_WAVE);
                             kprintf("trap: soft deepen wave=%u areas="
             "inventory,class,pf,pe32,outcome,stats,"

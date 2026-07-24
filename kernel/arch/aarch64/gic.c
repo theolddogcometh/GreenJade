@@ -58,7 +58,7 @@
  * bits remain, and SPI capacity covers UART/virtio0 INTIDs.
  *
  * -------------------------------------------------------------------------
- * Soft inventory deepen (Wave 32 exclusive; this unit only)
+ * Soft inventory deepen (Wave 33 exclusive; this unit only)
  * -------------------------------------------------------------------------
  * Multi-line greppable "aarch64: gic soft …" under fixed areas:
  *   inventory | dist | cpuif | spi | ppi | iar | gates | path | deepen
@@ -160,9 +160,9 @@
 #define GIC_PPI_STIMER_INTID  29u /* secure physical timer (masked) */
 #define GIC_PPI_VMAINT_INTID  28u /* virtual maintenance (unused at EL1) */
 
-/* Wave 32 soft inventory stamp (file-local; never product gate). */
-#define GIC_SOFT_WAVE 32u
-#define GIC_SOFT_AREAS 38u
+/* Wave 33 soft inventory stamp (file-local; never product gate). */
+#define GIC_SOFT_WAVE 33u
+#define GIC_SOFT_AREAS 40u
 
 extern void aarch64_uart_puts(const char *sz);
 extern void aarch64_uart_put_hex(unsigned long v);
@@ -866,20 +866,35 @@ aarch64_uart_puts("aarch64: gic: soft retmantle exclusive=1 soft_ne_product=1 "
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retmantle stamp; Soft!=product)\n");
 /*
- * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft!=product; not bar3.
  */
-/* Grep: aarch64: gic: soft retbulwark — Wave 32 return-bulwark honesty */
+/* Grep: aarch64: gic: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 aarch64_uart_puts("aarch64: gic: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
                    "never_blocks_m0=1 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retbulwark honesty; Soft!=product; not bar3)\n");
-/* Grep: aarch64: gic: soft retpanoply — Wave 32 exclusive panoply stamp */
+/* Grep: aarch64: gic: soft retpanoply — Wave 32 panoply stamp (kept) */
 aarch64_uart_puts("aarch64: gic: soft retpanoply exclusive=1 soft_ne_product=1 "
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
 aarch64_uart_puts(" (retpanoply stamp; Soft!=product)\n");
+/*
+ * ---- Wave 33 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: gic: soft retbastion — Wave 33 return-bastion honesty */
+aarch64_uart_puts("aarch64: gic: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retbastion honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: gic: soft retcitadel — Wave 33 exclusive citadel stamp */
+aarch64_uart_puts("aarch64: gic: soft retcitadel exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
+aarch64_uart_puts(" (retcitadel stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: gic soft deepen wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts(" areas=");
@@ -894,7 +909,7 @@ aarch64_uart_puts(" (retpanoply stamp; Soft!=product)\n");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);
     aarch64_uart_puts("\n");
 
-    /* Grep: aarch64: gic soft exclusive — Wave 32 exclusive deepen */
+    /* Grep: aarch64: gic soft exclusive — Wave 33 exclusive deepen */
     aarch64_uart_puts("aarch64: gic soft exclusive multi_server=0 "
                       "confine=0 bar3=0 product_kernel=OPEN soft_only=1 wave=");
     aarch64_uart_put_hex((unsigned long)GIC_SOFT_WAVE);

@@ -10,7 +10,7 @@
  *
  * greppable: MSI-X soft pulse path
  *
- * Soft inventory (Wave 14/15 base; Wave 32 exclusive deepen; this unit only):
+ * Soft inventory (Wave 14/15 base; Wave 33 exclusive deepen; this unit only):
  * Twin greppable prefixes (agent/smoke either works):
  *   "irq: soft …"
  *   "irq_msix: soft …"
@@ -27,7 +27,7 @@
  *   irq: soft path      / irq_msix: soft path       — honesty non-claim
  *   irq: soft return rate — Wave 19 ok/fail rate lamps
  *   irq: soft retcode    — Wave 19 retcode catalog
- *   irq: soft deepen    / irq_msix: soft deepen     — wave=32 areas stamp
+ *   irq: soft deepen    / irq_msix: soft deepen     — wave=33 areas stamp
  *   irq: soft ratio     / irq_msix: soft ratio      — Wave 15 path bp
  *   irq: soft headroom  / irq_msix: soft headroom   — Wave 15 exercise
  *   irq: soft surface   / irq_msix: soft surface    — Wave 16 catalog
@@ -914,11 +914,11 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retglyph — Wave 29 return-glyph honesty (kept) */
                             kprintf("irq_msix: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=32 "
+                                    "never_blocks_m0=1 wave=33 "
                                     "(retglyph honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retscepter — Wave 29 scepter stamp (kept) */
                             kprintf("irq_msix: soft retscepter exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=32 "
+                                    "product_kernel=OPEN bar3=0 wave=33 "
                                     "(retscepter stamp; Soft≠product)\n");
                                 /*
                              * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
@@ -927,11 +927,11 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("irq_msix: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=32 "
+                                    "never_blocks_m0=1 wave=33 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retemblem — Wave 30 emblem stamp (kept) */
                             kprintf("irq_msix: soft retemblem exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=32 "
+                                    "product_kernel=OPEN bar3=0 wave=33 "
                                     "(retemblem stamp; Soft≠product)\n");
                             /*
                              * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
@@ -940,29 +940,42 @@ irq_msix_soft_inventory_log(const char *szVia)
                              */
                             /* Grep: irq_msix: soft retaegis — Wave 31 return-aegis honesty (kept) */
                             kprintf("irq_msix: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=32 "
+                                    "never_blocks_m0=1 wave=33 "
                                     "(retaegis honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retsigil — Wave 30 return-sigil honesty (kept) */
                             kprintf("irq_msix: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
-                                    "never_blocks_m0=1 wave=32 "
+                                    "never_blocks_m0=1 wave=33 "
                                     "(retsigil honesty; Soft≠product; not bar3)\n");
                             /* Grep: irq_msix: soft retmantle — Wave 31 mantle stamp (kept) */
                             kprintf("irq_msix: soft retmantle exclusive=1 soft_ne_product=1 "
-                                    "product_kernel=OPEN bar3=0 wave=32 "
+                                    "product_kernel=OPEN bar3=0 wave=33 "
                                     "(retmantle stamp; Soft≠product)\n");
 /*
- * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
-/* Grep: irq_msix: soft retbulwark — Wave 32 return-bulwark honesty */
+/* Grep: irq_msix: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("irq_msix: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=32 "
+        "never_blocks_m0=1 wave=33 "
         "(retbulwark honesty; Soft≠product; not bar3)\n");
-/* Grep: irq_msix: soft retpanoply — Wave 32 exclusive panoply stamp */
+/* Grep: irq_msix: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("irq_msix: soft retpanoply exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=32 "
+        "product_kernel=OPEN bar3=0 wave=33 "
         "(retpanoply stamp; Soft≠product)\n");
+/*
+ * ---- Wave 33 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: irq_msix: soft retbastion — Wave 33 return-bastion honesty */
+kprintf("irq_msix: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=33 "
+        "(retbastion honesty; Soft≠product; not bar3)\n");
+/* Grep: irq_msix: soft retcitadel — Wave 33 exclusive citadel stamp */
+kprintf("irq_msix: soft retcitadel exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=33 "
+        "(retcitadel stamp; Soft≠product)\n");
                             kprintf("irq_msix: soft deepen wave=%u areas=%u via=%s ready=%u "
             "live=%u soft=%u path=%u tbl=%u exercise_ok=%u ok=1 skip=0\n",
             (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE,

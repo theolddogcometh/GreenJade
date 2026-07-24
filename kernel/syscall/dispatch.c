@@ -11,7 +11,7 @@
  *   - This file only routes and binds Linux "current"; handlers live in
  *     native.c / linux_*.c. Do not put subsystem logic here.
  *
- * Soft inventory (Wave 15 base + Wave 32 exclusive deepen; this unit only):
+ * Soft inventory (Wave 15 base + Wave 33 exclusive deepen; this unit only):
  *   "syscall: soft stats …"       — legacy aggregate (field-stable)
  *   "syscall: soft inventory …"   — wave stamp + caps + log_n
  *   "syscall: soft bridge …"      — LSTAR bridge enter/null
@@ -29,7 +29,7 @@
  *   "syscall: soft catalog …"     — surface catalog stamp
  *   "syscall: soft surfaces …"    — Wave 19 surface count lamp
  *   "syscall: soft note …"        — Wave 16 milestone note
- *   "syscall: soft deepen …"      — wave=32 area stamp
+ *   "syscall: soft deepen …"      — wave=33 area stamp
  *   "syscall: soft path …"        — surface catalog honesty
  *   "syscall: soft inventory PASS" / "syscall: soft PASS"
  * greppable: SYSCALL_ENTRY_SOFT_STATS / "syscall: soft"
@@ -47,9 +47,9 @@
 #include <gj/syscall.h>
 #include <gj/thread.h>
 
-/* Wave 32 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE 32u
-#define SYSCALL_SOFT_AREAS 48u
+/* Wave 33 soft inventory stamp + area count (greppable deepen). */
+#define SYSCALL_SOFT_WAVE 33u
+#define SYSCALL_SOFT_AREAS 50u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -61,7 +61,7 @@ static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
 static struct gj_syscall_entry_stats g_entryStats;
 
 /*
- * Wave 32 exclusive deepen (file-local; never hard-gates; wrap OK).
+ * Wave 33 exclusive deepen (file-local; never hard-gates; wrap OK).
  * greppable: syscall: soft …
  */
 static u64 g_u64SoftLogN;       /* inventory / multi-line dump emissions */
@@ -356,7 +356,7 @@ entry_soft_inventory_log(void)
             SYSCALL_SOFT_AREAS, (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft note (Wave 20 deepen) */
-    kprintf("syscall: soft note milestone=wave32 exclusive=1 "
+    kprintf("syscall: soft note milestone=wave33 exclusive=1 "
             "soft_only=1 hybrid=OptionC not_bar3=1 "
             "disp=%llu native=%llu linux=%llu wave=%u\n",
             (unsigned long long)s.u64DispatchEnter,
@@ -384,7 +384,7 @@ entry_soft_inventory_log(void)
             (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft retmap — Wave 19 return-surface map */
-    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=32\n");
+    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=33\n");
 
     /* Grep: syscall: soft deepen */
     /*
@@ -588,19 +588,34 @@ entry_soft_inventory_log(void)
                                     "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)SYSCALL_SOFT_WAVE);
 /*
- * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
-/* Grep: syscall: soft retbulwark — Wave 32 return-bulwark honesty */
+/* Grep: syscall: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("syscall: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
         "never_blocks_m0=1 wave=%u "
         "(retbulwark honesty; Soft≠product; not bar3)\n",
         (unsigned)SYSCALL_SOFT_WAVE);
-/* Grep: syscall: soft retpanoply — Wave 32 exclusive panoply stamp */
+/* Grep: syscall: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("syscall: soft retpanoply exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpanoply stamp; Soft≠product)\n",
+        (unsigned)SYSCALL_SOFT_WAVE);
+/*
+ * ---- Wave 33 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: syscall: soft retbastion — Wave 33 return-bastion honesty */
+kprintf("syscall: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbastion honesty; Soft≠product; not bar3)\n",
+        (unsigned)SYSCALL_SOFT_WAVE);
+/* Grep: syscall: soft retcitadel — Wave 33 exclusive citadel stamp */
+kprintf("syscall: soft retcitadel exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retcitadel stamp; Soft≠product)\n",
         (unsigned)SYSCALL_SOFT_WAVE);
                             kprintf("syscall: soft deepen wave=%u areas=%u ok=1 "
             "prefix=syscall:soft "

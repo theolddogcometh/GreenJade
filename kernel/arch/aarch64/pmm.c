@@ -5,7 +5,7 @@
  * aarch64 PMM — thin wrap over shared freelist core (kernel/shared/pmm_freelist.c).
  *
  * -------------------------------------------------------------------------
- * Soft inventory (Wave 32 exclusive deepen; this unit only — greppable
+ * Soft inventory (Wave 33 exclusive deepen; this unit only — greppable
  * "aarch64: pmm soft …")
  * -------------------------------------------------------------------------
  * Soft pool geometry: base/end/page counts after init (order-0 identity
@@ -17,7 +17,7 @@
  * Soft null free: free(NULL) is no-op (count unchanged).
  * Soft invariant: free ≤ total, non-zero total, pool geometry coherent.
  * Soft stats: gate sum + free ratio + log tally (Wave 19).
- * Soft deepen: area catalog stamp wave=32.
+ * Soft deepen: area catalog stamp wave=33.
  * Soft return: selftest/inventory return surfaces (Wave 19).
  * Soft path honesty: order-0 shared core only; not ≥1 TiB hierarchical.
  * Soft honesty: aarch64 product kernel remains OPEN (soft scaffold only).
@@ -29,12 +29,12 @@
  *   aarch64: pmm soft step free0=… free1=… free2=… drop=… restore=…
  *   aarch64: pmm soft inv free=… total=… pool_pages=… self=… multi=…
  *             lifo=… step=… null=… inv=…
- *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=32
- *   aarch64: pmm soft inventory wave=32 …
- *   aarch64: pmm soft deepen wave=32 areas=…
- *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=32
+ *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=33
+ *   aarch64: pmm soft inventory wave=33 …
+ *   aarch64: pmm soft deepen wave=33 areas=…
+ *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=33
  *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
- *             product_kernel=OPEN wave=32
+ *             product_kernel=OPEN wave=33
  *   aarch64: pmm soft honesty product_kernel=OPEN soft_only=1
  *   aarch64: pmm soft PASS | FAIL
  *
@@ -62,11 +62,11 @@ extern char __kernel_end[];
 #define PMM_SOFT_PAT_A 0xa5a5a5a5a5a5a5a5ull
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
 
-/* Wave 32 soft inventory stamp (greppable wave=32). */
-#define PMM_SOFT_WAVE 32u
+/* Wave 33 soft inventory stamp (greppable wave=33). */
+#define PMM_SOFT_WAVE 33u
 
 /* Soft deepen areas: pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen. */
-#define PMM_SOFT_AREAS 37u
+#define PMM_SOFT_AREAS 39u
 
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
@@ -730,19 +730,34 @@ pmm_soft_inventory(const struct pmm_soft_snap *pSnap)
                                     "(retmantle stamp; Soft≠product)\n",
                                     (unsigned)PMM_SOFT_WAVE);
 /*
- * ---- Wave 32 exclusive complementary surfaces (never reshape primary).
+ * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
  * Return surfaces only — soft inventory; never hard-gates product paths.
  * Soft≠product; not bar3.
  */
-/* Grep: aarch64: pmm: soft retbulwark — Wave 32 return-bulwark honesty */
+/* Grep: aarch64: pmm: soft retbulwark — Wave 32 return-bulwark honesty (kept) */
 kprintf("aarch64: pmm: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
         "never_blocks_m0=1 wave=%u "
         "(retbulwark honesty; Soft≠product; not bar3)\n",
         (unsigned)PMM_SOFT_WAVE);
-/* Grep: aarch64: pmm: soft retpanoply — Wave 32 exclusive panoply stamp */
+/* Grep: aarch64: pmm: soft retpanoply — Wave 32 panoply stamp (kept) */
 kprintf("aarch64: pmm: soft retpanoply exclusive=1 soft_ne_product=1 "
         "product_kernel=OPEN bar3=0 wave=%u "
         "(retpanoply stamp; Soft≠product)\n",
+        (unsigned)PMM_SOFT_WAVE);
+/*
+ * ---- Wave 33 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: pmm: soft retbastion — Wave 33 return-bastion honesty */
+kprintf("aarch64: pmm: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=%u "
+        "(retbastion honesty; Soft≠product; not bar3)\n",
+        (unsigned)PMM_SOFT_WAVE);
+/* Grep: aarch64: pmm: soft retcitadel — Wave 33 exclusive citadel stamp */
+kprintf("aarch64: pmm: soft retcitadel exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=%u "
+        "(retcitadel stamp; Soft≠product)\n",
         (unsigned)PMM_SOFT_WAVE);
                             kprintf("aarch64: pmm soft deepen wave=%u areas=%u "
             "catalog=pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen "
@@ -778,7 +793,7 @@ kprintf("aarch64: pmm: soft retpanoply exclusive=1 soft_ne_product=1 "
             "no_hier=1 no_tib=1 no_bar3=1 wave=%u\n",
             (unsigned)PMM_SOFT_WAVE);
 
-    /* Grep: aarch64: pmm soft exclusive — Wave 32 exclusive deepen */
+    /* Grep: aarch64: pmm soft exclusive — Wave 33 exclusive deepen */
     kprintf("aarch64: pmm soft exclusive multi_server=0 confine=0 bar3=0 "
             "product_kernel=OPEN soft_only=1 wave=%u\n",
             (unsigned)PMM_SOFT_WAVE);

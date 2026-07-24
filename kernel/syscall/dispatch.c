@@ -29,7 +29,7 @@
  *   "syscall: soft catalog …"     — surface catalog stamp
  *   "syscall: soft surfaces …"    — Wave 19 surface count lamp
  *   "syscall: soft note …"        — Wave 16 milestone note
- *   "syscall: soft deepen …"      — wave=53 area stamp
+ *   "syscall: soft deepen …"      — wave=54 area stamp
  *   "syscall: soft path …"        — surface catalog honesty
  *   "syscall: soft inventory PASS" / "syscall: soft PASS"
  * greppable: SYSCALL_ENTRY_SOFT_STATS / "syscall: soft"
@@ -48,8 +48,8 @@
 #include <gj/thread.h>
 
 /* Wave 45 soft inventory stamp + area count (greppable deepen). */
-#define SYSCALL_SOFT_WAVE 53u
-#define SYSCALL_SOFT_AREAS 86u
+#define SYSCALL_SOFT_WAVE 54u
+#define SYSCALL_SOFT_AREAS 88u
 
 /* Used only when no process is bound (early boot / standalone unit tests). */
 static enum gj_personality g_eDefaultPersonality = GJ_PERSONALITY_LINUX;
@@ -356,7 +356,7 @@ entry_soft_inventory_log(void)
             SYSCALL_SOFT_AREAS, (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft note (Wave 20 deepen) */
-    kprintf("syscall: soft note milestone=wave53 exclusive=1 "
+    kprintf("syscall: soft note milestone=wave54 exclusive=1 "
             "soft_only=1 hybrid=OptionC not_bar3=1 "
             "disp=%llu native=%llu linux=%llu wave=%u\n",
             (unsigned long long)s.u64DispatchEnter,
@@ -384,7 +384,7 @@ entry_soft_inventory_log(void)
             (unsigned)SYSCALL_SOFT_WAVE);
 
     /* Grep: syscall: soft retmap — Wave 19 return-surface map */
-    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=53\n");
+    kprintf("syscall: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=54\n");
 
     /* Grep: syscall: soft deepen */
     /*
@@ -824,11 +824,11 @@ kprintf("syscall: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("syscall: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("syscall: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -838,11 +838,11 @@ kprintf("syscall: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("syscall: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("syscall: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -852,11 +852,11 @@ kprintf("syscall: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("syscall: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("syscall: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -865,11 +865,11 @@ kprintf("syscall: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retsally — Wave 50 return-sally honesty */
 kprintf("syscall: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("syscall: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -878,11 +878,11 @@ kprintf("syscall: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("syscall: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("syscall: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -892,11 +892,11 @@ kprintf("syscall: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("syscall: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("syscall: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -905,12 +905,26 @@ kprintf("syscall: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: syscall: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("syscall: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: syscall: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("syscall: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retlunette stamp; Soft≠product)\n");
+/*
+ * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: syscall: soft retcaponier — Wave 54 return-caponier honesty */
+kprintf("syscall: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=54 "
+        "(retcaponier honesty; Soft≠product; not bar3)\n");
+/* Grep: syscall: soft retredan — Wave 54 exclusive redan stamp */
+kprintf("syscall: soft retredan exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=54 "
+        "(retredan stamp; Soft≠product)\n");
+
 
 
 

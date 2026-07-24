@@ -41,7 +41,7 @@
  *     net: tcp soft stats …      — aggregate path tallies
  *     net: tcp soft path …       — honesty: soft inventory ≠ bar3
  *     net: tcp soft slot=…       — per-live-slot detail (rate-limited)
- *     net: tcp soft deepen …     — wave=53 stamp + area count
+ *     net: tcp soft deepen …     — wave=54 stamp + area count
  *     net: tcp soft init|listen|accept|connect|emfile|syn|syn_drop|multi-seg …
  *     net: tcp soft PASS …
  *   Twin prefix also emitted: "net_tcp: soft …".
@@ -81,11 +81,11 @@
 #define TCP_SOFT_LOG_MAX   8u
 #define TCP_SOFT_EVENT_MAX 8u
 #define TCP_SOFT_SLOT_LOGS 2u
-/* Wave 35 exclusive soft deepen stamp (greppable wave=53). */
-#define TCP_SOFT_DEEPEN_WAVE 48u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=54). */
+#define TCP_SOFT_DEEPEN_WAVE 54u
 /* inventory sock bind life xfer input poll ring multi state capacity
  * catalog outcome stats path headroom surface ratio PASS slot deepen = 21 */
-#define TCP_SOFT_DEEPEN_AREAS 69u
+#define TCP_SOFT_DEEPEN_AREAS 71u
 
 /* Compile-time sizing guards (pure C; fail if multi-seg room shrinks). */
 typedef char tcp_rx_holds_bulk[(TCP_RX_MAX >= 3000u) ? 1 : -1];
@@ -1226,11 +1226,11 @@ kprintf("net: tcp: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("net: tcp: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("net: tcp: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1240,11 +1240,11 @@ kprintf("net: tcp: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("net: tcp: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("net: tcp: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1254,11 +1254,11 @@ kprintf("net: tcp: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("net: tcp: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("net: tcp: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1267,11 +1267,11 @@ kprintf("net: tcp: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retsally — Wave 50 return-sally honesty */
 kprintf("net: tcp: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("net: tcp: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1280,11 +1280,11 @@ kprintf("net: tcp: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("net: tcp: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("net: tcp: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1294,11 +1294,11 @@ kprintf("net: tcp: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("net: tcp: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("net: tcp: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1307,12 +1307,26 @@ kprintf("net: tcp: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: net: tcp: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("net: tcp: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: net: tcp: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("net: tcp: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retlunette stamp; Soft≠product)\n");
+/*
+ * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: net: tcp: soft retcaponier — Wave 54 return-caponier honesty */
+kprintf("net: tcp: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=54 "
+        "(retcaponier honesty; Soft≠product; not bar3)\n");
+/* Grep: net: tcp: soft retredan — Wave 54 exclusive redan stamp */
+kprintf("net: tcp: soft retredan exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=54 "
+        "(retredan stamp; Soft≠product)\n");
+
 
 
 
@@ -1327,7 +1341,7 @@ kprintf("net: tcp: soft retlunette exclusive=1 soft_ne_product=1 "
 		(unsigned long long)s.u64EventSkip);
 
 	/* Grep: net_tcp: soft retmap — Wave 19 return-surface map */
-	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=53\n");
+	kprintf("net_tcp: soft retmap ok|fail|inval|nodev|busy|nomem product_gate=0 soft_only=1 wave=54\n");
 
 	/* Grep: net_tcp: soft deepen (twin) */
 	kprintf("net_tcp: soft deepen wave=%u areas=%u used=%u ops=%llu "

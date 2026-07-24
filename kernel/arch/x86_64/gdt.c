@@ -51,7 +51,7 @@
  *   "gdt: soft retmap …" — Wave 17 return-surface map (kept)
  *   gdt: soft return rate — Wave 19 ok/fail rate lamps
  *   gdt: soft retcode    — Wave 19 retcode catalog
- *   "gdt: soft deepen …"   — wave=53 areas stamp
+ *   "gdt: soft deepen …"   — wave=54 areas stamp
  * Soft never hard-gates boot. No bar3 claim.
  * greppable: gdt: soft
  * greppable: gdt: soft deepen
@@ -148,7 +148,7 @@ static struct gj_gdt_user_soft g_SoftSnap;
 static int g_fSoftSnapLive;
 
 #define GJ_GDT_TSS_SEL_LOCAL 0x30u /* index 6 */
-#define GJ_GDT_SOFT_WAVE 53u   /* Wave 37 exclusive deepen stamp */
+#define GJ_GDT_SOFT_WAVE 54u   /* Wave 37 exclusive deepen stamp */
 
 static void gdt_soft_inc(volatile u32 *pCtr);
 static void gdt_user_soft_refresh(void);
@@ -1161,11 +1161,11 @@ kprintf("gdt: soft retpostern exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retinnerward — Wave 47 return-innerward honesty */
 kprintf("gdt: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retinnerward honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retdonjon — Wave 47 exclusive donjon stamp */
 kprintf("gdt: soft retdonjon exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdonjon stamp; Soft≠product)\n");
 
 /*
@@ -1175,11 +1175,11 @@ kprintf("gdt: soft retdonjon exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retchevaux — Wave 48 return-chevaux honesty */
 kprintf("gdt: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retchevaux honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retpalisade — Wave 48 exclusive palisade stamp */
 kprintf("gdt: soft retpalisade exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retpalisade stamp; Soft≠product)\n");
 
 /*
@@ -1189,11 +1189,11 @@ kprintf("gdt: soft retpalisade exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retglacisgate — Wave 49 return-glacisgate honesty */
 kprintf("gdt: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retglacisgate honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retoutwork — Wave 49 exclusive outwork stamp */
 kprintf("gdt: soft retoutwork exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retoutwork stamp; Soft≠product)\n");
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
@@ -1202,11 +1202,11 @@ kprintf("gdt: soft retoutwork exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retsally — Wave 50 return-sally honesty */
 kprintf("gdt: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retsally honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retcounterscarp — Wave 50 exclusive counterscarp stamp */
 kprintf("gdt: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcounterscarp stamp; Soft≠product)\n");
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
@@ -1215,11 +1215,11 @@ kprintf("gdt: soft retcounterscarp exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retfosse — Wave 51 return-fosse honesty */
 kprintf("gdt: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retfosse honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retcoveredway — Wave 51 exclusive coveredway stamp */
 kprintf("gdt: soft retcoveredway exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retcoveredway stamp; Soft≠product)\n");
 
 /*
@@ -1229,11 +1229,11 @@ kprintf("gdt: soft retcoveredway exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft rettenaille — Wave 52 return-tenaille honesty */
 kprintf("gdt: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(rettenaille honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retdemilune — Wave 52 exclusive demilune stamp */
 kprintf("gdt: soft retdemilune exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retdemilune stamp; Soft≠product)\n");
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
@@ -1242,12 +1242,26 @@ kprintf("gdt: soft retdemilune exclusive=1 soft_ne_product=1 "
  */
 /* Grep: gdt: soft retravelin — Wave 53 return-travelin honesty */
 kprintf("gdt: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
-        "never_blocks_m0=1 wave=53 "
+        "never_blocks_m0=1 wave=54 "
         "(retravelin honesty; Soft≠product; not bar3)\n");
 /* Grep: gdt: soft retlunette — Wave 53 exclusive lunette stamp */
 kprintf("gdt: soft retlunette exclusive=1 soft_ne_product=1 "
-        "product_kernel=OPEN bar3=0 wave=53 "
+        "product_kernel=OPEN bar3=0 wave=54 "
         "(retlunette stamp; Soft≠product)\n");
+/*
+ * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: gdt: soft retcaponier — Wave 54 return-caponier honesty */
+kprintf("gdt: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
+        "never_blocks_m0=1 wave=54 "
+        "(retcaponier honesty; Soft≠product; not bar3)\n");
+/* Grep: gdt: soft retredan — Wave 54 exclusive redan stamp */
+kprintf("gdt: soft retredan exclusive=1 soft_ne_product=1 "
+        "product_kernel=OPEN bar3=0 wave=54 "
+        "(retredan stamp; Soft≠product)\n");
+
 
 
 

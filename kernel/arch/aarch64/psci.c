@@ -73,9 +73,9 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 /* Soft features table size (must match g_aSoftFeat). */
 #define PSCI_SOFT_FEAT_COUNT      8u
 
-/* Wave 53 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 53u
-#define PSCI_SOFT_AREAS 75u
+/* Wave 54 soft inventory stamp (file-local; never product gate). */
+#define PSCI_SOFT_WAVE 54u
+#define PSCI_SOFT_AREAS 77u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -954,6 +954,22 @@ aarch64_uart_puts("aarch64: psci: soft retlunette exclusive=1 soft_ne_product=1 
                    "product_kernel=OPEN bar3=0 wave=");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retlunette stamp; Soft!=product)\n");
+/*
+ * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
+ * Return surfaces only — soft inventory; never hard-gates product paths.
+ * Soft≠product; not bar3.
+ */
+/* Grep: aarch64: psci: soft retcaponier — Wave 54 return-caponier honesty */
+aarch64_uart_puts("aarch64: psci: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
+                   "never_blocks_m0=1 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retcaponier honesty; Soft!=product; not bar3)\n");
+/* Grep: aarch64: psci: soft retredan — Wave 54 exclusive redan stamp */
+aarch64_uart_puts("aarch64: psci: soft retredan exclusive=1 soft_ne_product=1 "
+                   "product_kernel=OPEN bar3=0 wave=");
+aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
+aarch64_uart_puts(" (retredan stamp; Soft!=product)\n");
+
 
 
 

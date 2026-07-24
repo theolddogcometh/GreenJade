@@ -5,7 +5,7 @@
  * ioremap / iounmap. Host: malloc iomem + window table.
  * Freestanding: static iomem pool (no libc heap).
  *
- * Soft inventory (Wave 106 exclusive deepen; this unit only) —
+ * Soft inventory (Wave 107 exclusive deepen; this unit only) —
  * greppable "udx: mmio soft …":
  *   udx: mmio soft inventory …
  *   udx: mmio soft map …
@@ -35,7 +35,7 @@ static u8               g_aFsIomemUsed[UDX_FS_IOMEM_SLOTS];
 #define UDX_MMIO_SOFT_WAVE 70u
 
 /*
- * Soft MMIO product inventory (Wave 106 exclusive deepen). Cumulative for
+ * Soft MMIO product inventory (Wave 107 exclusive deepen). Cumulative for
  * this process. greppable: udx: mmio soft …
  * Never hard-gates; wrap OK if ever hit.
  */
@@ -91,7 +91,7 @@ mmio_soft_emit(const char *szFmt, ...)
 }
 
 /**
- * Greppable soft MMIO inventory (Wave 106 exclusive deepen).
+ * Greppable soft MMIO inventory (Wave 107 exclusive deepen).
  * Prefix-stable "udx: mmio soft …" — never hard-gates; observation only.
  *
  * greppable: udx: mmio soft
@@ -155,7 +155,7 @@ mmio_soft_inventory_log(void)
                    UDX_MMIO_SOFT_WAVE);
 
     /*
-     * Grep: udx: mmio soft honesty (Wave 106 exclusive deepen).
+     * Grep: udx: mmio soft honesty (Wave 107 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
     mmio_soft_emit("udx: mmio soft honesty multi_server=0 confine=0 bar3=0 "
@@ -290,8 +290,8 @@ udx_iounmap(struct udx_iomem *pIo)
 #endif
 }
 
-/* Wave 106 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retquarticangle continuum_toward=24800 soft_ne_product=1 wave=106
- *   greppable: soft retquinticangle exclusive=1 continuum_toward=24800 soft_ne_product=1 wave=106
+/* Wave 107 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retsplineangle continuum_toward=24900 soft_ne_product=1 wave=107
+ *   greppable: soft retbezierangle exclusive=1 continuum_toward=24900 soft_ne_product=1 wave=107
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */

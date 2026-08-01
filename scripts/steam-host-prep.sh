@@ -26,11 +26,16 @@
 #   ./scripts/steam-host-prep.sh --all-img         # fetch+stage+hwtest-img rebuild
 #   ./scripts/steam-host-prep.sh --fetch-only
 #   ./scripts/steam-host-prep.sh --skip-fetch --to-stage
+#   sudo ./scripts/steam-host-prep.sh --skip-fetch --to-mount /mnt/gj-persist
 #
 # Env:
 #   GJ_STEAM_TREE, GJ_STEAM_URL, GJ_STEAM_FORCE=1
 #   GJ_HWTEST_IMG (default build/greenjade-hwtest.img)
 #   GJ_SKIP_FETCH=1   reuse existing build/steam-tree
+#   Under sudo, put env AFTER sudo or use --skip-fetch:
+#     sudo GJ_SKIP_FETCH=1 ./scripts/steam-host-prep.sh --to-mount …
+#     sudo ./scripts/steam-host-prep.sh --skip-fetch --to-mount …
+#   (GJ_SKIP_FETCH=1 sudo … is dropped by sudo and will re-fetch.)
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
@@ -151,8 +156,9 @@ copy_tree_to() {
 	esac
 	if command -v rsync >/dev/null 2>&1; then
 		if [ "$_fat" = 1 ]; then
-			# -rltD: data + times + symlinks; no -pgo (perms/owner/group)
-			rsync -rltD --modify-window=1 --delete "$src"/ "$dest/steam/"
+			# FAT: no Unix owners/perms and no symlinks. -L materializes link targets
+			# as regular files (steam launcher → bin_steam.sh content).
+			rsync -rltD -L --modify-window=1 --delete "$src"/ "$dest/steam/"
 		else
 			rsync -a --delete "$src"/ "$dest/steam/"
 		fi
@@ -160,8 +166,9 @@ copy_tree_to() {
 		rm -rf "$dest/steam"
 		mkdir -p "$dest/steam"
 		if [ "$_fat" = 1 ]; then
-			cp -r --no-preserve=mode,ownership "$src"/. "$dest/steam"/ 2>/dev/null ||
-				cp -r "$src"/. "$dest/steam"/
+			# -L: dereference symlinks for vfat
+			cp -rL --no-preserve=mode,ownership "$src"/. "$dest/steam"/ 2>/dev/null ||
+				cp -rL "$src"/. "$dest/steam"/
 		else
 			cp -a "$src"/. "$dest/steam"/
 		fi

@@ -134,12 +134,37 @@ copy_tree_to() {
 	fi
 	mkdir -p "$dest/steam"
 	echo "steam-host-prep: copy $src → $dest/steam"
+	# FAT/vfat (GJ-PERSIST) cannot chown/chmod the Unix way — rsync -a fails with
+	# "Operation not permitted" (exit 23). Detect and use content-only flags.
+	_fstype=$(findmnt -n -o FSTYPE --target "$dest" 2>/dev/null || true)
+	if [ -z "$_fstype" ] && command -v stat >/dev/null 2>&1; then
+		_fstype=$(stat -f -c %T "$dest" 2>/dev/null || true)
+	fi
+	case "$_fstype" in
+	vfat|msdos|fat|exfat|ntfs|fuseblk|fuse.exfat|fuse.ntfs*)
+		_fat=1
+		echo "steam-host-prep: dest fstype=${_fstype} → copy without owner/perms"
+		;;
+	*)
+		_fat=0
+		;;
+	esac
 	if command -v rsync >/dev/null 2>&1; then
-		rsync -a --delete "$src"/ "$dest/steam/"
+		if [ "$_fat" = 1 ]; then
+			# -rltD: data + times + symlinks; no -pgo (perms/owner/group)
+			rsync -rltD --modify-window=1 --delete "$src"/ "$dest/steam/"
+		else
+			rsync -a --delete "$src"/ "$dest/steam/"
+		fi
 	else
 		rm -rf "$dest/steam"
 		mkdir -p "$dest/steam"
-		cp -a "$src"/. "$dest/steam"/
+		if [ "$_fat" = 1 ]; then
+			cp -r --no-preserve=mode,ownership "$src"/. "$dest/steam"/ 2>/dev/null ||
+				cp -r "$src"/. "$dest/steam"/
+		else
+			cp -a "$src"/. "$dest/steam"/
+		fi
 	fi
 	# Ensure STATUS/README from stage policy
 	if [ ! -f "$dest/steam/STATUS" ]; then

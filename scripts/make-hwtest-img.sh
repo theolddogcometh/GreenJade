@@ -233,11 +233,11 @@ Keys: ./scripts/gj-quick-keys.sh <serial-log>
 EOF
 
 # Image geometry (defaults): 640 MiB total
-# p1: 1 MiB .. 385 MiB  (ESP ~384 MiB)
-# p2: 385 MiB .. end    (persist ~255 MiB)
-# With staged Steam READY, enlarge persist unless operator overrides.
+# p1 ESP: start LBA 2048, size 384 MiB (exact sector count for mformat -T)
+# p2 GJ-PERSIST: next 1 MiB-aligned LBA → end of image
+# With staged Steam READY, enlarge image unless operator overrides.
 IMG_MB="${GJ_HWTEST_IMG_MB:-640}"
-ESP_END_MB="${GJ_HWTEST_ESP_END_MB:-385}"
+ESP_MIB="${GJ_HWTEST_ESP_MIB:-384}"
 if [ "$steam_status" = "READY" ] && [ -z "${GJ_HWTEST_IMG_MB:-}" ]; then
 	# Headroom for bootstrap tree + logs (override with GJ_HWTEST_IMG_MB)
 	IMG_MB=2048
@@ -246,17 +246,40 @@ fi
 dd if=/dev/zero of="$out" bs=1M count="$IMG_MB" status=none 2>/dev/null || \
 	dd if=/dev/zero of="$out" bs=1048576 count="$IMG_MB" 2>/dev/null
 
+ESP_START_SECT=2048
+ESP_SECTS=$((ESP_MIB * 1024 * 1024 / 512))
+ESP_END_SECT=$((ESP_START_SECT + ESP_SECTS - 1))
+# Align persist start up to next 1 MiB boundary after ESP
+PERSIST_START_SECT=$(( (ESP_END_SECT + 1 + 2047) / 2048 * 2048 ))
+TOTAL_SECTS=$((IMG_MB * 1024 * 1024 / 512))
+PERSIST_SECTS=$((TOTAL_SECTS - PERSIST_START_SECT))
+if [ "$PERSIST_SECTS" -lt 2048 ]; then
+	echo "make-hwtest-img: FAIL persist too small (IMG_MB=$IMG_MB ESP_MIB=$ESP_MIB)" >&2
+	exit 1
+fi
+
 sgdisk -o \
-	-n 1:2048:$((ESP_END_MB * 2048)) -t 1:ef00 -c 1:EFI \
-	-n 2:$((ESP_END_MB * 2048 + 1)):0 -t 2:0700 -c 2:GJ-PERSIST \
+	-n 1:${ESP_START_SECT}:${ESP_END_SECT} -t 1:ef00 -c 1:EFI \
+	-n 2:${PERSIST_START_SECT}:0 -t 2:0700 -c 2:GJ-PERSIST \
 	"$out" >/dev/null
 
-ESP_OFF=$((2048 * 512))
-# persist starts at sector ESP_END_MB * 2048
-PERSIST_OFF=$((ESP_END_MB * 1024 * 1024))
+ESP_OFF=$((ESP_START_SECT * 512))
+PERSIST_OFF=$((PERSIST_START_SECT * 512))
 
-# Format ESP
-mformat -i "$out@@$ESP_OFF" -F -v GREENJADE ::
+# Hard require staged EFI + kernel before packing
+if [ ! -f "$esp_dir/EFI/BOOT/BOOTX64.EFI" ] || [ ! -f "$esp_dir/EFI/GREENJADE/KERNEL.ELF" ]; then
+	echo "make-hwtest-img: FAIL missing staged BOOTX64.EFI or KERNEL.ELF under $esp_dir" >&2
+	exit 1
+fi
+sz_k_stage=$(wc -c <"$esp_dir/EFI/GREENJADE/KERNEL.ELF" | tr -d ' ')
+sz_efi_stage=$(wc -c <"$esp_dir/EFI/BOOT/BOOTX64.EFI" | tr -d ' ')
+if [ "$sz_k_stage" -lt 100000 ] || [ "$sz_efi_stage" -lt 1000 ]; then
+	echo "make-hwtest-img: FAIL staged sizes efi=${sz_efi_stage}B kernel=${sz_k_stage}B" >&2
+	exit 1
+fi
+
+# Format ESP with exact sector count (do not let mformat eat the rest of the image)
+mformat -i "$out@@$ESP_OFF" -T "$ESP_SECTS" -F -v GREENJADE ::
 # Recreate directory tree on ESP via mtools
 mmd -i "$out@@$ESP_OFF" ::/EFI
 mmd -i "$out@@$ESP_OFF" ::/EFI/BOOT
@@ -309,8 +332,8 @@ if [ -d "$esp_dir/EFI/GREENJADE/rootfs-full" ]; then
 	fi
 fi
 
-# Format persist + copy tree (mcopy -s recursive when available)
-mformat -i "$out@@$PERSIST_OFF" -F -v GJ-PERSIST ::
+# Format persist with exact remaining sectors (must match GPT p2 start)
+mformat -i "$out@@$PERSIST_OFF" -T "$PERSIST_SECTS" -F -v GJ-PERSIST ::
 mmd -i "$out@@$PERSIST_OFF" ::/logs
 mmd -i "$out@@$PERSIST_OFF" ::/journal
 mmd -i "$out@@$PERSIST_OFF" ::/ssh
@@ -331,7 +354,7 @@ if [ -d "$persist_dir/steam" ]; then
 		:
 	else
 		# Fallback: top-level text + known files
-		for f in README.txt STATUS MANIFEST.txt; do
+		for f in README.txt STATUS MANIFEST.txt STAGE_META.txt; do
 			if [ -f "$persist_dir/steam/$f" ]; then
 				mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam/$f" "::/steam/$f"
 			fi
@@ -350,6 +373,20 @@ if [ -d "$persist_dir/steam" ]; then
 		fi
 	fi
 fi
+
+# Post-pack verification: KERNEL.ELF must be present and full-size on ESP
+{
+	export MTOOLSRC
+	MTOOLSRC=$(mktemp)
+	printf 'mtools_skip_check=1\ndrive x: file="%s" offset=%s\n' "$out" "$ESP_OFF" >"$MTOOLSRC"
+	k_listed=$(mdir x:/EFI/GREENJADE 2>/dev/null | grep -i KERNEL || true)
+	rm -f "$MTOOLSRC"
+	if [ -z "$k_listed" ]; then
+		echo "make-hwtest-img: FAIL KERNEL.ELF missing from packed ESP" >&2
+		exit 1
+	fi
+	echo "make-hwtest-img: ESP has KERNEL.ELF (staged ${sz_k_stage}B)"
+}
 
 sz=$(wc -c <"$out" | tr -d ' ')
 echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} rootfs_files=${rootfs_n}"

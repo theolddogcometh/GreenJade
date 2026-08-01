@@ -95,9 +95,12 @@ make live-iso
 ./scripts/run-live-iso.sh
 ```
 
-## Status — 2026-07-24
+## Status — 2026-08-01
 
-Parallel waves **soft shipped** (kernel / media / continuum graph only). **Open bars stay open.**
+**DUT hwtest pack ready for operator run** — see [HWTEST_TOMORROW.md](HWTEST_TOMORROW.md).  
+Artifacts (local `build/`, not in git): `greenjade-hwtest.img` (ESP+GJ-PERSIST, Steam media READY), `greenjade-live.iso`, Multiboot smoke **PASS**. Real-DUT boot still **operator action**. **bar3 OPEN.**
+
+Parallel waves **soft shipped** (kernel / media / continuum graph only; tip **makefile_max=26800**). **Open bars stay open.**
 
 **Soft stamp (Wave 9, historical):** continuum **makefile_max=15100** soft only (`graph_batch15100.c` parent wire / CREATE-ONLY decades when present on tree). Host `./scripts/steam-bar3-check.sh` → media inventory **READY** (stage/rootfs STATUS agree) — **media bootstrap only**. **bar3: OPEN.** Matrix **NOT-TRIED × 50**. **No bar3 claim.**
 

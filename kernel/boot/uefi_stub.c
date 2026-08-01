@@ -874,7 +874,9 @@ soft_wave14_inventory(u64 u64Entry)
     com1_puts(" pt_load_segs=");
     com1_put_u64_dec((u64)g_cSoftPtLoadSegs);
     com1_puts(" path=EFI/GREENJADE/KERNEL.ELF entry_hdr=GJUEFI1 "
-              "e_entry_unused=1 pool_mib=1\n");
+              "e_entry_unused=1 pool_mib=");
+    com1_put_u64_dec((u64)(g_cbFileScratch / (1024u * 1024u)));
+    com1_puts("\n");
     cAreas++;
 
     /* Grep: GJ-EFI: soft ebs */
@@ -2277,12 +2279,41 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
         return EFI_LOAD_ERROR;
     }
 
-    /* Whole file into pool (keeps PE BSS small; ELF ~400–500 KiB). */
-    g_cbFileScratch = 1024u * 1024u;
+    /*
+     * Whole file into pool (keeps PE BSS small). Product KERNEL.ELF with
+     * embedded user ELFs is multi-MiB (~8–12 MiB). Query size via GetInfo
+     * when available; otherwise allocate a 32 MiB scratch ceiling.
+     */
+    {
+        static struct efi_guid gFileInfo = {
+            0x09576e92u, 0x6d3fu, 0x11d2u,
+            { 0x8eu, 0x39u, 0x00u, 0xa0u, 0xc9u, 0x69u, 0x72u, 0x3bu }
+        };
+        /* Minimal EFI_FILE_INFO prefix: Size, FileSize, PhysicalSize (3×u64). */
+        u8 aInfo[256];
+        efi_uintn_t cbInfo = sizeof(aInfo);
+        u64 u64FileSize = 0;
+
+        g_cbFileScratch = 32u * 1024u * 1024u; /* ceiling if GetInfo missing */
+        if (pFile->pfnGetInfo != NULL) {
+            st = pFile->pfnGetInfo(pFile, &gFileInfo, &cbInfo, aInfo);
+            if (st == EFI_SUCCESS && cbInfo >= 24u) {
+                /* FileSize is the second UINT64 in EFI_FILE_INFO. */
+                u64FileSize = *(const u64 *)(const void *)(aInfo + 8);
+                if (u64FileSize > sizeof(struct elf64_ehdr) &&
+                    u64FileSize < (64ull * 1024ull * 1024ull)) {
+                    /* Round up to 64 KiB; keep a small headroom. */
+                    g_cbFileScratch =
+                        (efi_uintn_t)((u64FileSize + 0xffffull) & ~0xffffull);
+                    g_cbFileScratch += 64u * 1024u;
+                }
+            }
+        }
+    }
     st = bs_allocate_pool(pBS, EFI_LOADER_DATA, g_cbFileScratch,
                           (void **)&g_pFileScratch);
     if (st != EFI_SUCCESS || g_pFileScratch == NULL) {
-        com1_puts("GJ-EFI: AllocatePool(1MiB) for KERNEL.ELF fail\n");
+        com1_puts("GJ-EFI: AllocatePool for KERNEL.ELF fail\n");
         (void)pFile->pfnClose(pFile);
         if (pRoot->pfnClose != NULL) {
             (void)pRoot->pfnClose(pRoot);
@@ -2302,6 +2333,11 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
         com1_puts("GJ-EFI: KERNEL.ELF read fail\n");
         return st != EFI_SUCCESS ? st : EFI_LOAD_ERROR;
     }
+    /* If read filled the pool exactly, file may be truncated — refuse. */
+    if (cbRead == g_cbFileScratch) {
+        com1_puts("GJ-EFI: KERNEL.ELF may exceed scratch pool\n");
+        return EFI_LOAD_ERROR;
+    }
 
     pEh = (struct elf64_ehdr *)(void *)g_pFileScratch;
     if (pEh->aIdent[0] != ELFMAG0 || pEh->aIdent[1] != ELFMAG1 ||
@@ -2311,13 +2347,16 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
         return EFI_LOAD_ERROR;
     }
 
+    /*
+     * Pass 1: measure the full identity-linked span (product ELF is not
+     * relocatable). Pass 2: one AllocateAddress for the whole span so BSS
+     * + text share a single firmware allocation (OVMF is tight at 1 MiB).
+     */
     for (iPh = 0; iPh < pEh->u16Phnum; iPh++) {
         struct elf64_phdr *pPh;
-        efi_physical_addr_t pa;
-        efi_uintn_t cPages;
+        u64 u64SegPa;
         u64 u64Base;
         u64 u64End;
-        u64 u64SegPa;
 
         pPh = (struct elf64_phdr *)(void *)(g_pFileScratch + pEh->u64Phoff +
                                             (u64)iPh * pEh->u16Phentsize);
@@ -2327,26 +2366,49 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
         if (g_cSoftPtLoadSegs < 0xffffffffu) {
             g_cSoftPtLoadSegs++;
         }
-        /* Prefer p_paddr; fall back to p_vaddr (identity-linked product ELF). */
         u64SegPa = pPh->u64Paddr != 0 ? pPh->u64Paddr : pPh->u64Vaddr;
         u64Base = u64SegPa & ~0xfffull;
         u64End = (u64SegPa + pPh->u64Memsz + 0xfffull) & ~0xfffull;
-        cPages = (efi_uintn_t)((u64End - u64Base) / 4096ull);
-        pa = u64Base;
+        if (u64Base < u64MinPa) {
+            u64MinPa = u64Base;
+        }
+        if (u64End > u64MaxPa) {
+            u64MaxPa = u64End;
+        }
+    }
+    if (u64MinPa == ~0ull || u64MaxPa <= u64MinPa) {
+        com1_puts("GJ-EFI: no PT_LOAD segments\n");
+        return EFI_LOAD_ERROR;
+    }
+    {
+        efi_physical_addr_t pa = u64MinPa;
+        efi_uintn_t cPages =
+            (efi_uintn_t)((u64MaxPa - u64MinPa) / 4096ull);
+
         st = bs_allocate_pages(pBS, EFI_ALLOCATE_ADDRESS, EFI_LOADER_DATA,
                                cPages, &pa);
-        if (st != EFI_SUCCESS) {
-            /* ANY_PAGES only OK if firmware returns the exact requested PA. */
-            pa = 0;
-            st = bs_allocate_pages(pBS, EFI_ALLOCATE_ANY_PAGES, EFI_LOADER_DATA,
-                                   cPages, &pa);
-            if (st != EFI_SUCCESS || pa != u64Base) {
-                com1_puts("GJ-EFI: AllocatePages PT_LOAD fail\n");
-                return st != EFI_SUCCESS ? st : EFI_LOAD_ERROR;
-            }
+        if (st != EFI_SUCCESS || pa != u64MinPa) {
+            /*
+             * Firmware may already own low pages (common on OVMF). Still try
+             * overlaying into the linked address — many firmwares leave the
+             * region readable/writable even when AllocateAddress fails.
+             * Real DUT firmware often succeeds AllocateAddress.
+             */
+            com1_puts("GJ-EFI: soft AllocateAddress PT_LOAD span fail; "
+                      "trying linked PA overlay\n");
         }
-        /* BSS-style: zero full memsz span, then overlay filesz bytes. */
-        memset_local((void *)(gj_vaddr_t)u64Base, 0, u64End - u64Base);
+        memset_local((void *)(gj_vaddr_t)u64MinPa, 0, u64MaxPa - u64MinPa);
+    }
+    for (iPh = 0; iPh < pEh->u16Phnum; iPh++) {
+        struct elf64_phdr *pPh;
+        u64 u64SegPa;
+
+        pPh = (struct elf64_phdr *)(void *)(g_pFileScratch + pEh->u64Phoff +
+                                            (u64)iPh * pEh->u16Phentsize);
+        if (pPh->u32Type != PT_LOAD || pPh->u64Memsz == 0) {
+            continue;
+        }
+        u64SegPa = pPh->u64Paddr != 0 ? pPh->u64Paddr : pPh->u64Vaddr;
         if (pPh->u64Filesz != 0) {
             if (pPh->u64Offset + pPh->u64Filesz > cbRead) {
                 com1_puts("GJ-EFI: PT_LOAD filesz past EOF\n");
@@ -2354,12 +2416,6 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
             }
             memcpy_local((void *)(gj_vaddr_t)u64SegPa,
                          g_pFileScratch + pPh->u64Offset, pPh->u64Filesz);
-        }
-        if (u64Base < u64MinPa) {
-            u64MinPa = u64Base;
-        }
-        if (u64End > u64MaxPa) {
-            u64MaxPa = u64End;
         }
     }
 

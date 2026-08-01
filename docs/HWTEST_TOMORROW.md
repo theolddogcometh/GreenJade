@@ -3,6 +3,64 @@
 **Goal tomorrow:** boot GreenJade on real DUT, capture serial, confirm product markers, note hardware.  
 **Product tip:** `makefile_max=26800` (Wave 126). **bar3 remains OPEN** (Steam client / Top-50 still not claimed).
 
+## DUT #1 — ASUS ROG G752VT-RH71
+
+| Field | Value (stock / typical RH71 config) |
+|-------|-------------------------------------|
+| **Model** | ASUS ROG **G752VT-RH71** (17.3″ gaming laptop, ~2015–2016) |
+| **CPU** | Intel **Core i7-6700HQ** (Skylake, 4C/8T, 2.6–3.5 GHz) — **x86_64** OK |
+| **RAM** | Often **16 GiB** DDR4 (upgradeable to 64 GiB) — plenty for bring-up |
+| **GPU** | NVIDIA **GeForce GTX 970M** 3 GiB + Intel HD 530 (mux / Optimus-era) |
+| **Display** | 17.3″ FHD IPS (some SKUs G-Sync) — firmware **GOP** is the only soft console path |
+| **Storage** | **M.2 NVMe** boot SSD + **2.5″ SATA** HDD common — matches HCL **T1 soft probes** (NVMe CAP / AHCI), **not** full product drivers |
+| **USB** | USB 3.0 / xHCI — good for hwtest stick; HID probe soft only |
+| **Net** | Realtek/Intel wired + Wi‑Fi — **not** virtio; expect **no LAN product path** on first boot unless a clean-room NIC lands later |
+| **Audio** | Realtek HDA — kernel multi-stream smoke is **virtio/HDA stub path**; laptop codec = **open** |
+| **Firmware** | **UEFI** (Aptio); Secure Boot present |
+
+### Firmware keys (ASUS ROG G752)
+
+| Action | Key (typical) |
+|--------|----------------|
+| Boot menu (one-shot) | **Esc** (or **F8** on some ROG SKUs) at power-on |
+| Setup (BIOS/UEFI) | **F2** at power-on |
+| Boot override | Setup → **Boot** → USB / UEFI: USB name |
+
+**Required settings before USB boot:**
+
+1. **Secure Boot → Disabled** (GreenJade is not signed for MS UEFI CA).
+2. Prefer **UEFI** boot of the stick (not CSM-only “Legacy USB” unless Multiboot ISO needs it).
+3. If present: **Fast Boot → Disabled** (so Esc/F2 work reliably).
+4. **Launch CSM** / Legacy: leave **Off** for pure UEFI USB (`BOOTX64.EFI`); if UEFI USB fails, try **live ISO** with CSM **Enabled** for Multiboot hybrid (lab Multiboot path is the proven one).
+5. Discrete GPU: leave default; first bring-up only needs **UEFI GOP** framebuffer (often Intel or NVIDIA firmware FB — do not expect GTX 970M 3D).
+
+### G752-specific expectations (honest)
+
+| Surface | Expect on first boot |
+|---------|----------------------|
+| **UEFI load** | `GJ-EFI` → `KERNEL.ELF loaded` if ESP pack is good; OVMF sometimes #UD after handoff — **DUT may differ** |
+| **Multiboot (live ISO)** | Same path as lab QEMU — **preferred if UEFI stalls** |
+| **M0 OK / live daemons** | Target greps; keyboard may work only if USB HID path is enough for shell (soft) |
+| **Serial** | **No DB9 / no easy motherboard UART** on this chassis. Options: (a) **on-screen GOP** only; (b) external **USB‑TTL only if you have a UART header** (you almost certainly do not); (c) second machine is **not** required for first “did it boot?” if the panel shows boot text |
+| **NVMe / AHCI soft lines** | Possible greppable probes if serial/log exists — **≠** product storage |
+| **Steam / bar3** | Media **READY** on stick only — **do not** launch Steam on Windows under dual-boot and call that GreenJade bar3 |
+
+### Physical steps for this laptop
+
+1. Charge battery or plug AC (G752 draws hard under load; firmware USB boot is fine on AC).
+2. Insert **written** hwtest USB (rear or side USB3 port).
+3. Power on → spam **Esc** (boot menu) → select **UEFI: … USB**.
+4. Watch **panel**: early `GJ-EFI` / later shell if console works.
+5. If black screen after firmware: try **live ISO** stick, or Setup → other USB port, or disable Fast Boot / Secure Boot again.
+6. Log results in `GJ-PERSIST/logs/` (mount stick on lab host) or a note file: model **G752VT-RH71**, BIOS version (F2 → Main), what grepped.
+
+### HCL placement
+
+- **Tier target:** **T1 soft probes** (x86_64 Skylake laptop: NVMe + AHCI + USB HC + GOP).
+- **Not yet:** T1 product close, NVIDIA product path, Wi‑Fi, full HDA, Steam client.
+
+---
+
 ## What is ready on this lab host
 
 | Artifact | Path | Notes |
@@ -25,12 +83,13 @@
 ## What you need to bring / plug in
 
 1. **USB stick ≥ 4 GiB** (will be **wiped**).
-2. **DUT** with UEFI (or legacy Multiboot if using live ISO + GRUB path).
-3. **USB serial adapter** + cable to DUT COM/header (115200 8N1).
-4. Optional: Ethernet to DUT + lab host on same LAN (product **sshd :22** default-on).
-5. This tree checked out, or a laptop with the image + keys copied.
+2. **DUT: ASUS G752VT-RH71** (UEFI; or Multiboot via live ISO if UEFI stalls).
+3. **Serial is optional on this laptop** (no convenient COM). Prefer **on-screen** bring-up; use USB‑TTL only if you later wire a board UART.
+4. Optional: Ethernet cable (product **sshd :22** is default-on in QEMU; **real NIC on G752 is not virtio** — likely **no SSH on first laptop boot**).
+5. Phone camera / second laptop notes for BIOS version + boot greps if no serial log file.
+6. This tree on the lab host: images already under `build/`.
 
-**No USB stick is plugged into this lab box right now** (`lsblk` shows only RAID `sda`/`sdb`). Plug the stick tomorrow before write.
+**No USB stick is plugged into this lab box right now** (`lsblk` shows only RAID `sda`/`sdb`). Plug the stick before write.
 
 ## Tomorrow — step by step
 

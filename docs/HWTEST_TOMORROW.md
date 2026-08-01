@@ -180,16 +180,17 @@ Do **not** mark matrix rows PASS from media READY alone. See `docs/STEAM_HWTEST.
 
 ## Success criteria (minimum bar for “DUT boot worked”)
 
-- [ ] Stick boots firmware (UEFI or Multiboot hybrid)
-- [ ] Serial shows **`M0 OK`**
-- [ ] **`gj-quick-keys` miss=0** on the capture (or document which keys miss)
-- [ ] **`TRAP #UD` = 0** (or file issue with snippet)
-- [ ] Note DUT model, CPU, RAM, storage, NIC, GPU in a short log note under `GJ-PERSIST/logs/` or `docs/`
+- [ ] Stick boots firmware on **G752VT-RH71** (UEFI USB or Multiboot hybrid)
+- [ ] Evidence of **`M0 OK`** (serial log **or** clear on-screen / photo)
+- [ ] If a serial capture exists: **`gj-quick-keys` miss=0** (or document which keys miss)
+- [ ] Note **`#UD` / hang / black screen** if any
+- [ ] Record: model **G752VT-RH71**, BIOS version (F2 → Main), RAM size, boot path used
 
 Stretch (still open product):
 
-- [ ] `sshd` reachable on LAN `:22` (if net works on DUT)
-- [ ] Steam launcher path visible under persist (still not a bar3 close)
+- [ ] Soft greps for **NVMe / AHCI / USB HC** probes (≠ product storage)
+- [ ] `sshd` on LAN (unlikely until a real NIC path exists)
+- [ ] Steam tree visible on GJ-PERSIST (media only — **not** bar3)
 
 ## Rebuild commands (if image deleted)
 

@@ -58,10 +58,10 @@ static volatile int g_fYieldReq;
 static struct gj_sched_soft_stats g_soft;
 static int g_fSoftStatsOnce; /* one-shot soft dump after warm picks */
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=125). */
-#define THREAD_SOFT_DEEPEN_WAVE 125u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=126). */
+#define THREAD_SOFT_DEEPEN_WAVE 126u
 /* Fixed greppable categories emitted under "thread: soft …". */
-#define THREAD_SOFT_DEEPEN_AREAS 191u
+#define THREAD_SOFT_DEEPEN_AREAS 193u
 
 /*
  * Soft sched inventory (Wave 19; file-local; ready = RUNNABLE, run = RUNNING).
@@ -1692,6 +1692,10 @@ kprintf("thread: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=O
 kprintf("thread: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: thread: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
 kprintf("thread: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+/* Grep: thread: soft retgradientangle — Wave 126 return-gradientangle honesty */
+kprintf("thread: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product; not bar3)\n");
+/* Grep: thread: soft retblendangle — Wave 126 exclusive blendangle stamp */
+kprintf("thread: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=126 (retblendangle stamp; Soft≠product)\n");
                             kprintf("thread: soft deepen wave=%u areas=%u live=%u ready=%u "
             "run=%u blocked=%u pick=%lu log_n=%u ok=1 skip=0\n",
             (unsigned)THREAD_SOFT_DEEPEN_WAVE,

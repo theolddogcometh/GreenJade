@@ -74,8 +74,8 @@ extern void aarch64_uart_put_hex_n(unsigned long v, unsigned cNibbles);
 #define PSCI_SOFT_FEAT_COUNT      8u
 
 /* Wave 62 soft inventory stamp (file-local; never product gate). */
-#define PSCI_SOFT_WAVE 125u
-#define PSCI_SOFT_AREAS 213u
+#define PSCI_SOFT_WAVE 126u
+#define PSCI_SOFT_AREAS 215u
 
 /* Set by exception path when recovering a PSCI probe trap. */
 volatile unsigned long g_psci_probe_fault;
@@ -1436,6 +1436,10 @@ aarch64_uart_puts("aarch64: psci: soft retinkangle exclusive=1 soft_ne_product=1
 aarch64_uart_puts("aarch64: psci: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: psci: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
 aarch64_uart_puts("aarch64: psci: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+/* Grep: aarch64: psci: soft retgradientangle — Wave 126 return-gradientangle honesty */
+aarch64_uart_puts("aarch64: psci: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: psci: soft retblendangle — Wave 126 exclusive blendangle stamp */
+aarch64_uart_puts("aarch64: psci: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=126 (retblendangle stamp; Soft≠product)\n");
 aarch64_uart_put_hex((unsigned long)PSCI_SOFT_WAVE);
 aarch64_uart_puts(" (retfaceangle stamp; Soft!=product)\n");
     aarch64_uart_puts("aarch64: psci soft deepen wave=");

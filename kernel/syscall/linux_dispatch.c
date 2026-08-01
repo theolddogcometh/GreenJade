@@ -94,8 +94,8 @@ static u32 g_u32SoftRetNote;        /* soft_note_ret calls */
 static u8  g_fSoftInvOnce;          /* one-shot deep dump after activity */
 
 /* Wave 15 soft inventory stamp + area count (greppable deepen). */
-#define LINUX_DISPATCH_SOFT_WAVE 125u
-#define LINUX_DISPATCH_SOFT_AREAS 234u
+#define LINUX_DISPATCH_SOFT_WAVE 126u
+#define LINUX_DISPATCH_SOFT_AREAS 236u
 
 static void soft_inc(u32 *pCtr);
 static void soft_note_ret(i64 i64Ret);
@@ -1686,6 +1686,10 @@ kprintf("linux: dispatch: soft retinkangle exclusive=1 soft_ne_product=1 product
 kprintf("linux: dispatch: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: linux: dispatch: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
 kprintf("linux: dispatch: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+/* Grep: linux: dispatch: soft retgradientangle — Wave 126 return-gradientangle honesty */
+kprintf("linux: dispatch: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product; not bar3)\n");
+/* Grep: linux: dispatch: soft retblendangle — Wave 126 exclusive blendangle stamp */
+kprintf("linux: dispatch: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=126 (retblendangle stamp; Soft≠product)\n");
                             kprintf("linux: dispatch soft deepen wave=%u areas=%u live=%u "
             "table=%u hot=%u cold=%u none=%u log_n=%u\n",
             (unsigned)LINUX_DISPATCH_SOFT_WAVE, LINUX_DISPATCH_SOFT_AREAS,

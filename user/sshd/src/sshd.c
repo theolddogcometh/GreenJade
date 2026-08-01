@@ -351,10 +351,10 @@ main(int argc, char **argv)
 	}
 	printf("sshd: authorized_keys soft PASS\n");
 
-	/* Grep: sshd: soft inventory (Wave 125 exclusive deepen; host smoke) */
-/* Wave 125 soft deepen surfaces (CREATE-ONLY soft ≠ product):
- *   greppable: soft retpaletteangle continuum_toward=26700 soft_ne_product=1 wave=125
- *   greppable: soft retstrokeangle exclusive=1 continuum_toward=26700 soft_ne_product=1 wave=125
+	/* Grep: sshd: soft inventory (Wave 126 exclusive deepen; host smoke) */
+/* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
+ *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
+ *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
  * Soft ≠ product complete; product lamps 0; bar3 OPEN.
  */
 

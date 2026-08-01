@@ -15,9 +15,9 @@
 #   product-summary      scripts/gj-product-summary.sh when present
 #   live-iso artifact    presence only (build via make live-iso separately)
 #   nvme CAP             already soft (RHEL QEMU splits)
-#   continuum high-water via product-summary (Wave 125: toward M=26700;
-#     greppable 26700 when scan ≥26700, prior tip 26600 when ≥26600 — not a hard gate;
-#     ≠ bar3/Top50; soft deepen retpaletteangle/retstrokeangle CREATE-ONLY only;
+#   continuum high-water via product-summary (Wave 126: toward M=26800;
+#     greppable 26700 when scan ≥26700, prior tip 26700 when ≥26700 — not a hard gate;
+#     ≠ bar3/Top50; soft deepen retgradientangle/retblendangle CREATE-ONLY only;
 #     soft ≠ product complete; product lamps 0; do not hardcode false max)
 #
 # Contrast:

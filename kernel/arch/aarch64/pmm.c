@@ -31,7 +31,7 @@
  *             lifo=… step=… null=… inv=…
  *   aarch64: pmm soft stats gates=… free=… total=… ratio=… logs=… wave=118
  *   aarch64: pmm soft inventory wave=118 …
- *   aarch64: pmm soft deepen wave=125 areas=…
+ *   aarch64: pmm soft deepen wave=126 areas=…
  *   aarch64: pmm soft return inv_ret=… product_kernel=OPEN wave=118
  *   aarch64: pmm soft path order0=1 hier=0 neon=0 tib_bar=0 core=1
  *             product_kernel=OPEN wave=118
@@ -63,10 +63,10 @@ extern char __kernel_end[];
 #define PMM_SOFT_PAT_B 0x5a5a5a5a5a5a5a5aull
 
 /* Wave 45 soft inventory stamp (greppable wave=121). */
-#define PMM_SOFT_WAVE 125u
+#define PMM_SOFT_WAVE 126u
 
 /* Soft deepen areas: pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen. */
-#define PMM_SOFT_AREAS 213u
+#define PMM_SOFT_AREAS 215u
 
 static u64 g_u64PoolBase;
 static u64 g_u64PoolEnd;
@@ -1513,6 +1513,10 @@ kprintf("aarch64: pmm: soft retinkangle exclusive=1 soft_ne_product=1 product_ke
 kprintf("aarch64: pmm: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: aarch64: pmm: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
 kprintf("aarch64: pmm: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+/* Grep: aarch64: pmm: soft retgradientangle — Wave 126 return-gradientangle honesty */
+kprintf("aarch64: pmm: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product; not bar3)\n");
+/* Grep: aarch64: pmm: soft retblendangle — Wave 126 exclusive blendangle stamp */
+kprintf("aarch64: pmm: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=126 (retblendangle stamp; Soft≠product)\n");
                             kprintf("aarch64: pmm soft deepen wave=%u areas=%u "
             "catalog=pool,multi,lifo,step,inv,stats,path,surf,return,honesty,deepen "
             "logs=%u soft_only=1\n",

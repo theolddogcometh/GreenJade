@@ -148,10 +148,10 @@ static struct futex_waiter      g_aWaiters[GJ_FUTEX_MAX_WAITERS];
 static struct futex_robust_slot g_aRobust[GJ_FUTEX_ROBUST_SLOTS];
 static struct gj_spinlock       g_lockFutex = GJ_SPINLOCK_INIT;
 
-/* Wave 35 exclusive soft deepen stamp (greppable wave=125). */
-#define FUTEX_SOFT_DEEPEN_WAVE 125u
+/* Wave 35 exclusive soft deepen stamp (greppable wave=126). */
+#define FUTEX_SOFT_DEEPEN_WAVE 126u
 /* Fixed greppable categories emitted under "futex: soft …". */
-#define FUTEX_SOFT_DEEPEN_AREAS 189u
+#define FUTEX_SOFT_DEEPEN_AREAS 191u
 
 /*
  * Soft wait/wake sticky counters (wrap OK; diagnostics only).
@@ -1824,6 +1824,10 @@ kprintf("futex: soft retinkangle exclusive=1 soft_ne_product=1 product_kernel=OP
 kprintf("futex: soft retpaletteangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=125 (retpaletteangle honesty; Soft≠product; not bar3)\n");
 /* Grep: futex: soft retstrokeangle — Wave 125 exclusive strokeangle stamp */
 kprintf("futex: soft retstrokeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=125 (retstrokeangle stamp; Soft≠product)\n");
+/* Grep: futex: soft retgradientangle — Wave 126 return-gradientangle honesty */
+kprintf("futex: soft retgradientangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=126 (retgradientangle honesty; Soft≠product; not bar3)\n");
+/* Grep: futex: soft retblendangle — Wave 126 exclusive blendangle stamp */
+kprintf("futex: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=126 (retblendangle stamp; Soft≠product)\n");
                             kprintf("futex: soft deepen wave=%u areas=%u wait_enter=%lu "
             "wake_enter=%lu used=%u waiting=%u soft_log=%lu ok=1 skip=0\n",
             (unsigned)FUTEX_SOFT_DEEPEN_WAVE,

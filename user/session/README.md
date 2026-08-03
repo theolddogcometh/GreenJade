@@ -231,3 +231,5 @@ make sessiond      # → build/sessiond (host A1 smoke)
 
 Source of truth for freestanding code under this tree: `sessiond_gj.c` only.
 Host smoke: `sessiond.c`. Compositor pointer: `compositor_stub.c`.
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

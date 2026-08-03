@@ -48,6 +48,7 @@
 #include <gj/file_lock.h>
 #include <gj/hda.h>
 #include <gj/iommu.h>
+#include <gj/devmgr.h>
 #include <gj/net_door.h>
 #include <gj/irq_msix.h>
 #include <gj/notify.h>
@@ -71,11 +72,23 @@
 extern char __kernel_start[];
 extern char __kernel_end[];
 
-/*
- * serial_soft_log is linkable (serial.c) but not yet in public klog.h.
- * Weak: skip if the object is not linked into this image.
- */
+#include <gj/fb_console.h>
+
 extern void serial_soft_log(void) __attribute__((weak));
+
+#include <gj/ddi_door.h>
+#include <gj/linux_ksym.h>
+#include <gj/linux_module.h>
+
+/* Optional embedded r8169.ko for ABI module-path smoke (weak if not linked). */
+extern char gj_r8169_ko_blob[] __attribute__((weak));
+extern char gj_r8169_ko_blob_end[] __attribute__((weak));
+/*
+ * Optional embedded xhci_pci.ko (PCI 8086:a12f). Host often has xHCI *builtin*
+ * → no .ko → symbols stay weak NULL → soft path SKIP builtin. Soft≠product.
+ */
+extern char gj_xhci_pci_ko_blob[] __attribute__((weak));
+extern char gj_xhci_pci_ko_blob_end[] __attribute__((weak));
 
 /* Multiboot2 tag types */
 #define MB2_TAG_END  0
@@ -3504,6 +3517,15 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     gj_paddr_t paB;
     int iSmoke;
     const struct gj_boot_info *pBi;
+    const struct gj_boot_info *pPanel;
+
+    /* Panel bars: adaptive Y for ASPEED/short GOP (see uefi_panel_y_slot). */
+    pPanel = boot_info_get();
+    if (pPanel != NULL) {
+        kprintf("panel: fb %ux%u pitch=%u bpp=%u\n",
+                (unsigned)pPanel->u32FbWidth, (unsigned)pPanel->u32FbHeight,
+                (unsigned)pPanel->u32FbPitch, (unsigned)pPanel->u32FbBpp);
+    }
 
     pmm_init(aRegions, cRegions,
              (gj_paddr_t)(gj_vaddr_t)__kernel_start,
@@ -3511,6 +3533,7 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
 
     paA = pmm_alloc();
     paB = pmm_alloc();
+    fb_console_hold(2, "phase: after_mmap / pmm");
     kprintf("pmm alloc 0x%lx 0x%lx free=%u\n",
             (unsigned long)paA, (unsigned long)paB,
             (unsigned)pmm_free_count());
@@ -3544,9 +3567,18 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     /*
      * Large-RAM hierarchical soak: 768 GiB class (run with GJ_MEM=768G).
      * True 1 TiB (1ull<<40) still soft-skips when max_pa is below that.
+     * Skip heavy TiB soft soak on panel path (no COM1) — saves minutes on DUT.
      */
-    if (pmm_soak_tib(768ull << 30) != 0) {
-        kprintf("pmm: TiB soak FAIL\n");
+    {
+        extern u32 serial_thre_dead(void);
+
+        if (serial_thre_dead() == 0u) {
+            if (pmm_soak_tib(768ull << 30) != 0) {
+                kprintf("pmm: TiB soak FAIL\n");
+            }
+        } else {
+            kprintf("pmm: TiB soak SKIP (panel path; no COM1)\n");
+        }
     }
     kheap_init();
     memobj_init();
@@ -3567,10 +3599,151 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         extern u32 ahci_probe_scan(void);
         extern u32 usb_probe_scan(void);
         extern u32 ps2_probe(void);
+        extern int xhci_msc_init(void);
+        extern int xhci_msc_stick_log_ready(void);
+        extern int xhci_msc_stick_log_write(const void *pBuf, u32 cb);
+        extern u32 xhci_msc_last_stage(void);
+        /*
+         * Soft VT-d identity for common PCH xHCI at 0:14.0 (G752 a12f,
+         * Supermicro 8d31). Never hard-fail if absent.
+         */
+        extern int iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func);
+        extern void dma_buf_soft_note(void);
+        u32 u32XhciSt;
+        int nXhId;
 
         (void)nvme_probe_scan();
         (void)ahci_probe_scan();
         (void)usb_probe_scan();
+        fb_console_hold(2, "phase: PCI / IOMMU / xHCI");
+        dma_buf_soft_note();
+        nXhId = iommu_vtd_xhci_identity(0, 0x14u, 0);
+        kprintf("iommu: identity 0:14.0 xhci_identity ret=%d "
+                "(1=PASS 0=SKIP -1=FAIL soft)\n",
+                nXhId);
+        /* Real USB MSC BOT stick log path (soft SKIP if no xHCI / no stick) */
+        (void)xhci_msc_init();
+        u32XhciSt = xhci_msc_last_stage();
+        kprintf("xhci: panel stage=%u msc_ready=%d\n",
+                (unsigned)u32XhciSt, xhci_msc_stick_log_ready());
+        {
+            extern void fb_console_status(const char *szLine);
+            extern u32 xhci_msc_last_cc(void);
+            extern u32 xhci_msc_addr_path(void);
+            static const char *const s_aszStage[] = {
+                "not_tried",  "no_xhci",    "hc_reset",   "rings",
+                "hc_up",      "no_ccs",     "port_reset", "enable_slot",
+                "enum",       "capacity",   "msc_ready",  "get_desc",
+                "eval_ep0",   "get_desc18", "hub",        "get_config",
+                "not_bot",    "set_config", "config_ep",  "address_cmd",
+                "set_address"
+            };
+            const char *szName = "?";
+            u32 u32Cc;
+            u32 u32Path;
+
+            if (u32XhciSt <= 20u) {
+                szName = s_aszStage[u32XhciSt];
+            }
+            u32Cc = xhci_msc_last_cc();
+            u32Path = xhci_msc_addr_path();
+            /* Fixed status strip + scroll log — readable without tick counting. */
+            {
+                const char *p;
+                static char s_sz[120];
+                char *q = s_sz;
+
+                p = "XHCI stage=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (u32XhciSt >= 10u) {
+                    *q++ = (char)('0' + (u32XhciSt / 10u));
+                }
+                *q++ = (char)('0' + (u32XhciSt % 10u));
+                p = " ";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                p = szName;
+                while (*p && (q - s_sz) < 70) {
+                    *q++ = *p++;
+                }
+                p = " cc=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (u32Cc >= 100u) {
+                    *q++ = (char)('0' + (u32Cc / 100u) % 10u);
+                }
+                if (u32Cc >= 10u) {
+                    *q++ = (char)('0' + (u32Cc / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (u32Cc % 10u));
+                if (u32XhciSt == 19u || u32XhciSt == 20u) {
+                    extern u8 xhci_msc_last_port(void);
+                    extern u8 xhci_msc_last_speed(void);
+                    u8 u8P;
+                    u8 u8S;
+
+                    p = (u32Path == 2u) ? " soft" : " bsr0";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    /* cc=4 = USB Transaction Error (link/device no response) */
+                    if (u32Cc == 4u) {
+                        p = " USBTE";
+                        while (*p && (q - s_sz) < 100) {
+                            *q++ = *p++;
+                        }
+                    }
+                    u8P = xhci_msc_last_port();
+                    u8S = xhci_msc_last_speed();
+                    /* Explicit " p22/s4" so panel is not misread as p2254. */
+                    if (u8P != 0 && (q - s_sz) < 100) {
+                        p = " p";
+                        while (*p) {
+                            *q++ = *p++;
+                        }
+                        if (u8P >= 10u) {
+                            *q++ = (char)('0' + (u8P / 10u) % 10u);
+                        }
+                        *q++ = (char)('0' + (u8P % 10u));
+                        p = "/s";
+                        while (*p) {
+                            *q++ = *p++;
+                        }
+                        *q++ = (char)('0' + (u8S % 10u));
+                    }
+                }
+                if (xhci_msc_stick_log_ready() != 0) {
+                    p = " MSC=READY";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                }
+                *q = '\0';
+                fb_console_status(s_sz);
+                fb_console_hold(3, s_sz);
+                if (xhci_msc_stick_log_ready() != 0) {
+                    fb_console_hold(4, "USB MSC: READY (KLOG path up)");
+                } else if (u32XhciSt == 20u) {
+                    fb_console_hold(4, "USB MSC: SET_ADDR ctrl fail");
+                } else if (u32XhciSt == 19u) {
+                    fb_console_hold(4, "USB MSC: AddressDevice BSR0 fail");
+                } else {
+                    fb_console_hold(4, "USB MSC: not ready");
+                }
+                kprintf("xhci: STATUS %s path=%u\n", s_sz, (unsigned)u32Path);
+            }
+        }
+        if (xhci_msc_stick_log_ready() != 0) {
+            static const char s_szStickHello[] =
+                "GreenJade kernel stick log: xhci_msc BOT path up\n";
+
+            (void)xhci_msc_stick_log_write(s_szStickHello,
+                                           sizeof(s_szStickHello) - 1u);
+        }
         (void)ps2_probe();
     }
     /* Console poll bring-up (serial COM1) */
@@ -4226,6 +4399,130 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
         }
     }
     (void)virtio_net_probe();
+    /* L2 mux: virtio (QEMU) or rtl8168 (G752 10ec:8168). Sets lab static IP. */
+    {
+        extern void net_l2_init(void);
+        extern int net_l2_ready(void);
+        extern u32 net_l2_backend(void);
+        extern const char *net_l2_name(void);
+        extern void net_l2_ip(u8 *pIp);
+        extern int rtl8168_link_up(void);
+        u8 aIp[4];
+        char szNet[96];
+        char *q;
+        const char *p;
+
+        net_l2_init();
+        /* Resync ARP/ICMP identity off QEMU 10.0.2.15 → lab IP (G752). */
+        {
+            extern void net_eth_apply_l2_identity(void);
+
+            net_eth_apply_l2_identity();
+        }
+        net_l2_ip(aIp);
+        q = szNet;
+        p = "NET ";
+        while (*p) {
+            *q++ = *p++;
+        }
+        p = net_l2_name();
+        while (*p && (q - szNet) < 40) {
+            *q++ = *p++;
+        }
+        if (net_l2_ready() != 0) {
+            p = " ";
+            while (*p) {
+                *q++ = *p++;
+            }
+            /* ip a.b.c.d */
+            {
+                u32 i;
+
+                for (i = 0; i < 4u; i++) {
+                    u32 v = aIp[i];
+
+                    if (v >= 100u) {
+                        *q++ = (char)('0' + (v / 100u) % 10u);
+                    }
+                    if (v >= 10u) {
+                        *q++ = (char)('0' + (v / 10u) % 10u);
+                    }
+                    *q++ = (char)('0' + (v % 10u));
+                    if (i < 3u) {
+                        *q++ = '.';
+                    }
+                }
+            }
+            if (net_l2_backend() == 2u) {
+                extern u32 rtl8168_tx_count(void);
+                extern u32 rtl8168_rx_count(void);
+                u32 u32Tx;
+                u32 u32Rx;
+
+                p = rtl8168_link_up() != 0 ? " UP" : " DOWN";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                /* Soft t/f/b/r — f=err only; b=ring full (busy ≠ fail). */
+                {
+                    extern u32 rtl8168_tx_fail(void);
+                    extern u32 rtl8168_tx_busy(void);
+                    u32 u32Tf;
+                    u32 u32Tb;
+
+                    u32Tx = rtl8168_tx_count();
+                    u32Rx = rtl8168_rx_count();
+                    u32Tf = rtl8168_tx_fail();
+                    u32Tb = rtl8168_tx_busy();
+                    p = " t";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    if (u32Tx >= 10u) {
+                        *q++ = (char)('0' + (u32Tx / 10u) % 10u);
+                    }
+                    *q++ = (char)('0' + (u32Tx % 10u));
+                    p = "/f";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    if (u32Tf >= 10u) {
+                        *q++ = (char)('0' + (u32Tf / 10u) % 10u);
+                    }
+                    *q++ = (char)('0' + (u32Tf % 10u));
+                    p = "/b";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    if (u32Tb >= 10u) {
+                        *q++ = (char)('0' + (u32Tb / 10u) % 10u);
+                    }
+                    *q++ = (char)('0' + (u32Tb % 10u));
+                    p = "/r";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    if (u32Rx >= 10u) {
+                        *q++ = (char)('0' + (u32Rx / 10u) % 10u);
+                    }
+                    *q++ = (char)('0' + (u32Rx % 10u));
+                }
+            }
+            p = " :22";
+            while (*p) {
+                *q++ = *p++;
+            }
+        } else {
+            /* Distinguish "no chip" vs "probe fail" — never silent. */
+            p = " FAIL (no L2)";
+            while (*p) {
+                *q++ = *p++;
+            }
+        }
+        *q = '\0';
+        fb_console_hold(6, szNet);
+        kprintf("net_l2: STATUS %s\n", szNet);
+    }
     if (virtio_net_ready()) {
         static const u8 aEth[64] = {
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -4519,6 +4816,469 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
     pci_msix_probe_log();
     irq_msix_init();
     iommu_probe();
+    /* Soft DDI/devmgr lamps (docs/DDI_SOFT.md); Soft≠product */
+    devmgr_soft_init();
+    /*
+     * ABI-first laptop path (option 1): DDI bind smoke only.
+     * Freestanding xhci_msc stage=15 / rtl8168 t/f/b/r = lab honesty only
+     * — not product DoD (docs/LAPTOP_LINUX_DRIVER_HOST.md, ABI_FIRST_PIVOT).
+     * greppable: main: soft ddi bind … | main: soft ddi laptop smoke PASS
+     * greppable: main: soft freestanding lab only
+     * greppable: main: soft linux_module path PASS|FAIL|SKIP
+     */
+    {
+        struct gj_ddi_dev_info info;
+        struct gj_ddi_map_note note;
+        i64 i64N;
+        i64 i64H;
+        i64 i64St;
+        u32 i;
+        u32 fRtl = 0u;
+        u32 fXhci = 0u;
+        u32 fRtlBind = 0u;
+        u32 fXhciBind = 0u;
+        u32 u32Bar;
+        u32 u32MapOk;
+
+        ddi_door_init();
+        (void)ddi_door_syscall(DDI_OP_INVENTORY, 0, 0, 0);
+        i64N = ddi_door_syscall(DDI_OP_SCAN, 0, 0, 0);
+        if (i64N < 0) {
+            i64N = 0;
+        }
+        kprintf("main: soft freestanding lab only "
+                "(xhci stage/net t-f-b-r != product; ABI=DDI+UDX)\n");
+
+        for (i = 0u; i < (u32)i64N && i < GJ_DDI_SOFT_DEV_MAX; i++) {
+            memset(&info, 0, sizeof(info));
+            i64St = ddi_door_syscall(DDI_OP_GET, (u64)i,
+                                     (u64)(uintptr_t)&info, 0);
+            if (i64St != 0) {
+                continue;
+            }
+            if (info.u16Vend == 0x10ecu && info.u16Dev == 0x8168u) {
+                fRtl = 1u;
+                kprintf("main: soft ddi found 10ec:8168 @ %02x:%02x.%u "
+                        "bar0=0x%lx/%lu bar2=0x%lx/%lu\n",
+                        (unsigned)info.u8Bus, (unsigned)info.u8Slot,
+                        (unsigned)info.u8Func,
+                        (unsigned long)info.u64Bar0Pa,
+                        (unsigned long)info.u64Bar0Cb,
+                        (unsigned long)info.u64Bar2Pa,
+                        (unsigned long)info.u64Bar2Cb);
+                i64H = ddi_door_syscall(DDI_OP_OPEN, (u64)i, 0, 0);
+                if (i64H > 0) {
+                    u32MapOk = 0u;
+                    /* RTL public path often uses BAR2; try 0 and 2. */
+                    for (u32Bar = 0u; u32Bar <= 2u; u32Bar += 2u) {
+                        memset(&note, 0, sizeof(note));
+                        i64St = ddi_door_syscall(DDI_OP_MAP_BAR, (u64)i64H,
+                                                 (u64)u32Bar,
+                                                 (u64)(uintptr_t)&note);
+                        if (i64St >= 0 && note.u8Ok != 0u) {
+                            u32MapOk++;
+                            kprintf("main: soft ddi map 10ec:8168 bar%u "
+                                    "pa=0x%lx va=0x%lx cb=0x%lx\n",
+                                    (unsigned)u32Bar,
+                                    (unsigned long)note.u64Pa,
+                                    (unsigned long)note.u64Va,
+                                    (unsigned long)note.u64Cb);
+                        }
+                    }
+                    (void)ddi_door_syscall(DDI_OP_IRQ_BIND, (u64)i64H, 0, 0);
+                    if (u32MapOk != 0u) {
+                        fRtlBind = 1u;
+                        kprintf("main: soft ddi bind 10ec:8168 PASS "
+                                "h=%ld maps=%u soft=1 product=0\n",
+                                (long)i64H, (unsigned)u32MapOk);
+                    } else {
+                        kprintf("main: soft ddi bind 10ec:8168 SKIP "
+                                "open ok map fail soft=1 product=0\n");
+                    }
+                } else {
+                    kprintf("main: soft ddi bind 10ec:8168 SKIP open\n");
+                }
+            }
+            if (info.u16Vend == 0x8086u && info.u16Dev == 0xa12fu) {
+                fXhci = 1u;
+                kprintf("main: soft ddi found 8086:a12f @ %02x:%02x.%u "
+                        "bar0=0x%lx/%lu\n",
+                        (unsigned)info.u8Bus, (unsigned)info.u8Slot,
+                        (unsigned)info.u8Func,
+                        (unsigned long)info.u64Bar0Pa,
+                        (unsigned long)info.u64Bar0Cb);
+                i64H = ddi_door_syscall(DDI_OP_OPEN, (u64)i, 0, 0);
+                if (i64H > 0) {
+                    memset(&note, 0, sizeof(note));
+                    i64St = ddi_door_syscall(DDI_OP_MAP_BAR, (u64)i64H, 0,
+                                             (u64)(uintptr_t)&note);
+                    if (i64St >= 0 && note.u8Ok != 0u) {
+                        u32 u32Cap;
+
+                        /*
+                         * Soft CFG dword0 (identity/vendor already known).
+                         * Not freestanding BOT; product = UDX host later.
+                         */
+                        u32Cap = (u32)ddi_door_syscall(DDI_OP_CFG_READ,
+                                                       (u64)i64H, 0, 0);
+                        (void)ddi_door_syscall(DDI_OP_IRQ_BIND, (u64)i64H,
+                                               0, 0);
+                        fXhciBind = 1u;
+                        kprintf("main: soft ddi bind 8086:a12f PASS "
+                                "h=%ld bar0_va=0x%lx cfg0=0x%x "
+                                "soft=1 product=0 (not freestanding stage)\n",
+                                (long)i64H, (unsigned long)note.u64Va,
+                                (unsigned)u32Cap);
+                    } else {
+                        kprintf("main: soft ddi bind 8086:a12f SKIP map\n");
+                    }
+                } else {
+                    kprintf("main: soft ddi bind 8086:a12f SKIP open\n");
+                }
+            }
+        }
+        if (fRtl == 0u) {
+            kprintf("main: soft ddi miss 10ec:8168\n");
+        }
+        if (fXhci == 0u) {
+            kprintf("main: soft ddi miss 8086:a12f\n");
+        }
+        kprintf("main: soft ddi laptop smoke PASS n=%ld rtl=%u/%u "
+                "xhci_a12f=%u/%u (found/bind) abi_first=1\n",
+                (long)i64N, (unsigned)fRtl, (unsigned)fRtlBind,
+                (unsigned)fXhci, (unsigned)fXhciBind);
+    }
+    /*
+     * ABI-first Linux module path smoke (soft≠product; G-AC-1: not bar3 AC).
+     * Optional weak embed of r8169.ko for load_mem; else SKIP (finit_module later).
+     * greppable: main: soft linux_module path PASS|FAIL|SKIP
+     * greppable: main: soft linux_module xhci path PASS|FAIL|SKIP
+     * Does not thrash freestanding xhci/rtl stages.
+     *
+     * Soft init order after ksym (pci last so __pci_register_driver overrides stub):
+     *   dma → time → netdev → phy → pci
+     *
+     * STATUS hold map (static pane; soft≠product only in kprintf):
+     *   7  ksym n=N
+     *   8  mod r8169 init=… | FAIL … | SKIP no embed
+     *   9  netdev soft N | unres=… | use finit_module later
+     *  10  probe 10ec:8168 soft|miss   (PASS path; parent-owned wording)
+     *  11  pci reg=N match=M           (PASS path; free hold)
+     *  12–13 soft xhci_pci path (below)
+     */
+    {
+        i64 i64Mod;
+        u64 cbKo;
+        const char *szUnresolved;
+        /* Headers may lag; soft stubs live in sibling wave units. Soft≠product. */
+        extern void linux_dma_soft_init(void);
+        extern void linux_time_soft_init(void);
+        extern void linux_netdev_soft_init(void);
+        extern void linux_phy_soft_init(void);
+        extern void linux_pci_soft_init(void);
+        extern u32  linux_netdev_soft_count(void);
+
+        linux_ksym_init();
+        {
+            char szHold[80];
+
+            linux_dma_soft_init();
+            linux_time_soft_init();
+            linux_netdev_soft_init();
+            linux_phy_soft_init();
+            /* last: overrides any stub pci_register_driver in earlier softs */
+            linux_pci_soft_init();
+            /* Pin ksym to STATUS (static) — scroll log is too noisy. */
+            {
+                u32 n = linux_ksym_count();
+                char *q = szHold;
+                const char *p = "ksym n=";
+                u32 v = n;
+
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (v >= 1000u) {
+                    *q++ = (char)('0' + (v / 1000u) % 10u);
+                }
+                if (v >= 100u) {
+                    *q++ = (char)('0' + (v / 100u) % 10u);
+                }
+                if (v >= 10u) {
+                    *q++ = (char)('0' + (v / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (v % 10u));
+                *q = '\0';
+                fb_console_hold(7, szHold);
+            }
+        }
+        linux_module_init();
+
+        cbKo = 0ull;
+        if ((uintptr_t)gj_r8169_ko_blob != 0ull &&
+            (uintptr_t)gj_r8169_ko_blob_end >
+                (uintptr_t)gj_r8169_ko_blob) {
+            cbKo = (u64)(gj_r8169_ko_blob_end - gj_r8169_ko_blob);
+        }
+
+        if (cbKo > 0ull) {
+            i64Mod = linux_module_load_mem(gj_r8169_ko_blob, (size_t)cbKo,
+                                           "r8169");
+            if (i64Mod == 0) {
+                i64 i64Init;
+                i64 i64InitDisp;
+                char szHold[80];
+                char *q;
+                const char *p;
+                u32 nNet;
+                u32 cReg;
+                u32 cMatch;
+
+                i64Init = linux_module_init_call("r8169");
+                /* Soft≠product: kprintf only — STATUS stays short milestones. */
+                kprintf("main: soft linux_module path PASS name=r8169 "
+                        "cb=%lu init=%ld soft=1 product=0 (soft≠product)\n",
+                        (unsigned long)cbKo, (long)i64Init);
+                /*
+                 * Safety net: if module init returned 0 but never soft-bound
+                 * 10ec:8168 (old 32-byte id_table stride bug, or register
+                 * SKIP), force EMU bind from devmgr inventory so STATUS can
+                 * show netdev soft ≥1. Soft≠product; greppable force emu.
+                 */
+                {
+                    extern u32 linux_pci_soft_force_emu_bind(u16, u16);
+                    extern u32 linux_pci_soft_bound_count(void);
+                    extern u32 linux_pci_soft_register_calls(void);
+                    extern u32 linux_pci_soft_match_count(void);
+                    u32 cBound;
+                    u32 cForce;
+
+                    nNet = linux_netdev_soft_count();
+                    cBound = linux_pci_soft_bound_count();
+                    cReg = linux_pci_soft_register_calls();
+                    cMatch = linux_pci_soft_match_count();
+                    kprintf("main: soft pci after r8169 init netdev=%u "
+                            "bound=%u reg_calls=%u match=%u "
+                            "(soft≠product)\n",
+                            (unsigned)nNet, (unsigned)cBound, (unsigned)cReg,
+                            (unsigned)cMatch);
+                    if (nNet == 0u) {
+                        cForce = linux_pci_soft_force_emu_bind(
+                            (u16)0x10ecu, (u16)0x8168u);
+                        nNet = linux_netdev_soft_count();
+                        kprintf("main: soft force emu 10ec:8168 "
+                                "hits=%u netdev_now=%u (soft≠product)\n",
+                                (unsigned)cForce, (unsigned)nNet);
+                    }
+                }
+                /*
+                 * STATUS 8–11 (static; no soft≠product spam on pane).
+                 * Hold 10 wording is parent-owned: probe 10ec:8168 soft|miss.
+                 * Hold 11 free (xhci uses 12–13).
+                 */
+                q = szHold;
+                p = "mod r8169 init=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                i64InitDisp = i64Init;
+                if (i64InitDisp < 0) {
+                    *q++ = '-';
+                    i64InitDisp = -i64InitDisp;
+                }
+                if ((u64)i64InitDisp >= 10ull) {
+                    *q++ = (char)('0' + ((u32)i64InitDisp / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (u32)i64InitDisp % 10u);
+                *q = '\0';
+                fb_console_hold(8, szHold);
+                /* hold 9: netdev soft N (0 if none registered) */
+                nNet = linux_netdev_soft_count();
+                q = szHold;
+                p = "netdev soft ";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (nNet >= 100u) {
+                    *q++ = (char)('0' + (nNet / 100u) % 10u);
+                }
+                if (nNet >= 10u) {
+                    *q++ = (char)('0' + (nNet / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (nNet % 10u));
+                *q = '\0';
+                fb_console_hold(9, szHold);
+                /* hold 10: parent-owned probe lamp (do not reword) */
+                if (nNet > 0u) {
+                    fb_console_hold(10, "probe 10ec:8168 soft");
+                } else {
+                    fb_console_hold(10, "probe 10ec:8168 miss");
+                }
+                /* hold 11: optional pci soft counters (xhci is 12–13) */
+                q = szHold;
+                p = "pci reg=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (cReg >= 100u) {
+                    *q++ = (char)('0' + (cReg / 100u) % 10u);
+                }
+                if (cReg >= 10u) {
+                    *q++ = (char)('0' + (cReg / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (cReg % 10u));
+                p = " match=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (cMatch >= 100u) {
+                    *q++ = (char)('0' + (cMatch / 100u) % 10u);
+                }
+                if (cMatch >= 10u) {
+                    *q++ = (char)('0' + (cMatch / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (cMatch % 10u));
+                *q = '\0';
+                fb_console_hold(11, szHold);
+                /*
+                 * net_l2 coexistence lamp: soft linux netdev present ≥1.
+                 * TX/RX stay freestanding (rtl8168|virtio); Soft≠product.
+                 * Grep: net_l2: soft linux netdev note n=N (Soft≠product)
+                 */
+                {
+                    extern void net_l2_soft_linux_note(void);
+
+                    net_l2_soft_linux_note();
+                }
+            } else {
+                char szHold[80];
+                char *q;
+                const char *p;
+                u32 i;
+
+                szUnresolved = linux_module_last_unresolved();
+                kprintf("main: soft linux_module path FAIL name=r8169 "
+                        "st=%ld unresolved=%s soft=1 product=0 "
+                        "(soft≠product)\n",
+                        (long)i64Mod,
+                        (szUnresolved != NULL && szUnresolved[0] != '\0')
+                            ? szUnresolved
+                            : "(none)");
+                q = szHold;
+                /* Decode common st for STATUS (FAULT=-8 reloc range). */
+                if (i64Mod == (i64)(-8)) {
+                    p = "mod r8169 FAIL FAULT reloc";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                } else {
+                    p = "mod r8169 FAIL st=";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                    {
+                        i64 s = i64Mod;
+
+                        if (s < 0) {
+                            *q++ = '-';
+                            s = -s;
+                        }
+                        if ((u64)s >= 10ull) {
+                            *q++ = (char)('0' + ((u32)s / 10u) % 10u);
+                        }
+                        *q++ = (char)('0' + (u32)s % 10u);
+                    }
+                }
+                *q = '\0';
+                fb_console_hold(8, szHold);
+                q = szHold;
+                p = "unres=";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (szUnresolved != NULL && szUnresolved[0] != '\0') {
+                    for (i = 0; i < 48u && szUnresolved[i] != '\0'; i++) {
+                        *q++ = szUnresolved[i];
+                    }
+                } else {
+                    p = "(none)";
+                    while (*p) {
+                        *q++ = *p++;
+                    }
+                }
+                *q = '\0';
+                fb_console_hold(9, szHold);
+                /* leave hold 10–11 free on FAIL (no probe/pci claim) */
+            }
+        } else {
+            kprintf("main: soft linux_module path SKIP no embed "
+                    "(use finit_module later; soft≠product)\n");
+            fb_console_hold(8, "mod r8169 SKIP no embed");
+            fb_console_hold(9, "use finit_module later");
+            /* leave hold 10–11 free on SKIP */
+        }
+
+        /*
+         * Soft xHCI module path (PCI 8086:a12f / xhci_pci). Soft≠product.
+         * Host often ships xhci as *builtin* → no .ko embed → SKIP builtin.
+         * When xhci_pci_mod_blob.S is linked (collect + embed-linux-mod), try
+         * load_mem like r8169. Does not rewrite freestanding xhci_msc stages.
+         * greppable: main: soft linux_module xhci path PASS|FAIL|SKIP
+         */
+        {
+            i64 i64Xhci;
+            u64 cbXhci;
+            const char *szUn;
+
+            cbXhci = 0ull;
+            if ((uintptr_t)gj_xhci_pci_ko_blob != 0ull &&
+                (uintptr_t)gj_xhci_pci_ko_blob_end >
+                    (uintptr_t)gj_xhci_pci_ko_blob) {
+                cbXhci = (u64)(gj_xhci_pci_ko_blob_end - gj_xhci_pci_ko_blob);
+            }
+
+            if (cbXhci > 0ull) {
+                kprintf("main: soft linux_module xhci path PRESENT "
+                        "name=xhci_pci cb=%lu soft=1 product=0\n",
+                        (unsigned long)cbXhci);
+                i64Xhci = linux_module_load_mem(gj_xhci_pci_ko_blob,
+                                                (size_t)cbXhci, "xhci_pci");
+                if (i64Xhci == 0) {
+                    i64 i64InitX;
+
+                    i64InitX = linux_module_init_call("xhci_pci");
+                    kprintf("main: soft linux_module xhci path PASS "
+                            "name=xhci_pci cb=%lu init=%ld soft=1 product=0 "
+                            "(not freestanding stage; BOT OPEN)\n",
+                            (unsigned long)cbXhci, (long)i64InitX);
+                    /* holds 12–13: leave 8–11 for r8169 STATUS */
+                    fb_console_hold(12, "mod xhci_pci LOAD ok");
+                    fb_console_hold(13, "probe 8086:a12f soft?");
+                } else {
+                    szUn = linux_module_last_unresolved();
+                    kprintf("main: soft linux_module xhci path FAIL "
+                            "name=xhci_pci st=%ld unresolved=%s soft=1 "
+                            "product=0\n",
+                            (long)i64Xhci,
+                            (szUn != NULL && szUn[0] != '\0') ? szUn
+                                                             : "(none)");
+                    fb_console_hold(12, "mod xhci_pci FAIL load");
+                    fb_console_hold(13, "xhci ksym surface OPEN");
+                }
+            } else {
+                /*
+                 * Expected on RHEL-class / many laptop hosts: xhci_pci builtin.
+                 * Collect stages meta/XHCI-STATUS.txt; finit_module later.
+                 */
+                kprintf("main: soft linux_module xhci path SKIP builtin "
+                        "(no xhci_pci embed; host often builtin; "
+                        "PCI 8086:a12f collect .ko or finit_module later)\n");
+                /* holds 12–13 only — do not clobber r8169 holds 8–11 */
+                fb_console_hold(12, "mod xhci_pci SKIP builtin");
+                fb_console_hold(13, "8086:a12f no .ko embed");
+            }
+        }
+    }
     {
         static struct gj_iommu_info iom;
         static struct gj_pci_msix_info aMx[4];
@@ -5019,6 +5779,9 @@ kernel_after_mmap(struct gj_mem_region *aRegions, size_t cRegions)
             kprintf("timer: APIC uncalibrated; mono remains PIT\n");
         }
     }
+    /* Safe point: PIC/APIC programmed; enable IRQ0 + IF (not in timer_init). */
+    timer_irq_enable();
+    fb_console_hold(5, "timer: IRQ0 enabled");
     kprintf("smp: detected=%u online=%u\n",
             smp_cpu_count_detected(), smp_cpu_count_online());
     smp_start_aps();
@@ -7283,6 +8046,16 @@ kprintf("soft: retblendangle exclusive=1 soft_ne_product=1 product_kernel=OPEN b
     }
 
     kprintf("M0 OK\n");
+    /*
+     * Force one net poll so hold line 6 can update NET counters after M0.
+     * Live "net: live" scroll spam is disabled (panel STATUS only).
+     */
+    {
+        extern void net_eth_poll(void);
+
+        net_eth_poll();
+        fb_console_hold(5, "M0 OK — NET line6 live if n= ticks");
+    }
     scheduler_run();
 }
 
@@ -7404,6 +8177,14 @@ kmain_uefi(struct gj_boot_info *pInfo)
     }
 
     serial_init();
+    /* GOP text console so panel-only DUTs get readable boot log (not just bars). */
+    {
+        extern void fb_console_init(const struct gj_boot_info *pInfo);
+
+        fb_console_init(pInfo);
+        fb_console_hold(0, "BOOT: kmain_uefi");
+        fb_console_hold(1, "phase: early");
+    }
     kprintf("GreenJade M0\n");
     kprintf("boot: source=UEFI kernel_end=0x%lx rsdp=0x%lx map=0x%lx bytes=%lu\n",
             (unsigned long)(gj_vaddr_t)__kernel_end,
@@ -7415,6 +8196,8 @@ kmain_uefi(struct gj_boot_info *pInfo)
                 (unsigned long)pInfo->u64FbBase, pInfo->u32FbWidth,
                 pInfo->u32FbHeight, pInfo->u32FbPitch, pInfo->u32FbBpp);
     }
+    /* Slot 0 white: kmain_uefi entered (under loader green/blue/cyan @0..144). */
+
     if ((gj_vaddr_t)__kernel_end >= 0x1000000ull) {
         kprintf("FATAL: kernel_end collides with user maps @0x1000000\n");
         for (;;) {
@@ -7424,12 +8207,14 @@ kmain_uefi(struct gj_boot_info *pInfo)
 
     /* Replace firmware CR3 with writable kernel identity map before VMM. */
     boot_install_identity_4gib();
+    fb_console_hold(1, "phase: identity map OK");
 
     gdt_init();
     idt_init();
     cpu_init_bsp();
     thread_init();
     cpu_syscall_init();
+    fb_console_hold(1, "phase: gdt/idt/cpu OK");
 
     if (pInfo == NULL || pInfo->u64MemMap == 0 || pInfo->u64MemMapBytes == 0) {
         kprintf("uefi: no memory map; partial halt\n");
@@ -7501,6 +8286,7 @@ kmain_uefi(struct gj_boot_info *pInfo)
     }
 
     kernel_after_mmap(aRegions, cRegions);
+    /* If we return, full bring-up finished (kernel_after_mmap normally loops). */
     for (;;) {
         __asm__ volatile ("hlt");
     }

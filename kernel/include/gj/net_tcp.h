@@ -23,6 +23,8 @@
  * Poll integration:
  *   net_eth_poll → net_tcp_input (per TCP frame) then net_tcp_poll
  *   (rtx last unacked data seg + TIME_WAIT soft reap after TCP_TW_MS).
+ *   Cold poll/epoll readiness: net_tcp_poll_mask / net_tcp_fd_ok
+ *   (POLLIN/OUT/ERR/HUP from RX, accept queue, write window, closed).
  *
  * Stats (accepts, segments, bytes_rx/tx, retransmits, tw_reaps):
  *   segs = TX segments + RX segments seen by net_tcp_input
@@ -78,8 +80,20 @@ i64 net_tcp_recv(i64 i64Fd, void *pBuf, size_t cb);
  */
 i64 net_tcp_close(i64 i64Fd);
 
-/** Non-zero if fd is a live net_tcp table entry. */
+/**
+ * Nonzero if fd is a live net_tcp socket.
+ * Ownership test for FD range 96..111 (TCP_MAX slots).
+ */
 int net_tcp_fd_ok(i64 i64Fd);
+
+/**
+ * Return Linux-shaped POLLIN/POLLOUT/POLLERR/POLLHUP bits for a TCP fd,
+ * or 0 if not a net_tcp fd.
+ * Bits: POLLIN=0x1 POLLPRI=0x2 POLLOUT=0x4 POLLERR=0x8 POLLHUP=0x10
+ * Readiness from RX ring, accept queue, write window, and close states.
+ * Cold poll/epoll path query — does not touch vfs_ram or protonrt.
+ */
+u32 net_tcp_poll_mask(i64 i64Fd, u32 u32Want);
 
 /**
  * Demux IPv4 TCP frame (full eth frame from net_eth_poll).

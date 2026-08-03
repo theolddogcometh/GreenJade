@@ -7,7 +7,7 @@
  * Soft deepen: pager ep kernel ref + badge + slot-1 mirror; wait reparent /
  * WNOWAIT / counts; death quota+CDT CNode clear + orphan reparent + scrub.
  *
- * Soft product inventory (Wave 35 exclusive deepen; this unit only):
+ * Soft product inventory (ABI-first fork/wait deepen; this unit only):
  * greppable: "process: soft …"
  *   process: soft inventory …
  *   process: soft stats …
@@ -16,9 +16,10 @@
  *   process: soft confine …
  *   process: soft pager …
  *   process: soft fault …
- *   process: soft wait …
+ *   process: soft wait …     — wait4/waitid WNOHANG reaper (shell/sshd later)
+ *   process: soft fork-wait product-min — PCB parent fork/clone/wait APIs
  *   process: soft death …
- *   process: soft fork …
+ *   process: soft fork …     — linux_fork + linux_clone flag map (usable pid)
  *   process: soft jit …
  *   process: soft promise …
  *   process: soft path …
@@ -35,7 +36,7 @@
  *     process: death … / process: death deepen wave=116 …
  *
  * Honesty: soft inventory only — not product multi-server seal, not Apple §13
- * closed, not bar3. Death cleanup ≠ bootstrap seal product.
+ * closed, not bar3. Fork stub ≠ real user child; wait table ≠ full posix wait.
  * docs/CAP_ADDRESSING.md · docs/APPLE_CHANNEL_REMAINING.md §13 ·
  * docs/SOLARIS_STYLE_REMAINING.md §6 · §9 · docs/SECURITY_CORE_DESIGN.md §13
  */
@@ -51,14 +52,15 @@
 
 /* ---- Wave 19 exclusive soft inventory (this unit only) ------------------ */
 #define GJ_PROCESS_SOFT_WAVE 116u
-#define GJ_PROCESS_SOFT_AREAS 213u /* greppable inventory area count */
+#define GJ_PROCESS_SOFT_AREAS 217u /* greppable inventory area count */
 #define GJ_SEAL_SOFT_WAVE 116u /* Apple s13 seal checklist stamp */
 #define GJ_SEAL_SOFT_LOG_MAX   8u
 
 /* Forward: wait table lives later; soft census snapshots used/zombie/free. */
 #define GJ_WAIT_SLOTS 64u
 #define GJ_WAIT_PID_BASE 100u
-#define GJ_FORK_STUBS 16u
+/* Soft fork stub pool (shell pipelines later; not product process table). */
+#define GJ_FORK_STUBS 32u
 
 /*
  * Soft path tallies (diagnostics only; wrap OK). Never hard-gate product.
@@ -104,6 +106,9 @@ static u32 g_u32SoftWaitForget;
 static u32 g_u32SoftWait4Enter;
 static u32 g_u32SoftWait4Echild;
 static u32 g_u32SoftWait4Nohang0;
+static u32 g_u32SoftWait4LiveTimeout; /* blocking soft budget, live remain */
+static u32 g_u32SoftWait4ReapPid;     /* specific-pid reap */
+static u32 g_u32SoftWait4ReapAny;     /* any-child reap */
 static u32 g_u32SoftForkEnter;
 static u32 g_u32SoftForkOk;
 static u32 g_u32SoftForkFull;
@@ -113,9 +118,25 @@ static u32 g_u32SoftForkAsOk;
 static u32 g_u32SoftForkAsFail;
 static u32 g_u32SoftForkCloneOk;
 static u32 g_u32SoftForkCloneFail;
+static u32 g_u32SoftForkRegFail;      /* wait table full after stub alloc */
+static u32 g_u32SoftCloneEnter;
+static u32 g_u32SoftCloneForkLike;    /* flags 0 / share → fork */
+static u32 g_u32SoftCloneVfork;
+static u32 g_u32SoftCloneThreadReject;
+static u32 g_u32SoftCloneNsReject;
 static u32 g_u32SoftDeathEnter;
 static u32 g_u32SoftLogN;
 static u8  g_fSoftInvOnce;
+static u32 g_u32SoftLastForkPid;      /* last usable child pid (diag) */
+/* process: soft fork-wait product-min tallies */
+static u32 g_u32SoftFwForkEnter;
+static u32 g_u32SoftFwForkOk;
+static u32 g_u32SoftFwCloneEnter;
+static u32 g_u32SoftFwWaitEnter;
+static u32 g_u32SoftFwWaitReap;
+static u32 g_u32SoftFwWaitidEnter;
+static u32 g_u32SoftFwSmokeOk;
+static u8  g_fSoftFwPassOnce;         /* one-shot PASS kprintf */
 
 static void process_soft_inc(u32 *pCtr);
 static void process_soft_inventory(const char *szVia);
@@ -214,30 +235,59 @@ process_soft_inventory(const char *szVia)
             g_u32SoftFaultEnter, g_u32SoftFaultNoPager, g_u32SoftFaultWxDeny,
             g_u32SoftFaultBusy, g_u32SoftFaultAgain, GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft wait */
+    /*
+     * Grep: process: soft wait
+     * ABI-first reaper for shell/sshd later: wait4/waitid WNOHANG + reap.
+     * Product incomplete (no stop/continue; fixed table; soft poll budget).
+     */
     kprintf("process: soft wait reg_ok=%u reg_idem=%u reg_full=%u "
             "reg_null=%u zombie=%u reap=%u nowait=%u reparent=%u "
             "forget=%u wait4_enter=%u echild=%u nohang0=%u "
+            "live_timeout=%u reap_pid=%u reap_any=%u "
             "used=%u zombie_now=%u live=%u free=%u wave=%u\n",
             g_u32SoftWaitRegOk, g_u32SoftWaitRegIdem, g_u32SoftWaitRegFull,
             g_u32SoftWaitRegNull, g_u32SoftWaitZombie, g_u32SoftWaitReap,
             g_u32SoftWaitNowait, g_u32SoftWaitReparentN, g_u32SoftWaitForget,
             g_u32SoftWait4Enter, g_u32SoftWait4Echild, g_u32SoftWait4Nohang0,
-            u32Used, u32Zombie, u32Live, u32Free, GJ_PROCESS_SOFT_WAVE);
+            g_u32SoftWait4LiveTimeout, g_u32SoftWait4ReapPid,
+            g_u32SoftWait4ReapAny, u32Used, u32Zombie, u32Live, u32Free,
+            GJ_PROCESS_SOFT_WAVE);
 
     /* Grep: process: soft death */
     kprintf("process: soft death enter=%u wave=%u "
             "(detail via process: death tallies / deepen)\n",
             g_u32SoftDeathEnter, GJ_PROCESS_SOFT_WAVE);
 
-    /* Grep: process: soft fork */
+    /*
+     * Grep: process: soft fork
+     * usable child pid + deferred/vfork exit; clone flags map fork-like.
+     * Soft incomplete: stub PCB, not full user AS/thread (shell/sshd later).
+     */
     kprintf("process: soft fork enter=%u ok=%u full=%u vfork=%u "
             "deferred=%u as_ok=%u as_fail=%u clone_ok=%u clone_fail=%u "
-            "wave=%u\n",
+            "reg_fail=%u last_pid=%u "
+            "clone_enter=%u clone_forklike=%u clone_vfork=%u "
+            "clone_thr_rej=%u clone_ns_rej=%u wave=%u\n",
             g_u32SoftForkEnter, g_u32SoftForkOk, g_u32SoftForkFull,
             g_u32SoftForkVfork, g_u32SoftForkDeferred, g_u32SoftForkAsOk,
             g_u32SoftForkAsFail, g_u32SoftForkCloneOk, g_u32SoftForkCloneFail,
+            g_u32SoftForkRegFail, g_u32SoftLastForkPid, g_u32SoftCloneEnter,
+            g_u32SoftCloneForkLike, g_u32SoftCloneVfork,
+            g_u32SoftCloneThreadReject, g_u32SoftCloneNsReject,
             GJ_PROCESS_SOFT_WAVE);
+
+    /*
+     * Grep: process: soft fork-wait product-min
+     * PCB parent → child pid + wait4/waitid reaper (cold personality later).
+     */
+    kprintf("process: soft fork-wait product-min fork_enter=%u fork_ok=%u "
+            "clone_enter=%u wait_enter=%u wait_reap=%u waitid_enter=%u "
+            "smoke_ok=%u pass_once=%u last_pid=%u wave=%u "
+            "(soft≠product; not full AS clone)\n",
+            g_u32SoftFwForkEnter, g_u32SoftFwForkOk, g_u32SoftFwCloneEnter,
+            g_u32SoftFwWaitEnter, g_u32SoftFwWaitReap, g_u32SoftFwWaitidEnter,
+            g_u32SoftFwSmokeOk, (unsigned)g_fSoftFwPassOnce,
+            g_u32SoftLastForkPid, GJ_PROCESS_SOFT_WAVE);
 
     /* Grep: process: soft jit */
     kprintf("process: soft jit set_on=%u set_off=%u query_hit=%u "
@@ -2228,6 +2278,151 @@ static u64                      g_u64WaitReap;
 static u64                      g_u64WaitReparent;
 static u64                      g_u64WaitNowaitPeek;
 
+/* process_wait_pid_of defined later; used by soft parent identity helpers. */
+u32 process_wait_pid_of(struct gj_process *pProc);
+
+/*
+ * Soft parent identity for PCBs that are not wait-registered children
+ * (boot/init long-lived parents). pids 2..99 — below GJ_WAIT_PID_BASE so
+ * they never collide with child wait-table pids. Does NOT put the parent
+ * into the zombie table (avoids G-PROC-5 CNode wipe on parent death).
+ * greppable: process: soft fork-wait product-min
+ */
+#define GJ_SOFT_PARENT_MAX      16u
+#define GJ_SOFT_PARENT_PID_BASE 2u
+#define GJ_SOFT_PARENT_PID_MAX  99u
+
+struct process_soft_parent {
+    u8                 u8Used;
+    u8                 u8Pad[3];
+    u32                u32Pid;
+    struct gj_process *pParent;
+};
+
+static struct process_soft_parent g_aSoftParent[GJ_SOFT_PARENT_MAX];
+static u32                        g_u32NextSoftParentPid = GJ_SOFT_PARENT_PID_BASE;
+
+/** Wait-table or soft-parent pid for PCB; 0 if unknown (no allocate). */
+static u32
+process_soft_parent_pid_lookup(struct gj_process *pParent)
+{
+    u32 i;
+    u32 pid;
+
+    if (pParent == NULL) {
+        return 0;
+    }
+    pid = process_wait_pid_of(pParent);
+    if (pid != 0u) {
+        return pid;
+    }
+    for (i = 0; i < GJ_SOFT_PARENT_MAX; i++) {
+        if (g_aSoftParent[i].u8Used && g_aSoftParent[i].pParent == pParent) {
+            return g_aSoftParent[i].u32Pid;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Ensure soft parent identity for fork/wait filter.
+ * Wait-registered parents keep their wait pid; others get soft map 2..99.
+ * Fallback 1 (init) if soft map full.
+ */
+static u32
+process_soft_ensure_parent_pid(struct gj_process *pParent)
+{
+    u32 i;
+    u32 pid;
+
+    if (pParent == NULL) {
+        return 1u;
+    }
+    pid = process_soft_parent_pid_lookup(pParent);
+    if (pid != 0u) {
+        return pid;
+    }
+    for (i = 0; i < GJ_SOFT_PARENT_MAX; i++) {
+        if (!g_aSoftParent[i].u8Used) {
+            pid = g_u32NextSoftParentPid++;
+            if (pid < GJ_SOFT_PARENT_PID_BASE || pid > GJ_SOFT_PARENT_PID_MAX) {
+                g_u32NextSoftParentPid = GJ_SOFT_PARENT_PID_BASE + 1u;
+                pid = GJ_SOFT_PARENT_PID_BASE;
+            }
+            g_aSoftParent[i].u8Used = 1;
+            g_aSoftParent[i].u32Pid = pid;
+            g_aSoftParent[i].pParent = pParent;
+            kprintf("process: soft fork-wait product-min parent_id pid=%u "
+                    "soft (not wait-table)\n",
+                    pid);
+            return pid;
+        }
+    }
+    return 1u; /* soft map full → init bucket */
+}
+
+/** Resolve wait-table PCB by Linux-shaped pid (NULL if missing). */
+static struct gj_process *
+process_wait_proc_of_pid(u32 u32Pid)
+{
+    u32 i;
+
+    if (u32Pid == 0u) {
+        return NULL;
+    }
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        if (g_aWait[i].u8Used && g_aWait[i].u32Pid == u32Pid) {
+            return g_aWait[i].pProc;
+        }
+    }
+    return NULL;
+}
+
+/** Soft parent PCB for a soft/wait parent pid (NULL if none). */
+static struct gj_process *
+process_soft_parent_pcb_of_pid(u32 u32Ppid)
+{
+    u32 i;
+
+    if (u32Ppid == 0u) {
+        return NULL;
+    }
+    for (i = 0; i < GJ_WAIT_SLOTS; i++) {
+        if (g_aWait[i].u8Used && g_aWait[i].u32Pid == u32Ppid) {
+            return g_aWait[i].pProc;
+        }
+    }
+    for (i = 0; i < GJ_SOFT_PARENT_MAX; i++) {
+        if (g_aSoftParent[i].u8Used && g_aSoftParent[i].u32Pid == u32Ppid) {
+            return g_aSoftParent[i].pParent;
+        }
+    }
+    return NULL;
+}
+
+/**
+ * One-shot greppable PASS after first successful fork+wait product-min path.
+ * greppable: process: soft fork-wait product-min PASS
+ */
+static void
+process_soft_fw_pass_once(i64 i64Pid, int nStatus, const char *szVia)
+{
+    const char *szViaSafe;
+
+    if (g_fSoftFwPassOnce != 0) {
+        return;
+    }
+    if (i64Pid <= 0) {
+        return;
+    }
+    g_fSoftFwPassOnce = 1;
+    szViaSafe = (szVia != NULL && szVia[0] != '\0') ? szVia : "path";
+    kprintf("process: soft fork-wait product-min PASS via=%s pid=%ld "
+            "status=0x%x WIFEXITED=%d exit=%d soft≠product\n",
+            szViaSafe, (long)i64Pid, (unsigned)nStatus,
+            GJ_WIFEXITED(nStatus) ? 1 : 0, GJ_WEXITSTATUS(nStatus));
+}
+
 /*
  * Soft wait-table census (Wave 15 inventory). Snapshots used/zombie/live/free.
  * Does not lock (soft OK). greppable via process: soft wait …
@@ -2298,18 +2493,11 @@ process_wait_register(struct gj_process *pChild, u32 u32Ppid)
             g_aWait[i].u32Exit = 0;
             g_aWait[i].pProc = pChild;
             pChild->u32Alive = 1;
-            /* Soft: link pParent when parent PCB is still in the wait table. */
-            pChild->pParent = NULL;
-            {
-                u32 j;
-
-                for (j = 0; j < GJ_WAIT_SLOTS; j++) {
-                    if (g_aWait[j].u8Used && g_aWait[j].u32Pid == u32ParentPid) {
-                        pChild->pParent = g_aWait[j].pProc;
-                        break;
-                    }
-                }
-            }
+            /*
+             * Soft: link pParent from wait table or soft parent map
+             * (process: soft fork-wait product-min).
+             */
+            pChild->pParent = process_soft_parent_pcb_of_pid(u32ParentPid);
             g_u64WaitRegister++;
             process_soft_inc(&g_u32SoftWaitRegOk);
             process_soft_maybe_once();
@@ -2792,20 +2980,59 @@ process_death(struct gj_process *pProc, u32 u32ExitCode)
     process_soft_inventory("death");
 }
 
-/* Stub children for Linux fork/vfork (no full AS clone until product spawn). */
+/*
+ * Stub children for Linux fork/vfork/clone (no full AS clone until product
+ * spawn). greppable: process: soft fork
+ * Product incomplete: stub does not run user code; usable for parent
+ * wait4/waitid WNOHANG smokes and shell/sshd ABI later.
+ */
 static struct gj_process g_aForkStub[GJ_FORK_STUBS];
 static u8                g_aForkUsed[GJ_FORK_STUBS];
 
 /**
- * Deferred child exit: schedules after parent returns from fork so wait4 can
- * reap a real zombie (not only vfork's immediate exit).
+ * Soft reverse: drop private AS on fork path when wait_register fails
+ * (not wait-registered → process_death would skip AS destroy).
+ */
+static void
+fork_stub_as_teardown(struct gj_process *pChild)
+{
+    u64 u64Cr3;
+    u64 u64Ker;
+    u64 u64Saved;
+
+    if (pChild == NULL) {
+        return;
+    }
+    u64Cr3 = pChild->u64Cr3;
+    u64Ker = vmm_kernel_cr3();
+    if (u64Cr3 == 0 || u64Ker == 0 ||
+        (u64Cr3 & ~0xfffull) == (u64Ker & ~0xfffull)) {
+        pChild->u64Cr3 = 0;
+        return;
+    }
+    u64Saved = cpu_read_cr3();
+    cpu_load_cr3(u64Ker);
+    vmm_set_anon_cursor(NULL);
+    (void)vmm_as_destroy(u64Cr3);
+    pChild->u64Cr3 = 0;
+    if (u64Saved != 0 &&
+        (u64Saved & ~0xfffull) != (u64Cr3 & ~0xfffull)) {
+        cpu_load_cr3(u64Saved);
+    }
+}
+
+/**
+ * Deferred child exit: runs after parent returns from fork so wait4/waitid
+ * can observe live (WNOHANG→0) then zombie (reap pid+status).
+ * greppable: process: soft fork
  */
 static void
 fork_child_exit_worker(void *pArg)
 {
     struct gj_process *pChild = (struct gj_process *)pArg;
 
-    /* Yield so parent can run wait4 after fork returns */
+    /* Yield so parent can run wait4/WNOHANG after fork returns a usable pid */
+    thread_yield();
     thread_yield();
     thread_yield();
     if (pChild != NULL && pChild->u32Alive) {
@@ -2821,7 +3048,12 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     u32 i;
     u32 pid;
     u32 thr = 0;
+    u32 u32Parent;
 
+    /*
+     * process: soft fork — enter
+     * Returns usable wait-table pid (≥ GJ_WAIT_PID_BASE) on success.
+     */
     process_soft_inc(&g_u32SoftForkEnter);
     for (i = 0; i < GJ_FORK_STUBS; i++) {
         if (!g_aForkUsed[i]) {
@@ -2830,6 +3062,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     }
     if (i >= GJ_FORK_STUBS) {
         process_soft_inc(&g_u32SoftForkFull);
+        kprintf("process: soft fork full stubs=%u EAGAIN\n", GJ_FORK_STUBS);
         return -11; /* EAGAIN */
     }
     memset(&g_aForkStub[i], 0, sizeof(g_aForkStub[i]));
@@ -2839,6 +3072,7 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     /*
      * Private AS shell for child (G-AS) + clone parent private user pages.
      * Product: full COW; bring-up: copy non-identity user 4K pages from parent.
+     * Soft incomplete (process: soft fork): not a runnable user child.
      */
     if (process_as_ensure(&g_aForkStub[i]) == GJ_OK) {
         u32 cCloned = 0;
@@ -2864,27 +3098,36 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     } else {
         process_soft_inc(&g_u32SoftForkAsFail);
     }
-    pid = process_wait_register(&g_aForkStub[i], u32Ppid ? u32Ppid : 1u);
+    u32Parent = u32Ppid ? u32Ppid : 1u;
+    pid = process_wait_register(&g_aForkStub[i], u32Parent);
     if (pid == 0) {
+        /* Soft reverse: free AS + stub so table pressure does not leak CR3. */
+        fork_stub_as_teardown(&g_aForkStub[i]);
         g_aForkUsed[i] = 0;
+        process_soft_inc(&g_u32SoftForkRegFail);
         process_soft_inc(&g_u32SoftForkFull);
+        kprintf("process: soft fork reg_fail ENOMEM soft\n");
         return -12; /* ENOMEM */
     }
+    g_u32SoftLastForkPid = pid;
     if (fExitNow) {
-        /* vfork-shaped: child already exited; free AS shell */
+        /* vfork-shaped: child already zombie; parent wait4 reaps immediately */
         process_soft_inc(&g_u32SoftForkVfork);
         process_death(&g_aForkStub[i], 0);
     } else {
         /*
-         * fork-shaped: schedule a kernel worker that marks the child zombie
-         * after yields so parent wait4 can reap (bring-up; product: user AS).
+         * fork-shaped: deferred zombie so parent can:
+         *   wait4(pid, …, WNOHANG) → 0 while live, then pid+status
+         * greppable: process: soft fork / process: soft wait
          */
         thr = thread_create(&g_aForkStub[i], fork_child_exit_worker,
                             &g_aForkStub[i]);
         if (thr == 0) {
-            /* Fallback: immediate exit so wait still works */
+            /* Fallback: immediate exit so wait still works with usable pid */
             process_death(&g_aForkStub[i], 0);
             process_soft_inc(&g_u32SoftForkOk);
+            process_soft_maybe_once();
+            kprintf("process: soft fork pid=%u (no thr, exit now) ok\n", pid);
             kprintf("process: linux_fork pid=%u (no thr, exit now)\n", pid);
             return (i64)pid;
         }
@@ -2892,9 +3135,60 @@ process_linux_fork(u32 u32Ppid, int fExitNow)
     }
     process_soft_inc(&g_u32SoftForkOk);
     process_soft_maybe_once();
+    kprintf("process: soft fork pid=%u ppid=%u exit_now=%d thr=%u ok\n", pid,
+            u32Parent, fExitNow, thr);
     kprintf("process: linux_fork pid=%u exit_now=%d thr=%u\n", pid, fExitNow,
             thr);
     return (i64)pid;
+}
+
+/*
+ * Soft clone(2) flag map → fork-like wait child (ABI-first for shell/sshd).
+ * greppable: process: soft fork
+ */
+i64
+process_linux_clone(u32 u32Ppid, u64 u64Flags)
+{
+    u64 u64Share;
+
+    process_soft_inc(&g_u32SoftCloneEnter);
+    /* CSIGNAL (low 8) is exit signal only — not clone geometry. */
+    u64Share = u64Flags & ~GJ_CLONE_CSIGNAL;
+
+    /*
+     * CLONE_THREAD needs child stack + entry (syscall cold / thread_create_user).
+     * Soft: reject here so ABI callers do not get a false process pid.
+     */
+    if ((u64Share & GJ_CLONE_THREAD) != 0ull) {
+        process_soft_inc(&g_u32SoftCloneThreadReject);
+        kprintf("process: soft fork clone CLONE_THREAD reject EINVAL soft\n");
+        return -22; /* EINVAL */
+    }
+
+    /* Namespace isolation not product — soft EINVAL (shell never sets these). */
+    if ((u64Share & GJ_CLONE_NS_MASK) != 0ull) {
+        process_soft_inc(&g_u32SoftCloneNsReject);
+        kprintf("process: soft fork clone ns flags=0x%lx EINVAL soft\n",
+                (unsigned long)u64Share);
+        return -22; /* EINVAL */
+    }
+
+    /* CLONE_VFORK → immediate zombie; parent wait4 reaps. */
+    if ((u64Share & GJ_CLONE_VFORK) != 0ull) {
+        process_soft_inc(&g_u32SoftCloneVfork);
+        kprintf("process: soft fork clone vfork-like soft\n");
+        return process_linux_fork(u32Ppid, 1);
+    }
+
+    /*
+     * flags==0 or share-table bits (VM/FS/FILES/SIGHAND/…): fork-like.
+     * Product incomplete: share bits ignored (stub AS, not true share).
+     * Returns usable child pid for wait4/waitid WNOHANG.
+     */
+    process_soft_inc(&g_u32SoftCloneForkLike);
+    kprintf("process: soft fork clone fork-like flags=0x%lx soft\n",
+            (unsigned long)u64Flags);
+    return process_linux_fork(u32Ppid, 0);
 }
 
 i64
@@ -2940,12 +3234,20 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
     u32 attempt;
     int fNoHang = (nOptions & GJ_WAIT_WNOHANG) != 0;
     int fNoWait = (nOptions & GJ_WAIT_WNOWAIT) != 0;
-    u32 u32MaxAttempts = fNoHang ? 1u : 64u;
+    /* Soft poll budget: enough yields for fork_child_exit_worker + shell poll. */
+    u32 u32MaxAttempts = fNoHang ? 1u : 256u;
+    int fLastHaveChild = 0;
 
+    /*
+     * process: soft wait — wait4/waitid reaper enter
+     * WNOHANG: 0 while live child matches; pid+status when zombie.
+     * Never ECHILD while a matching unreaped child still exists.
+     */
     process_soft_inc(&g_u32SoftWait4Enter);
     /*
      * Soft: WUNTRACED / WCONTINUED ignored (no stop/continue state yet).
      * pid 0 treated as any-child (bring-up); pid < -1 process-group unsupported.
+     * Product incomplete — greppable: process: soft wait
      */
     for (attempt = 0; attempt < u32MaxAttempts; attempt++) {
         u32 i;
@@ -2985,6 +3287,8 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
                 /* Soft WNOWAIT: report zombie without consuming the slot. */
                 g_u64WaitNowaitPeek++;
                 process_soft_inc(&g_u32SoftWaitNowait);
+                kprintf("process: soft wait nowait pid=%u status=0x%x soft\n",
+                        pS->u32Pid, (unsigned)i32Status);
                 kprintf("process: wait4 nowait pid=%u status=0x%x soft\n",
                         pS->u32Pid, (unsigned)i32Status);
                 return i64Ret;
@@ -2993,6 +3297,14 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
             pS->u8Reaped = 1;
             g_u64WaitReap++;
             process_soft_inc(&g_u32SoftWaitReap);
+            if (i64Pid > 0) {
+                process_soft_inc(&g_u32SoftWait4ReapPid);
+            } else {
+                process_soft_inc(&g_u32SoftWait4ReapAny);
+            }
+            kprintf("process: soft wait reaped pid=%u status=0x%x "
+                    "nohang=%d soft\n",
+                    pS->u32Pid, (unsigned)i32Status, fNoHang);
             kprintf("process: wait4 reaped pid=%u status=0x%x\n", pS->u32Pid,
                     (unsigned)i32Status);
             {
@@ -3015,19 +3327,239 @@ process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions)
             pS->pProc = NULL;
             return i64Ret;
         }
+        fLastHaveChild = fHaveChild;
         /* No unreaped children at all → ECHILD */
         if (!fHaveChild) {
             process_soft_inc(&g_u32SoftWait4Echild);
+            kprintf("process: soft wait echild pid=%ld ppid=%u soft\n",
+                    (long)i64Pid, u32Ppid);
             return -10; /* ECHILD */
         }
-        /* Live children, none exited yet */
+        /* Live children, none exited yet — WNOHANG poll returns 0 (usable). */
         if (fNoHang) {
             process_soft_inc(&g_u32SoftWait4Nohang0);
+            /* Quiet path: shell/sshd may poll often; log only first soft once. */
             return 0; /* WNOHANG */
         }
-        /* Blocking-ish: yield so fork exit workers can run */
+        /* Blocking-ish: yield so fork exit workers can mark zombie */
         thread_yield();
     }
-    process_soft_inc(&g_u32SoftWait4Echild);
-    return -10; /* ECHILD — timed out waiting for child exit */
+    /*
+     * Soft poll budget exhausted with live children still registered.
+     * Must NOT return ECHILD (would break shell wait loops). Return 0 as
+     * soft would-block timeout; caller may retry or use WNOHANG poll.
+     * greppable: process: soft wait
+     */
+    (void)fLastHaveChild;
+    process_soft_inc(&g_u32SoftWait4LiveTimeout);
+    kprintf("process: soft wait live_timeout pid=%ld ppid=%u attempts=%u "
+            "soft (not ECHILD; product incomplete)\n",
+            (long)i64Pid, u32Ppid, u32MaxAttempts);
+    return 0;
+}
+
+/* ---- process: soft fork-wait product-min (PCB parent surface) ----------- */
+
+u32
+process_soft_parent_pid_of(struct gj_process *pParent)
+{
+    return process_soft_parent_pid_lookup(pParent);
+}
+
+/**
+ * After linux_fork/clone: force child->pParent and soft identity link.
+ * greppable: process: soft fork-wait product-min
+ */
+static void
+process_soft_fw_link_child(struct gj_process *pParent, i64 i64ChildPid)
+{
+    struct gj_process *pChild;
+
+    if (pParent == NULL || i64ChildPid <= 0) {
+        return;
+    }
+    pChild = process_wait_proc_of_pid((u32)i64ChildPid);
+    if (pChild != NULL) {
+        pChild->pParent = pParent;
+    }
+}
+
+i64
+process_fork_soft(struct gj_process *pParent)
+{
+    u32 u32Ppid;
+    i64 i64Pid;
+
+    /*
+     * process: soft fork-wait product-min — fork enter
+     * Reliable parent PCB → child wait-table pid (≥ GJ_WAIT_PID_BASE).
+     */
+    process_soft_inc(&g_u32SoftFwForkEnter);
+    if (pParent == NULL) {
+        kprintf("process: soft fork-wait product-min fork EINVAL null parent\n");
+        return -22; /* EINVAL */
+    }
+    u32Ppid = process_soft_ensure_parent_pid(pParent);
+    i64Pid = process_linux_fork(u32Ppid, 0);
+    if (i64Pid > 0) {
+        process_soft_fw_link_child(pParent, i64Pid);
+        process_soft_inc(&g_u32SoftFwForkOk);
+        g_u32SoftLastForkPid = (u32)i64Pid;
+        kprintf("process: soft fork-wait product-min fork pid=%ld ppid=%u ok\n",
+                (long)i64Pid, u32Ppid);
+    } else {
+        kprintf("process: soft fork-wait product-min fork fail r=%ld ppid=%u\n",
+                (long)i64Pid, u32Ppid);
+    }
+    return i64Pid;
+}
+
+i64
+process_clone_soft(struct gj_process *pParent, u64 u64Flags)
+{
+    u32 u32Ppid;
+    i64 i64Pid;
+
+    process_soft_inc(&g_u32SoftFwCloneEnter);
+    if (pParent == NULL) {
+        kprintf("process: soft fork-wait product-min clone EINVAL null parent\n");
+        return -22; /* EINVAL */
+    }
+    u32Ppid = process_soft_ensure_parent_pid(pParent);
+    i64Pid = process_linux_clone(u32Ppid, u64Flags);
+    if (i64Pid > 0) {
+        process_soft_fw_link_child(pParent, i64Pid);
+        process_soft_inc(&g_u32SoftFwForkOk);
+        g_u32SoftLastForkPid = (u32)i64Pid;
+        kprintf("process: soft fork-wait product-min clone pid=%ld ppid=%u "
+                "flags=0x%lx ok\n",
+                (long)i64Pid, u32Ppid, (unsigned long)u64Flags);
+    } else {
+        kprintf("process: soft fork-wait product-min clone fail r=%ld "
+                "flags=0x%lx\n",
+                (long)i64Pid, (unsigned long)u64Flags);
+    }
+    return i64Pid;
+}
+
+i64
+process_wait_soft(struct gj_process *pParent, i64 i64Pid, int *pStatus,
+                  int nOptions)
+{
+    u32 u32Ppid;
+    i64 i64Ret;
+    i32 i32St = 0;
+
+    /*
+     * process: soft fork-wait product-min — wait4-shaped reaper
+     * Status: (exit & 0xff) << 8 ⇒ GJ_WIFEXITED true for normal exit.
+     */
+    process_soft_inc(&g_u32SoftFwWaitEnter);
+    if (pParent == NULL) {
+        return -22; /* EINVAL */
+    }
+    u32Ppid = process_soft_parent_pid_lookup(pParent);
+    if (u32Ppid == 0u) {
+        /* Never forked as this parent — no soft identity ⇒ ECHILD. */
+        process_soft_inc(&g_u32SoftWait4Echild);
+        kprintf("process: soft fork-wait product-min wait echild no parent_id\n");
+        return -10; /* ECHILD */
+    }
+    i64Ret = process_wait4_ppid(u32Ppid, i64Pid, &i32St, nOptions);
+    if (pStatus != NULL) {
+        *pStatus = (int)i32St;
+    }
+    if (i64Ret > 0) {
+        process_soft_inc(&g_u32SoftFwWaitReap);
+        process_soft_fw_pass_once(i64Ret, (int)i32St, "wait_soft");
+        kprintf("process: soft fork-wait product-min wait reaped pid=%ld "
+                "status=0x%x WIFEXITED=%d\n",
+                (long)i64Ret, (unsigned)i32St, GJ_WIFEXITED(i32St) ? 1 : 0);
+    }
+    return i64Ret;
+}
+
+i64
+process_waitid_soft(struct gj_process *pParent, u32 u32IdType, i64 i64Id,
+                    int *pStatus, int nOptions, int *pSiCode)
+{
+    i64 i64PidArg;
+    i64 i64Ret;
+    int nSt = 0;
+
+    /*
+     * process: soft fork-wait product-min — waitid-shaped
+     * P_ALL / P_PID only; si_code = CLD_EXITED on normal exit reap.
+     */
+    process_soft_inc(&g_u32SoftFwWaitidEnter);
+    if (pParent == NULL) {
+        return -22; /* EINVAL */
+    }
+    if (u32IdType == GJ_P_PGID) {
+        kprintf("process: soft fork-wait product-min waitid P_PGID EINVAL\n");
+        return -22; /* EINVAL — process group not product */
+    }
+    if (u32IdType == GJ_P_PID) {
+        if (i64Id <= 0) {
+            return -22; /* EINVAL */
+        }
+        i64PidArg = i64Id;
+    } else if (u32IdType == GJ_P_ALL) {
+        i64PidArg = -1;
+    } else {
+        return -22; /* EINVAL unknown idtype */
+    }
+
+    i64Ret = process_wait_soft(pParent, i64PidArg, &nSt, nOptions);
+    if (pStatus != NULL) {
+        *pStatus = nSt;
+    }
+    if (i64Ret > 0) {
+        if (pSiCode != NULL) {
+            /* Soft: always exited-shape status from wait table today. */
+            *pSiCode = GJ_CLD_EXITED;
+        }
+        process_soft_fw_pass_once(i64Ret, nSt, "waitid_soft");
+        kprintf("process: soft fork-wait product-min waitid reaped pid=%ld "
+                "si_code=%d status=0x%x\n",
+                (long)i64Ret, GJ_CLD_EXITED, (unsigned)nSt);
+    } else if (pSiCode != NULL) {
+        *pSiCode = 0;
+    }
+    return i64Ret;
+}
+
+i64
+process_fork_wait_soft_smoke(struct gj_process *pParent)
+{
+    i64 i64Pid;
+    i64 i64Wr;
+    int nStatus = 0;
+
+    /*
+     * Smoke: CLONE_VFORK → immediate zombie, then wait (no deferred thr race).
+     * First success → process: soft fork-wait product-min PASS
+     */
+    if (pParent == NULL) {
+        return -22;
+    }
+    i64Pid = process_clone_soft(pParent, GJ_CLONE_VFORK);
+    if (i64Pid <= 0) {
+        kprintf("process: soft fork-wait product-min smoke fork fail r=%ld\n",
+                (long)i64Pid);
+        return i64Pid;
+    }
+    i64Wr = process_wait_soft(pParent, i64Pid, &nStatus, 0);
+    if (i64Wr == i64Pid && GJ_WIFEXITED(nStatus)) {
+        process_soft_inc(&g_u32SoftFwSmokeOk);
+        process_soft_fw_pass_once(i64Wr, nStatus, "smoke");
+        kprintf("process: soft fork-wait product-min smoke ok pid=%ld "
+                "status=0x%x exit=%d\n",
+                (long)i64Wr, (unsigned)nStatus, GJ_WEXITSTATUS(nStatus));
+        return i64Wr;
+    }
+    kprintf("process: soft fork-wait product-min smoke PARTIAL pid=%ld "
+            "wr=%ld status=0x%x\n",
+            (long)i64Pid, (long)i64Wr, (unsigned)nStatus);
+    return (i64Wr < 0) ? i64Wr : -1;
 }

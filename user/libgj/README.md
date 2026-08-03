@@ -143,3 +143,5 @@ archive.)
 | `user/libgj-so/` | SysV-hash product SO |
 | `user/libgj-gnu/` | GNU-hash product SO |
 | `user/libcgj/` | Full libc surface — separate ownership; do not merge |
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

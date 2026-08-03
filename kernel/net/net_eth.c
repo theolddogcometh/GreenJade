@@ -38,16 +38,31 @@
  */
 #include <gj/klog.h>
 #include <gj/net_eth.h>
+#include <gj/net_l2.h>
 #include <gj/net_tcp.h>
 #include <gj/string.h>
 #include <gj/virtio_net.h>
 
-/* Guest "address" for QEMU user net (10.0.2.15 is typical DHCP guest) */
-static const u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
-static const u8 g_aOurIp[4] = { 10, 0, 2, 15 };
+/*
+ * Guest identity — filled from net_l2 after probe (virtio QEMU 10.0.2.15 or
+ * rtl8168 lab static 10.200.125.50). Defaults match QEMU until net_l2_init +
+ * net_eth_apply_l2_identity(). G752 bug: without resync, ARP saw r>0 but
+ * compared TPA to 10.0.2.15 → no reply → t=0.
+ */
+static u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
+static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
 
-/* Max frames drained per net_eth_poll (soft batch). */
-#define NET_ETH_POLL_MAX 8
+static void
+net_eth_sync_l2(void)
+{
+    if (net_l2_ready() != 0) {
+        net_l2_mac(g_aOurMac);
+        net_l2_ip(g_aOurIp);
+    }
+}
+
+/* Max frames drained per net_eth_poll (soft batch). Full rtl ring = 32. */
+#define NET_ETH_POLL_MAX 32
 /* Soft inventory re-log cadence after first activity (poll entries). */
 #define NET_ETH_SOFT_LOG_EVERY 256u
 /* Cap inventory spam (init + link flips + first drain + cadence). */
@@ -135,20 +150,27 @@ htons(u16 u16V)
     return (u16)((u16V << 8) | (u16V >> 8));
 }
 
+/*
+ * Internet checksum (RFC 1071) — MUST sum 16-bit words in network order.
+ * Loading bare u16* on little-endian x86 swaps bytes and produces a wrong
+ * ~sum; peers drop IP/ICMP with bad checksums. Symptom with static ARP:
+ * unicast reaches DUT MAC, ping 100% loss (no ICMP reply accepted).
+ */
 static u16
 ip_checksum(const void *p, u32 cb)
 {
-    const u16 *pW = (const u16 *)p;
+    const u8 *pB = (const u8 *)p;
     u32 u32Sum = 0;
 
-    while (cb > 1) {
-        u32Sum += *pW++;
-        cb -= 2;
+    while (cb > 1u) {
+        u32Sum += ((u32)pB[0] << 8) | (u32)pB[1];
+        pB += 2;
+        cb -= 2u;
     }
-    if (cb) {
-        u32Sum += *(const u8 *)pW;
+    if (cb != 0u) {
+        u32Sum += (u32)pB[0] << 8;
     }
-    while (u32Sum >> 16) {
+    while ((u32Sum >> 16) != 0u) {
         u32Sum = (u32Sum & 0xffffu) + (u32Sum >> 16);
     }
     return (u16)~u32Sum;
@@ -187,7 +209,7 @@ net_eth_soft_log(void)
     u32 u32AvgBatch;
     u32 u32DropIpv4;
 
-    u32Ready = virtio_net_ready() ? 1u : 0u;
+    u32Ready = net_l2_ready() ? 1u : (virtio_net_ready() ? 1u : 0u);
     u32Proto = g_u32ArpReplies + g_u32UdpEchoes + g_u32IcmpEchoes +
                g_u32TcpDemux;
     u32AvgBatch = 0u;
@@ -1487,7 +1509,12 @@ net_eth_init(void)
     g_u32BytesRx = 0;
     g_u32BytesTx = 0;
     /* Soft shadow of device ready at init (probe may run later). */
-    g_u32LinkReady = virtio_net_ready() ? 1u : 0u;
+    g_u32LinkReady = net_l2_ready() ? 1u : (virtio_net_ready() ? 1u : 0u);
+    /* Refresh identity if net_l2 already picked a backend. */
+    if (net_l2_ready() != 0) {
+        net_l2_mac(g_aOurMac);
+        net_l2_ip(g_aOurIp);
+    }
     kprintf("net_eth: ARP/UDP/ICMP-echo helpers (IP %u.%u.%u.%u) poll_max=%u\n",
             g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3],
             NET_ETH_POLL_MAX);
@@ -1504,6 +1531,77 @@ net_eth_init(void)
             (u32)NET_ETH_SOFT_LOG_CAP);
     /* Greppable soft inventory at init (NODEV typical before virtio probe). */
     net_eth_soft_log();
+}
+
+/*
+ * Broadcast ARP reply (op=2) for our IP — hosts learn MAC without needing
+ * who-has handling. Lab: 10.200.125.50 not answering who-has while t/r climb.
+ * Frame is full 60-byte minimum Ethernet (FCS added by NIC).
+ */
+static int
+net_eth_arp_announce(void)
+{
+    u8 a[64];
+    u32 i;
+
+    net_eth_sync_l2();
+    if (net_l2_ready() == 0) {
+        return -1;
+    }
+    memset(a, 0, sizeof(a));
+    for (i = 0; i < 6u; i++) {
+        a[i] = 0xffu; /* eth dst broadcast */
+    }
+    memcpy(a + 6, g_aOurMac, 6);
+    a[12] = 0x08;
+    a[13] = 0x06;
+    a[14] = 0;
+    a[15] = 1; /* htype eth */
+    a[16] = 0x08;
+    a[17] = 0x00; /* ptype ip */
+    a[18] = 6;
+    a[19] = 4;
+    a[20] = 0;
+    a[21] = 2; /* REPLY (not request) — better for neigh learning */
+    memcpy(a + 22, g_aOurMac, 6);  /* sha */
+    memcpy(a + 28, g_aOurIp, 4);   /* spa */
+    for (i = 0; i < 6u; i++) {
+        a[32 + i] = 0xffu; /* tha broadcast */
+    }
+    memcpy(a + 38, g_aOurIp, 4); /* tpa = us (gratuitous) */
+    if (net_l2_tx(a, 60u) == 0) {
+        net_eth_soft_inc(&g_u32ArpReplies);
+        net_eth_soft_inc(&g_u32TxOk);
+        return 0;
+    }
+    net_eth_soft_inc(&g_u32TxFail);
+    return -1;
+}
+
+void
+net_eth_apply_l2_identity(void)
+{
+    u32 n;
+
+    net_eth_sync_l2();
+    if (net_l2_ready() == 0) {
+        kprintf("net_eth: apply_l2 SKIP (no L2 backend)\n");
+        return;
+    }
+    kprintf("net_eth: apply_l2 ip=%u.%u.%u.%u mac=%02x:%02x:%02x:%02x:%02x:"
+            "%02x backend=%s\n",
+            g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3], g_aOurMac[0],
+            g_aOurMac[1], g_aOurMac[2], g_aOurMac[3], g_aOurMac[4],
+            g_aOurMac[5], net_l2_name());
+
+    /* Burst 3 gratuitous replies so lab host can learn without who-has. */
+    for (n = 0; n < 3u; n++) {
+        if (net_eth_arp_announce() == 0) {
+            kprintf("net_eth: ARP announce %u soft PASS\n", (unsigned)n);
+        } else {
+            kprintf("net_eth: ARP announce %u soft FAIL\n", (unsigned)n);
+        }
+    }
 }
 
 static void
@@ -1535,6 +1633,7 @@ handle_icmp(const u8 *pFrame, u32 cb)
         net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
+    net_eth_sync_l2();
     if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
         net_eth_soft_inc(&g_u32IcmpNotUs);
         return;
@@ -1545,11 +1644,19 @@ handle_icmp(const u8 *pFrame, u32 cb)
         return; /* echo request */
     }
     u16Tot = (u16)((pIp[2] << 8) | pIp[3]);
-    if (u16Tot < (u16)(u16Ihl + 8) || (u32)(14 + u16Tot) > cb || u16Tot > 100) {
+    /* Allow full Ethernet MTU class (was 100 — too tight). */
+    if (u16Tot < (u16)(u16Ihl + 8) || (u32)(14 + u16Tot) > cb ||
+        u16Tot > 1500u) {
         net_eth_soft_inc(&g_u32IcmpShort);
         return;
     }
+    kprintf("net_eth: ICMP echo req from %u.%u.%u.%u len=%u soft\n",
+            pIp[12], pIp[13], pIp[14], pIp[15], (unsigned)u16Tot);
     cbIcmp = (u32)u16Tot - (u32)u16Ihl;
+    if (cbIcmp + 34u > sizeof(aOut)) {
+        net_eth_soft_inc(&g_u32IcmpShort);
+        return;
+    }
     memset(aOut, 0, sizeof(aOut));
     memcpy(aOut, pFrame + 6, 6);
     memcpy(aOut + 6, g_aOurMac, 6);
@@ -1564,6 +1671,8 @@ handle_icmp(const u8 *pFrame, u32 cb)
         aOut[14 + 2] = (u8)(u16NewTot >> 8);
         aOut[14 + 3] = (u8)u16NewTot;
     }
+    aOut[14 + 8] = 64; /* TTL */
+    aOut[14 + 9] = 1;  /* ICMP */
     /* swap IP src/dst */
     memcpy(aOut + 14 + 12, pIp + 16, 4);
     memcpy(aOut + 14 + 16, pIp + 12, 4);
@@ -1575,8 +1684,8 @@ handle_icmp(const u8 *pFrame, u32 cb)
         aOut[14 + 10] = (u8)(u16C >> 8);
         aOut[14 + 11] = (u8)(u16C & 0xff);
     }
-    /* ICMP echo reply */
-    aOut[14 + 20] = 0; /* type echo reply */
+    /* ICMP echo reply: type 0, copy id/seq/payload from request. */
+    aOut[14 + 20] = 0;
     aOut[14 + 21] = 0;
     aOut[14 + 22] = 0;
     aOut[14 + 23] = 0;
@@ -1590,7 +1699,7 @@ handle_icmp(const u8 *pFrame, u32 cb)
         aOut[14 + 23] = (u8)(u16C & 0xff);
     }
     cbOut = 14u + 20u + cbIcmp;
-    if (virtio_net_tx(aOut, cbOut) == 0) {
+    if (net_l2_tx(aOut, cbOut) == 0) {
         net_eth_soft_inc(&g_u32IcmpEchoes);
         net_eth_soft_inc(&g_u32TxOk);
         net_eth_soft_add(&g_u32BytesTx, cbOut);
@@ -1608,12 +1717,19 @@ handle_arp(const u8 *pFrame, u32 cb)
     const u8 *pArp;
 
     net_eth_soft_inc(&g_u32ArpSeen);
+    net_eth_sync_l2();
 
     if (cb < 42) {
         net_eth_soft_inc(&g_u32ArpBadOp);
         return;
     }
     pArp = pFrame + 14;
+    /* htype eth (1), ptype ip (0x0800), hlen 6, plen 4 */
+    if (pArp[0] != 0 || pArp[1] != 1 || pArp[2] != 0x08 || pArp[3] != 0x00 ||
+        pArp[4] != 6 || pArp[5] != 4) {
+        net_eth_soft_inc(&g_u32ArpBadOp);
+        return;
+    }
     /* op == request (1), tpa == us */
     if (pArp[6] != 0 || pArp[7] != 1) {
         net_eth_soft_inc(&g_u32ArpBadOp);
@@ -1624,7 +1740,7 @@ handle_arp(const u8 *pFrame, u32 cb)
         return;
     }
     memset(aOut, 0, sizeof(aOut));
-    /* eth */
+    /* eth: unicast back to requester */
     memcpy(aOut, pFrame + 6, 6);       /* dst = sender mac */
     memcpy(aOut + 6, g_aOurMac, 6);
     aOut[12] = 0x08;
@@ -1642,10 +1758,15 @@ handle_arp(const u8 *pFrame, u32 cb)
     memcpy(aOut + 28, g_aOurIp, 4);
     memcpy(aOut + 32, pArp + 8, 6);  /* tha = sender hw */
     memcpy(aOut + 38, pArp + 14, 4); /* tpa = sender ip */
-    if (virtio_net_tx(aOut, 42) == 0) {
+    /* 60-byte min frame (rtl pads too; be explicit). */
+    if (net_l2_tx(aOut, 60u) == 0) {
         net_eth_soft_inc(&g_u32ArpReplies);
         net_eth_soft_inc(&g_u32TxOk);
-        net_eth_soft_add(&g_u32BytesTx, 42u);
+        net_eth_soft_add(&g_u32BytesTx, 60u);
+        kprintf("net_eth: ARP reply to %02x:%02x:%02x:%02x:%02x:%02x for "
+                "%u.%u.%u.%u soft PASS\n",
+                pArp[8], pArp[9], pArp[10], pArp[11], pArp[12], pArp[13],
+                g_aOurIp[0], g_aOurIp[1], g_aOurIp[2], g_aOurIp[3]);
     } else {
         net_eth_soft_inc(&g_u32ArpTxFail);
         net_eth_soft_inc(&g_u32TxFail);
@@ -1731,7 +1852,7 @@ handle_udp(const u8 *pFrame, u32 cb)
         memcpy(pOudp + 8, pUdp + 8, cbPay);
     }
     cbOut = 14u + 20u + 8u + cbPay;
-    if (virtio_net_tx(aOut, cbOut) == 0) {
+    if (net_l2_tx(aOut, cbOut) == 0) {
         net_eth_soft_inc(&g_u32UdpEchoes);
         net_eth_soft_inc(&g_u32TxOk);
         net_eth_soft_add(&g_u32BytesTx, cbOut);
@@ -1823,7 +1944,7 @@ net_eth_soft_link_sample(void)
 {
     u32 u32Now;
 
-    u32Now = virtio_net_ready() ? 1u : 0u;
+    u32Now = net_l2_ready() ? 1u : (virtio_net_ready() ? 1u : 0u);
     if (u32Now != g_u32LinkReady) {
         g_u32LinkReady = u32Now;
         net_eth_soft_inc(&g_u32LinkChanges);
@@ -1839,16 +1960,22 @@ void
 net_eth_poll(void)
 {
     static u8 aRx[1518];
+    static u32 g_u32LastPanelTx;
+    static u32 g_u32LastPanelRx;
     i32 i32N;
     u32 u32Batch;
     u32 u32Ready;
 
     net_eth_soft_inc(&g_u32Polls);
 
-    u32Ready = net_eth_soft_link_sample();
+    /* Always resync IP/MAC from L2 (rtl8168 probe is after net_eth_init). */
+    net_eth_sync_l2();
+
+    /* Prefer net_l2 (virtio or rtl8168); fall back to virtio-only sample. */
+    u32Ready = net_l2_ready() != 0 ? 1u : net_eth_soft_link_sample();
     if (u32Ready == 0u) {
         /*
-         * No device: skip RX. Multi-seg rtx only applies to virtio peers;
+         * No device: skip RX. Multi-seg rtx only applies to L2 peers;
          * loopback multi-seg advances SndUna inline in net_tcp_send.
          * Still tick TCP soft TIME_WAIT / rtx for any live sockets.
          */
@@ -1857,13 +1984,163 @@ net_eth_poll(void)
         net_eth_soft_maybe_cadence();
         return;
     }
+    /*
+     * Lab ARP: a few greets at first, then at most ~1/sec by jiffies — NOT
+     * every N polls (PIT+APIC+idle×8 made f450 TX-fail storms).
+     */
+    if (net_l2_backend() == GJ_NET_L2_RTL8168) {
+        static u32 g_u32Ann;
+        static u64 g_u64LastAnnJif;
+        extern void rtl8168_poll_hw(void);
+        extern u64 timer_jiffies(void);
+        u64 u64J;
+
+        rtl8168_poll_hw();
+
+        g_u32Ann++;
+        u64J = timer_jiffies();
+        if (g_u32Ann <= 4u) {
+            (void)net_eth_arp_announce();
+            g_u64LastAnnJif = u64J;
+        } else if (u64J - g_u64LastAnnJif >= 100ull) {
+            /* ~1 Hz if GJ_TIMER_HZ≈100 */
+            (void)net_eth_arp_announce();
+            g_u64LastAnnJif = u64J;
+        }
+    }
     /* Soft multi-frame drain: up to NET_ETH_POLL_MAX frames per call. */
     for (u32Batch = 0; u32Batch < NET_ETH_POLL_MAX; u32Batch++) {
-        i32N = virtio_net_rx(aRx, sizeof(aRx));
+        i32N = net_l2_rx(aRx, sizeof(aRx));
         if (i32N < 14 || (u32)i32N > sizeof(aRx)) {
             break;
         }
         (void)handle_frame(aRx, (u32)i32N);
+    }
+    /*
+     * Panel hold line 6: NET counters (STATUS static pane only).
+     * Do NOT kprintf "net: live …" — it flooded the scroll log on G752 and
+     * hid linux_ksym / module path lines. Operator asked: turn off fprint.
+     * Hold updates only when t/f/b/r/d/link change (no n= tick spam).
+     */
+    if (net_l2_backend() == GJ_NET_L2_RTL8168) {
+        extern u32 rtl8168_tx_count(void);
+        extern u32 rtl8168_rx_count(void);
+        extern u32 rtl8168_tx_fail(void);
+        extern u32 rtl8168_tx_busy(void);
+        extern u32 rtl8168_rx_drop(void);
+        extern int rtl8168_link_up(void);
+        extern void fb_console_hold(u32 u32Line, const char *szText);
+        static u32 g_u32LastPanelTf;
+        static u32 g_u32LastPanelTb;
+        static u32 g_u32LastPanelRd;
+        static u32 g_u32LastPanelLink;
+        static u8  g_fPanelOnce;
+        u32 u32Tx = rtl8168_tx_count();
+        u32 u32Rx = rtl8168_rx_count();
+        u32 u32Tf = rtl8168_tx_fail();
+        u32 u32Tb = rtl8168_tx_busy();
+        u32 u32Rd = rtl8168_rx_drop();
+        u32 u32Link = rtl8168_link_up() ? 1u : 0u;
+        int fRefresh;
+
+        fRefresh = 0;
+        if (g_fPanelOnce == 0u) {
+            fRefresh = 1;
+            g_fPanelOnce = 1u;
+        }
+        if (u32Tx != g_u32LastPanelTx || u32Rx != g_u32LastPanelRx ||
+            u32Tf != g_u32LastPanelTf || u32Tb != g_u32LastPanelTb ||
+            u32Rd != g_u32LastPanelRd || u32Link != g_u32LastPanelLink) {
+            fRefresh = 1;
+        }
+        if (fRefresh != 0) {
+            char sz[96];
+            char *q = sz;
+            const char *p;
+            u8 aIp[4];
+            u32 i;
+
+            g_u32LastPanelTx = u32Tx;
+            g_u32LastPanelRx = u32Rx;
+            g_u32LastPanelTf = u32Tf;
+            g_u32LastPanelTb = u32Tb;
+            g_u32LastPanelRd = u32Rd;
+            g_u32LastPanelLink = u32Link;
+            net_l2_ip(aIp);
+            p = "NET ";
+            while (*p) {
+                *q++ = *p++;
+            }
+            for (i = 0; i < 4u; i++) {
+                u32 v = aIp[i];
+
+                if (v >= 100u) {
+                    *q++ = (char)('0' + (v / 100u) % 10u);
+                }
+                if (v >= 10u) {
+                    *q++ = (char)('0' + (v / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (v % 10u));
+                if (i < 3u) {
+                    *q++ = '.';
+                }
+            }
+            p = u32Link != 0u ? " UP" : " DN";
+            while (*p) {
+                *q++ = *p++;
+            }
+            p = " t";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tx >= 100u) {
+                *q++ = (char)('0' + (u32Tx / 100u) % 10u);
+            }
+            if (u32Tx >= 10u) {
+                *q++ = (char)('0' + (u32Tx / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tx % 10u));
+            p = "/f";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tf >= 10u) {
+                *q++ = (char)('0' + (u32Tf / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tf % 10u));
+            p = "/b";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Tb >= 100u) {
+                *q++ = (char)('0' + (u32Tb / 100u) % 10u);
+            }
+            if (u32Tb >= 10u) {
+                *q++ = (char)('0' + (u32Tb / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Tb % 10u));
+            p = "/r";
+            while (*p) {
+                *q++ = *p++;
+            }
+            if (u32Rx >= 10u) {
+                *q++ = (char)('0' + (u32Rx / 10u) % 10u);
+            }
+            *q++ = (char)('0' + (u32Rx % 10u));
+            if (u32Rd != 0u && (q - sz) < 90) {
+                p = " d";
+                while (*p) {
+                    *q++ = *p++;
+                }
+                if (u32Rd >= 10u) {
+                    *q++ = (char)('0' + (u32Rd / 10u) % 10u);
+                }
+                *q++ = (char)('0' + (u32Rd % 10u));
+            }
+            *q = '\0';
+            /* STATUS static only — no scroll kprintf. */
+            fb_console_hold(6, sz);
+        }
     }
     if (u32Batch != 0u) {
         g_u32LastBatch = u32Batch;

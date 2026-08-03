@@ -191,3 +191,5 @@ cc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 ld -nostdlib -static -T user/init/user.ld -z max-page-size=0x1000 \
    -o build/user/vfsd.elf build/user/vfsd/vfsd_gj.o build/user/libgj.a
 ```
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

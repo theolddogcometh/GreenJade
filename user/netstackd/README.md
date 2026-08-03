@@ -250,3 +250,5 @@ make netstackd       # → build/netstackd (host)
 
 Kernel live spawn embeds `netstackd.elf` via `kernel/proc/netstackd_embed.S`
 (not part of this directory).
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

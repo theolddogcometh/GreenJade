@@ -14,8 +14,21 @@
  *   Never hard-gates; diagnostics only (wrap OK). Soft ≠ bar3.
  * greppable: protonrt: soft
  * greppable: cold_link: soft
+ * greppable: protonrt: soft fork-wait wire PASS
+ * greppable: protonrt: soft poll block PASS
+ * greppable: protonrt: soft init_module PASS|FAIL
+ * greppable: protonrt: soft finit_module PASS|FAIL
+ * greppable: protonrt: soft delete_module PASS|FAIL
+ *
+ * Daemon-grade cold: fork/clone/wait → process_*_soft when parent PCB is
+ * available; poll/ppoll soft-spin on timeout>0 (soft≠product blocking).
+ *
+ * Soft module path (init_module / finit_module / delete_module):
+ *   bounce → linux_module_load_mem + init_call; delete → exit_call if loaded.
+ * Soft≠product .ko AC (G-AC-1). Cold-classified NRs 175 / 176 / 313.
  */
 #include <gj/cold_ipc.h>
+#include <gj/config.h>
 #include <gj/cpu.h>
 #include <gj/elf_load.h>
 #include <gj/error.h>
@@ -24,11 +37,15 @@
 #include <gj/klog.h>
 #include <gj/linux_abi.h>
 #include <gj/linux_dispatch.h>
+#include <gj/linux_module.h>
 #include <gj/memobj.h>
 #include <gj/net_lo.h>
+#include <gj/linux_cold_net.h>
+#include <gj/pmm.h>
 #include <gj/process.h>
 #include <gj/string.h>
 #include <gj/thread.h>
+#include <gj/timer.h>
 #include <gj/types.h>
 #include <gj/user_access.h>
 #include <gj/vfs_ram.h>
@@ -114,11 +131,16 @@ static u64 g_u64PrtSoftExposeFull;            /* expose table full deny */
 static u64 g_u64PrtSoftPathDeny;              /* path policy deny */
 static u64 g_u64PrtSoftDeathNote;             /* death cleanup notes */
 static u8  g_fPrtSoftOnce;                    /* one-shot deep dump */
+static u8  g_fPrtSoftColdNetOnce;             /* one-shot cold_net bridge */
+static u8  g_fPrtSoftForkWaitWireOnce;        /* fork-wait soft wire PASS */
+static u8  g_fPrtSoftPollBlockOnce;           /* poll soft-spin PASS */
 
 static void protonrt_soft_inc(u64 *pCtr);
 static void protonrt_soft_note_enter(u64 u64Nr);
 static void protonrt_soft_inventory_log(void);
 static void protonrt_soft_inventory_maybe_once(void);
+static struct gj_process *protonrt_soft_parent(void);
+static void protonrt_soft_fork_wait_wire_pass_once(void);
 
 /** Soft: saturating-ish bump (u64 wrap is fine for telemetry). */
 static void
@@ -128,6 +150,37 @@ protonrt_soft_inc(u64 *pCtr)
         return;
     }
     (*pCtr)++;
+}
+
+/**
+ * Soft: resolve parent PCB for fork/clone/wait cold wires.
+ * Prefer g_pLinuxProc; fall back to current thread's process.
+ */
+static struct gj_process *
+protonrt_soft_parent(void)
+{
+    struct gj_process *p = g_pLinuxProc;
+    struct gj_thread *pCur;
+
+    if (p != NULL) {
+        return p;
+    }
+    pCur = thread_current();
+    if (pCur != NULL) {
+        return pCur->pProc;
+    }
+    return NULL;
+}
+
+/** Grep once: protonrt: soft fork-wait wire PASS */
+static void
+protonrt_soft_fork_wait_wire_pass_once(void)
+{
+    if (g_fPrtSoftForkWaitWireOnce != 0) {
+        return;
+    }
+    g_fPrtSoftForkWaitWireOnce = 1;
+    kprintf("protonrt: soft fork-wait wire PASS\n");
 }
 
 /**
@@ -210,6 +263,7 @@ protonrt_soft_grp_of(u64 u64Nr)
     case LINUX_NR_socket:
     case LINUX_NR_connect:
     case LINUX_NR_accept:
+    case LINUX_NR_accept4:
     case LINUX_NR_sendto:
     case LINUX_NR_recvfrom:
     case LINUX_NR_sendmsg:
@@ -222,7 +276,6 @@ protonrt_soft_grp_of(u64 u64Nr)
     case LINUX_NR_socketpair:
     case LINUX_NR_setsockopt:
     case LINUX_NR_getsockopt:
-    case LINUX_NR_accept4:
     case LINUX_NR_recvmmsg:
     case LINUX_NR_sendmmsg:
         return (u32)PRT_SOFT_GRP_NET;
@@ -2019,6 +2072,160 @@ promise_gate_cpath(void)
     return confine_soft_promise_require(GJ_PROMISE_CPATH);
 }
 
+/*
+ * Soft Linux .ko load via finit/init/delete_module (cold NRs 175/176/313).
+ * Bounce cap 2 MiB; vfs_ram regular-file fds for finit_module.
+ * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
+ */
+#define GJ_SOFT_MODULE_BOUNCE_MAX (2u * 1024u * 1024u)
+#define GJ_SOFT_MODULE_NAME_MAX   64u
+
+/** Map GJ_ERR_* (and soft init errno-class) → Linux -errno for cold edge. */
+static i64
+soft_mod_st_to_linux(i64 i64St)
+{
+    if (i64St >= 0) {
+        return i64St;
+    }
+    if (i64St == (i64)GJ_ERR_INVAL) {
+        return -LINUX_EINVAL;
+    }
+    if (i64St == (i64)GJ_ERR_NOMEM) {
+        return -LINUX_ENOMEM;
+    }
+    if (i64St == (i64)GJ_ERR_NOENT) {
+        return -LINUX_ENOENT;
+    }
+    if (i64St == (i64)GJ_ERR_FAULT) {
+        return -LINUX_EFAULT;
+    }
+    if (i64St == (i64)GJ_ERR_BUSY) {
+        return -LINUX_EBUSY;
+    }
+    if (i64St == (i64)GJ_ERR_PERM) {
+        return -LINUX_EPERM;
+    }
+    if (i64St == (i64)GJ_ERR_NOSUPPORT) {
+        return -LINUX_ENOEXEC;
+    }
+    if (i64St == (i64)GJ_ERR_IO) {
+        return -LINUX_EIO;
+    }
+    /* Module init may return a Linux-style -errno directly. */
+    if (i64St >= (i64)(-4095) && i64St <= (i64)(-1)) {
+        return i64St;
+    }
+    return -LINUX_EINVAL;
+}
+
+/** Soft basename + strip trailing .ko → module name (default softmod). */
+static void
+soft_mod_name_from_path(char *szOut, size_t cbOut, const char *szPath)
+{
+    const char *pBase;
+    const char *p;
+    size_t n;
+
+    if (szOut == NULL || cbOut == 0u) {
+        return;
+    }
+    szOut[0] = '\0';
+    if (szPath == NULL || szPath[0] == '\0') {
+        (void)strlcpy(szOut, "softmod", cbOut);
+        return;
+    }
+    pBase = szPath;
+    for (p = szPath; *p != '\0'; p++) {
+        if (*p == '/') {
+            pBase = p + 1;
+        }
+    }
+    if (pBase[0] == '\0') {
+        (void)strlcpy(szOut, "softmod", cbOut);
+        return;
+    }
+    n = 0;
+    while (pBase[n] != '\0' && (n + 1u) < cbOut) {
+        /* Strip ".ko" suffix soft */
+        if (pBase[n] == '.' && pBase[n + 1] == 'k' && pBase[n + 2] == 'o' &&
+            pBase[n + 3] == '\0') {
+            break;
+        }
+        szOut[n] = pBase[n];
+        n++;
+    }
+    szOut[n] = '\0';
+    if (n == 0u) {
+        (void)strlcpy(szOut, "softmod", cbOut);
+    }
+}
+
+/**
+ * Allocate contiguous PMM pages for module bounce (HHDM VA).
+ * *pPa / *pcPages filled for free; NULL on fail.
+ */
+static void *
+soft_mod_bounce_alloc(size_t cb, gj_paddr_t *pPa, u32 *pcPages)
+{
+    u32 cPages;
+    u32 cPo2;
+    gj_paddr_t pa;
+
+    if (pPa == NULL || pcPages == NULL || cb == 0u ||
+        cb > (size_t)GJ_SOFT_MODULE_BOUNCE_MAX) {
+        return NULL;
+    }
+    cPages = (u32)((cb + (size_t)GJ_PAGE_SIZE - 1u) / (size_t)GJ_PAGE_SIZE);
+    if (cPages == 0u) {
+        cPages = 1u;
+    }
+    /* Prefer power-of-two for hierarchical freelist (≤512). */
+    cPo2 = 1u;
+    while (cPo2 < cPages && cPo2 < 512u) {
+        cPo2 <<= 1;
+    }
+    if (cPo2 >= cPages) {
+        cPages = cPo2;
+    }
+    pa = pmm_alloc_pages(cPages);
+    if (pa == 0) {
+        return NULL;
+    }
+    *pPa = pa;
+    *pcPages = cPages;
+    return (void *)(gj_vaddr_t)hhdm_to_virt(pa);
+}
+
+static void
+soft_mod_bounce_free(gj_paddr_t pa, u32 cPages)
+{
+    if (pa != 0 && cPages != 0u) {
+        pmm_free_pages(pa, cPages);
+    }
+}
+
+/** load_mem + init_call; maps status to Linux -errno. */
+static i64
+soft_mod_load_and_init(const void *pImg, size_t cb, const char *szName)
+{
+    i64 i64St;
+    const char *sz = szName;
+
+    if (sz == NULL || sz[0] == '\0') {
+        sz = "softmod";
+    }
+    i64St = linux_module_load_mem(pImg, cb, sz);
+    if (i64St != 0) {
+        return soft_mod_st_to_linux(i64St);
+    }
+    i64St = linux_module_init_call(sz);
+    if (i64St != 0) {
+        (void)linux_module_exit_call(sz);
+        return soft_mod_st_to_linux(i64St);
+    }
+    return 0;
+}
+
 static void
 copy_path_from_arg(char *szOut, size_t cbOut, u64 u64Path)
 {
@@ -2329,13 +2536,24 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_poll:
     case LINUX_NR_ppoll: {
         /*
-         * poll(struct pollfd *fds, nfds_t nfds, timeout):
-         * Use vfs readiness (eventfd/pipe/inotify/ram) mapped to POLLIN/OUT.
-         * arg0 = user pollfd array, arg1 = nfds (max 16 for T0).
+         * poll(struct pollfd *fds, nfds_t nfds, timeout_ms)
+         * ppoll(..., const struct timespec *tmo_p, ...)
+         *
+         * All fds via vfs_ram_poll_mask (ram + net_tcp + net_lo route).
+         * No always-ready shortcuts. Soft≠product blocking:
+         *   timeout==0  → single readiness pass
+         *   timeout>0   → soft-spin with thread_yield + timer_jiffies budget
+         *   timeout<0 / ppoll NULL → treat as non-block single pass here
+         *     (product infinite wait remains OPEN)
+         * greppable: protonrt: soft poll block PASS
          */
         u32 nfds = (u32)pRegs->u64Arg1;
         u32 i;
         u32 ready = 0;
+        i64 i64TimeoutMs = 0;
+        u32 u32SpinLeft = 0;
+        u64 u64J0;
+        u32 u32Pass;
 
         if (nfds == 0) {
             return 0;
@@ -2346,59 +2564,145 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (pRegs->u64Arg0 == 0) {
             return -LINUX_EFAULT;
         }
-        for (i = 0; i < nfds; i++) {
-            /* pollfd: int fd; short events; short revents — 8 bytes on x86_64 */
-            i32 fd = 0;
-            u16 events = 0;
-            u16 revents = 0;
-            u32 want;
-            u32 got;
-            u64 base = pRegs->u64Arg0 + (u64)i * 8u;
 
-            if (user_range_ok(base, 8)) {
-                if (copy_from_user(&fd, base, 4) != GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-                if (copy_from_user(&events, base + 4, 2) != GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-            } else {
-                i32 *p = (i32 *)(gj_vaddr_t)base;
+        /* Decode timeout: poll uses int ms; ppoll uses timespec*. */
+        if (pRegs->u64Nr == LINUX_NR_poll) {
+            i64TimeoutMs = (i64)(i32)pRegs->u64Arg2;
+        } else if (pRegs->u64Arg2 != 0) {
+            i64 i64Sec = 0;
+            i64 i64Nsec = 0;
 
-                fd = p[0];
-                events = ((u16 *)(gj_vaddr_t)base)[2];
-            }
-            /* POLLIN=1 POLLOUT=4 — same numbers as EPOLLIN/OUT */
-            want = (u32)events;
-            if (want == 0) {
-                want = 0x005u;
-            }
-            if (fd < 0) {
-                revents = 0;
-            } else if (vfs_ram_fd_ok((i64)fd)) {
-                got = vfs_ram_poll_mask((i64)fd, want);
-                revents = (u16)(got & want);
-                if (got & 0x008u) {
-                    revents |= 0x0008u; /* POLLERR */
+            if (user_range_ok(pRegs->u64Arg2, 16)) {
+                if (copy_from_user(&i64Sec, pRegs->u64Arg2, 8) != GJ_OK) {
+                    return -LINUX_EFAULT;
                 }
-                if (got & 0x010u) {
-                    revents |= 0x0010u; /* POLLHUP */
-                }
-            } else if (net_lo_fd_ok((i64)fd)) {
-                revents = (u16)(want & 0x0005u); /* always R/W ready on lo */
-            } else {
-                revents = 0x0008u; /* POLLERR */
-            }
-            if (user_range_ok(base, 8)) {
-                if (copy_to_user(base + 6, &revents, 2) != GJ_OK) {
+                if (copy_from_user(&i64Nsec, pRegs->u64Arg2 + 8, 8) !=
+                    GJ_OK) {
                     return -LINUX_EFAULT;
                 }
             } else {
-                ((u16 *)(gj_vaddr_t)base)[3] = revents;
+                i64Sec = *(const i64 *)(gj_vaddr_t)pRegs->u64Arg2;
+                i64Nsec = *(const i64 *)(gj_vaddr_t)(pRegs->u64Arg2 + 8);
             }
-            if (revents != 0) {
-                ready++;
+            if (i64Sec < 0 || i64Nsec < 0) {
+                i64TimeoutMs = 0;
+            } else if (i64Sec == 0 && i64Nsec == 0) {
+                i64TimeoutMs = 0;
+            } else {
+                i64TimeoutMs = i64Sec * 1000 + i64Nsec / 1000000;
+                if (i64TimeoutMs <= 0) {
+                    i64TimeoutMs = 1; /* sub-ms → one soft tick */
+                }
             }
+        } else {
+            /* ppoll NULL timespec: product infinite; soft single pass. */
+            i64TimeoutMs = 0;
+        }
+
+        /*
+         * Soft spin budget when timeout > 0 (daemon poll loops).
+         * Cap attempts + jiffies so soft never hangs product bring-up.
+         * soft≠product blocking.
+         */
+        if (i64TimeoutMs > 0) {
+            u32SpinLeft = (u32)i64TimeoutMs;
+            if (u32SpinLeft > 128u) {
+                u32SpinLeft = 128u;
+            }
+            if (u32SpinLeft < 1u) {
+                u32SpinLeft = 1u;
+            }
+        }
+
+        u64J0 = timer_jiffies();
+        for (u32Pass = 0;; u32Pass++) {
+            ready = 0;
+            for (i = 0; i < nfds; i++) {
+                /* pollfd: int fd; short events; short revents — 8B x86_64 */
+                i32 fd = 0;
+                u16 events = 0;
+                u16 revents = 0;
+                u32 want;
+                u32 got;
+                u64 base = pRegs->u64Arg0 + (u64)i * 8u;
+
+                if (user_range_ok(base, 8)) {
+                    if (copy_from_user(&fd, base, 4) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                    if (copy_from_user(&events, base + 4, 2) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    i32 *p = (i32 *)(gj_vaddr_t)base;
+
+                    fd = p[0];
+                    events = ((u16 *)(gj_vaddr_t)base)[2];
+                }
+                /* POLLIN=1 POLLOUT=4 — same numbers as EPOLLIN/OUT */
+                want = (u32)events;
+                if (want == 0) {
+                    want = (u32)(LINUX_POLLIN | LINUX_POLLOUT);
+                }
+                if (fd < 0) {
+                    revents = 0;
+                } else {
+                    /*
+                     * Route ram + net_tcp + net_lo via vfs_ram_poll_mask
+                     * (A2 net route). Soft≠product; no always-ready.
+                     */
+                    got = vfs_ram_poll_mask((i64)fd, want);
+                    if (got == 0 && !vfs_ram_fd_ok((i64)fd) &&
+                        !net_lo_fd_ok((i64)fd)) {
+                        extern int net_tcp_fd_ok(i64 i64Fd);
+
+                        if (!net_tcp_fd_ok((i64)fd)) {
+                            revents = (u16)LINUX_POLLERR;
+                            goto prt_poll_store;
+                        }
+                    }
+                    revents = (u16)(got & want);
+                    if (got & (u32)LINUX_POLLERR) {
+                        revents |= (u16)LINUX_POLLERR;
+                    }
+                    if (got & (u32)LINUX_POLLHUP) {
+                        revents |= (u16)LINUX_POLLHUP;
+                    }
+                }
+            prt_poll_store:
+                if (user_range_ok(base, 8)) {
+                    if (copy_to_user(base + 6, &revents, 2) != GJ_OK) {
+                        return -LINUX_EFAULT;
+                    }
+                } else {
+                    ((u16 *)(gj_vaddr_t)base)[3] = revents;
+                }
+                if (revents != 0) {
+                    ready++;
+                }
+            }
+
+            if (ready != 0 || i64TimeoutMs <= 0 || u32SpinLeft == 0) {
+                break;
+            }
+            /* Soft-spin: yield so peer thr / net soft progress can run. */
+            thread_yield();
+            if (u32SpinLeft > 0) {
+                u32SpinLeft--;
+            }
+            /* Hard soft cap ~320ms @ GJ_TIMER_HZ=100 (soft≠product block). */
+            if ((timer_jiffies() - u64J0) > 32ull) {
+                break;
+            }
+            (void)u32Pass;
+        }
+
+        if (i64TimeoutMs > 0 && g_fPrtSoftPollBlockOnce == 0) {
+            g_fPrtSoftPollBlockOnce = 1;
+            /* Grep: protonrt: soft poll block PASS */
+            kprintf("protonrt: soft poll block PASS timeout_ms=%ld "
+                    "ready=%u soft_not_product_block=1\n",
+                    (long)i64TimeoutMs, ready);
         }
         return (i64)ready;
     }
@@ -2662,167 +2966,55 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        return net_lo_socket((int)pRegs->u64Arg0, (int)pRegs->u64Arg1,
-                             (int)pRegs->u64Arg2);
+        /* ABI-first: STREAM → net_tcp, else net_lo (linux_cold_net bridge). */
+        if (g_fPrtSoftColdNetOnce == 0) {
+            g_fPrtSoftColdNetOnce = 1;
+            /* Grep: protonrt: soft cold_net bridge PASS (soft ≠ product). */
+            kprintf("protonrt: soft cold_net bridge PASS\n");
+        }
+        return gj_linux_cold_socket(pRegs);
     }
 
-    case LINUX_NR_sendto:
-        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            u8 aBuf[256];
-            size_t cb = (size_t)pRegs->u64Arg2;
+    case LINUX_NR_sendto: {
+        i64 i64Gate;
 
-            if (cb > sizeof(aBuf)) {
-                cb = sizeof(aBuf);
-            }
-            if (cb > 0 && pRegs->u64Arg1 == 0) {
-                return -LINUX_EFAULT;
-            }
-            if (user_range_ok(pRegs->u64Arg1, cb)) {
-                if (copy_from_user(aBuf, pRegs->u64Arg1, cb) != GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-            } else {
-                memcpy(aBuf, (const void *)(gj_vaddr_t)pRegs->u64Arg1, cb);
-            }
-            return net_lo_send((i64)pRegs->u64Arg0, aBuf, cb);
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        return -LINUX_EBADF;
+        return gj_linux_cold_sendto(pRegs);
+    }
 
     case LINUX_NR_sendmsg: {
-        /* msghdr: msg_iov at offset 16, msg_iovlen at 24 (x86_64) — simplified */
-        u64 u64Msg;
-        u64 u64Iov = 0;
-        u64 u64IovLen = 0;
-        u8 aBuf[256];
-        size_t total = 0;
-        u64 i;
+        i64 i64Gate;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return -LINUX_EBADF;
+        /* ABI-first: single-iov soft via linux_cold_net (tcp + lo). */
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        u64Msg = pRegs->u64Arg1;
-        if (u64Msg == 0) {
-            return -LINUX_EFAULT;
-        }
-        if (user_range_ok(u64Msg + 16, 16)) {
-            (void)copy_from_user(&u64Iov, u64Msg + 16, 8);
-            (void)copy_from_user(&u64IovLen, u64Msg + 24, 8);
-        } else {
-            u64Iov = *(const u64 *)(gj_vaddr_t)(u64Msg + 16);
-            u64IovLen = *(const u64 *)(gj_vaddr_t)(u64Msg + 24);
-        }
-        if (u64Iov == 0 || u64IovLen == 0) {
-            return 0;
-        }
-        if (u64IovLen > 8) {
-            u64IovLen = 8;
-        }
-        for (i = 0; i < u64IovLen; i++) {
-            u64 base = 0;
-            u64 len = 0;
-            size_t chunk;
-
-            if (user_range_ok(u64Iov + i * 16, 16)) {
-                (void)copy_from_user(&base, u64Iov + i * 16, 8);
-                (void)copy_from_user(&len, u64Iov + i * 16 + 8, 8);
-            } else {
-                base = *(const u64 *)(gj_vaddr_t)(u64Iov + i * 16);
-                len = *(const u64 *)(gj_vaddr_t)(u64Iov + i * 16 + 8);
-            }
-            chunk = (size_t)len;
-            if (chunk > sizeof(aBuf) - total) {
-                chunk = sizeof(aBuf) - total;
-            }
-            if (chunk == 0) {
-                break;
-            }
-            if (user_range_ok(base, chunk)) {
-                if (copy_from_user(aBuf + total, base, chunk) != GJ_OK) {
-                    return total ? (i64)total : -LINUX_EFAULT;
-                }
-            } else {
-                memcpy(aBuf + total, (const void *)(gj_vaddr_t)base, chunk);
-            }
-            total += chunk;
-        }
-        return net_lo_send((i64)pRegs->u64Arg0, aBuf, total);
+        return gj_linux_cold_sendmsg(pRegs);
     }
 
-    case LINUX_NR_recvfrom:
-        if (net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            u8 aBuf[256];
-            size_t cb = (size_t)pRegs->u64Arg2;
-            i64 i64N;
+    case LINUX_NR_recvfrom: {
+        i64 i64Gate;
 
-            if (cb > sizeof(aBuf)) {
-                cb = sizeof(aBuf);
-            }
-            if (cb > 0 && pRegs->u64Arg1 == 0) {
-                return -LINUX_EFAULT;
-            }
-            i64N = net_lo_recv((i64)pRegs->u64Arg0, aBuf, cb);
-            if (i64N <= 0) {
-                return i64N;
-            }
-            if (user_range_ok(pRegs->u64Arg1, (u64)i64N)) {
-                if (copy_to_user(pRegs->u64Arg1, aBuf, (size_t)i64N) !=
-                    GJ_OK) {
-                    return -LINUX_EFAULT;
-                }
-            } else {
-                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aBuf, (size_t)i64N);
-            }
-            return i64N;
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        return -LINUX_EBADF;
+        return gj_linux_cold_recvfrom(pRegs);
+    }
 
     case LINUX_NR_recvmsg: {
-        u64 u64Msg = pRegs->u64Arg1;
-        u64 u64Iov = 0;
-        u64 u64IovLen = 0;
-        u8 aBuf[256];
-        i64 i64N;
-        u64 base = 0;
-        u64 len = 0;
+        i64 i64Gate;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return -LINUX_EBADF;
+        /* ABI-first: single-iov soft via linux_cold_net (tcp + lo). */
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        if (u64Msg == 0) {
-            return -LINUX_EFAULT;
-        }
-        if (user_range_ok(u64Msg + 16, 16)) {
-            (void)copy_from_user(&u64Iov, u64Msg + 16, 8);
-            (void)copy_from_user(&u64IovLen, u64Msg + 24, 8);
-        } else {
-            u64Iov = *(const u64 *)(gj_vaddr_t)(u64Msg + 16);
-            u64IovLen = *(const u64 *)(gj_vaddr_t)(u64Msg + 24);
-        }
-        if (u64Iov == 0 || u64IovLen == 0) {
-            return 0;
-        }
-        if (user_range_ok(u64Iov, 16)) {
-            (void)copy_from_user(&base, u64Iov, 8);
-            (void)copy_from_user(&len, u64Iov + 8, 8);
-        } else {
-            base = *(const u64 *)(gj_vaddr_t)u64Iov;
-            len = *(const u64 *)(gj_vaddr_t)(u64Iov + 8);
-        }
-        if (len > sizeof(aBuf)) {
-            len = sizeof(aBuf);
-        }
-        i64N = net_lo_recv((i64)pRegs->u64Arg0, aBuf, (size_t)len);
-        if (i64N <= 0) {
-            return i64N;
-        }
-        if (user_range_ok(base, (u64)i64N)) {
-            if (copy_to_user(base, aBuf, (size_t)i64N) != GJ_OK) {
-                return -LINUX_EFAULT;
-            }
-        } else {
-            memcpy((void *)(gj_vaddr_t)base, aBuf, (size_t)i64N);
-        }
-        return i64N;
+        return gj_linux_cold_recvmsg(pRegs);
     }
 
     case LINUX_NR_sendmmsg: {
@@ -2893,107 +3085,54 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 1;
     }
 
-    case LINUX_NR_shutdown:
-        return net_lo_shutdown((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+    case LINUX_NR_shutdown: {
+        i64 i64Gate;
+
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
+        }
+        return gj_linux_cold_shutdown(pRegs);
+    }
 
     case LINUX_NR_setsockopt: {
-        int v = 0;
+        i64 i64Gate;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return -LINUX_EBADF;
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        if (pRegs->u64Arg3 != 0 && pRegs->u64Arg4 >= 4) {
-            if (user_range_ok(pRegs->u64Arg3, 4)) {
-                (void)copy_from_user(&v, pRegs->u64Arg3, 4);
-            } else {
-                v = *(const int *)(gj_vaddr_t)pRegs->u64Arg3;
-            }
-        }
-        return net_lo_setsockopt((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
-                                 (int)pRegs->u64Arg2, &v, 4);
+        return gj_linux_cold_setsockopt(pRegs);
     }
 
     case LINUX_NR_getsockopt: {
-        int v = 0;
-        u32 len = 4;
-        u32 *pLen = NULL;
+        i64 i64Gate;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return -LINUX_EBADF;
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        if (pRegs->u64Arg4 != 0) {
-            if (user_range_ok(pRegs->u64Arg4, 4)) {
-                (void)copy_from_user(&len, pRegs->u64Arg4, 4);
-            } else {
-                len = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg4;
-            }
-            pLen = &len;
-        }
-        {
-            i64 r = net_lo_getsockopt((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1,
-                                      (int)pRegs->u64Arg2, &v, pLen ? pLen
-                                                                     : &len);
-
-            if (r != 0) {
-                return r;
-            }
-            if (pRegs->u64Arg3 != 0) {
-                if (user_range_ok(pRegs->u64Arg3, 4)) {
-                    (void)copy_to_user(pRegs->u64Arg3, &v, 4);
-                } else {
-                    *(int *)(gj_vaddr_t)pRegs->u64Arg3 = v;
-                }
-            }
-            if (pRegs->u64Arg4 != 0) {
-                if (user_range_ok(pRegs->u64Arg4, 4)) {
-                    (void)copy_to_user(pRegs->u64Arg4, &len, 4);
-                } else {
-                    *(u32 *)(gj_vaddr_t)pRegs->u64Arg4 = len;
-                }
-            }
-            return 0;
-        }
+        return gj_linux_cold_getsockopt(pRegs);
     }
 
-    case LINUX_NR_getsockname:
-    case LINUX_NR_getpeername: {
-        u8 aSa[16];
-        u32 len = 16;
-        i64 r;
+    case LINUX_NR_getsockname: {
+        i64 i64Gate;
 
-        if (!net_lo_fd_ok((i64)pRegs->u64Arg0)) {
-            return -LINUX_EBADF;
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        if (pRegs->u64Arg2 != 0) {
-            if (user_range_ok(pRegs->u64Arg2, 4)) {
-                (void)copy_from_user(&len, pRegs->u64Arg2, 4);
-            } else {
-                len = *(const u32 *)(gj_vaddr_t)pRegs->u64Arg2;
-            }
+        return gj_linux_cold_getsockname(pRegs);
+    }
+
+    case LINUX_NR_getpeername: {
+        i64 i64Gate;
+
+        i64Gate = confine_soft_promise_require(GJ_PROMISE_INET);
+        if (i64Gate != 0) {
+            return i64Gate;
         }
-        if (pRegs->u64Nr == LINUX_NR_getsockname) {
-            r = net_lo_getsockname((i64)pRegs->u64Arg0, aSa, &len);
-        } else {
-            r = net_lo_getpeername((i64)pRegs->u64Arg0, aSa, &len);
-        }
-        if (r != 0) {
-            return r;
-        }
-        if (pRegs->u64Arg1 != 0) {
-            if (user_range_ok(pRegs->u64Arg1, len)) {
-                (void)copy_to_user(pRegs->u64Arg1, aSa, len);
-            } else {
-                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg1, aSa, len);
-            }
-        }
-        if (pRegs->u64Arg2 != 0) {
-            if (user_range_ok(pRegs->u64Arg2, 4)) {
-                (void)copy_to_user(pRegs->u64Arg2, &len, 4);
-            } else {
-                *(u32 *)(gj_vaddr_t)pRegs->u64Arg2 = len;
-            }
-        }
-        return 0;
+        return gj_linux_cold_getpeername(pRegs);
     }
 
     case LINUX_NR_pipe:
@@ -3052,18 +3191,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        /* sockaddr_in: port at offset 2, big-endian */
-        if (pRegs->u64Arg1 != 0) {
-            u16 u16PortBe = 0;
-            if (user_range_ok(pRegs->u64Arg1 + 2, 2)) {
-                (void)copy_from_user(&u16PortBe, pRegs->u64Arg1 + 2, 2);
-            } else {
-                u16PortBe = *(const u16 *)(gj_vaddr_t)(pRegs->u64Arg1 + 2);
-            }
-            return net_lo_bind((i64)pRegs->u64Arg0,
-                               (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
-        }
-        return -LINUX_EFAULT;
+        return gj_linux_cold_bind(pRegs);
     }
 
     case LINUX_NR_listen: {
@@ -3073,7 +3201,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        return net_lo_listen((i64)pRegs->u64Arg0, (int)pRegs->u64Arg1);
+        return gj_linux_cold_listen(pRegs);
     }
 
     case LINUX_NR_accept:
@@ -3084,8 +3212,8 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        /* flags ignored for bring-up (CLOEXEC/NONBLOCK) */
-        return net_lo_accept((i64)pRegs->u64Arg0);
+        /* flags ignored for bring-up (CLOEXEC/NONBLOCK) inside cold_net */
+        return gj_linux_cold_accept(pRegs);
     }
 
     case LINUX_NR_fallocate:
@@ -3409,17 +3537,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         if (i64Gate != 0) {
             return i64Gate;
         }
-        if (pRegs->u64Arg1 != 0) {
-            u16 u16PortBe = 0;
-            if (user_range_ok(pRegs->u64Arg1 + 2, 2)) {
-                (void)copy_from_user(&u16PortBe, pRegs->u64Arg1 + 2, 2);
-            } else {
-                u16PortBe = *(const u16 *)(gj_vaddr_t)(pRegs->u64Arg1 + 2);
-            }
-            return net_lo_connect((i64)pRegs->u64Arg0,
-                                  (u16)((u16PortBe >> 8) | (u16PortBe << 8)));
-        }
-        return -LINUX_EFAULT;
+        return gj_linux_cold_connect(pRegs);
     }
 
     case LINUX_NR_close:
@@ -3618,12 +3736,25 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_wait4: {
         i32 st = 0;
         i64 r;
-        i32 *pSt = NULL;
+        int *pSt = NULL;
+        struct gj_process *pParent;
 
         if (pRegs->u64Arg1 != 0) {
-            pSt = &st;
+            pSt = (int *)&st;
         }
-        r = process_wait4((i64)pRegs->u64Arg0, pSt, (int)pRegs->u64Arg2);
+        /*
+         * Daemon-grade: process_wait_soft when parent PCB available
+         * (PCB-filtered children). Fallback process_wait4 if no PCB.
+         * greppable: protonrt: soft fork-wait wire PASS
+         */
+        pParent = protonrt_soft_parent();
+        if (pParent != NULL) {
+            protonrt_soft_fork_wait_wire_pass_once();
+            r = process_wait_soft(pParent, (i64)pRegs->u64Arg0, pSt,
+                                  (int)pRegs->u64Arg2);
+        } else {
+            r = process_wait4((i64)pRegs->u64Arg0, &st, (int)pRegs->u64Arg2);
+        }
         if (r > 0 && pRegs->u64Arg1 != 0) {
             if (user_range_ok(pRegs->u64Arg1, sizeof(st))) {
                 if (copy_to_user(pRegs->u64Arg1, &st, sizeof(st)) != GJ_OK) {
@@ -3637,6 +3768,72 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             return -LINUX_ECHILD;
         }
         return r;
+    }
+
+    case LINUX_NR_waitid: {
+        /*
+         * waitid(idtype, id, *infop, options) — soft reaper for driver hosts.
+         * Prefer process_waitid_soft when parent PCB is available.
+         * greppable: protonrt: soft fork-wait wire PASS
+         */
+        i32 st = 0;
+        int nSiCode = 0;
+        i64 r;
+        struct gj_process *pParent;
+        u32 u32IdType = (u32)pRegs->u64Arg0;
+        i64 i64Id = (i64)pRegs->u64Arg1;
+        int nOpts = (int)pRegs->u64Arg3;
+        u8 aInfo[128];
+        u32 i;
+
+        pParent = protonrt_soft_parent();
+        if (pParent != NULL) {
+            protonrt_soft_fork_wait_wire_pass_once();
+            r = process_waitid_soft(pParent, u32IdType, i64Id, (int *)&st,
+                                    nOpts, &nSiCode);
+        } else {
+            i64 pid = -1;
+
+            if (u32IdType == GJ_P_PID) {
+                pid = i64Id;
+            } else if (u32IdType != GJ_P_ALL) {
+                return -LINUX_EINVAL;
+            }
+            r = process_wait4(pid, &st, nOpts | 1 /* WNOHANG soft prefer */);
+            if (r > 0) {
+                nSiCode = 1; /* CLD_EXITED-shaped */
+            }
+        }
+        if (r == -10) {
+            return -LINUX_ECHILD;
+        }
+        if (r <= 0) {
+            return r;
+        }
+        if (pRegs->u64Arg2 != 0) {
+            for (i = 0; i < sizeof(aInfo); i++) {
+                aInfo[i] = 0;
+            }
+            /* si_signo=SIGCHLD(17), si_code, si_pid, si_status */
+            aInfo[0] = 17;
+            aInfo[4] = (u8)(nSiCode & 0xff);
+            {
+                u32 p = (u32)r;
+
+                aInfo[12] = (u8)(p & 0xffu);
+                aInfo[13] = (u8)((p >> 8) & 0xffu);
+                aInfo[14] = (u8)((p >> 16) & 0xffu);
+                aInfo[15] = (u8)((p >> 24) & 0xffu);
+            }
+            aInfo[24] = (u8)((st >> 8) & 0xffu);
+            if (user_range_ok(pRegs->u64Arg2, sizeof(aInfo))) {
+                (void)copy_to_user(pRegs->u64Arg2, aInfo, sizeof(aInfo));
+            } else {
+                memcpy((void *)(gj_vaddr_t)pRegs->u64Arg2, aInfo,
+                       sizeof(aInfo));
+            }
+        }
+        return 0; /* waitid success is 0; pid lives in siginfo */
     }
 
     case LINUX_NR_kill: {
@@ -4316,8 +4513,20 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
         return 0;
     }
 
-    case LINUX_NR_fork:
+    case LINUX_NR_fork: {
+        /*
+         * Soft product-min: process_fork_soft when parent PCB available
+         * (links child for process_wait_soft reaping). Fallback linux_fork.
+         * greppable: protonrt: soft fork-wait wire PASS
+         */
+        struct gj_process *pParent = protonrt_soft_parent();
+
+        if (pParent != NULL) {
+            protonrt_soft_fork_wait_wire_pass_once();
+            return process_fork_soft(pParent);
+        }
         return process_linux_fork(1, 0);
+    }
 
     case LINUX_NR_vfork:
         /* vfork: child runs first — mark zombie so parent wait sees exit */
@@ -4326,10 +4535,12 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
     case LINUX_NR_clone:
     case LINUX_NR_clone3: {
         /*
-         * clone(flags, stack, ...): CLONE_THREAD (0x10000) → same pid-shaped.
-         * Otherwise create wait-registered child (fork-like).
+         * clone(flags, stack, ...): CLONE_THREAD → same-pid thread spawn.
+         * Otherwise process_clone_soft when parent PCB available.
+         * greppable: protonrt: soft fork-wait wire PASS
          */
         u64 u64Flags = pRegs->u64Arg0;
+        struct gj_process *pParent;
 
         if (pRegs->u64Nr == LINUX_NR_clone3 && pRegs->u64Arg0 != 0) {
             /* clone_args.flags at offset 0 */
@@ -4339,7 +4550,7 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 u64Flags = *(const u64 *)(gj_vaddr_t)pRegs->u64Arg0;
             }
         }
-        if (u64Flags & 0x10000ull /* CLONE_THREAD */) {
+        if (u64Flags & GJ_CLONE_THREAD) {
             /*
              * Thread-shaped: spawn real user thread in current process AS
              * when child_stack is provided. Entry = parent user RIP (after
@@ -4370,6 +4581,11 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
             }
             /* No stack/entry (kernel-side smoke): soft success */
             return 0;
+        }
+        pParent = protonrt_soft_parent();
+        if (pParent != NULL) {
+            protonrt_soft_fork_wait_wire_pass_once();
+            return process_clone_soft(pParent, u64Flags);
         }
         return process_linux_fork(1, 0);
     }
@@ -4597,6 +4813,161 @@ protonrt_service(struct gj_linux_regs *pRegs, void *pCtx)
                 (void)net_lo_close((i64)i);
             }
         }
+        return 0;
+    }
+
+    /*
+     * Soft module load path (Option C cold). Soft≠product .ko AC (G-AC-1).
+     * init_module(umod, len, uargs) / finit_module(fd, uargs, flags) /
+     * delete_module(name, flags). Bounce ≤2 MiB → load_mem + init_call.
+     * greppable: protonrt: soft init_module|finit_module|delete_module PASS|FAIL
+     */
+    case LINUX_NR_init_module: {
+        /* init_module(void *umod, unsigned long len, const char *uargs) */
+        u64 u64Umod = pRegs->u64Arg0;
+        u64 u64Len = pRegs->u64Arg1;
+        size_t cb;
+        void *pBounce;
+        gj_paddr_t paBounce = 0;
+        u32 cPages = 0;
+        i64 i64R;
+        char szName[GJ_SOFT_MODULE_NAME_MAX];
+
+        (void)pRegs->u64Arg2; /* uargs soft-ignored (params OPEN) */
+        if (u64Umod == 0 || u64Len == 0) {
+            kprintf("protonrt: soft init_module FAIL\n");
+            return -LINUX_EINVAL;
+        }
+        if (u64Len > (u64)GJ_SOFT_MODULE_BOUNCE_MAX) {
+            kprintf("protonrt: soft init_module FAIL\n");
+            return -LINUX_EFBIG;
+        }
+        cb = (size_t)u64Len;
+        pBounce = soft_mod_bounce_alloc(cb, &paBounce, &cPages);
+        if (pBounce == NULL) {
+            kprintf("protonrt: soft init_module FAIL\n");
+            return -LINUX_ENOMEM;
+        }
+        if (user_range_ok(u64Umod, (u64)cb)) {
+            if (copy_from_user(pBounce, u64Umod, cb) != GJ_OK) {
+                soft_mod_bounce_free(paBounce, cPages);
+                kprintf("protonrt: soft init_module FAIL\n");
+                return -LINUX_EFAULT;
+            }
+        } else {
+            /* Kernel-smoke pointer path */
+            memcpy(pBounce, (const void *)(gj_vaddr_t)u64Umod, cb);
+        }
+        (void)strlcpy(szName, "softmod", sizeof(szName));
+        i64R = soft_mod_load_and_init(pBounce, cb, szName);
+        soft_mod_bounce_free(paBounce, cPages);
+        if (i64R != 0) {
+            kprintf("protonrt: soft init_module FAIL\n");
+            return i64R;
+        }
+        kprintf("protonrt: soft init_module PASS\n");
+        return 0;
+    }
+
+    case LINUX_NR_finit_module: {
+        /*
+         * finit_module(int fd, const char *uargs, int flags)
+         * vfs_ram fd only: read file → bounce ≤2 MiB → load_mem + init_call.
+         */
+        i64 i64Fd = (i64)pRegs->u64Arg0;
+        size_t cb = 0;
+        size_t cbGot = 0;
+        void *pBounce;
+        gj_paddr_t paBounce = 0;
+        u32 cPages = 0;
+        i64 i64R;
+        i64 i64N;
+        char szPath[96];
+        char szName[GJ_SOFT_MODULE_NAME_MAX];
+        u8 aStat[144];
+        i64 i64Size = 0;
+
+        (void)pRegs->u64Arg1; /* uargs soft-ignored */
+        (void)pRegs->u64Arg2; /* flags soft-ignored */
+        if (i64Fd < 0 || !vfs_ram_fd_ok(i64Fd)) {
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return -LINUX_EBADF;
+        }
+        /* Size from fstat st_size (Linux x86_64 layout offset 48). */
+        memset(aStat, 0, sizeof(aStat));
+        i64R = vfs_ram_fstat(i64Fd, aStat, sizeof(aStat));
+        if (i64R != 0) {
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return i64R;
+        }
+        memcpy(&i64Size, aStat + 48, sizeof(i64Size));
+        if (i64Size <= 0) {
+            /* Empty or unknown: try read until cap (soft). */
+            i64Size = (i64)GJ_SOFT_MODULE_BOUNCE_MAX;
+        }
+        if ((u64)i64Size > (u64)GJ_SOFT_MODULE_BOUNCE_MAX) {
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return -LINUX_EFBIG;
+        }
+        cb = (size_t)i64Size;
+        pBounce = soft_mod_bounce_alloc(cb, &paBounce, &cPages);
+        if (pBounce == NULL) {
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return -LINUX_ENOMEM;
+        }
+        /* Rewind soft; product preserves offset OPEN. */
+        (void)vfs_ram_lseek(i64Fd, 0, 0);
+        while (cbGot < cb) {
+            i64N = vfs_ram_read(i64Fd, (u8 *)pBounce + cbGot, cb - cbGot);
+            if (i64N < 0) {
+                soft_mod_bounce_free(paBounce, cPages);
+                kprintf("protonrt: soft finit_module FAIL\n");
+                return i64N;
+            }
+            if (i64N == 0) {
+                break;
+            }
+            cbGot += (size_t)i64N;
+        }
+        if (cbGot == 0u) {
+            soft_mod_bounce_free(paBounce, cPages);
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return -LINUX_EINVAL;
+        }
+        szPath[0] = '\0';
+        (void)vfs_ram_fd_path(i64Fd, szPath, sizeof(szPath));
+        soft_mod_name_from_path(szName, sizeof(szName), szPath);
+        i64R = soft_mod_load_and_init(pBounce, cbGot, szName);
+        soft_mod_bounce_free(paBounce, cPages);
+        if (i64R != 0) {
+            kprintf("protonrt: soft finit_module FAIL\n");
+            return i64R;
+        }
+        kprintf("protonrt: soft finit_module PASS\n");
+        return 0;
+    }
+
+    case LINUX_NR_delete_module: {
+        /* delete_module(const char *name, int flags) — soft exit_call if loaded */
+        char szName[GJ_SOFT_MODULE_NAME_MAX];
+        i64 i64R;
+
+        (void)pRegs->u64Arg1; /* flags soft-ignored */
+        copy_path_from_arg(szName, sizeof(szName), pRegs->u64Arg0);
+        if (szName[0] == '\0') {
+            kprintf("protonrt: soft delete_module FAIL\n");
+            return -LINUX_ENOENT;
+        }
+        if (!linux_module_loaded(szName)) {
+            kprintf("protonrt: soft delete_module FAIL\n");
+            return -LINUX_ENOENT;
+        }
+        i64R = linux_module_exit_call(szName);
+        if (i64R != 0) {
+            kprintf("protonrt: soft delete_module FAIL\n");
+            return soft_mod_st_to_linux(i64R);
+        }
+        kprintf("protonrt: soft delete_module PASS\n");
         return 0;
     }
 

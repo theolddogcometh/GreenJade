@@ -15,7 +15,10 @@
  *   - Mint path: install + soft post-mint verify reason catalog
  *   - Kill / wait / from_cap path tallies + live peak
  *   - Wave 15: teardown / AS reverse / wait-register / JIT mint / lifecycle
- *   greppable: "spawn: soft …"
+ *   - ABI-first: process_wait poll (AGAIN while alive) pairs with process: soft wait
+ *   greppable: "spawn: soft …"  /  "spawn: soft wait"
+ *   Linux pid fork/wait product-min lives in process.c (not wired here):
+ *     greppable: "process: soft fork-wait product-min"
  *   Never hard-gates; diagnostics / smoke grep only (wrap OK). Soft ≠ bar3.
  *
  * Soft mint verify (grep: spawn: mint soft | spawn: soft mint):
@@ -1698,7 +1701,16 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
     struct spawn_slot *pSlot;
     gj_status_t st;
     u32 u32Exit;
+    u32 u32WaitPid;
 
+    /*
+     * spawn: soft wait — cap-wait reaper (G-PROC product path).
+     * Poll-friendly: alive child → GJ_ERR_AGAIN (like wait4 WNOHANG=0 live).
+     * Linux wait4/waitid use process_wait4* (process: soft wait); this path
+     * is PROCESS task-cap wait for process_spawn children (shell/sshd later
+     * may prefer either surface). Product incomplete ≠ full posix waitid.
+     * greppable: spawn: soft wait
+     */
     spawn_soft_inc(&g_u32SoftWaitEnter);
 
     if (pParent == NULL || pRef == NULL) {
@@ -1729,17 +1741,20 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
         return GJ_ERR_NOENT;
     }
     if (pChild->u32Alive) {
+        /* Soft WNOHANG-shaped: parent can poll without blocking forever. */
         spawn_soft_inc(&g_u32SoftWaitAgain);
         soft_inventory_maybe_once();
         return GJ_ERR_AGAIN;
     }
     u32Exit = pChild->u32ExitCode;
+    u32WaitPid = process_wait_pid_of(pChild);
     if (pOutExit != NULL) {
         *pOutExit = u32Exit;
     }
     /*
      * Reap: drop wait-table entry, invalidate parent PROCESS cap, recycle
      * spawn slot. Cap gen bump prevents reuse of a stale handle.
+     * Aligns with process_wait4 slot scrub (process: soft wait).
      */
     process_wait_forget(pChild);
     if (res.pSlot != NULL) {
@@ -1752,6 +1767,8 @@ process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
         spawn_soft_inc(&g_u32SoftWaitSlotFree);
     }
     g_cWait++;
+    kprintf("spawn: soft wait reaped exit=%u wait_pid=%u PASS\n", u32Exit,
+            u32WaitPid);
     kprintf("spawn: wait reaped exit=%u PASS\n", u32Exit);
     soft_inventory_maybe_once();
     return GJ_OK;

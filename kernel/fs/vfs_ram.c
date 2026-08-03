@@ -19,11 +19,15 @@
  *   greppable: "vfs_ram: soft …"
  */
 #include <gj/klog.h>
+#include <gj/net_lo.h>
+#include <gj/net_tcp.h>
 #include <gj/scsi_mid.h>
 #include <gj/string.h>
 #include <gj/vfs_ram.h>
 #include <gj/virtio_blk.h>
 #include <gj/virtio_scsi.h>
+
+/* Net poll readiness — declared in net_tcp.h / net_lo.h (included above). */
 
 #define VFS_MAX_FILES  64
 #define VFS_MAX_FDS    96
@@ -4252,9 +4256,51 @@ epoll_ready_mask(i32 i32Fd, u32 u32Want)
 u32
 vfs_ram_poll_mask(i64 i64Fd, u32 u32Want)
 {
-    soft_inc(&g_u32SoftPollProbe); /* Wave 14 */
-    u32 u32Got = epoll_ready_mask((i32)i64Fd, u32Want);
+    u32 u32Got;
     u32 u32Keep;
+    static u8 g_u8NetRoutePassOnce;
+
+    soft_inc(&g_u32SoftPollProbe); /* Wave 14 */
+
+    /*
+     * Ram/special table first. Non-ram FDs may live in net_tcp (96..111) or
+     * net_lo (64..79) — route to net_*_poll_mask instead of ERR|HUP.
+     * Soft kprintf only once on first successful net route (daemon bring-up).
+     */
+    if (!vfs_ram_fd_ok(i64Fd)) {
+        if (net_tcp_fd_ok(i64Fd)) {
+            u32Got = net_tcp_poll_mask(i64Fd, u32Want);
+            /* Grep: vfs_ram: soft poll net route PASS */
+            if (!g_u8NetRoutePassOnce) {
+                g_u8NetRoutePassOnce = 1;
+                kprintf("vfs_ram: soft poll net route PASS via=tcp fd=%lld "
+                        "ready=0x%x want=0x%x\n",
+                        (long long)i64Fd, (unsigned)u32Got,
+                        (unsigned)u32Want);
+            }
+            return u32Got;
+        }
+        if (net_lo_fd_ok(i64Fd)) {
+            u32Got = net_lo_poll_mask(i64Fd, u32Want);
+            /* Grep: vfs_ram: soft poll net route PASS */
+            if (!g_u8NetRoutePassOnce) {
+                g_u8NetRoutePassOnce = 1;
+                kprintf("vfs_ram: soft poll net route PASS via=lo fd=%lld "
+                        "ready=0x%x want=0x%x\n",
+                        (long long)i64Fd, (unsigned)u32Got,
+                        (unsigned)u32Want);
+            }
+            return u32Got;
+        }
+        /* Unknown fd: preserve prior soft ERR|HUP shape from epoll_ready_mask */
+        u32Got = VFS_EPOLLERR | VFS_EPOLLHUP;
+        if (u32Want == 0) {
+            return u32Got;
+        }
+        return u32Got; /* ERR/HUP always surfaced */
+    }
+
+    u32Got = epoll_ready_mask((i32)i64Fd, u32Want);
 
     /* Surface ERR/HUP/RDHUP even if not in want; IN/OUT only if wanted (or want 0) */
     u32Keep = u32Got & (VFS_EPOLLERR | VFS_EPOLLHUP | VFS_EPOLLRDHUP);
@@ -4348,11 +4394,17 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
         u32Ev |= VFS_EPOLLIN;
     }
     if (nOp == 1 /* EPOLL_CTL_ADD */) {
-        if (!vfs_ram_fd_ok(i64Fd)) {
+        /*
+         * Mixed fd sets: ram/specials + net_lo (64..79) + net_tcp (96..111).
+         * Readiness for all kinds is resolved via vfs_ram_poll_mask in wait.
+         */
+        if (!vfs_ram_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd) &&
+            !net_tcp_fd_ok(i64Fd)) {
             return soft_out(&g_u32SoftEpollCtlOk, &g_u32SoftEpollCtlFail, -9);
         }
         /* Reject watching another epoll instance (simplifies bring-up) */
-        if (g_aFds[i64Fd].u8Kind == VFS_KIND_EPOLL) {
+        if (vfs_ram_fd_ok(i64Fd) &&
+            g_aFds[i64Fd].u8Kind == VFS_KIND_EPOLL) {
             return soft_out(&g_u32SoftEpollCtlOk, &g_u32SoftEpollCtlFail, -22);
         }
         for (i = 0; i < pE->u8N; i++) {
@@ -4381,7 +4433,8 @@ vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data)
         return -2; /* ENOENT */
     }
     if (nOp == 3 /* EPOLL_CTL_MOD */) {
-        if (!vfs_ram_fd_ok(i64Fd)) {
+        if (!vfs_ram_fd_ok(i64Fd) && !net_lo_fd_ok(i64Fd) &&
+            !net_tcp_fd_ok(i64Fd)) {
             return soft_out(&g_u32SoftEpollCtlOk, &g_u32SoftEpollCtlFail, -9);
         }
         for (i = 0; i < pE->u8N; i++) {
@@ -4807,11 +4860,14 @@ vfs_ram_epoll_wait(i64 i64Ep, void *pEvents, int nMax, int nTimeout)
                         VFS_EPOLLONESHOT)) == 0) {
             continue;
         }
-        u32R = epoll_ready_mask(pE->aWatch[i].i32Fd, u32Want);
-        /* Always surface ERR/HUP/RDHUP; gate IN/OUT by interest */
-        u32Report = u32R & (VFS_EPOLLERR | VFS_EPOLLHUP | VFS_EPOLLRDHUP);
-        u32Report |= u32R & u32Want &
-                     (VFS_EPOLLIN | VFS_EPOLLOUT | VFS_EPOLLRDHUP);
+        /*
+         * Unified readiness: pipes/eventfd/timerfd/… via epoll_ready_mask,
+         * net_lo/net_tcp via their poll_mask (mixed fd sets for daemon loops).
+         * vfs_ram_poll_mask already surfaces ERR/HUP/RDHUP and gates IN/OUT.
+         */
+        u32R = vfs_ram_poll_mask((i64)pE->aWatch[i].i32Fd, u32Want);
+        u32Report = u32R & (VFS_EPOLLERR | VFS_EPOLLHUP | VFS_EPOLLRDHUP |
+                            VFS_EPOLLIN | VFS_EPOLLOUT);
         if (u32Report != 0) {
             if (pOut != NULL) {
                 /* packed epoll_event: u32 events + u64 data (12 bytes) */

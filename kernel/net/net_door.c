@@ -54,6 +54,8 @@
  *   net_door: soft backend     — virtio-net live + tcp segs/accepts snapshot
  *   net_door: soft path        — honesty: soft inventory ≠ bar3 / product
  *   net_door: soft deepen      — wave=116 stamp + area count
+ *   net_door: soft tcp_surface — product interim TCP opcode lamps
+ *   net_door: soft tcp product surface PASS
  *   net_door: soft inventory PASS / net_door: soft PASS
  */
 #include <gj/config.h>
@@ -85,8 +87,8 @@
 #define NET_DOOR_SOFT_DEEPEN_WAVE 116u
 /* inventory claim sock ring ring_ok virtio virtio_ok xfer last err
  * group capacity catalog outcome stats backend path
- * headroom surface ratio return deepen PASS = 23 */
-#define NET_DOOR_SOFT_DEEPEN_AREAS 166u
+ * headroom surface ratio return deepen tcp_surface PASS = 25 */
+#define NET_DOOR_SOFT_DEEPEN_AREAS 168u
 
 /* Keep multi-seg room: bounce ≥ bulk smoke and > one MSS. */
 typedef char net_xfer_ge_bulk[(NET_XFER_MAX >= 3000u) ? 1 : -1];
@@ -130,6 +132,7 @@ struct net_door_soft {
     u64 u64TcpStats;
     u64 u64TcpStatsInval;
     u64 u64TcpStatsFault;
+    u64 u64SockPoll;       /* SOCK_POLL → net_tcp_poll_mask */
     /* Wave 15: socket path routing + outcome */
     u64 u64SockTcp;        /* ops routed to net_tcp */
     u64 u64SockLo;         /* ops routed to net_lo */
@@ -306,6 +309,8 @@ net_door_soft_note_ret(i64 i64Ret)
  *   net_door: soft backend …
  *   net_door: soft path …
  *   net_door: soft deepen …
+ *   net_door: soft tcp_surface …
+ *   net_door: soft tcp product surface PASS
  *   net_door: soft inventory PASS / net_door: soft PASS
  * greppable: net_door: soft
  * Soft only — never hard-gates; soft ≠ bar3.
@@ -344,7 +349,7 @@ net_door_soft_inventory_log(void)
     u32UserP = (u32Ready != 0) ? virtio_net_user_ring_pushes() : 0u;
     u64SockEnter = s.u64Socket + s.u64Bind + s.u64Listen + s.u64Accept +
                    s.u64Connect + s.u64Close + s.u64Send + s.u64Recv +
-                   s.u64TcpStats;
+                   s.u64TcpStats + s.u64SockPoll;
     u64RingEnter = s.u64ExportRing + s.u64MapRing + s.u64Kick +
                    s.u64AvailPush + s.u64UsedReap + s.u64RingState +
                    s.u64MapDma + s.u64DescAlloc + s.u64UserAvail +
@@ -375,17 +380,18 @@ net_door_soft_inventory_log(void)
     /* Grep: net_door: soft sock */
     kprintf("net_door: soft sock poll=%lu stats=%lu socket=%lu bind=%lu "
             "listen=%lu accept=%lu connect=%lu close=%lu send=%lu "
-            "recv=%lu tcp_stats=%lu tcp=%lu lo=%lu ok=%lu fail=%lu "
-            "owned=%lu unowned=%lu wave=%u\n",
+            "recv=%lu tcp_stats=%lu sock_poll=%lu tcp=%lu lo=%lu "
+            "ok=%lu fail=%lu owned=%lu unowned=%lu wave=%u\n",
             (unsigned long)s.u64Poll, (unsigned long)s.u64Stats,
             (unsigned long)s.u64Socket, (unsigned long)s.u64Bind,
             (unsigned long)s.u64Listen, (unsigned long)s.u64Accept,
             (unsigned long)s.u64Connect, (unsigned long)s.u64Close,
             (unsigned long)s.u64Send, (unsigned long)s.u64Recv,
-            (unsigned long)s.u64TcpStats, (unsigned long)s.u64SockTcp,
-            (unsigned long)s.u64SockLo, (unsigned long)s.u64SockOk,
-            (unsigned long)s.u64SockFail, (unsigned long)s.u64SockOwned,
-            (unsigned long)s.u64SockUnowned, u32Wave);
+            (unsigned long)s.u64TcpStats, (unsigned long)s.u64SockPoll,
+            (unsigned long)s.u64SockTcp, (unsigned long)s.u64SockLo,
+            (unsigned long)s.u64SockOk, (unsigned long)s.u64SockFail,
+            (unsigned long)s.u64SockOwned, (unsigned long)s.u64SockUnowned,
+            u32Wave);
 
     /* Grep: net_door: soft ring (enter surface; prefix-stable) */
     kprintf("net_door: soft ring export=%lu map=%lu remap=%lu kick=%lu "
@@ -503,10 +509,27 @@ net_door_soft_inventory_log(void)
     /* Grep: net_door: soft catalog (Wave 15 opcode soft catalog) */
     kprintf("net_door: soft catalog claim=1 release=1 poll=1 stats=1 "
             "socket=1 bind=1 listen=1 accept=1 connect=1 close=1 "
-            "send=1 recv=1 tcp_stats=1 export=1 map=1 kick=1 "
+            "send=1 recv=1 tcp_stats=1 sock_poll=1 export=1 map=1 kick=1 "
             "avail=1 reap=1 ring_state=1 dma=1 desc=1 user_avail=1 "
             "bounce=1 virtio_tx=1 virtio_rx=1 queue_info=1 "
             "full_stack=0 bar3=0 wave=%u\n",
+            u32Wave);
+
+    /*
+     * Product interim TCP surface lamps (native door vs net_tcp_*).
+     * Grep: net_door: soft tcp_surface
+     * Grep: net_door: soft tcp product surface PASS
+     * Soft only — never hard-gates; soft ≠ product / bar3.
+     */
+    kprintf("net_door: soft tcp_surface socket=1 bind=1 listen=1 "
+            "accept=1 connect=1 send=1 recv=1 close=1 stats=1 "
+            "sock_poll=1 poll_via_eth=1 tw_reaps=soft_backend "
+            "input=internal fd_ok=route shutdown=gap sockopt=gap "
+            "rtl8168=out_of_scope wave=%u\n",
+            u32Wave);
+    kprintf("net_door: soft tcp product surface PASS "
+            "ops=socket|bind|listen|accept|connect|send|recv|close|"
+            "stats|sock_poll native_door=1 linux_nr_pref=0 wave=%u\n",
             u32Wave);
 
     /* Grep: net_door: soft outcome (Wave 15 ok|err rollup) */
@@ -1906,6 +1929,7 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
         aSt[1] = (rtx << 16) | (segs & 0xffffu);
         aSt[2] = net_tcp_bytes_rx();
         aSt[3] = net_tcp_bytes_tx();
+        /* Soft gap: tw_reaps stays in soft backend inventory (ABI full). */
         if (user_range_ok(u64Arg1, sizeof(aSt))) {
             net_door_soft_inc(&g_soft.u64UserCopy);
             if (copy_to_user(u64Arg1, aSt, sizeof(aSt)) != GJ_OK) {
@@ -1916,6 +1940,25 @@ net_door_call(u32 u32Op, u64 u64Arg1, u64 u64Arg2, u64 u64Arg3)
             net_door_soft_inc(&g_soft.u64KernelCopy);
             memcpy((void *)(gj_vaddr_t)u64Arg1, aSt, sizeof(aSt));
         }
+        return net_door_soft_done(0);
+    }
+    case GJ_NET_OP_SOCK_POLL: {
+        /*
+         * Product interim fd readiness for freestanding over Linux NR poll.
+         * arg1=fd arg2=want → mask bits (net_tcp_poll_mask). Non-TCP → 0.
+         */
+        u32 u32Want;
+        u32 u32Got;
+        int fTcp;
+
+        net_door_soft_inc(&g_soft.u64SockPoll);
+        u32Want = (u32)u64Arg2;
+        fTcp = net_tcp_fd_ok((i64)u64Arg1) ? 1 : 0;
+        if (fTcp != 0) {
+            u32Got = net_tcp_poll_mask((i64)u64Arg1, u32Want);
+            return net_door_soft_sock_done((i64)u32Got, 1);
+        }
+        /* Soft: net_lo / unknown have no door poll_mask; empty ready. */
         return net_door_soft_done(0);
     }
     case GJ_NET_OP_VIRTIO_TX: {

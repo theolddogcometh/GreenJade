@@ -165,3 +165,5 @@ make sshd       # → build/sshd (host POSIX smoke)
 Embedded via `kernel/proc/sshd_embed.S` and spawned after `netstackd` in
 `kernel/main.c` (outside this directory). Boot log shows the kernel markers
 above; freestanding markers appear once the ELF runs its TCP :22 self-smoke.
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

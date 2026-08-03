@@ -28,6 +28,14 @@
  *   PROCESS cap mint verify (type/rights/obj/gen) after parent install
  *   Cumulative + live + fail/kill/wait/mint counters
  *
+ * Linux pid fork/wait product-min (process.h / process.c — not this file)
+ * ----------------------------------------------------------------------
+ *   greppable: "process: soft fork-wait product-min"
+ *   process_fork_soft / process_clone_soft / process_wait_soft /
+ *   process_waitid_soft — PCB parent → child pid + wait4/waitid reaper.
+ *   Cap lifecycle here remains process_spawn / process_kill / process_wait.
+ *   Soft ≠ product full posix_spawn; cold personality wires later.
+ *
  * Failure policy
  * --------------
  * Any failure after partial install reverse tear-downs (no orphan AS/cap).
@@ -156,8 +164,11 @@ gj_status_t process_kill(struct gj_process *pParent, const struct gj_cap_ref *pR
                          u32 u32ExitCode);
 
 /**
- * Wait for child death (WAIT right). Returns exit code or GJ_ERR_AGAIN if live.
- * On success: invalidates parent PROCESS cap and recycles fixed spawn slot.
+ * Wait for child death (WAIT right). Returns exit code or GJ_ERR_AGAIN if live
+ * (poll-friendly, like wait4 WNOHANG with live child).
+ * On success: invalidates parent PROCESS cap, forgets wait-table slot, recycles
+ * fixed spawn slot. Linux pid wait uses process_wait4* (process: soft wait).
+ * greppable: spawn: soft wait
  */
 gj_status_t process_wait(struct gj_process *pParent, const struct gj_cap_ref *pRef,
                          u32 *pOutExit);

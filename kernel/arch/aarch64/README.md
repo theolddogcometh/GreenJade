@@ -3,6 +3,12 @@
 QEMU `virt` freestanding product ELF with **shared freestanding C**:
 `string` / `kprintf` / `pmm_freelist` / `sched_coop` + arch switch.
 
+**Product laptop / ABI-first work (G752VT, soft Linux module path, UDX/DDI)
+lives on x86_64** — see root [README.md](../../../README.md) and
+[docs/ABI_FIRST_PIVOT.md](../../../docs/ABI_FIRST_PIVOT.md). This aarch64
+tree remains a QEMU `virt` scaffold (virtio-mmio T0-shaped), not the G752
+hwtest path.
+
 ## Status
 
 | Component | State |

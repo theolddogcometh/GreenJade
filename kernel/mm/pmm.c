@@ -514,8 +514,8 @@ log_tib_design_soft(void)
 static void
 pmm_soft_inventory(const char *szWhere)
 {
-    u64 cHi = high_order_nodes();
-    u64 cbBlock = (u64)GJ_PAGE_SIZE << PMM_MAX_ORDER;
+    u64 cHi;
+    u64 cbBlock;
     u64 cInUse;
     u64 cNodesAll;
     u64 cKerPages;
@@ -529,10 +529,22 @@ pmm_soft_inventory(const char *szWhere)
     const char *szHost;
     int fReady;
     int fHostTib;
+    extern u32 serial_thre_dead(void);
 
     if (szWhere == 0) {
         szWhere = "path";
     }
+    /*
+     * Multi-KiB soft flood: skip on panel-only DUTs (no COM1 THRE) so
+     * kernel_after_mmap can reach xHCI stick log / M0.
+     */
+    if (serial_thre_dead() != 0u) {
+        kprintf("pmm: soft inventory SKIP via=%s (no COM1; panel path)\n",
+                szWhere);
+        return;
+    }
+    cHi = high_order_nodes();
+    cbBlock = (u64)GJ_PAGE_SIZE << PMM_MAX_ORDER;
     if (g_cSoftInvLogs < 0xffffffffu) {
         g_cSoftInvLogs++;
     }

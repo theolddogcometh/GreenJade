@@ -6,7 +6,9 @@
 #
 # Layout written (from make hwtest-img):
 #   p1  EF00 ESP (FAT32, GREENJADE)  — BOOTX64.EFI + KERNEL.ELF + rootfs/user
-#   p2  0700 data (FAT32, GJ-PERSIST) — durable logs/ + ssh/ + steam/
+#                                     (FAT required by UEFI firmware)
+#   p2  8300 Linux (ext4, GJ-PERSIST) — durable logs/ + ssh/ + steam/
+#                                     (ext4 default for Linux/Unix lab)
 #
 # Prerequisites:
 #   make hwtest-img              → build/greenjade-hwtest.img
@@ -19,7 +21,7 @@
 #
 # Post-write (lab host + DUT):
 #   1. Boot DUT UEFI → GreenJade BOOTX64.EFI  (serial: GJ-EFI / M0 OK)
-#   2. Logs:  sudo mount -L GJ-PERSIST /mnt/gj-persist  →  logs/
+#   2. Logs:  sudo mount -t ext4 -L GJ-PERSIST /mnt/gj-persist  →  logs/
 #   3. Lab SSH (serial bridge): sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh
 #      or: sudo ./scripts/hwtest-ssh-setup.sh
 #   4. Soft-scan serial: ./scripts/gj-product-summary.sh /mnt/gj-persist/logs/….txt
@@ -78,26 +80,104 @@ fi
 echo "install-hwtest-usb: image=$img (${img_sz}B)"
 ls -la "$img"
 echo "install-hwtest-usb: TARGET=$dev (ALL DATA WILL BE ERASED)"
+
+# Must unmount before dd: writing while automount holds old vfat leaves a live
+# wrong FS in the kernel (I/O errors, missing steam/STATUS, lsblk still "vfat").
+unmount_target() {
+	_d="$1"
+	if command -v findmnt >/dev/null 2>&1; then
+		# Collect targets first (umount changes findmnt output while iterating)
+		_tgts=$(findmnt -rn -o SOURCE,TARGET 2>/dev/null | while read -r src tgt; do
+			case "$src" in
+			"$_d"|"$_d"p[0-9]*|"$_d"[0-9]*)
+				printf '%s\n' "$tgt"
+				;;
+			esac
+		done)
+		for tgt in $_tgts; do
+			[ -n "$tgt" ] || continue
+			echo "install-hwtest-usb: umount $tgt"
+			umount "$tgt" 2>/dev/null || umount -l "$tgt" 2>/dev/null || true
+		done
+	fi
+	for p in "$_d"?* "$_d"[0-9]* "$_d"p[0-9]*; do
+		[ -b "$p" ] || continue
+		if findmnt -n "$p" >/dev/null 2>&1; then
+			echo "install-hwtest-usb: umount $p"
+			umount "$p" 2>/dev/null || umount -l "$p" 2>/dev/null || true
+		fi
+	done
+	if command -v blockdev >/dev/null 2>&1; then
+		blockdev --flushbufs "$_d" 2>/dev/null || true
+	fi
+}
+unmount_target "$dev"
+
+if findmnt -rn -o SOURCE 2>/dev/null | grep -E "^${dev}(p?[0-9]+)?\$" >/dev/null 2>&1; then
+	echo "install-hwtest-usb: FAIL $dev still has mounts — umount and retry:" >&2
+	findmnt -rn -o SOURCE,TARGET 2>/dev/null | grep -E "^${dev}" >&2 || true
+	exit 1
+fi
+
 echo "install-hwtest-usb: 5 second abort window (Ctrl-C)..."
 sleep 5
 
-dd if="$img" of="$dev" bs=4M status=progress conv=fsync
+dd if="$img" of="$dev" bs=4M status=progress conv=fsync,notrunc
 sync
-# Re-read partition table
+
 if command -v partprobe >/dev/null 2>&1; then
 	partprobe "$dev" 2>/dev/null || true
 fi
-# Soft: try to report labels after write (may need udev settle)
-if command -v lsblk >/dev/null 2>&1; then
-	lsblk -o NAME,SIZE,FSTYPE,LABEL "$dev" 2>/dev/null || true
+if command -v udevadm >/dev/null 2>&1; then
+	udevadm settle --timeout=10 2>/dev/null || true
 fi
-echo "install-hwtest-usb: PASS wrote $img → $dev"
-echo "  Boot:  UEFI → GreenJade BOOTX64.EFI (serial: GJ-EFI / M0 OK)"
-echo "  Logs:  mount -L GJ-PERSIST  →  logs/"
-echo "  SSH:   on lab host: sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh"
+# Invalidate stale blkid cache (old TYPE=vfat for p2)
+if command -v blkid >/dev/null 2>&1; then
+	blkid -g 2>/dev/null || true
+	for p in "$dev"?* "$dev"[0-9]* "$dev"p[0-9]*; do
+		[ -b "$p" ] || continue
+		blkid -p -o udev "$p" >/dev/null 2>&1 || true
+	done
+fi
+
+echo "install-hwtest-usb: partition probe:"
+if command -v lsblk >/dev/null 2>&1; then
+	lsblk -o NAME,SIZE,FSTYPE,LABEL,PARTTYPENAME "$dev" 2>/dev/null || true
+fi
+if command -v blkid >/dev/null 2>&1; then
+	blkid "${dev}1" "${dev}2" "${dev}p1" "${dev}p2" 2>/dev/null || \
+		blkid | grep -E "$(basename "$dev")" || true
+fi
+
+p2=""
+for cand in "${dev}2" "${dev}p2"; do
+	[ -b "$cand" ] && p2=$cand && break
+done
+if [ -n "$p2" ] && command -v blkid >/dev/null 2>&1; then
+	p2_type=$(blkid -o value -s TYPE "$p2" 2>/dev/null || true)
+	p2_label=$(blkid -o value -s LABEL "$p2" 2>/dev/null || true)
+	echo "install-hwtest-usb: p2 $p2 TYPE=${p2_type:-?} LABEL=${p2_label:-?}"
+	case "$p2_type" in
+	ext4|ext3|ext2)
+		echo "install-hwtest-usb: p2 filesystem OK (ext*, Linux lab default)"
+		;;
+	vfat|msdos)
+		echo "install-hwtest-usb: warn: p2 is FAT (expected ext4 unless GJ_HWTEST_PERSIST_FS=fat32)" >&2
+		;;
+	*)
+		echo "install-hwtest-usb: warn: unexpected p2 TYPE=${p2_type:-unknown}" >&2
+		;;
+	esac
+fi
+
+echo "install-hwtest-usb: PASS wrote $img -> $dev"
+echo "  Boot:  UEFI -> GreenJade BOOTX64.EFI (serial: GJ-EFI / M0 OK)"
+echo "  Logs:  umount any automount first, then:"
+echo "         sudo umount /run/media/\$USER/GJ-PERSIST 2>/dev/null; true"
+echo "         sudo mount -t ext4 -L GJ-PERSIST /mnt/gj-persist"
+echo "         cat /mnt/gj-persist/steam/STATUS   # expect READY"
+echo "  SSH:   sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh"
 echo "  Soft:  ./scripts/gj-product-summary.sh <serial-log>   # exit 0 always"
 echo "  Keys:  ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1"
-echo "  Steam: if STATUS=SKELETON, host prep (option 3):"
-echo "         sudo make steam-to-persist   # or steam-host-prep --to-label"
-echo "         docs/STEAM_HWTEST.md"
-echo "  Note:  READY/media ≠ Steam client; Top-50 stays NOT-TRIED until DUT run"
+echo "  Steam: if STATUS=SKELETON: sudo make steam-to-persist"
+echo "  Note:  READY/media != Steam client; Top-50 stays NOT-TRIED until DUT run"

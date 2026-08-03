@@ -66,17 +66,31 @@ C_SRCS := \
 	kernel/drv/virtio_pci.c \
 	kernel/drv/virtio_gpu.c \
 	kernel/drv/virtio_net.c \
+kernel/drv/rtl8168.c \
+kernel/drv/net_l2.c \
 	kernel/drv/virtio_input.c \
 	kernel/drv/virtio_blk.c \
 	kernel/drv/virtio_scsi.c \
 	kernel/drv/nvme_probe.c \
 	kernel/drv/ahci_probe.c \
 	kernel/drv/usb_probe.c \
+	kernel/drv/xhci_msc.c \
+	kernel/drv/fb_console.c \
 	kernel/drv/ps2_probe.c \
 	kernel/drv/pci_msix.c \
 	kernel/drv/irq_msix.c \
+kernel/drv/devmgr_soft.c \
+	kernel/drv/ddi_door.c \
+	kernel/mm/linux_ksym.c \
+	kernel/mm/linux_module.c \
+	kernel/mm/linux_pci_soft.c \
+	kernel/mm/linux_dma_soft.c \
+	kernel/mm/linux_netdev_soft.c \
+	kernel/mm/linux_time_soft.c \
+	kernel/mm/linux_phy_soft.c \
 	kernel/mm/iommu_probe.c \
 	kernel/mm/iommu_vtd.c \
+	kernel/mm/dma_buf.c \
 	kernel/ipc/notify.c \
 	kernel/syscall/wow64.c \
 	kernel/cap/revoke.c \
@@ -97,6 +111,7 @@ C_SRCS := \
 	kernel/syscall/entry_bridge.c \
 	kernel/syscall/cold_ipc.c \
 	kernel/syscall/protonrt_cold_link.c \
+kernel/syscall/linux_cold_net.c \
 	kernel/syscall/io_uring_min.c \
 	user/libprotonrt/src/cold_linux.c
 
@@ -117,7 +132,15 @@ S_SRCS := \
 	kernel/proc/hda_client_embed.S \
 	kernel/proc/vfsd_embed.S \
 	kernel/proc/shell_embed.S \
+	kernel/proc/r8169_mod_blob.S \
 	user/protonrt-server/server.S
+
+# Optional xHCI soft embed (PCI 8086:a12f): only if collect + embed-linux-mod
+# produced kernel/proc/xhci_pci_mod_blob.S. Host often has xhci *builtin* → no
+# .ko → no .S → main.c weak symbols stay NULL → SKIP builtin. Soft≠product.
+ifneq ($(wildcard kernel/proc/xhci_pci_mod_blob.S),)
+S_SRCS += kernel/proc/xhci_pci_mod_blob.S
+endif
 
 C_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(C_SRCS))
 S_OBJS := $(patsubst %.S,$(BUILD)/%.o,$(S_SRCS))
@@ -139,7 +162,7 @@ UDX_EXAMPLE := $(BUILD)/udx_skeleton
 
 UDX_CFLAGS := -std=c11 -Wall -Wextra -Werror -Iuser/udx/include -Iuser/udx/src -O2 -g
 
-.PHONY: all clean run license udx udx-example uefi-stub uefi greenjade.efi ovmf smoke stage-esp stage-rootfs install-img install-usb live-iso hwtest-img install-hwtest-usb hwtest-ssh-setup steam-fetch steam-stage steam-host-prep steam-host-prep-all steam-to-persist steam-to-rootfs userland vulkan-icd sessiond sessiond-gj netstackd netstackd-gj sshd sshd-gj storaged storaged-gj shell-gj ld-gj libcgj libgj-so libgj-gnu vfsd-gj
+.PHONY: all clean run license udx udx-example ddi-host-gj drivers-udx uefi-stub uefi greenjade.efi ovmf smoke stage-esp stage-rootfs install-img install-usb live-iso hwtest-img install-hwtest-usb linux-hwtest-img install-linux-hwtest hwtest-ssh-setup steam-fetch steam-stage steam-host-prep steam-host-prep-all steam-to-persist steam-to-rootfs userland vulkan-icd sessiond sessiond-gj netstackd netstackd-gj sshd sshd-gj storaged storaged-gj shell-gj ld-gj libcgj libgj-so libgj-gnu vfsd-gj personality-gj
 
 all: $(KERNEL)
 
@@ -147,7 +170,9 @@ ovmf: greenjade.efi
 	chmod +x scripts/run-ovmf.sh
 	./scripts/run-ovmf.sh $(BUILD)/GreenJade.efi
 
-# Stage EFI/BOOT + EFI/GREENJADE for real-hw install / USB ESP copy
+# Stage EFI/BOOT + EFI/GREENJADE for real-hw install / USB ESP copy.
+# Soft driver pack (optional, not hard-dep): make drivers-udx personality-gj
+# then stage-esp → stage-udx-drivers.sh packs ddi_host + rtl8168_udx + xhci_udx.
 stage-esp: greenjade.efi $(KERNEL)
 	chmod +x scripts/stage-esp.sh
 	./scripts/stage-esp.sh $(BUILD)/esp
@@ -207,8 +232,16 @@ live-iso: greenjade.efi $(KERNEL) userland
 	chmod +x scripts/make-live-iso.sh
 	./scripts/make-live-iso.sh $(BUILD)/greenjade-live.iso
 
-# Dual-partition hardware-test GPT image: ESP + GJ-PERSIST (logs + lab SSH helpers)
-hwtest-img: greenjade.efi $(KERNEL) userland
+# Dual-partition hardware-test GPT image: ESP + GJ-PERSIST (logs + lab SSH helpers).
+# Soft driver pack (optional, not hard-dep): make drivers-udx personality-gj first;
+# make-hwtest-img → stage-esp → stage-udx-drivers includes ddi_host + class hosts.
+# Host-collect Linux .ko + NEEDED-DRIVERS for GJ-PERSIST staging (ABI path).
+.PHONY: collect-linux-drivers
+collect-linux-drivers:
+	chmod +x scripts/collect-linux-drivers.sh
+	./scripts/collect-linux-drivers.sh $(BUILD)/linux-drivers
+
+hwtest-img: greenjade.efi $(KERNEL) userland collect-linux-drivers
 	chmod +x scripts/make-hwtest-img.sh
 	./scripts/make-hwtest-img.sh $(BUILD)/greenjade-hwtest.img
 
@@ -218,6 +251,20 @@ install-hwtest-usb: hwtest-img
 	chmod +x scripts/install-hwtest-usb.sh
 	@test -n "$(DEV)" || (echo "usage: sudo make install-hwtest-usb DEV=/dev/sdX" >&2; exit 1)
 	./scripts/install-hwtest-usb.sh $(DEV)
+
+# Linux auto hardware-test OS (Alpine): boot → probes → report on ESP → poweroff
+# Usage: sudo make linux-hwtest-img
+#        sudo make install-linux-hwtest DEV=/dev/sdX
+linux-hwtest-img:
+	chmod +x scripts/linux-hwtest/build-img.sh scripts/linux-hwtest/overlay/opt/gj-hwtest/*.sh \
+		scripts/linux-hwtest/overlay/etc/local.d/gj-hwtest.start \
+		scripts/linux-hwtest/install-usb.sh
+	./scripts/linux-hwtest/build-img.sh $(BUILD)/linux-hwtest.img
+
+install-linux-hwtest: linux-hwtest-img
+	chmod +x scripts/linux-hwtest/install-usb.sh
+	@test -n "$(DEV)" || (echo "usage: sudo make install-linux-hwtest DEV=/dev/sdX" >&2; exit 1)
+	./scripts/linux-hwtest/install-usb.sh $(DEV)
 
 # Enable OpenSSH on the *lab host* for remote debug (Grok SSHes here, then serial to DUT)
 # Usage: sudo make hwtest-ssh-setup
@@ -411,6 +458,74 @@ $(NETSTACKD_GJ_ELF): user/netstackd/src/netstackd_gj.c $(LIBGJ) user/init/user.l
 	$(CC) $(USER_CFLAGS) -c -o $(BUILD)/user/netstackd/netstackd_gj.o \
 		user/netstackd/src/netstackd_gj.c
 	$(LD) $(USER_LDFLAGS) -o $@ $(BUILD)/user/netstackd/netstackd_gj.o $(LIBGJ)
+	@echo "built $@"
+
+
+PERSONALITY_GJ_ELF := $(BUILD)/user/personality.elf
+.PHONY: personality-gj
+personality-gj: $(PERSONALITY_GJ_ELF)
+	@echo "personality-gj: $(PERSONALITY_GJ_ELF)"
+$(PERSONALITY_GJ_ELF): user/personality/personality_gj.c $(LIBGJ) user/init/user.ld
+	@mkdir -p $(dir $@) $(BUILD)/user/personality
+	$(CC) $(USER_CFLAGS) -c -o $(BUILD)/user/personality/personality_gj.o \
+		user/personality/personality_gj.c
+	$(LD) $(USER_LDFLAGS) -o $@ $(BUILD)/user/personality/personality_gj.o $(LIBGJ)
+	@echo "built $@"
+
+# ---------------------------------------------------------------------------
+# UDX soft driver hosts (Linux host-libc lab) — ESP pack via stage-udx-drivers
+# Operator path:
+#   make drivers-udx personality-gj
+#   make stage-esp          # packs EFI/GREENJADE/drivers/{ddi_host,rtl8168_udx,xhci_udx}
+#   make hwtest-img         # when mtools/sgdisk/etc present
+# Soft ≠ product T1 NIC/USB. Dual MIT OR Apache-2.0; no GPL .ko.
+# ---------------------------------------------------------------------------
+DDI_HOST_BIN    := $(BUILD)/user/drivers/ddi_host
+RTL8168_UDX_BIN := $(BUILD)/user/drivers/rtl8168_udx
+XHCI_UDX_BIN    := $(BUILD)/user/drivers/xhci_udx
+
+.PHONY: ddi-host-gj drivers-udx
+ddi-host-gj: $(DDI_HOST_BIN)
+	@echo "ddi-host-gj: $(DDI_HOST_BIN)"
+
+# Freestanding NATIVE DDI host (GJ_SYS_DDI scan/bind for G752 IDs). Soft≠product.
+$(DDI_HOST_BIN): user/drivers/ddi_host_gj/ddi_host_gj.c $(LIBGJ) user/init/user.ld \
+		user/drivers/ddi_host_gj/Makefile
+	@mkdir -p $(dir $@) user/drivers/ddi_host_gj/build
+	$(MAKE) -C user/drivers/ddi_host_gj \
+		OUT=$(abspath user/drivers/ddi_host_gj/build/ddi_host.elf) \
+		LIBGJ=$(abspath $(LIBGJ)) || \
+	$(MAKE) -C user/drivers/ddi_host_gj
+	@if [ -f user/drivers/ddi_host_gj/build/ddi_host.elf ]; then \
+		cp -f user/drivers/ddi_host_gj/build/ddi_host.elf $@; \
+	elif [ -f user/drivers/ddi_host_gj/build/ddi_host ]; then \
+		cp -f user/drivers/ddi_host_gj/build/ddi_host $@; \
+	else \
+		echo "ddi-host-gj: FAIL missing freestanding ELF" >&2; exit 1; \
+	fi
+	@echo "built $@  (freestanding ddi_host_gj; GJ_SYS_DDI soft host)"
+
+drivers-udx: $(DDI_HOST_BIN) $(RTL8168_UDX_BIN) $(XHCI_UDX_BIN)
+	@echo "drivers-udx: $(DDI_HOST_BIN) $(RTL8168_UDX_BIN) $(XHCI_UDX_BIN)"
+
+$(RTL8168_UDX_BIN): $(UDX_LIB) user/drivers/rtl8168_udx/rtl8168_udx.c \
+		user/drivers/rtl8168_udx/Makefile
+	@mkdir -p $(dir $@)
+	$(MAKE) -C user/drivers/rtl8168_udx \
+		UDX_LIB=$(abspath $(UDX_LIB)) \
+		UDX_INC=$(abspath user/udx/include) \
+		BUILD=$(abspath $(BUILD)/user/drivers)
+	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
+	@echo "built $@"
+
+$(XHCI_UDX_BIN): $(UDX_LIB) user/drivers/xhci_udx/xhci_udx.c \
+		user/drivers/xhci_udx/Makefile
+	@mkdir -p $(dir $@)
+	$(MAKE) -C user/drivers/xhci_udx \
+		UDX_LIB=$(abspath $(UDX_LIB)) \
+		UDX_INC=$(abspath user/udx/include) \
+		BUILD=$(abspath $(BUILD)/user/drivers)
+	@test -f $@ || (echo "drivers-udx: FAIL missing $@" >&2; exit 1)
 	@echo "built $@"
 
 sshd-gj: $(SSHD_GJ_ELF)
@@ -27608,4 +27723,6 @@ $(BUILD)/aarch64/shared/sched_coop.o: kernel/shared/sched_coop.c
 	$(AARCH64_CC) $(AARCH64_CFLAGS) -c -o $@ $<
 
 # Note: `make udx` → libudx.a; `make udx-example` → host PCI skeleton demo.
+#       `make ddi-host-gj` → build/user/drivers/ddi_host (skeleton product name).
+#       `make drivers-udx` → ddi_host + rtl8168_udx + xhci_udx under build/user/drivers/.
 

@@ -1851,6 +1851,16 @@ apic_timer_irq(void)
         if (timer_apic_source()) {
             timer_tick_apic();
             apic_soft_inc64(&g_u64SoftTimerMono);
+        } else {
+            /*
+             * LAPIC armed but mono still PIT: still poll eth + light tick
+             * so lab NIC is not dead when only LVT fires.
+             */
+            {
+                extern void net_eth_poll(void);
+
+                net_eth_poll();
+            }
         }
     } else {
         apic_soft_inc64(&g_u64SoftTimerIrqAp);

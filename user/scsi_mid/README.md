@@ -231,3 +231,5 @@ Host skeleton: `server.c`.
 2. Route block I/O to storaged / store door after HBA claim.
 3. WRITE10 live door smoke once durable test media is default in QEMU configs.
 4. Collapse freestanding soft into linked `cdb.o` when parent Makefile allows multi-TU.
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

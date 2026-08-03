@@ -10,6 +10,7 @@
  *   region table soft — fixed GJ_PROC_REGION_MAX; full/reuse/overlap markers
  *   USER map flags    — memobj_sanitize_user_prot always forces U
  *   named lifecycle   — publish/unlink independent of last map
+ *   file map soft     — vfs_ram regular-fd snapshot → FILE memobj + PTEs
  *
  * Soft memobj inventory (Wave 35 exclusive deepen):
  *   - Honesty / non-claims: soft ≠ product, ≠ bar3, ≠ 1TiB product
@@ -35,8 +36,11 @@
  *   memobj: soft PASS | PARTIAL | INIT | NONE | inventory PASS
  *   memobj: named | memobj: share | memobj: region table soft
  *   memobj: USER map | wine-shm
+ *   memobj: file map soft | memobj: file create soft
+ *   memobj: soft map_file PASS  — first vfs_ram file-map success (ABI-first)
  * Honesty: soft inventory only — not bar3 / not product / not 1TiB product /
- *          full FILE-object production remains OPEN. Soft ≠ product.
+ *          full live FILE pager remains OPEN; soft snapshot path is wired.
+ *          Soft ≠ product.
  */
 #include <gj/cap.h>
 #include <gj/config.h>
@@ -47,6 +51,7 @@
 #include <gj/process.h>
 #include <gj/string.h>
 #include <gj/user_access.h>
+#include <gj/vfs_ram.h>
 #include <gj/vmm.h>
 
 #define GJ_MEMOBJ_POOL 32
@@ -152,12 +157,16 @@ static u32 g_cSoftNamedTableFull;
 static u32 g_cSoftCreateAnonOk;
 static u32 g_cSoftCreateAnonFail;
 static u32 g_cSoftCreateNamedFail;
+static u32 g_cSoftCreateFileOk;   /* FILE-kind create soft ok */
+static u32 g_cSoftCreateFileFail; /* FILE-kind create soft miss */
 static u32 g_cSoftMapAnonOk;
 static u32 g_cSoftMapAnonFail;
 static u32 g_cSoftMapShareOk;
 static u32 g_cSoftMapShareFail;
 static u32 g_cSoftMapNamedOk;
 static u32 g_cSoftMapNamedFail;
+static u32 g_cSoftMapFileOk;      /* file map soft (vfs_ram snapshot) ok */
+static u32 g_cSoftMapFileFail;    /* file map soft miss → hot ENOSYS */
 static u32 g_cSoftMapCoreFail;    /* core installer soft miss (map path) */
 static u32 g_cSoftUnmapRegion;
 static u32 g_cSoftUnmapOrphan;
@@ -223,12 +232,16 @@ memobj_init(void)
     g_cSoftCreateAnonOk = 0;
     g_cSoftCreateAnonFail = 0;
     g_cSoftCreateNamedFail = 0;
+    g_cSoftCreateFileOk = 0;
+    g_cSoftCreateFileFail = 0;
     g_cSoftMapAnonOk = 0;
     g_cSoftMapAnonFail = 0;
     g_cSoftMapShareOk = 0;
     g_cSoftMapShareFail = 0;
     g_cSoftMapNamedOk = 0;
     g_cSoftMapNamedFail = 0;
+    g_cSoftMapFileOk = 0;
+    g_cSoftMapFileFail = 0;
     g_cSoftMapCoreFail = 0;
     g_cSoftUnmapRegion = 0;
     g_cSoftUnmapOrphan = 0;
@@ -545,6 +558,49 @@ memobj_create_anon(u32 cPages)
     return pObj;
 }
 
+struct gj_memobj *
+memobj_create_file(u32 cPages)
+{
+    struct gj_memobj *pObj;
+    u32 iPage;
+    gj_paddr_t pa;
+
+    if (cPages == 0 || cPages > GJ_MEMOBJ_MAX_PAGES) {
+        g_cSoftCreateFileFail++;
+        return NULL;
+    }
+    pObj = pool_alloc();
+    if (pObj == NULL) {
+        g_cSoftCreateFileFail++;
+        return NULL;
+    }
+    pObj->u32Kind = (u32)GJ_MEMOBJ_FILE;
+    pObj->cPages = cPages;
+    pObj->cMapped = 0;
+    pObj->u32Flags = GJ_MEMOBJ_F_ZEROED;
+    for (iPage = 0; iPage < cPages; iPage++) {
+        pa = pmm_alloc();
+        if (pa == 0) {
+            while (iPage > 0) {
+                iPage--;
+                pmm_free(pObj->aPa[iPage]);
+                pObj->aPa[iPage] = 0;
+            }
+            pool_free(pObj);
+            g_cSoftCreateFileFail++;
+            return NULL;
+        }
+        pObj->aPa[iPage] = pa;
+        memobj_zero_frame(pa);
+    }
+    soft_pool_peak_note();
+    g_cSoftCreateFileOk++;
+    /* Greppable: memobj: file create soft */
+    kprintf("memobj: file create soft pages=%u (soft #%u)\n",
+            (unsigned)cPages, (unsigned)g_cSoftCreateFileOk);
+    return pObj;
+}
+
 /**
  * Soft: drop named publish if this object still occupies a name slot.
  * Prevents dangling wine-shm registry entries after destroy.
@@ -810,6 +866,174 @@ memobj_map_anon(struct gj_process *pProc, u64 u64Hint, size_t cbLen,
         return 0;
     }
     g_cSoftMapAnonOk++;
+    soft_inventory_maybe_once();
+    return vaBase;
+}
+
+/*
+ * Linux x86_64 struct stat layout (matches vfs_ram_fstat fill).
+ * Soft local — avoids depending on vfs_ram private types.
+ */
+struct memobj_stat64 {
+    u64 u64Dev;
+    u64 u64Ino;
+    u64 u64Nlink;
+    u32 u32Mode;
+    u32 u32Uid;
+    u32 u32Gid;
+    u32 u32Pad0;
+    u64 u64Rdev;
+    i64 i64Size;
+    i64 i64Blksize;
+    i64 i64Blocks;
+    i64 i64Atime;
+    u64 u64AtimeNsec;
+    i64 i64Mtime;
+    u64 u64MtimeNsec;
+    i64 i64Ctime;
+    u64 u64CtimeNsec;
+    u64 aUnused[3];
+};
+
+/** S_IFMT / S_IFREG from Linux public mode bits. */
+#define MEMOBJ_S_IFMT  0170000u
+#define MEMOBJ_S_IFREG 0100000u
+
+/**
+ * Soft: pread vfs_ram bytes into already-zeroed object frames at u64Off.
+ * Returns 0 on success, -1 on soft fail (bad fd / IO error).
+ */
+static int
+memobj_fill_from_fd(struct gj_memobj *pObj, i64 i64Fd, u64 u64Off)
+{
+    u32 iPage;
+    u64 u64SavedCr3 = 0;
+    int fSwitched = 0;
+    i64 i64N;
+
+    if (pObj == NULL || pObj->cPages == 0 || !vfs_ram_fd_ok(i64Fd)) {
+        return -1;
+    }
+
+    for (iPage = 0; iPage < pObj->cPages; iPage++) {
+        void *pVa;
+        u64 u64PageOff = u64Off + (u64)iPage * (u64)GJ_PAGE_SIZE;
+
+        if (hhdm_ready()) {
+            pVa = (void *)hhdm_to_virt(pObj->aPa[iPage]);
+        } else {
+            if (!fSwitched) {
+                u64SavedCr3 = cpu_read_cr3();
+                cpu_load_cr3(vmm_kernel_cr3());
+                fSwitched = 1;
+            }
+            pVa = (void *)(gj_vaddr_t)pObj->aPa[iPage];
+        }
+        /* Frames already zeroed: short/EOF pread leaves tail zero. */
+        i64N = vfs_ram_pread(i64Fd, pVa, (size_t)GJ_PAGE_SIZE, u64PageOff);
+        if (i64N < 0) {
+            if (fSwitched) {
+                cpu_load_cr3(u64SavedCr3);
+            }
+            return -1;
+        }
+    }
+    if (fSwitched) {
+        cpu_load_cr3(u64SavedCr3);
+    }
+    return 0;
+}
+
+gj_vaddr_t
+memobj_map_file_fd(struct gj_process *pProc, i64 i64Fd, u64 u64Hint,
+                   size_t cbLen, u32 u32Prot, int fFixed, u64 u64Off)
+{
+    size_t cbAligned;
+    u32 cPages;
+    struct gj_memobj *pObj;
+    gj_vaddr_t vaBase;
+    struct memobj_stat64 st;
+    i64 i64St;
+
+    if (pProc == NULL || cbLen == 0) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    if (!vfs_ram_fd_ok(i64Fd)) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    /* Linux mmap offset must be page-aligned. */
+    if ((u64Off & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    if (fFixed && (u64Hint & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+
+    memset(&st, 0, sizeof(st));
+    i64St = vfs_ram_fstat(i64Fd, &st, sizeof(st));
+    if (i64St != 0) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    /*
+     * Soft: only regular ramfs files (memfd / open paths). Reject dir and
+     * specials (chr/blk/fifo/sock). Type bits 0 soft-treated as regular.
+     */
+    {
+        u32 u32Type = st.u32Mode & MEMOBJ_S_IFMT;
+
+        if (u32Type != MEMOBJ_S_IFREG && u32Type != 0u) {
+            g_cSoftMapFileFail++;
+            return 0;
+        }
+    }
+
+    cbAligned = (cbLen + GJ_PAGE_SIZE - 1) & ~(size_t)(GJ_PAGE_SIZE - 1);
+    cPages = (u32)(cbAligned / GJ_PAGE_SIZE);
+    if (cPages == 0 || cPages > GJ_MEMOBJ_MAX_PAGES) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+
+    pObj = memobj_create_file(cPages);
+    if (pObj == NULL) {
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    if (memobj_fill_from_fd(pObj, i64Fd, u64Off) != 0) {
+        memobj_destroy(pObj);
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+
+    vaBase = memobj_map_obj_core(pProc, pObj, u64Hint, u32Prot, fFixed, 0);
+    if (vaBase == 0) {
+        memobj_destroy(pObj);
+        g_cSoftMapFileFail++;
+        return 0;
+    }
+    g_cSoftMapFileOk++;
+    /*
+     * Greppable first-success lamp (ABI-first file mmap soft):
+     *   memobj: soft map_file PASS
+     * Detail row remains: memobj: file map soft …
+     */
+    if (g_cSoftMapFileOk == 1u) {
+        kprintf("memobj: soft map_file PASS va=0x%lx pages=%u fd=%ld "
+                "off=0x%lx size=%ld\n",
+                (unsigned long)vaBase, (unsigned)cPages, (long)i64Fd,
+                (unsigned long)u64Off, (long)st.i64Size);
+    }
+    /* Greppable: memobj: file map soft */
+    kprintf("memobj: file map soft va=0x%lx pages=%u fd=%ld off=0x%lx "
+            "size=%ld (soft #%u)\n",
+            (unsigned long)vaBase, (unsigned)cPages, (long)i64Fd,
+            (unsigned long)u64Off, (long)st.i64Size,
+            (unsigned)g_cSoftMapFileOk);
     soft_inventory_maybe_once();
     return vaBase;
 }
@@ -1339,13 +1563,19 @@ soft_inventory_log(void)
     u32 u32PoolPct;
     u32 u32NamedPct;
     u32 fReady;
+    extern u32 serial_thre_dead(void);
 
+    if (serial_thre_dead() != 0u) {
+        kprintf("memobj: soft inventory SKIP (no COM1; panel path)\n");
+        return;
+    }
     soft_inventory_scan();
 
-    cMapOk = g_cSoftMapAnonOk + g_cSoftMapShareOk + g_cSoftMapNamedOk;
+    cMapOk = g_cSoftMapAnonOk + g_cSoftMapShareOk + g_cSoftMapNamedOk +
+             g_cSoftMapFileOk;
     cMapFail = g_cSoftMapAnonFail + g_cSoftMapShareFail + g_cSoftMapNamedFail +
-               g_cSoftMapCoreFail;
-    cCreateOk = g_cSoftCreateAnonOk + g_cSoftNamedCreate;
+               g_cSoftMapFileFail + g_cSoftMapCoreFail;
+    cCreateOk = g_cSoftCreateAnonOk + g_cSoftNamedCreate + g_cSoftCreateFileOk;
 
     /*
      * Soft verdict (inventory only; never hard-gates maps):
@@ -1354,10 +1584,12 @@ soft_inventory_log(void)
      *   INIT     — inventory dumped, no create/map activity yet
      *   NONE     — reserved (kept for greppable PASS/NONE symmetry)
      */
-    if (g_cSoftCreateAnonOk != 0u || g_cSoftNamedCreate != 0u || cMapOk != 0u) {
+    if (g_cSoftCreateAnonOk != 0u || g_cSoftNamedCreate != 0u ||
+        g_cSoftCreateFileOk != 0u || cMapOk != 0u) {
         szVerdict = "PASS";
     } else if (g_cSoftCreateAnonFail != 0u || g_cSoftCreateNamedFail != 0u ||
-               cMapFail != 0u || g_cSoftNamedTableFull != 0u) {
+               g_cSoftCreateFileFail != 0u || cMapFail != 0u ||
+               g_cSoftNamedTableFull != 0u) {
         szVerdict = "PARTIAL";
     } else if (g_u32SoftInvSamples > 0u) {
         szVerdict = "INIT";
@@ -1463,18 +1695,20 @@ soft_inventory_log(void)
 
     /* Grep: memobj: soft create */
     kprintf("memobj: soft create anon_ok=%u anon_fail=%u named_fail=%u "
-            "named_ok=%u destroy=%u reclaim=%u\n",
+            "named_ok=%u file_ok=%u file_fail=%u destroy=%u reclaim=%u\n",
             g_cSoftCreateAnonOk, g_cSoftCreateAnonFail, g_cSoftCreateNamedFail,
-            g_cSoftNamedCreate, g_cSoftDestroy, g_cSoftReclaim);
+            g_cSoftNamedCreate, g_cSoftCreateFileOk, g_cSoftCreateFileFail,
+            g_cSoftDestroy, g_cSoftReclaim);
     cAreas++;
 
     /* Grep: memobj: soft map */
     kprintf("memobj: soft map anon_ok=%u anon_fail=%u share_ok=%u "
-            "share_fail=%u named_ok=%u named_fail=%u core_fail=%u "
-            "user_map=%u map_ok_sum=%u\n",
+            "share_fail=%u named_ok=%u named_fail=%u file_ok=%u file_fail=%u "
+            "core_fail=%u user_map=%u map_ok_sum=%u\n",
             g_cSoftMapAnonOk, g_cSoftMapAnonFail, g_cSoftMapShareOk,
             g_cSoftMapShareFail, g_cSoftMapNamedOk, g_cSoftMapNamedFail,
-            g_cSoftMapCoreFail, g_cSoftUserMap, cMapOk);
+            g_cSoftMapFileOk, g_cSoftMapFileFail, g_cSoftMapCoreFail,
+            g_cSoftUserMap, cMapOk);
     cAreas++;
 
     /* Grep: memobj: soft unmap */
@@ -1585,15 +1819,15 @@ soft_inventory_log(void)
     /*
      * Grep: memobj: soft path
      * Honesty catalog of product surfaces this unit exposes.
-     * file_kind=0: FILE pager not product-wired (cold OPEN).
+     * file_soft=1: vfs_ram snapshot map; full live FILE pager remains OPEN.
      */
     kprintf("memobj: soft path claim=1 anon=1 named=1 share=1 unlink=1 "
             "user_map=1 region_table=1 as_ensure=1 wine_shm=1 "
             "design=1 lookup=1 page_pa=1 reclaim=1 lamps=1 "
-            "file_kind=0 max_pages=%u pool=%u named_max=%u region_max=%u "
-            "product_tib=0 bar3=OPEN "
-            "(soft inventory; FILE cold OPEN; not product; not bar3; "
-            "not 1TiB product)\n",
+            "file_soft=1 file_kind=soft max_pages=%u pool=%u named_max=%u "
+            "region_max=%u product_tib=0 bar3=OPEN "
+            "(soft inventory; FILE soft snapshot; full pager OPEN; "
+            "not product; not bar3; not 1TiB product)\n",
             (unsigned)GJ_MEMOBJ_MAX_PAGES, (unsigned)GJ_MEMOBJ_POOL,
             (unsigned)GJ_NAMED_MAX, (unsigned)GJ_PROC_REGION_MAX);
     cAreas++;
@@ -1651,9 +1885,9 @@ soft_inventory_log(void)
      * Wave 19: explicit OPEN honesty (FILE / product remain OPEN).
      * Grep: memobj: soft OPEN
      */
-    kprintf("memobj: soft OPEN file_kind=OPEN product_tib=0 bar3=OPEN "
-            "wine_shm=soft full_file_pager=OPEN wave=%u "
-            "(soft inventory; never closes FILE product; soft≠product)\n",
+    kprintf("memobj: soft OPEN file_soft=1 file_kind=soft product_tib=0 "
+            "bar3=OPEN wine_shm=soft full_file_pager=OPEN wave=%u "
+            "(soft snapshot wired; live pager OPEN; soft≠product)\n",
             (unsigned)MEMOBJ_SOFT_WAVE);
     cAreas++;
 
@@ -2721,12 +2955,19 @@ kprintf("memobj: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel
 static void
 soft_inventory_maybe_once(void)
 {
+    extern u32 serial_thre_dead(void);
+
     if (g_fSoftInvOnce != 0) {
         return;
     }
+    if (serial_thre_dead() != 0u) {
+        g_fSoftInvOnce = 1;
+        return;
+    }
     if (g_cSoftCreateAnonOk == 0 && g_cSoftNamedCreate == 0 &&
-        g_cSoftMapAnonOk == 0 && g_cSoftMapShareOk == 0 &&
-        g_cSoftMapNamedOk == 0) {
+        g_cSoftCreateFileOk == 0 && g_cSoftMapAnonOk == 0 &&
+        g_cSoftMapShareOk == 0 && g_cSoftMapNamedOk == 0 &&
+        g_cSoftMapFileOk == 0) {
         return;
     }
     g_fSoftInvOnce = 1;

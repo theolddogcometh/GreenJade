@@ -210,3 +210,5 @@ Parent tree owns:
 - Rootfs/ESP stage of `/lib/ld-gj.so.1`
 
 Do not treat this directory as owning Makefile or kernel edits.
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

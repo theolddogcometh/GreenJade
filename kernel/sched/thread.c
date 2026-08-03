@@ -2809,9 +2809,10 @@ thread_exit(void)
 void
 scheduler_run(void)
 {
-    kprintf("sched: run loop (idle HLT when idle)\n");
+    kprintf("sched: run loop (idle HLT when idle; net poll every pass)\n");
     for (;;) {
-        net_eth_poll(); /* ARP/UDP-echo while idle */
+        /* One poll per idle pass — timer IRQs also poll; avoid TX thrash. */
+        net_eth_poll();
         session_input_poll(); /* fan-in virtio-input for session */
         (void)thread_yield_pending(); /* clear soft-preempt flag */
         schedule();
@@ -2822,7 +2823,7 @@ scheduler_run(void)
 
             if (pNext == pIdle || pNext == thread_current()) {
                 if (timer_ready()) {
-                    __asm__ volatile ("hlt");
+                    __asm__ volatile ("sti; hlt" ::: "memory");
                 } else {
                     __asm__ volatile ("pause");
                 }

@@ -128,7 +128,7 @@ companion GPT image instead of (or in addition to) the ISO:
 
 That image has:
   p1  EFI System Partition  — GreenJade boot + product tree
-  p2  FAT32 label GJ-PERSIST — logs/, journal/, ssh/, steam/
+  p2  ext4 label GJ-PERSIST — logs/, journal/, ssh/, steam/ (hwtest USB; ISO is ESP-only)
 
 After a test run, remount GJ-PERSIST on a lab host and collect:
   logs/serial-*.txt

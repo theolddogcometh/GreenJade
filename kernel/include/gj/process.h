@@ -17,12 +17,14 @@
  *   wait    reparent orphans → init(1); WNOWAIT peek; live/zombie counts
  *   death   quota+CDT-aware CNode clear; exec/auxv scrub; fault-lock force
  *   confine OpenBSD-shaped promise bits (ambient until confined)
+ *   fork-wait product-min: PCB parent → child pid + wait4/waitid reaper
  *
  * Grep markers:
  *   process:pager ref | process:pager slot1 | process: set_pager
  *   process: wait register | process: zombie | process: wait reparent
  *   process:death cnode | process: cnode_clear | process: as_destroy
  *   process: death exit= (G-PROC-5)
+ *   process: soft fork-wait product-min
  *
  * Product spawn / kill / wait-by-cap live in <gj/spawn.h> (G-PROC-*).
  * This header is PCB + bootstrap + pager policy + Linux wait4 interim.
@@ -52,6 +54,57 @@
 #define GJ_WAIT_WUNTRACED  2         /* catalog; stop not modelled */
 #define GJ_WAIT_WCONTINUED 8         /* catalog; continue not modelled */
 #define GJ_WAIT_WNOWAIT    0x01000000 /* soft: peek zombie, do not reap */
+
+/*
+ * Linux-ish wait status decode (product-min soft).
+ * process_wait4* stores (exit_code & 0xff) << 8 so WIFEXITED is true for
+ * normal exits; signal/stop paths not modelled yet (always exited shape).
+ * greppable: process: soft fork-wait product-min
+ */
+#define GJ_WIFEXITED(status)   ((((int)(status)) & 0x7f) == 0)
+#define GJ_WEXITSTATUS(status) ((((int)(status)) >> 8) & 0xff)
+#define GJ_WIFSIGNALED(status) (((((int)(status)) & 0x7f) + 1) >= 2 && \
+                                (((int)(status)) & 0x7f) != 0x7f)
+#define GJ_WTERMSIG(status)    (((int)(status)) & 0x7f)
+#define GJ_WIFSTOPPED(status)  ((((int)(status)) & 0xff) == 0x7f)
+#define GJ_WSTOPSIG(status)    ((((int)(status)) >> 8) & 0xff)
+
+/* waitid idtype (Linux-shaped soft; P_PGID rejected). */
+#define GJ_P_ALL  0u
+#define GJ_P_PID  1u
+#define GJ_P_PGID 2u
+
+/* waitid si_code soft (CLD_EXITED when zombie reaped as normal exit). */
+#define GJ_CLD_EXITED    1
+#define GJ_CLD_KILLED    2
+#define GJ_CLD_DUMPED    3
+#define GJ_CLD_TRAPPED   4
+#define GJ_CLD_STOPPED   5
+#define GJ_CLD_CONTINUED 6
+
+/*
+ * Soft clone flag bits (Linux sched.h values; process_linux_clone only).
+ * Full set lives in linux_abi.h; duplicated here so process.h stays free of
+ * linux_abi. Product incomplete — 0 flags / plain fork-like only for shell.
+ */
+#define GJ_CLONE_CSIGNAL              0x000000ffull
+#define GJ_CLONE_VM                   0x00000100ull
+#define GJ_CLONE_FS                   0x00000200ull
+#define GJ_CLONE_FILES                0x00000400ull
+#define GJ_CLONE_SIGHAND              0x00000800ull
+#define GJ_CLONE_VFORK                0x00004000ull
+#define GJ_CLONE_THREAD               0x00010000ull
+#define GJ_CLONE_NEWNS                0x00020000ull
+#define GJ_CLONE_NEWCGROUP            0x02000000ull
+#define GJ_CLONE_NEWUTS               0x04000000ull
+#define GJ_CLONE_NEWIPC               0x08000000ull
+#define GJ_CLONE_NEWUSER              0x10000000ull
+#define GJ_CLONE_NEWPID               0x20000000ull
+#define GJ_CLONE_NEWNET               0x40000000ull
+/* Namespace / isolation bits rejected soft (not product multi-ns). */
+#define GJ_CLONE_NS_MASK                                                       \
+    (GJ_CLONE_NEWNS | GJ_CLONE_NEWCGROUP | GJ_CLONE_NEWUTS | GJ_CLONE_NEWIPC | \
+     GJ_CLONE_NEWUSER | GJ_CLONE_NEWPID | GJ_CLONE_NEWNET)
 
 /*
  * Root meta object installed in CNode slot 0 after bootstrap.
@@ -296,8 +349,15 @@ void process_wait_forget(struct gj_process *pProc);
 /**
  * wait4-shaped: pid -1 = any child of the implicit parent filter;
  * options WNOHANG / soft WNOWAIT (peek without reap).
- * Returns child pid, 0 (WNOHANG none), or -errno (ECHILD).
+ * Returns child pid, 0 (WNOHANG none / soft live-timeout), or -errno (ECHILD).
  * *pStatus gets exit status (code << 8) when non-NULL.
+ *
+ * Soft product (ABI-first for shell/sshd later):
+ *   - WNOHANG + live child → 0 (poll-friendly; waitid maps here)
+ *   - WNOHANG + zombie → pid + status, slot reaped
+ *   - Blocking: yields until zombie or soft poll budget; live after budget → 0
+ *     (never false ECHILD while children still registered)
+ * greppable: process: soft wait
  */
 i64  process_wait4(i64 i64Pid, i32 *pStatus, int nOptions);
 
@@ -316,18 +376,33 @@ void process_death(struct gj_process *pProc, u32 u32ExitCode);
 /**
  * Linux fork/vfork-shaped: create stub child PCB, register wait4 pid.
  * fExitNow: immediately process_death (vfork). Else schedule deferred exit
- * worker (two yields) so parent wait4 can reap after fork returns.
- * Returns child pid or -EAGAIN (-11) if stub table full (16).
+ * worker (yields) so parent wait4 / waitid WNOHANG can see live then zombie.
+ * Returns usable child pid (≥100) or -EAGAIN (-11) / -ENOMEM (-12).
  * Not a full AS/CNode clone (G-PROC-4); product path is process_spawn.
+ * Soft incomplete: child does not run user code; shell/sshd later need spawn.
+ * greppable: process: soft fork
  */
 i64 process_linux_fork(u32 u32Ppid, int fExitNow);
+
+/**
+ * Soft clone(2)-shaped flag decode → fork-like wait child.
+ *   flags 0 / share bits only → process_linux_fork(ppid, 0)  [usable pid]
+ *   CLONE_VFORK               → process_linux_fork(ppid, 1)
+ *   CLONE_THREAD             → -EINVAL (needs stack/entry; cold path)
+ *   NEW* namespace bits       → -EINVAL (not product multi-ns)
+ * Parent reaps with process_wait4 / waitid + WNOHANG.
+ * greppable: process: soft fork
+ */
+i64 process_linux_clone(u32 u32Ppid, u64 u64Flags);
 
 /** Look up wait-table pid for a process pointer (0 if unregistered). */
 u32 process_wait_pid_of(struct gj_process *pProc);
 
 /**
  * wait4 filtered by parent pid (u32Ppid==0 → any parent, legacy).
- * Same return contract as process_wait4.
+ * Same return contract as process_wait4. Prefer this when caller knows
+ * its Linux-shaped pid (shell/sshd later; PE32 already).
+ * greppable: process: soft wait
  */
 i64 process_wait4_ppid(u32 u32Ppid, i64 i64Pid, i32 *pStatus, int nOptions);
 
@@ -352,3 +427,65 @@ u32 process_wait_zombie_count(u32 u32Ppid);
  * Grep: process: wait reparent
  */
 u32 process_wait_reparent(u32 u32OldPpid, u32 u32NewPpid);
+
+/* ---- process: soft fork-wait product-min (PCB parent surface) ------------ */
+/*
+ * Cold personality / shell later: parent PCB in, child Linux-shaped pid out.
+ * Soft ≠ product full AS/CNode clone (G-PROC-4); product create is process_spawn.
+ * Zombie list: fixed wait table (process_wait_register / note_exit / wait4).
+ * Status bits: Linux-ish (code<<8) so GJ_WIFEXITED / GJ_WEXITSTATUS work.
+ * greppable: process: soft fork-wait product-min
+ */
+
+/**
+ * Soft fork from parent PCB: reliable child pid (≥100) return.
+ * Ensures soft parent identity (wait-table pid or soft parent map 2..99) so
+ * process_wait_soft can filter children without requiring parent death-wipe
+ * registration. Links child->pParent. Deferred exit worker (usable WNOHANG).
+ * Returns child pid or -EAGAIN/-ENOMEM/-EINVAL.
+ * greppable: process: soft fork-wait product-min
+ */
+i64 process_fork_soft(struct gj_process *pParent);
+
+/**
+ * Soft clone from parent PCB (flag map same as process_linux_clone).
+ * CLONE_VFORK → immediate zombie; share bits → fork-like; THREAD/NS → -EINVAL.
+ * greppable: process: soft fork-wait product-min
+ */
+i64 process_clone_soft(struct gj_process *pParent, u64 u64Flags);
+
+/**
+ * wait4-shaped reap of this parent's children (status Linux-ish WIFEXITED).
+ * Uses parent's soft/wait pid filter. Same return contract as process_wait4:
+ *   pid / 0 (WNOHANG or soft live budget) / -ECHILD / -EINVAL.
+ * *pStatus: (exit & 0xff) << 8 when non-NULL.
+ * greppable: process: soft fork-wait product-min
+ */
+i64 process_wait_soft(struct gj_process *pParent, i64 i64Pid, int *pStatus,
+                      int nOptions);
+
+/**
+ * waitid-shaped soft reaper (product-min).
+ * u32IdType: GJ_P_ALL (any child), GJ_P_PID (exact id), GJ_P_PGID → -EINVAL.
+ * nOptions: GJ_WAIT_WNOHANG / GJ_WAIT_WNOWAIT (+ catalog stop bits ignored).
+ * *pStatus: wait status bits; *pSiCode: GJ_CLD_EXITED on normal exit (opt).
+ * Returns child pid, 0, or -errno.
+ * greppable: process: soft fork-wait product-min
+ */
+i64 process_waitid_soft(struct gj_process *pParent, u32 u32IdType, i64 i64Id,
+                        int *pStatus, int nOptions, int *pSiCode);
+
+/**
+ * Soft smoke: vfork-like child + wait (immediate zombie path).
+ * On first success prints greppable:
+ *   "process: soft fork-wait product-min PASS"
+ * No main.c hook required — cold personality may call later.
+ * Returns reaped pid or negative errno.
+ */
+i64 process_fork_wait_soft_smoke(struct gj_process *pParent);
+
+/**
+ * Soft parent identity pid for a PCB (0 if never forked as parent / not
+ * wait-registered). Does not allocate. Diagnostics / cold later.
+ */
+u32 process_soft_parent_pid_of(struct gj_process *pParent);

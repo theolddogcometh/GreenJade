@@ -148,3 +148,5 @@ cc -c -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 | `user/libgj-gnu/` | GNU-hash product SO counterpart (`gj_gnu_export`) |
 | `user/ld-gj/` | Userspace dynlinker; resolves `gj_so_export` via SysV hash |
 | `kernel/proc/elf_load.c` | Kernel multi-SO SysV-hash lookup / smoke |
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

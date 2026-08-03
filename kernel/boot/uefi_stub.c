@@ -45,9 +45,16 @@
  *   GJ-EFI: memmap soft PASS|REJECT …
  *   GJ-EFI: handoff soft PASS|PARTIAL …
  *
+ * ESP BOOT.LOG tee (pre-ExitBootServices diagnostics on disk):
+ *   Circular RAM ring (64 KiB BSS) tees every COM1 char (com1_putc path).
+ *   Milestone flush_boot_log() writes \EFI\GREENJADE\BOOT.LOG via SimpleFS
+ *   (same volume as KERNEL.ELF). Overwrite OK; never hard-fails product boot.
+ *   greppable: GJ-EFI: BOOT.LOG write PASS|FAIL
+ *
  * greppable: GJ-EFI: soft
  * greppable: GJ-EFI: soft inventory
  * greppable: GJ-EFI: soft deepen
+ * greppable: GJ-EFI: BOOT.LOG write
  *
  * Built as PE32+ EFI_APPLICATION via ld -mi386pep (see scripts/build-efi.sh).
  * Multiboot2 greenjade.elf does not link this file (dev-only P-BOOT-2).
@@ -72,9 +79,14 @@ typedef u64 efi_uintn_t;
 #define EFI_ALLOCATE_ADDRESS   2
 #define EFI_LOADER_DATA        2
 
-#define EFI_FILE_MODE_READ 0x0000000000000001ull
+#define EFI_FILE_MODE_READ   0x0000000000000001ull
+#define EFI_FILE_MODE_WRITE  0x0000000000000002ull
+#define EFI_FILE_MODE_CREATE 0x8000000000000000ull
 
 #define EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL 0x00000001u
+
+/* ESP BOOT.LOG circular tee capacity (PE BSS; 64–128 KiB range). */
+#define GJ_BOOT_LOG_CAP (64u * 1024u)
 
 /* EFI memory types we reclaim after ExitBootServices */
 #define EfiLoaderCode          1u
@@ -211,6 +223,7 @@ struct efi_file_protocol {
     void *pfnDelete;
     efi_status_t (__attribute__((ms_abi)) *pfnRead)(struct efi_file_protocol *pThis,
                             efi_uintn_t *pBufferSize, void *pBuffer);
+    /* Cast to efi_file_write_t (ms_abi) at call sites — same pattern as Read. */
     void *pfnWrite;
     efi_status_t (__attribute__((ms_abi)) *pfnGetPosition)(struct efi_file_protocol *pThis,
                                    u64 *pPos);
@@ -221,6 +234,13 @@ struct efi_file_protocol {
     void *pfnSetInfo;
     void *pfnFlush;
 };
+
+typedef efi_status_t (__attribute__((ms_abi)) *efi_file_write_t)(
+    struct efi_file_protocol *pThis, efi_uintn_t *pBufferSize, void *pBuffer);
+typedef efi_status_t (__attribute__((ms_abi)) *efi_file_flush_t)(
+    struct efi_file_protocol *pThis);
+typedef efi_status_t (__attribute__((ms_abi)) *efi_file_delete_t)(
+    struct efi_file_protocol *pThis);
 
 struct efi_simple_fs {
     u64 u64Revision;
@@ -311,24 +331,61 @@ static u64 g_cSoftMmBytes;
 static u32 g_fSoftMmOk;
 
 /*
+ * ESP BOOT.LOG circular ring (PE BSS). Tees COM1 bytes pre-EBS; flush_boot_log
+ * dumps the ring to \EFI\GREENJADE\BOOT.LOG. Circular overwrite when full.
+ * Head = next write index; Len = bytes stored (0..GJ_BOOT_LOG_CAP).
+ */
+static u8 g_aBootLog[GJ_BOOT_LOG_CAP];
+static u32 g_uBootLogHead;
+static u32 g_uBootLogLen;
+
+/*
  * COM1 (0x3F8) early log — same role as kprintf before serial_init /
  * after ExitBootServices when ConOut is gone. Prefix all lines "GJ-EFI:".
+ * Every serial char is also teed into g_aBootLog (as if serial).
  */
+static void
+boot_log_putc(char chOut)
+{
+    g_aBootLog[g_uBootLogHead] = (u8)chOut;
+    g_uBootLogHead++;
+    if (g_uBootLogHead >= GJ_BOOT_LOG_CAP) {
+        g_uBootLogHead = 0;
+    }
+    if (g_uBootLogLen < GJ_BOOT_LOG_CAP) {
+        g_uBootLogLen++;
+    }
+}
+
+/* Sticky: no THRE on 0x3FD (common on laptops without legacy UART). */
+static u32 g_fCom1Dead;
+
 static void
 com1_putc(char chOut)
 {
     u32 u32Spins;
+    u32 u32Limit = g_fCom1Dead ? 64u : 20000u;
+    u8 u8SawThre = 0;
 
-    /* Port I/O via inb/outb (not MMIO). Spin on LSR THRE bit. */
-    for (u32Spins = 0; u32Spins < 100000u; u32Spins++) {
+    /*
+     * Port I/O via inb/outb (not MMIO). Spin on LSR THRE bit.
+     * Cap the spin: G752-class boxes never raise THRE — 100k× soft flood
+     * looked like a hang after the blue (EBS) bar.
+     */
+    for (u32Spins = 0; u32Spins < u32Limit; u32Spins++) {
         u8 u8Lsr;
 
         __asm__ volatile ("inb %1, %0" : "=a"(u8Lsr) : "Nd"((u16)0x3FD));
         if ((u8Lsr & 0x20u) != 0) {
+            u8SawThre = 1;
             break;
         }
     }
+    if (u8SawThre == 0) {
+        g_fCom1Dead = 1;
+    }
     __asm__ volatile ("outb %0, %1" : : "a"((u8)chOut), "Nd"((u16)0x3F8));
+    boot_log_putc(chOut);
 }
 
 static void
@@ -342,6 +399,19 @@ com1_puts(const char *szMsg)
             com1_putc('\r');
         }
         com1_putc(*szMsg++);
+    }
+}
+
+/*
+ * PE EFI_APPLICATION does not link kernel stdio_k. Soft deepen incorrectly
+ * called kprintf() — undefined PLT → hang after EBS (blue bar, never cyan).
+ * Soft calls are string literals only; map to COM1.
+ */
+static void
+kprintf(const char *szFmt, ...)
+{
+    if (szFmt != NULL) {
+        com1_puts(szFmt);
     }
 }
 
@@ -2037,6 +2107,50 @@ efi_puts(struct efi_simple_text_output *pOut, const u16 *pW)
     (void)pOut->pfnOutputString(pOut, (u16 *)(gj_vaddr_t)pW);
 }
 
+/*
+ * On-screen progress for real DUTs without COM1 (e.g. G752 laptop).
+ * COM1 markers remain the greppable path; ConOut dies after ExitBootServices.
+ */
+static void
+efi_say(struct efi_system_table *pST, const char *szMsg)
+{
+    u16 aw[120];
+    u32 i = 0;
+
+    if (pST == NULL || pST->pConOut == NULL || szMsg == NULL) {
+        return;
+    }
+    while (*szMsg != '\0' && i + 2u < (u32)(sizeof(aw) / sizeof(aw[0]))) {
+        char ch = *szMsg++;
+
+        if (ch == '\n') {
+            aw[i++] = (u16)'\r';
+            aw[i++] = (u16)'\n';
+        } else {
+            aw[i++] = (u16)(u8)ch;
+        }
+    }
+    aw[i] = 0;
+    efi_puts(pST->pConOut, aw);
+}
+
+/*
+ * Colour bars disabled (text-first panel). Keep symbol for call sites;
+ * kernel fb_console owns the GOP after jump to kmain_uefi.
+ */
+static void
+efi_fb_bar(u64 u64Base, u32 u32Pitch, u32 u32Width, u32 u32Height,
+           u32 u32Y0, u32 u32BarH, u32 u32Color)
+{
+    (void)u64Base;
+    (void)u32Pitch;
+    (void)u32Width;
+    (void)u32Height;
+    (void)u32Y0;
+    (void)u32BarH;
+    (void)u32Color;
+}
+
 /* Freestanding helpers — PE image cannot link kernel string.o. */
 static void
 memcpy_local(void *pDst, const void *pSrc, u64 cb)
@@ -2192,6 +2306,207 @@ bs_open_protocol(struct efi_boot_services *pBS, efi_handle_t hHandle,
 }
 
 /*
+ * Write circular ring [u32Start, u32Start+cb) possibly wrapping to pFile.
+ * Two Write calls when the valid range wraps past GJ_BOOT_LOG_CAP.
+ */
+static efi_status_t
+boot_log_file_write(struct efi_file_protocol *pFile, efi_file_write_t pfnWrite)
+{
+    efi_uintn_t cbChunk;
+    efi_status_t st;
+    u32 u32Start;
+    u32 u32First;
+    u32 u32Rest;
+
+    if (pFile == NULL || pfnWrite == NULL) {
+        return EFI_LOAD_ERROR;
+    }
+    if (g_uBootLogLen == 0) {
+        return EFI_SUCCESS;
+    }
+    /* Oldest byte index when head is the next write slot. */
+    u32Start = g_uBootLogHead + GJ_BOOT_LOG_CAP - g_uBootLogLen;
+    if (u32Start >= GJ_BOOT_LOG_CAP) {
+        u32Start -= GJ_BOOT_LOG_CAP;
+    }
+    if (u32Start + g_uBootLogLen <= GJ_BOOT_LOG_CAP) {
+        cbChunk = (efi_uintn_t)g_uBootLogLen;
+        st = pfnWrite(pFile, &cbChunk, &g_aBootLog[u32Start]);
+        if (st != EFI_SUCCESS) {
+            return st;
+        }
+        if (cbChunk != (efi_uintn_t)g_uBootLogLen) {
+            return EFI_LOAD_ERROR;
+        }
+        return EFI_SUCCESS;
+    }
+    u32First = GJ_BOOT_LOG_CAP - u32Start;
+    u32Rest = g_uBootLogLen - u32First;
+    cbChunk = (efi_uintn_t)u32First;
+    st = pfnWrite(pFile, &cbChunk, &g_aBootLog[u32Start]);
+    if (st != EFI_SUCCESS) {
+        return st;
+    }
+    if (cbChunk != (efi_uintn_t)u32First) {
+        return EFI_LOAD_ERROR;
+    }
+    cbChunk = (efi_uintn_t)u32Rest;
+    st = pfnWrite(pFile, &cbChunk, &g_aBootLog[0]);
+    if (st != EFI_SUCCESS) {
+        return st;
+    }
+    if (cbChunk != (efi_uintn_t)u32Rest) {
+        return EFI_LOAD_ERROR;
+    }
+    return EFI_SUCCESS;
+}
+
+/*
+ * Milestone flush: dump COM1 tee ring to \EFI\GREENJADE\BOOT.LOG on the same
+ * ESP volume as KERNEL.ELF. Soft-only — failures emit greppable markers and
+ * never gate product boot. Safe only while Boot Services still run.
+ *
+ * greppable: GJ-EFI: BOOT.LOG write PASS|FAIL
+ */
+static void
+flush_boot_log(struct efi_boot_services *pBS, efi_handle_t hImage)
+{
+    static struct efi_guid gLoadedImage = {
+        0x5B1B31A1u, 0x9562u, 0x11d2u,
+        { 0x8Eu, 0x3Fu, 0x00u, 0xA0u, 0xC9u, 0x69u, 0x72u, 0x3Bu }
+    };
+    static struct efi_guid gSimpleFs = {
+        0x964e5b22u, 0x6459u, 0x11d2u,
+        { 0x8eu, 0x39u, 0x00u, 0xa0u, 0xc9u, 0x69u, 0x72u, 0x3bu }
+    };
+    /* Path: \EFI\GREENJADE\BOOT.LOG */
+    static u16 awPath[] = {
+        '\\', 'E', 'F', 'I', '\\', 'G', 'R', 'E', 'E', 'N', 'J', 'A', 'D',
+        'E', '\\', 'B', 'O', 'O', 'T', '.', 'L', 'O', 'G', 0
+    };
+    struct efi_loaded_image *pLi = NULL;
+    struct efi_simple_fs *pFs = NULL;
+    struct efi_file_protocol *pRoot = NULL;
+    struct efi_file_protocol *pFile = NULL;
+    struct efi_system_table *pST = NULL;
+    efi_status_t st;
+    efi_file_write_t pfnWrite;
+    efi_file_flush_t pfnFlush;
+    efi_file_delete_t pfnDelete;
+    u64 u64Mode;
+
+    if (pBS == NULL || hImage == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=null_bs_or_image\n");
+        return;
+    }
+
+    st = bs_open_protocol(pBS, hImage, &gLoadedImage, (void **)&pLi, hImage,
+                          NULL, EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
+    if (st != EFI_SUCCESS || pLi == NULL || pLi->hDevice == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=LoadedImage\n");
+        return;
+    }
+    pST = pLi->pST;
+
+    st = bs_open_protocol(pBS, pLi->hDevice, &gSimpleFs, (void **)&pFs, hImage,
+                          NULL, EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
+    if (st != EFI_SUCCESS || pFs == NULL || pFs->pfnOpenVolume == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=SimpleFileSystem\n");
+        efi_say(pST, "GJ-EFI: BOOT.LOG write FAIL\r\n");
+        return;
+    }
+
+    st = pFs->pfnOpenVolume(pFs, &pRoot);
+    if (st != EFI_SUCCESS || pRoot == NULL || pRoot->pfnOpen == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=OpenVolume\n");
+        efi_say(pST, "GJ-EFI: BOOT.LOG write FAIL\r\n");
+        return;
+    }
+
+    /*
+     * Best-effort truncate: delete existing BOOT.LOG so a shorter ring does
+     * not leave stale tail bytes. Overwrite without rename (BOOT.PREV optional;
+     * SetInfo rename is fragile freestanding — overwrite is OK).
+     */
+    st = pRoot->pfnOpen(pRoot, &pFile, awPath, EFI_FILE_MODE_READ, 0);
+    if (st == EFI_SUCCESS && pFile != NULL) {
+        pfnDelete = (efi_file_delete_t)pFile->pfnDelete;
+        if (pfnDelete != NULL) {
+            (void)pfnDelete(pFile); /* Delete closes the handle. */
+        } else if (pFile->pfnClose != NULL) {
+            (void)pFile->pfnClose(pFile);
+        }
+        pFile = NULL;
+    }
+
+    u64Mode = EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE;
+    st = pRoot->pfnOpen(pRoot, &pFile, awPath, u64Mode, 0);
+    if (st != EFI_SUCCESS || pFile == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=Open CREATE st=");
+        com1_put_u64_hex((u64)st);
+        com1_puts("\n");
+        efi_say(pST, "GJ-EFI: BOOT.LOG write FAIL\r\n");
+        if (pRoot->pfnClose != NULL) {
+            (void)pRoot->pfnClose(pRoot);
+        }
+        return;
+    }
+
+    pfnWrite = (efi_file_write_t)pFile->pfnWrite;
+    if (pfnWrite == NULL) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=Write missing\n");
+        efi_say(pST, "GJ-EFI: BOOT.LOG write FAIL\r\n");
+        if (pFile->pfnClose != NULL) {
+            (void)pFile->pfnClose(pFile);
+        }
+        if (pRoot->pfnClose != NULL) {
+            (void)pRoot->pfnClose(pRoot);
+        }
+        return;
+    }
+
+    if (pFile->pfnSetPosition != NULL) {
+        (void)pFile->pfnSetPosition(pFile, 0);
+    }
+
+    st = boot_log_file_write(pFile, pfnWrite);
+    if (st != EFI_SUCCESS) {
+        com1_puts("GJ-EFI: BOOT.LOG write FAIL reason=Write st=");
+        com1_put_u64_hex((u64)st);
+        com1_puts(" bytes=");
+        com1_put_u64_dec((u64)g_uBootLogLen);
+        com1_puts("\n");
+        efi_say(pST, "GJ-EFI: BOOT.LOG write FAIL\r\n");
+        if (pFile->pfnClose != NULL) {
+            (void)pFile->pfnClose(pFile);
+        }
+        if (pRoot->pfnClose != NULL) {
+            (void)pRoot->pfnClose(pRoot);
+        }
+        return;
+    }
+
+    pfnFlush = (efi_file_flush_t)pFile->pfnFlush;
+    if (pfnFlush != NULL) {
+        (void)pfnFlush(pFile);
+    }
+    if (pFile->pfnClose != NULL) {
+        (void)pFile->pfnClose(pFile);
+    }
+    if (pRoot->pfnClose != NULL) {
+        (void)pRoot->pfnClose(pRoot);
+    }
+
+    /* PASS markers after close so the next flush includes them. */
+    com1_puts("GJ-EFI: BOOT.LOG write PASS bytes=");
+    com1_put_u64_dec((u64)g_uBootLogLen);
+    com1_puts(" cap=");
+    com1_put_u64_dec((u64)GJ_BOOT_LOG_CAP);
+    com1_puts("\n");
+    efi_say(pST, "GJ-EFI: BOOT.LOG write PASS\r\n");
+}
+
+/*
  * Load \EFI\GREENJADE\KERNEL.ELF from the image device volume.
  * On success: *pEntry = kmain_uefi (from GJUEFI1), *pKernelPa/Bytes = span.
  */
@@ -2233,10 +2548,12 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
     *pKernelPa = 0;
     *pKernelBytes = 0;
 
+    efi_say(pST, "GJ-EFI: open protocols...\r\n");
     st = bs_open_protocol(pBS, hImage, &gLoadedImage, (void **)&pLi, hImage,
                           NULL, EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
     if (st != EFI_SUCCESS || pLi == NULL || pLi->hDevice == NULL) {
         com1_puts("GJ-EFI: LoadedImage protocol fail\n");
+        efi_say(pST, "GJ-EFI: FAIL LoadedImage\r\n");
         return st != EFI_SUCCESS ? st : EFI_LOAD_ERROR;
     }
 
@@ -2244,25 +2561,30 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
                           NULL, EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
     if (st != EFI_SUCCESS || pFs == NULL || pFs->pfnOpenVolume == NULL) {
         com1_puts("GJ-EFI: SimpleFileSystem protocol fail\n");
+        efi_say(pST, "GJ-EFI: FAIL SimpleFileSystem\r\n");
         return st != EFI_SUCCESS ? st : EFI_LOAD_ERROR;
     }
 
     st = pFs->pfnOpenVolume(pFs, &pRoot);
     if (st != EFI_SUCCESS || pRoot == NULL) {
         com1_puts("GJ-EFI: OpenVolume fail\n");
+        efi_say(pST, "GJ-EFI: FAIL OpenVolume\r\n");
         return st;
     }
     if (pRoot->pfnOpen == NULL) {
         com1_puts("GJ-EFI: File.Open missing\n");
+        efi_say(pST, "GJ-EFI: FAIL File.Open missing\r\n");
         if (pRoot->pfnClose != NULL) {
             (void)pRoot->pfnClose(pRoot);
         }
         return EFI_LOAD_ERROR;
     }
 
+    efi_say(pST, "GJ-EFI: open KERNEL.ELF...\r\n");
     st = pRoot->pfnOpen(pRoot, &pFile, awPath, EFI_FILE_MODE_READ, 0);
     if (st != EFI_SUCCESS || pFile == NULL) {
         com1_puts("GJ-EFI: open \\EFI\\GREENJADE\\KERNEL.ELF fail\n");
+        efi_say(pST, "GJ-EFI: FAIL open KERNEL.ELF\r\n");
         if (pRoot->pfnClose != NULL) {
             (void)pRoot->pfnClose(pRoot);
         }
@@ -2314,6 +2636,7 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
                           (void **)&g_pFileScratch);
     if (st != EFI_SUCCESS || g_pFileScratch == NULL) {
         com1_puts("GJ-EFI: AllocatePool for KERNEL.ELF fail\n");
+        efi_say(pST, "GJ-EFI: FAIL AllocatePool KERNEL\r\n");
         (void)pFile->pfnClose(pFile);
         if (pRoot->pfnClose != NULL) {
             (void)pRoot->pfnClose(pRoot);
@@ -2323,6 +2646,8 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
     if (pFile->pfnSetPosition != NULL) {
         (void)pFile->pfnSetPosition(pFile, 0);
     }
+    /* Multi-MiB read from USB can take seconds — show progress on panel. */
+    efi_say(pST, "GJ-EFI: reading KERNEL.ELF (multi-MiB)...\r\n");
     cbRead = g_cbFileScratch;
     st = pFile->pfnRead(pFile, &cbRead, g_pFileScratch);
     (void)pFile->pfnClose(pFile);
@@ -2331,6 +2656,7 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
     }
     if (st != EFI_SUCCESS || cbRead < sizeof(struct elf64_ehdr)) {
         com1_puts("GJ-EFI: KERNEL.ELF read fail\n");
+        efi_say(pST, "GJ-EFI: FAIL KERNEL.ELF read\r\n");
         return st != EFI_SUCCESS ? st : EFI_LOAD_ERROR;
     }
     /* If read filled the pool exactly, file may be truncated — refuse. */
@@ -2385,6 +2711,7 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
         efi_uintn_t cPages =
             (efi_uintn_t)((u64MaxPa - u64MinPa) / 4096ull);
 
+        efi_say(pST, "GJ-EFI: AllocateAddress PT_LOAD span...\r\n");
         st = bs_allocate_pages(pBS, EFI_ALLOCATE_ADDRESS, EFI_LOADER_DATA,
                                cPages, &pa);
         if (st != EFI_SUCCESS || pa != u64MinPa) {
@@ -2396,7 +2723,11 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
              */
             com1_puts("GJ-EFI: soft AllocateAddress PT_LOAD span fail; "
                       "trying linked PA overlay\n");
+            efi_say(pST, "GJ-EFI: AllocateAddress fail; overlay linked PA\r\n");
+        } else {
+            efi_say(pST, "GJ-EFI: AllocateAddress OK\r\n");
         }
+        efi_say(pST, "GJ-EFI: zero+copy PT_LOAD segments...\r\n");
         memset_local((void *)(gj_vaddr_t)u64MinPa, 0, u64MaxPa - u64MinPa);
     }
     for (iPh = 0; iPh < pEh->u16Phnum; iPh++) {
@@ -2447,8 +2778,8 @@ load_kernel_elf(struct efi_boot_services *pBS, efi_handle_t hImage,
     *pEntry = u64Entry;
     *pKernelPa = u64MinPa;
     *pKernelBytes = u64MaxPa - u64MinPa;
-    (void)pST;
     com1_puts("GJ-EFI: KERNEL.ELF loaded (GJUEFI1 entry ready)\n");
+    efi_say(pST, "GJ-EFI: KERNEL.ELF loaded (GJUEFI1 ready)\r\n");
     return EFI_SUCCESS;
 }
 
@@ -2483,6 +2814,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     }
     pBS = pST->pBootServices;
     efi_puts(pST->pConOut, awBanner);
+    efi_say(pST, "GJ-EFI: loader live (panel path; COM1 optional)\r\n");
 
     /*
      * Handoff buffer: zero + stamp header. Kernel boot_info_set_global()
@@ -2497,6 +2829,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     g_BootInfo.u32Mb2InfoPhys = 0;
 
     /* Must load KERNEL.ELF while BootServices (file I/O) still work. */
+    efi_say(pST, "GJ-EFI: loading KERNEL.ELF from ESP...\r\n");
     st = load_kernel_elf(pBS, hImage, pST, &u64Entry, &u64KernelPa,
                          &u64KernelBytes);
     if (st != EFI_SUCCESS) {
@@ -2505,6 +2838,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
             g_cSoftLoadFail++;
         }
         com1_puts("GJ-EFI: KERNEL.ELF load failed — EBS then halt\n");
+        efi_say(pST, "GJ-EFI: KERNEL load FAILED (see COM1 if any)\r\n");
         /* Grep: GJ-EFI: soft load FAIL */
         com1_puts("GJ-EFI: soft load FAIL st=");
         com1_put_u64_hex((u64)st);
@@ -2518,6 +2852,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
         g_BootInfo.u64KernelPhys = u64KernelPa;
         g_BootInfo.u64KernelBytes = u64KernelBytes;
         g_BootInfo.u32Flags |= GJ_BOOT_F_KERNEL_IMG;
+        efi_say(pST, "GJ-EFI: KERNEL load OK\r\n");
         /* Grep: GJ-EFI: soft load PASS */
         com1_puts("GJ-EFI: soft load PASS phys=");
         com1_put_u64_hex(u64KernelPa);
@@ -2531,6 +2866,8 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
         com1_put_u64_dec((u64)GJ_EFI_SOFT_WAVE);
         com1_puts("\n");
     }
+    /* Milestone: post-KERNEL load (ok or fail) — still pre-EBS. */
+    flush_boot_log(pBS, hImage);
 
     /* Optional GOP fill for early desktop FB (kernel may ignore). Soft markers. */
     {
@@ -2565,6 +2902,11 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
                 g_cSoftGopPass++;
             }
             com1_puts("GJ-EFI: GOP framebuffer captured\n");
+            efi_say(pST, "GJ-EFI: GOP captured (green bar = loader alive)\r\n");
+            /* Green bar survives EBS when ConOut is gone (laptop panel path). */
+            efi_fb_bar(g_BootInfo.u64FbBase, g_BootInfo.u32FbPitch,
+                       g_BootInfo.u32FbWidth, g_BootInfo.u32FbHeight,
+                       0, 48, 0x0000C000u);
             /* Grep: GJ-EFI: GOP soft PASS */
             com1_puts("GJ-EFI: GOP soft PASS base=");
             com1_put_u64_hex(g_BootInfo.u64FbBase);
@@ -2588,8 +2930,11 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
                 g_cSoftGopSkip++;
             }
             com1_puts("GJ-EFI: GOP soft SKIP (no usable framebuffer)\n");
+            efi_say(pST, "GJ-EFI: GOP SKIP (text only until EBS)\r\n");
         }
     }
+    /* Milestone: post-GOP capture/skip — still pre-EBS. */
+    flush_boot_log(pBS, hImage);
 
     /* Prefer ACPI 2.0 RSDP; keep 1.0 if that is all firmware publishes. */
     if (pST->pConfigurationTable != NULL) {
@@ -2644,6 +2989,7 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
      * change between GetMemoryMap and ExitBootServices (UEFI contract).
      * Buffer is PE BSS (LoaderData) — valid after EBS under identity map.
      */
+    efi_say(pST, "GJ-EFI: GetMemoryMap + ExitBootServices...\r\n");
     u64MapSize = sizeof(g_aMemMapScratch);
     u64MapKey = 0;
     u64DescSize = 0;
@@ -2654,10 +3000,12 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
                                 &u64MapKey, &u64DescSize, &u32DescVer);
     if (st == EFI_BUFFER_TOO_SMALL) {
         com1_puts("GJ-EFI: GetMemoryMap buffer too small (48KiB)\n");
+        efi_say(pST, "GJ-EFI: FAIL GetMemoryMap buffer too small\r\n");
         return st;
     }
     if (st != EFI_SUCCESS) {
         com1_puts("GJ-EFI: GetMemoryMap fail\n");
+        efi_say(pST, "GJ-EFI: FAIL GetMemoryMap\r\n");
         return st;
     }
 
@@ -2667,6 +3015,14 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     g_BootInfo.u32Flags |= GJ_BOOT_F_MEMMAP;
     /* Soft classify before EBS (map still in PE BSS scratch). */
     soft_memmap_marker(u64MapSize, u64DescSize);
+
+    /*
+     * Critical milestone: last ESP write before ExitBootServices. File I/O
+     * dies with Boot Services; soft inventory after EBS cannot flush.
+     * Note: GetMemoryMap key may change if flush allocates (OpenProtocol is
+     * typically already installed) — UEFI retry path below handles key churn.
+     */
+    flush_boot_log(pBS, hImage);
 
     st = bs_exit_boot_services(pBS, hImage, u64MapKey);
     if (st != EFI_SUCCESS) {
@@ -2708,13 +3064,37 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
     }
 
     com1_puts("GJ-EFI: ExitBootServices ok\n");
+    /* ConOut is dead after EBS — use GOP bar if we have it. */
+    if ((g_BootInfo.u32Flags & GJ_BOOT_F_FB) != 0 &&
+        g_BootInfo.u64FbBase != 0) {
+        /* Blue bar under green = EBS ok, about to jump. */
+        efi_fb_bar(g_BootInfo.u64FbBase, g_BootInfo.u32FbPitch,
+                   g_BootInfo.u32FbWidth, g_BootInfo.u32FbHeight,
+                   48, 48, 0x000000C0u);
+    }
+    /*
+     * Jump path: soft_handoff_marker is short. soft_wave14_inventory is a large
+     * soft deepen dump — only when COM1 THRE works (OVMF). On laptops without
+     * UART, com1 is "dead" after the first chars; skip the flood so we reach
+     * cyan bar + kmain (G752 hang was undefined kprintf + COM1 spin).
+     */
     soft_handoff_marker(u64Entry);
-    /* Wave 15 exclusive soft inventory deepen (COM1; never gates jump). */
-    soft_wave14_inventory(u64Entry);
+    if (g_fCom1Dead == 0) {
+        soft_wave14_inventory(u64Entry);
+    } else {
+        com1_puts("GJ-EFI: soft inventory SKIP (no COM1; panel path)\n");
+    }
 
     if (u64Entry == 0) {
         /* Load failed earlier; stay halted with EBS already done. */
         com1_puts("GJ-EFI: no kernel entry — halt\n");
+        if ((g_BootInfo.u32Flags & GJ_BOOT_F_FB) != 0 &&
+            g_BootInfo.u64FbBase != 0) {
+            /* Red bar = no entry. */
+            efi_fb_bar(g_BootInfo.u64FbBase, g_BootInfo.u32FbPitch,
+                       g_BootInfo.u32FbWidth, g_BootInfo.u32FbHeight,
+                       96, 48, 0x00C00000u);
+        }
         for (;;) {
             __asm__ volatile ("hlt");
         }
@@ -2728,6 +3108,13 @@ efi_main(efi_handle_t hImage, struct efi_system_table *pST)
         }
     }
     com1_puts("GJ-EFI: jump kmain_uefi\n");
+    if ((g_BootInfo.u32Flags & GJ_BOOT_F_FB) != 0 &&
+        g_BootInfo.u64FbBase != 0) {
+        /* Cyan bar = jumping to kmain_uefi. */
+        efi_fb_bar(g_BootInfo.u64FbBase, g_BootInfo.u32FbPitch,
+                   g_BootInfo.u32FbWidth, g_BootInfo.u32FbHeight,
+                   96, 48, 0x0000C0C0u);
+    }
     pfnKernel(&g_BootInfo);
 
     /* kmain_uefi is noreturn; if it returns, park the BSP. */

@@ -142,6 +142,15 @@ extern "C" {
  */
 #define GJ_SYS_SCSI              102
 
+/**
+ * Soft DDI door (nr 103) — userspace Linux-shaped driver hosts.
+ * Kernel source of truth: kernel/include/gj/syscall.h + gj/ddi_door.h.
+ * Soft≠product: scan/get/open/map_bar/cfg/dma notes (docs/DDI_SOFT.md).
+ *   arg0 = GJ_DDI_OP_* / DDI_OP_* (match kernel ddi_door.h)
+ * Greppable: GJ_SYS_DDI, gj_ddi, GJ_DDI_OP_
+ */
+#define GJ_SYS_DDI               103
+
 /* ---- HDA stream ops (arg0 of GJ_SYS_HDA_STREAM) ---- */
 /* Soft PCM path for hda_client: open → write → start → tick* → close. */
 #define GJ_HDA_OP_OPEN   0u /* arg1=ch arg2=rate_hz arg3=bits → 0/-errno */
@@ -163,6 +172,21 @@ extern "C" {
 /* 4 reserved (keep sparse; do not renumber 5/6) */
 #define GJ_SCSI_OP_READY     5u /* → 1 if transport ready */
 #define GJ_SCSI_OP_STATS     6u /* arg1=u32[2] door_io, ready */
+
+/* ---- DDI door ops (arg0 of GJ_SYS_DDI) — match kernel ddi_door.h ---- */
+/*
+ * Soft DDI ops for userspace driver hosts (docs/DDI_SOFT.md).
+ * Soft≠product. Numbers match kernel DDI_OP_* (do not renumber).
+ * Greppable: GJ_DDI_OP_
+ */
+#define GJ_DDI_OP_SCAN       1u /* → device count (devmgr_soft_pci_scan) */
+#define GJ_DDI_OP_GET        2u /* arg1=index arg2=user gj_ddi_dev_info* */
+#define GJ_DDI_OP_OPEN       3u /* arg1=index → soft handle id */
+#define GJ_DDI_OP_MAP_BAR    4u /* arg1=handle arg2=bar arg3=va_hint → 0 */
+#define GJ_DDI_OP_CFG_READ   5u /* arg1=handle arg2=offset → u32 */
+#define GJ_DDI_OP_DMA_NOTE   6u /* arg1=handle arg2=pa arg3=cb */
+#define GJ_DDI_OP_INVENTORY  7u /* once: ddi_door: soft product surface PASS */
+#define GJ_DDI_OP_CFG_WRITE 16u /* arg1=handle arg2=off arg3=val; careful soft */
 
 /* ---- Net door ops (arg0 of GJ_SYS_NET) — match kernel net_door.h ---- */
 /*
@@ -1012,6 +1036,75 @@ static inline long gj_scsi_ready(void)
 static inline long gj_scsi_stats(void *pU32x2)
 {
     return gj_scsi(GJ_SCSI_OP_STATS, (long)(uintptr_t)pU32x2, 0, 0);
+}
+
+/**
+ * Soft DDI door (GJ_SYS_DDI nr 103).
+ * Multiplex: op = GJ_DDI_OP_*; match kernel ddi_door.h.
+ * Dual MIT OR Apache-2.0. Greppable: gj_ddi, GJ_SYS_DDI, GJ_DDI_OP_
+ * Soft≠product (no live MMIO/IRQ/DMA cap mint).
+ */
+static inline long gj_ddi(unsigned op, unsigned long a1, unsigned long a2,
+                          unsigned long a3)
+{
+    return gj_syscall6(GJ_SYS_DDI, (long)op, (long)a1, (long)a2, (long)a3,
+                       0, 0);
+}
+
+/** Soft PCI scan → device count (may be 0 if scan deferred). */
+static inline long gj_ddi_scan(void)
+{
+    return gj_ddi(GJ_DDI_OP_SCAN, 0, 0, 0);
+}
+
+/** Soft get device row: index + user ptr to packed dev info → 0/-errno. */
+static inline long gj_ddi_get(unsigned uIdx, void *pInfo)
+{
+    return gj_ddi(GJ_DDI_OP_GET, (unsigned long)uIdx,
+                  (unsigned long)(uintptr_t)pInfo, 0);
+}
+
+/** Soft open inventory index → handle id (>0) or -errno. */
+static inline long gj_ddi_open(unsigned uIdx)
+{
+    return gj_ddi(GJ_DDI_OP_OPEN, (unsigned long)uIdx, 0, 0);
+}
+
+/**
+ * Soft MAP_BAR: handle + bar_idx + va_hint.
+ * Returns 0 on success (kernel UC VA soft-noted in serial; not i64).
+ */
+static inline long gj_ddi_map_bar(unsigned long uHandle, unsigned uBarIdx,
+                                  unsigned long uVaHint)
+{
+    return gj_ddi(GJ_DDI_OP_MAP_BAR, uHandle, (unsigned long)uBarIdx, uVaHint);
+}
+
+/** Soft CFG_READ: handle + dword offset → u32 or -errno. */
+static inline long gj_ddi_cfg_read(unsigned long uHandle, unsigned uOff)
+{
+    return gj_ddi(GJ_DDI_OP_CFG_READ, uHandle, (unsigned long)uOff, 0);
+}
+
+/** Soft CFG_WRITE note (careful soft; may not live-poke). */
+static inline long gj_ddi_cfg_write(unsigned long uHandle, unsigned uOff,
+                                    unsigned uVal)
+{
+    return gj_ddi(GJ_DDI_OP_CFG_WRITE, uHandle, (unsigned long)uOff,
+                  (unsigned long)uVal);
+}
+
+/** Soft DMA window note: handle + pa + cb. */
+static inline long gj_ddi_dma_note(unsigned long uHandle, unsigned long uPa,
+                                   unsigned long uCb)
+{
+    return gj_ddi(GJ_DDI_OP_DMA_NOTE, uHandle, uPa, uCb);
+}
+
+/** Soft inventory lamp once: ddi_door: soft product surface PASS. */
+static inline long gj_ddi_inventory(void)
+{
+    return gj_ddi(GJ_DDI_OP_INVENTORY, 0, 0, 0);
 }
 
 /**

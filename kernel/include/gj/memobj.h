@@ -26,6 +26,7 @@
  * ---------------------------------------
  *   G-MO-1   anon mmap → object + PTEs
  *   G-MO-3   named shareable maps (wine-shm / winesrv-shm / mfd:*)
+ *   FILE    soft file-backed mmap via vfs_ram fd snapshot (not live pager)
  *   G-MAP-2  USER map flags always forced on product maps
  *   region   fixed GJ_PROC_REGION_MAX table with soft full / reuse / overlap
  *   G-AS     process_as_ensure / process_as_activate (private CR3)
@@ -33,7 +34,7 @@
  * Object kinds
  * ------------
  *   ANON   — private-ish frames; shareable only if F_SHAREABLE
- *   FILE   — cold/pager (not fully wired in v1)
+ *   FILE   — soft snapshot from vfs_ram regular fd; full pager remains OPEN
  *   NAMED  — published in soft name table; multi-process map (G-MO-3)
  *
  * Layering
@@ -50,9 +51,14 @@
  *   memobj: share
  *   memobj: region table soft
  *   memobj: USER map
+ *   memobj: file map soft
+ *   memobj: file create soft
+ *   memobj: soft map_file PASS   — first soft vfs_ram file-map success
  *   wine-shm
  *
  * greppable: G-MO-1 G-MO-3 G-MAP-2 MEMOBJ_NAMED MEMOBJ_SHARE MEMOBJ_REGION
+ * greppable: MEMOBJ_FILE_SOFT
+ * greppable: memobj: soft map_file PASS
  */
 #pragma once
 
@@ -63,11 +69,12 @@
 struct gj_process;
 
 /**
- * Memory object kind (u32Kind). FILE is reserved for pager-backed cold path.
+ * Memory object kind (u32Kind). FILE soft path snapshots vfs_ram bytes;
+ * a live demand-pager remains OPEN (not product-complete).
  */
 enum gj_memobj_kind {
     GJ_MEMOBJ_ANON  = 1,
-    GJ_MEMOBJ_FILE  = 2, /* cold/pager — not fully wired in v1 */
+    GJ_MEMOBJ_FILE  = 2, /* soft vfs_ram snapshot; full pager OPEN */
     GJ_MEMOBJ_NAMED = 3, /* published in named registry (shareable) */
 };
 
@@ -116,6 +123,14 @@ void memobj_init(void);
 struct gj_memobj *memobj_create_anon(u32 cPages);
 
 /**
+ * Allocate a FILE-kind memory object with cPages zeroed frames (soft).
+ * Soft product only: no pager / no live fd binding — filled by map_file_fd.
+ * Returns NULL if cPages==0, > MAX, or PMM exhausted.
+ * greppable: memobj: file create soft
+ */
+struct gj_memobj *memobj_create_file(u32 cPages);
+
+/**
  * Destroy object frames + free pool slot.
  * Named objects should be unpublished first (or destroy clears named soft).
  * Caller must ensure no live maps (cMapped == 0) for hard safety; soft may
@@ -132,6 +147,21 @@ void memobj_destroy(struct gj_memobj *pObj);
  */
 gj_vaddr_t memobj_map_anon(struct gj_process *pProc, u64 u64Hint, size_t cbLen,
                            u32 u32Prot, int fFixed);
+
+/**
+ * Soft file-backed map from a live vfs_ram regular-file fd.
+ *
+ * Snapshot: pread file bytes at u64Off into a new FILE memobj, then install
+ * USER PTEs (G-MAP-2). Beyond-EOF bytes stay zero. Not a live pager — shared
+ * file mutations after map are not reflected (soft product path).
+ *
+ * Returns VA base or 0 when fd is not a ram regular file, length exceeds
+ * GJ_MEMOBJ_MAX_PAGES, offset unaligned, or map install fails.
+ * greppable: memobj: file map soft
+ */
+gj_vaddr_t memobj_map_file_fd(struct gj_process *pProc, i64 i64Fd, u64 u64Hint,
+                              size_t cbLen, u32 u32Prot, int fFixed,
+                              u64 u64Off);
 
 /**
  * Unmap VA range: drop regions + PTEs; free object if last map + not named.

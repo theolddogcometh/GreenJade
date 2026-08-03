@@ -30,6 +30,7 @@
  *
  * Greppable: "vmm: HHDM base=" "vmm: as_create" "vmm: as_destroy leaf="
  *            "vmm: COW break" "vmm: as_clone_user" "vmm: map_device_uc"
+ *            "vmm: soft user mmio map PASS"
  *            "vmm: ensure_identity_rw" (… soft PASS)
  *            "vmm: soft honesty" "vmm: soft inventory" "vmm: soft as"
  *            "vmm: soft cow" "vmm: soft hhdm" "vmm: soft device_uc"
@@ -48,9 +49,12 @@
  */
 #include <gj/apic.h>
 #include <gj/config.h>
+#include <gj/cpu.h>
 #include <gj/error.h>
 #include <gj/klog.h>
+#include <gj/memobj.h>
 #include <gj/pmm.h>
+#include <gj/process.h>
 #include <gj/string.h>
 #include <gj/user_access.h>
 #include <gj/vmm.h>
@@ -58,6 +62,8 @@
 #define PTE_P   (1ull << 0)
 #define PTE_W   (1ull << 1)
 #define PTE_U   (1ull << 2)
+#define PTE_PWT (1ull << 3) /* write-through — device UC pair with PCD */
+#define PTE_PCD (1ull << 4) /* cache disable — uncacheable-ish MMIO */
 #define PTE_PS  (1ull << 7) /* page size: 2MiB/1GiB */
 /* Available software bit — marks fork COW leaf (cleared on break). */
 #define PTE_COW (1ull << 9)
@@ -139,6 +145,10 @@ static u32 g_cSoftAsDestroyReject;
 static u32 g_cSoftDevUcReject;
 static u32 g_cSoftDevUcNomem;
 static u32 g_cSoftMapDevReject;
+static u32 g_cSoftUserMmioOk;     /* successful vmm_map_user_device pages */
+static u32 g_cSoftUserMmioCall;   /* vmm_map_user_device call count */
+static u32 g_cSoftUserMmioReject; /* inval/perm rejects */
+static u8  g_fSoftUserMmioPass;   /* one-shot greppable PASS lamp */
 static u32 g_cSoftEnsureReject;
 static u32 g_cSoftEnsureNomem;
 static u32 g_cSoftCowBreakNomem;
@@ -391,7 +401,11 @@ higher_half_soft_inventory(void)
     int fUserHalfEmptyGoal;
     int fTemplate;
     u64 u64Anon;
+    extern u32 serial_thre_dead(void);
 
+    if (serial_thre_dead() != 0u) {
+        return;
+    }
     vmm_soft_inc(&g_cHhSoftLogs);
     vmm_soft_inc(&g_cHhSoftPathNotes);
     vmm_soft_inc(&g_cHhSoftOpenLogs);
@@ -605,7 +619,12 @@ soft_inventory_log(void)
     int fHhdm;
     int fTemplate;
     int fSoftPass;
+    extern u32 serial_thre_dead(void);
 
+    if (serial_thre_dead() != 0u) {
+        kprintf("vmm: soft inventory SKIP (no COM1; panel path)\n");
+        return;
+    }
     vmm_soft_inc(&g_cSoftInvLogs);
     vmm_soft_note_peaks();
 
@@ -672,12 +691,15 @@ soft_inventory_log(void)
             (unsigned)GJ_VMM_SOFT_WAVE);
     cAreas++;
 
-    /* Grep: vmm: soft device_uc */
+    /* Grep: vmm: soft device_uc (incl. user-AS MMIO path tallies) */
     kprintf("vmm: soft device_uc maps=%u pages=%u pages_peak=%u "
             "reject=%u nomem=%u map_dev_reject=%u "
-            "base=0x%lx span=0x%lx wave=%u\n",
+            "user_mmio_call=%u user_mmio_ok_pages=%u user_mmio_reject=%u "
+            "user_mmio_pass=%u base=0x%lx span=0x%lx wave=%u\n",
             g_cMapDeviceUc, g_cMapDeviceUcPages, g_cMapDeviceUcPagesPeak,
             g_cSoftDevUcReject, g_cSoftDevUcNomem, g_cSoftMapDevReject,
+            g_cSoftUserMmioCall, g_cSoftUserMmioOk, g_cSoftUserMmioReject,
+            (unsigned)g_fSoftUserMmioPass,
             (unsigned long)GJ_DEVICE_MMIO_BASE,
             (unsigned long)GJ_DEVICE_MMIO_SPAN,
             (unsigned)GJ_VMM_SOFT_WAVE);
@@ -1939,7 +1961,14 @@ kprintf("vmm: soft retblendangle exclusive=1 soft_ne_product=1 product_kernel=OP
 static void
 soft_inventory_maybe_once(void)
 {
+    extern u32 serial_thre_dead(void);
+
     if (g_fSoftInvOnce != 0) {
+        return;
+    }
+    if (serial_thre_dead() != 0u) {
+        /* Panel path: never emit multi-KiB vmm soft inventory. */
+        g_fSoftInvOnce = 1;
         return;
     }
     if (g_cAsCreate == 0 && g_cMapDeviceUc == 0 && g_cCowBreak == 0 &&
@@ -2819,6 +2848,178 @@ vmm_map_page(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
     *pPte &= ~PTE_COW;
     vmm_tlb_flush_page(va);
     vmm_soft_inc(&g_cSoftMapOk);
+    return GJ_OK;
+}
+
+/*
+ * PA overlaps kernel image/BSS (identity-linked phys on bring-up). Soft
+ * reject for user device maps — never grant kernel text/data as MMIO.
+ */
+static int
+pa_overlaps_kernel_image(gj_paddr_t pa, u64 cb)
+{
+    extern char __kernel_start[];
+    extern char __kernel_end[];
+    u64 u64Ker0;
+    u64 u64Ker1;
+    u64 u64Pa0;
+    u64 u64Pa1;
+
+    u64Ker0 = (u64)(gj_vaddr_t)__kernel_start & ~((u64)GJ_PAGE_SIZE - 1ull);
+    u64Ker1 = ((u64)(gj_vaddr_t)__kernel_end + (u64)GJ_PAGE_SIZE - 1ull) &
+              ~((u64)GJ_PAGE_SIZE - 1ull);
+    u64Pa0 = (u64)pa & ~((u64)GJ_PAGE_SIZE - 1ull);
+    u64Pa1 = ((u64)pa + cb + (u64)GJ_PAGE_SIZE - 1ull) &
+             ~((u64)GJ_PAGE_SIZE - 1ull);
+    return (u64Pa0 < u64Ker1 && u64Pa1 > u64Ker0) ? 1 : 0;
+}
+
+/**
+ * Map one 4 KiB device page into the *active* CR3 as USER + UC + NX.
+ * Caller ensures alignment and AS activation.
+ */
+static gj_status_t
+vmm_map_page_user_device_uc(gj_vaddr_t va, gj_paddr_t pa, u32 u32Prot)
+{
+    u64 *pPte;
+    u64 u64F;
+
+    if ((va & (GJ_PAGE_SIZE - 1)) != 0 || (pa & (GJ_PAGE_SIZE - 1)) != 0) {
+        return GJ_ERR_INVAL;
+    }
+    if (va_in_kernel_identity(va)) {
+        return GJ_ERR_PERM;
+    }
+    /* Device MMIO: USER forced; EXEC always stripped (no W|X). */
+    u32Prot &= (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
+    u32Prot |= GJ_VMM_PROT_USER;
+    if ((u32Prot & (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE)) == 0) {
+        u32Prot |= GJ_VMM_PROT_READ;
+    }
+    pPte = walk_pte(va, 1);
+    if (pPte == NULL) {
+        return GJ_ERR_NOMEM;
+    }
+    u64F = prot_to_flags(u32Prot);
+    /* Force NX + PCD|PWT (same UC pattern as vmm_map_device_uc leaves). */
+    u64F |= PTE_NX | PTE_PCD | PTE_PWT;
+    *pPte = (pa & PTE_ADDR_MASK) | u64F;
+    *pPte &= ~PTE_COW;
+    vmm_tlb_flush_page(va);
+    return GJ_OK;
+}
+
+gj_status_t
+vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa, gj_paddr_t pa,
+                    u64 cb, u32 u32Prot)
+{
+    u64 u64Va;
+    u64 u64Pa;
+    u64 u64EndVa;
+    u64 u64Pages;
+    u64 iPage;
+    u64 u64SavedCr3;
+    gj_status_t st;
+    u32 u32MapProt;
+
+    vmm_soft_inc(&g_cSoftUserMmioCall);
+
+    if (pProc == NULL || cb == 0) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return GJ_ERR_INVAL;
+    }
+    /* Page-align: both VA and PA must be 4 KiB aligned. */
+    if ((u64UserVa & (u64)(GJ_PAGE_SIZE - 1)) != 0 ||
+        ((u64)pa & (u64)(GJ_PAGE_SIZE - 1)) != 0) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return GJ_ERR_INVAL;
+    }
+    /* Round length up to whole pages. */
+    u64Pages = (cb + (u64)GJ_PAGE_SIZE - 1ull) / (u64)GJ_PAGE_SIZE;
+    if (u64Pages == 0) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return GJ_ERR_INVAL;
+    }
+    /* Overflow-safe end checks. */
+    if (u64UserVa + u64Pages * (u64)GJ_PAGE_SIZE < u64UserVa ||
+        (u64)pa + u64Pages * (u64)GJ_PAGE_SIZE < (u64)pa) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return GJ_ERR_INVAL;
+    }
+    u64Va = u64UserVa;
+    u64Pa = (u64)pa;
+    u64EndVa = u64Va + u64Pages * (u64)GJ_PAGE_SIZE;
+
+    /* G-MAP-2 product user band only. */
+    if (u64Va < GJ_USER_VA_BASE || u64EndVa > GJ_USER_VA_END ||
+        u64EndVa < u64Va) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return GJ_ERR_INVAL;
+    }
+    /* Reject PA over kernel image/BSS (critical identity region). */
+    if (pa_overlaps_kernel_image(pa, u64Pages * (u64)GJ_PAGE_SIZE)) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        kprintf("vmm: map_user_device reject pa=0x%lx (kernel image)\n",
+                (unsigned long)pa);
+        return GJ_ERR_PERM;
+    }
+
+    /* USER forced; EXEC stripped — device maps never W|X. */
+    u32MapProt = u32Prot & (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE);
+    u32MapProt |= GJ_VMM_PROT_USER;
+    if ((u32MapProt & (GJ_VMM_PROT_READ | GJ_VMM_PROT_WRITE)) == 0) {
+        u32MapProt |= GJ_VMM_PROT_READ;
+    }
+
+    st = process_as_ensure(pProc);
+    if (st != GJ_OK) {
+        vmm_soft_inc(&g_cSoftUserMmioReject);
+        return st;
+    }
+
+    u64SavedCr3 = cpu_read_cr3();
+    process_as_activate(pProc);
+
+    for (iPage = 0; iPage < u64Pages; iPage++) {
+        st = vmm_map_page_user_device_uc(
+            (gj_vaddr_t)(u64Va + iPage * (u64)GJ_PAGE_SIZE),
+            (gj_paddr_t)(u64Pa + iPage * (u64)GJ_PAGE_SIZE), u32MapProt);
+        if (st != GJ_OK) {
+            while (iPage > 0) {
+                iPage--;
+                (void)vmm_unmap_page(
+                    (gj_vaddr_t)(u64Va + iPage * (u64)GJ_PAGE_SIZE));
+            }
+            /* Restore prior CR3 (keep process AS if it was already active). */
+            if ((u64SavedCr3 & ~0xfffull) == (pProc->u64Cr3 & ~0xfffull)) {
+                process_as_activate(pProc);
+            } else {
+                cpu_load_cr3(u64SavedCr3);
+            }
+            if (st == GJ_ERR_NOMEM) {
+                vmm_soft_inc(&g_cSoftMapNomem);
+            } else {
+                vmm_soft_inc(&g_cSoftUserMmioReject);
+            }
+            return st;
+        }
+    }
+
+    if ((u64SavedCr3 & ~0xfffull) == (pProc->u64Cr3 & ~0xfffull)) {
+        process_as_activate(pProc);
+    } else {
+        cpu_load_cr3(u64SavedCr3);
+    }
+
+    g_cSoftUserMmioOk += (u32)u64Pages;
+    /* Soft greppable once: product path lamp for UDX ioremap under GJ. */
+    if (g_fSoftUserMmioPass == 0) {
+        g_fSoftUserMmioPass = 1;
+        kprintf("vmm: soft user mmio map PASS va=0x%lx pa=0x%lx pages=%lu "
+                "prot=0x%x\n",
+                (unsigned long)u64Va, (unsigned long)u64Pa,
+                (unsigned long)u64Pages, (unsigned)u32MapProt);
+    }
     return GJ_OK;
 }
 

@@ -57,6 +57,18 @@ static struct udx_pci_driver *g_pPciDrivers;
 static struct udx_pci_bound  *g_pPciDevices;
 
 /*
+ * Freestanding DDI grant install pool (no libc heap).
+ * Soft bound: host-linux still uses malloc inject; this path is for
+ * GJ_SYS_DDI grants registered via udx_host_install_granted_pci.
+ */
+#if !defined(UDX_HOST_LIBC)
+#define UDX_PCI_FS_GRANT_MAX 8u
+static struct udx_pci_bound g_aFsBound[UDX_PCI_FS_GRANT_MAX];
+static struct udx_pci_dev   g_aFsPdev[UDX_PCI_FS_GRANT_MAX];
+static u8                   g_aFsGrantUsed[UDX_PCI_FS_GRANT_MAX];
+#endif
+
+/*
  * Soft PCI product inventory (Wave 126 exclusive deepen).
  * Cumulative for this process. greppable: udx: pci soft …
  * Never hard-gates; wrap OK if ever hit.
@@ -249,6 +261,8 @@ pci_soft_inventory_log(void)
      */
     pci_soft_emit("udx: pci soft path register=udx_pci_register_driver "
                   "inject=udx_host_inject_pci_ex "
+                  "grant=udx_host_install_granted_pci "
+                  "ddi_bind=udx_host_bind_by_id "
                   "enable=udx_pci_enable master=udx_pci_set_master "
                   "regions=udx_pci_request_regions "
                   "cfg=udx_pci_read_config_*/write_config_* "
@@ -610,6 +624,156 @@ udx_host_rescan_pci(void)
     for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
         pci_try_bind(pBound);
     }
+}
+
+/*
+ * Zero a freestanding bound slot (soft pool recycle).
+ */
+#if !defined(UDX_HOST_LIBC)
+static void
+pci_fs_bound_clear(struct udx_pci_bound *pBound)
+{
+    int iBar;
+
+    if (pBound == NULL) {
+        return;
+    }
+    for (iBar = 0; iBar < 6; iBar++) {
+        pBound->apBarHost[iBar] = NULL;
+    }
+    pBound->pPdev = NULL;
+    pBound->pDrv = NULL;
+    pBound->pNext = NULL;
+    pBound->u8Enabled = 0;
+    pBound->u8Master = 0;
+    pBound->u8Regions = 0;
+    pBound->u8Bound = 0;
+    pBound->szRegionName = NULL;
+    pBound->u8CfgLive = 0;
+}
+#endif
+
+/**
+ * Install a DDI-granted (or soft-granted) PCI function.
+ * BAR phys/len come from the grant; optional BAR0 VA is window-registered
+ * so udx_ioremap(granted_pa, len) works without host inject.
+ *
+ * greppable path: used by udx_host_bind_* (soft ddi bind PASS).
+ */
+udx_status_t
+udx_host_install_granted_pci(u16 u16Vendor, u16 u16Device,
+                             u16 u16SubVendor, u16 u16SubDevice,
+                             u32 u32Class,
+                             u8 u8Bus, u8 u8Devfn, int nIrq,
+                             const u64 *aBarPhys, const u64 *aBarLen,
+                             const u8 *aBarIsMem, void *pBar0Va,
+                             struct udx_pci_dev **ppOut)
+{
+    struct udx_pci_bound *pBound;
+    struct udx_pci_dev *pPdev;
+    int iBar;
+#if !defined(UDX_HOST_LIBC)
+    u32 iSlot;
+#endif
+
+    if (aBarPhys == NULL || aBarLen == NULL) {
+        return UDX_ERR_INVAL;
+    }
+
+    /* Reject duplicate BDF. */
+    for (pBound = g_pPciDevices; pBound != NULL; pBound = pBound->pNext) {
+        if (pBound->pPdev &&
+            pBound->pPdev->u8Bus == u8Bus &&
+            pBound->pPdev->u8Devfn == u8Devfn) {
+            return UDX_ERR_BUSY;
+        }
+    }
+
+#if defined(UDX_HOST_LIBC)
+    pBound = (struct udx_pci_bound *)calloc(1, sizeof(*pBound));
+    pPdev = (struct udx_pci_dev *)calloc(1, sizeof(*pPdev));
+    if (pBound == NULL || pPdev == NULL) {
+        free(pBound);
+        free(pPdev);
+        return UDX_ERR_NOMEM;
+    }
+#else
+    pBound = NULL;
+    pPdev = NULL;
+    for (iSlot = 0; iSlot < UDX_PCI_FS_GRANT_MAX; iSlot++) {
+        if (!g_aFsGrantUsed[iSlot]) {
+            g_aFsGrantUsed[iSlot] = 1;
+            pBound = &g_aFsBound[iSlot];
+            pPdev = &g_aFsPdev[iSlot];
+            pci_fs_bound_clear(pBound);
+            /* Soft zero pdev fields. */
+            {
+                u8 *pBytes = (u8 *)(void *)pPdev;
+                u32 iByte;
+                for (iByte = 0; iByte < (u32)sizeof(*pPdev); iByte++) {
+                    pBytes[iByte] = 0;
+                }
+            }
+            break;
+        }
+    }
+    if (pBound == NULL || pPdev == NULL) {
+        return UDX_ERR_NOMEM;
+    }
+#endif
+
+    pPdev->u16Vendor = u16Vendor;
+    pPdev->u16Device = u16Device;
+    pPdev->u16SubVendor = u16SubVendor;
+    pPdev->u16SubDevice = u16SubDevice;
+    pPdev->u32Class = u32Class & 0x00ffffffu;
+    pPdev->u8Bus = u8Bus;
+    pPdev->u8Devfn = u8Devfn;
+    pPdev->nIrq = nIrq;
+    pBound->pPdev = pPdev;
+
+    for (iBar = 0; iBar < 6; iBar++) {
+        u64 u64Len = aBarLen[iBar];
+        u8 u8Mem = aBarIsMem ? aBarIsMem[iBar] : 1;
+
+        pPdev->aBarIsMem[iBar] = u8Mem ? 1u : 0u;
+        pPdev->aBarLen[iBar] = u64Len;
+        pPdev->aBarPhys[iBar] = (u64Len != 0) ? aBarPhys[iBar] : 0;
+        pBound->apBarHost[iBar] = NULL;
+    }
+
+    /*
+     * Wire ioremap path: granted BAR0 PA → process VA window.
+     * udx_ioremap(phys, len) looks up this window (host + freestanding).
+     */
+    if (pBar0Va != NULL && pPdev->aBarLen[0] != 0 &&
+        pPdev->aBarPhys[0] != 0) {
+        udx_host_window_register(pPdev->aBarPhys[0], pBar0Va,
+                                 pPdev->aBarLen[0]);
+        pBound->apBarHost[0] = pBar0Va; /* bookkeeping; not free'd on FS */
+    }
+
+    pci_cfg_init(pBound);
+
+    pBound->pNext = g_pPciDevices;
+    g_pPciDevices = pBound;
+
+    udx_printk("udx: grant pci %04x:%04x bus %u devfn %u irq %d "
+               "bar0_pa=%llx bar0_len=%llx bar0_va=%s\n",
+               u16Vendor, u16Device, (unsigned)u8Bus, (unsigned)u8Devfn,
+               nIrq,
+               (unsigned long long)pPdev->aBarPhys[0],
+               (unsigned long long)pPdev->aBarLen[0],
+               (pBar0Va != NULL) ? "mapped" : "none");
+
+    pci_try_bind(pBound);
+
+    if (ppOut) {
+        *ppOut = pPdev;
+    }
+    pci_soft_count_lists();
+    pci_soft_maybe_once();
+    return UDX_OK;
 }
 
 udx_status_t

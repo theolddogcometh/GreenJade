@@ -44,6 +44,7 @@
  *   VMM_AS_DESTROY     — free user tables + private leaves; not boot AS
  *   VMM_COW            — share RO+COW; break on write fault
  *   VMM_MAP_DEVICE_UC  — high UC BAR window for T1 soft CAP
+ *   VMM_MAP_USER_DEVICE — user-AS UC MMIO (UDX ioremap product path)
  *   VMM_ENSURE_ID_RW   — repair RO identity leaves before BSS stores
  *
  * Active-CR3 rule (normative for map/unmap/protect/translate)
@@ -61,15 +62,19 @@
  *   vmm: COW break … free_old|PASS  (also live=/frees=)
  *   vmm: as_clone_user … cow= rocopy= cow_live=
  *   vmm: map_device_uc … pages= soft PASS
+ *   vmm: soft user mmio map PASS   — first user-AS device MMIO map
  *   vmm: ensure_identity_rw … fixed= dual= soft PASS
  *
  * greppable: VMM_HHDM VMM_AS_CREATE VMM_AS_DESTROY VMM_COW G-AS
- * greppable: VMM_MAP_DEVICE_UC VMM_ENSURE_ID_RW P-MEM-5 G-MAP
+ * greppable: VMM_MAP_DEVICE_UC VMM_MAP_USER_DEVICE VMM_ENSURE_ID_RW
+ * greppable: P-MEM-5 G-MAP "vmm: soft user mmio map PASS"
  */
 #pragma once
 
 #include <gj/error.h>
 #include <gj/types.h>
+
+struct gj_process;
 
 /* ---- Protection bits (leaf PTE intent) ---------------------------------- */
 /*
@@ -256,3 +261,29 @@ gj_status_t vmm_map_device(gj_paddr_t pa, u64 cb);
  * (or soft reject). Span limited by GJ_DEVICE_MMIO_SPAN (config).
  */
 gj_status_t vmm_map_device_uc(gj_paddr_t pa, u64 cb, gj_vaddr_t *pVaOut);
+
+/**
+ * Map physical MMIO pages into a user process address space (driver hosts).
+ *
+ * Product path for UDX ioremap under GJ: install 4 KiB USER + UC (PCD|PWT)
+ * leaves under the process private CR3 so a userspace driver host can access
+ * BAR/MMIO without kernel identity maps. Kernel-half map_device_uc remains
+ * the soft CAP probe path; this is the process-local grant install helper.
+ *
+ * Preconditions / policy:
+ *   - pProc non-NULL; ensures private AS (process_as_ensure) and activates it
+ *   - u64UserVa and pa page-aligned; cb > 0 (rounded up to pages)
+ *   - VA span entirely in [GJ_USER_VA_BASE, GJ_USER_VA_END) (G-MAP-2 band)
+ *   - PA span must not overlap kernel image/BSS phys (identity link range)
+ *   - Always forces GJ_VMM_PROT_USER; always NX (no W|X — EXEC stripped)
+ *   - Leaf PTE gets PCD|PWT UC attributes (same pattern as map_device_uc)
+ *   - u32Prot may request READ and/or WRITE; empty rights default to READ
+ *
+ * Does not allocate frames (PA is device/MMIO). Does not free on unmap —
+ * caller unmaps via vmm_unmap_page / process teardown. Soft greppable once:
+ *   `vmm: soft user mmio map PASS`
+ *
+ * Returns GJ_OK, or GJ_ERR_INVAL / GJ_ERR_PERM / GJ_ERR_NOMEM.
+ */
+gj_status_t vmm_map_user_device(struct gj_process *pProc, u64 u64UserVa,
+                                gj_paddr_t pa, u64 cb, u32 u32Prot);

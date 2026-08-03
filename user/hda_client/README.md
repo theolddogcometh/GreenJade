@@ -264,3 +264,5 @@ hda_client-gj: soft suite PASS
 hda_client-gj: live path PASS
 hda_client: live spawn PASS
 ```
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

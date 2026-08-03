@@ -86,12 +86,54 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 
 ---
 
+## ABI-first + laptop Linux drivers (G752VT)
+
+Product direction is **ABI-first**, not freestanding class-driver thrash:
+
+| Layer | Role | Claim |
+|-------|------|--------|
+| **Linux-shaped userspace** | Option C ABI, libcgj, servers | Product path for apps |
+| **DDI / UDX hosts** | Cap-gated PCI / IRQ / DMA (soft → product) | Dual MIT/Apache drivers out of TCB |
+| **Soft module path** | Load host-collected `.ko` (e.g. embedded `r8169`) via ksym + soft PCI/netdev | **Soft ≠ product**; **G-AC-1** no `.ko` product AC |
+| **Freestanding lab** | `rtl8168` / `xhci_msc` stages, GOP STATUS pane | Lab inventory only |
+| **T0 product net** | **virtio-net** (QEMU / virt) | Remains product NIC |
+
+**First DUT:** ASUS ROG **G752VT** — NIC `10ec:8168`, xHCI `8086:a12f`, lab static **10.200.125.50**.
+
+```sh
+make collect-linux-drivers   # host .ko → build/linux-drivers/ (+ NEEDED-DRIVERS)
+make hwtest-img              # → build/greenjade-hwtest.img (ESP + GJ-PERSIST)
+sudo ./scripts/install-hwtest-usb.sh /dev/sdX
+```
+
+On boot, GOP **STATUS (STATIC)** holds track module path (soft):
+
+| Hold | Example |
+|------|---------|
+| 7 | `ksym n=…` |
+| 8 | `mod r8169 LOAD ok init=0` |
+| 9 | `netdev soft N` (want ≥1 after id_table stride fix) |
+| 10 | `probe 10ec:8168 soft` \| `miss` |
+| 11 | `pci reg=… match=…` |
+| 12–13 | xHCI soft SKIP when host `xhci_pci` is **builtin** (no `.ko`) |
+
+Soft load of RHEL-class `r8169.ko` needs **40-byte** `pci_device_id` rows (fixed). Real `.ko` **probe** still needs host-shaped `pci_dev` (see [docs/PCI_DEV_SOFT_LAYOUT.md](docs/PCI_DEV_SOFT_LAYOUT.md)). Soft EMU bind proves match + soft netdev without calling Linux probe.
+
+---
+
 ## Docs
 
 | Doc | Purpose |
 |-----|---------|
 | [Architecture](docs/GREENJADE_KERNEL_SPEC.md) | Project law, product bars, milestones |
 | [**Design complete freeze**](docs/DESIGN_SPEC_COMPLETE.md) | Isolation, doors, AC, matrix, locks, clean-room |
+| [**ABI-first pivot**](docs/ABI_FIRST_PIVOT.md) | Strategy: ABI + DDI + host drivers over freestanding thrash |
+| [ABI wave status](docs/ABI_WAVE_STATUS.md) | Soft wave lamps / module path status |
+| [Linux module path](docs/LINUX_MODULE_PATH.md) | Soft `.ko` loader, ksym, r8169 embed, xHCI builtin |
+| [Laptop Linux driver host](docs/LAPTOP_LINUX_DRIVER_HOST.md) | G752VT collect / stage / STATUS expectations |
+| [DDI soft](docs/DDI_SOFT.md) | Soft DDI door / devmgr inventory |
+| [PCI soft layout](docs/PCI_DEV_SOFT_LAYOUT.md) | Soft vs host `pci_dev` for real probe |
+| [G752VT Linux hwtest](docs/G752VT_LINUX_HWTEST.md) | DUT map + freestanding vs Linux inventory |
 | [Security core](docs/SECURITY_CORE_DESIGN.md) | Caps, revoke, IPC, SMP, quotas |
 | [Cap addressing](docs/CAP_ADDRESSING.md) | Scheme A; root meta; pager |
 | [Proton personality](docs/PROTON_PERSONALITY.md) | Deck Top 50; clean-room Linux ABI |
@@ -102,12 +144,13 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 | [Solaris remaining](docs/SOLARIS_STYLE_REMAINING.md) | Untyped, CDT, map cookie |
 | [x86_64 Intel platform](docs/X86_64_INTEL_PLATFORM.md) | UEFI, VT-d, x2APIC, TSC |
 | [HCL](docs/HCL.md) | Hardware tiers T0–T3 + install checklist |
+| [HW test tomorrow](docs/HWTEST_TOMORROW.md) | Operator checklist for DUT media |
 | [UDX Linux porter](docs/UDX_LINUX_PORTER.md) | Userspace driver API |
 | [Implementation](docs/IMPLEMENTATION.md) / [TODO](docs/TODO.md) | Coding phases |
 | [Deck Top 50 matrix](matrix/deck-top50-TEMPLATE.md) | Adoption tracking |
 | [STYLE](STYLE.md) · [LICENSE](LICENSE) | Style · dual MIT/Apache |
 
-Driver hosts use **UDX** (`user/udx/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.
+Driver hosts use **UDX** (`user/udx/`) and soft DDI (`user/drivers/`) — Linux-shaped `probe` / `irq` / `dma` / `mmio` with caps hidden; see the UDX guide.
 
 ---
 

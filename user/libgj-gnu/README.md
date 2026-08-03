@@ -129,3 +129,5 @@ cc -c -std=c11 -ffreestanding -fno-builtin -fno-stack-protector \
 | `user/ld-gj/` | Userspace dynlinker; resolves `gj_gnu_export` via GNU hash |
 | `kernel/proc/elf_load.c` | Kernel multi-SO GNU-hash lookup / smoke |
 | `kernel/fs/vfs_ram.c` | Placeholder seed paths until real ELF is staged |
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

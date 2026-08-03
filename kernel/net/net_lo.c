@@ -1764,6 +1764,128 @@ net_lo_fd_ok(i64 i64Fd)
     return g_aSocks[u32Slot].u8Used;
 }
 
+/*
+ * Linux poll bit numbers (same as EPOLLIN/OUT/ERR/HUP on x86).
+ * Cold-path query only — net_lo table state, no vfs_ram/protonrt.
+ */
+#define LO_POLLIN  0x0001u
+#define LO_POLLOUT 0x0004u
+#define LO_POLLERR 0x0008u
+#define LO_POLLHUP 0x0010u
+
+/** Soft RX free space: 1 if push_rx would accept ≥1 byte. */
+static int
+lo_rx_has_space(u32 u32Slot)
+{
+    struct net_lo_sock *pS;
+    u32 u32Cap;
+
+    if (u32Slot >= NET_LO_MAX || !g_aSocks[u32Slot].u8Used) {
+        return 0;
+    }
+    pS = &g_aSocks[u32Slot];
+    u32Cap = NET_LO_BUF;
+    if (pS->u32RcvBuf > 0 && pS->u32RcvBuf < u32Cap) {
+        u32Cap = pS->u32RcvBuf;
+    }
+    return pS->u32RxLen < u32Cap ? 1 : 0;
+}
+
+/**
+ * Linux-shaped readiness for poll/epoll cold path (loopback sockets).
+ *
+ * POLLIN:  RX data, accept pending, or EOF (RD shut / peer half-close).
+ * POLLOUT: WR open and destination ring has space (peer or self unpaired).
+ * POLLHUP: both directions shut, or peer gone with drained RX.
+ * POLLERR: reserved soft (no RST surface); not set on live slots.
+ *
+ * Returns 0 if fd is not a live net_lo socket. ERR/HUP always surface;
+ * IN/OUT filtered by u32Want (0 → default IN|OUT interest).
+ */
+u32
+net_lo_poll_mask(i64 i64Fd, u32 u32Want)
+{
+    u32 u32Slot;
+    u32 u32Got = 0;
+    struct net_lo_sock *pS;
+    i16 i16Peer;
+    static u8 g_u8PollMaskOnce;
+
+    if (!net_lo_fd_ok(i64Fd)) {
+        return 0;
+    }
+    u32Slot = (u32)(i64Fd - NET_FD_BASE);
+    pS = &g_aSocks[u32Slot];
+
+    /* Listener: POLLIN when accept() would not EAGAIN. */
+    if (pS->u8Listening) {
+        i16Peer = pS->i16Peer;
+        if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+            g_aSocks[i16Peer].u8Used) {
+            u32Got |= LO_POLLIN;
+        } else if (pS->u8Pending > 0) {
+            u32Got |= LO_POLLIN;
+        }
+        /* Listeners are not writeable soft. */
+    } else {
+        /* Connected / unbound / half-closed: data or EOF readable. */
+        if (pS->u32RxLen > 0) {
+            u32Got |= LO_POLLIN;
+        } else if (pS->u8ShutRd) {
+            /* Empty ring + RD shut → EOF-shaped POLLIN. */
+            u32Got |= LO_POLLIN;
+        }
+
+        /*
+         * Writeable when send path accepts data: local WR open and
+         * destination ring has free space. Unpaired → self ring (dgram smoke).
+         */
+        if (!pS->u8ShutWr) {
+            i16Peer = pS->i16Peer;
+            if (i16Peer >= 0 && (u32)i16Peer < NET_LO_MAX &&
+                g_aSocks[i16Peer].u8Used) {
+                if (lo_rx_has_space((u32)i16Peer)) {
+                    u32Got |= LO_POLLOUT;
+                }
+            } else if (lo_rx_has_space(u32Slot)) {
+                /* Unpaired / peer gone: self-loop path still accepts. */
+                u32Got |= LO_POLLOUT;
+            }
+        }
+
+        /*
+         * HUP when both directions shut, or peer half-closed us with no RX
+         * left and local WR also shut. Peer gone alone keeps POLLOUT soft
+         * until RD drained; once RD shut + empty → HUP with POLLIN EOF.
+         */
+        if (pS->u8ShutRd && pS->u8ShutWr) {
+            u32Got |= LO_POLLHUP;
+        } else if (pS->u8ShutRd && pS->u32RxLen == 0 &&
+                   (pS->i16Peer < 0 ||
+                    (u32)pS->i16Peer >= NET_LO_MAX ||
+                    !g_aSocks[pS->i16Peer].u8Used)) {
+            u32Got |= LO_POLLHUP;
+        }
+    }
+
+    /* Grep: net_lo: soft poll_mask (once) */
+    if (!g_u8PollMaskOnce) {
+        g_u8PollMaskOnce = 1;
+        kprintf("net_lo: soft poll_mask ready=0x%x fd=%lld want=0x%x "
+                "listen=%u rx=%u pend=%u shut_rd=%u shut_wr=%u\n",
+                (unsigned)u32Got, (long long)i64Fd, (unsigned)u32Want,
+                (unsigned)pS->u8Listening, (unsigned)pS->u32RxLen,
+                (unsigned)pS->u8Pending, (unsigned)pS->u8ShutRd,
+                (unsigned)pS->u8ShutWr);
+    }
+
+    /* ERR/HUP always surface; IN/OUT only if requested (or want==0). */
+    if (u32Want == 0) {
+        return u32Got;
+    }
+    return (u32Got & (LO_POLLERR | LO_POLLHUP)) | (u32Got & u32Want);
+}
+
 i64
 net_lo_socket(int nDomain, int nType, int nProto)
 {

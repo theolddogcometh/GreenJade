@@ -147,6 +147,13 @@ u64  timer_mono_nsec_soft(void);
 /** Nanoseconds accounted per tick (PIT divisor period or APIC period). */
 u64  timer_nsec_per_tick(void);
 
+/**
+ * Unmask PIC IRQ0 and enable CPU interrupts (sti).
+ * Call after timer_init() and preferably after apic_init() — not inside
+ * timer_init (G752 bare-metal faulted on early sti + first IRQ0).
+ */
+void timer_irq_enable(void);
+
 /** Raw tick counter advanced by the active mono source. */
 u64  timer_jiffies(void);
 

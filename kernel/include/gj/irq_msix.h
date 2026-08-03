@@ -15,6 +15,18 @@
  * global MSI-X Notification. Path tags attribute last pulse for stats.
  * greppable: MSI-X soft pulse path
  *
+ * Driver-host wait path (soft ≠ product IRQ cap mint; same shape as product):
+ *   1) Soft-bind (optional): irq_msix_soft_user_bind / DDI_OP_IRQ_BIND
+ *      records handle → badge mask (note only; no hard IRQ in userspace).
+ *   2) Fire: irq_msix_soft_inject / PLATFORM_INFO op3 / table soft fire /
+ *      hard IRQ → notify_pulse on notify_msix_global().
+ *   3) Wait: GJ_SYS_NOTIFY_WAIT
+ *        arg0 = GJ_NOTIFY_WHICH_MSIX_GLOBAL (0)
+ *        arg1 = badge mask  (e.g. GJ_MSIX_BADGE_SOFT | 0x7 smoke)
+ *        arg2 = block       (0=poll, 1=block until matching pulse)
+ *      → returns CAS-cleared matched pending bits (unsigned in rax).
+ * greppable: irq_msix: soft user notify PASS
+ *
  * Badge bits (OR into Notification pending):
  *   GJ_MSIX_BADGE_SOFT  — soft inject (bit 0)
  *   GJ_MSIX_BADGE_HW    — hw-sim pulse (bit 1)
@@ -28,6 +40,7 @@
  *   MSI-X soft pulse path
  *   notify: MSI-X IRQ PASS (with notify bind)
  *   irq_msix soft path exercise PASS
+ *   irq_msix: soft user notify PASS
  */
 #pragma once
 
@@ -68,8 +81,26 @@ void irq_msix_handler(void);
 /**
  * Software inject (smoke / host inject without device fire).
  * OR @u64Badge into the MSI-X Notification; updates soft count / last path.
+ * When a soft user bind is live and pending matches the bind mask, emits
+ * greppable "irq_msix: soft user notify PASS" (once-shot lamp).
  */
 void irq_msix_soft_inject(u64 u64Badge);
+
+/**
+ * Soft-record driver-host IRQ note: handle → badge mask.
+ * Soft ≠ product: no CNode IRQ Notification mint; global MSI-X notify only.
+ * u64BadgeMask 0 → GJ_MSIX_BADGE_SOFT. u32Handle 0 clears the soft note.
+ * Returns 0 if ready (or clear), -1 if IRQ path not ready.
+ * greppable path: ddi: soft irq note PASS (via DDI_OP_IRQ_BIND)
+ */
+int irq_msix_soft_user_bind(u32 u32Handle, u64 u64BadgeMask);
+
+/** Soft-bound DDI handle id (0 = unbound); stats. */
+u32 irq_msix_soft_user_handle(void);
+/** Soft-bound badge wait mask; stats. */
+u64 irq_msix_soft_user_mask(void);
+/** Lifetime soft user-notify match hits (after inject with bind live). */
+u32 irq_msix_soft_user_notify_hits(void);
 
 /**
  * Soft pulse path: inject badge on the MSI-X Notification, track last badge

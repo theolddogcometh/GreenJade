@@ -1965,6 +1965,10 @@ gj_linux_dispatch_init(void)
     set_cold(LINUX_NR_userfaultfd);
     set_cold(LINUX_NR_seccomp);
     set_cold(LINUX_NR_bpf);
+    /* Soft module load path (protonrt_cold_link → linux_module_load_mem). */
+    set_cold(LINUX_NR_init_module);   /* 175 */
+    set_cold(LINUX_NR_delete_module); /* 176 */
+    set_cold(LINUX_NR_finit_module);  /* 313 */
     set_cold(LINUX_NR_keyctl);
     set_cold(LINUX_NR_add_key);
     set_cold(LINUX_NR_request_key);

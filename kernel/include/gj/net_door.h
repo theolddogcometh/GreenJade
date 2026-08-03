@@ -35,14 +35,41 @@
  *   STREAM multi-seg chunking is internal to net_tcp_send; door clamps.
  *
  * Socket path vs virtio path:
- *   SOCKET..ACCEPT / TCP_STATS  → net_lo + net_tcp interim tables
- *   POLL / VIRTIO_* / ring ops  → virtio-net + net_eth demux
+ *   SOCKET..ACCEPT / SOCK_POLL / TCP_STATS → net_lo + net_tcp interim tables
+ *   POLL / VIRTIO_* / ring ops            → virtio-net + net_eth demux
  *   netstackd CLAIM then owns ring MAP/KICK/AVAIL programming (UDX)
+ *
+ * Product interim TCP surface (prefer native GJ_SYS_NET over Linux NRs):
+ *   SOCKET / BIND / LISTEN / ACCEPT / CONNECT / SEND / RECV / CLOSE /
+ *   TCP_STATS / SOCK_POLL  — freestanding sshd + netstackd primary path.
+ *
+ * Opcode matrix vs net_tcp_* (product interim):
+ *   GJ_NET_OP_SOCKET    → net_tcp_socket      (SOCK_STREAM; DGRAM→net_lo)
+ *   GJ_NET_OP_BIND      → net_tcp_bind        (port host-order u16)
+ *   GJ_NET_OP_LISTEN    → net_tcp_listen      (soft backlog clamp)
+ *   GJ_NET_OP_ACCEPT    → net_tcp_accept      (-EAGAIN if empty)
+ *   GJ_NET_OP_CONNECT   → net_tcp_connect     (local listener SYN soft)
+ *   GJ_NET_OP_SEND      → net_tcp_send        (multi-seg MSS inside)
+ *   GJ_NET_OP_RECV      → net_tcp_recv        (short OK; 0=EOF soft)
+ *   GJ_NET_OP_CLOSE     → net_tcp_close       (soft FIN / free slot)
+ *   GJ_NET_OP_TCP_STATS → accepts/segs|rtx/rx_b/tx_b getters
+ *   GJ_NET_OP_SOCK_POLL → net_tcp_poll_mask   (POLLIN/OUT/ERR/HUP)
+ *   GJ_NET_OP_POLL      → net_eth_poll        (→ net_tcp_input + net_tcp_poll)
+ *
+ * Soft gaps (no clean door op / not thrashing product ABI — soft≠product):
+ *   net_tcp_init        — kmain only (not a door op)
+ *   net_tcp_fd_ok       — door-internal routing helper (not exported)
+ *   net_tcp_input       — eth demux internal (via POLL)
+ *   net_tcp_poll        — idle rtx/TW reap internal (via POLL)
+ *   net_tcp_tw_reaps    — soft backend inventory only (TCP_STATS ABI full)
+ *   shutdown / sockopt / getsockname — no net_tcp_* yet (linux_cold soft)
+ *   rtl8168 freestanding — out of door scope (do not thrash)
  *
  * Greppable product markers (main / netstackd; keep ABI stable):
  *   net_door: PASS / ownership PASS / socket path PASS /
  *   virtio queue PASS / ring map PASS / avail push PASS / user ring PASS
  *   net_door claim soft
+ * Soft TCP surface lamp (inventory): net_door: soft tcp product surface PASS
  */
 #pragma once
 
@@ -68,7 +95,7 @@
 #define GJ_NET_OP_CONNECT 7u
 /** close: arg1=fd — soft FIN on TCP ESTABLISHED/CLOSE_WAIT */
 #define GJ_NET_OP_CLOSE  8u
-/** listen: arg1=fd — store/clamp soft backlog */
+/** listen: arg1=fd arg2=backlog — store/clamp soft backlog */
 #define GJ_NET_OP_LISTEN 9u
 /**
  * claim: arg1=non-zero 32-bit token — netstackd ownership.
@@ -141,8 +168,21 @@
  * Used by product sshd after LISTEN + client CONNECT on net_lo / net_tcp.
  */
 #define GJ_NET_OP_ACCEPT 25u
-/** TCP_STATS: arg1=user u32[4] {accepts, segs, rx_bytes, tx_bytes} */
+/**
+ * TCP_STATS: arg1=user u32[4]
+ *   [0] accepts
+ *   [1] low16=segments, high16=retransmits
+ *   [2] rx_bytes
+ *   [3] tx_bytes (full 32-bit)
+ * Soft gap: tw_reaps only in soft backend inventory (ABI full; soft≠product).
+ */
 #define GJ_NET_OP_TCP_STATS 26u
+/**
+ * SOCK_POLL: arg1=fd arg2=want (POLLIN=1 POLLOUT=4 POLLERR=8 POLLHUP=0x10)
+ * → readiness mask bits via net_tcp_poll_mask. Non-TCP fd → 0 soft.
+ * Freestanding poll preference over Linux NR poll for interim TCP FDs.
+ */
+#define GJ_NET_OP_SOCK_POLL 27u
 
 /**
  * One-shot init of ownership/soft counters. Safe to re-call (idempotent soft).

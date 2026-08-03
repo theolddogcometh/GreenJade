@@ -1479,15 +1479,28 @@ boot_install_identity_4gib(void)
             u64Cr3Read == u64Cr3Expect, (unsigned)cLeaves,
             (unsigned)g_cSoftIdentityInstall, (unsigned)IDMAP_SOFT_WAVE);
 
-    /* Grep: identity: soft … (Wave 20 exclusive soft inventory deepen) */
-    identity_soft_inventory(u64Cr3Expect, u64Cr3Read, cLeaves);
-
     /*
-     * Soft UEFI handoff deepen: GOP / memmap / handoff markers once serial
-     * is up and identity is ours. Multiboot does not call this function.
+     * Full soft inventory is multi-KiB of kprintf. On DUTs without COM1
+     * (G752 panel path) that hung after the white kmain bar even with a
+     * spin cap. Keep deepen for Multiboot/OVMF serial only.
      */
-    pBi = boot_info_get();
-    if (pBi != NULL && pBi->u32Source == GJ_BOOT_SRC_UEFI) {
-        boot_info_soft_log(pBi);
+    {
+        extern u32 serial_thre_dead(void);
+
+        if (serial_thre_dead() == 0u) {
+            /* Grep: identity: soft … (Wave 20 exclusive soft inventory deepen) */
+            identity_soft_inventory(u64Cr3Expect, u64Cr3Read, cLeaves);
+            /*
+             * Soft UEFI handoff deepen: GOP / memmap / handoff markers once
+             * serial is up and identity is ours. Multiboot does not call here.
+             */
+            pBi = boot_info_get();
+            if (pBi != NULL && pBi->u32Source == GJ_BOOT_SRC_UEFI) {
+                boot_info_soft_log(pBi);
+            }
+        } else {
+            kprintf("identity: soft inventory SKIP (no COM1 THRE; panel path)\n");
+            (void)pBi;
+        }
     }
 }

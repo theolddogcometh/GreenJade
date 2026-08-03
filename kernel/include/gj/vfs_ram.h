@@ -21,7 +21,8 @@
  *
  * FD policy:
  *   open returns fd ≥ 3 or -errno; kinds RAM/BLK/SCSI/PIPE/EVENTFD/…
- *   poll/epoll readiness via vfs_ram_poll_mask (Linux-shaped ERR/HUP bits)
+ *   poll/epoll readiness via vfs_ram_poll_mask (Linux-shaped ERR/HUP bits);
+ *   net_lo (64..79) / net_tcp (96..111) routed out of table for mixed sets
  *
  * Greppable: vfs_ram / cold FS / linux: io_uring … via this surface
  */
@@ -208,12 +209,15 @@ i64 vfs_ram_epoll_create1(int nFlags);
  * epoll_ctl: nOp 1=ADD 2=DEL 3=MOD.
  * u32Events: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10;
  *            EPOLLRDHUP=0x2000 EPOLLONESHOT=0x40000000 (honoured in wait).
+ * Target fd may be vfs_ram special/pipe/eventfd/… or net_lo / net_tcp
+ * (mixed interest lists for daemon loops). Nested epoll rejected soft.
  */
 i64 vfs_ram_epoll_ctl(i64 i64Ep, int nOp, i64 i64Fd, u32 u32Events, u64 u64Data);
 
 /**
  * epoll_wait: fill packed {u32 events; u64 data} records (12 bytes each).
  * nTimeout ignored (non-blocking probe). EPOLLONESHOT disables after fire.
+ * Readiness via vfs_ram_poll_mask (net route + pipe/eventfd/… bits).
  * Returns ready count or -errno.
  */
 i64 vfs_ram_epoll_wait(i64 i64Ep, void *pEvents, int nMax, int nTimeout);
@@ -253,9 +257,20 @@ i64 vfs_ram_copy_file_range(i64 i64In, u64 *pOffIn, i64 i64Out, u64 *pOffOut,
                             size_t cb);
 
 /**
- * poll readiness mask for an fd.
+ * poll readiness mask for an fd (cold poll/epoll/io_uring POLL_ADD path).
+ *
  * Bits: EPOLLIN=1 EPOLLOUT=4 EPOLLERR=8 EPOLLHUP=0x10 EPOLLRDHUP=0x2000.
  * ERR/HUP/RDHUP are returned even when not present in u32Want (Linux-shaped).
+ * u32Want==0 → default interest EPOLLIN|EPOLLOUT for the table that owns fd.
+ *
+ * Routing (ABI-first mixed sets for daemon loops):
+ *   vfs_ram live fd  → pipes, eventfd, timerfd, signalfd, inotify, pidfd,
+ *                      io_uring, blk/scsi, ram files (epoll_ready_mask shape)
+ *   net_tcp fd_ok    → net_tcp_poll_mask (RX / accept / write window / close)
+ *   net_lo  fd_ok    → net_lo_poll_mask  (RX / accept / ring space / shut)
+ *   unknown          → EPOLLERR|EPOLLHUP
+ *
  * Regular/block files always ready for IN|OUT among the requested bits.
+ * Soft greppable once: "vfs_ram: soft poll net route PASS" on first net hit.
  */
 u32 vfs_ram_poll_mask(i64 i64Fd, u32 u32Want);

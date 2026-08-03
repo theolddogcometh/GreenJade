@@ -35,6 +35,13 @@
 void net_eth_init(void);
 
 /**
+ * Pull MAC/IPv4 from net_l2 after NIC probe (virtio or rtl8168).
+ * net_eth_init runs early (before probe); call this after net_l2_init so
+ * ARP/ICMP match the lab static IP (e.g. 10.200.125.50), not QEMU 10.0.2.15.
+ */
+void net_eth_apply_l2_identity(void);
+
+/**
  * Poll RX (multi-frame soft batch up to NET_ETH_POLL_MAX):
  *   - demux ethertype / IPv4 proto
  *   - ARP request → reply (our MAC/IP)

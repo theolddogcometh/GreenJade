@@ -5,6 +5,10 @@
  * MMIO map + accessors. Host: window table from inject.
  * Freestanding: same API; ioremap uses static iomem pool + host window
  * table when a map grant is registered (no libc heap required).
+ *
+ * DDI bind path: after udx_host_bind_by_id / install_granted_pci, BAR0
+ * phys is window-registered with the granted VA — call
+ * udx_ioremap(udx_pci_resource_start(pdev,0), len) as usual.
  */
 #pragma once
 

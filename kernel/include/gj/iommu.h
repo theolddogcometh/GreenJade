@@ -24,6 +24,7 @@
  *   iommu: vtd tables PASS / vtd soft-only … PASS / vtd soft-probe PASS
  *   iommu: vtd identity grant PASS / vtd TE soft-arm/path PASS
  *   iommu: vtd TE live-ready PASS / vtd domain soft PASS
+ *   iommu: xhci identity … PASS | SKIP | FAIL
  */
 #pragma once
 
@@ -255,3 +256,36 @@ u32  iommu_vtd_domain_count(void);
  * Logs `iommu: vtd domain soft PASS`. Returns 1 on success, 0 on fail.
  */
 int  iommu_vtd_domain_soft_smoke(void);
+
+/* ---- Soft xHCI / freestanding DMA identity (VT-d Translated hosts) ---- */
+
+/**
+ * Common PCH xHCI BDF on many Intel laptops (e.g. G752VT class 0:14.0).
+ * Callers may pass any valid BDF; these are conveniences for parent wiring.
+ */
+#define GJ_IOMMU_XHCI_BUS_DEFAULT  0u
+#define GJ_IOMMU_XHCI_SLOT_DEFAULT 0x14u
+#define GJ_IOMMU_XHCI_FUNC_DEFAULT 0u
+
+/**
+ * Soft: grant identity-path policy for a PCI BDF (typical xHCI 0:14.0).
+ *
+ * Ensures VT-d identity tables (soft), attaches BDF to default domain 0,
+ * and records a software DMA window inside the bring-up identity cover
+ * [0, 1 GiB). Never hard-gates boot; safe when no DRHD / no DMAR.
+ *
+ * Return:
+ *   1  PASS — tables + window + identity cover for BDF
+ *   0  SKIP — no work needed / no inventory and tables unavailable
+ *  -1  FAIL — bad BDF, table init fail with DMAR present, or grant fail
+ *
+ * Greppable (keep stable):
+ *   iommu: xhci identity bdf=B:S.F … PASS
+ *   iommu: xhci identity bdf=B:S.F … SKIP
+ *   iommu: xhci identity bdf=B:S.F … FAIL
+ *
+ * Parent (main / xhci) should call after iommu_probe(), e.g.:
+ *   (void)iommu_vtd_xhci_identity(0, 0x14, 0);
+ * Pair with dma_buf_alloc_page() so device DMA PAs stay in identity cover.
+ */
+int  iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func);

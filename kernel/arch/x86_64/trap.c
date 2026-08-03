@@ -1742,7 +1742,15 @@ trap_dispatch(struct gj_trap_frame *pFrame)
     }
 
     if (!fUser) {
+        extern void fb_console_trap(u32 u32Vec, u64 u64Err, u64 u64Rip,
+                                    u64 u64Cr2, u32 u32Thr, u32 u32State);
+
         g_u64SoftHaltKern++;
+        /* Pin fault on STATUS pane so scroll wipe cannot hide it. */
+        fb_console_trap(u32Vec, pFrame->u64Error, pFrame->u64Rip,
+                        (u32Vec == 14u) ? read_cr2() : 0ull,
+                        pThr != NULL ? pThr->u32Id : 0u,
+                        pThr != NULL ? pThr->u32State : 0u);
         kprintf("trap: kernel fault — halt\n");
         for (;;) {
             __asm__ volatile ("cli; hlt");

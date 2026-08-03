@@ -3237,6 +3237,7 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
     u32 u32VmmProt;
     gj_vaddr_t va;
     int fFixed;
+    int fAnon;
 
     hot_soft_enter(HOT_SOFT_GRP_MEM, pRegs);
     if (pRegs == NULL) {
@@ -3246,19 +3247,86 @@ gj_linux_hot_mmap(struct gj_linux_regs *pRegs)
     u64Len = pRegs->u64Arg1;
     u64Prot = pRegs->u64Arg2;
     u64Flags = pRegs->u64Arg3;
+    fAnon = ((u64Flags & LINUX_MAP_ANONYMOUS) != 0) ? 1 : 0;
 
     if (u64Len == 0) {
         return -LINUX_EINVAL;
     }
-    /* Hot path: anonymous, or io_uring ring fd (SQ/CQ/SQE mmap). */
-    if ((u64Flags & LINUX_MAP_ANONYMOUS) == 0) {
+    /* Hot path: anonymous, io_uring ring fd, or soft vfs_ram file map. */
+    if (!fAnon) {
         i64 i64Fd = (i64)pRegs->u64Arg4;
         u64 u64Off = pRegs->u64Arg5;
 
         if (gj_io_uring_fd_ok(i64Fd)) {
             return gj_io_uring_mmap(i64Fd, u64Off, u64Len);
         }
-        return -LINUX_ENOSYS; /* other file maps → cold later */
+        /* W^X gate also applies to soft file maps. */
+        if ((u64Prot & LINUX_PROT_WRITE) && (u64Prot & LINUX_PROT_EXEC)) {
+            if (!gj_process_has_jit(g_pLinuxProc)) {
+                return -LINUX_EACCES; /* W^X without CapJit */
+            }
+        }
+        u32VmmProt = 0;
+        if (u64Prot & LINUX_PROT_READ) {
+            u32VmmProt |= GJ_VMM_PROT_READ;
+        }
+        if (u64Prot & LINUX_PROT_WRITE) {
+            u32VmmProt |= GJ_VMM_PROT_WRITE;
+        }
+        if (u64Prot & LINUX_PROT_EXEC) {
+            u32VmmProt |= GJ_VMM_PROT_EXEC;
+        }
+        if (u32VmmProt == 0) {
+            u32VmmProt = GJ_VMM_PROT_READ;
+        }
+        fFixed = ((u64Flags & LINUX_MAP_FIXED) != 0) ? 1 : 0;
+        if (!fFixed && u64Addr == 0) {
+            u64Addr = 0x0000000040000000ull;
+        }
+        /*
+         * Soft product path (ABI-first item 4): live vfs_ram regular-file
+         * fd (open / memfd path) → snapshot fill → FILE memobj + USER PTEs.
+         * Success returns mapped VA. MAP_ANONYMOUS path is separate below.
+         * Non-ram / unsupported fd types stay ENOSYS (product vfs door OPEN).
+         */
+        if (g_pLinuxProc != NULL && vfs_ram_fd_ok(i64Fd)) {
+            /* Linux mmap: offset must be page-aligned (4 KiB). */
+            if ((u64Off & 0xfffull) != 0) {
+                return -LINUX_EINVAL;
+            }
+            va = memobj_map_file_fd(g_pLinuxProc, i64Fd, u64Addr,
+                                    (size_t)u64Len, u32VmmProt, fFixed,
+                                    u64Off);
+            if (va != 0) {
+                static u32 s_cMmapFilePass;
+
+                s_cMmapFilePass++;
+                /* Greppable: linux_hot: mmap file soft PASS */
+                if (s_cMmapFilePass == 1u) {
+                    kprintf("linux_hot: mmap file soft PASS va=0x%lx "
+                            "fd=%ld len=%lu off=0x%lx\n",
+                            (unsigned long)va, (long)i64Fd,
+                            (unsigned long)u64Len, (unsigned long)u64Off);
+                }
+                return (i64)va;
+            }
+            /*
+             * ram fd present but snapshot/map failed (OOM, non-regular,
+             * region full, > GJ_MEMOBJ_MAX_PAGES). Not a permanent
+             * ENOSYS-only path — soft miss with proper errno.
+             */
+            kprintf("linux_hot: mmap file soft FAIL fd=%ld len=%lu "
+                    "off=0x%lx (ENOMEM soft)\n",
+                    (long)i64Fd, (unsigned long)u64Len,
+                    (unsigned long)u64Off);
+            return -LINUX_ENOMEM;
+        }
+        /* Greppable: linux_hot: mmap file soft ENOSYS (non-vfs_ram / no proc) */
+        kprintf("linux_hot: mmap file soft ENOSYS fd=%ld len=%lu off=0x%lx "
+                "proc=%p\n",
+                (long)i64Fd, (unsigned long)u64Len, (unsigned long)u64Off,
+                (void *)g_pLinuxProc);
+        return -LINUX_ENOSYS;
     }
     if ((u64Prot & LINUX_PROT_WRITE) && (u64Prot & LINUX_PROT_EXEC)) {
         if (!gj_process_has_jit(g_pLinuxProc)) {

@@ -15,6 +15,10 @@
  *   udx: mmio soft wave …
  * Pure observation; never gates host skeleton PASS or freestanding path.
  * Soft ≠ skeleton PASS. greppable: udx: mmio soft
+ *
+ * Freestanding DDI bind: udx_host_bind_* maps BAR0 and registers the
+ * granted PA via udx_host_window_register; udx_ioremap(phys,len) then
+ * resolves that window (same lookup as host inject). Soft ≠ product.
  */
 #include "udx_internal.h"
 
@@ -145,6 +149,7 @@ mmio_soft_inventory_log(void)
      */
     mmio_soft_emit("udx: mmio soft path map=udx_ioremap unmap=udx_iounmap "
                    "lookup=udx_host_window_lookup "
+                   "grant_bar=udx_host_bind_by_id "
                    "accessors=header_inlines "
                    "skeleton_gate=0 hard_gate=0 soft=1\n");
 

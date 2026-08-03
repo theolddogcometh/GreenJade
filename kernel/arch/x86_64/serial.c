@@ -58,9 +58,22 @@
  *   serial_soft_verify_ok / verify_bad / ready / txfull / log_n
  *   serial_soft_port / ier / lcr / mcr / lsr / msr / iir / div
  *   serial_soft_status_refresh / serial_soft_verify / serial_soft_log
+ *   serial_thre_dead — sticky panel-path lamp (declared in gj/klog.h)
+ *
+ * -------------------------------------------------------------------------
+ * Panel path: sticky THRE-dead (G752 / laptop DUTs without useful COM1)
+ * -------------------------------------------------------------------------
+ * Product TX spins on LSR.THRE up to UART_SOFT_SPIN_MAX. Hosts with no
+ * legacy 0x3F8 never raise THRE; a full soft inventory at 100k loops/char
+ * looks hung after the white kmain bar. After the first full miss, putchar
+ * sticky-shortens the spin budget (32) so boot continues, and
+ * serial_thre_dead() returns non-zero so soft inventory flood sites may
+ * skip multi-KiB dumps. QEMU Multiboot with a live 16550 keeps THRE present
+ * → full spin budget and serial_thre_dead() == 0. Soft ≠ hard boot gate.
  */
 #include <gj/config.h>
 #include <gj/console.h>
+#include <gj/fb_console.h>
 #include <gj/klog.h>
 #include <gj/types.h>
 
@@ -490,14 +503,37 @@ serial_init(void)
     }
 }
 
+/*
+ * Sticky THRE-dead lamp (panel path). 0 while COM1 raises THRE (QEMU /
+ * real UART → full UART_SOFT_SPIN_MAX). Set on first full miss; thereafter
+ * putchar uses a short budget. Exposed via serial_thre_dead() (gj/klog.h).
+ */
+static u32 g_fSerialThreDead;
+
 void
 serial_putchar(char chOut)
 {
     u16 uPort = serial_port();
     u32 uSpins;
+    u8 u8SawThre = 0;
 
     if (g_u32SoftPutcharN < 0xffffffffu) {
         g_u32SoftPutcharN++;
+    }
+    /*
+     * Panel path (G752 / no 0x3F8): after first THRE miss, skip COM1 I/O
+     * entirely. A residual 32-spin budget still burned ~32 port reads per
+     * char × soft inventory flood → multi-minute "boot". GOP/fb_console is
+     * the operator log; UART is dead.
+     */
+    if (g_fSerialThreDead != 0u) {
+        if (chOut == '\n' && g_u32SoftCrExpand < 0xffffffffu) {
+            g_u32SoftCrExpand++;
+        }
+        if (g_u32SoftChars < 0xffffffffu) {
+            g_u32SoftChars++;
+        }
+        return;
     }
     if (chOut == '\n') {
         if (g_u32SoftCrExpand < 0xffffffffu) {
@@ -505,11 +541,31 @@ serial_putchar(char chOut)
         }
         serial_putchar('\r');
     }
+    /*
+     * Spin on LSR.THRE. Laptops without 0x3F8 never set THRE — first full
+     * miss sets sticky dead lamp (above). QEMU Multiboot 16550 raises THRE
+     * promptly → lamp stays 0, full budget remains.
+     */
     for (uSpins = 0; uSpins < UART_SOFT_SPIN_MAX; uSpins++) {
         if ((inb((u16)(uPort + UART_LSR)) & UART_LSR_THRE) != 0u) {
+            u8SawThre = 1;
             break;
         }
         g_u32SoftTxFullHits++;
+    }
+    if (u8SawThre == 0) {
+        g_fSerialThreDead = 1;
+        /* Do not outb into the void; mark dead and return. */
+        if (g_u32SoftSpinCapHit < 0xffffffffu) {
+            g_u32SoftSpinCapHit++;
+        }
+        if (uSpins > g_u32SoftSpinMax) {
+            g_u32SoftSpinMax = uSpins;
+        }
+        if (g_u32SoftChars < 0xffffffffu) {
+            g_u32SoftChars++;
+        }
+        return;
     }
     if (uSpins > 0u) {
         g_u32SoftThrWaits++;
@@ -517,13 +573,23 @@ serial_putchar(char chOut)
     if (uSpins > g_u32SoftSpinMax) {
         g_u32SoftSpinMax = uSpins;
     }
-    if (uSpins >= UART_SOFT_SPIN_MAX) {
-        if (g_u32SoftSpinCapHit < 0xffffffffu) {
-            g_u32SoftSpinCapHit++;
-        }
-    }
     outb(uPort, (u8)chOut);
     g_u32SoftChars++;
+}
+
+/**
+ * Soft observability: non-zero if COM1 never raised THRE (panel-only DUT).
+ *
+ * Sticky after the first full soft-spin miss in serial_putchar. Used by
+ * pmm/vmm soft inventory to skip multi-KiB floods on dead COM1 so
+ * kernel_after_mmap can reach xHCI / M0 on G752-class laptops.
+ * Returns 0 when THRE is present (QEMU Multiboot / real UART) — full spin
+ * budget remains. Declared in gj/klog.h. Soft ≠ hard boot gate.
+ */
+u32
+serial_thre_dead(void)
+{
+    return g_fSerialThreDead;
 }
 
 void
@@ -548,12 +614,15 @@ void
 console_putchar(char chOut)
 {
     serial_putchar(chOut);
+    /* Panel path: also paint GOP so DUTs without COM1 get a *nix-style log. */
+    fb_console_putchar(chOut);
 }
 
 void
 console_write(const char *szText)
 {
     serial_write(szText);
+    fb_console_write(szText);
 }
 
 int

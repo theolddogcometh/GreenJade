@@ -97,3 +97,5 @@ Kernel smoke links the same sources with `GJ_VK_KERNEL_SMOKE` (virtio-gpu + PMM)
 - Real sparse binding, multi-queue, timeline semaphores
 - Real compute / query timestamps
 - Descriptor-driven texturing (still GJ bind-texture path)
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

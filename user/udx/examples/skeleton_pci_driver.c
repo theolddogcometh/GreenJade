@@ -25,11 +25,15 @@
  * FREESTANDING DRIVER-HOST SHAPE (on GreenJade)
  *   Same probe / remove / quiesce / mmio / dma / request_irq path.
  *   Differences:
- *     - No udx_host_inject_pci / udx_host_fire_irq (devmgr grants the device).
+ *     - udx_host_bind_by_id / bind_scan via GJ_SYS_DDI (103) instead of inject.
+ *     - On bind PASS: BAR0 granted PA is window-registered for ioremap.
+ *     - Soft SKIP until kernel DDI is live; host-linux keeps inject.
  *     - IRQ delivery is pumped from udx_run via NOTIFY_WAIT badge bits,
  *       not from udx_request_irq itself (request_irq only binds the table).
  *     - DMA cookies use freestanding static slab + IOMMU grant helpers.
- *   Optional: udx_skeleton_freestanding_register() without UDX_HOST_LIBC.
+ *   Optional: udx_skeleton_freestanding_register() /
+ *             udx_skeleton_freestanding_bind_g752() without UDX_HOST_LIBC.
+ *   G752 first targets: 10ec:8168, 8086:a12f (include/udx/ddi.h).
  *
  * CLEAN-ROOM RULES
  *   Replace MY_VEND/MY_DEV and the register program from public hardware
@@ -394,6 +398,14 @@ main(int argc, char **argv)
         return 1;
     }
 
+    /*
+     * Soft DDI bind probe (host-linux): expected SKIP — GJ_SYS_DDI is a
+     * freestanding path. Soft fallback keeps inject below for lab tests.
+     * greppable: udx: soft ddi bind SKIP
+     * G752 first targets (docs): 10ec:8168, 8086:a12f.
+     */
+    (void)udx_host_bind_by_id(0x10ecu, 0x8168u, NULL);
+
     /* BAR0 memory window of MY_BAR0_LEN; other BARs unused. */
     for (iBar = 0; iBar < 6; iBar++) {
         aBarLen[iBar] = 0;
@@ -471,6 +483,13 @@ main(int argc, char **argv)
  * (init / spawn). This TU can still be type-checked without host inject:
  * keep probe/remove/isr symbols and a tiny init that only registers.
  * Link against freestanding libudx + platform when wiring a real host.
+ *
+ * Product attach (soft until kernel GJ_SYS_DDI is live):
+ *   udx_init → udx_pci_register_driver → udx_host_bind_by_id(vend,dev)
+ *     or udx_host_bind_scan()
+ *   On PASS: BAR0 granted PA is window-registered; probe may ioremap.
+ *   On SKIP: syscall soft-stub / no device (inject is host-linux only).
+ * G752 first targets: 10ec:8168 (rtl), 8086:a12f (xhci) — see udx/ddi.h.
  */
 int
 udx_skeleton_freestanding_register(void)
@@ -479,6 +498,37 @@ udx_skeleton_freestanding_register(void)
         return UDX_ERR_IO;
     }
     return udx_pci_register_driver(&my_driver);
+}
+
+/**
+ * Optional freestanding DDI bind helper for GJ driver-host mains.
+ * Registers my_drv then soft-binds G752-class ids (or any id table match
+ * after scan). Soft ≠ product; greppable PASS|SKIP from host bind path.
+ */
+int
+udx_skeleton_freestanding_bind_g752(void)
+{
+    udx_status_t st;
+    struct udx_pci_dev *pPdev;
+
+    st = udx_skeleton_freestanding_register();
+    if (st != UDX_OK) {
+        return st;
+    }
+
+    /* Prefer rtl8168 then xHCI — first lab bind targets. */
+    pPdev = NULL;
+    st = udx_host_bind_by_id(0x10ecu, 0x8168u, &pPdev);
+    if (st == UDX_OK) {
+        return UDX_OK;
+    }
+    pPdev = NULL;
+    st = udx_host_bind_by_id(0x8086u, 0xa12fu, &pPdev);
+    if (st == UDX_OK) {
+        return UDX_OK;
+    }
+    /* Full scan soft path (may still SKIP if kernel DDI stub). */
+    return udx_host_bind_scan();
 }
 
 #endif /* UDX_HOST_LIBC */

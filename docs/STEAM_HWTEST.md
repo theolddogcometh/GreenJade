@@ -51,7 +51,7 @@ Host soft check (no download, always exit 0):
 |------|--------|---------------------------|
 | Host fetch bootstrap (`.deb` extract only) | **wired** | `./scripts/fetch-steam-bootstrap.sh` or `make steam-fetch` → `build/steam-tree/` + `READY` |
 | Stage tree with `STATUS` | **wired** | `./scripts/stage-steam-tree.sh` or `make steam-stage` → `STATUS` = `READY` or `SKELETON` |
-| Pack into hwtest image (option 2) | **wired** | `make hwtest-img` → p2 `GJ-PERSIST/steam/` |
+| Pack into hwtest image (option 2) | **wired** | `make hwtest-img` → p2 **ext4** `GJ-PERSIST/steam/` (ESP stays FAT) |
 | Host prep onto stick/image (option 3) | **wired** | `scripts/steam-host-prep.sh --to-label` / `--to-img` / `--to-mount` |
 | Offline / skip re-download | **wired** | `GJ_SKIP_FETCH=1` or stage alone → skeleton if no tree |
 | Soft media inventory | **wired** | `./scripts/steam-bar3-check.sh` (file counts, launcher, blob, STATUS hits) |

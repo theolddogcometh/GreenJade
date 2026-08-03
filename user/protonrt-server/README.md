@@ -197,3 +197,5 @@ part of this directory.
 
 Cap surface for production personality: cold door, vfs client, optional net
 client — **no** IOMMU/IRQ (G-PERS-2).
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

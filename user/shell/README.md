@@ -217,3 +217,5 @@ Parent tree owns:
 - Boot spawn of the ELF after VFS is ready
 
 Do not treat this directory as owning Makefile or kernel edits.
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

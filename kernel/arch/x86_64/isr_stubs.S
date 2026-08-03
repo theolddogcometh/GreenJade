@@ -124,6 +124,14 @@ isr_stub_128:
 /* IRQ0 timer (legacy PIT path) — no error code; EOI in C handler */
 IRQ_STUB irq_stub_0, irq_timer_handler
 
+/*
+ * Unhandled PIC IRQs (vectors 33–47). Real hardware often delivers a
+ * spurious IRQ7 (vector 39) the moment IF is set after PIC remap; without
+ * a present IDT gate that becomes #GP(err=IDT|EXT|index=39) — G752 halt
+ * inside timer_irq_enable right after sti. Shared EOI stub is enough.
+ */
+IRQ_STUB irq_stub_pic_spurious, irq_pic_spurious_handler
+
 /* Local APIC timer (vector 48) */
 IRQ_STUB irq_stub_apic_timer, apic_timer_irq
 

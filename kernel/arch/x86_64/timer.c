@@ -202,8 +202,12 @@ inb(u16 u16Port)
     return u8Val;
 }
 
-/* isr_stubs.S — IRQ0 after PIC remap (vector 32) */
+/* isr_stubs.S — IRQ0 after PIC remap (vector 32); PIC 1–15 share spurious */
 extern void irq_stub_0(void);
+extern void irq_stub_pic_spurious(void);
+
+/* Soft count of unhandled / spurious PIC IRQs (vectors 33–47). */
+static volatile u64 g_u64SoftPicSpurious;
 
 static void
 quantum_tick(void)
@@ -237,9 +241,17 @@ timer_tick(void)
      * Mono preference: when APIC/x2APIC timer source is armed, jiffies/mono
      * advance only from timer_tick_apic. PIT IRQ0 is soft-fallback only —
      * still EOI the PIC if a stray IRQ arrives, but do not advance mono.
-     * Wave 13/15: count demoted stray IRQ0 for greppable soft apic mono path.
+     *
+     * Lab NIC: ALWAYS net_eth_poll on any timer IRQ (PIT or APIC). G752: if
+     * APIC handoff masks PIT and APIC IRQs are quiet, poll was dead after M0
+     * (panel n= frozen). Poll is cheap; dual-path is intentional.
      */
     timer_soft_inc(&g_u64SoftTickPitEoi);
+    {
+        extern void net_eth_poll(void);
+
+        net_eth_poll();
+    }
     if (!g_fApicSource) {
         g_u64Jiffies++;
         g_u64PitTicks++;
@@ -264,6 +276,11 @@ timer_tick_apic(void)
     timer_soft_inc(&g_u64SoftFutexCoupled);
     quantum_tick();
     revoke_hygiene_tick();
+    {
+        extern void net_eth_poll(void);
+
+        net_eth_poll();
+    }
 }
 
 void
@@ -327,14 +344,33 @@ irq_timer_handler(void)
     timer_tick();
 }
 
+/*
+ * C entry from irq_stub_pic_spurious (PIC IRQs 1–15 → vectors 33–47).
+ * G752: after sti, PIC may deliver spurious IRQ7 (vec 39). Must have a
+ * present gate + EOI or CPU raises #GP on the missing IDT entry.
+ */
+void
+irq_pic_spurious_handler(void)
+{
+    if (g_u64SoftPicSpurious < ~0ull) {
+        g_u64SoftPicSpurious++;
+    }
+    /* Slave then master EOI covers IRQ8–15 and is harmless for master-only. */
+    outb(PIC2_CMD, PIC_EOI);
+    outb(PIC1_CMD, PIC_EOI);
+}
+
+/** Remap PICs to 32/40. fUnmaskIrq0=0 keeps all masked (safe setup). */
 static void
-pic_remap(void)
+pic_remap(int fUnmaskIrq0)
 {
     u8 u8A1;
     u8 u8A2;
 
     u8A1 = inb(PIC1_DATA);
     u8A2 = inb(PIC2_DATA);
+    (void)u8A1;
+    (void)u8A2;
 
     outb(PIC1_CMD, 0x11);
     outb(PIC2_CMD, 0x11);
@@ -345,10 +381,11 @@ pic_remap(void)
     outb(PIC1_DATA, 0x01);
     outb(PIC2_DATA, 0x01);
 
-    /* Unmask IRQ0 only; leave remaining PIC lines masked */
-    (void)u8A1;
-    (void)u8A2;
-    outb(PIC1_DATA, 0xFE); /* IRQ0 unmasked */
+    if (fUnmaskIrq0 != 0) {
+        outb(PIC1_DATA, 0xFE); /* IRQ0 only */
+    } else {
+        outb(PIC1_DATA, 0xFF); /* all masked */
+    }
     outb(PIC2_DATA, 0xFF);
 }
 
@@ -416,18 +453,59 @@ timer_init(void)
     g_u64SoftFutexCoupled = 0;
     g_u32Quantum = 5;
     g_u32SliceLeft = 5;
-    pic_remap();
+    /*
+     * Program PIC+PIT with IRQ0 masked and IF left clear. Do NOT sti here.
+     * G752: any early sti in timer_init raced IRQ0 → kernel fault halt
+     * (RIP in timer_init / kprintf setup). IRQs enabled later via
+     * timer_irq_enable() after APIC init.
+     */
+    __asm__ volatile ("cli" ::: "memory");
+    pic_remap(0); /* remap, keep IRQ0 masked */
     pit_set_hz(GJ_TIMER_HZ);
     idt_set_gate(32, (void *)irq_stub_0, 0x8E);
+    /*
+     * Install present gates for PIC IRQs 1–15 (vectors 33–47) BEFORE any
+     * later sti. Missing gate 39 → #GP on spurious IRQ7 (G752 STATUS
+     * FAULT vec=13 err=0x13b rip=timer_irq_enable+sti).
+     */
+    {
+        u32 u32Vec;
+
+        for (u32Vec = 33u; u32Vec < 48u; u32Vec++) {
+            idt_set_gate(u32Vec, (void *)irq_stub_pic_spurious, 0x8E);
+        }
+    }
     g_fTimerReady = 1;
-    __asm__ volatile ("sti");
-    kprintf("timer: PIT %u Hz IRQ0 vector 32 nsec/tick=%lu quantum=%u\n",
+    kprintf("timer: PIT %u Hz IRQ0 vector 32 nsec/tick=%lu quantum=%u "
+            "(IRQs still masked; PIC 33-47 spurious gates OK)\n",
             (unsigned)GJ_TIMER_HZ, (unsigned long)g_u64NsecPerTick,
             (unsigned)g_u32Quantum);
-    /* Early boot: mono prefers PIT until APIC/x2APIC timer source armed. */
-    timer_mono_pref_soft_log();
-    /* Wave 15: baseline soft inventory (zeros/jiffies=0 expected early). */
-    timer_soft_inventory_log();
+    /*
+     * Skip multi-KiB soft inventory on panel path (dead COM1 / G752): floods
+     * the FB log and has raced faults after SMEP/SMAP harden. Full inventory
+     * still runs when THRE is live (QEMU Multiboot).
+     */
+    if (serial_thre_dead() == 0u) {
+        timer_mono_pref_soft_log();
+        timer_soft_inventory_log();
+    } else {
+        kprintf("timer: soft inventory SKIP (panel path)\n");
+    }
+}
+
+void
+timer_irq_enable(void)
+{
+    if (g_fTimerReady == 0) {
+        kprintf("timer: irq_enable SKIP (timer not ready)\n");
+        return;
+    }
+    /* Mask slave fully; unmask master IRQ0 only; then open IF. */
+    outb(PIC2_DATA, 0xFF);
+    outb(PIC1_DATA, 0xFE); /* unmask IRQ0 only */
+    __asm__ volatile ("sti" ::: "memory");
+    kprintf("timer: IRQ0 unmasked + sti PASS (pic_spur=%lu)\n",
+            (unsigned long)g_u64SoftPicSpurious);
 }
 
 void
@@ -449,11 +527,13 @@ timer_set_apic_source(u64 u64NsecPerTick)
         timer_soft_inc(&g_u64SoftHandoffFirst);
     }
     /*
-     * Prefer APIC for mono/jiffies. Mask PIT IRQ0 so mono advances only
-     * from the APIC timer; PIT remains soft-fallback telemetry only.
+     * Prefer APIC for mono/jiffies. Keep PIT IRQ0 unmasked so lab net_eth_poll
+     * still runs if LAPIC timer IRQs are quiet (G752: n= frozen after M0 when
+     * PIT was fully masked). Mono still only advances from timer_tick_apic.
      */
     g_fApicSource = 1;
-    outb(PIC1_DATA, 0xFF);
+    outb(PIC2_DATA, 0xFF);
+    outb(PIC1_DATA, 0xFE); /* IRQ0 unmasked — poll path; mono not advanced */
 
     /* Greppable mono preference + demotion lamps (product / smoke). */
     timer_mono_pref_soft_log();

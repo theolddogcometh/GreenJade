@@ -2660,3 +2660,93 @@ iommu_vtd_domain_soft_smoke(void)
     kprintf("iommu: vtd domain soft PASS\n");
     return 1;
 }
+
+/*
+ * Soft xHCI identity path for freestanding DMA under VT-d Translated domains.
+ * Sample window sits inside bring-up identity [0, 1 GiB). Parent pairs this
+ * with dma_buf_alloc_page() so real buffer PAs stay coverable.
+ *
+ * greppable: iommu: xhci identity … PASS|SKIP|FAIL
+ */
+int
+iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func)
+{
+    int fCovered = 0;
+    int fPresent;
+    u32 u32Did;
+    /* Low sample inside identity SLPT; not a real xHCI buffer — policy only */
+    const u64 u64PaSample = 0x1000ull;
+    const u64 u64CbSample = 0x1000ull;
+
+    if (!vtd_bdf_ok(bus, slot, func)) {
+        kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL bad_bdf\n",
+                (unsigned)bus, (unsigned)slot, (unsigned)func);
+        return -1;
+    }
+
+    fPresent = iommu_present();
+
+    if (!g_fVtdReady) {
+        if (iommu_vtd_init_tables() != 0) {
+            /*
+             * No tables: SKIP when platform has no DMAR/IVRS inventory
+             * (QEMU default / no IOMMU). FAIL when inventory said present
+             * but we could not build identity tables.
+             */
+            if (!fPresent) {
+                kprintf("iommu: xhci identity bdf=%u:%u.%u SKIP no_tables "
+                        "no_dmar\n",
+                        (unsigned)bus, (unsigned)slot, (unsigned)func);
+                return 0;
+            }
+            kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL tables\n",
+                    (unsigned)bus, (unsigned)slot, (unsigned)func);
+            return -1;
+        }
+    }
+
+    /* Domain 0 = default identity domain after table build */
+    if (!g_aDom[0].u8Used) {
+        vtd_domain_pool_init();
+    }
+    u32Did = iommu_vtd_domain_lookup(bus, slot, func);
+    if (u32Did == GJ_IOMMU_DOMAIN_INVALID || u32Did != 0) {
+        /* Soft attach to identity DID 0 (updates bus-0 context when ready) */
+        if (iommu_vtd_domain_attach(0, bus, slot, func) != 0) {
+            /*
+             * Attach soft-fail is non-fatal when slots full; still try window.
+             * Log and continue — window + cover is the DMA policy surface.
+             */
+            kprintf("iommu: xhci identity bdf=%u:%u.%u attach soft-miss "
+                    "(continue window)\n",
+                    (unsigned)bus, (unsigned)slot, (unsigned)func);
+        }
+    }
+
+    if (iommu_vtd_window_grant(bus, slot, func, u64PaSample, u64CbSample,
+                               &fCovered) != 0) {
+        kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL grant\n",
+                (unsigned)bus, (unsigned)slot, (unsigned)func);
+        return -1;
+    }
+
+    if (!fCovered || !iommu_vtd_identity_covers(u64PaSample, u64CbSample)) {
+        kprintf("iommu: xhci identity bdf=%u:%u.%u FAIL cover "
+                "limit=0x%lx sample=0x%lx\n",
+                (unsigned)bus, (unsigned)slot, (unsigned)func,
+                (unsigned long)VTD_IDENTITY_LIMIT, (unsigned long)u64PaSample);
+        return -1;
+    }
+
+    /*
+     * Grep: iommu: xhci identity … PASS
+     * Soft ≠ product always-on IOMMU; TE/DRHD optional.
+     */
+    kprintf("iommu: xhci identity bdf=%u:%u.%u cover=1 limit=0x%lx "
+            "did=%u te_mode=%d drhd=%d PASS\n",
+            (unsigned)bus, (unsigned)slot, (unsigned)func,
+            (unsigned long)VTD_IDENTITY_LIMIT,
+            iommu_vtd_domain_lookup(bus, slot, func), iommu_vtd_te_mode(),
+            (g_u64Drhd != 0) ? 1 : 0);
+    return 1;
+}

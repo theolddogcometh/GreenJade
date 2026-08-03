@@ -56,14 +56,26 @@ struct udx_fs_dma_slot {
 /*
  * Freestanding GJ syscalls for the driver-host shape.
  * Numbers match kernel GJ_SYS_* (user/libgj/include/gj/syscalls.h).
- * Host (UDX_HOST_LIBC) builds never include these helpers.
+ * Host (UDX_HOST_LIBC without GJ_FREESTANDING) builds never include these.
  *
  * SysV x86_64 SYSCALL: nr=rax; a0..a5 → rdi,rsi,rdx,r10,r8,r9.
  */
-#if !defined(UDX_HOST_LIBC)
+#if !defined(UDX_HOST_LIBC) || defined(GJ_FREESTANDING)
 
 #define UDX_GJ_SYS_PLATFORM_INFO  98
 #define UDX_GJ_SYS_NOTIFY_WAIT    99
+/*
+ * Soft DDI door (GJ_SYS_DDI = 103 after GJ_SYS_SCSI=102).
+ * Kernel may soft-stub; UDX bind path soft-handles unknown/-ENOSYS.
+ * See include/udx/ddi.h for opcodes and grant shapes.
+ * Guard: ddi.h may already define UDX_GJ_SYS_DDI / GJ_SYS_DDI.
+ */
+#ifndef UDX_GJ_SYS_DDI
+#ifndef GJ_SYS_DDI
+#define GJ_SYS_DDI 103
+#endif
+#define UDX_GJ_SYS_DDI GJ_SYS_DDI
+#endif
 #define UDX_GJ_PLAT_IOMMU_GRANT   5
 
 static inline long
@@ -128,4 +140,4 @@ udx_gj_iommu_grant(u32 u32Bdf, udx_dma_addr_t dma, size_t cbSize)
                            (long)cbSize);
 }
 
-#endif /* !UDX_HOST_LIBC */
+#endif /* !UDX_HOST_LIBC || GJ_FREESTANDING */

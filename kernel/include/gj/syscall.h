@@ -180,6 +180,15 @@
  */
 #define GJ_SYS_SCSI              102
 
+/**
+ * DDI door (userspace Linux-shaped driver hosts / UDX soft path):
+ *   arg0 = DDI_OP_* (see gj/ddi_door.h)
+ *   SCAN=1 GET=2 OPEN=3 MAP_BAR=4 CFG_READ=5 DMA_NOTE=6 INVENTORY=7
+ *   CFG_WRITE=16 (careful soft)
+ * Soft ≠ product grant mint (docs/DDI_SOFT.md).
+ */
+#define GJ_SYS_DDI               103
+
 /*
  * Personality mode for a task (PCB field when tasks exist).
  * Linux mode: rax is Linux NR; hybrid hot/cold dispatch.

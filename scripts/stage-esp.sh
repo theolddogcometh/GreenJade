@@ -43,6 +43,17 @@ for f in init.elf shell.elf sessiond.elf netstackd.elf sshd.elf storaged.elf \
         user_n=$((user_n + 1))
     fi
 done
+# Cold personality + UDX driver-host artifacts (soft; missing OK).
+# Prefer first: make drivers-udx personality-gj
+#   → build/user/personality.elf
+#   → build/user/drivers/{ddi_host,rtl8168_udx,xhci_udx}
+# Harvest also: user/drivers/*/build/*, build/udx_skeleton as ddi_host alias.
+# Also writes EFI/GREENJADE/DRIVERS.txt + LAPTOP.txt (G752VT).
+chmod +x scripts/stage-udx-drivers.sh
+./scripts/stage-udx-drivers.sh "$out" || true
+if [ -f "$out/EFI/GREENJADE/user/personality.elf" ]; then
+    user_n=$((user_n + 1))
+fi
 # Dynlinker + SO names for product INTERP / DT_NEEDED path
 mkdir -p "$out/EFI/GREENJADE/lib"
 if [ -f build/user/ld-gj.so.1 ]; then
@@ -85,6 +96,13 @@ kernel=$(wc -c <build/greenjade.elf | tr -d ' ')B
 date=$(date -u +%Y-%m-%dT%H:%MZ 2>/dev/null || echo unknown)
 EOF
 
+# Pre-sized kernel stick log file (128 KiB, contiguous clusters preferred).
+# xhci_msc overwrites this on real USB MSC after BOT bring-up.
+# Also empty BOOT.LOG placeholder for UEFI pre-ExitBootServices path.
+dd if=/dev/zero of="$out/EFI/GREENJADE/KLOG.TXT" bs=1024 count=128 status=none 2>/dev/null || \
+	dd if=/dev/zero of="$out/EFI/GREENJADE/KLOG.TXT" bs=1024 count=128 2>/dev/null || true
+: >"$out/EFI/GREENJADE/BOOT.LOG"
+
 cat >"$out/EFI/GREENJADE/INSTALL.txt" <<'EOF'
 GreenJade — real-hardware install path (bring-up)
 
@@ -96,14 +114,28 @@ Hardware-test media (ESP + GJ-PERSIST logs/ssh/steam) — preferred on DUT:
   make hwtest-img
   sudo ./scripts/install-hwtest-usb.sh /dev/sdX
 
+ASUS ROG G752VT (laptop DUT) — see also:
+  EFI/GREENJADE/LAPTOP.txt   USB boot keys, firmware, SS port tips
+  EFI/GREENJADE/DRIVERS.txt  G752 PCI IDs + UDX host bind (no GPL .ko)
+
+G752VT short path:
+  1. make hwtest-img && sudo ./scripts/install-hwtest-usb.sh /dev/sdX
+  2. Secure Boot Off · UEFI USB · Esc boot menu · USB3 jack (SS port 5)
+  3. Collect: mount -L GREENJADE (BOOT.LOG, KLOG.TXT) + GJ-PERSIST/logs
+
 Manual ESP copy:
 1. Create a GPT disk with an EFI System Partition (type EF00), FAT32.
 2. Copy this tree onto the ESP:
      EFI/BOOT/BOOTX64.EFI
      EFI/GREENJADE/KERNEL.ELF
      EFI/GREENJADE/user/*.elf   (init, shell, sessiond, netstackd, sshd,
-                                 storaged, vfsd, scsi_mid, hda_client)
+                                 storaged, vfsd, scsi_mid, hda_client,
+                                 personality.elf when built)
      EFI/GREENJADE/lib/*        (ld-gj, libcgj libc.so.6, libgj-so/gnu)
+     EFI/GREENJADE/drivers/*    (UDX hosts: ddi_host, rtl8168_udx, xhci_udx,
+                                 udx_skeleton; make drivers-udx)
+     EFI/GREENJADE/DRIVERS.txt  (G752 IDs + UDX bind model)
+     EFI/GREENJADE/LAPTOP.txt   (G752VT USB boot steps)
 3. Firmware boot: select "EFI Boot" / BOOTX64.EFI (or set BootOrder).
 4. Expect serial: GJ-EFI, KERNEL.ELF loaded, M0 OK; soft product markers
    (sshd/scsi_mid/hda_client live spawn) when embeds run.
@@ -122,7 +154,7 @@ Bring-up status (product surface — honest):
   - ELF dynlinker: INTERP-first, ld-gj, multi-SO SysV/GNU hash+bloom
   - Product embeds: sshd (default-on :22), scsi_mid, hda_client (kernel
     multi-stream PASS ≠ Steam audio)
-  - ESP packages freestanding user ELFs + lib/ under EFI/GREENJADE/
+  - ESP packages freestanding user ELFs + lib/ + UDX drivers/ hosts
   - Deck Top 50 rows remain NOT-TRIED until real-hw + Steam client run
 
 Policy: pure C, MIT OR Apache-2.0, no GPL source, clean-room Linux ABI OK.
@@ -136,9 +168,13 @@ EOF
     ls -la "$out/EFI/BOOT/BOOTX64.EFI"
     echo "  EFI/GREENJADE/KERNEL.ELF"
     ls -la "$out/EFI/GREENJADE/KERNEL.ELF"
-    echo "  EFI/GREENJADE/INSTALL.txt"
+    echo "  EFI/GREENJADE/INSTALL.txt DRIVERS.txt LAPTOP.txt"
     echo "  EFI/GREENJADE/user/"
     ls -la "$out/EFI/GREENJADE/user/" 2>/dev/null || true
+    if [ -d "$out/EFI/GREENJADE/drivers" ]; then
+        echo "  EFI/GREENJADE/drivers/"
+        ls -la "$out/EFI/GREENJADE/drivers/" 2>/dev/null || true
+    fi
 }
 
 # Fingerprint sizes (install smoke gate string)
@@ -166,7 +202,16 @@ libc_note="libc=${sz_libc}B"
 if [ "${sz_libc:-0}" -lt 1000 ]; then
     libc_note="libc=${sz_libc}B(placeholder)"
 fi
-echo "stage-esp: PASS efi=${sz_efi}B kernel=${sz_k}B user_elfs=${user_n} ${libc_note} path=$out"
+drv_note="drivers=0"
+if [ -d "$out/EFI/GREENJADE/drivers" ]; then
+    drv_n=$(find "$out/EFI/GREENJADE/drivers" -type f ! -name 'MANIFEST.txt' 2>/dev/null | wc -l | tr -d ' ')
+    drv_note="drivers=${drv_n}"
+fi
+pers_note=""
+if [ -f "$out/EFI/GREENJADE/user/personality.elf" ]; then
+    pers_note=" personality=yes"
+fi
+echo "stage-esp: PASS efi=${sz_efi}B kernel=${sz_k}B user_elfs=${user_n} ${libc_note} ${drv_note}${pers_note} path=$out"
 if [ -n "$soft_miss" ]; then
     echo "stage-esp: soft-miss user:${soft_miss}" >&2
 fi

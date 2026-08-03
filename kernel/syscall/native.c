@@ -54,6 +54,7 @@
  */
 #include <gj/cap.h>
 #include <gj/cold_ipc.h>
+#include <gj/ddi_door.h>
 #include <gj/door.h>
 #include <gj/error.h>
 #include <gj/hda.h>
@@ -2368,6 +2369,10 @@ gj_native_syscall_dispatch(struct gj_syscall_regs *pRegs)
         pRegs->i64Ret = (i64)notify_wait(pN, u64Mask, fBlock);
         break;
     }
+    case GJ_SYS_DDI:
+        pRegs->i64Ret = ddi_door_syscall((u32)pRegs->u64Arg0, pRegs->u64Arg1,
+                                         pRegs->u64Arg2, pRegs->u64Arg3);
+        break;
     case GJ_SYS_SCSI: {
         /* arg0=op → scsi_door_submit / transport probe (userspace scsi_mid). */
         u32 u32Op = (u32)pRegs->u64Arg0;

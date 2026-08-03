@@ -71,6 +71,18 @@ i64 net_lo_close(i64 i64Fd);
 /** Non-zero if fd is a live net_lo table entry (not vfs_ram / net_tcp). */
 int net_lo_fd_ok(i64 i64Fd);
 
+/**
+ * Return Linux-shaped POLLIN/POLLOUT/POLLERR/POLLHUP bits for a net_lo fd,
+ * or 0 if not a live net_lo socket.
+ * Bits: POLLIN=0x1 POLLOUT=0x4 POLLERR=0x8 POLLHUP=0x10
+ * POLLIN:  RX data, accept pending, or EOF (local RD shut / peer half-close).
+ * POLLOUT: can send (WR open and peer/self ring has space).
+ * POLLHUP: both directions shut, or peer gone with no remaining RX.
+ * Cold poll/epoll path query — does not touch vfs_ram or protonrt.
+ * ERR/HUP always surface; IN/OUT filtered by u32Want (0 → default IN|OUT).
+ */
+u32 net_lo_poll_mask(i64 i64Fd, u32 u32Want);
+
 /** shutdown: how 0=RD 1=WR 2=RDWR — mark half-closed; does not free slot. */
 i64 net_lo_shutdown(i64 i64Fd, int nHow);
 

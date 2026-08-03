@@ -139,8 +139,9 @@ copy_tree_to() {
 	fi
 	mkdir -p "$dest/steam"
 	echo "steam-host-prep: copy $src → $dest/steam"
-	# FAT/vfat (GJ-PERSIST) cannot chown/chmod the Unix way — rsync -a fails with
-	# "Operation not permitted" (exit 23). Detect and use content-only flags.
+	# Default GJ-PERSIST is ext4 (Linux lab) → rsync -a keeps modes + symlinks.
+	# FAT/vfat fallback cannot chown/chmod — rsync -a fails exit 23; detect and
+	# use content-only flags + -L materialize.
 	_fstype=$(findmnt -n -o FSTYPE --target "$dest" 2>/dev/null || true)
 	if [ -z "$_fstype" ] && command -v stat >/dev/null 2>&1; then
 		_fstype=$(stat -f -c %T "$dest" 2>/dev/null || true)

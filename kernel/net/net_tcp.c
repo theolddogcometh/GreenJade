@@ -108,8 +108,22 @@ typedef char tcp_mss_multi[(TCP_MSS > 0 && TCP_TX_MAX > TCP_MSS) ? 1 : -1];
 #define FL_PSH 0x08
 #define FL_ACK 0x10
 
-static const u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
-static const u8 g_aOurIp[4] = { 10, 0, 2, 15 };
+/* Synced from net_l2 (virtio QEMU or rtl8168 lab static). */
+static u8 g_aOurMac[6] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
+static u8 g_aOurIp[4] = { 10, 0, 2, 15 };
+
+static void
+tcp_sync_l2_identity(void)
+{
+	extern int net_l2_ready(void);
+	extern void net_l2_mac(u8 *pMac);
+	extern void net_l2_ip(u8 *pIp);
+
+	if (net_l2_ready() != 0) {
+		net_l2_mac(g_aOurMac);
+		net_l2_ip(g_aOurIp);
+	}
+}
 
 struct tcp_sock {
 	u8  u8Used;
@@ -1855,20 +1869,22 @@ tcp_soft_maybe_log(int fForce)
 	tcp_soft_print(0);
 }
 
+/* RFC 1071 — sum 16-bit words in network order (not LE u16 loads). */
 static u16
 ip_cksum(const void *p, u32 cb)
 {
-	const u16 *w = (const u16 *)p;
+	const u8 *b = (const u8 *)p;
 	u32 sum = 0;
 
-	while (cb > 1) {
-		sum += *w++;
-		cb -= 2;
+	while (cb > 1u) {
+		sum += ((u32)b[0] << 8) | (u32)b[1];
+		b += 2;
+		cb -= 2u;
 	}
-	if (cb) {
-		sum += *(const u8 *)w;
+	if (cb != 0u) {
+		sum += (u32)b[0] << 8;
 	}
-	while (sum >> 16) {
+	while ((sum >> 16) != 0u) {
 		sum = (sum & 0xffffu) + (sum >> 16);
 	}
 	return (u16)~sum;
@@ -2054,8 +2070,13 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 		}
 		return -1;
 	}
-	if (!virtio_net_ready()) {
-		return -1;
+	tcp_sync_l2_identity();
+	{
+		extern int net_l2_ready(void);
+
+		if (net_l2_ready() == 0 && !virtio_net_ready()) {
+			return -1;
+		}
 	}
 	/* Eth: one segment ≤ MSS; frame buf is 1518 (14+20+20+MSS). */
 	if (cbPay > TCP_MSS) {
@@ -2117,8 +2138,12 @@ tcp_tx_raw(u32 s, u8 flags, u32 seq, const u8 *pPay, u32 cbPay)
 	pTcp[16] = (u8)(csum >> 8);
 	pTcp[17] = (u8)csum;
 	cbTot = 14u + cbIp;
-	if (virtio_net_tx(aOut, cbTot) != 0) {
-		return -1;
+	{
+		extern int net_l2_tx(const void *pFrame, u32 cbLen);
+
+		if (net_l2_tx(aOut, cbTot) != 0) {
+			return -1;
+		}
 	}
 	g_u32Segs++;
 	g_u32TxB += cbPay;
@@ -2231,6 +2256,117 @@ net_tcp_fd_ok(i64 fd)
 	u32 s;
 
 	return fd_to_slot(fd, &s) == 0;
+}
+
+/*
+ * Linux poll bit numbers (same as EPOLLIN/OUT/ERR/HUP on x86).
+ * Cold-path query only — net_tcp table state, no vfs_ram/protonrt.
+ */
+#define TCP_POLLIN  0x0001u
+#define TCP_POLLPRI 0x0002u
+#define TCP_POLLOUT 0x0004u
+#define TCP_POLLERR 0x0008u
+#define TCP_POLLHUP 0x0010u
+
+/**
+ * Linux-shaped readiness for poll/epoll cold path.
+ *
+ * POLLIN:  RX data, accept pending, or EOF (peer FIN / terminal).
+ * POLLOUT: ESTABLISHED|CLOSE_WAIT, FIN not sent, soft write window open.
+ * POLLHUP: both sides shut soft (terminal) or local FIN + peer FIN.
+ * POLLERR: reserved soft (no RST surface yet); not set on live slots.
+ *
+ * Returns 0 if fd is not a live net_tcp socket. ERR/HUP always surface;
+ * IN/OUT filtered by u32Want (0 → default IN|OUT interest).
+ */
+u32
+net_tcp_poll_mask(i64 i64Fd, u32 u32Want)
+{
+	u32 u32Slot;
+	u32 u32Got = 0;
+	struct tcp_sock *pSock;
+	static u8 g_u8PollMaskOnce;
+
+	if (fd_to_slot(i64Fd, &u32Slot) != 0) {
+		return 0;
+	}
+	pSock = &g_aT[u32Slot];
+
+	/* Listener: POLLIN when accept() would not EAGAIN. */
+	if (pSock->u8Listening) {
+		i16 i16Peer = pSock->i16Peer;
+
+		if (i16Peer >= 0 && (u32)i16Peer < TCP_MAX &&
+		    g_aT[i16Peer].u8Used &&
+		    (g_aT[i16Peer].u8State == ST_ESTABLISHED ||
+		     g_aT[i16Peer].u8State == ST_SYN_RCVD)) {
+			u32Got |= TCP_POLLIN;
+		} else if (pSock->u8Pending > 0) {
+			/* Soft pending count without peer pointer still signals. */
+			u32Got |= TCP_POLLIN;
+		}
+	} else {
+		/*
+		 * Connected / half-closed: data or EOF readable.
+		 * ST_CLOSED on a live slot is "just socket()'d" — not EOF
+		 * (close() frees the slot; terminal states are TW/LAST_ACK).
+		 */
+		if (pSock->u32RxLen > 0) {
+			u32Got |= TCP_POLLIN;
+		} else if (pSock->u8State == ST_CLOSE_WAIT ||
+			   pSock->u8State == ST_TIME_WAIT ||
+			   pSock->u8State == ST_LAST_ACK) {
+			/* Empty ring + peer FIN / terminal → EOF-shaped POLLIN. */
+			u32Got |= TCP_POLLIN;
+		}
+
+		/*
+		 * Writeable when send path accepts data (ESTABLISHED|CLOSE_WAIT)
+		 * and we have not emitted local FIN. Soft peer window is advisory
+		 * (send still probes 1 B when fully in-flight) — report POLLOUT
+		 * whenever the state machine would accept net_tcp_send.
+		 * Write-window soft: u16PeerWnd / (SndNxt-SndUna) tracked on TX.
+		 */
+		if ((pSock->u8State == ST_ESTABLISHED ||
+		     pSock->u8State == ST_CLOSE_WAIT) &&
+		    !pSock->u8FinSent) {
+			u32Got |= TCP_POLLOUT;
+		}
+
+		/*
+		 * HUP when both directions shut soft, or terminal reclaim states.
+		 * CLOSE_WAIT alone keeps write side open (no HUP yet).
+		 * Fresh ST_CLOSED (pre-connect) is not hangup.
+		 */
+		if (pSock->u8State == ST_TIME_WAIT ||
+		    pSock->u8State == ST_LAST_ACK) {
+			u32Got |= TCP_POLLHUP;
+		} else if (pSock->u8State == ST_CLOSE_WAIT && pSock->u8FinSent) {
+			u32Got |= TCP_POLLHUP;
+		} else if (pSock->u8State == ST_FIN_WAIT1 ||
+			   pSock->u8State == ST_FIN_WAIT2) {
+			/* Local write shut; full HUP once RX also drained soft. */
+			if (pSock->u32RxLen == 0) {
+				u32Got |= TCP_POLLHUP;
+			}
+		}
+	}
+
+	/* Grep: net_tcp: soft poll_mask (once) */
+	if (!g_u8PollMaskOnce) {
+		g_u8PollMaskOnce = 1;
+		kprintf("net_tcp: soft poll_mask ready=0x%x fd=%lld want=0x%x "
+			"state=%u rx=%u pend=%u\n",
+			(unsigned)u32Got, (long long)i64Fd, (unsigned)u32Want,
+			(unsigned)pSock->u8State, (unsigned)pSock->u32RxLen,
+			(unsigned)pSock->u8Pending);
+	}
+
+	/* ERR/HUP always surface; IN/OUT only if requested (or want==0). */
+	if (u32Want == 0) {
+		return u32Got;
+	}
+	return (u32Got & (TCP_POLLERR | TCP_POLLHUP)) | (u32Got & u32Want);
 }
 
 i64
@@ -2670,6 +2806,7 @@ net_tcp_input(const u8 *pFrame, u32 cb)
 		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;
 	}
+	tcp_sync_l2_identity();
 	if (memcmp(pIp + 16, g_aOurIp, 4) != 0) {
 		tcp_soft_bump(&g_soft.u64InputMiss);
 		return 0;

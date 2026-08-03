@@ -4,8 +4,9 @@
 # Build a dual-partition GPT disk image for real-hardware testing on USB:
 #
 #   p1  EF00 ESP (FAT32, ~384 MiB)  — BOOTX64.EFI + KERNEL.ELF + rootfs/user
-#   p2  0700 data (FAT32, ~256 MiB) — label GJ-PERSIST for durable logs + ssh keys
-#                                     + optional prebuilt Steam tree (option 2)
+#                                     (FAT required by UEFI firmware)
+#   p2  8300 Linux (ext4, rest)     — label GJ-PERSIST: logs + ssh + Steam tree
+#                                     (ext4 for Linux/Unix-only lab: symlinks OK)
 #
 # Usage:
 #   ./scripts/make-hwtest-img.sh [out.img]
@@ -20,14 +21,16 @@
 #   ./scripts/steam-bar3-check.sh                  # media READY/SKELETON, exit 0
 #   ./scripts/hwtest-ssh-setup.sh                  # lab-host OpenSSH + hwtest key
 #
-# Env: GJ_HWTEST_IMG_MB, GJ_HWTEST_ESP_END_MB — geometry overrides
+# Env: GJ_HWTEST_IMG_MB, GJ_HWTEST_ESP_MIB — geometry overrides
 # Steam READY auto-grows image unless GJ_HWTEST_IMG_MB is set (see below).
+# GJ_HWTEST_PERSIST_FS=fat32  — emergency fallback to FAT32 persist (not default).
 set -eu
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root"
 out="${1:-build/greenjade-hwtest.img}"
 esp_dir="${TMPDIR:-/tmp}/gj-hwtest-esp.$$"
 persist_dir="${TMPDIR:-/tmp}/gj-hwtest-persist.$$"
+persist_raw="${TMPDIR:-/tmp}/gj-hwtest-persist-raw.$$"
 
 need() {
 	command -v "$1" >/dev/null 2>&1 || {
@@ -40,9 +43,25 @@ need mformat
 need mcopy
 need mmd
 need sgdisk
+# Default persist is ext4 (Linux/Unix lab); mke2fs required unless FAT fallback.
+PERSIST_FS="${GJ_HWTEST_PERSIST_FS:-ext4}"
+case "$PERSIST_FS" in
+ext4|EXT4)
+	PERSIST_FS=ext4
+	need mke2fs
+	;;
+fat32|FAT32|vfat|msdos)
+	PERSIST_FS=fat32
+	;;
+*)
+	echo "make-hwtest-img: unknown GJ_HWTEST_PERSIST_FS=$PERSIST_FS (use ext4 or fat32)" >&2
+	exit 1
+	;;
+esac
 
 cleanup() {
 	rm -rf "$esp_dir" "$persist_dir"
+	rm -f "$persist_raw"
 }
 trap cleanup EXIT INT TERM HUP
 
@@ -81,17 +100,23 @@ cat >"$persist_dir/README.txt" <<EOF
 GJ-PERSIST — GreenJade hardware-test durable storage
 ====================================================
 
-Mount this FAT32 partition on a lab host (label GJ-PERSIST) after a run:
+Filesystem: ${PERSIST_FS}  (default ext4 for Linux/Unix-only lab; ESP is still FAT)
+Label:      GJ-PERSIST
+
+Mount on a lab host after a run:
 
   sudo mkdir -p /mnt/gj-persist
   sudo mount -L GJ-PERSIST /mnt/gj-persist
   ls /mnt/gj-persist/logs
+  # ext4: rsync -a works (symlinks + modes preserved)
 
 Directories
-  logs/      serial captures, dmesg dumps, operator notes
-  journal/   structured run journals (JSON/text)
-  ssh/       authorized_keys + lab-host enable helpers
-  steam/     prebuilt Steam tree (option 2) — STATUS=$steam_status
+  logs/           serial captures, dmesg dumps, operator notes
+  journal/        structured run journals (JSON/text)
+  ssh/            authorized_keys + lab-host enable helpers
+  steam/          prebuilt Steam tree (option 2) — STATUS=$steam_status
+  linux-drivers/  host-collected Linux .ko + firmware + NEEDED-DRIVERS.txt
+                  (ABI/module-path staging; freestanding does not load .ko yet)
 
 Steam (option 2 — no dpkg on GreenJade)
   Lab host:  make steam-fetch && make steam-stage && make hwtest-img
@@ -209,6 +234,26 @@ fi
 EOF
 chmod +x "$persist_dir/bin/collect-serial-log.sh"
 
+# ---- Linux drivers on disk (operator collect → ABI/module-path staging) ----
+# Host-collected .ko + firmware + NEEDED-DRIVERS checklist. Not linked into
+# KERNEL.ELF; freestanding module load remains OPEN. Soft≠product GPL ship.
+chmod +x scripts/collect-linux-drivers.sh
+./scripts/collect-linux-drivers.sh build/linux-drivers >/dev/null || \
+	./scripts/collect-linux-drivers.sh build/linux-drivers || true
+if [ -d build/linux-drivers ]; then
+	mkdir -p "$persist_dir/linux-drivers"
+	cp -a build/linux-drivers/. "$persist_dir/linux-drivers/" 2>/dev/null || true
+	# ESP glance copy of the checklist (FAT-friendly)
+	if [ -f build/linux-drivers/NEEDED-DRIVERS.txt ]; then
+		cp -f build/linux-drivers/NEEDED-DRIVERS.txt \
+			"$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" 2>/dev/null || true
+	fi
+	n_ld=$(find build/linux-drivers/modules -type f 2>/dev/null | wc -l | tr -d ' ')
+	echo "make-hwtest-img: linux-drivers staged modules=${n_ld:-0} → GJ-PERSIST/linux-drivers/"
+else
+	echo "make-hwtest-img: warn: no build/linux-drivers (collect soft-failed)" >&2
+fi
+
 # Copy product rootfs tree onto ESP under EFI/GREENJADE/rootfs-full (small)
 mkdir -p "$esp_dir/EFI/GREENJADE/rootfs-full"
 # Limit to essential dirs to keep ESP size predictable
@@ -221,11 +266,14 @@ cp -f "$esp_dir/EFI/GREENJADE/INSTALL.txt" \
 	"$esp_dir/EFI/GREENJADE/HWTEST.txt" 2>/dev/null || true
 cat >"$esp_dir/EFI/GREENJADE/HWTEST.txt" <<'EOF'
 GreenJade hardware-test USB layout
-  p1 ESP (this partition) — boot GreenJade + user/ + lib/ + rootfs-full/
-  p2 GJ-PERSIST — durable logs + lab SSH enable + steam/
+  p1 ESP (this partition) — boot GreenJade + user/ + lib/ + drivers/ + rootfs-full/
+  p2 GJ-PERSIST — durable logs + lab SSH enable + steam/ + linux-drivers/
 
 Boot: UEFI → BOOTX64.EFI → serial GJ-EFI / M0 OK
       soft markers: sshd/scsi_mid/hda_client live spawn when embeds run
+G752: EFI/GREENJADE/LAPTOP.txt · DRIVERS.txt · NEEDED-DRIVERS.txt
+Linux modules (host-collected, for ABI/module-path work — not loaded yet):
+      mount -L GJ-PERSIST → linux-drivers/modules/ + NEEDED-DRIVERS.txt
 Logs: mount -L GJ-PERSIST; see README.txt
 SSH:  sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh  (lab host)
 Soft: ./scripts/gj-product-summary.sh <serial-log>
@@ -252,19 +300,29 @@ ESP_END_SECT=$((ESP_START_SECT + ESP_SECTS - 1))
 # Align persist start up to next 1 MiB boundary after ESP
 PERSIST_START_SECT=$(( (ESP_END_SECT + 1 + 2047) / 2048 * 2048 ))
 TOTAL_SECTS=$((IMG_MB * 1024 * 1024 / 512))
-PERSIST_SECTS=$((TOTAL_SECTS - PERSIST_START_SECT))
+# GPT last usable LBA is TOTAL_SECTS-34 (backup header + 32-entry table)
+# Do not fill through disk end or dd will clobber the backup GPT.
+GPT_LAST_USABLE=$((TOTAL_SECTS - 34))
+PERSIST_END_SECT=$GPT_LAST_USABLE
+PERSIST_SECTS=$((PERSIST_END_SECT - PERSIST_START_SECT + 1))
 if [ "$PERSIST_SECTS" -lt 2048 ]; then
 	echo "make-hwtest-img: FAIL persist too small (IMG_MB=$IMG_MB ESP_MIB=$ESP_MIB)" >&2
 	exit 1
 fi
 
+if [ "$PERSIST_FS" = "ext4" ]; then
+	PERSIST_GPT_TYPE=8300
+else
+	PERSIST_GPT_TYPE=0700
+fi
 sgdisk -o \
 	-n 1:${ESP_START_SECT}:${ESP_END_SECT} -t 1:ef00 -c 1:EFI \
-	-n 2:${PERSIST_START_SECT}:0 -t 2:0700 -c 2:GJ-PERSIST \
+	-n 2:${PERSIST_START_SECT}:${PERSIST_END_SECT} -t 2:${PERSIST_GPT_TYPE} -c 2:GJ-PERSIST \
 	"$out" >/dev/null
 
 ESP_OFF=$((ESP_START_SECT * 512))
 PERSIST_OFF=$((PERSIST_START_SECT * 512))
+PERSIST_BYTES=$((PERSIST_SECTS * 512))
 
 # Hard require staged EFI + kernel before packing
 if [ ! -f "$esp_dir/EFI/BOOT/BOOTX64.EFI" ] || [ ! -f "$esp_dir/EFI/GREENJADE/KERNEL.ELF" ]; then
@@ -292,6 +350,30 @@ mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/KERNEL.ELF" ::/EFI/GREENJAD
 mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/INSTALL.txt" ::/EFI/GREENJADE/INSTALL.txt
 mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/HWTEST.txt" ::/EFI/GREENJADE/HWTEST.txt
 mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/VERSION" ::/EFI/GREENJADE/VERSION 2>/dev/null || true
+# UDX / G752 operator notes (staged by stage-udx-drivers via stage-esp)
+if [ -f "$esp_dir/EFI/GREENJADE/DRIVERS.txt" ]; then
+	mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/DRIVERS.txt" ::/EFI/GREENJADE/DRIVERS.txt
+fi
+if [ -f "$esp_dir/EFI/GREENJADE/LAPTOP.txt" ]; then
+	mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/LAPTOP.txt" ::/EFI/GREENJADE/LAPTOP.txt
+fi
+if [ -f "$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" ]; then
+	mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" \
+		::/EFI/GREENJADE/NEEDED-DRIVERS.txt
+fi
+# Pre-sized 128 KiB KLOG.TXT for kernel xhci_msc stick log (FAT overwrite path)
+if [ ! -f "$esp_dir/EFI/GREENJADE/KLOG.TXT" ]; then
+	dd if=/dev/zero of="$esp_dir/EFI/GREENJADE/KLOG.TXT" bs=1024 count=128 status=none 2>/dev/null || \
+		dd if=/dev/zero of="$esp_dir/EFI/GREENJADE/KLOG.TXT" bs=1024 count=128 2>/dev/null || true
+fi
+mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/KLOG.TXT" ::/EFI/GREENJADE/KLOG.TXT 2>/dev/null || true
+if [ -f "$esp_dir/EFI/GREENJADE/BOOT.LOG" ]; then
+	mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/BOOT.LOG" ::/EFI/GREENJADE/BOOT.LOG 2>/dev/null || true
+else
+	: >"${TMPDIR:-/tmp}/gj-boot-log-empty.$$"
+	mcopy -o -i "$out@@$ESP_OFF" "${TMPDIR:-/tmp}/gj-boot-log-empty.$$" ::/EFI/GREENJADE/BOOT.LOG 2>/dev/null || true
+	rm -f "${TMPDIR:-/tmp}/gj-boot-log-empty.$$"
+fi
 
 # User ELFs + libs
 user_n=0
@@ -306,6 +388,17 @@ for f in "$esp_dir/EFI/GREENJADE/lib/"*; do
 	mcopy -o -i "$out@@$ESP_OFF" "$f" "::/EFI/GREENJADE/lib/$(basename "$f")"
 	lib_n=$((lib_n + 1))
 done
+
+# UDX driver-host binaries (flat under EFI/GREENJADE/drivers/)
+drv_n=0
+if [ -d "$esp_dir/EFI/GREENJADE/drivers" ]; then
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/drivers 2>/dev/null || true
+	for f in "$esp_dir/EFI/GREENJADE/drivers/"*; do
+		[ -f "$f" ] || continue
+		mcopy -o -i "$out@@$ESP_OFF" "$f" "::/EFI/GREENJADE/drivers/$(basename "$f")"
+		drv_n=$((drv_n + 1))
+	done
+fi
 
 # Thin rootfs-full snapshot on ESP (sbin/bin/usr/lib/etc — no opt/steam bulk)
 # Prepared above under $esp_dir; best-effort recursive mcopy, then fallbacks.
@@ -332,46 +425,74 @@ if [ -d "$esp_dir/EFI/GREENJADE/rootfs-full" ]; then
 	fi
 fi
 
-# Format persist with exact remaining sectors (must match GPT p2 start)
-mformat -i "$out@@$PERSIST_OFF" -T "$PERSIST_SECTS" -F -v GJ-PERSIST ::
-mmd -i "$out@@$PERSIST_OFF" ::/logs
-mmd -i "$out@@$PERSIST_OFF" ::/journal
-mmd -i "$out@@$PERSIST_OFF" ::/ssh
-mmd -i "$out@@$PERSIST_OFF" ::/bin
-mmd -i "$out@@$PERSIST_OFF" ::/steam
-mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/README.txt" ::/README.txt
-mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/logs/README.txt" ::/logs/README.txt
-mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/enable-lab-ssh.sh" ::/ssh/enable-lab-ssh.sh
-mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/sshd_config.snippet" ::/ssh/sshd_config.snippet
-mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/bin/collect-serial-log.sh" ::/bin/collect-serial-log.sh
-if [ -f "$persist_dir/ssh/authorized_keys" ]; then
-	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/authorized_keys" ::/ssh/authorized_keys
-	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/id_ed25519.pub" ::/ssh/id_ed25519.pub
-fi
-# Steam tree (option 2) — recursive copy when mcopy -s available
-if [ -d "$persist_dir/steam" ]; then
-	if mcopy -s -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam" ::/steam 2>/dev/null; then
-		:
+# Format + populate persist (default ext4 for Linux/Unix lab; FAT32 fallback)
+if [ "$PERSIST_FS" = "ext4" ]; then
+	# Raw FS image sized exactly to GPT p2 → mke2fs -d seeds tree → dd inject
+	# Do NOT pass sector count as mke2fs blocks-count (that is FS blocks, often 4KiB).
+	rm -f "$persist_raw"
+	if command -v truncate >/dev/null 2>&1; then
+		truncate -s "$PERSIST_BYTES" "$persist_raw"
 	else
-		# Fallback: top-level text + known files
-		for f in README.txt STATUS MANIFEST.txt STAGE_META.txt; do
-			if [ -f "$persist_dir/steam/$f" ]; then
-				mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam/$f" "::/steam/$f"
-			fi
-		done
-		if [ -d "$persist_dir/steam/bin" ]; then
-			mmd -i "$out@@$PERSIST_OFF" ::/steam/bin 2>/dev/null || true
-			for f in "$persist_dir/steam/bin/"*; do
-				[ -f "$f" ] || continue
-				mcopy -o -i "$out@@$PERSIST_OFF" "$f" "::/steam/bin/$(basename "$f")"
-			done
-		fi
-		# Best-effort usr tree (bootstrap can be large)
-		if [ -d "$persist_dir/steam/usr" ] && command -v mcopy >/dev/null 2>&1; then
-			mcopy -s -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam/usr" ::/steam/usr 2>/dev/null || \
-				echo "make-hwtest-img: warn: full steam/usr copy failed (size/mtools); STATUS still on media" >&2
+		dd if=/dev/zero of="$persist_raw" bs=512 count="$PERSIST_SECTS" status=none 2>/dev/null
+	fi
+	# -F: force on file; -L: volume label; -d: root dir contents (e2fsprogs ≥1.43)
+	# File size alone sets the FS size (matches PERSIST_BYTES / GPT p2).
+	if ! mke2fs -t ext4 -F -L GJ-PERSIST -d "$persist_dir" \
+		"$persist_raw" >/dev/null 2>&1; then
+		if ! mke2fs -t ext4 -F -L GJ-PERSIST -d "$persist_dir" "$persist_raw"; then
+			echo "make-hwtest-img: FAIL mke2fs ext4 persist (need e2fsprogs with -d)" >&2
+			exit 1
 		fi
 	fi
+	raw_sz=$(wc -c <"$persist_raw" | tr -d ' ')
+	if [ "$raw_sz" -ne "$PERSIST_BYTES" ]; then
+		echo "make-hwtest-img: FAIL persist raw size $raw_sz != $PERSIST_BYTES" >&2
+		exit 1
+	fi
+	dd if="$persist_raw" of="$out" bs=512 seek="$PERSIST_START_SECT" count="$PERSIST_SECTS" \
+		conv=notrunc status=none
+	rm -f "$persist_raw"
+	echo "make-hwtest-img: persist ext4 label=GJ-PERSIST sectors=$PERSIST_SECTS (symlinks OK)"
+else
+	# Emergency FAT32 fallback (GJ_HWTEST_PERSIST_FS=fat32) — no real symlinks
+	mformat -i "$out@@$PERSIST_OFF" -T "$PERSIST_SECTS" -F -v GJ-PERSIST ::
+	mmd -i "$out@@$PERSIST_OFF" ::/logs
+	mmd -i "$out@@$PERSIST_OFF" ::/journal
+	mmd -i "$out@@$PERSIST_OFF" ::/ssh
+	mmd -i "$out@@$PERSIST_OFF" ::/bin
+	mmd -i "$out@@$PERSIST_OFF" ::/steam
+	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/README.txt" ::/README.txt
+	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/logs/README.txt" ::/logs/README.txt
+	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/enable-lab-ssh.sh" ::/ssh/enable-lab-ssh.sh
+	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/sshd_config.snippet" ::/ssh/sshd_config.snippet
+	mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/bin/collect-serial-log.sh" ::/bin/collect-serial-log.sh
+	if [ -f "$persist_dir/ssh/authorized_keys" ]; then
+		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/authorized_keys" ::/ssh/authorized_keys
+		mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/ssh/id_ed25519.pub" ::/ssh/id_ed25519.pub
+	fi
+	if [ -d "$persist_dir/steam" ]; then
+		if mcopy -s -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam" ::/steam 2>/dev/null; then
+			:
+		else
+			for f in README.txt STATUS MANIFEST.txt STAGE_META.txt; do
+				if [ -f "$persist_dir/steam/$f" ]; then
+					mcopy -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam/$f" "::/steam/$f"
+				fi
+			done
+			if [ -d "$persist_dir/steam/bin" ]; then
+				mmd -i "$out@@$PERSIST_OFF" ::/steam/bin 2>/dev/null || true
+				for f in "$persist_dir/steam/bin/"*; do
+					[ -f "$f" ] || continue
+					mcopy -o -i "$out@@$PERSIST_OFF" "$f" "::/steam/bin/$(basename "$f")"
+				done
+			fi
+			if [ -d "$persist_dir/steam/usr" ]; then
+				mcopy -s -o -i "$out@@$PERSIST_OFF" "$persist_dir/steam/usr" ::/steam/usr 2>/dev/null || \
+					echo "make-hwtest-img: warn: full steam/usr copy failed (FAT/mtools)" >&2
+			fi
+		fi
+	fi
+	echo "make-hwtest-img: persist FAT32 (fallback) — prefer default ext4 for Steam symlinks"
 fi
 
 # Post-pack verification: KERNEL.ELF must be present and full-size on ESP
@@ -388,14 +509,25 @@ fi
 	echo "make-hwtest-img: ESP has KERNEL.ELF (staged ${sz_k_stage}B)"
 }
 
+# Ensure backup GPT is intact (safety net if any writer touched the tail)
+if ! sgdisk -v "$out" >/dev/null 2>&1; then
+	sgdisk -e "$out" >/dev/null 2>&1 || true
+fi
+
 sz=$(wc -c <"$out" | tr -d ' ')
-echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} rootfs_files=${rootfs_n}"
-echo "  layout: p1 ESP(GREENJADE) + p2 FAT32(GJ-PERSIST) logs+ssh+steam"
+ld_n=$(find "$persist_dir/linux-drivers/modules" -type f 2>/dev/null | wc -l | tr -d ' ')
+echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} drivers=${drv_n} linux_ko=${ld_n:-0} rootfs_files=${rootfs_n}"
+echo "  layout: p1 ESP FAT(GREENJADE) + p2 ${PERSIST_FS}(GJ-PERSIST) logs+ssh+steam+linux-drivers"
+echo "  G752:   EFI/GREENJADE/LAPTOP.txt · DRIVERS.txt · NEEDED-DRIVERS.txt · drivers/ (UDX)"
+echo "  Linux:  GJ-PERSIST/linux-drivers/ (host .ko staging; load on GJ = OPEN)"
 echo "  write:  sudo ./scripts/install-hwtest-usb.sh /dev/sdX"
 echo "  SSH:    after plug-in on lab host:"
 echo "          sudo mount -L GJ-PERSIST /mnt/gj-persist"
 echo "          sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh"
+echo "          ls /mnt/gj-persist/linux-drivers/modules"
 echo "  Soft:   ./scripts/gj-product-summary.sh <serial-log>   # exit 0"
 echo "  Keys:   ./scripts/gj-quick-keys.sh <serial-log>        # hard miss exit 1"
 echo "  Steam:  docs/STEAM_HWTEST.md  (make steam-fetch for READY tree)"
 echo "  Note:   READY/media ≠ Steam client run; Top-50 remains NOT-TRIED"
+echo "  FS:     default persist=ext4 (Linux lab); ESP remains FAT for UEFI"
+echo "          fallback: GJ_HWTEST_PERSIST_FS=fat32"

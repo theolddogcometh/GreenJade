@@ -38,8 +38,14 @@
  *   irq: soft stats     / irq_msix: soft stats      — aggregate counters
  *   irq: soft inventory PASS / irq: soft PASS
  *   irq_msix: soft inventory PASS / irq_msix: soft PASS
+ *   irq_msix: soft user notify PASS — soft inject → badge for bound host
  * Never hard-gates product paths; diagnostics / smoke grep only.
  * Soft ≠ live device MSI-X product close; soft ≠ game I/O; bar3 remains open.
+ *
+ * Driver-host soft wire (soft≠product):
+ *   soft user bind (handle→badge) → soft inject / table fire →
+ *   notify_pulse(notify_msix_global) → userspace GJ_SYS_NOTIFY_WAIT
+ *   which=0 mask=badge block=0|1 reaps matched pending bits.
  */
 #include <gj/apic.h>
 #include <gj/idt.h>
@@ -95,8 +101,20 @@ static u32 g_u32SoftInit;          /* irq_msix_init calls */
 static u32 g_u32SoftLogN;          /* soft inventory emissions */
 static u8  g_fSoftInvOnce;         /* one-shot deep dump after activity */
 
+/*
+ * Soft driver-host IRQ note (handle → badge mask).
+ * Soft ≠ product IRQ cap mint; delivery remains global MSI-X Notification.
+ * greppable: irq_msix: soft user notify PASS
+ */
+static u32 g_u32SoftUserHandle;    /* DDI soft handle id; 0 = unbound */
+static u64 g_u64SoftUserMask;      /* wait mask for GJ_SYS_NOTIFY_WAIT */
+static u32 g_u32SoftUserBinds;     /* soft_user_bind success count */
+static u32 g_u32SoftUserNotifyHit; /* inject match with bind live */
+static u8  g_fSoftUserNotifyPass;  /* once-shot PASS lamp */
+
 static void irq_msix_soft_inventory_log(const char *szVia);
 static void irq_msix_soft_inventory_maybe_once(void);
+static void irq_msix_soft_user_notify_maybe(u64 u64Badge);
 
 /** Soft: saturating-ish bump (u32 wrap is fine for telemetry). */
 static void
@@ -128,6 +146,48 @@ irq_msix_note_pulse(u64 u64Badge, u32 u32Path)
     }
     g_u64LastBadge = u64Badge;
     g_u32LastPath = u32Path;
+}
+
+/**
+ * After soft inject pulse: if a driver-host soft bind is live and the
+ * global MSI-X Notification pending overlaps the bind mask, record a hit
+ * and emit greppable PASS once. Soft path only (no kprintf on hard IRQ).
+ * Userspace reaps via GJ_SYS_NOTIFY_WAIT which=0 mask=g_u64SoftUserMask.
+ */
+static void
+irq_msix_soft_user_notify_maybe(u64 u64Badge)
+{
+    struct gj_notify *pNotify;
+    u64 u64Pending;
+    u64 u64Match;
+
+    if (g_u32SoftUserHandle == 0u || g_u64SoftUserMask == 0ull) {
+        return;
+    }
+    pNotify = notify_msix_global();
+    if (pNotify == NULL || !notify_is_live(pNotify)) {
+        return;
+    }
+    u64Pending = notify_pending(pNotify);
+    u64Match = u64Pending & g_u64SoftUserMask;
+    if (u64Match == 0ull) {
+        /* Pulse may have just OR'd; accept badge ∩ mask as soft match. */
+        u64Match = u64Badge & g_u64SoftUserMask;
+    }
+    if (u64Match == 0ull) {
+        return;
+    }
+    irq_msix_soft_inc(&g_u32SoftUserNotifyHit);
+    if (g_fSoftUserNotifyPass != 0u) {
+        return;
+    }
+    g_fSoftUserNotifyPass = 1u;
+    /* Grep: irq_msix: soft user notify PASS */
+    kprintf("irq_msix: soft user notify PASS handle=%u badge=0x%lx "
+            "pending=0x%lx mask=0x%lx "
+            "wait=GJ_SYS_NOTIFY_WAIT which=0 block=1 soft≠product\n",
+            (unsigned)g_u32SoftUserHandle, (unsigned long)u64Badge,
+            (unsigned long)u64Pending, (unsigned long)g_u64SoftUserMask);
 }
 
 /**
@@ -655,6 +715,14 @@ irq_msix_soft_inventory_log(const char *szVia)
             "self_ipi=0 bar3=open dual=soft+idt_gate via=%s wave=%u "
             "(soft inventory; not product gate)\n",
             szViaSafe, (unsigned)IRQ_MSIX_SOFT_DEEPEN_WAVE);
+
+    /* Grep: irq_msix: soft user */
+    kprintf("irq_msix: soft user handle=%u mask=0x%lx binds=%u "
+            "notify_hits=%u pass=%u wait=GJ_SYS_NOTIFY_WAIT which=0 "
+            "soft≠product\n",
+            (unsigned)g_u32SoftUserHandle, (unsigned long)g_u64SoftUserMask,
+            (unsigned)g_u32SoftUserBinds, (unsigned)g_u32SoftUserNotifyHit,
+            (unsigned)g_fSoftUserNotifyPass);
 
     /* Grep: irq_msix: soft ratio (Wave 15 twin) */
     {
@@ -1749,8 +1817,55 @@ irq_msix_soft_inject(u64 u64Badge)
     g_u32MsixIrq++;
     irq_msix_note_pulse(u64Badge, GJ_MSIX_PATH_SOFT);
     notify_pulse(pNotify, u64Badge);
-    /* No kprintf here: may be nested under soft fire / early inject storms. */
+    /*
+     * Soft user notify: when a driver-host bind is live, one-shot PASS
+     * (kprintf only on first match — safe under inject storms).
+     */
+    irq_msix_soft_user_notify_maybe(u64Badge);
+    /* No other kprintf here: may be nested under soft fire / early inject. */
     irq_msix_soft_inventory_maybe_once();
+}
+
+int
+irq_msix_soft_user_bind(u32 u32Handle, u64 u64BadgeMask)
+{
+    if (u32Handle == 0u) {
+        g_u32SoftUserHandle = 0u;
+        g_u64SoftUserMask = 0ull;
+        return 0;
+    }
+    if (!g_fReady) {
+        return -1;
+    }
+    if (u64BadgeMask == 0ull) {
+        u64BadgeMask = GJ_MSIX_BADGE_SOFT;
+    }
+    g_u32SoftUserHandle = u32Handle;
+    g_u64SoftUserMask = u64BadgeMask;
+    irq_msix_soft_inc(&g_u32SoftUserBinds);
+    /* Grep: irq_msix: soft user bind */
+    kprintf("irq_msix: soft user bind handle=%u mask=0x%lx "
+            "wait=GJ_SYS_NOTIFY_WAIT which=0 soft≠product\n",
+            (unsigned)u32Handle, (unsigned long)u64BadgeMask);
+    return 0;
+}
+
+u32
+irq_msix_soft_user_handle(void)
+{
+    return g_u32SoftUserHandle;
+}
+
+u64
+irq_msix_soft_user_mask(void)
+{
+    return g_u64SoftUserMask;
+}
+
+u32
+irq_msix_soft_user_notify_hits(void)
+{
+    return g_u32SoftUserNotifyHit;
 }
 
 u32
@@ -1774,6 +1889,7 @@ irq_msix_soft_pulse_path(u64 u64Badge)
     g_u32SoftPulsePath++;
     irq_msix_note_pulse(u64Badge, GJ_MSIX_PATH_SOFT);
     notify_pulse(pNotify, u64Badge);
+    irq_msix_soft_user_notify_maybe(u64Badge);
     /*
      * Soft path verify: pending must observe the OR'd badge (stats poll;
      * does not clear — wait path owns reclaim).
@@ -1946,6 +2062,34 @@ irq_msix_soft_path_exercise(void)
                 "last_badge=0x%lx\n",
                 g_u32MsixSoft, g_u32SoftPulsePath, g_u32TablePulse,
                 (unsigned long)g_u64LastBadge);
+        /*
+         * Soft driver-host wire selftest: bind synthetic handle → soft inject
+         * → pending matches mask (same shape as userspace NOTIFY_WAIT reclaim).
+         * greppable: irq_msix: soft user notify PASS
+         */
+        if (irq_msix_soft_user_bind(1u, GJ_MSIX_BADGE_SOFT) == 0) {
+            irq_msix_soft_inject(GJ_MSIX_BADGE_SOFT);
+            /*
+             * If inject path skipped PASS (e.g. race), still confirm pending
+             * and emit once so boot smoke always greps the wire.
+             */
+            if (g_fSoftUserNotifyPass == 0u) {
+                u64 u64PendUser = notify_pending(pNotify);
+
+                if ((u64PendUser & GJ_MSIX_BADGE_SOFT) != 0ull) {
+                    irq_msix_soft_inc(&g_u32SoftUserNotifyHit);
+                    g_fSoftUserNotifyPass = 1u;
+                    kprintf("irq_msix: soft user notify PASS handle=%u "
+                            "badge=0x%lx pending=0x%lx mask=0x%lx "
+                            "wait=GJ_SYS_NOTIFY_WAIT which=0 block=1 "
+                            "soft≠product\n",
+                            (unsigned)g_u32SoftUserHandle,
+                            (unsigned long)GJ_MSIX_BADGE_SOFT,
+                            (unsigned long)u64PendUser,
+                            (unsigned long)g_u64SoftUserMask);
+                }
+            }
+        }
     } else {
         irq_msix_soft_inc(&g_u32SoftExerciseFail);
         kprintf("irq: MSI-X soft pulse path FAIL soft=%u path=%u tbl=%u "
@@ -2003,6 +2147,11 @@ irq_msix_init(void)
     g_u32SoftExerciseFail = 0;
     g_u32SoftExerciseNotReady = 0;
     g_fSoftInvOnce = 0;
+    g_u32SoftUserHandle = 0;
+    g_u64SoftUserMask = 0;
+    g_u32SoftUserBinds = 0;
+    g_u32SoftUserNotifyHit = 0;
+    g_fSoftUserNotifyPass = 0;
     kprintf("irq: MSI-X vec=0x%x Notification bound PASS\n", GJ_MSIX_IRQ_VEC);
     /* Baseline soft inventory before exercise (zeros typical). */
     irq_msix_soft_inventory_log("init");

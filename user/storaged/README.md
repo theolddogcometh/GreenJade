@@ -220,3 +220,5 @@ Full surface (STATS/CAP/QUEUE_INFO/FLUSH, etc.): parent
 1. Door to `scsi_door_submit` / HBA host.
 2. Simple FS (ustar or fat32) for `/`.
 3. fsync barrier on writeback (`GJ_STORE_OP_FLUSH`).
+
+See also: [ABI-first pivot](../../docs/ABI_FIRST_PIVOT.md) (product direction).

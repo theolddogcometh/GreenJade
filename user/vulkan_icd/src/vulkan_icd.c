@@ -9,11 +9,11 @@
  *   "vk: QueuePresentKHR", "vk: QueueSubmit", "vk_icd: negotiate"
  * Do not change those substrings without updating the smoke harness.
  *
- * Soft inventory (Wave 126 exclusive deepen; greppable; not bar3 GPU):
+ * Soft inventory (Wave 126 exclusive deepen; greppable GPU):
  *   vk_icd: soft inventory wave=70 negotiate=… present=… submit=… acquire=…
  *   vk_icd: soft deepen wave=70 areas=negotiate,instance,device,swapchain,
  *           acquire,present,submit,lookup,host,path,counts,features,note,crc
- *   vk_icd: soft path software_present|virtio_gpu bar3=0
+ *   vk_icd: soft path software_present|virtio_gpu
  * Soft counters wrap OK; never hard-gate product returns.
  * greppable: "vk_icd: soft"
  */
@@ -1054,7 +1054,7 @@ static const char g_szVkIcdSoftInventory[] =
     "vk_icd: soft inventory wave=70 surfaces=10 areas=14 "
     "negotiate=1 instance=1 device=1 swapchain=1 acquire=1 present=1 "
     "submit=1 lookup=1 host=1 path=1 counts=1 features=1 note=1 crc=1 "
-    "bar3=0 (soft inventory; not bar3)";
+    " (soft inventory)";
 
 /*
  * Grep: vk_icd: soft deepen
@@ -1063,7 +1063,7 @@ static const char g_szVkIcdSoftDeepen[] =
     "vk_icd: soft deepen wave=70 areas=14 "
     "negotiate,instance,device,swapchain,acquire,present,submit,"
     "lookup,host,path,counts,features,note,crc "
-    "software_present=1 multi_server=0 confine=0 bar3=0";
+    "software_present=1 multi_server=0 confine=0";
 
 /*
  * Grep: vk_icd: soft path
@@ -1072,25 +1072,25 @@ static const char g_szVkIcdSoftPath[] =
 #ifdef GJ_VK_KERNEL_SMOKE
     "vk_icd: soft path mode=kernel_smoke virtio_gpu=1 "
     "present=virtio software_crc=0 multi_server=0 confine=0 "
-    "bar3=0 (soft inventory; not bar3)";
+    " (soft inventory)";
 #else
     "vk_icd: soft path mode=host software_present=1 "
     "present=soft_fb_crc multi_server=0 confine=0 "
-    "bar3=0 (soft inventory; not bar3)";
+    " (soft inventory)";
 #endif
 
 /*
  * Grep: vk_icd: soft honesty
  */
 static const char g_szVkIcdSoftHonesty[] =
-    "vk_icd: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "vk_icd: soft honesty multi_server=0 confine=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70";
 
 /* Soft area name catalog (Wave 111; cold only). */
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 static const char *const g_apszVkIcdSoftAreas[] = {

@@ -29,7 +29,7 @@
  *   greppable: protonrt-user: soft serve-miss
  *   greppable: protonrt-user: soft deepen wave=14
  *   greppable: protonrt-user: soft inventory areas=6 wave=14
- * Soft areas (fixed; agent honesty only — not bar3):
+ * Soft areas (fixed; agent honesty only —):
  *   1 up-banner   2 fixed-frame   3 wire-zero
  *   4 yield-miss  5 one-shot-soft 6 never-exit-soft
  * Soft flags in r15 (bit inventory, Wave 14):

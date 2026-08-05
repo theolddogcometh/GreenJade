@@ -26,8 +26,8 @@
  *   ld-gj: soft so used=… hash=… gnu=… dyn=…
  *   ld-gj: soft probe so=… gnu=… so_soft=… gnu_soft=… hit=…
  *   ld-gj: soft deepen wave=70 areas=… so=… hit=… meth=…
- *   ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan bar3=0
- *   ld-gj: soft resolve inv=… id=… so_inv=… gnu_inv=… bar3=0
+ *   ld-gj: soft path handoff=… multi=… resolve=sysv+gnu+scan
+ *   ld-gj: soft resolve inv=… id=… so_inv=… gnu_inv=…
  * Diagnostics only — never hard-fail live/scaffold PASS.
  *
  * Smoke markers (prefix-stable): ld-gj: handoff magic PASS, multi-SO,
@@ -107,7 +107,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define GJ_LD_SOFT_WAVE 70u
@@ -1118,7 +1118,7 @@ soft_inventory_log(void)
     aLine[o] = '\0';
     gj_puts(aLine);
 
-    /* Grep: ld-gj: soft path (Wave 111 honesty; not bar3) */
+    /* Grep: ld-gj: soft path (Wave 111 honesty) */
     o = 0u;
     soft_append_s(aLine, sizeof(aLine), &o, "ld-gj: soft path handoff=");
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_fSoftHandoff);
@@ -1127,12 +1127,12 @@ soft_inventory_log(void)
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)(g_cSoImg > 0u));
     soft_append_s(aLine, sizeof(aLine), &o,
                   " resolve=sysv+gnu+scan multi_server=0 confine=0 "
-                  "bar3=0 (soft; not bar3)\n");
+                  " (soft)\n");
     aLine[o] = '\0';
     gj_puts(aLine);
 
     /* Grep: ld-gj: soft honesty (Wave 126 exclusive deepen) */
-    gj_puts("ld-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    gj_puts("ld-gj: soft honesty multi_server=0 confine=0 "
             "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
     /* Grep: ld-gj: soft resolve (Wave 111 companion probe rollup) */
@@ -1147,7 +1147,7 @@ soft_inventory_log(void)
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftSoInv);
     soft_append_s(aLine, sizeof(aLine), &o, " gnu_inv=");
     soft_append_u(aLine, sizeof(aLine), &o, (unsigned long)g_cSoftGnuInv);
-    soft_append_s(aLine, sizeof(aLine), &o, " bar3=0\n");
+    soft_append_s(aLine, sizeof(aLine), &o, "\n");
     aLine[o] = '\0';
     gj_puts(aLine);
 }

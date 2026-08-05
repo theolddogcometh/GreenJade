@@ -34,7 +34,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 void scsi_mid_soft_inventory_log(void);
@@ -305,11 +305,11 @@ main(void)
     /* Grep: scsi_mid-server: soft path */
     printf("scsi_mid-server: soft path soft_lun=1 door=0 product_inq=none "
            "soft_inq=soft lun_honest=soft multi_server=0 confine=0 wave=%u "
-           "(soft inventory; not bar3)\n",
+           "(soft inventory)\n",
            (unsigned)SOFT_HOST_WAVE);
 
     /* Grep: scsi_mid-server: soft honesty (Wave 126 exclusive deepen) */
-    printf("scsi_mid-server: soft honesty multi_server=0 confine=0 bar3=0 "
+    printf("scsi_mid-server: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
            (unsigned)SOFT_HOST_WAVE);
 

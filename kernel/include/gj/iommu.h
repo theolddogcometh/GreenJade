@@ -284,8 +284,11 @@ int  iommu_vtd_domain_soft_smoke(void);
  *   iommu: xhci identity bdf=B:S.F … SKIP
  *   iommu: xhci identity bdf=B:S.F … FAIL
  *
- * Parent (main / xhci) should call after iommu_probe(), e.g.:
- *   (void)iommu_vtd_xhci_identity(0, 0x14, 0);
+ * Parent (main / xhci / rtl8168) should call after iommu_probe(), e.g.:
+ *   (void)iommu_vtd_xhci_identity(0, 0x14, 0);       // xHCI
+ *   (void)iommu_vtd_xhci_identity(bus, slot, func);  // 10ec:8168 @ 03:00.0
  * Pair with dma_buf_alloc_page() so device DMA PAs stay in identity cover.
+ * Root table covers all 256 buses (shared identity context) so non-bus-0
+ * endpoints (G752 NIC) are not left unmapped under TE.
  */
 int  iommu_vtd_xhci_identity(u8 bus, u8 slot, u8 func);

@@ -12,14 +12,17 @@
  *   xhci_msc_last_stage()        — bring-up stage for panel / serial
  *   xhci_msc_last_cc()           — last xHCI completion code (sticky)
  *
- * Greppable serial markers (soft; never claim HID/bar3):
+ * Greppable serial markers (soft; never claim HID):
  *   xhci: init PASS|FAIL|SKIP
  *   xhci: port connect ...
  *   xhci: SS port pick ...
  *   xhci: SS-capable ports ...
  *   xhci: ctrl req=0x.. wlen=.. cc=.. residual=.. slot=.. port=.. spd=..
  *   msc: BOT ready capacity=...
- *   stick: log write PASS|FAIL bytes=... path=KLOG.TXT|raw
+ *   msc: not_ready reason=...
+ *   stick: log write OPEN|PASS|FAIL bytes=... path=none|KLOG.TXT|raw
+ *   stick: persist STATUS OPEN ... (MSC not ready; soft fail-closed)
+ *   stick: raw log smoke write+read PASS | write OPEN|FAIL
  */
 #pragma once
 
@@ -57,13 +60,24 @@ int xhci_msc_stick_log_ready(void);
  * 12 = Evaluate Context EP0 MPS fail
  * 13 = full device descriptor fail
  * 14 = USB hub skipped (no hub support)
- * 15 = config descriptor fail
+ * 15 = GET_DESCRIPTOR(config) fail (G752 high-water; cc=0 = timeout)
  * 16 = no MSC BOT interface
  * 17 = SET_CONFIGURATION fail
  * 18 = Configure Endpoint fail
  * 19 = Address Device command fail (BSR0; real xHCI address path)
  * 20 = legacy software SET_ADDRESS control fail (no longer used; xHCI
  *      addresses via Address Device BSR=0 only — see xhci_msc.c)
+ *
+ * Panel / serial (soft; Soft≠product):
+ *   XHCI stage=15 get_config cc=0 TO pN/sN
+ *   USB MSC: GET_CONFIG fail (cc=0=TO)
+ *   msc: not_ready reason=get_config|no_ccs|not_bot|stage_N
+ *   msc: ready reason=bot_capacity
+ *   msc: progress get_config|set_config|config_ep|bot_capacity|enum|
+ *                 get_desc|readdress|ep0_pre_config ...
+ *   xhci: get config PASS|FAIL|GET_CONFIG stage=15
+ *   xhci: ep0 hard-resync|soft-continue|ep0_state
+ *   stick: raw log smoke write+read PASS
  */
 u32 xhci_msc_last_stage(void);
 
@@ -94,8 +108,12 @@ u8 xhci_msc_last_speed(void);
  * Write log payload to pre-sized EFI/GREENJADE/KLOG.TXT on LUN0 partition 1
  * (FAT32 ESP) when possible; else raw high-LBA area with magic "GJUSBLOG1".
  *
+ * Soft fail-closed when MSC not ready: returns -1 and emits greppable
+ * `stick: log write OPEN ...` (never silent). Ready path unchanged.
+ * Soft≠product; not a store_door substitute (store_door = virtio/scsi).
+ *
  * @param pBuf  payload bytes
  * @param cb    length (truncated to file/raw budget)
- * @return 0 on success, -1 on failure / not ready
+ * @return 0 on success, -1 on failure / not ready (OPEN)
  */
 int xhci_msc_stick_log_write(const void *pBuf, u32 cb);

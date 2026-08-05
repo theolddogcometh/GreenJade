@@ -6,7 +6,7 @@
  *
  * Soft inventory (Wave 126 exclusive deepen — greppable "storaged: soft …"):
  *   storaged: soft inventory … / soft deepen wave=70 …
- *   multi_server=0 confine=0; soft ≠ product multi-server confine; not bar3.
+ *   multi_server=0 confine=0; soft ≠ product multi-server confine.
  *
  * Exercises door-shaped sector R/W against an in-process 32 KiB image so CI
  * can green without the kernel store door. The freestanding product path is
@@ -403,15 +403,15 @@ main(void)
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
     printf("storaged: soft inventory soft_steps=%u sectors=%u io=%u "
            "wave=70 multi_server=0 confine=0\n",
            cSoft, (unsigned)GJ_STORE_SECTS, (unsigned)g_u32Io);
     printf("storaged: soft deepen product_kernel=OPEN wave=70 areas=1 multi_server=0 "
-           "confine=0 bar3=0\n");
-    printf("storaged: soft honesty multi_server=0 confine=0 bar3=0 "
+           "confine=0\n");
+    printf("storaged: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
     printf("storaged: door-shaped multi-lba ok sectors=%u io=%u\n",

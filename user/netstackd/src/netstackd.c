@@ -158,15 +158,15 @@ main(void)
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
     printf("netstackd: soft inventory tx=%u rx=%u echo=%u wave=70 "
            "multi_server=0 confine=0\n",
            g_u32Tx, g_u32Rx, g_u32Echo);
     printf("netstackd: soft deepen product_kernel=OPEN wave=70 areas=1 multi_server=0 "
-           "confine=0 bar3=0\n");
-    printf("netstackd: soft honesty multi_server=0 confine=0 bar3=0 "
+           "confine=0\n");
+    printf("netstackd: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
     printf("netstackd: PASS\n");

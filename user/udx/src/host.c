@@ -258,7 +258,7 @@ host_soft_inventory_log(void)
      * Grep: udx: host soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    host_soft_emit("udx: host soft honesty multi_server=0 confine=0 bar3=0 "
+    host_soft_emit("udx: host soft honesty multi_server=0 confine=0 "
                   "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
                   UDX_HOST_SOFT_WAVE);
 
@@ -1283,6 +1283,6 @@ udx_host_bind_by_id(u16 u16Vendor, u16 u16Device,
  * greppable: udx: soft ddi dma not-granted
  * greppable: udx: soft ddi bind PASS
  * greppable: udx: soft ddi bind SKIP
- * Product lamps 0; bar3 OPEN; no GPL.
+ * Product lamps 0;; no GPL.
  * G752 first bind targets: 10ec:8168, 8086:a12f.
  */

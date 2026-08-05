@@ -21,9 +21,15 @@
 | `make hwtest-img` | Packs those onto **GJ-PERSIST/linux-drivers/** + ESP **NEEDED-DRIVERS.txt** |
 | `make linux-hwtest-img` | Linux inventory USB; **`70-needed-drivers.sh`** writes DUT **NEEDED-DRIVERS** for collect |
 | Soft module loader + ksym | **In progress** — see [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) |
-| Module **load** / `finit_module` on freestanding GJ | **OPEN** — staging is for ABI/module-path development; not “insmod works today” |
+| Module **load** / soft bind (embed r8169) | **SOFT DONE** on G752 — `INIT=0`, `REG=1` `MATCH=1` `NETDEV SOFT 1`; force-EMU netdev-only fix when bound without netdev |
+| Real `.ko` probe / hostish `pci_dev` **0xb40** | **REAL+SOFT1 stable** — lab: `PROBE … REAL` `ST=0` `NETDEV SOFT 1` (prior first REAL same lamps); soft ≠ product |
+| **Next** | **D7** datapath / MMIO handoff — freestanding still owns MMIO; soft open/TX · hold14 refresh · soft NAPI (in progress) |
+| xHCI module path | **SKIP builtin** — no `xhci_pci.ko` on many hosts → dual **DoD A OPEN** ([TODO.md](TODO.md)) |
+| **Dual DoD (laptop)** | **A** Linux USB drivers path **OPEN** (stage-15 / builtin not enough). **B** freestanding **sshd TCP :22 OPEN** (ICMP ping ≠ :22). Soft ≠ product · **G-AC-1.** |
+| Product TX/RX / BOT | **OPEN** — soft ≠ product; **G-AC-1** |
+| Bar3 / Deck Top 50 | **OPEN** — [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (not boot spam) |
 
-Honesty: staged `.ko` are **host Linux** binaries (often GPL). GreenJade **source tree** stays dual-license (**no GPL source**); product AC is not “bar3 by shipping GPL.” Full `r8169` / `xhci_hcd` need a **large ksym surface** — iterative resolve, not freestanding thrash.
+Honesty: staged `.ko` are **host Linux** binaries (often GPL). GreenJade **source tree** stays dual-license (**no GPL source**); product AC is not “bar3 by shipping GPL.” Soft netdev bind ≠ TX/RX. Full `r8169` / `xhci_hcd` need a **large ksym surface** — iterative resolve, not freestanding thrash.
 
 ### Module path at a glance (normative: [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md))
 
@@ -31,10 +37,12 @@ Honesty: staged `.ko` are **host Linux** binaries (often GPL). GreenJade **sourc
 |---|------|--------|
 | 1 | Collect `.ko` (`collect-linux-drivers`) | **DONE** (live) |
 | 2 | Stage on media (`GJ-PERSIST/linux-drivers/`) | **DONE** (live) |
-| 3 | Soft module loader + ksym | **IN PROGRESS** |
-| 4 | `finit_module` / boot smoke | **OPEN** |
-| 5 | Iterative ksym for full r8169 / xhci_hcd | **OPEN** |
-| DoD | Module loads → probe binds PCI → net/usb datapath | **OPEN** (D5–D8) |
+| 3 | Soft module loader + ksym | **IN PROGRESS** (r8169 embed path soft-working; ksym **N=289**) |
+| 4 | Soft load + id match + netdev | **SOFT DONE** — `NETDEV SOFT 1` (EMU + REAL) |
+| 5 | Hostish real probe (`pci_dev` **0xb40**) | **SOFT DONE** — REAL+SOFT1 stable |
+| 6 | **D7** datapath / MMIO handoff | **NEXT** — freestanding owns MMIO; soft open/TX · hold14 · soft NAPI |
+| 7 | Iterative ksym / media `finit_module` | **OPEN** |
+| DoD | Real probe → net/usb datapath | **OPEN** (D6 soft-done; D7–D8) |
 
 ---
 
@@ -46,7 +54,7 @@ Honesty: staged `.ko` are **host Linux** binaries (often GPL). GreenJade **sourc
 | **License** | GreenJade tree + UDX + out-of-tree product drivers: **MIT OR Apache-2.0** (or BSD dual-license out of tree). **No** Linux driver **source** import. |
 | **Two tracks** | **(A)** UDX soft host (this runbook, wave D). **(B)** Host-collected module path: collect → stage → soft loader/ksym → `finit_module` — [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md). Track B is ABI/engineering; does **not** rewrite G-AC-1 for bar3. |
 | **Product path** | **ABI** (Linux-shaped syscall/personality) → **virtio T0** apps → **DDI** (`GJ_SYS_DDI` / door) → **UDX** clean-room / dual-license **userspace** driver hosts; module path deepens hostability of collected drivers. |
-| **Not product** | In-kernel freestanding `rtl8168` / `xhci_msc` stage thrash; Linux inventory `RESULT: PASS`; Steam **bar3** (stays **OPEN**); product NIC **TX/RX**, xHCI **BOT/MSC**, **live IRQ**, module **load/probe/datapath** (all still **OPEN**). |
+| **Not product** | In-kernel freestanding `rtl8168` / `xhci_msc` stage thrash; Linux inventory `RESULT: PASS`; Steam **bar3** (stays **OPEN**); product NIC **TX/RX**, xHCI **BOT/MSC**, **live IRQ**, REAL+SOFT1 / soft `NETDEV SOFT 1` ≠ product datapath. |
 | **Operator choice (2026-08)** | **Option 1 — ABI-first:** freestanding panel `xhci stage=15 GET_CONFIG cc=0` and `net … t/f/b/r link=1` are **lab honesty only**. Product-shaped work = **DDI bind + UDX hosts**; module path = **collect/stage + loader/ksym**. Do **not** treat stage/net counters as T0/T1 close. |
 
 ```text
@@ -102,7 +110,7 @@ Porter contract: [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md). Soft DDI surface: [
 | **UDX bind** | `user/udx/src/host.c` | `udx_host_bind_by_id` / `bind_scan` → same SCAN/GET/OPEN/MAP_BAR opcodes as kernel |
 | **User MMIO** | `vmm_map_user_device` in `kernel/mm/vmm.c` | MAP_BAR prefers process user-AS UC map; falls back to kernel UC for same-AS smoke |
 | **rtl8168_udx** | `user/drivers/rtl8168_udx/` | Clean-room skeleton — soft probe / ISR / work; **no product TX/RX** |
-| **xhci_udx** | `user/drivers/xhci_udx/` | Clean-room skeleton — soft cap read; **no product BOT/MSC** |
+| **xhci_udx** | `user/drivers/xhci_udx/` | Clean-room skeleton — soft cap/params/PORTSC + **soft BOT progress stub**; **no product BOT/MSC** |
 
 ### 2.2 Explicitly still **OPEN** (do not claim)
 
@@ -212,7 +220,7 @@ cat /mnt/gj-persist/linux-drivers/NEEDED-DRIVERS.txt 2>/dev/null || true
 sudo umount /mnt/gj-persist
 ```
 
-Photo of the panel is valid evidence when serial is absent.
+Panel capture is valid evidence when serial is absent.
 
 ---
 
@@ -239,8 +247,11 @@ Photo of the panel is valid evidence when serial is absent.
 | **`main: soft ddi bind 10ec:8168 PASS`** | OPEN + MAP BAR0/2 + soft IRQ note | **No** — not TX/RX |
 | **`main: soft ddi bind 8086:a12f PASS`** | OPEN + MAP BAR0 + soft CFG/IRQ note | **No** — not BOT / not stage15 |
 | **`main: soft ddi laptop smoke PASS … abi_first=1`** | Boot DDI bind path finished | **No** |
-| **`main: soft linux_module xhci path SKIP builtin`** | No `xhci_pci` embed (host often builtin) | **No** — not BOT; collect `.ko` later |
+| **`main: soft linux_module xhci path SKIP builtin`** | No `xhci_pci` embed (host often builtin) — **expected** on G752 class | **No** — not BOT; collect plain `.ko` later |
 | **`main: soft linux_module xhci path PASS\|FAIL`** | Optional weak embed load of `xhci_pci.ko` | **No** — load ≠ probe ≠ BOT |
+| **STATUS `netdev soft 1`** / **`pci reg=1 match=1`** | Soft r8169 register + id match | **No** — soft bind ≠ TX/RX |
+| **STATUS `probe 10ec:8168 real`** | Hostish real `.ko` probe (lab REAL+SOFT1) | **No** — REAL+SOFT1 ≠ product datapath |
+| **STATUS `probe 10ec:8168 soft`** | Soft EMU probe lamp (prior path) | **No** |
 | **`xhci: … stage=15`** / **`NET … t/f/b/r`** | Freestanding lab panel (ignore for product) | **No** |
 
 ### 5.2 UDX / class hosts (when host process runs bind)
@@ -252,6 +263,8 @@ Photo of the panel is valid evidence when serial is absent.
 | **`udx: soft ddi host note PASS`** / **`udx: soft ddi-ready`** | Host soft surface lamps | **No** |
 | **`rtl8168_udx: soft probe PASS`** | Clean-room NIC skeleton probe+ISR soft path | **No** — **TX/RX OPEN** |
 | **`xhci_udx: soft probe PASS`** / **`soft cap ver=`** | Clean-room xHCI skeleton cap read | **No** — **BOT OPEN** |
+| **`xhci_udx: soft bot stage=1..4`** / **`soft bot stub PASS`** | Soft BOT **progress** (cap→params→ports→stub) | **No** — catalog only; **no** CBW/MSC |
+| **`xhci_udx: soft params … maxports=`** / **`soft ports … ccs=`** | HCSPARAMS1 + soft PORTSC walk | **No** — not live enum / reset |
 
 In-tree greppable anchors (wave D — prefer these over old “scan deferred” only):
 
@@ -274,6 +287,10 @@ udx: soft ddi bind PASS
 udx: soft ddi bind SKIP
 rtl8168_udx: soft probe PASS
 xhci_udx: soft probe PASS
+xhci_udx: soft bot stage=
+xhci_udx: soft bot stub PASS
+xhci_udx: soft ports
+xhci_udx: soft params
 ```
 
 Host UDX demo (lab Linux, not laptop DUT — inject path; DDI bind expected **SKIP** without GreenJade kernel):
@@ -300,14 +317,14 @@ make -C user/drivers/xhci_udx && ./user/drivers/xhci_udx/build/xhci_udx
 |-------|--------|
 | **T0 product net** | **virtio-net** (QEMU / CI). Remains virtio until a **UDX NIC product** path with real DDI grants **and** TX/RX. |
 | **G752 wired NIC** | Hardware **`10ec:8168`**. Soft `rtl8168_udx` probe / lab in-kernel `rtl8168` ≠ product LAN. **Product TX/RX OPEN.** |
-| **Product sshd on laptop NIC** | **Not** expected on freestanding laptop boot. |
+| **Product sshd on laptop NIC** | **Not** product AC (**G-AC-1** / Soft ≠ product). Lab dual **DoD B:** freestanding **sshd TCP :22** from host — **OPEN** until proven ([TODO.md](TODO.md)); ICMP ≠ :22. |
 | **G752 xHCI** | Hardware **`8086:a12f`**. Soft `xhci_udx` cap read / lab `xhci_msc` ≠ product USB. **Product BOT/MSC OPEN.** |
 | **Live IRQ to UDX host** | **OPEN** — host `fire_irq` / soft ISR only; kernel notify product not closed. |
 | **Freestanding `rtl8168` / `xhci_msc` kernel** | **Lab only** — stage numbers are **not** T0/T1 product bars under ABI-first. |
 | **Linux inventory PASS** | Topology oracle (`a12f`, SS port map, VT-d translated). **≠** freestanding product. **≠** bar3. |
 | **Steam bar3** | **OPEN** — media READY on `GJ-PERSIST` ≠ client launch ≠ Deck Top 50. |
 | **Linux `.ko` product AC** | **Forbidden** for bar3/Steam ship story (**G-AC-1**). Dual-license product-shaped hosts remain **Linux-SHAPED UDX**. |
-| **Module path load/probe/datapath** | Collect+stage **DONE**; soft loader+ksym **in progress**; load / PCI bind / net+usb datapath **OPEN** — [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md). |
+| **Module path load/probe/datapath** | Collect+stage **DONE**; REAL+SOFT1 **stable**; **D7** TX/RX / MMIO handoff **OPEN** (freestanding owns MMIO) — [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md). |
 
 ```text
 Linux inventory stick  →  map PCI IDs / ports / IOMMU   (oracle)
@@ -349,10 +366,10 @@ Normative table: [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) **§ DoD checklist
 | **D2** | Stage on media (`GJ-PERSIST/linux-drivers/`) | **DONE** |
 | **D3** | Soft module loader + ksym | **OPEN** (in progress) |
 | **D4** | `finit_module` / boot smoke | **OPEN** |
-| **D5** | Module loads (init returns 0) | **OPEN** |
-| **D6** | Probe binds PCI (`10ec:8168` / `8086:a12f`) | **OPEN** |
-| **D7** | Net datapath (TX/RX) | **OPEN** |
-| **D8** | USB datapath (HC + device path) | **OPEN** |
+| **D5** | Module loads (init returns 0) | **SOFT DONE** (r8169 INIT=0 embed) |
+| **D6** | Probe binds PCI (`10ec:8168` hostish real) | **SOFT DONE** — REAL+SOFT1 stable; soft ≠ product |
+| **D7** | Net datapath (TX/RX) / MMIO handoff | **OPEN** (**next**); freestanding owns MMIO |
+| **D8** | USB datapath (HC + device path) | **OPEN** (xhci **SKIP builtin**) |
 | **D9** | Iterative ksym honesty for full r8169/xhci_hcd | **OPEN** |
 | **D10** | No GPL source in tree; no bar3-by-`.ko` claim | **DONE** (policy) |
 
@@ -369,26 +386,27 @@ Normative table: [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) **§ DoD checklist
 | Live DDI **cap mint** (MMIO_FRAME / IRQ Notification / DMA window into host CNode) | **OPEN** |
 | Product multi-server `devmgr` match → grant graph | **OPEN** |
 | Product UDX NIC laptop LAN / sshd | **OPEN** |
-| Soft module loader + ksym product surface | **OPEN** (in progress) |
-| `finit_module` load of staged `.ko` | **OPEN** |
-| Module probe bind + net/usb datapath (DoD D5–D8) | **OPEN** |
+| Soft module loader + ksym product surface | **OPEN** (in progress; r8169 embed soft-working; ksym N=289) |
+| Hostish real `.ko` probe (`pci_dev` **0xb40**) | **SOFT DONE** — REAL+SOFT1 stable; soft ≠ product |
+| Media `finit_module` load of staged `.ko` | **OPEN** |
+| Net/usb datapath (DoD D7–D8) / MMIO handoff | **OPEN** (**next**); freestanding owns MMIO |
 | Freestanding in-kernel stage count as T1 close | **Never** a product bar |
 | Linux `.ko` as bar3/Steam product AC | **Forbidden** (**G-AC-1**) |
 
 ### 7.4 Short DoD vs remaining (one glance)
 
 ```text
-WAVE D + MEDIA DONE                  STILL OPEN
+WAVE D + MEDIA + REAL+SOFT1          STILL OPEN
 ──────────────────────────────       ────────────────────────────────
-GJ_SYS_DDI=103 in kernel             Product TX/RX (rtl8168_udx)
+GJ_SYS_DDI=103 in kernel             Product TX/RX (rtl8168_udx / .ko)
 Real soft PCI scan (devmgr_soft)     Product xHCI BOT/MSC (xhci_udx)
 UDX SCAN/GET/OPEN/MAP_BAR bind       Live IRQ / kernel notify product
 vmm_map_user_device for user MMIO    Full CNode MMIO/IRQ/DMA cap mint
 Clean-room rtl8168_udx + xhci_udx    Multi-server devmgr match graph
-collect + stage linux-drivers/       Soft loader + ksym (in progress)
-G-AC-1: no bar3-by-.ko; no GPL src   finit_module / module loads
-Soft lamps greppable on laptop path  Probe binds PCI; net/usb datapath
-                                     bar3 (Steam client + matrix)
+collect + stage linux-drivers/       D7 net datapath / MMIO handoff
+REAL+SOFT1 stable                    Freestanding still owns MMIO
+r8169 INIT=0 + NETDEV SOFT 1         media finit_module; soft open/TX
+G-AC-1: no bar3-by-.ko; no GPL src   bar3 (Steam client + matrix)
 ```
 
 ---
@@ -420,5 +438,5 @@ Do not mix labels or claims. Details: [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTE
 
 *Dual MIT OR Apache-2.0 spirit: small honest docs, fail-closed claims, no GPL **source** in tree.*  
 ***G-AC-1:** no bar3/Steam product AC via shipping GPL `.ko` — product-shaped class hosts = Linux-SHAPED UDX.*  
-*Module path: collect+stage live; soft loader+ksym in progress; load/probe/datapath OPEN.*  
+*Module path: REAL+SOFT1 stable; soft ≠ product; next = D7 datapath / MMIO handoff (freestanding owns MMIO).*  
 *Wave D soft host path live ≠ product TX/RX ≠ BOT ≠ live IRQ ≠ bar3 closed.*

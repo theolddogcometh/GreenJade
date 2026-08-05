@@ -8,7 +8,58 @@ Policy: pure C, **MIT OR Apache-2.0**, no GPL, no OOP.
 **Design:** complete freeze — implement, do not re-litigate architecture  
 Specs: [Architecture](GREENJADE_KERNEL_SPEC.md) · [Design complete](DESIGN_SPEC_COMPLETE.md) · [Security](SECURITY_CORE_DESIGN.md) · [Proton](PROTON_PERSONALITY.md) · [Hybrid ABI](LINUX_ABI_HYBRID.md)
 
+**Live status (do not restate everywhere):**
+
+| Topic | Canonical doc |
+|-------|----------------|
+| **Bar3 / Deck Top 50** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (**OPEN** / **NOT-TRIED × 50**) |
+| **ABI-first + G752 drivers** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) |
+| **Host Linux `.ko` path** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) |
+| **Soft `pci_dev` plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) |
+| **r8169 MMIO handoff** | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) |
+| **Soft DDI** | [DDI_SOFT.md](DDI_SOFT.md) |
+
 ---
+
+## Current track — 2026-08-04 (dual DoD)
+
+**Direction:** dual laptop DoD on freestanding net + Linux USB module path. **Soft ≠ product.** **G-AC-1.** Dual **MIT OR Apache-2.0**. **Bar3** only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md).
+
+### Dual DoD (both OPEN until closed)
+
+| # | DoD | Status | Close when |
+|---|-----|--------|------------|
+| **A** | **Linux USB drivers path** (laptop) | **OPEN** (code in flight) | Soft `linux_usb_soft` (+usb/scsi ksym seed); freestanding MSC stage-15 GET_CONFIG deepen; host xHCI often **SKIP BUILTIN**. Close when stick/MSC works via Linux-shaped or freestanding path on DUT. See [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md). |
+| **B** | **sshd running / reachable** on laptop freestanding net | **OPEN** (code in flight) | Code: eth SYN-ACK rtx, sshd accept every yield + eth session path. Close when host `nc`/ssh to **TCP :22** gets `SSH-2.0-GreenJade_sshd` (and session path works). ICMP ping **PROVEN** ≠ this DoD. Soft ≠ product · **G-AC-1.** |
+
+**Lab context:** freestanding ICMP **PROVEN** (host **0% loss**); hybrid SOFT + L2 BR live; dual DoD A/B still need DUT re-flash proof. Soft ≠ product.
+
+| # | Parallel support | Status | Note |
+|---|------------------|--------|------|
+| **1** | Net freestanding ping | **PROVEN** | ICMP; VT-d all-bus identity + 8168G RX |
+| **2** | USB freestanding MSC stick | OPEN | Stage 15 GET_CONFIG deepen (EP0 soft-continue / hard-resync) |
+| **3** | Linux NIC module hybrid | Soft eng live | Gate0 SOFT (no REAL BAR); CF8/iomap zero-touch |
+| **4** | Linux USB module path | Soft seed | `linux_usb_soft`; leaf still needs more ksym / real HC |
+| **5** | DDI/UDX | Soft door | Soft BOT catalog; product mint OPEN |
+
+**Blocking now (dual DoD):** **A** USB stick/MSC · **B** TCP **:22** after flash. Soft ≠ product · **G-AC-1.**
+
+### Baseline (not dual-DoD close)
+
+| Item | Note |
+|------|------|
+| **DUT** | G752VT · `10ec:8168` · xHCI `8086:a12f` · lab **10.200.125.50** |
+| **Lab ping** | freestanding RX/TX + ICMP; hybrid SOFT — **not** sshd/:22 |
+| **sshd** | Freestanding eth path + SYN-ACK rtx in tree; DUT verify OPEN |
+| **Hybrid 4a** | `HYBRID WIRE=FS SOFT=R8169` · L2 BR · freestanding owns wire |
+| **REAL probe** | Hostish REAL soft PASS when gated; gate0 skips REAL for 8168 |
+| **RX unblock** | VT-d identity **all buses** + 8168G CPlus/EarlyOffV2 |
+| **T0 product net** | virtio |
+| **Docs** | No test-panel photo IDs in public docs (lamps / serial only) |
+| **Holds 7–15** | ksym · mod · netdev · probe · pci · xHCI · L2 BR · HYBRID |
+
+---
+
 
 ## Legend
 
@@ -144,7 +195,7 @@ Design all structures for **SMP** and **>1 TiB** even if M1 tests are smaller.
 Caps, hierarchical quotas, sync IPC with timeouts, mono clock.
 
 **Progress note (2026-07-23 — substantial incomplete soft product, not closed):**  
-Exclusive deepen shipped greppable soft product surfaces for the open list — **none close product** / bar3:
+Exclusive deepen shipped greppable soft product surfaces for the open list — **none close product**. Bar3 status: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only.
 
 | Track | Soft greps (shipped) | Still open (product) |
 |-------|----------------------|----------------------|
@@ -480,13 +531,12 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 - [x] **Bugfix:** `vmm_as_destroy` no longer frees PTs still shared with kernel (COW)
 - [x] **Bugfix:** syscall dispatch binds `g_pLinuxProc` to calling process (init mmap maps own AS)
 - [x] **IDT:** #BP/#OF DPL3 trap gates; int80 vector 128 DPL3
-- [ ] **Deck Top 50 matrix / bar3:** dated snapshot + HCL; track majority (≥25) → met (≥40); **real-hw Steam client + title runs still open**
-  - **When installable on real hardware:** install Steam → try Top 50 titles; fill [matrix](../matrix/deck-top50-2026-07-19.md) (not a SteamOS port)
+- [ ] **Deck Top 50 matrix / bar3:** see **only** [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) (OPEN; **NOT-TRIED × 50**). When installable: client + title runs → fill [matrix](../matrix/deck-top50-2026-07-19.md)
 - [x] **Steam option 2+3 scripts** (fetch/stage/host-prep media path; **not** real Steam client run) — `scripts/fetch-steam-bootstrap.sh`, `stage-steam-tree.sh`, `steam-host-prep.sh`
 - [x] **Install path partial:** `make stage-esp` + `make install-img` + `make install-usb DEV=` (GPT ESP img for dd/USB)
 - [x] **A2:** PE32 int80 brk with real page maps (`pe32: int80 brk PASS`)
 - [x] **A2:** PE32 int80 access/mkdir/rename/unlink via vfs (`pe32: int80 access PASS`)
-- [ ] **Real-hardware install path / bar3** (UEFI boot, storage, display, input, net sufficient for Steam client — ESP image ready; full userspace/Steam still open)
+- [ ] **Real-hardware install path for Steam client** (UEFI, storage, display, input, net) — ESP/`hwtest-img` live; full userspace/Steam still open. Bar3 ceiling: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md)
 - [x] **io_uring min rings + SQE I/O** — setup/enter/register + package mmap + SQE READ/WRITE/FSYNC/CLOSE/READV/WRITEV (`linux: io_uring min rings PASS`, `linux: io_uring mmap PASS`, `linux: io_uring SQE I/O PASS`, `linux: io_uring register depth PASS`, `linux: io_uring more opcodes PASS`); game/title I/O still open
 - [x] **A2 partial:** ELF PT_INTERP probe + ET_DYN load bias (`elf: PT_INTERP probe PASS`)
 - [x] **A2 partial:** execve INTERP load path (`linux: execve INTERP PASS`, `linux: dynlink path PASS`)
@@ -575,11 +625,12 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 4. [x] PMM freelist multi-TiB path + soak (not 4 GiB bitmap); hierarchical order freelists
 5. [x] **UEFI** OVMF + **SMP** schedule shipped (PMM-backed percpu growth still open)
 6. [x] Migrate SPDX to `MIT OR Apache-2.0` on all sources
-7. [ ] **Bar3:** real-hw install + Steam client + Deck Top 50 title matrix
+7. [ ] **Bar3 / Deck Top 50** — [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only (not restated in boot logs)
 8. [ ] **True 1 TiB soak** when host allows (`-m 1280G`; 768 GiB soak already PASS)
 9. [ ] Full multi-server security / `confine` + drop ambient authority
 10. [x] `io_uring` min rings + SQE I/O + register depth/more opcodes soft PASS (game/title I/O still open)
 11. [x] `aarch64` product-shaped scaffold (shared C string/stdio/pmm/sched + PSCI; UEFI PE still open)
+12. [ ] **Dual DoD (G752 laptop)** — **A** Linux USB drivers path (OPEN while stage-15/builtin) · **B** sshd reachable TCP **:22** on freestanding net (OPEN until host connects). Soft ≠ product · **G-AC-1.** See Current track.
 
 ---
 
@@ -587,8 +638,14 @@ Exclusive deepen shipped greppable soft product surfaces for the open list — *
 
 | Date | Note |
 |------|------|
-
-| 2026-07-24 | **Wave 126 product continuum tip:** parent wire **makefile_max=26800** (graph_batch26701–26800 in CGJ_SRCS + libc.map); soft deepen **retgradientangle**/**retblendangle**; CREATE-ONLY continuum pre-generated through **96000**. Product smoke **M0 OK UD=0**. Soft ≠ product complete. Product lamps **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
+| 2026-08-04 | **Dual DoD code land:** freestanding **ICMP PROVEN**; VT-d all-bus identity + 8168G RX; hybrid SOFT (gate0 no REAL BAR); **sshd** eth SYN-ACK rtx + accept-every-yield + eth session (DUT verify **OPEN**); **USB** stage-15 EP0 deepen + `linux_usb_soft` seed; public docs without test-panel photo IDs. Dual DoD **A/B still OPEN** until DUT flash proves stick + `:22`. Soft ≠ product. **G-AC-1.** Dual MIT/Apache. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-04 | **Dual DoD track opened:** **A** Linux USB path **OPEN**. **B** sshd TCP **:22** **OPEN** (ICMP ≠ :22). Soft ≠ product. **G-AC-1.** |
+| 2026-08-04 | **Multi-goal parallel (prior):** lab evidence `PROBE SOFT` · guest IP fixed **10.200.125.50** · USB stage-15 GET_CONFIG TO · `usb-storage` **FAIL KSYM** · xHCI **SKIP BUILTIN**. Soft ≠ product. **G-AC-1.** Dual MIT/Apache. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-04 | **Multi-goal parallel (prior):** lab evidence `PROBE SOFT` · `NET R0 B132` · hybrid ON · `L2 BR 0` · MSC **NOT READY** · xHCI **SKIP BUILTIN**. Soft ≠ product. **G-AC-1.** |
+| 2026-08-04 | **Waves 1–3 final status:** REAL+SOFT1 **proven** (`PROBE … REAL` `ST=0` `NETDEV SOFT 1`). Code: hold14 live (await lab panel/serial); soft open/NAPI skip `.ko` + softirq + first-tx; MMIO phase0 live + phases 1–3 stubs gate0 (phase3 Option A when gate1); soft skb + `dev_queue_xmit` reverse TX; D4 **PARTIAL** (`source=media` + embed fallback). Prior hybrid 4a eng: `HYBRID WIRE=FS SOFT=R8169` · `L2 BR RX>0`. Soft ≠ product. **G-AC-1.** Dual MIT/Apache. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
+| 2026-08-04 | **Wave land (integration):** hold14 · soft open/NAPI · MMIO stubs · reverse TX · D4 PARTIAL (see waves 1–3 row). Freestanding **still owns MMIO** at gate0. Soft ≠ product. **G-AC-1.** |
+| 2026-08-03 | **ABI-first G752:** lab evidence `PROBE … REAL` + `NETDEV SOFT 1` **stable**; **ksym N=289**; Soft L2 bridge **ON when REAL**. Soft ≠ product. **Next:** freestanding still owns MMIO; deepen soft open/TX. Bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). Prior first REAL probe; prior EMU `PROBE … SOFT`. Docs: [ABI_WAVE_STATUS](ABI_WAVE_STATUS.md) · [LINUX_MODULE_PATH](LINUX_MODULE_PATH.md). |
+| 2026-07-24 | **Wave 126 product continuum tip (historical):** parent wire **makefile_max=26800**; soft deepen **retgradientangle**/**retblendangle**; CREATE-ONLY through **96000**. Product smoke **M0 OK**. Soft ≠ product. Continuum ≠ bar3 — see [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). |
 | 2026-07-24 | **Wave 125 soft continuum (historical):** prior tip **makefile_max=26700**; soft deepen **retpaletteangle**/**retstrokeangle**. Soft ≠ product. bar3 open. |
 | 2026-07-24 | **Wave 124 soft continuum (honesty only):** makefile target high-water **advancing toward 26600** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retbrushangle**/**retinkangle** (CREATE-ONLY soft only); honest scan may still report **makefile_max=26500** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |
 | 2026-07-24 | **Wave 123 soft continuum (honesty only):** makefile target high-water **advancing toward 26500** (parent wires / CREATE-ONLY graph); soft deepen surfaces **retlayerangle**/**retcanvasangle** (CREATE-ONLY soft only); honest scan may still report **makefile_max=26400** until parent wires — **do not hardcode false max**. **Soft ≠ product complete.** Product lamps remain **0**. Top 50 **NOT-TRIED × 50**. **bar3 still open**. |

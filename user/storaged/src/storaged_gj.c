@@ -58,10 +58,10 @@
  *                which=… mapped=… va=…
  *   storaged-gj: soft multi lba=… sects=… bytes=… ok=…
  *   storaged-gj: soft deepen wave=70 areas=… ok=… skip=…
- *   storaged-gj: soft path store=1 ring=1 bar3=0 fs=0 multi_server=0
+ *   storaged-gj: soft path store=1 ring=1 fs=0 multi_server=0
  *                confine=0 wave=70
  *   storaged-gj: soft inventory PASS
- * Diagnostics only — never hard-fail the live path; not a bar3 / FS claim.
+ * Diagnostics only — never hard-fail the live path; not a
  * Honesty: soft inventory ≠ product multi-server confine.
  *
  *   make storaged-gj → build/user/storaged.elf
@@ -105,7 +105,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SOFT_INV_WAVE   61u
@@ -572,12 +572,12 @@ soft_inventory_log(void)
 
     /*
      * Grep: storaged-gj: soft path
-     * Honesty: store-door + soft ring inventory only; not bar3 / FS claim.
+     * Honesty: store-door + soft ring inventory only / FS claim.
      * Soft inventory ≠ product multi-server confine.
      */
     o = 0u;
     append_s(aLine, sizeof(aLine), &o,
-             "storaged-gj: soft path store=1 ring=1 bar3=0 fs=0 "
+             "storaged-gj: soft path store=1 ring=1 fs=0 "
              "multi_server=0 confine=0 wave=");
     append_u(aLine, sizeof(aLine), &o, (unsigned long)SOFT_INV_WAVE);
     append_s(aLine, sizeof(aLine), &o, "\n");
@@ -588,10 +588,10 @@ soft_inventory_log(void)
      * Grep: storaged-gj: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    msg("storaged-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    msg("storaged-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
-    /* Soft lamp only — never a product / bar3 gate. */
+    /* Soft lamp only — never a product gate. */
     msg("storaged-gj: soft inventory PASS\n");
 }
 

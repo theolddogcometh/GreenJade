@@ -197,7 +197,7 @@ dma_soft_inventory_log(void)
      * Grep: udx: dma soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    dma_soft_emit("udx: dma soft honesty multi_server=0 confine=0 bar3=0 "
+    dma_soft_emit("udx: dma soft honesty multi_server=0 confine=0 "
                   "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
                   UDX_DMA_SOFT_WAVE);
 
@@ -409,5 +409,5 @@ udx_dma_sync_single_for_device(struct udx_device *pDev, udx_dma_addr_t dma,
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */

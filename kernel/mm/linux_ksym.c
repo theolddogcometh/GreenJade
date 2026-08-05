@@ -221,8 +221,16 @@ static long gj_ksym_soft_ethtool_op_get_link(void) __attribute__((used));
 static long gj_ksym_soft_ethtool_op_get_link(void) { return 0; }
 static long gj_ksym_soft_ethtool_op_get_ts_info(void) __attribute__((used));
 static long gj_ksym_soft_ethtool_op_get_ts_info(void) { return 0; }
+/*
+ * Empty ksym only: real soft bodies in linux_dma_soft (replace on init).
+ * -ENOENT so accidental pre-replace calls do not look like "fw loaded".
+ */
 static long gj_ksym_soft_firmware_request_nowarn(void) __attribute__((used));
-static long gj_ksym_soft_firmware_request_nowarn(void) { return 0; }
+static long gj_ksym_soft_firmware_request_nowarn(void) { return -2; /* ENOENT */ }
+static long gj_ksym_soft_request_firmware(void) __attribute__((used));
+static long gj_ksym_soft_request_firmware(void) { return -2; /* ENOENT */ }
+static long gj_ksym_soft_request_firmware_direct(void) __attribute__((used));
+static long gj_ksym_soft_request_firmware_direct(void) { return -2; /* ENOENT */ }
 static long gj_ksym_soft_fortify_panic(void) __attribute__((used));
 static long gj_ksym_soft_fortify_panic(void) { return 0; }
 static long gj_ksym_soft_free_irq(void) __attribute__((used));
@@ -479,6 +487,7 @@ static long gj_ksym_soft_readw(void) __attribute__((used));
 static long gj_ksym_soft_readw(void) { return 0; }
 static long gj_ksym_soft_register_netdev(void) __attribute__((used));
 static long gj_ksym_soft_register_netdev(void) { return 0; }
+/* Empty ksym only; linux_dma_soft release_firmware is the soft no-op body. */
 static long gj_ksym_soft_release_firmware(void) __attribute__((used));
 static long gj_ksym_soft_release_firmware(void) { return 0; }
 static long gj_ksym_soft_request_irq(void) __attribute__((used));
@@ -562,6 +571,51 @@ static long gj_ksym_soft_writel(void) __attribute__((used));
 static long gj_ksym_soft_writel(void) { return 0; }
 static long gj_ksym_soft_writew(void) __attribute__((used));
 static long gj_ksym_soft_writew(void) { return 0; }
+
+/*
+ * Soft MSC leaf helpers (usb-storage.ko reloc surface) — safe empty/fail-closed
+ * generics only. Cap ~15; do NOT stub full usbcore/scsi midlayer here.
+ * Soft≠product. INIT=0 for usb_storage still MUST FAIL without usb_* / scsi_*
+ * ksym (see docs/LINUX_MODULE_PATH.md §D8).
+ * greppable: linux_ksym: soft usb_storage leaf stubs
+ */
+static long gj_ksym_soft_dma_max_mapping_size(void) __attribute__((used));
+static long gj_ksym_soft_dma_max_mapping_size(void) { return 0; }
+static long gj_ksym_soft_queue_limits_commit_update_frozen(void)
+    __attribute__((used));
+static long gj_ksym_soft_queue_limits_commit_update_frozen(void) { return 0; }
+static long gj_ksym_soft_sprintf(void) __attribute__((used));
+static long gj_ksym_soft_sprintf(void) { return 0; }
+static long gj_ksym_soft_seq_printf(void) __attribute__((used));
+static long gj_ksym_soft_seq_printf(void) { return 0; }
+static long gj_ksym_soft_seq_putc(void) __attribute__((used));
+static long gj_ksym_soft_seq_putc(void) { return 0; }
+static long gj_ksym_soft_complete(void) __attribute__((used));
+static long gj_ksym_soft_complete(void) { return 0; }
+static long gj_ksym_soft_finish_wait(void) __attribute__((used));
+static long gj_ksym_soft_finish_wait(void) { return 0; }
+static long gj_ksym_soft_wait_for_completion(void) __attribute__((used));
+static long gj_ksym_soft_wait_for_completion(void) { return 0; }
+static long gj_ksym_soft_wait_for_completion_interruptible(void)
+    __attribute__((used));
+static long gj_ksym_soft_wait_for_completion_interruptible(void) { return 0; }
+static long gj_ksym_soft_wait_for_completion_interruptible_timeout(void)
+    __attribute__((used));
+static long gj_ksym_soft_wait_for_completion_interruptible_timeout(void)
+{
+    return 0;
+}
+static long gj_ksym_soft__raw_spin_lock_irq(void) __attribute__((used));
+static long gj_ksym_soft__raw_spin_lock_irq(void) { return 0; }
+static long gj_ksym_soft__raw_spin_unlock_irq(void) __attribute__((used));
+static long gj_ksym_soft__raw_spin_unlock_irq(void) { return 0; }
+static long gj_ksym_soft_schedule(void) __attribute__((used));
+static long gj_ksym_soft_schedule(void) { return 0; }
+static long gj_ksym_soft_schedule_timeout(void) __attribute__((used));
+static long gj_ksym_soft_schedule_timeout(void) { return 0; }
+static long gj_ksym_soft_schedule_timeout_uninterruptible(void)
+    __attribute__((used));
+static long gj_ksym_soft_schedule_timeout_uninterruptible(void) { return 0; }
 
 int
 linux_ksym_register(const char *name, void *addr)
@@ -726,6 +780,8 @@ linux_ksym_init(void)
     (void)linux_ksym_register("ethtool_op_get_link", (void *)(uintptr_t)gj_ksym_soft_ethtool_op_get_link);
     (void)linux_ksym_register("ethtool_op_get_ts_info", (void *)(uintptr_t)gj_ksym_soft_ethtool_op_get_ts_info);
     (void)linux_ksym_register("firmware_request_nowarn", (void *)(uintptr_t)gj_ksym_soft_firmware_request_nowarn);
+    (void)linux_ksym_register("request_firmware", (void *)(uintptr_t)gj_ksym_soft_request_firmware);
+    (void)linux_ksym_register("request_firmware_direct", (void *)(uintptr_t)gj_ksym_soft_request_firmware_direct);
     (void)linux_ksym_register("fortify_panic", (void *)(uintptr_t)gj_ksym_soft_fortify_panic);
     (void)linux_ksym_register("free_irq", (void *)(uintptr_t)gj_ksym_soft_free_irq);
     (void)linux_ksym_register("free_netdev", (void *)(uintptr_t)gj_ksym_soft_free_netdev);
@@ -897,6 +953,50 @@ linux_ksym_init(void)
     (void)linux_ksym_register("writeb", (void *)(uintptr_t)gj_ksym_soft_writeb);
     (void)linux_ksym_register("writel", (void *)(uintptr_t)gj_ksym_soft_writel);
     (void)linux_ksym_register("writew", (void *)(uintptr_t)gj_ksym_soft_writew);
+
+    /*
+     * usb-storage soft leaf: first reloc misses on el9 ko were generic
+     * (dma_max_mapping_size, sprintf, wait/complete, …). Empty stubs only —
+     * still leave usb_* / scsi_* unresolved so load FAIL is honest need=usbcore.
+     * Cap 15. Soft≠product. greppable: linux_ksym: soft usb_storage leaf stubs
+     */
+    (void)linux_ksym_register("dma_max_mapping_size",
+                              (void *)(uintptr_t)gj_ksym_soft_dma_max_mapping_size);
+    (void)linux_ksym_register(
+        "queue_limits_commit_update_frozen",
+        (void *)(uintptr_t)gj_ksym_soft_queue_limits_commit_update_frozen);
+    (void)linux_ksym_register("sprintf", (void *)(uintptr_t)gj_ksym_soft_sprintf);
+    (void)linux_ksym_register("seq_printf",
+                              (void *)(uintptr_t)gj_ksym_soft_seq_printf);
+    (void)linux_ksym_register("seq_putc",
+                              (void *)(uintptr_t)gj_ksym_soft_seq_putc);
+    (void)linux_ksym_register("complete",
+                              (void *)(uintptr_t)gj_ksym_soft_complete);
+    (void)linux_ksym_register("finish_wait",
+                              (void *)(uintptr_t)gj_ksym_soft_finish_wait);
+    (void)linux_ksym_register("wait_for_completion",
+                              (void *)(uintptr_t)gj_ksym_soft_wait_for_completion);
+    (void)linux_ksym_register(
+        "wait_for_completion_interruptible",
+        (void *)(uintptr_t)gj_ksym_soft_wait_for_completion_interruptible);
+    (void)linux_ksym_register(
+        "wait_for_completion_interruptible_timeout",
+        (void *)(uintptr_t)
+            gj_ksym_soft_wait_for_completion_interruptible_timeout);
+    (void)linux_ksym_register("_raw_spin_lock_irq",
+                              (void *)(uintptr_t)gj_ksym_soft__raw_spin_lock_irq);
+    (void)linux_ksym_register(
+        "_raw_spin_unlock_irq",
+        (void *)(uintptr_t)gj_ksym_soft__raw_spin_unlock_irq);
+    (void)linux_ksym_register("schedule",
+                              (void *)(uintptr_t)gj_ksym_soft_schedule);
+    (void)linux_ksym_register("schedule_timeout",
+                              (void *)(uintptr_t)gj_ksym_soft_schedule_timeout);
+    (void)linux_ksym_register(
+        "schedule_timeout_uninterruptible",
+        (void *)(uintptr_t)gj_ksym_soft_schedule_timeout_uninterruptible);
+    kprintf("linux_ksym: soft usb_storage leaf stubs n=15 "
+            "(generics only; usbcore/scsi mid OPEN) soft=1 product=0\n");
 
     kprintf("linux_ksym: soft init PASS n=%u max=%u soft=1 product=0\n",
             (unsigned)g_u32KsymN, (unsigned)LINUX_KSYM_MAX);

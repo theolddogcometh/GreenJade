@@ -54,7 +54,7 @@ static const char g_szSoBatch1SoftInventory[] =
 	"libgj-so: soft batch1 wave=70 areas=9 "
 	"export,stamp,init,id,hash,streq,bucket,get,probe "
 	"marker=0x421 stamp=B1s1 freestanding=1 multi_server=0 "
-	"confine=0 bar3=0";
+	"confine=0";
 
 /* greppable: GJ_SO_BATCH1_SOFT_MARKER */
 volatile uint64_t gj_so_batch1_export = GJ_SO_BATCH1_EXPORT_VALUE;

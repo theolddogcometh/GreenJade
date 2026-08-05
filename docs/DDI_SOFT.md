@@ -214,4 +214,17 @@ product: host     →  door_call(DDI_OP_*)          →  devmgr mints caps
 
 G752VT class soft hosts (`rtl8168_udx` / `xhci_udx`) sit **above** this door — they do not replace it. See [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md).
 
-*Soft confine ≠ product multi-server; soft window note ≠ VT-d enforce; soft ddi_door ≠ live grant.*
+### Soft xHCI BOT progress (dual-license host only)
+
+`user/drivers/xhci_udx` deepens the soft host path **without** freestanding `xhci_msc` thrash and **without** GPL:
+
+| Soft stage lamp | Meaning | Product? |
+|-----------------|---------|----------|
+| `xhci_udx: soft bot stage=1 cap` | CAPLENGTH/HCIVERSION soft snapshot | **No** |
+| `xhci_udx: soft bot stage=2 params` | HCSPARAMS1 MaxPorts/MaxSlots | **No** |
+| `xhci_udx: soft bot stage=3 ports` | Soft PORTSC CCS walk | **No** |
+| `xhci_udx: soft bot stage=4 stub` / `soft bot stub PASS` | BOT **catalog** only (next=slot/addr/enum/bot OPEN) | **No** |
+
+Freestanding bind still uses DDI SCAN/OPEN/MAP_BAR (`udx_host_bind_by_id` → `8086:a12f`). Soft stage=4 **≠** stick access; product BOT remains OPEN.
+
+*Soft confine ≠ product multi-server; soft window note ≠ VT-d enforce; soft ddi_door ≠ live grant; soft bot stub ≠ MSC.*

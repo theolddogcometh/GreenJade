@@ -32,6 +32,8 @@
  *   u64Fb*             optional GOP capture              optional FB tag
  *   u64KernelPhys/Bytes loaded KERNEL.ELF span           0 (image is the ELF)
  *   u32Mb2InfoPhys     0                                 Multiboot2 info phys
+ *   u64SoftMediaPhys/Bytes  optional UEFI ESP .ko blob   0 (dev Multiboot)
+ *                           (LoaderData pages; soft≠product D4 media)
  *
  * u32Flags may be stamped by the filler or derived in boot_info_set_global().
  * Consumers should prefer flags when present, but still tolerate flags==0 and
@@ -42,6 +44,8 @@
  *   u32Magic   == GJ_BOOT_INFO_MAGIC ('GJBI' LE)
  *   u32Version == GJ_BOOT_INFO_VERSION (bump only on breaking layout)
  * boot_info_valid() is the soft gate for "this is a GreenJade handoff".
+ * Soft media fields are a non-breaking tail extension (version stays 1);
+ * older fillers leave them zero via boot_info_clear / memset.
  *
  * -------------------------------------------------------------------------
  * Soft product surface (this module / UEFI handoff only)
@@ -55,21 +59,27 @@
  *
  * EFI types soft-reclaimed as usable RAM (must match kmain_uefi + stub):
  *   LoaderCode/Data, BootServicesCode/Data, Conventional, ACPIReclaim
+ * Soft media pages are LoaderData; kernel pmm_soft_reserve() excludes them
+ * from freelist until soft module load consumes the blob.
  *
  * Grep markers (kernel side, kprintf after serial_init):
  *   boot: handoff soft PASS|PARTIAL|STUB …
  *   boot: memmap soft PASS|SKIP|REJECT …
  *   boot: GOP soft PASS|SKIP|REJECT …
+ *   boot: soft media PASS|SKIP …
  *   boot: identity soft PASS …          (identity_map.c)
  *
  * Grep markers (EFI stub COM1, prefix GJ-EFI:):
  *   GJ-EFI: GOP soft PASS|SKIP …
  *   GJ-EFI: memmap soft PASS|REJECT …
  *   GJ-EFI: handoff soft PASS|PARTIAL …
+ *   GJ-EFI: soft media PASS|SKIP|FAIL …
  *
  * greppable: boot: handoff soft
  * greppable: boot: memmap soft
  * greppable: boot: GOP soft
+ * greppable: boot: soft media
+ * greppable: GJ-EFI: soft media
  * greppable: GJ_BOOT_F_ GJ_BOOT_SRC_ GJ_BOOT_INFO_MAGIC
  * greppable: P-BOOT-1 P-BOOT-3 kmain_uefi
  */
@@ -90,6 +100,8 @@
 #define GJ_BOOT_F_FB         (1u << 2) /* u64FbBase + geometry valid */
 #define GJ_BOOT_F_KERNEL_IMG (1u << 3) /* u64KernelPhys/Bytes span valid */
 #define GJ_BOOT_F_MB2_INFO   (1u << 4) /* u32Mb2InfoPhys is Multiboot2 info */
+/* Soft D4: UEFI SimpleFS loaded ESP .ko (e.g. r8169) into LoaderData pages. */
+#define GJ_BOOT_F_SOFT_MEDIA (1u << 5) /* u64SoftMediaPhys/Bytes valid */
 
 /*
  * EFI memory types soft-reclaimed as usable RAM after ExitBootServices
@@ -153,6 +165,16 @@ struct gj_boot_info {
     u64  u64KernelBytes;
     u32  u32Mb2InfoPhys; /* Multiboot2 info phys (0 if UEFI) */
     u32  u32Pad;         /* keep struct 8-byte aligned */
+    /*
+     * Soft media handoff (D4 / Soft≠product; G-AC-1).
+     * UEFI stub may LoadFile \linux-drivers\modules\r8169.ko into
+     * AllocatePages(LOADER_DATA) before ExitBootServices. Phys ptr is
+     * identity-mapped; PMM must reserve the span so freelist does not
+     * reuse it before soft linux_module source=media consumes it.
+     * Zero when Multiboot or file absent. Never product AC.
+     */
+    u64  u64SoftMediaPhys;  /* phys base of soft .ko blob (0 if none) */
+    u64  u64SoftMediaBytes; /* byte length of that blob */
 };
 
 /** Zero buffer and stamp magic/version. No-op if pInfo is NULL. */

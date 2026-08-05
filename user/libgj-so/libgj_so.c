@@ -35,13 +35,13 @@
  *   greppable: GJ_SO_SOFT_PATH
  *   greppable: GJ_SO_SOFT_NOTE
  *   greppable: libgj-so: soft deepen wave=70
- * Soft batches live under src/ (unwired). Diagnostics only — not bar3.
+ * Soft batches live under src/ (unwired). Diagnostics only —.
  *
  * Soft inventory (Wave 126 exclusive deepen):
  *   libgj-so: soft inventory wave=70 surfaces=12 caps=0x1f stamp=SYSV
  *   libgj-so: soft deepen wave=70 areas=export,init,get,hash,stamp,caps,
  *              probe,touch,path,inventory,wave,note
- *   libgj-so: soft path hash=sysv soname=libgj-so.so.1 bar3=0
+ *   libgj-so: soft path hash=sysv soname=libgj-so.so.1
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -99,7 +99,7 @@ static const char g_szSoSoftInventory[] =
     "gj_so_soft_probe,gj_so_soft_touch,gj_so_soft_inventory,"
     "gj_so_soft_deepen,gj_so_soft_path,gj_so_soft_note "
     "policy=freestanding,sysv_hash,no_libc,soft_null "
-    "deepen=wave17 hot_path=clean multi_server=0 confine=0 bar3=0";
+    "deepen=wave17 hot_path=clean multi_server=0 confine=0";
 
 /*
  * Wave 126 soft deepen stamp.
@@ -110,7 +110,7 @@ static const char g_szSoSoftDeepen[] =
     "libgj-so: soft deepen wave=70 areas=12 "
     "export,init,get,hash,stamp,caps,probe,touch,path,inventory,wave,note "
     "product_export=0x42 soft_stamp=SYSV hot_path=clean "
-    "multi_server=0 confine=0 bar3=0 "
+    "multi_server=0 confine=0 "
     "retgradientangle=1 retblendangle=1 continuum_toward=26800 soft_ne_product=1 wave=126";
 /*
  * Soft path honesty line.
@@ -120,7 +120,7 @@ static const char g_szSoSoftDeepen[] =
 static const char g_szSoSoftPath[] =
     "libgj-so: soft path hash=sysv soname=libgj-so.so.1 "
     "export=0x42 freestanding=1 pure_c=1 no_heap=1 no_libc=1 "
-    "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
+    "multi_server=0 confine=0 (soft inventory)";
 
 /*
  * Soft honesty line (Wave 126 exclusive).
@@ -128,7 +128,7 @@ static const char g_szSoSoftPath[] =
  * Grep: libgj-so: soft retgradientangle / retblendangle (CREATE-ONLY soft ≠ product)
  */
 static const char g_szSoSoftHonesty[] =
-    "libgj-so: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "libgj-so: soft honesty multi_server=0 confine=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70 "
     "retgradientangle=1 retblendangle=1 continuum_toward=26800 soft_ne_product=1 wave=126";
 /* Soft area name catalog (Wave 111; cold only). */

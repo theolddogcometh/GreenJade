@@ -10,7 +10,7 @@
  * *** SOFT SCAFFOLD ONLY (ABI-first pivot) ***
  * Product direction: Linux ABI Option C + virtio T0 + userspace/DDI drivers.
  * This file is bring-up / lab stick-log experiment — not T1 product close,
- * not bar3, not a reason to thrash EP0 recovery as primary engineering.
+ * not a reason to thrash EP0 recovery as primary engineering.
  * Soft ≠ product. Linux inventory (xhci_hcd) remains G752 ground truth.
  *
  * Scope (MVP honest):
@@ -21,7 +21,7 @@
  *   - Configure Endpoint for bulk IN/OUT; BOT READ CAPACITY(10) + WRITE(10)
  *   - FAT32 overwrite of pre-sized EFI/GREENJADE/KLOG.TXT, else raw LBA log
  *
- * Soft ≠ HID ≠ bar3. QEMU Multiboot without xHCI → SKIP cleanly.
+ * Soft ≠ HID. QEMU Multiboot without xHCI → SKIP cleanly.
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -92,6 +92,7 @@
 
 #define XHCI_TRB_CYCLE  (1u << 0)
 #define XHCI_TRB_TC     (1u << 1)
+#define XHCI_TRB_ISP    (1u << 2) /* Interrupt on Short Packet */
 #define XHCI_TRB_CH     (1u << 4) /* Chain */
 #define XHCI_TRB_IOC    (1u << 5)
 #define XHCI_TRB_IDT    (1u << 6)
@@ -104,9 +105,27 @@
 #define XHCI_EP_TYPE_BULK_OUT 2u
 #define XHCI_EP_TYPE_BULK_IN  6u
 
+/* EP State (Output Context DW0 bits 2:0) — xHCI 6.2.3 */
+#define XHCI_EP_ST_DISABLED 0u
+#define XHCI_EP_ST_RUNNING  1u
+#define XHCI_EP_ST_HALTED   2u
+#define XHCI_EP_ST_STOPPED  3u
+#define XHCI_EP_ST_ERROR    4u
+
 #define XHCI_RING_TRBS   64u
 #define XHCI_MAX_PORTS   32u
 #define XHCI_POLL_SPINS  5000000u
+/*
+ * SS EP0 (GET_CONFIG after device-desc) needs a long poll on Intel a12f.
+ * Photo high-water: stage=15 cc=0 TO p21/p22 s4 — short budgets false-TO.
+ * HS also gets margin (companion / internal HS).
+ */
+#define XHCI_POLL_SPINS_SS_CTRL (XHCI_POLL_SPINS * 20u)
+#define XHCI_POLL_SPINS_HS_CTRL (XHCI_POLL_SPINS * 5u)
+/* Late Transfer Event grace after primary poll (device still completing). */
+#define XHCI_POLL_SPINS_CTRL_GRACE (XHCI_POLL_SPINS * 2u)
+/* Drain must catch already-posted events; 80 was too tight on a12f. */
+#define XHCI_DRAIN_SPINS 4000u
 #define XHCI_MAP_BYTES   (256u * 1024u)
 
 /* USB request types */
@@ -587,13 +606,14 @@ xfer_enqueue(struct xhci_trb *pRing, u32 *pIdx, u8 *pCycle, gj_paddr_t paRing,
     u32 u32Ctrl;
 
     if (*pIdx >= XHCI_RING_TRBS - 1u) {
-        /* Update link cycle then wrap */
+        /* Update link cycle then wrap (clflush for a12f non-snoop DMA). */
         pRing[XHCI_RING_TRBS - 1u].u64Param = (u64)paRing;
         pRing[XHCI_RING_TRBS - 1u].u32Status = 0;
         pRing[XHCI_RING_TRBS - 1u].u32Control =
             (XHCI_TRB_TYPE_LINK << 10) | XHCI_TRB_TC |
             (*pCycle != 0 ? XHCI_TRB_CYCLE : 0u);
         mmio_barrier();
+        xhci_clflush_ptr(&pRing[XHCI_RING_TRBS - 1u]);
         *pIdx = 0;
         *pCycle ^= 1u;
     }
@@ -631,7 +651,10 @@ xhci_wait_xfer(u32 u32Spins)
 static int xhci_evaluate_ep0_mps(void);
 static void xhci_ep0_ring_reset(void);
 static void xhci_port_force_u0(u8 u8Port);
+static void xhci_port_power_on(u8 u8Port);
 static u32 portsc_read(u8 u8Port);
+static u8 *ctx_ep(void *pBase, int fInput, u8 u8Dci);
+static int xhci_ep0_arm_after_address(void);
 
 /* Drain any pending event ring entries (port status + stale xfer). */
 static void
@@ -641,36 +664,85 @@ xhci_drain_events(u32 u32Max)
     u32 u32Code = 0;
 
     for (i = 0; i < u32Max; i++) {
-        if (xhci_wait_event(0, &u32Code, NULL, NULL, 80u) < 0) {
+        if (xhci_wait_event(0, &u32Code, NULL, NULL, XHCI_DRAIN_SPINS) < 0) {
             break;
         }
     }
 }
 
 /*
+ * Sample EP0 Output Context state + TR Dequeue (invalidate DevCtx first).
+ * Returns EP State 0..4; *pDeq optional (pointer | DCS).
+ * Grep: xhci: ep0_state
+ */
+static u32
+xhci_ep0_sample(u64 *pDeq)
+{
+    u8 *pEp0;
+    u32 u32Dw0 = 0;
+    u64 u64Deq = 0;
+
+    if (pDeq != NULL) {
+        *pDeq = 0;
+    }
+    if (g_pDevCtx == NULL || g_u8SlotId == 0) {
+        return XHCI_EP_ST_DISABLED;
+    }
+    /* HC wrote Output Context via DMA — pull into CPU cache. */
+    xhci_clflush_span(g_pDevCtx, (u32)g_u8CtxSize * 3u);
+    pEp0 = ctx_ep(g_pDevCtx, 0, 1);
+    memcpy(&u32Dw0, pEp0 + 0x00, 4);
+    memcpy(&u64Deq, pEp0 + 0x08, 8);
+    if (pDeq != NULL) {
+        *pDeq = u64Deq;
+    }
+    return u32Dw0 & 0x7u;
+}
+
+/*
  * After stall/babble/timeout: Reset Endpoint(EP0) + Set TR Dequeue to a fresh
  * ring. Soft ring_reset alone is not enough once the HC halted EP0 (stage 15).
+ * Match xhci_ep0_arm_after_address: second ring_reset after Set TR Deq so
+ * producer DCS/cycle stay aligned (a12f desync → GET_CONFIG cc=0).
+ *
+ * CRITICAL: after a timed-out control TD the HC is still Running with dequeue
+ * mid-ring while software has advanced — settle-only retry enqueues more TRBs
+ * onto a desynced producer (classic stage-15). Always Stop+Reset+Set TR Deq
+ * | DCS=1 and match software cycle=1 idx=0.
  */
 static int
 xhci_ep0_hard_resync(void)
 {
     u32 u32Code = 0;
     u32 u32Ctrl;
+    u32 u32EpSt;
+    u64 u64Deq = 0;
 
     if (g_u8SlotId == 0) {
         xhci_ep0_ring_reset();
         return -1;
     }
+    u32EpSt = xhci_ep0_sample(&u64Deq);
+    kprintf("xhci: ep0 hard-resync begin state=%u deq=0x%lx idx=%u cyc=%u\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle);
     xhci_drain_events(32u);
+    /* Only force U0 when PLS != 0 — LWS spam drops SS after device-desc. */
     if (g_u8PortId != 0) {
-        xhci_port_force_u0(g_u8PortId);
+        u32 u32Ps = portsc_read(g_u8PortId);
+
+        if (((u32Ps >> 5) & 0xfu) != 0u) {
+            xhci_port_force_u0(g_u8PortId);
+        }
+        /* Keep PP on during resync (a12f can drop power after long TO). */
+        xhci_port_power_on(g_u8PortId);
     }
 
     /* Stop Endpoint EP0 (ignore fail — may already be idle/halted). */
     u32Ctrl = (XHCI_TRB_TYPE_STOP_EP << 10) | (1u << 16) |
               ((u32)g_u8SlotId << 24);
     (void)xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL);
-    xhci_drain_events(16u);
+    xhci_drain_events(32u);
 
     /* Reset Endpoint, Endpoint ID = DCI 1 (EP0), TSP=0 */
     u32Ctrl = (XHCI_TRB_TYPE_RESET_EP << 10) | (1u << 16) |
@@ -679,6 +751,7 @@ xhci_ep0_hard_resync(void)
         kprintf("xhci: Reset Endpoint EP0 FAIL code=%u\n", u32Code);
         /* Fall through — still try Set TR Dequeue / Evaluate */
     }
+    xhci_drain_events(16u);
 
     xhci_ep0_ring_reset();
     /* Set TR Dequeue Pointer: param = ring | DCS=1, EP ID = 1 */
@@ -689,8 +762,64 @@ xhci_ep0_hard_resync(void)
                 u32Code);
         return xhci_evaluate_ep0_mps();
     }
-    xhci_settle(200000u);
+    /* Resync software producer to DCS=1 after Set TR Dequeue (same as arm). */
+    xhci_ep0_ring_reset();
+    xhci_clflush_ptr(g_pEp0Ring);
+    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
+    xhci_settle(300000u);
+    u32EpSt = xhci_ep0_sample(&u64Deq);
+    kprintf("xhci: ep0 hard-resync done state=%u deq=0x%lx dcs=%u\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq,
+            (unsigned)(u64Deq & 1ull));
     return 0;
+}
+
+/*
+ * Before first GET_CONFIG after a working device-desc:
+ *   Running (1)  → soft-continue (do NOT Set TR Deq — desync → stage-15 TO)
+ *   Stopped (3)  → already armed/evaluated; soft-continue enqueue+doorbell
+ *   Halted/Error → hard resync (Reset + Set TR Deq | DCS=1)
+ *   Disabled     → arm after address
+ * Grep: msc: progress ep0_pre_config
+ */
+static void
+xhci_ep0_prepare_for_config(void)
+{
+    u32 u32EpSt;
+    u64 u64Deq = 0;
+
+    u32EpSt = xhci_ep0_sample(&u64Deq);
+    kprintf("msc: progress ep0_pre_config state=%u deq=0x%lx idx=%u cyc=%u "
+            "mps0=%u\n",
+            (unsigned)u32EpSt, (unsigned long)u64Deq, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle, (unsigned)g_u16MaxPkt0);
+
+    if (u32EpSt == XHCI_EP_ST_RUNNING || u32EpSt == XHCI_EP_ST_STOPPED) {
+        /* Soft-continue: leave producer / HC dequeue alone. */
+        kprintf("xhci: ep0 soft-continue state=%u (no Set TR Deq)\n",
+                (unsigned)u32EpSt);
+        return;
+    }
+    if (u32EpSt == XHCI_EP_ST_HALTED || u32EpSt == XHCI_EP_ST_ERROR) {
+        kprintf("xhci: ep0 state=%u → hard-resync before GET_CONFIG\n",
+                (unsigned)u32EpSt);
+        (void)xhci_ep0_hard_resync();
+        return;
+    }
+    /*
+     * Disabled / unknown sample: if software already advanced past a
+     * successful device-desc TD, prefer soft-continue — arming a still-
+     * Running EP (stale sample) is the stage-15 desync path.
+     */
+    if (g_u32Ep0Idx != 0u || g_fEp0Cycle != 1u) {
+        kprintf("xhci: ep0 soft-continue state=%u (producer advanced; "
+                "no Set TR Deq)\n",
+                (unsigned)u32EpSt);
+        return;
+    }
+    kprintf("xhci: ep0 state=%u idx=0 → arm before GET_CONFIG\n",
+            (unsigned)u32EpSt);
+    (void)xhci_ep0_arm_after_address();
 }
 
 /*
@@ -758,6 +887,7 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
      * wLength=255 with multi-TRB + short packet broke G752 a12f (stage 15).
      * xHCI allows Transfer Length > Max Packet Size; HC splits on the wire.
      * Setup Transfer Length in status = 8 (xHCI 6.4.1.2.1).
+     * Single Data TRB + ISP (short packet event) — multi-TRB desync on a12f.
      */
     xfer_enqueue(g_pEp0Ring, &g_u32Ep0Idx, &g_fEp0Cycle, g_paEp0Ring,
                  u64SetupRaw, 8u,
@@ -767,16 +897,25 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
     u32Dir = (fIn != 0) ? (1u << 16) : 0u;
 
     if (u16Len > 0 && pData != NULL) {
+        u32 u32DataFlags;
+
         if (fIn == 0) {
             memcpy(g_pScratch, pData, u16Len);
         } else {
             memset(g_pScratch, 0, u16Len > GJ_PAGE_SIZE ? GJ_PAGE_SIZE : u16Len);
         }
         xhci_clflush_ptr(g_pScratch);
-        /* Single Data TRB; DIR bit 16 only (not TRT). CH → Status. */
+        /*
+         * Single Data TRB; DIR bit 16 only (not TRT). CH → Status.
+         * ISP so short GET_CONFIG (wlen>actual) yields a reliable event
+         * before Status (stage-15 residual path).
+         */
+        u32DataFlags = (XHCI_TRB_TYPE_DATA << 10) | XHCI_TRB_CH | u32Dir;
+        if (fIn != 0) {
+            u32DataFlags |= XHCI_TRB_ISP;
+        }
         xfer_enqueue(g_pEp0Ring, &g_u32Ep0Idx, &g_fEp0Cycle, g_paEp0Ring,
-                     (u64)g_paScratch, (u32)u16Len,
-                     (XHCI_TRB_TYPE_DATA << 10) | XHCI_TRB_CH | u32Dir);
+                     (u64)g_paScratch, (u32)u16Len, u32DataFlags);
     }
 
     /* Status stage: DIR = OUT if IN data; IN if no data or OUT data */
@@ -789,11 +928,18 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
                  (XHCI_TRB_TYPE_STATUS << 10) | XHCI_TRB_IOC | u32StatusDir);
 
     /* Ensure EP0 TRBs visible to HC DMA before doorbell (a12f non-snoop). */
-    xhci_clflush_span(g_pEp0Ring, 256u);
+    xhci_clflush_span(g_pEp0Ring, (u32)(XHCI_RING_TRBS * sizeof(struct xhci_trb)));
+    /* Explicit cycle/DCS producer fence before doorbell. */
+    mmio_barrier();
     doorbell_ep(g_u8SlotId, 1); /* EP0 DCI = 1 */
 
-    /* SS on Intel a12f: longer poll (config after device desc often needs it). */
-    u32Spins = (g_u8PortSpeed >= 4u) ? (XHCI_POLL_SPINS * 4u) : XHCI_POLL_SPINS;
+    /*
+     * SS on Intel a12f: long poll — GET_CONFIG after device-desc is the
+     * stage-15 high-water; short polls reported cc=0=TO with device still
+     * attached (photo p21/s4). HS also gets extra margin.
+     */
+    u32Spins = (g_u8PortSpeed >= 4u) ? XHCI_POLL_SPINS_SS_CTRL
+                                    : XHCI_POLL_SPINS_HS_CTRL;
 
     /*
      * Wait for Transfer Event. Accept Success (1) or Short Packet (13).
@@ -807,6 +953,14 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
      */
     nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
                           u32Spins);
+    if (nEv < 0) {
+        /*
+         * Grace poll: a12f sometimes posts the Transfer Event just after
+         * the primary budget (stage-15 false TO with device still OK).
+         */
+        nEv = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code, NULL, NULL,
+                              XHCI_POLL_SPINS_CTRL_GRACE);
+    }
     if (nEv < 0) {
         g_u32LastCtrlResidual = 0;
         xhci_note_ctrl_fail_cc(0);
@@ -825,9 +979,16 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         u32 u32Code2 = 0;
         int nEv2;
 
-        /* Short on Data: wait briefly for Status IOC (Success). */
+        /*
+         * Short on Data: wait for Status IOC (Success). Full SS budget —
+         * short Status wait left EP0 mid-TD → next GET_CONFIG cc=0.
+         */
         nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL, NULL,
-                               u32Spins / 4u + 100000u);
+                               u32Spins);
+        if (nEv2 < 0) {
+            nEv2 = xhci_wait_event(XHCI_TRB_TYPE_XFER_EVENT, &u32Code2, NULL,
+                                   NULL, XHCI_POLL_SPINS_CTRL_GRACE);
+        }
         if (nEv2 >= 0) {
             xhci_note_cc(u32Code2);
             if (u32Code2 != 1u && u32Code2 != 13u) {
@@ -838,8 +999,13 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
                 return -1;
             }
             /* Status OK: keep Data-stage residual for short-packet length. */
+        } else {
+            /*
+             * No Status event: some HCs event once on short Data. Drain
+             * longer so a late Status is not mistaken for the next TD.
+             */
+            xhci_drain_events(32u);
         }
-        /* Timeout on second event is soft OK — some HCs only event once. */
     }
     g_u32LastCtrlResidual = u32Residual;
     if (u16Len > 0 && pData != NULL && fIn != 0) {
@@ -847,7 +1013,7 @@ xhci_ctrl(const struct usb_setup *pSetup, void *pData, u16 u16Len, int fIn)
         memcpy(pData, g_pScratch, u16Len);
     }
     /* Drain trailing events (Short Packet + Status on some HCs). */
-    xhci_drain_events(16u);
+    xhci_drain_events(32u);
     return 0;
 }
 
@@ -1059,10 +1225,20 @@ xhci_evaluate_ep0_mps(void)
     u32 u32Code = 0;
 
     /*
-     * Evaluate Context reloads EP0 TR Dequeue Pointer from input context.
-     * Software producer index MUST reset to match or later control TDs desync
-     * (classic stage-8 hang after first 8-byte GET_DESCRIPTOR).
+     * Evaluate Context may ignore TR Dequeue while EP is Running (xHCI 4.6.7).
+     * Stop EP0 first, then Evaluate MPS, then Set TR Deq | DCS=1 so software
+     * producer (idx=0 cycle=1) matches HC — else stage-13/15 desync.
      */
+    if (g_u8SlotId == 0) {
+        xhci_ep0_ring_reset();
+        return -1;
+    }
+    xhci_drain_events(16u);
+    u32Ctrl = (XHCI_TRB_TYPE_STOP_EP << 10) | (1u << 16) |
+              ((u32)g_u8SlotId << 24);
+    (void)xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL);
+    xhci_drain_events(16u);
+
     xhci_ep0_ring_reset();
 
     memset(g_pInputCtx, 0, GJ_PAGE_SIZE);
@@ -1083,8 +1259,8 @@ xhci_evaluate_ep0_mps(void)
     ctx_write64(pEp0, 0x08, (u64)g_paEp0Ring | 1ull);
     ctx_write32(pEp0, 0x10, 8u);
 
-    xhci_clflush_ptr(g_pInputCtx);
-    xhci_clflush_ptr((u8 *)g_pInputCtx + 64u);
+    xhci_clflush_span(g_pInputCtx, (u32)g_u8CtxSize * 3u);
+    xhci_clflush_ptr(g_pEp0Ring);
 
     u32Ctrl = (XHCI_TRB_TYPE_EVAL_CTX << 10) | ((u32)g_u8SlotId << 24);
     if (xhci_cmd((u64)g_paInputCtx, 0, u32Ctrl, &u32Code, NULL) != 0) {
@@ -1092,8 +1268,16 @@ xhci_evaluate_ep0_mps(void)
                 (unsigned)g_u16MaxPkt0);
         return -1;
     }
-    /* Evaluate reloads dequeue — resync software producer again. */
+    /* Explicit Set TR Deq after Evaluate so DCS/producer cannot drift. */
     xhci_ep0_ring_reset();
+    u32Ctrl = (XHCI_TRB_TYPE_SET_TR_DEQ << 10) | (1u << 16) |
+              ((u32)g_u8SlotId << 24);
+    if (xhci_cmd((u64)g_paEp0Ring | 1ull, 0, u32Ctrl, &u32Code, NULL) != 0) {
+        kprintf("xhci: Set TR Deq after Evaluate FAIL code=%u (soft cont)\n",
+                u32Code);
+    }
+    xhci_ep0_ring_reset();
+    xhci_clflush_ptr(g_pEp0Ring);
     kprintf("xhci: Evaluate Context EP0 mps0=%u soft PASS\n",
             (unsigned)g_u16MaxPkt0);
     return 0;
@@ -1573,6 +1757,13 @@ xhci_fill_address_input(void)
  * After Address Device the HC has EP0 dequeue from input context. Explicitly
  * Set TR Dequeue to a fresh software ring so the first GET_DESC is not lost
  * (G752 stage-11: address PASS, first control timeout).
+ *
+ * Spec (xHCI 4.6.6): Set TR Dequeue only when EP is Stopped/Error/Halted.
+ * After a successful control TD EP0 is Running — Set TR Deq without Stop
+ * fails (or is ignored) while software ring_reset → producer/HC desync →
+ * next transfer times out (classic stage-15 GET_CONFIG cc=0 after device-desc
+ * PASS). Always Stop EP0 first, then Set TR Deq with DCS=1, then match
+ * software cycle/idx to that DCS.
  */
 static int
 xhci_ep0_arm_after_address(void)
@@ -1580,10 +1771,18 @@ xhci_ep0_arm_after_address(void)
     u32 u32Code = 0;
     u32 u32Ctrl;
 
-    xhci_ep0_ring_reset();
     if (g_u8SlotId == 0) {
+        xhci_ep0_ring_reset();
         return -1;
     }
+    xhci_drain_events(16u);
+    /* Stop EP0 — ignore fail (may already be idle/Stopped after Address). */
+    u32Ctrl = (XHCI_TRB_TYPE_STOP_EP << 10) | (1u << 16) |
+              ((u32)g_u8SlotId << 24);
+    (void)xhci_cmd(0, 0, u32Ctrl, &u32Code, NULL);
+    xhci_drain_events(16u);
+
+    xhci_ep0_ring_reset();
     /* Set TR Dequeue Pointer — EP ID = DCI 1 (EP0), DCS=1 on pointer. */
     u32Ctrl = (XHCI_TRB_TYPE_SET_TR_DEQ << 10) | (1u << 16) |
               ((u32)g_u8SlotId << 24);
@@ -1594,6 +1793,7 @@ xhci_ep0_arm_after_address(void)
     }
     xhci_ep0_ring_reset(); /* match DCS=1 / idx=0 after Set TR Dequeue */
     xhci_clflush_ptr(g_pEp0Ring);
+    xhci_clflush_ptr(&g_pEp0Ring[XHCI_RING_TRBS - 1u]);
     return 0;
 }
 
@@ -2021,31 +2221,60 @@ xhci_enable_address(void)
     return -1;
 }
 
-/* Re-address after stage-11 GET_DESC failure: always BSR0 (HC SET_ADDRESS). */
+/*
+ * Re-address after stage-11/15 fail: Disable Slot + warm reset + BSR0.
+ * On stage-15 second readdress, power-bounce first (a12f SS link sticky).
+ * Grep: xhci: readdress | msc: progress readdress
+ */
 static int
 xhci_readdress_alternate(void)
 {
+    static u32 s_u32ReaddrN;
+
+    s_u32ReaddrN++;
+    kprintf("msc: progress readdress n=%u port=%u spd=%u\n",
+            (unsigned)s_u32ReaddrN, (unsigned)g_u8PortId,
+            (unsigned)g_u8PortSpeed);
     xhci_disable_slot_soft();
     xhci_settle(500000u);
     if (g_u8PortId != 0) {
+        xhci_port_power_on(g_u8PortId);
+        if (s_u32ReaddrN >= 2u) {
+            kprintf("xhci: readdress power-bounce n=%u\n",
+                    (unsigned)s_u32ReaddrN);
+            xhci_port_power_bounce(g_u8PortId);
+        }
         xhci_port_force_u0(g_u8PortId);
         xhci_settle(500000u);
-        (void)xhci_port_reset_ex(g_u8PortId, 1);
-        xhci_settle(2000000u);
+        /* Alternate warm / cold on successive readdress. */
+        (void)xhci_port_reset_ex(g_u8PortId, (s_u32ReaddrN & 1u) != 0u ? 1 : 0);
+        xhci_settle((g_u8PortSpeed >= 4u || xhci_port_is_ss_cap(g_u8PortId))
+                        ? 4000000u
+                        : 1500000u);
+        if (((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
+            xhci_port_force_u0(g_u8PortId);
+            xhci_settle(500000u);
+        }
     }
     if (xhci_enable_slot_once() != 0) {
+        kprintf("msc: progress readdress FAIL enable_slot\n");
         return -1;
     }
-    kprintf("xhci: readdress HW/BSR0 after stage-11\n");
+    kprintf("xhci: readdress HW/BSR0 n=%u\n", (unsigned)s_u32ReaddrN);
     if (xhci_address_device_hw() != 0) {
+        kprintf("msc: progress readdress FAIL address\n");
         xhci_disable_slot_soft();
         return -1;
     }
     g_fAddrUsedBsrSoft = 0;
     if (g_u32LastStage == 19u || g_u32LastStage == 20u ||
-        g_u32LastStage == 7u) {
+        g_u32LastStage == 7u || g_u32LastStage == 15u ||
+        g_u32LastStage == 11u || g_u32LastStage == 13u) {
         g_u32LastStage = 4;
     }
+    kprintf("msc: progress readdress PASS n=%u slot=%u spd=%u\n",
+            (unsigned)s_u32ReaddrN, (unsigned)g_u8SlotId,
+            (unsigned)g_u8PortSpeed);
     return 0;
 }
 
@@ -2181,12 +2410,17 @@ xhci_configure_bulk(void)
 /*
  * Recover control path after stall/timeout: hard EP0 resync (Reset Endpoint +
  * Set TR Dequeue), not soft ring_reset alone (G752 stage-13/15).
+ * Do not LWS-spam: only force U0 when PLS != 0 (stage-15 thrash guard).
  */
 static void
 xhci_ctrl_recover(void)
 {
     if (g_u8PortId != 0) {
-        xhci_port_force_u0(g_u8PortId);
+        u32 u32Ps = portsc_read(g_u8PortId);
+
+        if (((u32Ps >> 5) & 0xfu) != 0u) {
+            xhci_port_force_u0(g_u8PortId);
+        }
     }
     xhci_settle((g_u8PortSpeed >= 4u) ? 500000u : 200000u);
     if (xhci_ep0_hard_resync() != 0) {
@@ -2436,192 +2670,352 @@ xhci_get_device_descriptor(u8 *pDev)
     return -1;
 }
 
+/*
+ * Port ready for next EP0 control after device-desc: PP on, CCS+PED, gentle U0.
+ * Returns 0 ok, -1 CCS gone / PED lost (caller readdresses — do not cold-PR only).
+ * Grep: xhci: pre-config
+ */
+static int
+xhci_port_ready_for_config(void)
+{
+    u32 u32Ps;
+
+    if (g_u8PortId == 0) {
+        return 0;
+    }
+    xhci_port_power_on(g_u8PortId);
+    u32Ps = portsc_read(g_u8PortId);
+    kprintf("xhci: pre-config portsc=0x%x ped=%u pls=%u spd=%u pp=%u\n",
+            (unsigned)u32Ps,
+            (u32Ps & XHCI_PORTSC_PED) != 0 ? 1u : 0u,
+            (unsigned)((u32Ps >> 5) & 0xfu),
+            (unsigned)((u32Ps >> 10) & 0xfu),
+            (u32Ps & XHCI_PORTSC_PP) != 0 ? 1u : 0u);
+    if ((u32Ps & XHCI_PORTSC_CCS) == 0) {
+        kprintf("xhci: pre-config CCS=0 (no device) stage=15\n");
+        xhci_note_ctrl_fail_cc(0);
+        return -1;
+    }
+    if ((u32Ps & XHCI_PORTSC_PED) == 0) {
+        /*
+         * PED lost after device-desc: port reset alone is wrong — device
+         * drops to USB addr 0 while slot keeps N. Caller must readdress.
+         */
+        kprintf("xhci: PED lost before config (need readdress) "
+                "portsc=0x%x\n",
+                (unsigned)u32Ps);
+        xhci_note_ctrl_fail_cc(0);
+        return -1;
+    }
+    /* Re-sample speed if field valid (SS stick may renegotiate). */
+    if (((u32Ps >> 10) & 0xfu) != 0u) {
+        g_u8PortSpeed = (u8)((u32Ps >> 10) & 0xfu);
+    }
+    /* Gentle U0 only if not already U0 — LWS spam drops SS (stage-15 thrash). */
+    if (((u32Ps >> 5) & 0xfu) != 0u) {
+        xhci_port_force_u0(g_u8PortId);
+        xhci_settle((g_u8PortSpeed >= 4u) ? 800000u : 300000u);
+    }
+    return 0;
+}
+
+/*
+ * GET_DESCRIPTOR(configuration). Soft-continue after a working device-desc:
+ * do NOT Set TR Deq / ring_reset before the first try when EP0 is Running —
+ * producer index already matches HC dequeue. Prior pre-arm desynced a12f →
+ * stage=15 cc=0 TO (photo p21/s4: device-desc PASS → config timeout).
+ *
+ * Ladder:
+ *   pre: drain + settle + port PP/PED + ep0_prepare (state-aware)
+ *   try: single Data TRB ctrl (9 → 64 → 255 → 512)
+ *   on fail after enqueue: ALWAYS hard resync (Stop+Reset+Set TR Deq | DCS=1)
+ *     — settle-only after TO leaves Running desync (deepen stage-15).
+ * PED loss returns -1 without port-reset-only. Caller readdresses.
+ *
+ * Grep: xhci: get config | xhci: GET_CONFIG stage=15 | msc: progress get_config
+ */
+static int
+xhci_get_config_descriptor(u8 *aCfg, u16 *pTotal)
+{
+    struct usb_setup setup;
+    int nTry;
+    int fGot = 0;
+    u16 u16TryLen;
+    u16 u16Got = 0;
+    u16 u16Total;
+    u32 iW;
+    /* Prefer 9-byte header first (single short Data TRB); then larger one-shot. */
+    static const u16 s_aCfgWlen[] = { 9u, 64u, 255u, 512u };
+
+    if (aCfg == NULL || pTotal == NULL) {
+        return -1;
+    }
+
+    kprintf("msc: progress get_config begin port=%u spd=%u mps0=%u "
+            "ep0_idx=%u ep0_cyc=%u\n",
+            (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed,
+            (unsigned)g_u16MaxPkt0, (unsigned)g_u32Ep0Idx,
+            (unsigned)g_fEp0Cycle);
+
+    xhci_drain_events(64u);
+    /*
+     * Post device-desc settle (USB device may need recovery before next
+     * control). Soft-continue first try — no thrash Set TR Deq while Running.
+     */
+    xhci_settle((g_u8PortSpeed >= 4u) ? 4000000u : 1000000u);
+    if (xhci_port_ready_for_config() != 0) {
+        kprintf("msc: progress get_config FAIL reason=port_not_ready\n");
+        return -1;
+    }
+    xhci_ep0_prepare_for_config();
+    xhci_drain_events(32u);
+
+    memset(&setup, 0, sizeof(setup));
+    setup.u8BmRequestType = 0x80u;
+    setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
+    setup.u16WValue = (u16)(USB_DT_CONFIG << 8); /* config index 0 */
+    setup.u16WIndex = 0;
+
+    for (iW = 0; iW < 4u && fGot == 0; iW++) {
+        u16TryLen = s_aCfgWlen[iW];
+        if (u16TryLen > 512u) {
+            u16TryLen = 512u;
+        }
+        setup.u16WLength = u16TryLen;
+        for (nTry = 0; nTry < 6; nTry++) {
+            u32 u32EpSt;
+            u64 u64Deq = 0;
+
+            memset(aCfg, 0, u16TryLen);
+            u32EpSt = xhci_ep0_sample(&u64Deq);
+            kprintf("xhci: get config try wlen=%u try=%u ep0_idx=%u cyc=%u "
+                    "state=%u deq=0x%lx\n",
+                    (unsigned)u16TryLen, (unsigned)nTry,
+                    (unsigned)g_u32Ep0Idx, (unsigned)g_fEp0Cycle,
+                    (unsigned)u32EpSt, (unsigned long)u64Deq);
+            kprintf("msc: progress get_config try wlen=%u n=%u\n",
+                    (unsigned)u16TryLen, (unsigned)nTry);
+            if (xhci_ctrl(&setup, aCfg, u16TryLen, 1) == 0 &&
+                aCfg[0] >= 9u && aCfg[1] == USB_DT_CONFIG) {
+                fGot = 1;
+                if (g_u32LastCtrlResidual < (u32)u16TryLen) {
+                    u16Got = (u16)((u32)u16TryLen - g_u32LastCtrlResidual);
+                } else {
+                    u16Got = 0;
+                }
+                if (u16Got < 9u) {
+                    u16Got = 9u;
+                }
+                kprintf("xhci: get config PASS wlen=%u try=%u got=%u "
+                        "residual=%u\n",
+                        (unsigned)u16TryLen, (unsigned)nTry,
+                        (unsigned)u16Got, (unsigned)g_u32LastCtrlResidual);
+                break;
+            }
+            kprintf("xhci: get config FAIL wlen=%u try=%u cc=%u mps0=%u "
+                    "spd=%u port=%u\n",
+                    (unsigned)u16TryLen, (unsigned)nTry,
+                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u16MaxPkt0,
+                    (unsigned)g_u8PortSpeed, (unsigned)g_u8PortId);
+            if (nTry + 1 >= 6) {
+                break;
+            }
+            /*
+             * After any failed enqueue+TO the HC dequeue and software
+             * producer are desynced while EP may still be Running.
+             * Settle-only is wrong — always hard resync (DCS=1).
+             */
+            kprintf("msc: progress get_config hard-resync after fail n=%u "
+                    "cc=%u\n",
+                    (unsigned)nTry, (unsigned)g_u32CtrlFailCc);
+            if (xhci_port_ready_for_config() != 0) {
+                kprintf("msc: progress get_config FAIL reason=ped_lost\n");
+                return -1;
+            }
+            xhci_ctrl_recover();
+            xhci_settle((g_u8PortSpeed >= 4u)
+                            ? (nTry >= 2 ? 5000000u : 2500000u)
+                            : 1000000u);
+            if (g_u8PortId != 0 &&
+                (portsc_read(g_u8PortId) & XHCI_PORTSC_PED) == 0) {
+                kprintf("xhci: PED lost mid-config try=%u\n",
+                        (unsigned)nTry);
+                kprintf("msc: progress get_config FAIL reason=ped_lost\n");
+                return -1;
+            }
+        }
+    }
+
+    if (fGot == 0) {
+        kprintf("xhci: GET_CONFIG stage=15 (header) cc=%u speed=%u port=%u "
+                "mps0=%u\n",
+                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed,
+                (unsigned)g_u8PortId, (unsigned)g_u16MaxPkt0);
+        kprintf("msc: progress get_config FAIL cc=%u port=%u spd=%u\n",
+                (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+                (unsigned)g_u8PortSpeed);
+        return -1;
+    }
+
+    u16Total = (u16)aCfg[2] | ((u16)aCfg[3] << 8);
+    kprintf("xhci: config wTotalLength=%u bNumInterfaces=%u val=%u "
+            "speed=%u got=%u\n",
+            (unsigned)u16Total, (unsigned)aCfg[4], (unsigned)aCfg[5],
+            (unsigned)g_u8PortSpeed, (unsigned)u16Got);
+    if (u16Total < 9u) {
+        u16Total = 9;
+    }
+    if (u16Total > 512u) {
+        u16Total = 512u;
+    }
+
+    /* Second fetch only if wTotalLength > bytes actually received. */
+    if (u16Total > u16Got) {
+        /*
+         * Soft-continue again — header fetch left EP0 healthy. Single Data
+         * TRB for full wTotalLength (HC splits on wire; multi-TRB broke a12f).
+         */
+        xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
+        setup.u8BmRequestType = 0x80u;
+        setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
+        setup.u16WValue = (u16)(USB_DT_CONFIG << 8);
+        setup.u16WIndex = 0;
+        setup.u16WLength = u16Total;
+        fGot = 0;
+        for (nTry = 0; nTry < 5; nTry++) {
+            memset(aCfg, 0, u16Total);
+            kprintf("xhci: get config full try total=%u try=%u\n",
+                    (unsigned)u16Total, (unsigned)nTry);
+            kprintf("msc: progress get_config full n=%u total=%u\n",
+                    (unsigned)nTry, (unsigned)u16Total);
+            if (xhci_ctrl(&setup, aCfg, u16Total, 1) == 0 && aCfg[0] >= 9u &&
+                aCfg[1] == USB_DT_CONFIG) {
+                fGot = 1;
+                kprintf("xhci: get config full PASS total=%u try=%u\n",
+                        (unsigned)u16Total, (unsigned)nTry);
+                break;
+            }
+            kprintf("xhci: get config full FAIL total=%u try=%u cc=%u\n",
+                    (unsigned)u16Total, (unsigned)nTry,
+                    (unsigned)g_u32CtrlFailCc);
+            if (nTry + 1 < 5) {
+                /* Same rule: failed enqueue → hard resync, never settle-only. */
+                xhci_ctrl_recover();
+                xhci_settle((g_u8PortSpeed >= 4u) ? 2000000u : 600000u);
+            }
+        }
+        if (fGot == 0) {
+            kprintf("xhci: GET_CONFIG stage=15 total=%u cc=%u\n",
+                    (unsigned)u16Total, (unsigned)g_u32CtrlFailCc);
+            kprintf("msc: progress get_config full FAIL total=%u cc=%u\n",
+                    (unsigned)u16Total, (unsigned)g_u32CtrlFailCc);
+            return -1;
+        }
+    }
+
+    kprintf("msc: progress get_config PASS total=%u val=%u port=%u spd=%u\n",
+            (unsigned)u16Total, (unsigned)aCfg[5], (unsigned)g_u8PortId,
+            (unsigned)g_u8PortSpeed);
+    *pTotal = u16Total;
+    return 0;
+}
+
 static int
 xhci_enum_msc(void)
 {
     struct usb_setup setup;
     u8 aDev[18];
     u8 aCfg[512];
-    u16 u16Total;
-
-    if (xhci_get_device_descriptor(aDev) != 0) {
-        /*
-         * Stage 11/13: control path after address. Readdress opposite method
-         * once (BSR0 ↔ BSR+soft) then retry full GET_DESC.
-         */
-        if (g_u32LastStage == 11u || g_u32LastStage == 13u) {
-            kprintf("xhci: stage-%u GET_DESC; readdress alternate + retry\n",
-                    (unsigned)g_u32LastStage);
-            if (xhci_readdress_alternate() == 0) {
-                if (xhci_get_device_descriptor(aDev) == 0) {
-                    goto got_dev;
-                }
-            }
-        }
-        return -1;
-    }
-got_dev:
-    kprintf("xhci: device class=%u sub=%u proto=%u mps0=%u vid=%x pid=%x\n",
-            (unsigned)aDev[4], (unsigned)aDev[5], (unsigned)aDev[6],
-            (unsigned)g_u16MaxPkt0,
-            (unsigned)(aDev[8] | ((u16)aDev[9] << 8)),
-            (unsigned)(aDev[10] | ((u16)aDev[11] << 8)));
-
-    /* Root-hub class device: skip (no hub traversal in MVP). */
-    if (aDev[4] == 0x09u) {
-        kprintf("xhci: skip USB hub soft FAIL (no hub support)\n");
-        g_u32LastStage = 14;
-        return -1;
-    }
+    u16 u16Total = 0;
+    int nPass;
 
     /*
-     * GET_DESCRIPTOR(config). Stage 15 = fail.
-     * G752: device-desc PASS then config cc=0 timeout = EP0 desync or LWS thrash.
-     * Hard resync EP0 once after device-desc TDs; long settle; try wLength 9 then 64.
-     * No Evaluate-first. On cc=0 always hard resync between tries.
+     * Up to 3 full passes: first enum; on stage-15 GET_CONFIG fail readdress
+     * (warm/cold + optional power-bounce + BSR0) and retry device+config.
+     * Soft ≠ product.
      */
-    {
-        int nTry;
-        int fGot = 0;
-        u16 u16TryLen;
-        u16 u16Got = 0;
-        u32 iW;
-        static const u16 s_aCfgWlen[] = { 9u, 64u, 255u };
-
-        xhci_drain_events(64u);
-        xhci_ctrl_recover(); /* Reset EP + Set TR Deq after device-desc TDs */
-        xhci_settle((g_u8PortSpeed >= 4u) ? 2000000u : 500000u);
-        if (g_u8PortId != 0) {
-            u32 u32Ps = portsc_read(g_u8PortId);
-
-            kprintf("xhci: pre-config portsc=0x%x ped=%u pls=%u spd=%u\n",
-                    (unsigned)u32Ps,
-                    (u32Ps & XHCI_PORTSC_PED) != 0 ? 1u : 0u,
-                    (unsigned)((u32Ps >> 5) & 0xfu),
-                    (unsigned)((u32Ps >> 10) & 0xfu));
-            if ((u32Ps & XHCI_PORTSC_PED) == 0) {
-                kprintf("xhci: PED lost before config; re-reset port\n");
-                (void)xhci_port_reset(g_u8PortId);
-                xhci_ctrl_recover();
-                xhci_settle(2000000u);
-            }
-        }
-        xhci_drain_events(32u);
-
-        memset(&setup, 0, sizeof(setup));
-        setup.u8BmRequestType = 0x80u;
-        setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
-        setup.u16WValue = (u16)(USB_DT_CONFIG << 8);
-        setup.u16WIndex = 0;
-
-        for (iW = 0; iW < 3u && fGot == 0; iW++) {
-            u16TryLen = s_aCfgWlen[iW];
-            if (u16TryLen > (u16)sizeof(aCfg)) {
-                u16TryLen = (u16)sizeof(aCfg);
-            }
-            setup.u16WLength = u16TryLen;
-            for (nTry = 0; nTry < 5; nTry++) {
-                memset(aCfg, 0, u16TryLen);
-                if (xhci_ctrl(&setup, aCfg, u16TryLen, 1) == 0 &&
-                    aCfg[0] >= 9u && aCfg[1] == USB_DT_CONFIG) {
-                    fGot = 1;
-                    if (g_u32LastCtrlResidual < (u32)u16TryLen) {
-                        u16Got =
-                            (u16)((u32)u16TryLen - g_u32LastCtrlResidual);
-                    } else {
-                        u16Got = 0;
-                    }
-                    if (u16Got < 9u) {
-                        u16Got = 9u;
-                    }
-                    kprintf("xhci: get config PASS wlen=%u try=%u got=%u "
-                            "residual=%u\n",
-                            (unsigned)u16TryLen, (unsigned)nTry,
-                            (unsigned)u16Got,
-                            (unsigned)g_u32LastCtrlResidual);
-                    break;
-                }
-                kprintf("xhci: get config FAIL wlen=%u try=%u cc=%u mps0=%u\n",
-                        (unsigned)u16TryLen, (unsigned)nTry,
-                        (unsigned)g_u32CtrlFailCc, (unsigned)g_u16MaxPkt0);
-                if (nTry + 1 < 5) {
-                    if (g_u32CtrlFailCc == 0u || nTry >= 1) {
-                        xhci_ctrl_recover();
-                        xhci_settle(1000000u);
-                    } else {
-                        (void)xhci_ep0_arm_after_address();
-                        xhci_settle(500000u);
-                    }
-                }
-            }
-        }
-
-        if (fGot == 0) {
-            kprintf("xhci: get config FAIL stage=15 (header) cc=%u speed=%u\n",
-                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortSpeed);
-            g_u32LastStage = 15;
-            return -1;
-        }
-
-        u16Total = (u16)aCfg[2] | ((u16)aCfg[3] << 8);
-        kprintf("xhci: config wTotalLength=%u bNumInterfaces=%u val=%u "
-                "speed=%u got=%u\n",
-                (unsigned)u16Total, (unsigned)aCfg[4], (unsigned)aCfg[5],
-                (unsigned)g_u8PortSpeed, (unsigned)u16Got);
-        if (u16Total < 9u) {
-            u16Total = 9;
-        }
-        if (u16Total > sizeof(aCfg)) {
-            u16Total = (u16)sizeof(aCfg);
-        }
-
-        /* Second fetch only if wTotalLength > bytes actually received. */
-        if (u16Total > u16Got) {
-            xhci_settle(300000u);
-            (void)xhci_ep0_arm_after_address();
-            setup.u8BmRequestType = 0x80u;
-            setup.u8BRequest = USB_REQ_GET_DESCRIPTOR;
-            setup.u16WValue = (u16)(USB_DT_CONFIG << 8);
-            setup.u16WIndex = 0;
-            setup.u16WLength = u16Total;
-            fGot = 0;
-            for (nTry = 0; nTry < 5; nTry++) {
-                memset(aCfg, 0, u16Total);
-                if (xhci_ctrl(&setup, aCfg, u16Total, 1) == 0 &&
-                    aCfg[0] >= 9u && aCfg[1] == USB_DT_CONFIG) {
-                    fGot = 1;
-                    kprintf("xhci: get config full PASS total=%u try=%u\n",
-                            (unsigned)u16Total, (unsigned)nTry);
-                    break;
-                }
-                kprintf("xhci: get config full FAIL total=%u try=%u cc=%u\n",
-                        (unsigned)u16Total, (unsigned)nTry,
-                        (unsigned)g_u32CtrlFailCc);
-                if (nTry + 1 < 5) {
-                    /* Soft re-arm twice, then hard resync. */
-                    if (nTry < 2) {
-                        (void)xhci_ep0_arm_after_address();
-                        xhci_settle(500000u);
-                    } else {
-                        xhci_ctrl_recover();
-                    }
-                }
-            }
-            if (fGot == 0) {
-                kprintf("xhci: get config FAIL stage=15 total=%u cc=%u\n",
-                        (unsigned)u16Total, (unsigned)g_u32CtrlFailCc);
+    kprintf("msc: progress enum begin port=%u spd=%u\n",
+            (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
+    for (nPass = 0; nPass < 3; nPass++) {
+        if (nPass > 0) {
+            kprintf("xhci: enum pass=%u readdress after GET_CONFIG fail\n",
+                    (unsigned)nPass);
+            kprintf("msc: progress enum readdress pass=%u\n",
+                    (unsigned)nPass);
+            if (xhci_readdress_alternate() != 0) {
+                kprintf("xhci: readdress after stage-15 FAIL\n");
                 g_u32LastStage = 15;
                 return -1;
             }
+            g_u32LastStage = 4;
         }
+
+        kprintf("msc: progress get_desc begin pass=%u\n", (unsigned)nPass);
+        if (xhci_get_device_descriptor(aDev) != 0) {
+            /*
+             * Stage 11/13: control path after address. Readdress once then
+             * retry full GET_DESC (early passes).
+             */
+            if (nPass < 2 &&
+                (g_u32LastStage == 11u || g_u32LastStage == 13u)) {
+                kprintf("xhci: stage-%u GET_DESC; readdress + retry\n",
+                        (unsigned)g_u32LastStage);
+                kprintf("msc: progress get_desc readdress stage=%u\n",
+                        (unsigned)g_u32LastStage);
+                if (xhci_readdress_alternate() == 0) {
+                    if (xhci_get_device_descriptor(aDev) == 0) {
+                        goto got_dev;
+                    }
+                }
+            }
+            kprintf("msc: progress get_desc FAIL stage=%u cc=%u\n",
+                    (unsigned)g_u32LastStage, (unsigned)g_u32CtrlFailCc);
+            return -1;
+        }
+    got_dev:
+        kprintf("msc: progress get_desc PASS vid=%x pid=%x mps0=%u pass=%u\n",
+                (unsigned)(aDev[8] | ((u16)aDev[9] << 8)),
+                (unsigned)(aDev[10] | ((u16)aDev[11] << 8)),
+                (unsigned)g_u16MaxPkt0, (unsigned)nPass);
+        kprintf("xhci: device class=%u sub=%u proto=%u mps0=%u vid=%x "
+                "pid=%x pass=%u\n",
+                (unsigned)aDev[4], (unsigned)aDev[5], (unsigned)aDev[6],
+                (unsigned)g_u16MaxPkt0,
+                (unsigned)(aDev[8] | ((u16)aDev[9] << 8)),
+                (unsigned)(aDev[10] | ((u16)aDev[11] << 8)),
+                (unsigned)nPass);
+
+        /* Root-hub class device: skip (no hub traversal in MVP). */
+        if (aDev[4] == 0x09u) {
+            kprintf("xhci: skip USB hub soft FAIL (no hub support)\n");
+            g_u32LastStage = 14;
+            return -1;
+        }
+
+        if (xhci_get_config_descriptor(aCfg, &u16Total) != 0) {
+            kprintf("xhci: GET_CONFIG stage=15 fail pass=%u cc=%u\n",
+                    (unsigned)nPass, (unsigned)g_u32CtrlFailCc);
+            g_u32LastStage = 15;
+            if (nPass + 1 < 3) {
+                continue; /* readdress + full retry */
+            }
+            return -1;
+        }
+        break; /* config OK */
     }
 
+    kprintf("msc: progress parse_cfg total=%u\n", (unsigned)u16Total);
     if (xhci_parse_msc_config(aCfg, u16Total) != 0) {
         kprintf("xhci: no MSC BOT interface soft FAIL (cfg_total=%u)\n",
+                (unsigned)u16Total);
+        kprintf("msc: progress parse_cfg FAIL not_bot total=%u\n",
                 (unsigned)u16Total);
         g_u32LastStage = 16; /* saw device, not BOT mass-storage */
         return -1;
     }
+    kprintf("msc: progress parse_cfg PASS bot cfg=%u out=%u in=%u\n",
+            (unsigned)g_u8ConfigVal, (unsigned)g_u8EpOut,
+            (unsigned)g_u8EpIn);
 
     memset(&setup, 0, sizeof(setup));
     setup.u8BmRequestType = 0x00u;
@@ -2633,30 +3027,62 @@ got_dev:
         int nTry;
         int fOk = 0;
 
-        for (nTry = 0; nTry < 3; nTry++) {
+        /*
+         * Soft-continue after GET_CONFIG success — no pre-arm thrash.
+         * SET_CONFIGURATION is no-data (Setup+Status only).
+         */
+        kprintf("msc: progress set_config begin cfg=%u port=%u spd=%u\n",
+                (unsigned)g_u8ConfigVal, (unsigned)g_u8PortId,
+                (unsigned)g_u8PortSpeed);
+        xhci_drain_events(32u);
+        xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
+        if (g_u8PortId != 0) {
+            xhci_port_power_on(g_u8PortId);
+            if (((portsc_read(g_u8PortId) >> 5) & 0xfu) != 0u) {
+                xhci_port_force_u0(g_u8PortId);
+            }
+        }
+        for (nTry = 0; nTry < 4; nTry++) {
             if (xhci_ctrl(&setup, NULL, 0, 0) == 0) {
                 fOk = 1;
+                kprintf("xhci: SET_CONFIGURATION PASS try=%u cfg=%u\n",
+                        (unsigned)nTry, (unsigned)g_u8ConfigVal);
                 break;
             }
             kprintf("xhci: SET_CONFIGURATION FAIL try=%u cfg=%u cc=%u\n",
                     (unsigned)nTry, (unsigned)g_u8ConfigVal,
                     (unsigned)g_u32CtrlFailCc);
-            if (nTry + 1 < 3) {
-                xhci_ctrl_recover();
+            if (nTry + 1 < 4) {
+                if (nTry == 0) {
+                    xhci_settle((g_u8PortSpeed >= 4u) ? 1500000u : 500000u);
+                } else {
+                    xhci_ctrl_recover();
+                    xhci_settle((g_u8PortSpeed >= 4u) ? 1000000u : 400000u);
+                }
             }
         }
         if (fOk == 0) {
             kprintf("xhci: SET_CONFIGURATION FAIL stage=17 cfg=%u cc=%u\n",
                     (unsigned)g_u8ConfigVal, (unsigned)g_u32CtrlFailCc);
+            kprintf("msc: progress set_config FAIL cfg=%u cc=%u\n",
+                    (unsigned)g_u8ConfigVal, (unsigned)g_u32CtrlFailCc);
             g_u32LastStage = 17;
             return -1;
         }
     }
+    kprintf("msc: progress set_config PASS cfg=%u\n",
+            (unsigned)g_u8ConfigVal);
 
+    /* Device may need settle after SET_CONFIGURATION before bulk config. */
+    xhci_settle((g_u8PortSpeed >= 4u) ? 1500000u : 500000u);
+    kprintf("msc: progress config_ep begin ep_out=%u ep_in=%u mps=%u\n",
+            (unsigned)g_u8EpOut, (unsigned)g_u8EpIn, (unsigned)g_u16BulkMps);
     if (xhci_configure_bulk() != 0) {
+        kprintf("msc: progress config_ep FAIL\n");
         g_u32LastStage = 18;
         return -1;
     }
+    kprintf("msc: progress config_ep PASS\n");
     kprintf("xhci: MSC BOT iface ep_out=%u ep_in=%u mps=%u cfg=%u\n",
             (unsigned)g_u8EpOut, (unsigned)g_u8EpIn, (unsigned)g_u16BulkMps,
             (unsigned)g_u8ConfigVal);
@@ -2725,9 +3151,11 @@ msc_read_capacity(void)
     u32 u32Lba;
     u32 u32Bsz;
 
+    kprintf("msc: progress bot_capacity begin\n");
     memset(aCdb, 0, sizeof(aCdb));
     aCdb[0] = SCSI_READ_CAPACITY10;
     if (msc_bot(aCdb, 10, aData, 8, 1) != 0) {
+        kprintf("msc: progress bot_capacity FAIL\n");
         return -1;
     }
     u32Lba = ((u32)aData[0] << 24) | ((u32)aData[1] << 16) |
@@ -2743,6 +3171,8 @@ msc_read_capacity(void)
     }
     kprintf("msc: BOT ready capacity=%u blocks block_size=%u\n",
             (unsigned)g_u32BlockCount, (unsigned)g_u32BlockSize);
+    kprintf("msc: progress bot_capacity PASS blocks=%u\n",
+            (unsigned)g_u32BlockCount);
     return 0;
 }
 
@@ -3049,7 +3479,15 @@ raw_log_write(const void *pBuf, u32 cb)
     u32 u32Payload;
     u32 u32Hdr = 16;
 
-    if (g_u32BlockCount < RAW_LOG_SECTS + 2u || pBuf == NULL) {
+    /* Soft: never silent on geometry / arg reject (grep: stick: raw log). */
+    if (pBuf == NULL) {
+        kprintf("stick: raw log write OPEN reason=null_buf (soft fail-closed)\n");
+        return -1;
+    }
+    if (g_u32BlockCount < RAW_LOG_SECTS + 2u) {
+        kprintf("stick: raw log write OPEN reason=geometry blocks=%u need>=%u "
+                "(soft fail-closed; Soft≠product)\n",
+                (unsigned)g_u32BlockCount, (unsigned)(RAW_LOG_SECTS + 2u));
         return -1;
     }
     u32Start = g_u32BlockCount - RAW_LOG_SECTS;
@@ -3069,13 +3507,36 @@ raw_log_write(const void *pBuf, u32 cb)
     if (u32Payload <= MSC_SECTOR - u32Hdr) {
         memcpy(aSec + u32Hdr, p, u32Payload);
         if (msc_write10(u32Start, aSec, 1) != 0) {
+            kprintf("stick: raw log write FAIL lba=%u bot_write (MSC ready path)\n",
+                    (unsigned)u32Start);
             return -1;
+        }
+        /* Smoke read-back: magic + length must match (write/read path). */
+        {
+            u8 aRd[MSC_SECTOR];
+
+            if (msc_read10(u32Start, aRd, 1) != 0) {
+                kprintf("stick: raw log write PASS write; read-back FAIL\n");
+                return -1;
+            }
+            if (aRd[0] != (u8)'G' || aRd[1] != (u8)'J' ||
+                aRd[2] != (u8)'U' || aRd[3] != (u8)'S' ||
+                aRd[4] != (u8)'B' || aRd[5] != (u8)'L' ||
+                aRd[6] != (u8)'O' || aRd[7] != (u8)'G' ||
+                aRd[8] != (u8)'1') {
+                kprintf("stick: raw log read-back magic FAIL\n");
+                return -1;
+            }
+            kprintf("stick: raw log smoke write+read PASS lba=%u bytes=%u\n",
+                    (unsigned)u32Start, (unsigned)u32Payload);
         }
         return 0;
     }
 
     memcpy(aSec + u32Hdr, p, MSC_SECTOR - u32Hdr);
     if (msc_write10(u32Start, aSec, 1) != 0) {
+        kprintf("stick: raw log write FAIL lba=%u multi_hdr bot_write\n",
+                (unsigned)u32Start);
         return -1;
     }
     u32Off = MSC_SECTOR - u32Hdr;
@@ -3089,9 +3550,23 @@ raw_log_write(const void *pBuf, u32 cb)
         memset(aSec, 0, sizeof(aSec));
         memcpy(aSec, p + u32Off, u32Chunk);
         if (msc_write10(u32Start + u32Sec, aSec, 1) != 0) {
+            kprintf("stick: raw log write FAIL lba=%u multi bot_write off=%u\n",
+                    (unsigned)(u32Start + u32Sec), (unsigned)u32Off);
             return -1;
         }
         u32Off += u32Chunk;
+    }
+    /* Multi-sector: verify header sector only. */
+    {
+        u8 aRd[MSC_SECTOR];
+
+        if (msc_read10(u32Start, aRd, 1) == 0 && aRd[0] == (u8)'G' &&
+            aRd[1] == (u8)'J' && aRd[8] == (u8)'1') {
+            kprintf("stick: raw log smoke write+read PASS lba=%u bytes=%u\n",
+                    (unsigned)u32Start, (unsigned)u32Payload);
+        } else {
+            kprintf("stick: raw log multi write ok; header read soft WARN\n");
+        }
     }
     return 0;
 }
@@ -3536,12 +4011,35 @@ xhci_msc_init(void)
     kprintf("xhci: init PASS (hc up; probing ports)\n");
 
     if (xhci_try_ports() != 0) {
-        kprintf("xhci: init soft PARTIAL (hc up, no MSC BOT stick) stage=%u\n",
-                (unsigned)g_u32LastStage);
+        /*
+         * Honesty: stage=15 + device was seen = code/enum path still open;
+         * stage=5 = no CCS (no stick / wrong port); stage=1 = no HC.
+         * Soft ≠ product T1. Grep: msc: not_ready
+         */
+        kprintf("xhci: init soft PARTIAL (hc up, no MSC BOT stick) stage=%u "
+                "cc=%u port=%u spd=%u\n",
+                (unsigned)g_u32LastStage, (unsigned)xhci_msc_last_cc(),
+                (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
+        if (g_u32LastStage == 15u) {
+            kprintf("msc: not_ready reason=get_config cc=%u port=%u spd=%u "
+                    "(device-desc reached; config timed out or PED loss — "
+                    "insert SS stick / check a12f EP0)\n",
+                    (unsigned)g_u32CtrlFailCc, (unsigned)g_u8PortId,
+                    (unsigned)g_u8PortSpeed);
+        } else if (g_u32LastStage == 5u) {
+            kprintf("msc: not_ready reason=no_ccs (no stick / no SS CCS port)\n");
+        } else if (g_u32LastStage == 16u) {
+            kprintf("msc: not_ready reason=not_bot (device not MSC BOT)\n");
+        } else {
+            kprintf("msc: not_ready reason=stage_%u cc=%u\n",
+                    (unsigned)g_u32LastStage, (unsigned)xhci_msc_last_cc());
+        }
         return 0;
     }
     kprintf("xhci: init PASS msc_ready=1 stage=%u\n",
             (unsigned)g_u32LastStage);
+    kprintf("msc: ready reason=bot_capacity port=%u spd=%u\n",
+            (unsigned)g_u8PortId, (unsigned)g_u8PortSpeed);
     return 0;
 }
 
@@ -3601,8 +4099,21 @@ xhci_msc_last_speed(void)
 int
 xhci_msc_stick_log_write(const void *pBuf, u32 cb)
 {
-    if (g_fMscReady == 0 || pBuf == NULL || cb == 0) {
-        kprintf("stick: log write FAIL bytes=%u path=none (not ready)\n",
+    /*
+     * Soft fail-closed when MSC not ready: greppable OPEN (never silent).
+     * Ready path: FAT KLOG.TXT → raw high-LBA (GJUSBLOG1). Soft≠product.
+     * Grep: stick: log write OPEN|PASS|FAIL
+     */
+    if (g_fMscReady == 0) {
+        kprintf("stick: log write OPEN bytes=%u path=none msc_ready=0 "
+                "stage=%u cc=%u (soft fail-closed; Soft≠product)\n",
+                (unsigned)cb, (unsigned)g_u32LastStage,
+                (unsigned)xhci_msc_last_cc());
+        return -1;
+    }
+    if (pBuf == NULL || cb == 0) {
+        kprintf("stick: log write OPEN bytes=%u path=none reason=bad_arg "
+                "(soft fail-closed)\n",
                 (unsigned)cb);
         return -1;
     }
@@ -3614,6 +4125,8 @@ xhci_msc_stick_log_write(const void *pBuf, u32 cb)
             return 0;
         }
         kprintf("stick: log write FAT soft FAIL; try raw\n");
+    } else {
+        kprintf("stick: log write FAT OPEN (KLOG.TXT not located); try raw\n");
     }
 
     if (raw_log_write(pBuf, cb) == 0) {
@@ -3621,6 +4134,7 @@ xhci_msc_stick_log_write(const void *pBuf, u32 cb)
         return 0;
     }
 
-    kprintf("stick: log write FAIL bytes=%u path=none\n", (unsigned)cb);
+    kprintf("stick: log write FAIL bytes=%u path=none (MSC ready; FAT+raw miss)\n",
+            (unsigned)cb);
     return -1;
 }

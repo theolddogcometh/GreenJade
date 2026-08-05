@@ -7,21 +7,26 @@
  *
  * Purpose
  * -------
- * Soft bodies for jiffies, msleep/udelay/usleep_range, and request_irq so
- * soft-loaded modules and F2 linux_ksym can resolve something observable
- * (counters + greppable logs + jiffies bumps). Complements stub entries in
- * linux_ksym_soft_inventory: this TU owns real soft implementations.
+ * Soft bodies for jiffies, msleep/udelay/usleep_range, request_irq, and
+ * _printk / _dev_err so soft-loaded modules and F2 linux_ksym can resolve
+ * something observable (counters + greppable logs + jiffies bumps).
+ * Complements stub entries in linux_ksym_soft_inventory: this TU owns real
+ * soft implementations.
  *
  * Soft ≠ product: no live PIC/APIC delivery, no real wall-clock sleep that
  * blocks product bring-up forever (spin budgets are capped). Soft ≠
  * ABI-stable handler calling conventions beyond "store the pointer".
+ * linux_time_soft_irq_inject is an explicit soft path for freestanding later.
  *
  * Greppable markers (keep stable):
  *   linux_time_soft: soft init PASS
  *   linux_time_soft: soft ksym register PASS|SKIP
  *   linux_time_soft: soft irq bind irq=…
  *   linux_time_soft: soft irq free irq=…
+ *   linux_time_soft: soft irq inject name=…
  *   linux_time_soft: soft msleep …
+ *   linux_time_soft: soft _printk …
+ *   linux_time_soft: soft _dev_err …
  *
  * See docs/LINUX_ABI_HYBRID.md · docs/UDX_LINUX_PORTER.md.
  */
@@ -79,6 +84,12 @@ void udelay(unsigned long usecs);
  */
 void usleep_range(unsigned long min, unsigned long max);
 
+/**
+ * Soft usleep_range_state: same as usleep_range; state ignored (no real
+ * TASK_* sleep states). Post-probe r8169 delay path. Soft≠product.
+ */
+void usleep_range_state(unsigned long min, unsigned long max, unsigned state);
+
 /* ---- Soft IRQ request table (Linux C names) ----------------------------- */
 
 /**
@@ -102,6 +113,36 @@ void free_irq(unsigned int irq, void *dev);
 /** Soft enable_irq / disable_irq: disable-depth bookkeeping only. */
 void enable_irq(unsigned int irq);
 void disable_irq(unsigned int irq);
+
+/**
+ * Soft IRQ inject by name recorded in request_irq / request_threaded_irq.
+ * When the slot is bound, not disabled, and has a handler, calls
+ * handler(irq, dev) (and thread_fn if primary returns soft wake-thread=2).
+ * Callable from freestanding later. Soft≠product (no APIC delivery).
+ * Grep: linux_time_soft: soft irq inject name=
+ * Returns 0 on inject, negative on unbound / disabled / no handler.
+ */
+int  linux_time_soft_irq_inject(const char *szName);
+
+/** Soft inject success counter. */
+u32  linux_time_soft_irq_inject_count(void);
+
+/* ---- Soft printk bodies (Linux C names; re-register over ksym stubs) ---- */
+
+/**
+ * Soft _printk: rate-capped kprintf of the format string (args ignored).
+ * Linux: int _printk(const char *fmt, ...). Soft returns 0.
+ */
+int  _printk(const char *szFmt, ...);
+
+/**
+ * Soft _dev_err: rate-capped kprintf with dev pointer + format string.
+ * Linux: void/int _dev_err(const struct device *dev, const char *fmt, ...).
+ * Soft returns 0. Sibling _dev_info / _dev_warn share the same soft path.
+ */
+int  _dev_err(const void *pDev, const char *szFmt, ...);
+int  _dev_info(const void *pDev, const char *szFmt, ...);
+int  _dev_warn(const void *pDev, const char *szFmt, ...);
 
 /** Soft diagnostics. */
 u32  linux_time_soft_irq_bound_count(void);

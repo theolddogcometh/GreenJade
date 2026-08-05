@@ -6,11 +6,11 @@
  * With GJ_VK_KERNEL_SMOKE: linked into the kernel (virtio-gpu + PMM).
  * Without it: stubs return failure so host builds only need vulkan_icd.c.
  *
- * Soft inventory (Wave 126 exclusive deepen; greppable; not bar3 GPU):
+ * Soft inventory (Wave 126 exclusive deepen; greppable GPU):
  *   gj_vk_icd: soft inventory wave=70 surfaces=16 pools=inst,dev,sc
  *   gj_vk_icd: soft deepen wave=70 areas=display,present,instance,device,
  *              swapchain,acquire,pixels,features,name,host,path,counts,note,area
- *   gj_vk_icd: soft path kernel_smoke|host_stub bar3=0
+ *   gj_vk_icd: soft path kernel_smoke|host_stub
  * Soft counters wrap OK; never hard-gate product returns.
  * greppable: "gj_vk_icd: soft"
  */
@@ -24,7 +24,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define GJ_VK_ICD_SOFT_WAVE 70u
@@ -482,7 +482,7 @@ static const char g_szGjVkIcdSoftInventory[] =
     "display=1 present=1 instance=1 device=1 swapchain=1 acquire=1 "
     "pixels=1 features=1 name=1 host=1 path=1 counts=1 note=1 area=1 "
     "feat=present_2d,swapchain,instance,named_export "
-    "bar3=0 (soft inventory; not bar3)";
+    " (soft inventory)";
 
 /*
  * Grep: gj_vk_icd: soft deepen
@@ -491,7 +491,7 @@ static const char g_szGjVkIcdSoftDeepen[] =
     "gj_vk_icd: soft deepen wave=70 areas=14 "
     "display,present,instance,device,swapchain,acquire,pixels,"
     "features,name,host,path,counts,note,area "
-    "hot_path=clean multi_server=0 confine=0 bar3=0";
+    "hot_path=clean multi_server=0 confine=0";
 
 /*
  * Grep: gj_vk_icd: soft path
@@ -499,19 +499,19 @@ static const char g_szGjVkIcdSoftDeepen[] =
 static const char g_szGjVkIcdSoftPath[] =
 #ifdef GJ_VK_KERNEL_SMOKE
     "gj_vk_icd: soft path mode=kernel_smoke virtio_gpu=1 pools=inst,dev,sc "
-    "freestanding=1 multi_server=0 confine=0 bar3=0 "
-    "(soft inventory; not bar3)";
+    "freestanding=1 multi_server=0 confine=0 "
+    "(soft inventory)";
 #else
     "gj_vk_icd: soft path mode=host_stub virtio_gpu=0 pools=none "
-    "freestanding=1 multi_server=0 confine=0 bar3=0 "
-    "(soft inventory; not bar3)";
+    "freestanding=1 multi_server=0 confine=0 "
+    "(soft inventory)";
 #endif
 
 /*
  * Grep: gj_vk_icd: soft honesty
  */
 static const char g_szGjVkIcdSoftHonesty[] =
-    "gj_vk_icd: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "gj_vk_icd: soft honesty multi_server=0 confine=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70";
 
 /* Soft area name catalog (Wave 111; cold only). */

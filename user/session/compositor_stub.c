@@ -24,7 +24,7 @@
  *
  * Soft inventory (Wave 126 exclusive deepen — greppable):
  *   session-compositor: soft deepen wave=70 …
- *   session-compositor: soft honesty multi_server=0 confine=0 bar3=0 …
+ *   session-compositor: soft honesty multi_server=0 confine=0 …
  * Soft pointer only — never a bar3 / multi-server claim.
  */
 #include <stdio.h>
@@ -42,12 +42,12 @@ main(void)
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
     printf("session-compositor: soft deepen wave=70 areas=1 "
-           "multi_server=0 confine=0 bar3=0 exclusive=1\n");
+           "multi_server=0 confine=0 exclusive=1\n");
     printf("session-compositor: soft honesty multi_server=0 confine=0 "
-           "bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
+           " exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
     return 0;
 }

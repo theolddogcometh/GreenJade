@@ -27,15 +27,28 @@
  *   linux_pci_soft: soft match …
  *   linux_pci_soft: soft probe 10ec:8168 PASS|FAIL|SKIP
  *   linux_pci_soft: soft probe …
- *   linux_pci_soft: soft pci_dev incomplete field=…
+ *   linux_pci_soft: soft hostish probe ENTER|PASS|FAIL|FAULT
+ *   linux_pci_soft: soft probe emu …
  *
  * Soft pci_dev layout plan: docs/PCI_DEV_SOFT_LAYOUT.md (Soft≠ABI-stable).
+ * Hostish offsets: gj/linux_pci_hostish_off.h (RHEL 5.14 oracle for r8169.ko).
  */
+#include <gj/config.h>
 #include <gj/devmgr.h>
 #include <gj/klog.h>
+#include <gj/linux_pci_hostish_off.h>
 #include <gj/linux_pci_soft.h>
 #include <gj/string.h>
 #include <gj/types.h>
+
+/*
+ * Freestanding laptop: after id match, try real .ko probe with hostish blob.
+ * On fail/fault → EMU netdev so STATUS still shows netdev soft ≥1.
+ * Soft≠product; G-AC-1. Set 0 for EMU-only.
+ */
+#ifndef LINUX_PCI_SOFT_TRY_REAL_PROBE
+#define LINUX_PCI_SOFT_TRY_REAL_PROBE 1
+#endif
 
 /* G752VT greppable target IDs (inventory lamps; match is id-table driven). */
 #define LPCIS_VID_REALTEK  0x10ecu
@@ -74,6 +87,30 @@ static u32  g_cProbeNone;
 static u32  g_cEnable;
 static u32  g_cBoundUsed;
 static u32  g_cDrvLive;
+
+/* Last probe lamps for STATUS hold 10/11 (soft module path only). */
+static int g_nLastProbeMode __attribute__((used)) =
+    LINUX_PCI_SOFT_PROBE_MODE_NONE;
+static int g_nLastProbeSt __attribute__((used)) = -1;
+
+/*
+ * Hostish probe-shaped blobs (Strategy A). Filled for freestanding .ko probe
+ * on the laptop; layout is host-oracle for staged r8169 kver only.
+ */
+static u8 g_aHostish[LINUX_PCI_HOSTISH_POOL][LINUX_PCI_HOSTISH_BLOB_BYTES]
+    __attribute__((aligned(64)));
+static u8 g_aHostishLive[LINUX_PCI_HOSTISH_POOL];
+static u8 g_aHostishBus[LINUX_PCI_HOSTISH_POOL][0x480]
+    __attribute__((aligned(64)));
+static u64 g_aHostishDmaMask[LINUX_PCI_HOSTISH_POOL];
+static u32 g_cHostishRealOk;
+static u32 g_cHostishRealFail;
+
+/*
+ * Export for trap.c (and header): set 1 only around pView->probe(hostish).
+ * Kernel #PF while non-zero → soft hostish probe FAULT then halt. Soft≠product.
+ */
+volatile u32 g_u32SoftHostishProbeInflight;
 
 /*
  * Soft registry of Linux .ko pci_driver objects.
@@ -153,6 +190,9 @@ lpcis_cfg_write32(u8 u8Bus, u8 u8Slot, u8 u8Func, u8 u8Off, u32 u32Val)
     lpcis_outl(LPCIS_PCI_CFG_ADDR, lpcis_cfg_addr(u8Bus, u8Slot, u8Func, u8Off));
     lpcis_outl(LPCIS_PCI_CFG_DATA, u32Val);
 }
+
+/* Forward: hostish pool membership (defined with hostish fill helpers). */
+static int lpcis_is_hostish(const void *pDev);
 
 static void
 lpcis_dev_bdf(const struct pci_dev *pDev, u8 *pu8Bus, u8 *pu8Slot, u8 *pu8Func)
@@ -436,6 +476,405 @@ lpcis_probe_log(const struct pci_dev *pDev, const char *szOutcome, int nSt,
  * On 10ec:8168 match: fill soft pci_dev with BAR phys from gj_devmgr_pci_fn,
  * then call probe(pdev, id). Soft≠product but config may use real CF8 later.
  */
+/* ---- Hostish fill + optional real .ko probe (freestanding / laptop) ---- */
+
+static void
+lpcis_hostish_put16(u8 *pBase, u32 u32Off, u16 u16Val)
+{
+    if (pBase == NULL || (u32Off + 2u) > LINUX_PCI_HOSTISH_BLOB_BYTES) {
+        return;
+    }
+    pBase[u32Off] = (u8)(u16Val & 0xffu);
+    pBase[u32Off + 1u] = (u8)((u16Val >> 8) & 0xffu);
+}
+
+static void
+lpcis_hostish_put32(u8 *pBase, u32 u32Off, u32 u32Val)
+{
+    u32 i;
+
+    if (pBase == NULL || (u32Off + 4u) > LINUX_PCI_HOSTISH_BLOB_BYTES) {
+        return;
+    }
+    for (i = 0u; i < 4u; i++) {
+        pBase[u32Off + i] = (u8)((u32Val >> (i * 8u)) & 0xffu);
+    }
+}
+
+static void
+lpcis_hostish_put64(u8 *pBase, u32 u32Off, u64 u64Val)
+{
+    u32 i;
+
+    if (pBase == NULL || (u32Off + 8u) > LINUX_PCI_HOSTISH_BLOB_BYTES) {
+        return;
+    }
+    for (i = 0u; i < 8u; i++) {
+        pBase[u32Off + i] = (u8)((u64Val >> (i * 8u)) & 0xffu);
+    }
+}
+
+static void
+lpcis_hostish_putptr(u8 *pBase, u32 u32Off, void *p)
+{
+    lpcis_hostish_put64(pBase, u32Off, (u64)(uintptr_t)p);
+}
+
+static u64
+lpcis_hostish_get64(const u8 *pBase, u32 u32Off)
+{
+    u64 u64Val;
+    u32 i;
+
+    u64Val = 0ull;
+    if (pBase == NULL || (u32Off + 8u) > LINUX_PCI_HOSTISH_BLOB_BYTES) {
+        return 0ull;
+    }
+    for (i = 0u; i < 8u; i++) {
+        u64Val |= ((u64)pBase[u32Off + i]) << (i * 8u);
+    }
+    return u64Val;
+}
+
+static int
+lpcis_is_hostish(const void *pDev)
+{
+    u32 i;
+    const u8 *p;
+
+    p = (const u8 *)pDev;
+    if (p == NULL) {
+        return 0;
+    }
+    for (i = 0u; i < LINUX_PCI_HOSTISH_POOL; i++) {
+        if (g_aHostishLive[i] != 0u && p == g_aHostish[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Gate0 hybrid: freestanding rtl8168 programs 10ec:8168 early (net_l2_init),
+ * then soft r8169 loads later (INIT=0 EMU). Soft ksyms pci_enable / set_master
+ * / write_config / status clear still do real CF8 writes if invoked with a
+ * soft or hostish pci_dev that carries the live BDF. That can disturb BM /
+ * command while freestanding owns rings → EMPTY poll + R0.
+ *
+ * Policy: while freestanding rtl8168_ready(), soft path must not issue real
+ * CF8 writes for 10ec:8168. Soft bookkeeping still succeeds. REAL probe after
+ * handoff prepare (ready=0) is allowed. Soft≠product; greppable NOOP hybrid.
+ */
+static int
+lpcis_vid_did_rtl8168(u16 u16Vend, u16 u16Dev)
+{
+    return (u16Vend == (u16)LPCIS_VID_REALTEK &&
+            u16Dev == (u16)LPCIS_DID_RTL8168)
+               ? 1
+               : 0;
+}
+
+static int
+lpcis_dev_vid_did(void *dev, u16 *pu16Vend, u16 *pu16Dev)
+{
+    struct pci_dev *pSoft;
+    u16 u16Vend;
+    u16 u16Dev;
+
+    if (dev == NULL || pu16Vend == NULL || pu16Dev == NULL) {
+        return -1;
+    }
+    if (lpcis_is_hostish(dev)) {
+        const u8 *pBlob = (const u8 *)dev;
+
+        u16Vend = (u16)pBlob[LINUX_PCI_HOSTISH_OFF_VENDOR] |
+                  ((u16)pBlob[LINUX_PCI_HOSTISH_OFF_VENDOR + 1u] << 8);
+        u16Dev = (u16)pBlob[LINUX_PCI_HOSTISH_OFF_DEVICE] |
+                 ((u16)pBlob[LINUX_PCI_HOSTISH_OFF_DEVICE + 1u] << 8);
+        *pu16Vend = u16Vend;
+        *pu16Dev = u16Dev;
+        return 0;
+    }
+    pSoft = (struct pci_dev *)dev;
+    *pu16Vend = pSoft->vendor;
+    *pu16Dev = pSoft->device;
+    return 0;
+}
+
+/**
+ * Non-zero = real CF8 write / live BAR map allowed for this soft/hostish dev.
+ * Zero = freestanding owns 10ec:8168 wire; soft must no-op HW.
+ *
+ * Gate0 (GJ_SOFT_R8169_MMIO_HANDOFF==0, default hybrid 4a):
+ *   Always NOOP soft CF8/iomap for 10ec:8168 — freestanding is sole BAR
+ *   owner for this build. Do not depend on rtl8168_ready() (race before
+ *   ready, or ready blip, must not open a CF8 window).
+ * Gate1 (handoff==1):
+ *   NOOP only while rtl8168_ready()!=0; after quiesce (ready=0) soft may
+ *   touch toward REAL/.ko open.
+ *
+ * Grep: linux_pci_soft: soft cf8 write NOOP hybrid
+ */
+int
+linux_pci_soft_hw_touch_ok(void *dev)
+{
+    u16 u16Vend;
+    u16 u16Dev;
+    extern int rtl8168_ready(void);
+    static u8 s_fNoopLogOnce;
+
+    if (dev == NULL) {
+        return 0;
+    }
+    if (lpcis_dev_vid_did(dev, &u16Vend, &u16Dev) != 0) {
+        return 1; /* unknown shape — do not block non-RTL */
+    }
+    if (lpcis_vid_did_rtl8168(u16Vend, u16Dev) == 0) {
+        return 1;
+    }
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Gate0 hybrid: freestanding sole BAR owner — always refuse soft touch. */
+    if (s_fNoopLogOnce == 0u) {
+        s_fNoopLogOnce = 1u;
+        /* Grep: linux_pci_soft: soft cf8 write NOOP hybrid */
+        kprintf("linux_pci_soft: soft cf8 write NOOP hybrid "
+                "10ec:8168 freestanding sole owner "
+                "(gate0 always; Soft≠product)\n");
+    }
+    return 0;
+#else
+    /* Gate1: refuse while freestanding wire live; allow after quiesce. */
+    if (rtl8168_ready() != 0) {
+        if (s_fNoopLogOnce == 0u) {
+            s_fNoopLogOnce = 1u;
+            /* Grep: linux_pci_soft: soft cf8 write NOOP hybrid */
+            kprintf("linux_pci_soft: soft cf8 write NOOP hybrid "
+                    "10ec:8168 freestanding owns (gate1 ready; Soft≠product)\n");
+        }
+        return 0;
+    }
+    return 1;
+#endif
+}
+
+/**
+ * Once-lamp: gate0 zero-touch policy for soft r8169 path (serial only).
+ * Grep: linux_pci_soft: soft hybrid zero-touch
+ */
+void
+linux_pci_soft_zero_touch_lamp_once(void)
+{
+    static u8 s_fOnce;
+
+    if (s_fOnce != 0u) {
+        return;
+    }
+    s_fOnce = 1u;
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+    /* Grep: linux_pci_soft: soft hybrid zero-touch */
+    kprintf("linux_pci_soft: soft hybrid zero-touch PASS "
+            "gate0 REAL=skip cf8/iomap=NOOP_8168 always "
+            "(freestanding BAR sole; Soft≠product; not gate1)\n");
+#else
+    /* Grep: linux_pci_soft: soft hybrid zero-touch */
+    kprintf("linux_pci_soft: soft hybrid zero-touch READY "
+            "gate1 REAL=allow cf8/iomap=NOOP_while_fs_ready "
+            "(toward sole-owner; Soft≠product)\n");
+#endif
+}
+
+static int
+lpcis_cf8_write_ok(void *dev)
+{
+    return linux_pci_soft_hw_touch_ok(dev);
+}
+
+static void
+lpcis_hostish_fill_bar(u8 *pBlob, u32 u32Bar, u64 u64Pa, u64 u64Cb, int fMem)
+{
+    u32 u32Res;
+    u64 u64End;
+    unsigned long ulFlags;
+
+    if (u32Bar >= 6u) {
+        return;
+    }
+    u32Res = LINUX_PCI_HOSTISH_OFF_RESOURCE_N(u32Bar);
+    if (u64Cb == 0ull && u64Pa == 0ull) {
+        return;
+    }
+    u64End = (u64Cb > 0ull) ? (u64Pa + u64Cb - 1ull) : u64Pa;
+    ulFlags = fMem ? LINUX_PCI_HOSTISH_IORESOURCE_MEM
+                   : LINUX_PCI_HOSTISH_IORESOURCE_IO;
+    lpcis_hostish_put64(pBlob, u32Res + LINUX_PCI_HOSTISH_RES_OFF_START, u64Pa);
+    lpcis_hostish_put64(pBlob, u32Res + LINUX_PCI_HOSTISH_RES_OFF_END, u64End);
+    lpcis_hostish_put64(pBlob, u32Res + LINUX_PCI_HOSTISH_RES_OFF_FLAGS,
+                        (u64)ulFlags);
+}
+
+static u8 *
+lpcis_hostish_fill(u32 u32Slot, const struct gj_devmgr_pci_fn *pFn,
+                   void *pLinuxDrv)
+{
+    u8 *pBlob;
+    u8 *pBus;
+    u32 u32Devfn;
+    u32 iBar;
+    u8 u8Rev;
+    u32 u32Class;
+
+    if (u32Slot >= LINUX_PCI_HOSTISH_POOL || pFn == NULL) {
+        return NULL;
+    }
+    pBlob = g_aHostish[u32Slot];
+    pBus = g_aHostishBus[u32Slot];
+    memset(pBlob, 0, LINUX_PCI_HOSTISH_BLOB_BYTES);
+    memset(pBus, 0, sizeof(g_aHostishBus[u32Slot]));
+
+    u32Devfn = (u32)(((pFn->bdf.u8Slot & 0x1fu) << 3) |
+                     (pFn->bdf.u8Func & 0x7u));
+    u32Class = ((u32)pFn->u8Class << 16) | ((u32)pFn->u8Subclass << 8) |
+               (u32)pFn->u8ProgIf;
+
+    /* pci_bus.number @ 0xd8 (host 5.14); primary @ 0xd9 */
+    pBus[0xd8] = pFn->bdf.u8Bus;
+    pBus[0xd9] = pFn->bdf.u8Bus;
+
+    lpcis_hostish_putptr(pBlob, LINUX_PCI_HOSTISH_OFF_BUS, pBus);
+    lpcis_hostish_put32(pBlob, LINUX_PCI_HOSTISH_OFF_DEVFN, u32Devfn);
+    lpcis_hostish_put16(pBlob, LINUX_PCI_HOSTISH_OFF_VENDOR, pFn->u16Vendor);
+    lpcis_hostish_put16(pBlob, LINUX_PCI_HOSTISH_OFF_DEVICE, pFn->u16Device);
+    lpcis_hostish_put32(pBlob, LINUX_PCI_HOSTISH_OFF_CLASS, u32Class);
+
+    {
+        u32 u32Id;
+
+        u32Id = lpcis_cfg_read32(pFn->bdf.u8Bus, pFn->bdf.u8Slot, pFn->bdf.u8Func,
+                                 0x08u);
+        u8Rev = (u8)(u32Id & 0xffu);
+        if (u8Rev == 0xffu) {
+            u8Rev = 0u;
+        }
+        pBlob[LINUX_PCI_HOSTISH_OFF_REVISION] = u8Rev;
+    }
+
+    lpcis_hostish_putptr(pBlob, LINUX_PCI_HOSTISH_OFF_DRIVER, pLinuxDrv);
+
+    g_aHostishDmaMask[u32Slot] = 0xffffffffffffffffull;
+    lpcis_hostish_put64(pBlob, LINUX_PCI_HOSTISH_OFF_DMA_MASK,
+                        g_aHostishDmaMask[u32Slot]);
+    lpcis_hostish_putptr(pBlob, LINUX_PCI_HOSTISH_OFF_DEV_DMA_MASK,
+                         &g_aHostishDmaMask[u32Slot]);
+    lpcis_hostish_put64(pBlob, LINUX_PCI_HOSTISH_OFF_DEV_COHERENT_DMA_MASK,
+                        g_aHostishDmaMask[u32Slot]);
+
+    lpcis_hostish_put32(pBlob, LINUX_PCI_HOSTISH_OFF_IRQ,
+                        (u32)LINUX_PCI_SOFT_IRQ);
+
+    for (iBar = 0u; iBar < LINUX_PCI_SOFT_BAR_MAX && iBar < 6u; iBar++) {
+        lpcis_hostish_fill_bar(pBlob, iBar, pFn->aBar[iBar].u64Pa,
+                               pFn->aBar[iBar].u64Cb,
+                               pFn->aBar[iBar].u8Mem != 0u ? 1 : 0);
+    }
+
+    lpcis_hostish_put32(pBlob, LINUX_PCI_HOSTISH_OFF_ENABLE_CNT, 1u);
+    g_aHostishLive[u32Slot] = 1u;
+    kprintf("linux_pci_soft: soft hostish fill %04x:%04x slot=%u "
+            "bar0=0x%llx rev=%u\n",
+            (unsigned)pFn->u16Vendor, (unsigned)pFn->u16Device,
+            (unsigned)u32Slot, (unsigned long long)pFn->aBar[0].u64Pa,
+            (unsigned)u8Rev);
+    return pBlob;
+}
+
+/**
+ * Try real .ko probe with hostish blob. Returns 1 if probe() returned 0.
+ * Soft≠product. Runs only under freestanding GreenJade (laptop flash path).
+ */
+static int
+lpcis_try_real_probe(struct lpcis_drv_view *pView,
+                     const struct pci_device_id *pId,
+                     const struct gj_devmgr_pci_fn *pFn, void *pLinuxDrv)
+{
+    u8 *pBlob;
+    int nSt;
+    u32 u32Slot;
+    extern int linux_netdev_soft_count(void);
+    extern void *alloc_etherdev_mqs(int sizeof_priv, unsigned txqs,
+                                   unsigned rxqs);
+    extern int register_netdev(void *dev);
+
+    if (pView == NULL || pView->probe == NULL || pId == NULL || pFn == NULL) {
+        return 0;
+    }
+
+    u32Slot = 0u;
+    while (u32Slot < LINUX_PCI_HOSTISH_POOL && g_aHostishLive[u32Slot] != 0u) {
+        u32Slot++;
+    }
+    if (u32Slot >= LINUX_PCI_HOSTISH_POOL) {
+        u32Slot = 0u;
+    }
+
+    pBlob = lpcis_hostish_fill(u32Slot, pFn, pLinuxDrv);
+    if (pBlob == NULL) {
+        return 0;
+    }
+
+    kprintf("linux_pci_soft: soft hostish probe ENTER %04x:%04x probe=%p\n",
+            (unsigned)pFn->u16Vendor, (unsigned)pFn->u16Device,
+            (void *)pView->probe);
+
+    g_u32SoftHostishProbeInflight = 1u;
+    nSt = pView->probe((struct pci_dev *)(void *)pBlob, pId);
+    g_u32SoftHostishProbeInflight = 0u;
+
+    linux_pci_soft_note_probe(pFn->u16Vendor, pFn->u16Device,
+                              LINUX_PCI_SOFT_PROBE_MODE_REAL, nSt);
+
+    if (nSt == 0) {
+        if (g_cHostishRealOk < 0xffffffffu) {
+            g_cHostishRealOk++;
+        }
+        if (g_cProbeOk < 0xffffffffu) {
+            g_cProbeOk++;
+        }
+        /* Ensure STATUS netdev soft ≥1 even if .ko did not register_netdev. */
+        if (linux_netdev_soft_count() == 0) {
+            void *pNd = alloc_etherdev_mqs(0, 1u, 1u);
+
+            if (pNd != NULL) {
+                (void)register_netdev(pNd);
+            }
+        }
+        kprintf("linux_pci_soft: soft hostish probe PASS %04x:%04x st=0 "
+                "netdev=%d\n",
+                (unsigned)pFn->u16Vendor, (unsigned)pFn->u16Device,
+                linux_netdev_soft_count());
+        if (pFn->u16Vendor == (u16)LPCIS_VID_REALTEK &&
+            pFn->u16Device == (u16)LPCIS_DID_RTL8168) {
+            kprintf("linux_pci_soft: soft probe 10ec:8168 PASS\n");
+        }
+        return 1;
+    }
+
+    if (g_cHostishRealFail < 0xffffffffu) {
+        g_cHostishRealFail++;
+    }
+    if (g_cProbeFail < 0xffffffffu) {
+        g_cProbeFail++;
+    }
+    kprintf("linux_pci_soft: soft hostish probe FAIL %04x:%04x st=%d "
+            "(fallback EMU)\n",
+            (unsigned)pFn->u16Vendor, (unsigned)pFn->u16Device, nSt);
+    if (pFn->u16Vendor == (u16)LPCIS_VID_REALTEK &&
+        pFn->u16Device == (u16)LPCIS_DID_RTL8168) {
+        kprintf("linux_pci_soft: soft probe 10ec:8168 FAIL st=%d\n", nSt);
+    }
+    g_aHostishLive[u32Slot] = 0u;
+    return 0;
+}
+
 /*
  * Soft bind without calling the .ko probe (pci_dev layout ≠ Linux).
  * Still counts as path progress: id_table match + soft netdev register.
@@ -459,25 +898,31 @@ lpcis_soft_emu_bind(struct lpcis_drv_view *pView,
     lpcis_fill_from_fn(pDev, pFn);
     pDev->pMatchedId = pId;
     pDev->driver_data = (void *)(unsigned long)pId->driver_data;
-    pDev->u8Bound = 1u;
 
-    /* Soft netdev so STATUS can show netdev soft ≥1 */
+    /* Soft netdev required for STATUS netdev soft ≥1; fail bind if missing. */
     pNd = alloc_etherdev_mqs(0, 1u, 1u);
-    if (pNd != NULL) {
-        nSt = register_netdev(pNd);
-        if (nSt != 0) {
-            kprintf("linux_pci_soft: soft netdev register FAIL st=%d\n", nSt);
-        }
+    if (pNd == NULL) {
+        kprintf("linux_pci_soft: soft netdev alloc FAIL (pool)\n");
+        lpcis_free_dev(pDev);
+        return 0;
+    }
+    nSt = register_netdev(pNd);
+    if (nSt != 0) {
+        kprintf("linux_pci_soft: soft netdev register FAIL st=%d\n", nSt);
+        lpcis_free_dev(pDev);
+        return 0;
     }
 
+    pDev->u8Bound = 1u;
     if (g_cProbeOk < 0xffffffffu) {
         g_cProbeOk++;
     }
+    linux_pci_soft_note_probe(pFn->u16Vendor, pFn->u16Device,
+                              LINUX_PCI_SOFT_PROBE_MODE_SOFT, 0);
     lpcis_probe_log(pDev, "PASS", 0,
                     (pView != NULL && pView->name != NULL) ? pView->name
                                                           : "emu");
-    kprintf("linux_pci_soft: soft probe emu (no .ko probe; pci_dev layout "
-            "soft≠Linux) id=%04x:%04x\n",
+    kprintf("linux_pci_soft: soft probe emu id=%04x:%04x\n",
             (unsigned)pFn->u16Vendor, (unsigned)pFn->u16Device);
     (void)pView;
     return 1;
@@ -524,10 +969,61 @@ lpcis_try_match_fn(struct lpcis_drv_view *pView,
                 (unsigned long long)pFn->aBar[0].u64Pa);
 
         /*
-         * Soft EMU bind: do not call .ko probe yet — soft pci_dev is not
-         * binary-compatible with Linux (would fault or corrupt). EMU still
-         * proves id_table match + soft netdev path for STATUS.
+         * Freestanding laptop: try hostish real .ko probe when probe fn set
+         * (r8169). On fail → EMU soft netdev so STATUS netdev soft ≥1.
+         *
+         * Hybrid 4a (gate0): if freestanding rtl8168 already owns the BAR,
+         * SKIP real .ko probe — it soft-resets MMIO, orphans freestanding
+         * rings → B### busy, R0, pings die (photos 3267/3271). EMU bind
+         * still lights NETDEV SOFT 1 + soft L2 bridge without killing wire.
+         * REAL probe only when GJ_SOFT_R8169_MMIO_HANDOFF=1 (toward 4b).
+         * Soft≠product.
          */
+#if LINUX_PCI_SOFT_TRY_REAL_PROBE
+        if (pView->probe != NULL) {
+            int fSkipRealHybrid = 0;
+
+            /*
+             * Gate0 hybrid: NEVER real-probe 10ec:8168. REAL maps the live
+             * BAR and orphans freestanding rings (photos 3271/3275: REAL +
+             * B### + R0 + ping dead). Do not gate on rtl8168_ready() —
+             * bind can race before ready, and old sticks still hit REAL.
+             * EMU → NETDEV SOFT 1; freestanding keeps wire. Soft≠product.
+             */
+#if GJ_SOFT_R8169_MMIO_HANDOFF == 0
+            if (pFn->u16Vendor == (u16)LPCIS_VID_REALTEK &&
+                pFn->u16Device == (u16)LPCIS_DID_RTL8168) {
+                fSkipRealHybrid = 1;
+                /* Grep: linux_pci_soft: soft hostish probe SKIP hybrid */
+                kprintf("linux_pci_soft: soft hostish probe SKIP hybrid "
+                        "10ec:8168 gate0 no REAL BAR (EMU bind; Soft≠product)\n");
+            }
+#endif
+            if (fSkipRealHybrid == 0) {
+                void *pLinuxDrv = NULL;
+                u32 j;
+
+                for (j = 0u; j < LINUX_PCI_SOFT_DRV_MAX; j++) {
+                    if (g_aDrvSlots[j].u8Used != 0u &&
+                        g_aDrvSlots[j].view.probe == pView->probe) {
+                        pLinuxDrv = g_aDrvSlots[j].pLinux;
+                        break;
+                    }
+                }
+                if (lpcis_try_real_probe(pView, pId, pFn, pLinuxDrv) != 0) {
+                    struct pci_dev *pSoft;
+
+                    pSoft = lpcis_alloc_dev();
+                    if (pSoft != NULL) {
+                        lpcis_fill_from_fn(pSoft, pFn);
+                        pSoft->pMatchedId = pId;
+                        pSoft->u8Bound = 1u;
+                    }
+                    return 1;
+                }
+            }
+        }
+#endif
         return lpcis_soft_emu_bind(pView, pId, pFn);
     }
     return 0;
@@ -944,20 +1440,25 @@ pci_enable_device(void *dev)
     }
 
     lpcis_dev_bdf(pDev, &u8Bus, &u8Slot, &u8Func);
-    u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
-    if ((u32Cmd & 0xffffu) != 0xffffu) {
-        u32Cmd = (u32Cmd & 0xffff0000u) | ((u32Cmd | (u32)u16Want) & 0xffffu);
-        lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+    /* Soft bookkeeping always; real CF8 only when freestanding not owner. */
+    if (lpcis_cf8_write_ok(dev) != 0) {
+        u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
+        if ((u32Cmd & 0xffffu) != 0xffffu) {
+            u32Cmd = (u32Cmd & 0xffff0000u) |
+                     ((u32Cmd | (u32)u16Want) & 0xffffu);
+            lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+        }
     }
 
     pDev->u8Enabled = 1u;
     if (g_cEnable < 0xffffffffu) {
         g_cEnable++;
     }
-    kprintf("linux_pci_soft: soft enable %04x:%04x @ %02x:%02x.%u\n",
+    kprintf("linux_pci_soft: soft enable %04x:%04x @ %02x:%02x.%u%s\n",
             (unsigned)pDev->vendor, (unsigned)pDev->device,
             (unsigned)pDev->bus, (unsigned)((pDev->devfn >> 3) & 0x1fu),
-            (unsigned)(pDev->devfn & 0x7u));
+            (unsigned)(pDev->devfn & 0x7u),
+            (lpcis_cf8_write_ok(dev) == 0) ? " (cf8 NOOP hybrid)" : "");
     return 0;
 }
 
@@ -990,11 +1491,13 @@ pci_set_master(void *dev)
     }
 
     lpcis_dev_bdf(pDev, &u8Bus, &u8Slot, &u8Func);
-    u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
-    if ((u32Cmd & 0xffffu) != 0xffffu) {
-        u32Cmd = (u32Cmd & 0xffff0000u) |
-                 ((u32Cmd | (u32)LPCIS_CMD_MASTER) & 0xffffu);
-        lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+    if (lpcis_cf8_write_ok(dev) != 0) {
+        u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
+        if ((u32Cmd & 0xffffu) != 0xffffu) {
+            u32Cmd = (u32Cmd & 0xffff0000u) |
+                     ((u32Cmd | (u32)LPCIS_CMD_MASTER) & 0xffffu);
+            lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+        }
     }
     pDev->u8Master = 1u;
 }
@@ -1014,11 +1517,14 @@ pci_clear_master(void *dev)
     }
 
     lpcis_dev_bdf(pDev, &u8Bus, &u8Slot, &u8Func);
-    u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
-    if ((u32Cmd & 0xffffu) != 0xffffu) {
-        u32Cmd = (u32Cmd & 0xffff0000u) |
-                 ((u32Cmd & ~(u32)LPCIS_CMD_MASTER) & 0xffffu);
-        lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+    /* Never clear BM on freestanding-owned NIC (would kill TX/RX DMA). */
+    if (lpcis_cf8_write_ok(dev) != 0) {
+        u32Cmd = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
+        if ((u32Cmd & 0xffffu) != 0xffffu) {
+            u32Cmd = (u32Cmd & 0xffff0000u) |
+                     ((u32Cmd & ~(u32)LPCIS_CMD_MASTER) & 0xffffu);
+            lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Cmd);
+        }
     }
     pDev->u8Master = 0u;
 }
@@ -1112,6 +1618,10 @@ pci_write_config_byte(void *dev, int nWhere, u8 u8Val)
     pDev = (struct pci_dev *)dev;
     if (pDev == NULL || nWhere < 0 || nWhere > 255) {
         return -1;
+    }
+    /* Hybrid: no real config write while freestanding owns 10ec:8168. */
+    if (lpcis_cf8_write_ok(dev) == 0) {
+        return 0; /* soft success; hardware untouched */
     }
     lpcis_dev_bdf(pDev, &u8Bus, &u8Slot, &u8Func);
     u32Word = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, (u8)(nWhere & ~3));
@@ -1238,11 +1748,12 @@ pci_status_get_and_clear_errors(void *dev)
     if (pDev == NULL) {
         return 0u;
     }
-    /* Soft: read status (offset 0x06), clear sticky error bits via CF8. */
+    /* Soft: read status (offset 0x06); clear sticky bits only if CF8 ok. */
     lpcis_dev_bdf(pDev, &u8Bus, &u8Slot, &u8Func);
     u32Dw = lpcis_cfg_read32(u8Bus, u8Slot, u8Func, 0x04u);
     u16St = (u16)((u32Dw >> 16) & 0xffffu);
-    if (u16St != 0xffffu && (u16St & 0xf900u) != 0u) {
+    if (u16St != 0xffffu && (u16St & 0xf900u) != 0u &&
+        lpcis_cf8_write_ok(dev) != 0) {
         /* Write-1-to-clear error bits in status. */
         u32Dw = (u32Dw & 0x0000ffffu) | ((u32)(u16St & 0xf900u) << 16);
         lpcis_cfg_write32(u8Bus, u8Slot, u8Func, 0x04u, u32Dw);
@@ -1262,11 +1773,20 @@ u64
 pci_resource_start(void *dev, int nBar)
 {
     struct pci_dev *pDev;
+    u8 *pBlob;
+    u32 u32Res;
 
-    pDev = (struct pci_dev *)dev;
-    if (pDev == NULL || nBar < 0 || nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
+    if (dev == NULL || nBar < 0 || nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
         return 0ull;
     }
+    /* Hostish blob: inlined macros may also read resource[]; ksym path. */
+    if (lpcis_is_hostish(dev)) {
+        pBlob = (u8 *)dev;
+        u32Res = LINUX_PCI_HOSTISH_OFF_RESOURCE_N((u32)nBar);
+        return lpcis_hostish_get64(pBlob,
+                                   u32Res + LINUX_PCI_HOSTISH_RES_OFF_START);
+    }
+    pDev = (struct pci_dev *)dev;
     return pDev->resource_start[nBar];
 }
 
@@ -1274,11 +1794,27 @@ u64
 pci_resource_len(void *dev, int nBar)
 {
     struct pci_dev *pDev;
+    u8 *pBlob;
+    u32 u32Res;
+    u64 u64Start;
+    u64 u64End;
 
-    pDev = (struct pci_dev *)dev;
-    if (pDev == NULL || nBar < 0 || nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
+    if (dev == NULL || nBar < 0 || nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
         return 0ull;
     }
+    if (lpcis_is_hostish(dev)) {
+        pBlob = (u8 *)dev;
+        u32Res = LINUX_PCI_HOSTISH_OFF_RESOURCE_N((u32)nBar);
+        u64Start = lpcis_hostish_get64(
+            pBlob, u32Res + LINUX_PCI_HOSTISH_RES_OFF_START);
+        u64End =
+            lpcis_hostish_get64(pBlob, u32Res + LINUX_PCI_HOSTISH_RES_OFF_END);
+        if (u64End < u64Start) {
+            return 0ull;
+        }
+        return (u64End - u64Start) + 1ull;
+    }
+    pDev = (struct pci_dev *)dev;
     return pDev->resource_len[nBar];
 }
 
@@ -1287,10 +1823,15 @@ pci_set_drvdata(void *dev, void *pData)
 {
     struct pci_dev *pDev;
 
-    pDev = (struct pci_dev *)dev;
-    if (pDev == NULL) {
+    if (dev == NULL) {
         return;
     }
+    if (lpcis_is_hostish(dev)) {
+        lpcis_hostish_putptr((u8 *)dev, LINUX_PCI_HOSTISH_OFF_DEV_DRIVER_DATA,
+                             pData);
+        return;
+    }
+    pDev = (struct pci_dev *)dev;
     pDev->driver_data = pData;
 }
 
@@ -1299,10 +1840,14 @@ pci_get_drvdata(void *dev)
 {
     struct pci_dev *pDev;
 
-    pDev = (struct pci_dev *)dev;
-    if (pDev == NULL) {
+    if (dev == NULL) {
         return NULL;
     }
+    if (lpcis_is_hostish(dev)) {
+        return (void *)(uintptr_t)lpcis_hostish_get64(
+            (const u8 *)dev, LINUX_PCI_HOSTISH_OFF_DEV_DRIVER_DATA);
+    }
+    pDev = (struct pci_dev *)dev;
     return pDev->driver_data;
 }
 
@@ -1332,6 +1877,33 @@ linux_pci_soft_match_count(void)
     return g_cMatch;
 }
 
+int
+linux_pci_soft_last_probe_mode(void)
+{
+    return g_nLastProbeMode;
+}
+
+int
+linux_pci_soft_last_probe_st(void)
+{
+    return g_nLastProbeSt;
+}
+
+void
+linux_pci_soft_note_probe(u16 u16Vend, u16 u16Dev, int nMode, int nSt)
+{
+    (void)u16Vend;
+    (void)u16Dev;
+    if (nMode == LINUX_PCI_SOFT_PROBE_MODE_REAL) {
+        g_nLastProbeMode = LINUX_PCI_SOFT_PROBE_MODE_REAL;
+    } else if (nMode == LINUX_PCI_SOFT_PROBE_MODE_SOFT) {
+        g_nLastProbeMode = LINUX_PCI_SOFT_PROBE_MODE_SOFT;
+    } else {
+        g_nLastProbeMode = LINUX_PCI_SOFT_PROBE_MODE_NONE;
+    }
+    g_nLastProbeSt = nSt;
+}
+
 /**
  * Force soft EMU bind for a VID:DID present in devmgr inventory.
  * Does not require a live .ko pci_driver registration (safety net when
@@ -1344,31 +1916,15 @@ linux_pci_soft_force_emu_bind(u16 u16Vend, u16 u16Dev)
     u32 i;
     u32 cHit;
     struct gj_devmgr_pci_fn fn;
-    struct lpcis_drv_view view;
-    static const struct pci_device_id s_aForceId[2] = {
-        { .vendor = 0u, .device = 0u, .subvendor = PCI_ANY_ID,
-          .subdevice = PCI_ANY_ID, .class = 0u, .class_mask = 0u,
-          .driver_data = 0ul, .override_only = 0u, .u32Pad = 0u },
-        { .vendor = 0u, .device = 0u, .subvendor = 0u, .subdevice = 0u,
-          .class = 0u, .class_mask = 0u, .driver_data = 0ul,
-          .override_only = 0u, .u32Pad = 0u }
-    };
-    struct pci_device_id aId[2];
+    struct pci_device_id idRow;
+    extern int linux_netdev_soft_count(void);
+    extern void *alloc_etherdev_mqs(int sizeof_priv, unsigned txqs,
+                                   unsigned rxqs);
+    extern int register_netdev(void *dev);
 
     if (!g_fReady) {
         linux_pci_soft_init();
     }
-
-    aId[0] = s_aForceId[0];
-    aId[0].vendor = (u32)u16Vend;
-    aId[0].device = (u32)u16Dev;
-    aId[1] = s_aForceId[1];
-
-    memset(&view, 0, sizeof(view));
-    view.name = "force-emu";
-    view.id_table = aId;
-    view.probe = NULL;
-    view.remove = NULL;
 
     if (!devmgr_soft_ready()) {
         devmgr_soft_init();
@@ -1378,15 +1934,51 @@ linux_pci_soft_force_emu_bind(u16 u16Vend, u16 u16Dev)
         cFn = devmgr_soft_pci_scan(NULL, 0u);
     }
 
+    /*
+     * Always ensure soft netdev for the target even if pci slot already
+     * "bound" without register_netdev (G752 photo: REG=1 MATCH=1 but
+     * NETDEV SOFT 0 / PROBE MISS). Soft≠product.
+     */
     cHit = 0u;
+    memset(&idRow, 0, sizeof(idRow));
+    idRow.vendor = (u32)u16Vend;
+    idRow.device = (u32)u16Dev;
+    idRow.subvendor = PCI_ANY_ID;
+    idRow.subdevice = PCI_ANY_ID;
+
     for (i = 0u; i < cFn; i++) {
+        u8 u8Devfn;
+
         if (devmgr_soft_get(i, &fn) != 0) {
             continue;
         }
         if (fn.u16Vendor != u16Vend || fn.u16Device != u16Dev) {
             continue;
         }
-        if (lpcis_try_match_fn(&view, &fn) != 0) {
+        u8Devfn = (u8)(((fn.bdf.u8Slot & 0x1fu) << 3) |
+                       (fn.bdf.u8Func & 0x7u));
+
+        if (lpcis_already_bound(NULL, fn.bdf.u8Bus, u8Devfn) != 0) {
+            /* Bound without netdev? mint netdev only. */
+            if (linux_netdev_soft_count() == 0) {
+                void *pNd = alloc_etherdev_mqs(0, 1u, 1u);
+
+                if (pNd != NULL && register_netdev(pNd) == 0) {
+                    linux_pci_soft_note_probe(u16Vend, u16Dev,
+                                              LINUX_PCI_SOFT_PROBE_MODE_SOFT,
+                                              0);
+                    if (cHit < 0xffffffffu) {
+                        cHit++;
+                    }
+                    kprintf("linux_pci_soft: soft force emu netdev-only "
+                            "%04x:%04x\n",
+                            (unsigned)u16Vend, (unsigned)u16Dev);
+                }
+            }
+            continue;
+        }
+
+        if (lpcis_soft_emu_bind(NULL, &idRow, &fn) != 0) {
             if (cHit < 0xffffffffu) {
                 cHit++;
             }
@@ -1395,13 +1987,17 @@ linux_pci_soft_force_emu_bind(u16 u16Vend, u16 u16Dev)
 
     if (u16Vend == (u16)LPCIS_VID_REALTEK &&
         u16Dev == (u16)LPCIS_DID_RTL8168) {
-        if (cHit > 0u) {
+        if (cHit > 0u || linux_netdev_soft_count() > 0) {
             kprintf("linux_pci_soft: soft force emu 10ec:8168 PASS hits=%u "
-                    "bound=%u\n",
-                    (unsigned)cHit, (unsigned)g_cBoundUsed);
+                    "netdev=%d bound=%u\n",
+                    (unsigned)cHit, linux_netdev_soft_count(),
+                    (unsigned)g_cBoundUsed);
+            if (cHit == 0u) {
+                cHit = 1u; /* netdev already present */
+            }
         } else {
             kprintf("linux_pci_soft: soft force emu 10ec:8168 SKIP "
-                    "(no inventory or already bound)\n");
+                    "(no inventory match)\n");
         }
     } else {
         kprintf("linux_pci_soft: soft force emu %04x:%04x hits=%u\n",

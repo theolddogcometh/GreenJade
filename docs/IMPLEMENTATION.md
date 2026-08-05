@@ -12,6 +12,8 @@
 | **Language** | Pure C11 + minimal asm |
 | **License** | **MIT OR Apache-2.0** |
 | **Priority order** | **1. Security → 2. Performance → 3. Portability → 4. Readability** |
+| **Live track (2026-08)** | [TODO.md](TODO.md) § *Current track* · [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) |
+| **Bar3 status** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only |
 
 This document is what you implement against. Architecture policy lives in `GREENJADE_KERNEL_SPEC.md`; **this file is concrete**.
 
@@ -567,7 +569,22 @@ All in **userspace driver host** processes, not kernel.
 11. SPIR-V software path + HDA stream ring + sessiond/netstackd/storaged host — **done** (door hand-off next)
 12. Textured FS / multi-attr VS; HDA CORB DMA; userspace door ownership  
 
-See [TODO.md](TODO.md), [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md), [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md).
+See [TODO.md](TODO.md) (especially § *Current track*), [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md), [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md), [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md).
+
+---
+
+## Progress note — 2026-08-04 (ABI-first / G752 module path)
+
+| Field | Value |
+|-------|--------|
+| **Direction** | ABI-first + DDI/UDX + host-collected `.ko` soft path — not freestanding class thrash |
+| **DUT** | G752VT · `10ec:8168` · `8086:a12f` · lab `10.200.125.50` |
+| **Soft done** | REAL+SOFT1 stable; ksym N=289; Soft L2 ON when REAL; DDI soft door; collect/stage media |
+| **Next** | **D7** net datapath — freestanding owns MMIO; hold14 refresh · soft open/TX · MMIO handoff · soft NAPI |
+| **Bar3** | OPEN — [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
+| **Normative** | [TODO.md](TODO.md) · [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) |
+
+Soft ≠ product. **G-AC-1.** Boot kprintf no longer restates bar3.
 
 ---
 

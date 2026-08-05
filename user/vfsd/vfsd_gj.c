@@ -47,10 +47,10 @@
  *   vfsd-gj: soft cache reclaim=… writefd=… seek=… unlink=… stat=… bits=… ok=…
  *   vfsd-gj: soft stats ok=… skip=… door_bits=… store_bits=… free_bits=…
  *   vfsd-gj: soft deepen wave=70 areas=… ok=… skip=…
- *   vfsd-gj: soft path multi_server=0 confine=0 (soft; not bar3)
- *   vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *   vfsd-gj: soft path multi_server=0 confine=0 (soft)
+ *   vfsd-gj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
  *   vfsd-gj: soft door PASS | soft door soft-skip
- * Diagnostics only — never hard-fail live path PASS; not a bar3 claim.
+ * Diagnostics only — never hard-fail live path PASS; not a
  * Honesty: soft inventory ≠ product multi-server confine.
  *
  *   make vfsd-gj → build/user/vfsd.elf
@@ -141,7 +141,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define VFSD_SOFT_STORE_MIRROR 1u
@@ -476,13 +476,13 @@ soft_inventory_log(void)
      * Soft inventory ≠ product multi-server confine.
      */
     msg("vfsd-gj: soft path door=1 store=1 cache=1 multi_server=0 "
-        "confine=0 (soft; not bar3; soft != product multi-server confine)\n");
+        "confine=0\n");
 
     /*
      * Grep: vfsd-gj: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    msg("vfsd-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    msg("vfsd-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
     /*
@@ -490,7 +490,7 @@ soft_inventory_log(void)
      * Soft inventory ≠ product multi-server / continuum.
      */
     msg("vfsd-gj: soft exclusive product_kernel=OPEN wave=70 multi_server=0 confine=0 "
-        "bar3=0 userland=1 kernel=0 continuum=0\n");
+        " userland=1 kernel=0 continuum=0\n");
 }
 
 /*

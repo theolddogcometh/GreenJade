@@ -116,7 +116,8 @@ Directories
   ssh/            authorized_keys + lab-host enable helpers
   steam/          prebuilt Steam tree (option 2) — STATUS=$steam_status
   linux-drivers/  host-collected Linux .ko + firmware + NEEDED-DRIVERS.txt
-                  (ABI/module-path staging; freestanding does not load .ko yet)
+                  (full tree; Soft≠product). ESP also has
+                  /linux-drivers/modules/r8169.ko for UEFI soft media handoff.
 
 Steam (option 2 — no dpkg on GreenJade)
   Lab host:  make steam-fetch && make steam-stage && make hwtest-img
@@ -236,10 +237,19 @@ chmod +x "$persist_dir/bin/collect-serial-log.sh"
 
 # ---- Linux drivers on disk (operator collect → ABI/module-path staging) ----
 # Host-collected .ko + firmware + NEEDED-DRIVERS checklist. Not linked into
-# KERNEL.ELF; freestanding module load remains OPEN. Soft≠product GPL ship.
+# KERNEL.ELF as product. Soft≠product GPL ship; G-AC-1.
+#
+# D4 media path (Soft≠product):
+#   GJ-PERSIST/linux-drivers/  — full tree (ext4; no freestanding reader yet)
+#   ESP /linux-drivers/modules/r8169.ko — FAT, UEFI SimpleFS can LoadFile
+#     → gj_boot_info soft media → soft load source=media (before embed)
+# greppable: make-hwtest-img: esp stage PASS|SKIP
 chmod +x scripts/collect-linux-drivers.sh
 ./scripts/collect-linux-drivers.sh build/linux-drivers >/dev/null || \
 	./scripts/collect-linux-drivers.sh build/linux-drivers || true
+esp_r8169=0
+esp_fw=0
+esp_fw_n=0
 if [ -d build/linux-drivers ]; then
 	mkdir -p "$persist_dir/linux-drivers"
 	cp -a build/linux-drivers/. "$persist_dir/linux-drivers/" 2>/dev/null || true
@@ -248,10 +258,87 @@ if [ -d build/linux-drivers ]; then
 		cp -f build/linux-drivers/NEEDED-DRIVERS.txt \
 			"$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" 2>/dev/null || true
 	fi
+	# ESP soft media: plain r8169.ko + critical rtl_nic plain .fw (UEFI-readable FAT).
+	# Layout matches soft probe / UEFI stub path:
+	#   \linux-drivers\modules\r8169.ko
+	#   \linux-drivers\firmware\rtl_nic\rtl8168*.fw  (operator stage; multi-blob
+	#     soft-media handoff NOT wired — runtime HIT is kernel .incbin embed)
+	# Also mirror under EFI/GREENJADE/linux-drivers/ next to checklist.
+	mkdir -p "$esp_dir/linux-drivers/modules" \
+		"$esp_dir/linux-drivers/firmware/rtl_nic" \
+		"$esp_dir/EFI/GREENJADE/linux-drivers/modules" \
+		"$esp_dir/EFI/GREENJADE/linux-drivers/firmware/rtl_nic"
+	: >"$esp_dir/linux-drivers/firmware/.keep"
+	: >"$esp_dir/EFI/GREENJADE/linux-drivers/firmware/.keep"
+	if [ -f build/linux-drivers/modules/r8169.ko ]; then
+		cp -f build/linux-drivers/modules/r8169.ko \
+			"$esp_dir/linux-drivers/modules/r8169.ko"
+		cp -f build/linux-drivers/modules/r8169.ko \
+			"$esp_dir/EFI/GREENJADE/linux-drivers/modules/r8169.ko"
+		esp_r8169=$(wc -c <"$esp_dir/linux-drivers/modules/r8169.ko" | tr -d ' ')
+	elif [ -f build/linux-drivers/modules_raw/r8169.ko ]; then
+		cp -f build/linux-drivers/modules_raw/r8169.ko \
+			"$esp_dir/linux-drivers/modules/r8169.ko"
+		cp -f build/linux-drivers/modules_raw/r8169.ko \
+			"$esp_dir/EFI/GREENJADE/linux-drivers/modules/r8169.ko"
+		esp_r8169=$(wc -c <"$esp_dir/linux-drivers/modules/r8169.ko" | tr -d ' ')
+	fi
+	# Stage plain rtl8168*.fw (~33 KiB total) for operator media honesty.
+	esp_fw=0
+	esp_fw_n=0
+	fw_plain="build/linux-drivers/firmware_plain/rtl_nic"
+	if [ ! -d "$fw_plain" ] || [ -z "$(ls -A "$fw_plain"/rtl8168*.fw 2>/dev/null || true)" ]; then
+		# Best-effort decompress from staged .xz if embed script not yet run
+		if [ -x scripts/embed-linux-fw.sh ] || [ -f scripts/embed-linux-fw.sh ]; then
+			chmod +x scripts/embed-linux-fw.sh 2>/dev/null || true
+			./scripts/embed-linux-fw.sh >/dev/null 2>&1 || true
+		fi
+	fi
+	if [ -d "$fw_plain" ]; then
+		for f in "$fw_plain"/rtl8168*.fw; do
+			[ -f "$f" ] || continue
+			bn=$(basename "$f")
+			cp -f "$f" "$esp_dir/linux-drivers/firmware/rtl_nic/$bn"
+			cp -f "$f" "$esp_dir/EFI/GREENJADE/linux-drivers/firmware/rtl_nic/$bn" \
+				2>/dev/null || true
+			sz=$(wc -c <"$f" | tr -d ' ')
+			esp_fw=$((esp_fw + sz))
+			esp_fw_n=$((esp_fw_n + 1))
+		done
+	fi
+	cat >"$esp_dir/linux-drivers/ESP-STAGE.txt" <<EOF
+GreenJade ESP soft media stage (D4; Soft≠product; G-AC-1)
+==========================================================
+r8169.ko bytes=${esp_r8169}
+rtl8168*.fw n=${esp_fw_n} bytes=${esp_fw}
+paths:
+  /linux-drivers/modules/r8169.ko
+  /linux-drivers/firmware/rtl_nic/rtl8168*.fw
+  /EFI/GREENJADE/linux-drivers/modules/r8169.ko
+  /EFI/GREENJADE/NEEDED-DRIVERS.txt
+firmware runtime: soft request_firmware uses in-kernel embed table
+  (scripts/embed-linux-fw.sh → linux_dma_soft HIT), NOT UEFI multi-blob load.
+  ESP fw copy is operator media honesty / future handoff; Soft≠product.
+UEFI stub LoadFile → gj_boot_info soft media → source=media before embed (.ko).
+Do not claim product NIC (G-AC-1). Full tree still on GJ-PERSIST.
+EOF
+	cp -f "$esp_dir/linux-drivers/ESP-STAGE.txt" \
+		"$esp_dir/EFI/GREENJADE/linux-drivers/ESP-STAGE.txt" 2>/dev/null || true
 	n_ld=$(find build/linux-drivers/modules -type f 2>/dev/null | wc -l | tr -d ' ')
 	echo "make-hwtest-img: linux-drivers staged modules=${n_ld:-0} → GJ-PERSIST/linux-drivers/"
+	if [ "${esp_r8169:-0}" -gt 1000 ]; then
+		echo "make-hwtest-img: esp stage PASS r8169.ko=${esp_r8169}B path=/linux-drivers/modules/r8169.ko (soft≠product; D4)"
+	else
+		echo "make-hwtest-img: esp stage SKIP r8169.ko missing (collect soft-failed?)" >&2
+	fi
+	if [ "${esp_fw_n:-0}" -gt 0 ]; then
+		echo "make-hwtest-img: esp stage PASS rtl_nic fw n=${esp_fw_n} bytes=${esp_fw} path=/linux-drivers/firmware/rtl_nic/ (soft embed HIT at runtime; Soft≠product)"
+	else
+		echo "make-hwtest-img: esp stage SKIP rtl_nic fw (collect/embed soft-failed? GJ-PERSIST still has firmware/*.xz)" >&2
+	fi
 else
 	echo "make-hwtest-img: warn: no build/linux-drivers (collect soft-failed)" >&2
+	echo "make-hwtest-img: esp stage SKIP no linux-drivers tree" >&2
 fi
 
 # Copy product rootfs tree onto ESP under EFI/GREENJADE/rootfs-full (small)
@@ -267,13 +354,16 @@ cp -f "$esp_dir/EFI/GREENJADE/INSTALL.txt" \
 cat >"$esp_dir/EFI/GREENJADE/HWTEST.txt" <<'EOF'
 GreenJade hardware-test USB layout
   p1 ESP (this partition) — boot GreenJade + user/ + lib/ + drivers/ + rootfs-full/
-  p2 GJ-PERSIST — durable logs + lab SSH enable + steam/ + linux-drivers/
+      + /linux-drivers/modules/r8169.ko (soft media; UEFI LoadFile → source=media)
+  p2 GJ-PERSIST — durable logs + lab SSH enable + steam/ + linux-drivers/ full tree
 
 Boot: UEFI → BOOTX64.EFI → serial GJ-EFI / M0 OK
       soft markers: sshd/scsi_mid/hda_client live spawn when embeds run
+      soft media: GJ-EFI: soft media PASS → linux_module source=media (Soft≠product)
 G752: EFI/GREENJADE/LAPTOP.txt · DRIVERS.txt · NEEDED-DRIVERS.txt
-Linux modules (host-collected, for ABI/module-path work — not loaded yet):
-      mount -L GJ-PERSIST → linux-drivers/modules/ + NEEDED-DRIVERS.txt
+Linux modules (host-collected; Soft≠product; G-AC-1):
+      ESP:  /linux-drivers/modules/r8169.ko  (UEFI handoff; D4 media path)
+      full: mount -L GJ-PERSIST → linux-drivers/modules/ + NEEDED-DRIVERS.txt
 Logs: mount -L GJ-PERSIST; see README.txt
 SSH:  sudo bash /mnt/gj-persist/ssh/enable-lab-ssh.sh  (lab host)
 Soft: ./scripts/gj-product-summary.sh <serial-log>
@@ -360,6 +450,44 @@ fi
 if [ -f "$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" ]; then
 	mcopy -o -i "$out@@$ESP_OFF" "$esp_dir/EFI/GREENJADE/NEEDED-DRIVERS.txt" \
 		::/EFI/GREENJADE/NEEDED-DRIVERS.txt
+fi
+# Soft media r8169.ko + rtl8168*.fw on ESP FAT (UEFI SimpleFS; D4). Soft≠product.
+# Runtime request_firmware HIT is in-kernel embed (not multi-blob UEFI LoadFile).
+if [ -f "$esp_dir/linux-drivers/modules/r8169.ko" ]; then
+	mmd -i "$out@@$ESP_OFF" ::/linux-drivers 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/linux-drivers/modules 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/linux-drivers/firmware 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/linux-drivers/firmware/rtl_nic 2>/dev/null || true
+	mcopy -o -i "$out@@$ESP_OFF" \
+		"$esp_dir/linux-drivers/modules/r8169.ko" \
+		::/linux-drivers/modules/r8169.ko
+	if [ -f "$esp_dir/linux-drivers/firmware/.keep" ]; then
+		mcopy -o -i "$out@@$ESP_OFF" \
+			"$esp_dir/linux-drivers/firmware/.keep" \
+			::/linux-drivers/firmware/.keep 2>/dev/null || true
+	fi
+	for f in "$esp_dir/linux-drivers/firmware/rtl_nic"/rtl8168*.fw; do
+		[ -f "$f" ] || continue
+		mcopy -o -i "$out@@$ESP_OFF" "$f" \
+			"::/linux-drivers/firmware/rtl_nic/$(basename "$f")" 2>/dev/null || true
+	done
+	if [ -f "$esp_dir/linux-drivers/ESP-STAGE.txt" ]; then
+		mcopy -o -i "$out@@$ESP_OFF" \
+			"$esp_dir/linux-drivers/ESP-STAGE.txt" \
+			::/linux-drivers/ESP-STAGE.txt 2>/dev/null || true
+	fi
+	# Mirror next to NEEDED-DRIVERS (UEFI alt path)
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/linux-drivers 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/linux-drivers/modules 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/linux-drivers/firmware 2>/dev/null || true
+	mmd -i "$out@@$ESP_OFF" ::/EFI/GREENJADE/linux-drivers/firmware/rtl_nic 2>/dev/null || true
+	mcopy -o -i "$out@@$ESP_OFF" \
+		"$esp_dir/linux-drivers/modules/r8169.ko" \
+		::/EFI/GREENJADE/linux-drivers/modules/r8169.ko 2>/dev/null || true
+	echo "make-hwtest-img: esp mcopy r8169.ko → ::/linux-drivers/modules/ (UEFI soft media)"
+	if [ "${esp_fw_n:-0}" -gt 0 ]; then
+		echo "make-hwtest-img: esp mcopy rtl_nic fw n=${esp_fw_n} → ::/linux-drivers/firmware/rtl_nic/"
+	fi
 fi
 # Pre-sized 128 KiB KLOG.TXT for kernel xhci_msc stick log (FAT overwrite path)
 if [ ! -f "$esp_dir/EFI/GREENJADE/KLOG.TXT" ]; then
@@ -516,10 +644,15 @@ fi
 
 sz=$(wc -c <"$out" | tr -d ' ')
 ld_n=$(find "$persist_dir/linux-drivers/modules" -type f 2>/dev/null | wc -l | tr -d ' ')
-echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} drivers=${drv_n} linux_ko=${ld_n:-0} rootfs_files=${rootfs_n}"
+echo "make-hwtest-img: PASS img=$out size=${sz}B steam=$steam_status user_elfs=${user_n} libs=${lib_n} drivers=${drv_n} linux_ko=${ld_n:-0} rootfs_files=${rootfs_n} esp_r8169=${esp_r8169:-0} esp_fw_n=${esp_fw_n:-0}"
 echo "  layout: p1 ESP FAT(GREENJADE) + p2 ${PERSIST_FS}(GJ-PERSIST) logs+ssh+steam+linux-drivers"
 echo "  G752:   EFI/GREENJADE/LAPTOP.txt · DRIVERS.txt · NEEDED-DRIVERS.txt · drivers/ (UDX)"
-echo "  Linux:  GJ-PERSIST/linux-drivers/ (host .ko staging; load on GJ = OPEN)"
+echo "  Linux:  GJ-PERSIST/linux-drivers/ (full tree) + ESP /linux-drivers/modules/r8169.ko"
+echo "  fw:     ESP /linux-drivers/firmware/rtl_nic/rtl8168*.fw (media honesty); runtime HIT = kernel embed"
+echo "  D4:     UEFI soft media handoff (source=media) when .ko staged; Soft≠product"
+if [ "${esp_r8169:-0}" -gt 1000 ]; then
+	echo "  greppable: make-hwtest-img: esp stage PASS"
+fi
 echo "  write:  sudo ./scripts/install-hwtest-usb.sh /dev/sdX"
 echo "  SSH:    after plug-in on lab host:"
 echo "          sudo mount -L GJ-PERSIST /mnt/gj-persist"

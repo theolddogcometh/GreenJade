@@ -2,31 +2,71 @@
 
 | Field | Value |
 |-------|--------|
-| **As of** | 2026-08-03 (post **wave D** + r8169 id_table soft fix) |
+| **As of** | 2026-08-04 lab panel/serial: `PROBE SOFT` · `NET R0 B132` · hybrid ON · `L2 BR 0` · USB MSC **NOT READY** · xHCI **SKIP BUILTIN**; **parallel goals** (TODO Current track): net FS ping · USB FS MSC · NIC hybrid · USB module · DDI/UDX; Soft ≠ product · **G-AC-1** |
 | **Law** | Dual **MIT OR Apache-2.0** only; **no GPL** in tree; **G-AC-1** — **not** Linux `.ko`; **Linux-SHAPED UDX** only |
 | **Normative pivot** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) |
+| **Coding backlog** | [TODO.md](TODO.md) § *Current track* |
 | **Hybrid design** | [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) |
 | **Soft DDI** | [DDI_SOFT.md](DDI_SOFT.md) |
 | **HCL** | [HCL.md](HCL.md) |
+| **Bar3 / Top 50** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) **only** (do not restate in boot kprintf) |
 | **Laptop UDX host runbook** | [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) — G752VT wave D host path; **G-AC-1** |
 | **Module path** | [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) — soft loader / staged `.ko`; **not** product AC |
+| **pci_dev plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) — hostish **0xb40** Strategy A (real probe soft PASS) |
 
-**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. bar3 stays **OPEN**. T0 product net = **virtio**. Freestanding `xhci_msc` / `rtl8168` = **lab soft only**. Wave D laptop path (`GJ_SYS_DDI=103`, real soft PCI scan, UDX SCAN/GET/OPEN/MAP_BAR, `vmm_map_user_device`, `rtl8168_udx`/`xhci_udx` skeletons) ≠ product **TX/RX** ≠ xHCI **BOT** ≠ **live IRQ** ≠ bar3. **G-AC-1:** staged / soft-loaded Linux `.ko` ≠ product claim.
+**Honesty rule:** greppable soft PASS / scaffold / soft bridge ≠ product DoD. Bar3: [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md). T0 product net = **virtio**. Freestanding `xhci_msc` / `rtl8168` = **lab soft only**. Soft `NETDEV SOFT ≥1` ≠ TX/RX. Soft L2 bridge ON ≠ freestanding MMIO handoff. Real probe `ST=0` ≠ product datapath. **G-AC-1:** staged / soft-loaded Linux `.ko` ≠ product claim. **Soft ≠ product.**
 
 ---
 
-## Wave note — 2026-08-03 (r8169 id_table stride)
+## Wave note — 2026-08-04 (parallel goals; lab panel/serial)
 
-**Symptom (photos 1000003238 / 1000003240):** `MOD R8169 LOAD OK INIT=0` then `NETDEV SOFT 0` — no soft bind to `10ec:8168`.
+**Parallel (TODO Current track):** (1) net FS ping **blocking** (2) USB FS MSC (3) NIC hybrid (4) USB module (5) DDI/UDX. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
+
+### Current lamps
+
+| Lamp | Value |
+|------|--------|
+| **PROBE** | `PROBE SOFT` |
+| **NET** | `R0 B132` (not live RX path) |
+| **hybrid** | ON |
+| **hold14** | `L2 BR 0` |
+| **USB MSC** | **NOT READY** |
+| **xHCI** | **SKIP BUILTIN** |
+
+### Prior proven (hybrid 4a eng)
+
+| Lamp | Value |
+|------|--------|
+| **NETDEV** | `NETDEV SOFT 1` |
+| **PROBE** | `PROBE 10EC:8168 REAL` · `REG=1 MATCH=1 ST=0` |
+| **ksym** | **N=295** |
+| **MOD** | `MOD R8169 INIT=0` |
+| **hold14** | **`L2 BR RX=2 TX=0`** (live; RX≡`R2`) |
+| **hold15** | **`HYBRID WIRE=FS SOFT=R8169`** |
+| **NET** | `10.200.125.50 UP T4/F0/B924/R2` |
+| **xHCI** | `MOD XHCI PCI SKIP BUILTIN` |
 
 | Item | Fact |
 |------|------|
-| **Root cause** | Soft `pci_device_id` row was **32 B**; RHEL **9.8** `r8169.ko` rows are **40 B** (`driver_data` + `override_only` + pad) |
-| **Effect** | `id_table` walk **false-ended** before matching `10ec:8168` |
-| **Fix** | Soft `sizeof(pci_device_id) == 40`; force-EMU bind safety net; STATUS `probe 10ec:8168 soft\|miss` |
-| **Claim** | **Soft ≠ product.** Module-path probe lamp ≠ TX/RX; **G-AC-1** — no `.ko` product AC |
+| **Proven HW** | **Hybrid 4a eng PASS** — Linux soft r8169 + freestanding wire + L2 RX live (`HYBRID WIRE=FS SOFT=R8169` · `L2 BR RX=2`) |
+| **Current lab** | SOFT probe · L2 BR 0 · MSC NOT READY; ping blocking |
+| **Prior** | REAL+SOFT1 stable (ksym was **N=289**) |
+| **Not proven** | Full `.ko` wire (4b); product AC; USB MSC stick; freestanding ping this boot |
+| **Next** | Five parallel goals — not single-threaded 4b-only |
+| **Claim** | **Soft ≠ product.** Hybrid eng ≠ product / bar3. **G-AC-1.** |
 
-See [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) §wave note.
+### Prior proven + regression (same week)
+
+| Lab milestone | Note |
+|---------------|------|
+| **REAL+SOFT1 stable** | ksym N=289; Soft L2 ON |
+| **First REAL probe** | `PROBE … REAL` `ST=0` `NETDEV SOFT 1` |
+| **Soft EMU** | `REG=1` `MATCH=1` `NETDEV SOFT 1` `PROBE … SOFT` |
+| **First soft NETDEV SOFT 1** | id_table 40 B holds |
+| **force-EMU netdev-only fix** | `NETDEV SOFT 0` / `MISS` — bound without netdev |
+| **id_table stride fix** | `NETDEV SOFT 0` from 32 B vs 40 B `pci_device_id` stride (**fixed**) |
+
+Also: boot/runtime **bar3 honesty spam** stripped from kprintf → [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only.
 
 ---
 
@@ -49,7 +89,11 @@ See [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) §wave note.
 | virtio-net / virtio-blk T0 | Yes | Product T0 path | CI/smoke gate |
 | In-kernel `xhci_msc` | Yes | Lab soft scaffold | **Never** T1 from stage count |
 | In-kernel `rtl8168` | Yes | Lab soft only | **Never** T0 product net |
-| Linux `.ko` / GPL drivers | **Forbidden** | **G-AC-1** | **Never** — UDX shape only |
+| Linux `.ko` / GPL drivers | **Forbidden** as product AC | **G-AC-1** | **Never** bar3-by-`.ko` — UDX shape for product |
+| Soft module path (r8169) | Yes | **Soft eng track** | REAL+SOFT1 stable; waves 1–3 code land; freestanding owns MMIO at gate0; **D7 OPEN** |
+| Soft firmware ksym | Yes | **Soft eng** | `-ENOENT` + null fw; **≠** real `.fw` load |
+| Hostish `pci_dev` **0xb40** | Soft PASS probe | **REAL+SOFT1 stable** | next = gate1 sole-owner → Option B / phase4 |
+| D4 media boot | Yes | **PARTIAL** | ESP+UEFI `source=media`; embed fallback; await lab panel/serial for `source=media` |
 
 ---
 
@@ -150,6 +194,7 @@ See [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) §wave note.
 | DDI opcodes (UDX) | `user/udx/include/udx/ddi.h` — **must match** kernel `DDI_OP_*` |
 | Bind sequence | **SCAN → GET → OPEN → MAP_BAR** (same as kernel door) |
 | Bind lamps | `udx: soft ddi bind PASS` · `udx: soft ddi bind SKIP` |
+| xHCI soft BOT progress | `xhci_udx: soft bot stage=1..4` · `soft bot stub PASS` · `soft ports` / `soft params` — **≠ product BOT** |
 | rtl8168 skeleton | `user/drivers/rtl8168_udx/` — soft probe/ISR/work; **TX/RX OPEN** |
 | xhci skeleton | `user/drivers/xhci_udx/` — soft CAPLENGTH/HCIVERSION; **BOT OPEN** |
 | Stage helper | `scripts/stage-udx-drivers.sh` — ESP `drivers/` only; **no `.ko`** |
@@ -188,6 +233,17 @@ Order matches [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md). Soft scaffolds **already
 | 4 | File-backed mmap product | Soft ramfs snapshot | Live pager / vfs-door file maps |
 | 5 | DDI product caps + class I/O | Wave D soft door + user MMIO + skeletons | Mint MMIO/IRQ/DMA **caps**; product TX/RX; BOT; live IRQ |
 
+**Module-path engineering (parallel, not product AC):**
+
+| # | Item | Current | Next step |
+|---|------|---------|-----------|
+| M1 | Soft netdev bind | **`NETDEV SOFT 1`** | Soft done |
+| M2 | Hostish real probe | **PASS** REAL+SOFT1 stable | Soft done; soft ≠ product |
+| M3 | **D7** MMIO handoff / datapath | phase0 live; 1–3 stubs gate0; reverse TX soft; freestanding owns MMIO | **Next:** gate1 sole-owner · Option B ndo_open · phase4 wire |
+| M4 | Soft firmware | `-ENOENT` null fw | Real `.fw` load |
+| M5 | D4 media | **PARTIAL** `source=media` + embed | await lab panel/serial; GJ-PERSIST ext4 still OPEN |
+| M6 | xHCI `.ko` | **SKIP builtin** | Optional; not blocking NIC |
+
 **Already soft-landed (deepen, don’t invent):**
 
 - Socket family cold bridge (`linux_cold_net`)  
@@ -215,14 +271,17 @@ Order matches [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md). Soft scaffolds **already
 ### 5.2 Wave D short DoD vs remaining
 
 ```text
-WAVE D DONE                          STILL OPEN
+WAVE D + SOFT BIND DONE              STILL OPEN
 ──────────────────────────────       ────────────────────────────────
-GJ_SYS_DDI=103 (ddi_door.c)          Product TX/RX (rtl8168_udx)
+GJ_SYS_DDI=103 (ddi_door.c)          Product TX/RX (rtl8168_udx / .ko)
 Real soft PCI scan (devmgr_soft)     Product xHCI BOT/MSC (xhci_udx)
 UDX SCAN/GET/OPEN/MAP_BAR bind       Live IRQ / kernel notify product
 vmm_map_user_device (user MMIO)      Full CNode MMIO/IRQ/DMA cap mint
 Clean-room rtl8168_udx + xhci_udx    Multi-server devmgr match graph
-G-AC-1: UDX shape, not .ko           bar3; G-PERS product default
+r8169 NETDEV SOFT 1                  Net/USB datapath (TX/RX · BOT)
+PROBE 10ec:8168 REAL ST=0            **D7** net datapath / MMIO handoff
+REG=1 MATCH=1 (prior EMU)            Freestanding still owns MMIO
+G-AC-1: UDX shape, not .ko product   bar3; G-PERS product default
 Soft laptop smoke lamps              Product sshd on laptop NIC
 ```
 
@@ -238,9 +297,11 @@ Soft laptop smoke lamps              Product sshd on laptop NIC
 | [DDI_SOFT.md](DDI_SOFT.md) | Soft devmgr API honesty |
 | [HCL.md](HCL.md) | T0 virtio / T1+ real HW; freestanding soft disposition |
 | [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) | G752VT operator runbook; wave D DoD vs OPEN bars |
+| [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) | Collect → stage → soft bind; NETDEV SOFT 1 wave |
+| [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) | Hostish `pci_dev` 0xb40 Strategy A plan |
 | [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) | Option C architecture |
 | [PROTON_PERSONALITY.md](PROTON_PERSONALITY.md) | Personality / Proton targeting |
 | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) | bar3 OPEN |
 | [UDX_LINUX_PORTER.md](UDX_LINUX_PORTER.md) | Porter contract for Linux-shaped UDX |
 
-*Soft confine ≠ product multi-server; soft bridge ≠ full glibc; soft scaffold ≠ G-PERS closed; soft probe ≠ TX/RX/BOT; **G-AC-1** ≠ Linux `.ko`.*
+*Soft confine ≠ product multi-server; soft bridge ≠ full glibc; soft scaffold ≠ G-PERS closed; soft probe ≠ TX/RX/BOT; **G-AC-1** ≠ Linux `.ko` product AC. Dual MIT OR Apache-2.0 tree only.*

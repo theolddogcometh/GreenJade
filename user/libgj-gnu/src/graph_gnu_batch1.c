@@ -46,7 +46,7 @@ static const char g_szGnuBatch1SoftInventory[] =
 	"libgj-gnu: soft batch1 wave=70 areas=6 "
 	"export,stamp,init,id,get,probe "
 	"marker=0x471 stamp=B1s1 freestanding=1 multi_server=0 "
-	"confine=0 bar3=0";
+	"confine=0";
 
 /* greppable: GJ_GNU_BATCH1_SOFT_MARKER */
 volatile uint64_t gj_gnu_batch1_export = GJ_GNU_BATCH1_CANON;

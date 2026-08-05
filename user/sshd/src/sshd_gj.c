@@ -17,6 +17,7 @@
  *   9. Encrypted CHANNEL_DATA send + recv (MAC verify + decrypt)
  *  10. Poly1305 soft AEAD self-check (RFC 8439 vector + post-keys tag)
  *  11. live path PASS → soft inventory → daemon park
+ *  12. Eth accept session: banner + KEX start (OpenSSH/nc on freestanding NIC)
  *
  * Soft inventory (Wave 126 exclusive deepen) — honesty, not product SSH.
  * Diagnostics only; never hard-fails the live path. Greppable prefix:
@@ -156,7 +157,7 @@ static uint32_t g_u32SoftLogN;     /* inventory log emissions */
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SOFT_SUITE_BANNER   (1u << 0)
@@ -1009,7 +1010,7 @@ soft_inventory_log(void)
 	 * Grep: sshd-gj: soft exclusive (Wave 126 exclusive deepen).
 	 * Soft inventory ≠ product multi-server confine.
 	 */
-	msg("sshd-gj: soft exclusive multi_server=0 confine=0 bar3=0 "
+	msg("sshd-gj: soft exclusive multi_server=0 confine=0 "
 	    "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 }
 
@@ -1585,6 +1586,184 @@ do_kex_and_session(long fd_srv, long fd_cli)
 }
 
 /*
+ * RECV with yield-retry for eth peers (loopback is immediate; NIC is not).
+ * Returns >0 bytes, 0 EOF, or last negative errno after tries.
+ */
+static long
+net_recv_wait(long fd, void *buf, long cap, unsigned tries)
+{
+	unsigned i;
+	long n = -11;
+
+	if (buf == 0 || cap <= 0) {
+		return -22;
+	}
+	for (i = 0; i < tries; i++) {
+		n = gj_net(GJ_NET_OP_RECV, fd, (long)(uintptr_t)buf, cap);
+		if (n > 0) {
+			return n;
+		}
+		if (n == 0) {
+			return 0; /* peer FIN / soft EOF */
+		}
+		/* -11 EAGAIN: yield so timer/net_eth_poll can drain RX */
+		gj_yield();
+	}
+	return n;
+}
+
+/*
+ * Server-only path for external eth accept (OpenSSH / nc client).
+ * At least: banner + KEXINIT (KEX start). Best-effort ECDH_REPLY + NEWKEYS
+ * when the peer speaks curve25519-sha256. Grep: eth accept session
+ */
+static int
+do_eth_server_session(long fd)
+{
+	static char aCliBanner[128];
+	uint8_t aPkt[640];
+	uint8_t aRbuf[640];
+	uint8_t aQc[32];
+	uint8_t sk_s[32], pk_s[32], base[32];
+	uint8_t shared[32], H[32], sig[32], host_pk[32];
+	uint8_t newkeys[64];
+	uint32_t n;
+	long nr;
+	long cbCliBanner = 0;
+	unsigned i;
+	int fBanner = 0;
+	int fKexStart = 0;
+	struct sha256_ctx hx;
+
+	/* Fresh direction state for this peer (self-smoke used globals). */
+	g_encrypted = 0;
+	g_seq_s2c_tx = 0;
+	g_seq_s2c_rx = 0;
+	g_seq_c2s_tx = 0;
+	g_seq_c2s_rx = 0;
+
+	gj_ssh_hostkey_init();
+	gj_ssh_hostkey_pk(host_pk);
+
+	/* RFC 4253 identification — product banner first. */
+	nr = gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)g_szBanner,
+		    (long)slen(g_szBanner));
+	if (nr <= 0) {
+		msg("sshd-gj: eth banner SEND FAIL\n");
+		return 0;
+	}
+
+	for (i = 0; i < sizeof(aCliBanner); i++) {
+		aCliBanner[i] = 0;
+	}
+	nr = net_recv_wait(fd, aCliBanner, (long)(sizeof(aCliBanner) - 1u),
+			   256u);
+	if (nr > 0 && banner_is_ssh(aCliBanner, nr)) {
+		fBanner = 1;
+		cbCliBanner = nr;
+		msg("sshd-gj: eth peer banner PASS\n");
+	} else {
+		/*
+		 * Some clients wait for server banner before speaking; we
+		 * already sent. Still offer KEXINIT so nc sees product id
+		 * and OpenSSH can start negotiation.
+		 */
+		msg("sshd-gj: eth peer banner soft-skip\n");
+	}
+
+	/* KEX start: server KEXINIT (OpenSSH needs this after banners). */
+	n = build_kexinit(aPkt, sizeof(aPkt));
+	if (n == 0 || send_pkt(fd, aPkt, n, 1) <= 0) {
+		msg("sshd-gj: eth KEXINIT SEND FAIL\n");
+		return fBanner;
+	}
+	fKexStart = 1;
+	msg("sshd-gj: eth KEX start PASS\n");
+
+	/* Drain client KEXINIT if present. */
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 256u);
+	if (nr < 6 || aRbuf[5] != SSH_MSG_KEXINIT) {
+		msg("sshd-gj: eth client KEXINIT soft-skip\n");
+		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+	}
+
+	/* Best-effort ECDH if peer sends KEX_ECDH_INIT (curve25519). */
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 256u);
+	if (nr < 42 || aRbuf[5] != SSH_MSG_KEX_ECDH_INIT) {
+		msg("sshd-gj: eth ECDH_INIT soft-skip\n");
+		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+	}
+	/* string Q_C at offset 10 (type@5 + string len@6..9) */
+	bytes_copy(aQc, aRbuf + 10, 32);
+
+	bytes_zero(base, 32);
+	base[0] = 9;
+	for (i = 0; i < 32; i++) {
+		sk_s[i] = (uint8_t)(host_pk[i] ^ (0x5a + (int)i));
+	}
+	sk_s[0] &= 248;
+	sk_s[31] &= 127;
+	sk_s[31] |= 64;
+	gj_ssh_x25519(pk_s, sk_s, base);
+	gj_ssh_x25519(shared, sk_s, aQc);
+
+	/* Soft exchange hash (product shape; not full RFC 4253 H). */
+	gj_ssh_sha256_init(&hx);
+	if (fBanner != 0 && cbCliBanner > 0) {
+		gj_ssh_sha256_update(&hx, aCliBanner, (size_t)cbCliBanner);
+	} else {
+		gj_ssh_sha256_update(&hx, g_szClientBanner,
+				     slen(g_szClientBanner));
+	}
+	gj_ssh_sha256_update(&hx, g_szBanner, slen(g_szBanner));
+	gj_ssh_sha256_update(&hx, aQc, 32);
+	gj_ssh_sha256_update(&hx, pk_s, 32);
+	gj_ssh_sha256_update(&hx, shared, 32);
+	gj_ssh_sha256_update(&hx, host_pk, 32);
+	gj_ssh_sha256_final(&hx, H);
+
+	gj_ssh_hostkey_sign(H, 32, sig);
+	n = build_ecdh_reply(aPkt, sizeof(aPkt), host_pk, pk_s, sig);
+	if (n == 0 || send_pkt(fd, aPkt, n, 1) <= 0) {
+		msg("sshd-gj: eth ECDH_REPLY FAIL\n");
+		return (fBanner != 0 || fKexStart != 0) ? 1 : 0;
+	}
+	msg("sshd-gj: eth ECDH_REPLY PASS\n");
+
+	n = build_simple(newkeys, sizeof(newkeys), SSH_MSG_NEWKEYS, 0, 0);
+	if (n != 0) {
+		(void)gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)newkeys,
+			     (long)n);
+		/* Soft drain peer NEWKEYS */
+		(void)net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 128u);
+		msg("sshd-gj: eth NEWKEYS soft PASS\n");
+	}
+
+	/*
+	 * Soft SERVICE_ACCEPT if peer sends SERVICE_REQUEST.
+	 * Not full userauth — product soft path only.
+	 */
+	nr = net_recv_wait(fd, aRbuf, (long)sizeof(aRbuf), 64u);
+	if (nr >= 6 && aRbuf[5] == SSH_MSG_SERVICE_REQUEST) {
+		uint8_t aSvc[64];
+		uint32_t cb;
+
+		cb = build_service(aSvc, sizeof(aSvc), SSH_MSG_SERVICE_ACCEPT,
+				   "ssh-userauth");
+		if (cb != 0) {
+			(void)gj_net(GJ_NET_OP_SEND, fd, (long)(uintptr_t)aSvc,
+				     (long)cb);
+		}
+	}
+
+	bytes_zero(sk_s, sizeof(sk_s));
+	bytes_zero(shared, sizeof(shared));
+	bytes_zero(sig, sizeof(sig));
+	bytes_zero(aQc, sizeof(aQc));
+	return 1;
+}
+
+/*
  * Product entry: self-smoke on TCP :22, then park with listen held.
  * Greppable markers documented in user/sshd/README.md.
  */
@@ -1666,10 +1845,11 @@ _start(void)
 		/*
 		 * Soft inventory still runs on FAIL for honesty (partial lamps).
 		 * Never promotes soft suite to product PASS.
+		 * Keep listen open anyway so external eth connect still works.
 		 */
 		soft_suite();
-		(void)gj_net(GJ_NET_OP_CLOSE, srv, 0, 0);
-		gj_exit(1);
+		msg("sshd-gj: daemon park after FAIL (TCP :22 listen held)\n");
+		/* fall through to park — do not CLOSE srv / exit */
 	}
 
 	/*
@@ -1677,32 +1857,29 @@ _start(void)
 	 * Greppable "sshd-gj: soft …" — not product SSH completeness.
 	 * Never hard-fails after live path PASS.
 	 */
-	soft_suite();
+	if (banner_ok && sess_ok) {
+		soft_suite();
+	}
 
 	/*
-	 * Keep listener open; park without net POLL on every quantum.
-	 * Eth frames are still demuxed on idle net_eth_poll in the kernel
-	 * scheduler; ACCEPT is tried rarely to avoid post-spawn #UD races
-	 * when other smokes run with this thread still live.
+	 * Keep listener open for freestanding NIC (rtl 10.200.125.50:22).
+	 * Eth demux + SYN-ACK rtx run in kernel net_eth_poll / net_tcp_poll
+	 * on the timer path. ACCEPT every yield so banner is not delayed.
 	 */
 	msg("sshd-gj: daemon park (TCP :22 listen held)\n");
-	{
-		unsigned long tick = 0;
+	for (;;) {
+		long a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
 
-		for (;;) {
-			if ((tick & 0x3fful) == 0) {
-				long a = gj_net(GJ_NET_OP_ACCEPT, srv, 0, 0);
-
-				if (a >= 0) {
-					msg("sshd-gj: eth accept\n");
-					(void)gj_net(GJ_NET_OP_SEND, a,
-						     (long)(uintptr_t)g_szBanner,
-						     (long)slen(g_szBanner));
-					(void)gj_net(GJ_NET_OP_CLOSE, a, 0, 0);
-				}
-			}
-			tick++;
-			gj_yield();
+		if (a >= 0) {
+			/*
+			 * Grep: sshd-gj: eth accept session
+			 * Real server path (banner + KEX start), not close-only.
+			 */
+			msg("sshd-gj: eth accept session\n");
+			(void)do_eth_server_session(a);
+			(void)gj_net(GJ_NET_OP_CLOSE, a, 0, 0);
+			msg("sshd-gj: eth accept session done\n");
 		}
+		gj_yield();
 	}
 }

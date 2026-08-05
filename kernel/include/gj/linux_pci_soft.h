@@ -29,6 +29,7 @@
  *   linux_pci_soft: soft probe 10ec:8168 PASS|FAIL|SKIP
  *   linux_pci_soft: soft ksym register PASS|SKIP
  *   linux_pci_soft: soft pci_dev incomplete field=…
+ *   linux_pci_soft: soft hostish probe ENTER|PASS|FAIL|FAULT
  *
  * Probe-shaped host field plan (Soft≠ABI): docs/PCI_DEV_SOFT_LAYOUT.md
  * See docs/DDI_SOFT.md · docs/LAPTOP_LINUX_DRIVER_HOST.md · UDX_LINUX_PORTER.md.
@@ -225,6 +226,22 @@ u32  linux_pci_soft_bound_count(void);
 u32  linux_pci_soft_register_calls(void);
 u32  linux_pci_soft_match_count(void);
 
+/* Last probe mode for STATUS (soft only; see docs/STEAM_BAR3_STATUS.md for bar3). */
+#define LINUX_PCI_SOFT_PROBE_MODE_NONE  (-1)
+#define LINUX_PCI_SOFT_PROBE_MODE_SOFT  (0)
+#define LINUX_PCI_SOFT_PROBE_MODE_REAL  (1)
+
+/*
+ * Set to 1 only around freestanding .ko probe(hostish); trap.c observes on
+ * kernel #PF and greps FAULT once then still halts. Soft≠product; no recovery.
+ * Defined in linux_pci_soft.c (BSS zero). Parent probe path may raise/clear.
+ */
+extern volatile u32 g_u32SoftHostishProbeInflight;
+
+int  linux_pci_soft_last_probe_mode(void);
+int  linux_pci_soft_last_probe_st(void);
+void linux_pci_soft_note_probe(u16 u16Vend, u16 u16Dev, int nMode, int nSt);
+
 /**
  * Force soft EMU bind for inventory VID:DID without requiring .ko probe.
  * Used after module init if netdev soft is still 0 (layout / id_table miss).
@@ -232,6 +249,21 @@ u32  linux_pci_soft_match_count(void);
  *   linux_pci_soft: soft force emu 10ec:8168 PASS|SKIP
  */
 u32  linux_pci_soft_force_emu_bind(u16 u16Vend, u16 u16Dev);
+
+/**
+ * Gate0 hybrid safety: non-zero if soft ksym may issue real CF8 writes or
+ * pci_iomap for this soft/hostish pci_dev.
+ * Gate0 (handoff==0): always 0 for 10ec:8168 (freestanding sole BAR).
+ * Gate1: 0 while rtl8168_ready(); 1 after freestanding quiesce.
+ * Grep: linux_pci_soft: soft cf8 write NOOP hybrid
+ */
+int  linux_pci_soft_hw_touch_ok(void *dev);
+
+/**
+ * Once serial lamp for hybrid zero-touch policy (gate0 REAL skip + CF8/iomap).
+ * Grep: linux_pci_soft: soft hybrid zero-touch
+ */
+void linux_pci_soft_zero_touch_lamp_once(void);
 
 #ifdef __cplusplus
 }

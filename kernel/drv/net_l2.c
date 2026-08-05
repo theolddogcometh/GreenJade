@@ -35,6 +35,11 @@ static u8 g_aIp[4];
 static u8 g_aMac[6];
 /** Once-ish soft coexistence lamp (does not switch TX/RX). */
 static int g_fSoftLinuxNoted;
+/** Soft MMIO handoff: freestanding quiesced, soft open not complete. */
+static int g_fSoftHandoffPending;
+/** Soft MMIO handoff: dual-drive FAULT (fail closed). */
+static int g_fSoftHandoffFault;
+static int g_fSoftHandoffFaultLogged;
 
 void
 net_l2_init(void)
@@ -77,9 +82,26 @@ net_l2_backend(void)
     return g_u32Backend;
 }
 
+void
+net_l2_refresh_mac(void)
+{
+    if (g_u32Backend != GJ_NET_L2_RTL8168) {
+        return;
+    }
+    rtl8168_mac(g_aMac);
+    kprintf("net_l2: soft refresh mac=%02x:%02x:%02x:%02x:%02x:%02x "
+            "(after reclaim; Soft≠product)\n",
+            g_aMac[0], g_aMac[1], g_aMac[2], g_aMac[3], g_aMac[4],
+            g_aMac[5]);
+}
+
 int
 net_l2_ready(void)
 {
+    /* Handoff pending / FAULT: freestanding not usable until soft open. */
+    if (g_fSoftHandoffPending != 0 || g_fSoftHandoffFault != 0) {
+        return 0;
+    }
     if (g_u32Backend == GJ_NET_L2_VIRTIO) {
         return virtio_net_ready();
     }
@@ -92,6 +114,10 @@ net_l2_ready(void)
 int
 net_l2_tx(const void *pFrame, u32 cbLen)
 {
+    /* Handoff pending / FAULT: fail closed — never dual-drive freestanding. */
+    if (g_fSoftHandoffPending != 0 || g_fSoftHandoffFault != 0) {
+        return -1;
+    }
     if (g_u32Backend == GJ_NET_L2_VIRTIO) {
         return virtio_net_tx(pFrame, cbLen);
     }
@@ -104,6 +130,9 @@ net_l2_tx(const void *pFrame, u32 cbLen)
 i32
 net_l2_rx(void *pOut, u32 cbMax)
 {
+    if (g_fSoftHandoffPending != 0 || g_fSoftHandoffFault != 0) {
+        return -1;
+    }
     if (g_u32Backend == GJ_NET_L2_VIRTIO) {
         return virtio_net_rx(pOut, cbMax);
     }
@@ -182,6 +211,73 @@ net_l2_soft_linux_note(void)
     /* Grep: net_l2: soft linux netdev note n=N (Soft≠product) */
     kprintf("net_l2: soft linux netdev note n=%d (Soft≠product)\n", nSoft);
     kprintf("net_l2: soft linux present backend=%s tx=freestanding "
-            "(Soft≠product; no TX switch yet)\n",
+            "(Soft≠product)\n",
             net_l2_name());
+    /*
+     * Soft L2 bridge when freestanding rtl owns wire + soft netdev present.
+     * Gate0 hybrid: EMU soft bind (REAL .ko probe skipped so BAR stays
+     * freestanding). Soft≠product.
+     */
+    {
+        extern int linux_pci_soft_last_probe_mode(void);
+        extern void linux_netdev_soft_l2_bridge_enable(int fOn);
+        extern int rtl8168_ready(void);
+        int nMode;
+
+        nMode = linux_pci_soft_last_probe_mode();
+        if (rtl8168_ready() != 0 && g_u32Backend == GJ_NET_L2_RTL8168) {
+            linux_netdev_soft_l2_bridge_enable(1);
+            kprintf("net_l2: soft linux datapath bridge ON mode=%s "
+                    "backend=%s (Soft≠product; freestanding L2+soft netdev)\n",
+                    (nMode == 1) ? "REAL" : "SOFT", net_l2_name());
+        } else if (nMode == 1 /* REAL */) {
+            linux_netdev_soft_l2_bridge_enable(1);
+            kprintf("net_l2: soft linux datapath bridge ON mode=REAL "
+                    "backend=%s (Soft≠product; freestanding L2+soft netdev)\n",
+                    net_l2_name());
+        }
+    }
+}
+
+/*
+ * Soft MMIO handoff pending (phase 1). Called from rtl8168_soft_handoff_prepare
+ * after freestanding TE/RE stop. Soft≠product. Grep: net_l2: soft mmio handoff
+ */
+void
+net_l2_soft_handoff_mark_pending(void)
+{
+    if (g_fSoftHandoffFault != 0) {
+        return;
+    }
+    g_fSoftHandoffPending = 1;
+    /* Grep: net_l2: soft mmio handoff pending */
+    kprintf("net_l2: soft mmio handoff pending backend was=%s "
+            "tx=fail-closed (Soft≠product; no soft open yet)\n",
+            net_l2_name());
+}
+
+int
+net_l2_soft_handoff_pending(void)
+{
+    return g_fSoftHandoffPending != 0 ? 1 : 0;
+}
+
+int
+net_l2_soft_handoff_fault(void)
+{
+    return g_fSoftHandoffFault != 0 ? 1 : 0;
+}
+
+void
+net_l2_soft_handoff_set_fault(const char *szWhy)
+{
+    g_fSoftHandoffFault = 1;
+    g_fSoftHandoffPending = 1; /* fail closed TX/RX */
+    if (g_fSoftHandoffFaultLogged == 0) {
+        g_fSoftHandoffFaultLogged = 1;
+        /* Grep: net_l2: soft mmio handoff FAULT */
+        kprintf("net_l2: soft mmio handoff FAULT why=%s (Soft≠product; "
+                "fail closed)\n",
+                (szWhy != NULL) ? szWhy : "?");
+    }
 }

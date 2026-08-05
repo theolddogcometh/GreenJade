@@ -2,13 +2,16 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **Path documented** — collect + stage **live**; soft module loader + ksym **in progress**; load soft-landed on DUT (r8169 INIT=0); soft probe stride fixed 2026-08-03; product probe / datapath **OPEN** |
+| **Status** | **Dual DoD (TODO Current track):** **A** Linux USB module path on laptop **OPEN** (xHCI **SKIP BUILTIN** · soft `linux_usb_soft` seed +33 `usb_*`/`scsi_*`; MSC may still FAIL KSYM on generics e.g. `sg_nents`; freestanding stage-15 still TO — not a module-path close). **B** sshd TCP **:22** on freestanding net is **not** this doc’s close (see TODO). Soft eng: `PROBE SOFT` · guest **10.200.125.50** · hybrid SOFT. Soft ≠ product; **G-AC-1**; dual **MIT OR Apache-2.0**; bar3 only [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) |
 | **DUT class** | Laptop real-HW (G752VT primary; same steps for other Intel x86_64) |
 | **Law** | Dual **MIT OR Apache-2.0** source tree; **no GPL source in tree** |
 | **Strategy** | [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) — not freestanding class-driver thrash |
 | **Operator runbook** | [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) (UDX soft host + media) |
 | **Inventory oracle** | [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) · `make linux-hwtest-img` |
-| **Wave status** | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) |
+| **Wave status** | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) · [TODO.md](TODO.md) § Current track |
+| **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only — not module-path kprintf |
+| **pci_dev plan** | [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) — Strategy A hostish **0xb40** (real probe soft PASS) |
+| **MMIO handoff** | [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) — freestanding → soft r8169 ownership; gate `GJ_SOFT_R8169_MMIO_HANDOFF` **default 0** |
 
 ## One-sentence goal
 
@@ -16,16 +19,95 @@
 
 ---
 
-## Wave note — 2026-08-03 (NETDEV SOFT 0 after LOAD OK)
+## Wave note — 2026-08-04 (dual DoD · module path = DoD A)
 
-**Photos:** `1000003238` / `1000003240` — `MOD R8169 LOAD OK INIT=0` then `NETDEV SOFT 0`.
+**Dual DoD (normative: [TODO.md](TODO.md) § Current track):** **A** this doc — Linux USB drivers path on laptop **OPEN** while freestanding stage-15 / xHCI **SKIP BUILTIN** / MSC soft seed (usb+scsi ksym; remaining generics). **B** sshd TCP **:22** on freestanding net — tracked in TODO, not closed by module soft lamps. Soft ≠ product · **G-AC-1** · dual **MIT OR Apache-2.0**.
+
+**Lab evidence (G752):** greppable STATUS / serial lamps below.
+
+| STATUS / lamp | Value |
+|---------------|--------|
+| **probe** | `PROBE SOFT` |
+| **NET** | freestanding ICMP lab PROVEN · guest **10.200.125.50** · hybrid SOFT |
+| **USB freestanding** | Stage 15 GET_CONFIG TO (lab path; ≠ DoD A close) |
+| **usb-storage** | soft seed **+33** `usb_*`/`scsi_*`; may still **FAIL KSYM** on `sg_nents` etc. |
+| **xHCI** | **SKIP BUILTIN** |
 
 | Item | Fact |
 |------|------|
-| **Root cause** | Soft `struct pci_device_id` was **32 bytes**; RHEL **9.8** `r8169.ko` table rows are **40 bytes** (`driver_data` + `override_only` + pad) |
-| **Effect** | Soft `id_table` walk **false-ended** before `10ec:8168` → no soft netdev bind |
-| **Fix** | Soft `sizeof(pci_device_id) == 40`; force-EMU bind safety net; STATUS lamp `probe 10ec:8168 soft\|miss` |
-| **Honesty** | **Soft ≠ product.** Load/init OK + soft probe ≠ TX/RX. **G-AC-1:** no Linux `.ko` product claim. Dual **MIT OR Apache-2.0** tree only. |
+| **DoD A (USB module)** | **OPEN** — soft usbcore seed live; need remaining generics + modular HC / real datapath |
+| **NIC hybrid** | Soft eng live; `PROBE SOFT`; prior hybrid 4a eng PROVEN |
+| **USB module** | xHCI **SKIP BUILTIN**; `linux_usb_soft` seed; remaining miss ~`sg_nents` |
+| **DoD B (sshd :22)** | **OPEN** on freestanding wire — ICMP ≠ TCP :22 ([TODO.md](TODO.md)) |
+| **Prior 4a** | `HYBRID WIRE=FS SOFT=R8169` · `L2 BR RX>0` · REAL+SOFT1 |
+| **Not proven** | Full `.ko` wire (4b); USB MSC via module; product AC |
+| **Honesty** | **Soft ≠ product.** Hybrid eng ≠ product. **G-AC-1.** Dual **MIT OR Apache-2.0**. |
+
+### Prior lamps (hybrid 4a eng)
+
+| STATUS / lamp | Value |
+|---------------|--------|
+| **netdev** | `NETDEV SOFT 1` |
+| **probe** | `PROBE 10EC:8168 REAL` · `REG=1 MATCH=1 ST=0` |
+| **ksym** | **N=295** |
+| **mod** | `MOD R8169 INIT=0` |
+| **hold14** | **`L2 BR RX=2 TX=0`** |
+| **hold15** | **`HYBRID WIRE=FS SOFT=R8169`** |
+| **NET** | `10.200.125.50 UP T4/F0/B924/R2` |
+| **xHCI** | `MOD XHCI PCI SKIP BUILTIN` · hold13 `USB linux path OPEN builtin` or **`usb_storage need=usbcore`** when MSC leaf embed fails ksym (this lab class) |
+
+### D7 MMIO handoff ([R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md))
+
+| Phase | State |
+|-------|--------|
+| **0** bridge copy-only | **LIVE** — freestanding owns wire; soft L2 copies frames |
+| **1** freestanding quiesce | **Stub** — gate0 → SKIP; gate1 → PREPARE |
+| **2** hostish sole-owner | **Stub** — ready codes; no dual-drive; `g_fMmioHandoff` still 0 until phase3 try_open |
+| **3** soft-open | **Stub Option A** — soft-open only when gate1 + sole-owner; **no** `.ko` ndo_open (Option B separate) |
+| **4** soft wire TX/RX | **OPEN** — or hybrid freestanding wire + soft control |
+
+Greppable (gate 0): `… handoff SKIP (gate off)`. Soft safety: `soft open skip .ko ops` · `soft napi poll skip .ko` · `soft softirq kick` · `soft l2 bridge first tx` · `soft dev_queue_xmit`.
+
+### Gate0 soft load health (zero-touch freestanding BAR)
+
+| Gate / symbol | Default | Effect |
+|--------------|---------|--------|
+| **`GJ_SOFT_R8169_MMIO_HANDOFF`** | **0** | gate0 hybrid: **no REAL** `.ko` probe for `10ec:8168` → EMU bind only |
+| **`GJ_SOFT_R8169_LOAD`** | **1** | boot load/init embed/media `r8169.ko`; set **0** = freestanding-only net isolation |
+| **`GJ_SOFT_R8169_KO_NDO_OPEN`** | **0** | Option B `.ko` ndo_open (needs handoff=1) |
+| **`linux_pci_soft_hw_touch_ok`** | — | gate0: **always 0** for `10ec:8168` (CF8 write + `pci_iomap` NOOP); gate1: NOOP while `rtl8168_ready()` |
+| **rtnl / eth_*** | soft bodies | nesting lock; eth_platform **-EOPNOTSUPP**; mac copy/validate; eth_type_trans |
+| **ethtool_op_get_link** | soft body | carrier or freestanding ready (empty stub was always-down) |
+| **ethtool_op_get_ts_info** | soft body | zero info head (no PHC) |
+| **net_ratelimit** | soft body | allow (1); empty stub suppressed |
+| **synchronize_net** | soft no-op | post-open safe |
+
+**Freestanding-only isolation:** rebuild with `-DGJ_SOFT_R8169_LOAD=0`. Boot skips soft r8169 load/init (hold8 `mod r8169 SKIP load=0`). Soft ksyms remain registered; no EMU netdev. Grep: `main: soft linux_module path SKIP name=r8169 reason=GJ_SOFT_R8169_LOAD=0`.
+
+**Zero-touch serial (once):** `linux_pci_soft: soft hybrid zero-touch PASS gate0 REAL=skip cf8/iomap=NOOP_8168 always` · `soft hostish probe SKIP hybrid` · `soft cf8 write NOOP hybrid` · `soft pci_iomap NOOP hybrid`. Soft ≠ product.
+
+**Prior lab milestones (same day):** first REAL probe; EMU bind; first SOFT 1; force-EMU netdev-only; id_table 40 B stride.
+
+### Real probe outcomes (hostish `pci_dev` 0xb40)
+
+| Serial / STATUS outcome | Meaning | Laptop evidence |
+|-------------------------|---------|-----------------|
+| **PASS** | `probe()` returned **0** | stable: `PROBE … REAL` `ST=0` `NETDEV SOFT 1`; prior first REAL same lamps |
+| **FAIL** | `probe()` returned **nonzero** | `… FAIL st=N (fallback EMU)`; may still show **NETDEV SOFT 1** |
+| **FAULT** | Ring-0 **#PF** mid-probe | `… FAULT` then **kernel halt** — no EMU fallback |
+
+Flag: `g_u32SoftHostishProbeInflight` around `.ko` probe; grep `soft hostish probe`. Soft≠product.
+
+### Force-EMU netdev-only (lab fix)
+
+| Symptom | `REG=1 MATCH=1` but `NETDEV SOFT 0` / `PROBE MISS` |
+|---------|------------------------------------------------------|
+| **Cause** | Slot already soft-bound without `register_netdev`; force path skipped as “already bound” |
+| **Fix** | EMU bind fails unless netdev registers; force-EMU can mint **netdev-only** when bound but count is 0 |
+
+### Prior wave (fixed) — id_table stride
+
+Lab evidence: soft `pci_device_id` was **32 B**; RHEL **9.8** rows are **40 B** → walk false-ended before `10ec:8168`. Fix: 40-byte stride. **Superseded** by SOFT 1 evidence above.
 
 ---
 
@@ -99,7 +181,14 @@ G752VT-class minimum set (from script map):
 | USB MSC stick | `usb_storage` / `uas` |
 | Storage (as present) | `ahci` / `nvme` / `sd_mod` / … |
 
-**xHCI presence honesty:** many hosts build `xhci_pci` / `xhci_hcd` / `usbcore` as **builtin** (no `.ko`). Collect writes `meta/XHCI-STATUS.txt` and greps `collect-linux-drivers: xhci 8086:a12f xhci_pci=BUILTIN|PRESENT|MISSING`. Soft boot path then: `main: soft linux_module xhci path SKIP builtin` until a plain `.ko` is staged and optionally `./scripts/embed-linux-mod.sh xhci_pci` (weak embed; Makefile links only if `kernel/proc/xhci_pci_mod_blob.S` exists).
+**xHCI / USB presence honesty (host lab reality):** many hosts (all RHEL9/el9 kvers on this lab) build `xhci_pci` / `xhci_hcd` / `usbcore` / `usb_common` as **builtin** (no `.ko`). **`usb-storage` / `uas` are often modular** and collect stages plain `.ko`. Collect writes:
+
+| Meta | Greppable |
+|------|-----------|
+| `meta/XHCI-STATUS.txt` | `collect-linux-drivers: xhci 8086:a12f xhci_pci=BUILTIN\|PRESENT\|MISSING` · `usb_storage=…` |
+| `meta/USB-STATUS.txt` | `collect-linux-drivers: usb path OPEN builtin hc=… msc=…` |
+
+Soft boot: `main: soft linux_module xhci path SKIP builtin` + `main: soft usb multi-mod order …` until an HC `.ko` is staged. Optional MSC leaf: `./scripts/embed-linux-mod.sh usb-storage` → `usb_storage_mod_blob.S` (auto from collect when PRESENT; Makefile weak link). Optional HC: `./scripts/embed-linux-mod.sh xhci_pci` only if a modular kver/distro supplies the file.
 
 Operator recipe:
 
@@ -125,7 +214,7 @@ From a **Linux inventory** stick (`make linux-hwtest-img`), `70-needed-drivers.s
 |------|--------|
 | **Image** | `make hwtest-img` (depends on `collect-linux-drivers`) |
 | **Persist** | **`GJ-PERSIST/linux-drivers/`** — full tree (`modules/`, `firmware/`, `meta/`, checklist) |
-| **ESP** | **`EFI/GREENJADE/NEEDED-DRIVERS.txt`** (checklist copy when present) |
+| **ESP** | **`EFI/GREENJADE/NEEDED-DRIVERS.txt`** + **`/linux-drivers/modules/r8169.ko`** + **`/linux-drivers/firmware/rtl_nic/rtl8168*.fw`** (UEFI soft media; D4) |
 | **Flash** | `sudo make install-hwtest-usb DEV=/dev/sdX` |
 | **Status** | **Live** (staging ≠ load) |
 
@@ -135,9 +224,13 @@ On-media layout after a good pack:
 GJ-PERSIST/
   linux-drivers/
     modules/          — .ko / .ko.xz / .ko.gz / .ko.zst
-    firmware/         — soft firmware blobs (e.g. rtl_nic/*)
+    firmware/         — host blobs as collected (often rtl_nic/*.fw.xz)
+    firmware_plain/   — decompressed rtl8168*.fw for soft embed / ESP
     meta/             — G752VT-MAP, COPIED, MISSING, BUILTIN, HOST-LSPCI-K
     NEEDED-DRIVERS.txt
+ESP (FAT):
+  /linux-drivers/modules/r8169.ko
+  /linux-drivers/firmware/rtl_nic/rtl8168*.fw   — media honesty (~33 KiB)
 EFI/GREENJADE/
   NEEDED-DRIVERS.txt  — ESP mirror of checklist (when staged)
 ```
@@ -149,9 +242,12 @@ sudo mount -L GJ-PERSIST /mnt/gj-persist
 ls /mnt/gj-persist/linux-drivers/modules
 cat /mnt/gj-persist/linux-drivers/NEEDED-DRIVERS.txt
 sudo umount /mnt/gj-persist
+sudo mount -L GREENJADE /mnt/gj-esp   # or GJ-LNX-ESP label per stick
+ls /mnt/gj-esp/linux-drivers/firmware/rtl_nic/
+sudo umount /mnt/gj-esp
 ```
 
-**Honesty:** staged modules sit on media for **module-path development**. GreenJade **does not yet** load them at boot.
+**Honesty:** D4 **PARTIAL** — ESP stages `r8169.ko` + plain `rtl8168*.fw`; UEFI soft media handoff is **single-blob** for the `.ko` (`source=media`). Multi-blob firmware LoadFile is **not** wired — runtime `request_firmware` uses the **in-kernel embed table** (see soft firmware below). **GJ-PERSIST** ext4 still unread at freestanding boot. Soft ≠ product. Await lab panel/serial for `source=media` + fw HIT.
 
 ---
 
@@ -174,27 +270,24 @@ Design constraints:
 
 ---
 
-## Step 4 — `finit_module` / boot smoke
+## Step 4 — `finit_module` / media boot path (**D4 PARTIAL**)
 
 | Surface | Where | Status |
 |---------|-------|--------|
-| Linux NR defs | `kernel/include/gj/linux_abi.h` — `LINUX_NR_init_module` (175), `delete_module` (176), `finit_module` (313) | **Present** |
-| Userspace graph wrappers | `user/libcgj/src/graph_batch3.c` — `init_module` / `finit_module` / `delete_module` syscalls | **Present** (call into kernel) |
-| Kernel load implementation | `init_module` / `finit_module` → soft loader | **OPEN** |
-| Boot smoke | Early or init-time: open staged `.ko` → `finit_module` → greppable PASS/FAIL | **OPEN** |
-| Panel / serial lamps (target) | e.g. `module: soft finit …` / `module: load FAIL unresolved=…` | **Not landed** |
+| Linux NR defs | `linux_abi.h` — init/finit/delete_module | **Present** |
+| Kernel soft load (memory) | `linux_module_load_mem` / `_src` | **SOFT DONE** (lab) |
+| Boot **media** (ESP/UEFI) | SimpleFS → `boot_info` soft media → `source=media` preferred | **SOFT PATH LIVE** (code); **await lab panel/serial** |
+| Boot **embed** fallback | `gj_r8169_ko_blob` → `source=embed` | **SOFT DONE** (G752 proven path) |
+| `finit_module` | vfs_ram fd only (`source=finit`) | **SOFT**; not GJ-PERSIST |
+| **GJ-PERSIST ext4** | staged tree on USB | **Unread** at freestanding boot |
 
-Target smoke sequence (when loader lands):
+| Source tag | Meaning |
+|------------|---------|
+| **`media`** | UEFI soft media handoff blob (ESP `r8169.ko`) |
+| **`embed`** | Linked blob fallback |
+| **`finit`** | Cold finit from vfs_ram fd |
 
-```text
-1. Mount / find GJ-PERSIST/linux-drivers/modules (or ESP staging)
-2. Order deps (usbcore → xhci_hcd → xhci_pci; phy → r8169; …)
-3. open(2) each .ko → finit_module(fd, params, flags)
-4. Grep: module load PASS/FAIL + first unresolved ksym on fail
-5. Do not claim PCI probe or datapath from load-alone
-```
-
-Until the kernel path exists, **expect ENOSYS / soft fail** — that is honest, not a silent pass.
+**D4 CLOSE remaining:** GJ-PERSIST ext4 reader and/or multi-module deps; Soft≠product.
 
 ---
 
@@ -229,6 +322,92 @@ Recommended loop:
 3. `usb_common` / core fragments before full `xhci_hcd`.  
 4. Only then attempt `r8169` / `xhci_pci`+`xhci_hcd` with eyes open on ksym debt.
 
+### D9 — ksym post-probe gaps (r8169 REAL ST=0)
+
+After load-time resolve (r8169 **180** strong und names all hit ksym; G752 lab evidence **INIT=0** / **REAL probe ST=0** / ksym **N≈289**), the remaining debt is **post-probe datapath quality**: empty return-0 ksym stubs vs soft bodies that fail closed / bookkeep / copy.
+
+**Unresolved logging (fail-closed):**
+
+| Path | Lamp / API |
+|------|------------|
+| Reloc strong `SHN_UNDEF` miss | `lmod_set_unres` → `g_szLastUnres` |
+| Load fail | `linux_module: soft load FAIL name=… missing=SYM` |
+| Reader | `linux_module_last_unresolved()` (boot panel uses this) |
+| Reloc range soft-zero | `linux_module: soft reloc … range soft-zero` / `soft reloc skip` |
+| Inventory | `linux_ksym: soft init PASS n=` / `soft inventory n=` |
+
+**ksym categories (register sites):**
+
+| TU | Role |
+|----|------|
+| `kernel/mm/linux_ksym.c` | Starter empty stubs (~272 names); capacity `LINUX_KSYM_MAX` |
+| `linux_pci_soft` | PCI register/config/irq/resource soft bodies |
+| `linux_dma_soft` | DMA / ioremap / pcim / kmalloc / firmware HIT\|MISS |
+| `linux_netdev_soft` | netdev / NAPI / skb / (post-probe) rtnl + eth_* |
+| `linux_phy_soft` | phy_* / mdiobus_* soft-complete |
+| `linux_time_soft` | jiffies / delay / IRQ request / printk |
+
+**Added this pass (soft bodies re-register over empty stubs; Soft≠product):**
+
+| Symbol | Soft behavior | File |
+|--------|---------------|------|
+| `rtnl_lock` / `rtnl_unlock` | nesting counter + once log | `linux_netdev_soft` |
+| `eth_platform_get_mac_address` | **-EOPNOTSUPP** + zero addr (fail closed; driver EEPROM fallback) | `linux_netdev_soft` |
+| `eth_mac_addr` | copy 6 B from sockaddr into soft `dev_addr` | `linux_netdev_soft` |
+| `eth_validate_addr` | soft is_valid_ether_addr on soft netdev | `linux_netdev_soft` |
+| `eth_type_trans` | ethertype from soft skb offset 12, else 0 | `linux_netdev_soft` |
+| `synchronize_net` | no-op + once log | `linux_netdev_soft` |
+| `ethtool_op_get_link` | soft carrier or freestanding ready (1=up) | `linux_netdev_soft` |
+| `ethtool_op_get_ts_info` | soft zero info head (no PHC) | `linux_netdev_soft` |
+| `net_ratelimit` | allow (1); empty stub suppressed | `linux_netdev_soft` |
+| `usleep_range_state` | alias `usleep_range` (state ignored) | `linux_time_soft` |
+| `memcpy_fromio` | real volatile byte-copy (empty stub wrote nothing) | `linux_dma_soft` |
+| `skb_copy_bits` | copy soft `abData` → buffer; **-EFAULT** if not soft pool skb | `linux_netdev_soft` |
+| `__skb_pad` | zero pad after soft data if room; free on fail if flagged; **-ENOMEM** else | `linux_netdev_soft` |
+| `skb_put` | grow soft `uLen`; return tail ptr; NULL fail closed | `linux_netdev_soft` |
+| `pskb_may_pull` | soft linear: 1 if `uLen` ≥ pull; 0 fail closed | `linux_netdev_soft` |
+| `__pskb_pull_tail` | soft no frags; return `abData` or NULL | `linux_netdev_soft` |
+| `pskb_expand_head` | soft fixed slab; 0 if fits (`nhead==0`); **-ENOMEM** else | `linux_netdev_soft` |
+| `__netdev_alloc_skb` / `dev_alloc_skb` | soft pool; logical len starts 0 (TX put path) | `linux_netdev_soft` |
+| `__napi_alloc_skb` | soft pool RX-shaped (`uLen` preset); alias of soft pool | `linux_netdev_soft` |
+
+Soft skb helpers: greppable `linux_netdev_soft: soft skb_copy_bits|__skb_pad|skb_put|pskb_may_pull|__netdev_alloc_skb`. Reverse TX: `dev_queue_xmit` → freestanding L2 when freestanding owns wire (`soft dev_queue_xmit`). Soft≠product; **no** `.ko` `ndo_start_xmit` product path.
+
+### Soft firmware (`request_firmware` embed HIT)
+
+| Piece | Detail |
+|-------|--------|
+| **Collect** | `make collect-linux-drivers` → `build/linux-drivers/firmware/rtl_nic/*.fw.xz` (+ full rtl_nic set) |
+| **Embed** | `scripts/embed-linux-fw.sh` (also from collect) decompresses **`rtl8168*.fw`** (~33 KiB total) → `firmware_plain/` + `kernel/proc/rtl_nic_fw_blob.S` + `kernel/include/gj/linux_fw_soft_tab.inc` |
+| **Lookup** | `linux_dma_soft` `request_firmware` / `firmware_request_nowarn` / `request_firmware_direct` match exact name (`rtl_nic/rtl8168h-2.fw`, …) |
+| **HIT** | Soft Linux-shaped `{ size, data, priv=NULL }` over `.rodata` `.incbin`; return **0** |
+| **MISS** | `*fw=NULL`, **-ENOENT** (non-rtl8168 names, empty table, slot full) |
+| **ESP** | Plain `rtl8168*.fw` staged under `/linux-drivers/firmware/rtl_nic/` for operator honesty; **not** loaded by UEFI multi-blob handoff |
+| **Cap** | Soft embed gate **2 MiB** total (`GJ_LINUX_FW_MAX`) |
+
+```text
+# greppable
+linux_dma_soft: soft firmware HIT name=rtl_nic/rtl8168h-2.fw size=… api=…
+linux_dma_soft: soft firmware MISS name=… api=…
+embed-linux-fw: PASS
+make-hwtest-img: esp stage PASS rtl_nic fw n=…
+```
+
+**Expected MISS:** any name outside the embed table (e.g. `rtl_nic/rtl8125*.fw`, `i915/*`, phy-only names not embedded). r8169 on **10ec:8168** typically requests one of the embedded `rtl8168*.fw` variants — that path should **HIT** after collect+rebuild. Soft ≠ product.
+
+**Still open (high priority):**
+
+| Gap | Why |
+|-----|-----|
+| Soft firmware beyond `rtl8168*` | Only 8168 family embedded (~33 KiB); other rtl_nic / i915 remain MISS |
+| Option B `.ko` `ndo_open` | After gate1 sole-owner + hostish layout confidence |
+| Phase 4 soft wire TX/RX | Or hybrid freestanding wire + soft control |
+| Gate1 sole-owner lab | Prove no dual-drive on G752 |
+| xhci_hcd full surface | **SKIP builtin** on lab host; no local modular HC `.ko` |
+| usb_storage soft leaf | Embed path live when staged; soft **usb+scsi seed** (`linux_usb_soft`); remaining FAIL on non-USB generics until deepened; INIT=0 ≠ stick |
+
+Soft ≠ product. Do not claim bar3 / product AC from soft ksym deepen.
+
 ---
 
 ## Relationship to UDX soft host (wave D)
@@ -257,27 +436,135 @@ Use this checklist for the **module path**. Mark each row honestly.
 | **D1** | **Collect** | `make collect-linux-drivers` produces modules + `NEEDED-DRIVERS.txt`; greppable `collect-linux-drivers: PASS` | **DONE** |
 | **D2** | **Stage** | `make hwtest-img` packs tree to **`GJ-PERSIST/linux-drivers/`** (+ ESP checklist) | **DONE** |
 | **D3** | **Soft loader + ksym** | In-tree soft loader can parse/relocate a `.ko` against a documented ksym table; fail-closed on missing symbols | **OPEN** (in progress) |
-| **D4** | **`finit_module` / boot smoke** | Kernel implements load path; boot or init smoke greppable PASS/FAIL for at least one staged module | **OPEN** |
-| **D5** | **Module loads** | At least one real staged module reaches `init` return 0 on GJ (deps satisfied) | **OPEN** |
-| **D6** | **Probe binds PCI** | Loaded driver probe matches DUT ID (`10ec:8168` and/or `8086:a12f`); device bound (not mere module init) | **OPEN** |
-| **D7** | **Net datapath** | Bound NIC: link + TX/RX (or equivalent product net I/O) on laptop silicon | **OPEN** |
-| **D8** | **USB datapath** | Bound xHCI: host controller runs; device path (e.g. MSC/HID) functional beyond soft lamp | **OPEN** |
+| **D4** | **`finit_module` / media boot path** | Staged media load or finit; greppable PASS/FAIL | **PARTIAL** — ESP `r8169.ko` + UEFI → `source=media`; embed fallback; GJ-PERSIST ext4 unread; finit vfs_ram-only. Soft≠product. §D4 media honesty |
+| **D5** | **Module loads** | Staged module `init` return 0 | **SOFT DONE** — r8169 INIT=0 on G752 (embed proven; media code path live, await lab panel/serial) |
+| **D6** | **Probe binds PCI** | Real `.ko` probe hostish `pci_dev` | **SOFT DONE** (REAL+SOFT1 stable; soft ≠ product) |
+| **D7** | **Net datapath** | Link + TX/RX; freestanding ↔ soft handoff | **OPEN** — lab: `R0 B9` · IP fixed · TX better; **block** freestanding RX for ping; handoff gate1 · Option B · phase4 still OPEN ([R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md)) |
+| **D8** | **USB datapath** | Bound xHCI: host controller runs; device path (e.g. MSC/HID) functional beyond soft lamp | **OPEN** — xHCI **SKIP BUILTIN**; soft **usbcore+scsi seed** (+33 stubs) advances MSC reloc past `usb_*`/`scsi_*`; first remaining miss **`sg_nents`** (or next non-USB generic). Soft load INIT=0 still ≠ stick. Freestanding **GET_CONFIG FAIL TO p21/s4**. Soft ≠ product. §D8 |
 | **D9** | **ksym honesty** | Docs/logs list remaining unresolved surface for full `r8169` / `xhci_hcd`; iterative resolve, no freestanding thrash substitute | **OPEN** (process) |
 | **D10** | **License honesty** | No GPL **source** in knano; staged `.ko` not claimed as dual-license product AC / bar3 close | **DONE** (policy) |
 
 ### One-glance
 
 ```text
-DONE                         OPEN
+DONE / SOFT-DONE             OPEN / PARTIAL
 ─────────────────────────    ────────────────────────────────────────
-D1 Collect .ko               D3 Soft module loader + ksym (in progress)
-D2 Stage on media            D4 finit_module / boot smoke
-D10 No GPL source in tree    D5 Module loads (init returns 0)
-  / no bar3-by-.ko claim     D6 Probe binds PCI (8168 / a12f)
-                             D7 Net datapath (TX/RX)
-                             D8 USB datapath (HC + device path)
-                             D9 Full r8169/xhci_hcd ksym surface
+D1 Collect .ko               D3 Soft loader + ksym (broaden)
+D2 Stage on media            D4 PARTIAL: source=media code; GJ-PERSIST ext4 OPEN
+D5 r8169 init=0 (G752)       D7 Net OPEN — R0 B9 TX↑; block FS RX
+D6 PROBE REAL+SOFT1 stable   D8 USB OPEN — soft usb seed; miss=sg_nents; ≠ stick
+D10 No GPL / no bar3.ko      D9 ksym post-probe (firmware HIT rtl8168* …)
 ```
+
+### D8 — USB linux path honesty (2026-08-04 lab host; soft usbcore seed)
+
+| Item | Fact |
+|------|------|
+| **PCI** | G752VT-class xHCI **`8086:a12f`** |
+| **Host kver sample** | RHEL **9.8** `5.14.0-687.15.1.el9_8` (all installed el9 kvers same shape) |
+| **HC stack** | `xhci_pci` · `xhci_hcd` · `usbcore` · `usb_common` → **BUILTIN** (no `.ko` on any local kver) |
+| **MSC leaf** | `usb-storage.ko` · `uas.ko` → **MODULAR PRESENT** (~222 KiB / ~75 KiB plain) |
+| **Collect** | `meta/XHCI-STATUS.txt` + `meta/USB-STATUS.txt`; greps `xhci_pci=BUILTIN` · `usb_storage=PRESENT` |
+| **Soft multi-mod order** | `usb_common → usbcore → xhci_hcd → xhci_pci → usb_storage` (serial stub always) |
+| **Soft xHCI** | `main: soft linux_module xhci path SKIP builtin` · hold12 `mod xhci_pci SKIP builtin` |
+| **Soft MSC leaf** | Optional embed `usb_storage_mod_blob.S` (collect auto when PRESENT) → `main: soft linux_module usb_storage path PRESENT\|PASS\|FAIL` |
+| **Soft usbcore seed** | `kernel/mm/linux_usb_soft.c` — fail-closed `usb_*` + `scsi_*` ksym bodies (cap 20–40). Grep: `linux_usb_soft: soft init PASS n=` |
+| **MSC fail lamp** | hold13 **`usb_storage need=usbcore`** + serial `need=usbcore OPEN unresolved=…` while non-USB generics remain (e.g. `sg_nents`) |
+| **STATUS hold13** | No MSC embed: `USB linux path OPEN builtin`. MSC FAIL KSYM: **`usb_storage need=usbcore`**. Load ok: `mod usb_storage LOAD ok`. |
+| **What D8 is not** | Soft leaf load / INIT=0 ≠ stick write; freestanding stage 15 ≠ Linux module path; Soft≠product; **G-AC-1** |
+| **Lab block (parallel)** | Freestanding **stage 15** stick (GET_CONFIG) · module path: remaining **generic** ksym (`sg_miter_*`, `kthread_*`, …) then real HC |
+| **Next for stick via Linux modules** | (1) Clear remaining ~34 non-USB/SCSI UND (or accept FAIL on first generic); (2) modular HC stack `.ko` from a distro/kver that builds `xhci_pci`/`xhci_hcd`/`usbcore` as modules (none of the local el9 trees do), or deepen soft HC; (3) multi-mod load; (4) soft probe `8086:a12f`; (5) bind MSC + BOT/UAS; (6) store door. Until then freestanding `xhci_msc` remains the only lab stick path. |
+
+#### D8 MSC leaf — soft ksym surface honesty (lab class)
+
+Host `usb-storage.ko` (el9 plain ~222 KiB) has **108** `SHN_UNDEF`. Prior soft ksym resolved **~41** (generics + prior surface); **~67** remained (of which **20** `usb_*` + **13** `scsi_*` + **~34** other).
+
+| Class | Examples | Soft stance |
+|-------|----------|-------------|
+| **Generic (safe empty)** | `dma_max_mapping_size`, `sprintf`, `seq_printf`/`putc`, `complete` / `wait_for_completion*`, `_raw_spin_lock_irq` / `_unlock_irq`, `schedule` / `schedule_timeout*`, `queue_limits_commit_update_frozen`, `finish_wait` | **+15 empty stubs** in `linux_ksym.c`. Grep: `linux_ksym: soft usb_storage leaf stubs n=15` |
+| **usbcore seed** | `usb_register_driver`, `usb_alloc_urb`, `usb_submit_urb`, `usb_control_msg`, `usb_sg_*`, `usb_autopm_*`, `usb_find_common_endpoints`, `usb_reset_*`, … (**20**) | **`linux_usb_soft.c`** fail-closed / no-op (register soft-success 0; submit/control → `-ENODEV`) |
+| **scsi mid seed** | `scsi_host_alloc`, `scsi_add_host_with_dma`, `scsi_scan_host`, `scsi_is_host_device`, `scsi_report_*`, `scsi_eh_*`, … (**13**) | **Same TU** — load-only soft host blob; `scsi_add_host_with_dma` → `-ENODEV` |
+| **Other (still OPEN)** | `sg_nents`, `sg_miter_*`, `kthread_*`, `param_ops_*`, `pcpu_hot`, wait/workqueue helpers, … (**~34**) | First remaining reloc miss expected **`sg_nents`** |
+
+**Reloc miss timeline (`.rela.text` order, el9 ko):**  
+1. Pre leaf generics: **`dma_max_mapping_size`**  
+2. Post +15 generics: **`scsi_is_host_device`**  
+3. Post soft usb+scsi seed (**+33**): expected **`sg_nents`**
+
+**usb_* UND (all seeded):**  
+`usb_alloc_coherent` `usb_alloc_urb` `usb_autopm_get_interface_no_resume` `usb_autopm_put_interface` `usb_autopm_put_interface_no_suspend` `usb_control_msg` `usb_deregister` `usb_find_common_endpoints` `usb_free_coherent` `usb_free_urb` `usb_kill_urb` `usb_lock_device_for_reset` `usb_register_driver` `usb_reset_device` `usb_reset_endpoint` `usb_sg_cancel` `usb_sg_init` `usb_sg_wait` `usb_submit_urb` `usb_unlink_urb`
+
+**scsi_* UND (all seeded):**  
+`scsi_add_host_with_dma` `scsi_done_direct` `scsi_eh_prep_cmnd` `scsi_eh_restore_cmnd` `scsi_host_alloc` `scsi_host_put` `scsi_is_host_device` `scsi_normalize_sense` `scsi_remove_host` `scsi_report_bus_reset` `scsi_report_device_reset` `scsi_scan_host` `scsi_sense_desc_find`
+
+**Verdict:** Soft **usbcore + scsi mid seed** closes the class gap that made MSC **MUST FAIL** on `usb_*`/`scsi_*` alone. Remaining FAIL (if any) is **generic** surface (`sg_*` / workqueue / kthread) — still honest **need=usbcore OPEN** lamp until load PASSes, and even **LOAD/INIT=0 without real HC ≠ stick datapath**. Soft≠product. Multi-mod path still documents order `usb_common → usbcore → xhci_hcd → xhci_pci → usb_storage`; host **BUILTIN** means soft seed substitutes for missing `.ko` exports only.
+
+```text
+# greppable (boot)
+main: soft linux_module xhci path SKIP builtin
+main: soft usb multi-mod order need=usb_common,usbcore,xhci_hcd,xhci_pci,usb_storage …
+main: soft linux_module usb_storage path PRESENT|PASS|FAIL|SKIP …
+main: soft usb_storage need=usbcore OPEN unresolved=…
+linux_ksym: soft usb_storage leaf stubs n=15 …
+linux_usb_soft: soft init PASS n=…
+
+# greppable (collect)
+collect-linux-drivers: xhci 8086:a12f xhci_pci=BUILTIN
+collect-linux-drivers: usb_storage=PRESENT
+collect-linux-drivers: usb path OPEN builtin hc=BUILTIN msc=PRESENT
+```
+
+**Waves 1–3 eng (not D7 close):** hold14 code · open/NAPI skip `.ko` · MMIO 0+1–3 stubs gate0 · skb + `dev_queue_xmit` reverse TX · D4 PARTIAL. Freestanding **owns MMIO** at gate0. Soft ≠ product.
+
+### Next blockers — “run with Linux drivers”
+
+1. Lab enable handoff **gate1** + prove **sole-owner** without dual-drive  
+2. **Option B** real `.ko` `ndo_open` after hostish layout confidence  
+3. **Phase 4** soft wire TX/RX (or hybrid freestanding wire + soft control)  
+4. **Firmware** soft embed HIT for `rtl8168*` (MISS for other names)  
+
+5. **Lab panel/serial** for hold14 live + `source=media`
+
+### D4 media honesty (2026-08-04, ESP handoff landed)
+
+| Item | Fact |
+|------|------|
+| **Stage (D2)** | **DONE** — `make collect-linux-drivers` + `make hwtest-img` → **`GJ-PERSIST/linux-drivers/`** + **ESP** `/linux-drivers/modules/r8169.ko` |
+| **ESP stage lamp** | `make-hwtest-img: esp stage PASS r8169.ko=…B path=/linux-drivers/modules/r8169.ko` |
+| **UEFI handoff** | Stub LoadFile `\linux-drivers\modules\r8169.ko` → `AllocatePages(LOADER_DATA)` → `gj_boot_info.u64SoftMediaPhys/Bytes` + `GJ_BOOT_F_SOFT_MEDIA` |
+| **Boot load media** | **SOFT PATH LIVE** when handoff present: soft probe prefers `boot_info` blob → `linux_module_load_mem_src(…, "media")` before embed; PMM reserves soft media pages |
+| **GJ-PERSIST ext4** | Still **unread** at freestanding boot (no ext4 reader) |
+| **vfs_ram soft probe** | Still tries seed paths; host `.ko` does **not** fit (≤32 KiB cap) |
+| **Lab fallback** | **Embed** — `gj_r8169_ko_blob` → `source=embed` if no handoff / media load fails |
+| **`finit_module`** | Soft cold path can load from a **vfs_ram** fd (`source=finit`); still not GJ-PERSIST |
+| **Greppable** | `make-hwtest-img: esp stage PASS` · `GJ-EFI: soft media PASS\|SKIP\|FAIL` · `boot: soft media PASS\|SKIP` · `pmm: soft media reserve PASS` · `linux_module: soft media path PRESENT … reason=esp_uefi` · `linux_module: soft load source=media\|embed name=` · `linux_module: soft media status D4` / `TODO D4` |
+| **Do not claim** | Soft media load = product NIC (G-AC-1); stage on USB = bar3; Soft = product |
+
+**Operator path (collect → stage ESP + persist → boot source=media):**
+
+```sh
+cd /home/jay/Documents/knano
+make collect-linux-drivers          # build/linux-drivers/modules/r8169.ko …
+make hwtest-img                     # packs ESP + GJ-PERSIST
+# greppable: make-hwtest-img: esp stage PASS
+sudo make install-hwtest-usb DEV=/dev/sdX
+
+# Host-side verify ESP soft media:
+sudo mkdir -p /mnt/gj-esp && sudo mount -L GREENJADE /mnt/gj-esp
+ls -la /mnt/gj-esp/linux-drivers/modules/r8169.ko
+cat /mnt/gj-esp/linux-drivers/ESP-STAGE.txt
+sudo umount /mnt/gj-esp
+
+# After GJ UEFI boot serial (media path):
+#   GJ-EFI: soft media PASS name=r8169 phys=… bytes=…
+#   boot: soft media PASS phys=… bytes=…
+#   pmm: soft media reserve PASS …
+#   linux_module: soft media path PRESENT name=r8169 path=boot_info reason=esp_uefi …
+#   linux_module: soft load source=media name=r8169 …
+#   linux_module: soft media status D4 name=r8169 status=MEDIA …
+```
+
+**Next for D4 CLOSE:** GJ-PERSIST ext4 reader and/or multi-module dependency load from media; keep Soft≠product honesty.
 
 ### What “can run with Linux drivers” does **not** mean yet
 
@@ -303,8 +590,9 @@ sudo make install-hwtest-usb DEV=/dev/sdX   # careful: whole device
 make linux-hwtest-img
 # sudo make install-linux-hwtest DEV=/dev/sdY
 
-# After boot (when loader exists): look for module lamps — today expect OPEN
-# grep -E 'module:|finit_module|ksym|collect-linux' KLOG / panel capture
+# After boot: media preferred, embed fallback (D4 PARTIAL)
+# grep -E 'linux_module: soft (load source|media path|media status)|soft linux_module path' SERIAL
+# expect: source=media … OR source=embed PASS; Soft≠product
 ```
 
 ---
@@ -313,14 +601,16 @@ make linux-hwtest-img
 
 | Doc | Role |
 |-----|------|
-| [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) | Strategy: ABI + host path, not freestanding thrash |
-| [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) | G752VT UDX host runbook + media labels |
+| [ABI_FIRST_PIVOT.md](ABI_FIRST_PIVOT.md) | Strategy: ABI + host path |
+| [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) | G752VT UDX host runbook |
 | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) | Soft inventory honesty |
-| [DDI_SOFT.md](DDI_SOFT.md) | Soft DDI / cap notes |
-| [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) | Linux inventory oracle |
-| [HCL.md](HCL.md) | Tiers + product-path table |
+| [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) | Hostish `pci_dev` **0xb40** |
+| [R8169_MMIO_HANDOFF.md](R8169_MMIO_HANDOFF.md) | MMIO handoff phases + gate |
+| [TODO.md](TODO.md) | Current track |
+| [DDI_SOFT.md](DDI_SOFT.md) | Soft DDI |
+| [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) | Inventory oracle |
 
 ---
 
-*Dual MIT OR Apache-2.0 source tree. Operator-collected `.ko` on media = module-path engineering, not GPL import, not freestanding thrash, not bar3.*  
-*DoD D1–D2–D10 live; D3–D9 OPEN until loader, load, probe, and datapath evidence exist.*
+*Dual MIT OR Apache-2.0. Soft ≠ product. G-AC-1. Bar3 only STEAM_BAR3_STATUS.*  
+*2026-08-04 lab: PROBE SOFT · R0 B9 · IP fixed · TX better · GET_CONFIG FAIL TO p21/s4 · usb-storage soft seed linux_usb_soft +33 usb_*/scsi_* (first remaining miss ~sg_nents; INIT=0 ≠ stick) · xHCI SKIP BUILTIN. D7/D8 OPEN. Block: FS RX + USB stage 15. Soft ≠ product.*

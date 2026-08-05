@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT OR Apache-2.0
  * Copyright (c) 2026 Project GreenJade contributors
- * Soft host gates MILESTONE 68400 (CREATE-ONLY). Mirror 25800; bar3=0.
+ * Soft host gates MILESTONE 68400 (CREATE-ONLY). Mirror 25800;.
  * See NOTES_milestone_68400.txt. Manual: cc … cgj_soft_milestone_68400.c -ldl
  * DIRECT: -DCGJ_SOFT_M68400_DIRECT + graph_batch68391..68400.c
  */

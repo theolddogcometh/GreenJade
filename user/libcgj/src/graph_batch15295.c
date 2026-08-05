@@ -24,7 +24,7 @@
  * Soft rule: missing symbol → skip; present but wrong value → hard fail.
  * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
  * makefile_max honesty is parent-side (scan → makefile_max=15300 when wired).
- * Soft continuum ready ≠ bar3 ready (bar3 stays 0 at batch15293).
+ * Soft continuum ready ready (bar3 stays 0 at batch15293).
  *
  * Clean-room freestanding pure C (integer only). Compiles with
  * -ffreestanding -msse2 -Wall -Wextra -Werror. No malloc, no errno, no

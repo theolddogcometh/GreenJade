@@ -44,7 +44,7 @@
  *             proc|uring|enosys|query|path|groups|last|open|deepen|wave …
  *   cold_linux: soft inventory|fd|io|fd_alloc|stat|namei|id|time|poll|sock|
  *               proc|uring|enosys|query|path|groups|last|open|deepen|wave …
- * Pure observation; never hard-gates; wrap OK; soft ≠ bar3.
+ * Pure observation; never hard-gates; wrap OK; soft.
  * Honesty: soft cold personality ≠ product multi-process UDX/notify close.
  */
 #include <stdint.h>
@@ -713,13 +713,13 @@ soft_inventory_log(void)
     /* Grep: protonrt: soft path */
     kprintf("protonrt: soft path claim=cold_linux_personality hybrid=OptionC "
             "hot=kernel cold=libprotonrt enter_only=1 ret_rewrite=0 "
-            "(soft inventory; not bar3)\n");
+            "(soft inventory)\n");
 
     /* Grep: protonrt: soft groups (Wave 111 deepen — all enters one line) */
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
     kprintf("protonrt: soft groups io=%llu fd_alloc=%llu stat=%llu "
@@ -754,27 +754,27 @@ soft_inventory_log(void)
      * greppable: protonrt: soft open
      */
     kprintf("protonrt: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
-            "driver_host=OPEN bar3=OPEN product=0 soft=1 wave=%u\n",
+            "driver_host=OPEN product=0 soft=1 wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
     /* Grep: protonrt: soft deepen wave (Wave 111 stamp) */
     kprintf("protonrt: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=protonrt:_soft log_n=%llu "
-            "(soft inventory; not bar3)\n",
+            "(soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS,
             (unsigned long long)g_u64SoftLogN);
 
     /* Grep: protonrt: soft wave */
     kprintf("protonrt: soft wave n=%u unit=cold_linux exclusive=1 "
             "areas=%u kernel_notify=OPEN multi_process_spsc=OPEN "
-            "(soft inventory; not bar3)\n",
+            "(soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
     /*
      * Grep: protonrt: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    kprintf("protonrt: soft honesty multi_server=0 confine=0 bar3=0 "
+    kprintf("protonrt: soft honesty multi_server=0 confine=0 "
             "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
@@ -874,7 +874,7 @@ soft_inventory_log(void)
     /* Grep: cold_linux: soft path */
     kprintf("cold_linux: soft path claim=cold_linux_personality "
             "hybrid=OptionC hot=kernel cold=libprotonrt enter_only=1 "
-            "ret_rewrite=0 (soft inventory; not bar3)\n");
+            "ret_rewrite=0 (soft inventory)\n");
 
     /* Grep: cold_linux: soft groups (Wave 111 deepen) */
     kprintf("cold_linux: soft groups io=%llu fd_alloc=%llu stat=%llu "
@@ -906,24 +906,24 @@ soft_inventory_log(void)
 
     /* Grep: cold_linux: soft open (Wave 111 honesty) */
     kprintf("cold_linux: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
-            "driver_host=OPEN bar3=OPEN product=0 soft=1 wave=%u\n",
+            "driver_host=OPEN product=0 soft=1 wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 
     /* Grep: cold_linux: soft deepen wave (Wave 111 stamp) */
     kprintf("cold_linux: soft deepen wave=%u areas=%u unit=cold_linux "
             "exclusive=1 prefix=cold_linux:_soft log_n=%llu "
-            "(soft inventory; not bar3)\n",
+            "(soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS,
             (unsigned long long)g_u64SoftLogN);
 
     /* Grep: cold_linux: soft wave */
     kprintf("cold_linux: soft wave n=%u unit=cold_linux exclusive=1 "
             "areas=%u kernel_notify=OPEN multi_process_spsc=OPEN "
-            "(soft inventory; not bar3)\n",
+            "(soft inventory)\n",
             (unsigned)COLD_SOFT_WAVE, (unsigned)COLD_SOFT_AREAS);
 
     /* Grep: cold_linux: soft honesty (Wave 126 exclusive deepen) */
-    kprintf("cold_linux: soft honesty multi_server=0 confine=0 bar3=0 "
+    kprintf("cold_linux: soft honesty multi_server=0 confine=0 "
             "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
             (unsigned)COLD_SOFT_WAVE);
 }

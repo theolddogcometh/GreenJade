@@ -62,8 +62,8 @@
  *   hda_client: soft format stereo=… mono=… bits8=…
  *   hda_client: soft ratio ok=… skip=… door_ok=… door_miss=…
  *   hda_client: soft deepen wave=70 areas=… ok=… skip=… played=…
- *   hda_client: soft path open=stereo write=pcm … (soft; not bar3)
- *   hda_client: soft honesty not-bar3 not-pipewire soft-inventory-only
+ *   hda_client: soft path open=stereo write=pcm … (soft)
+ *   hda_client: soft honesty not-pipewire soft-inventory-only
  *   hda-gj: soft suite|door|played|inventory|steps|miss|last|first|
  *           peak|ops|format|ratio|deepen|path|honesty twins
  *
@@ -138,7 +138,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SOFT_S_MULTI      (1u << 0)
@@ -725,11 +725,11 @@ soft_inventory_log(void)
     msg("hda_client: soft path open=stereo write=pcm start=arm "
         "tick=frames stats=qpu mono=ch1 bits8=ch2 reclaim=reopen "
         "reject=inval idle=empty closed=reject zerotick=0 "
-        "(soft inventory; not bar3)\n");
+        "(soft inventory)\n");
 
-    /* Grep: hda_client: soft honesty (Wave 111; never bar3) */
-    msg("hda_client: soft honesty not-bar3 not-pipewire not-product-audio "
-        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=70\n");
+    /* Grep: hda_client: soft honesty (Wave 111) */
+    msg("hda_client: soft honesty not-pipewire not-product-audio "
+        "soft-inventory-only multi_server=0 confine=0 product_kernel=OPEN wave=70\n");
 
     /* Twin prefix: hda-gj: soft … (agent-friendly alias) */
     o = 0;
@@ -941,9 +941,9 @@ soft_inventory_log(void)
     msg("hda-gj: soft path open=stereo write=pcm start=arm tick=frames "
         "stats=qpu mono=ch1 bits8=ch2 reclaim=reopen reject=inval "
         "idle=empty closed=reject zerotick=0 "
-        "(soft inventory; not bar3)\n");
-    msg("hda-gj: soft honesty not-bar3 not-pipewire not-product-audio "
-        "soft-inventory-only multi_server=0 confine=0 bar3=0 product_kernel=OPEN wave=70\n");
+        "(soft inventory)\n");
+    msg("hda-gj: soft honesty not-pipewire not-product-audio "
+        "soft-inventory-only multi_server=0 confine=0 product_kernel=OPEN wave=70\n");
 }
 
 /*

@@ -62,3 +62,39 @@ u32 rtl8168_tx_fail(void);
 u32 rtl8168_tx_busy(void);
 /** Frames completed by NIC but dropped (RES/ROR/bad len). */
 u32 rtl8168_rx_drop(void);
+
+/**
+ * Soft MMIO handoff prepare (phase 1 → phase-2 readiness).
+ * Gate GJ_SOFT_R8169_MMIO_HANDOFF==0 (default): no-op, log once
+ *   "rtl8168: soft mmio handoff SKIP (gate off)"
+ * Gate 1: stop TE/RE, mask IntrMask, clear ready, mark net_l2 pending.
+ * Leaves g_pMmio mapped but idle (no unmap). poll_hw/tx/rx refuse TE|RE.
+ * Does NOT call soft/.ko open; does NOT set g_fMmioHandoff. Soft≠product.
+ * Grep: rtl8168: soft mmio handoff
+ */
+void rtl8168_soft_handoff_prepare(void);
+
+/** Non-zero after successful phase-1 prepare (gate on path only). */
+int  rtl8168_soft_handoff_prepared(void);
+
+/**
+ * Soft hybrid kick: PCI BM/ASPM + one-shot full ring rearm + program_hw
+ * (no chip soft-reset). CPlus TXENB|PCI_MRW|MACSTAT_DIS first, EarlyOffV2
+ * RxConfig, force RxCfg after RE. Prefer over reclaim after SOFT
+ * (photo 3283 reclaim→R0). Soft≠product.
+ * Grep: rtl8168: soft kick wire | soft rx empty
+ */
+void rtl8168_kick_wire(void);
+
+/**
+ * Hybrid 4a: reclaim freestanding wire after soft REAL r8169.ko probe.
+ *
+ * Hostish REAL probe maps the same BAR and reprograms the NIC (soft-reset,
+ * new rings). That orphans freestanding TX/RX rings → OWN stuck, B### busy,
+ * pings not returned. Call after REAL probe when gate0 keeps freestanding
+ * as wire owner. Re-soft-reset, re-arm rings, rtl_program_hw, TX selftest.
+ * No-op if not ready / handoff prepared / no MMIO. Soft≠product.
+ * Grep: rtl8168: soft reclaim wire
+ * Returns 0 on reclaim+selftest PASS, -1 on skip/fail.
+ */
+int  rtl8168_reclaim_wire(void);

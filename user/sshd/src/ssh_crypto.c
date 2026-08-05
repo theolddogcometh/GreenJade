@@ -15,7 +15,7 @@
  *
  * Soft inventory (Wave 126 exclusive deepen — greppable when hostkey init runs
  * via sshd-gj: soft crypto …). multi_server=0 confine=0; soft ≠ product
- * multi-server confine; not bar3. This unit is freestanding pure C only.
+ * multi-server confine. This unit is freestanding pure C only.
  *
  * Used by freestanding KEX: curve25519-sha256@libssh.org, NEWKEYS key
  * derivation (RFC 4253 7.2), and post-NEWKEYS channel encrypt/MAC.
@@ -30,7 +30,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SSH_CRYPTO_SOFT_WAVE 70u
@@ -38,9 +38,9 @@
 /* Grep surface: ssh_crypto: soft deepen product_kernel=OPEN wave=70 multi_server=0 confine=0 */
 static const char g_szSshCryptoSoftDeepen[] =
 	"ssh_crypto: soft deepen product_kernel=OPEN wave=70 multi_server=0 confine=0 "
-	"bar3=0 exclusive=1 soft=1\n";
+	" exclusive=1 soft=1\n";
 static const char g_szSshCryptoSoftHonesty[] =
-	"ssh_crypto: soft honesty multi_server=0 confine=0 bar3=0 "
+	"ssh_crypto: soft honesty multi_server=0 confine=0 "
 	"exclusive=1 soft=1 product_kernel=OPEN wave=70\n";
 
 /* ---- SHA-256 (FIPS 180-4) ----------------------------------------------- */

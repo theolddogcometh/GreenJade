@@ -9,20 +9,31 @@
  *   - linux_dma_soft_init: ready lamp + linux_ksym_register of bodies
  *   - dma_alloc_attrs / free: pmm pages, identity VA=PA when pa < 4 GiB
  *   - dma_map_* / sync: identity cookies; coherent soft (no cache flush)
+ *   - dma_set_mask*: accept mask + soft last-mask bookkeeping
  *   - ioremap / readl-class: identity cast + volatile MMIO access
- *   - kmalloc_trace / kfree: kheap or pmm soft
+ *   - pci_iomap / pci_iounmap / pcim_*: soft BAR → ioremap (hostish gated)
+ *   - kmalloc / kzalloc / kmalloc_trace / kfree: kheap or pmm soft
+ *   - firmware_request_nowarn / request_firmware*: soft embed table HIT
+ *     (rtl_nic/rtl8168*.fw .incbin) or MISS → -ENOENT + *fw=NULL
  *
  * Soft ≠ product: no VT-d grant, no full struct page/device ABI.
- * Cap: LINUX_DMA_SOFT_PAGE_MAX coherent pages.
+ * Cap: LINUX_DMA_SOFT_PAGE_MAX coherent pages; fw embed ≤ ~2 MiB.
  *
  * Greppable markers (keep stable):
  *   linux_dma_soft: soft init PASS n=
  *   linux_dma_soft: soft ksym register PASS|SKIP
+ *   linux_dma_soft: soft firmware HIT name=
+ *   linux_dma_soft: soft firmware MISS name=
+ *   linux_dma_soft: soft pci_iomap …
+ *   linux_dma_soft: soft dma_set_mask …
  */
 #include <gj/config.h>
 #include <gj/kheap.h>
 #include <gj/klog.h>
+#include <gj/linux_abi.h>
 #include <gj/linux_dma_soft.h>
+#include <gj/linux_pci_hostish_off.h>
+#include <gj/linux_pci_soft.h>
 #include <gj/pmm.h>
 #include <gj/string.h>
 #include <gj/types.h>
@@ -50,6 +61,23 @@ static u32 g_cIoremap;
 static u32 g_cIounmap;
 static u32 g_cKmallocOk;
 static u32 g_cKfree;
+static u32 g_cFwReq;
+static u32 g_cFwRel;
+static u32 g_cFwHit;
+static u32 g_cFwMiss;
+static u32 g_cFwMissLog; /* cap MISS log spam */
+static u32 g_cSetMask;
+static u32 g_cSetCohMask;
+static u32 g_cPciIomap;
+static u32 g_cPciIomapFail;
+static u32 g_cPciIounmap;
+static u32 g_cPcimEnable;
+static u32 g_cPcimIomap;
+static u32 g_cPcimMwi;
+static u64 g_u64LastDmaMask;
+static u64 g_u64LastCohMask;
+static int g_fMaskLogOnce;
+static int g_fIomapLogOnce;
 
 struct ldmas_dma_slot {
     u8         u8Live;
@@ -475,11 +503,25 @@ __dma_sync_single_for_device(void *dev, u64 addr, unsigned long size, int dir)
     ldmas_inc(&g_cSyncDev);
 }
 
+/**
+ * Soft dma_set_mask: accept any mask (Soft≠product DMA filter).
+ * Records last mask for diagnostics. Does not poke hostish device offsets
+ * (arg0 may be soft or &pdev->dev; layout not trusted here). Soft≠ABI.
+ */
 int
 dma_set_mask(void *dev, u64 mask)
 {
     (void)dev;
-    (void)mask;
+    ldmas_inc(&g_cSetMask);
+    g_u64LastDmaMask = mask;
+
+    if (g_fMaskLogOnce == 0) {
+        g_fMaskLogOnce = 1;
+        /* Grep: linux_dma_soft: soft dma_set_mask */
+        kprintf("linux_dma_soft: soft dma_set_mask mask=0x%llx dev=%p "
+                "calls=%u soft_ne_product=1\n",
+                (unsigned long long)mask, dev, (unsigned)g_cSetMask);
+    }
     return 0;
 }
 
@@ -487,8 +529,21 @@ int
 dma_set_coherent_mask(void *dev, u64 mask)
 {
     (void)dev;
-    (void)mask;
+    ldmas_inc(&g_cSetCohMask);
+    g_u64LastCohMask = mask;
     return 0;
+}
+
+int
+dma_set_mask_and_coherent(void *dev, u64 mask)
+{
+    int nSt;
+
+    nSt = dma_set_mask(dev, mask);
+    if (nSt != 0) {
+        return nSt;
+    }
+    return dma_set_coherent_mask(dev, mask);
 }
 
 /* ---- MMIO --------------------------------------------------------------- */
@@ -615,7 +670,223 @@ writeb(u8 val, volatile void *addr)
     *(volatile u8 *)addr = val;
 }
 
-/* ---- kmalloc_trace / kfree ---------------------------------------------- */
+void
+memcpy_fromio(void *pTo, const volatile void *pFrom, unsigned long cb)
+{
+    u8 *pu8Dst;
+    const volatile u8 *pu8Src;
+    unsigned long i;
+    static int s_fLogOnce;
+
+    if (pTo == NULL || pFrom == NULL || cb == 0ul) {
+        return;
+    }
+    /*
+     * Soft: byte-wise copy so volatile MMIO loads are not optimized into a
+     * single bulk that the empty ksym stub never performed. Soft≠product
+     * (no dma_rmb / ordered barrier beyond volatile access).
+     */
+    pu8Dst = (u8 *)pTo;
+    pu8Src = (const volatile u8 *)pFrom;
+    for (i = 0ul; i < cb; i++) {
+        pu8Dst[i] = pu8Src[i];
+    }
+    if (s_fLogOnce == 0) {
+        s_fLogOnce = 1;
+        /* Grep: linux_dma_soft: soft memcpy_fromio */
+        kprintf("linux_dma_soft: soft memcpy_fromio cb=%lu (Soft≠product)\n",
+                (unsigned long)cb);
+    }
+}
+
+/* ---- pci_iomap / pcim_* (re-register over empty ksym stubs) ------------- */
+
+/**
+ * Hostish BAR start (Strategy A RHEL 5.14 resource[] offsets).
+ * Soft≠ABI-stable across kver.
+ */
+static u64
+ldmas_hostish_bar_start(const void *pDev, int nBar)
+{
+    const u8 *pRes;
+
+    if (pDev == NULL || nBar < 0 ||
+        nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
+        return 0ull;
+    }
+    pRes = (const u8 *)pDev + LINUX_PCI_HOSTISH_OFF_RESOURCE_N(nBar);
+    return *(const u64 *)(pRes + LINUX_PCI_HOSTISH_RES_OFF_START);
+}
+
+static u64
+ldmas_hostish_bar_len(const void *pDev, int nBar)
+{
+    const u8 *pRes;
+    u64 u64Start;
+    u64 u64End;
+
+    if (pDev == NULL || nBar < 0 ||
+        nBar >= (int)LINUX_PCI_SOFT_BAR_MAX) {
+        return 0ull;
+    }
+    pRes = (const u8 *)pDev + LINUX_PCI_HOSTISH_OFF_RESOURCE_N(nBar);
+    u64Start = *(const u64 *)(pRes + LINUX_PCI_HOSTISH_RES_OFF_START);
+    u64End = *(const u64 *)(pRes + LINUX_PCI_HOSTISH_RES_OFF_END);
+    if (u64Start == 0ull || u64End < u64Start) {
+        return 0ull;
+    }
+    return (u64End - u64Start) + 1ull;
+}
+
+/**
+ * Soft: prefer linux_pci_soft BAR arrays; when empty and the pointer looks
+ * hostish-shaped (soft front vendor@0 == 0, hostish vendor@0x3c set), read
+ * hostish resource[]. Parent hostish blobs are ≥ 0xb40; filled soft
+ * inventory pci_dev has vendor at offset 0 so never takes hostish path.
+ */
+static void
+ldmas_pci_bar(void *dev, int nBar, u64 *pu64Start, u64 *pu64Len)
+{
+    u64 u64Start;
+    u64 u64Len;
+    u16 u16SoftVend;
+    u16 u16HostVend;
+
+    if (pu64Start != NULL) {
+        *pu64Start = 0ull;
+    }
+    if (pu64Len != NULL) {
+        *pu64Len = 0ull;
+    }
+    if (dev == NULL || nBar < 0) {
+        return;
+    }
+
+    u64Start = pci_resource_start(dev, nBar);
+    u64Len = pci_resource_len(dev, nBar);
+
+    if (u64Start == 0ull || u64Len == 0ull) {
+        u16SoftVend = *(const u16 *)dev;
+        u16HostVend =
+            *(const u16 *)((const u8 *)dev + LINUX_PCI_HOSTISH_OFF_VENDOR);
+        if (u16SoftVend == 0u && u16HostVend != 0u) {
+            u64Start = ldmas_hostish_bar_start(dev, nBar);
+            u64Len = ldmas_hostish_bar_len(dev, nBar);
+        }
+    }
+
+    if (pu64Start != NULL) {
+        *pu64Start = u64Start;
+    }
+    if (pu64Len != NULL) {
+        *pu64Len = u64Len;
+    }
+}
+
+void *
+pci_iomap(void *dev, int nBar, unsigned long ulMaxLen)
+{
+    u64 u64Start;
+    u64 u64Len;
+    unsigned long cbMap;
+    void *pVa;
+    static u8 s_fIomapNoopOnce;
+
+    ldmas_inc(&g_cPciIomap);
+
+    if (dev == NULL || nBar < 0) {
+        ldmas_inc(&g_cPciIomapFail);
+        return NULL;
+    }
+
+    /*
+     * Gate0 hybrid: freestanding owns 10ec:8168 BAR. Soft iomap would give
+     * .ko a second VA on the live MMIO (dual-drive). Refuse map until
+     * freestanding ready drops (handoff prepare). Soft≠product.
+     * Grep: linux_dma_soft: soft pci_iomap NOOP hybrid
+     */
+    if (linux_pci_soft_hw_touch_ok(dev) == 0) {
+        ldmas_inc(&g_cPciIomapFail);
+        if (s_fIomapNoopOnce == 0u) {
+            s_fIomapNoopOnce = 1u;
+            kprintf("linux_dma_soft: soft pci_iomap NOOP hybrid "
+                    "bar=%d (freestanding owns 10ec:8168; Soft≠product)\n",
+                    nBar);
+        }
+        return NULL;
+    }
+
+    ldmas_pci_bar(dev, nBar, &u64Start, &u64Len);
+    if (u64Start == 0ull || u64Len == 0ull) {
+        ldmas_inc(&g_cPciIomapFail);
+        if (g_fIomapLogOnce == 0) {
+            g_fIomapLogOnce = 1;
+            /* Grep: linux_dma_soft: soft pci_iomap */
+            kprintf("linux_dma_soft: soft pci_iomap FAIL bar=%d dev=%p "
+                    "(empty BAR; soft_ne_product=1)\n",
+                    nBar, dev);
+        }
+        return NULL;
+    }
+
+    cbMap = (unsigned long)u64Len;
+    if (ulMaxLen != 0ul && ulMaxLen < cbMap) {
+        cbMap = ulMaxLen;
+    }
+
+    pVa = ioremap(u64Start, cbMap);
+
+    if (g_fIomapLogOnce == 0) {
+        g_fIomapLogOnce = 1;
+        /* Grep: linux_dma_soft: soft pci_iomap */
+        kprintf("linux_dma_soft: soft pci_iomap bar=%d start=0x%llx "
+                "len=0x%lx va=%p soft_ne_product=1\n",
+                nBar, (unsigned long long)u64Start, cbMap, pVa);
+    }
+    if (pVa == NULL) {
+        ldmas_inc(&g_cPciIomapFail);
+    }
+    return pVa;
+}
+
+void
+pci_iounmap(void *dev, void *pAddr)
+{
+    (void)dev;
+    ldmas_inc(&g_cPciIounmap);
+    iounmap(pAddr);
+}
+
+int
+pcim_enable_device(void *dev)
+{
+    int nSt;
+
+    ldmas_inc(&g_cPcimEnable);
+    /* Soft managed enable → plain soft pci_enable_device (no devres table). */
+    nSt = pci_enable_device(dev);
+    return nSt;
+}
+
+void *
+pcim_iomap_region(void *dev, int nBar, const char *szName)
+{
+    (void)szName;
+    ldmas_inc(&g_cPcimIomap);
+    /* Soft: no region claim table; map full BAR (maxlen 0 = full). */
+    return pci_iomap(dev, nBar, 0ul);
+}
+
+int
+pcim_set_mwi(void *dev)
+{
+    (void)dev;
+    ldmas_inc(&g_cPcimMwi);
+    /* Soft: MWI / cache-line no-op success (Soft≠product bus cmd). */
+    return 0;
+}
+
+/* ---- kmalloc_trace / kmalloc / kzalloc / kfree -------------------------- */
 
 void *
 kmalloc_trace(void *s, unsigned long size, unsigned gfp)
@@ -695,6 +966,34 @@ kmalloc_trace(void *s, unsigned long size, unsigned gfp)
     return p;
 }
 
+void *
+kmalloc(unsigned long size, unsigned gfp)
+{
+    void *p;
+
+    p = kmalloc_trace(NULL, size, gfp);
+    /*
+     * Soft: honor common __GFP_ZERO bit (0x100 on many x86_64 configs) by
+     * zeroing when set. Soft≠product GFP ABI completeness.
+     */
+    if (p != NULL && (gfp & 0x100u) != 0u) {
+        memset(p, 0, (size_t)size);
+    }
+    return p;
+}
+
+void *
+kzalloc(unsigned long size, unsigned gfp)
+{
+    void *p;
+
+    p = kmalloc_trace(NULL, size, gfp);
+    if (p != NULL && size > 0ul) {
+        memset(p, 0, (size_t)size);
+    }
+    return p;
+}
+
 void
 kfree(const void *p)
 {
@@ -731,6 +1030,198 @@ kfree(const void *p)
     ldmas_inc(&g_cKfree);
 }
 
+/* ---- Soft firmware (embed table HIT / else MISS ENOENT) ----------------- */
+
+/*
+ * Host Linux layout (RHEL 9-class firmware.h):
+ *   struct firmware { size_t size; const u8 *data; void *priv; };
+ * Soft embeds rtl_nic/rtl8168*.fw via scripts/embed-linux-fw.sh (.incbin).
+ * request_firmware looks up by exact name; HIT → soft hdr; MISS → -ENOENT.
+ *
+ * Soft ≠ product. Grep:
+ *   linux_dma_soft: soft firmware HIT name=
+ *   linux_dma_soft: soft firmware MISS name=
+ */
+#define LDMAS_FW_SLOT_MAX  8u
+#define LDMAS_FW_MISS_LOG_MAX 16u
+
+/* Linux-shaped firmware object (size / data / priv). */
+struct ldmas_fw_hdr {
+    unsigned long size;
+    const u8     *data;
+    void         *priv;
+};
+
+struct ldmas_fw_slot {
+    u8                u8Live;
+    u8                u8Pad[7];
+    struct ldmas_fw_hdr hdr;
+};
+
+struct ldmas_fw_ent {
+    const char *szName;
+    const u8   *pData;
+    const u8   *pEnd;
+};
+
+#define LDMAS_FW_DECL
+#include <gj/linux_fw_soft_tab.inc>
+#undef LDMAS_FW_DECL
+
+static const struct ldmas_fw_ent g_aFwEmbed[] = {
+#define LDMAS_FW_TAB
+#include <gj/linux_fw_soft_tab.inc>
+#undef LDMAS_FW_TAB
+    /* Sentinel: keeps array non-empty when embed table is vacant. */
+    { NULL, NULL, NULL },
+};
+
+static struct ldmas_fw_slot g_aFwSlot[LDMAS_FW_SLOT_MAX];
+
+static const struct ldmas_fw_ent *
+ldmas_fw_find(const char *szName)
+{
+    u32 i;
+    u32 n;
+
+    if (szName == NULL || szName[0] == '\0') {
+        return NULL;
+    }
+    n = (u32)(sizeof(g_aFwEmbed) / sizeof(g_aFwEmbed[0]));
+    for (i = 0u; i < n; i++) {
+        if (g_aFwEmbed[i].szName == NULL || g_aFwEmbed[i].pData == NULL ||
+            g_aFwEmbed[i].pEnd == NULL) {
+            continue;
+        }
+        if (g_aFwEmbed[i].pEnd <= g_aFwEmbed[i].pData) {
+            continue;
+        }
+        if (strcmp(g_aFwEmbed[i].szName, szName) == 0) {
+            return &g_aFwEmbed[i];
+        }
+    }
+    return NULL;
+}
+
+static struct ldmas_fw_hdr *
+ldmas_fw_slot_take(const u8 *pData, unsigned long cb)
+{
+    u32 i;
+
+    for (i = 0u; i < LDMAS_FW_SLOT_MAX; i++) {
+        if (g_aFwSlot[i].u8Live == 0) {
+            g_aFwSlot[i].u8Live = 1;
+            g_aFwSlot[i].hdr.size = cb;
+            g_aFwSlot[i].hdr.data = pData;
+            g_aFwSlot[i].hdr.priv = NULL;
+            return &g_aFwSlot[i].hdr;
+        }
+    }
+    return NULL;
+}
+
+static void
+ldmas_fw_slot_release(const void *pFw)
+{
+    u32 i;
+
+    if (pFw == NULL) {
+        return;
+    }
+    for (i = 0u; i < LDMAS_FW_SLOT_MAX; i++) {
+        if (g_aFwSlot[i].u8Live != 0 &&
+            (const void *)&g_aFwSlot[i].hdr == pFw) {
+            g_aFwSlot[i].u8Live = 0;
+            g_aFwSlot[i].hdr.size = 0ul;
+            g_aFwSlot[i].hdr.data = NULL;
+            g_aFwSlot[i].hdr.priv = NULL;
+            return;
+        }
+    }
+}
+
+static int
+ldmas_fw_request(void **ppFw, const char *szName, void *pDev, const char *szApi)
+{
+    const struct ldmas_fw_ent *pEnt;
+    struct ldmas_fw_hdr *pHdr;
+    unsigned long cb;
+    const char *szNm;
+    const char *szA;
+
+    (void)pDev;
+
+    ldmas_inc(&g_cFwReq);
+    szNm = (szName != NULL && szName[0] != '\0') ? szName : "(null)";
+    szA = (szApi != NULL && szApi[0] != '\0') ? szApi : "?";
+
+    if (ppFw != NULL) {
+        *ppFw = NULL;
+    }
+
+    pEnt = ldmas_fw_find(szName);
+    if (pEnt == NULL) {
+        ldmas_inc(&g_cFwMiss);
+        /* Grep: linux_dma_soft: soft firmware MISS name= */
+        if (g_cFwMissLog < LDMAS_FW_MISS_LOG_MAX) {
+            g_cFwMissLog++;
+            kprintf("linux_dma_soft: soft firmware MISS name=%s api=%s "
+                    "(null fw; soft_ne_product=1)\n",
+                    szNm, szA);
+        }
+        return -LINUX_ENOENT;
+    }
+
+    cb = (unsigned long)(pEnt->pEnd - pEnt->pData);
+    pHdr = ldmas_fw_slot_take(pEnt->pData, cb);
+    if (pHdr == NULL) {
+        ldmas_inc(&g_cFwMiss);
+        if (g_cFwMissLog < LDMAS_FW_MISS_LOG_MAX) {
+            g_cFwMissLog++;
+            kprintf("linux_dma_soft: soft firmware MISS name=%s api=%s "
+                    "(slot full; soft_ne_product=1)\n",
+                    szNm, szA);
+        }
+        return -LINUX_ENOENT;
+    }
+
+    if (ppFw != NULL) {
+        *ppFw = (void *)pHdr;
+    }
+    ldmas_inc(&g_cFwHit);
+    /* Grep: linux_dma_soft: soft firmware HIT name= */
+    kprintf("linux_dma_soft: soft firmware HIT name=%s size=%lu api=%s "
+            "soft_ne_product=1\n",
+            szNm, (unsigned long)cb, szA);
+    return 0;
+}
+
+int
+firmware_request_nowarn(void **ppFw, const char *szName, void *pDev)
+{
+    return ldmas_fw_request(ppFw, szName, pDev, "firmware_request_nowarn");
+}
+
+int
+request_firmware(void **ppFw, const char *szName, void *pDev)
+{
+    return ldmas_fw_request(ppFw, szName, pDev, "request_firmware");
+}
+
+int
+request_firmware_direct(void **ppFw, const char *szName, void *pDev)
+{
+    return ldmas_fw_request(ppFw, szName, pDev, "request_firmware_direct");
+}
+
+void
+release_firmware(const void *pFw)
+{
+    ldmas_inc(&g_cFwRel);
+    /* Soft: free slot only; blob data stays in .rodata embed. */
+    ldmas_fw_slot_release(pFw);
+}
+
 /* ---- Init / diagnostics ------------------------------------------------- */
 
 void
@@ -760,6 +1251,24 @@ linux_dma_soft_init(void)
     g_cIounmap = 0u;
     g_cKmallocOk = 0u;
     g_cKfree = 0u;
+    g_cFwReq = 0u;
+    g_cFwRel = 0u;
+    g_cFwHit = 0u;
+    g_cFwMiss = 0u;
+    g_cFwMissLog = 0u;
+    memset(g_aFwSlot, 0, sizeof(g_aFwSlot));
+    g_cSetMask = 0u;
+    g_cSetCohMask = 0u;
+    g_cPciIomap = 0u;
+    g_cPciIomapFail = 0u;
+    g_cPciIounmap = 0u;
+    g_cPcimEnable = 0u;
+    g_cPcimIomap = 0u;
+    g_cPcimMwi = 0u;
+    g_u64LastDmaMask = 0ull;
+    g_u64LastCohMask = 0ull;
+    g_fMaskLogOnce = 0;
+    g_fIomapLogOnce = 0;
     memset(g_aDma, 0, sizeof(g_aDma));
     memset(g_aIo, 0, sizeof(g_aIo));
     memset(g_aKm, 0, sizeof(g_aKm));
@@ -797,6 +1306,8 @@ linux_dma_soft_init(void)
                    &u32KsymSkip);
     ldmas_ksym_one("dma_set_coherent_mask", (void *)dma_set_coherent_mask,
                    &u32KsymOk, &u32KsymSkip);
+    ldmas_ksym_one("dma_set_mask_and_coherent",
+                   (void *)dma_set_mask_and_coherent, &u32KsymOk, &u32KsymSkip);
 
     ldmas_ksym_one("ioremap", (void *)ioremap, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("ioremap_wc", (void *)ioremap_wc, &u32KsymOk, &u32KsymSkip);
@@ -804,16 +1315,42 @@ linux_dma_soft_init(void)
                    &u32KsymSkip);
     ldmas_ksym_one("iounmap", (void *)iounmap, &u32KsymOk, &u32KsymSkip);
 
+    /* Replace empty ksym pci_iomap / pcim_* stubs (r8169 early probe). */
+    ldmas_ksym_one("pci_iomap", (void *)pci_iomap, &u32KsymOk, &u32KsymSkip);
+    ldmas_ksym_one("pci_iounmap", (void *)pci_iounmap, &u32KsymOk,
+                   &u32KsymSkip);
+    ldmas_ksym_one("pcim_enable_device", (void *)pcim_enable_device, &u32KsymOk,
+                   &u32KsymSkip);
+    ldmas_ksym_one("pcim_iomap_region", (void *)pcim_iomap_region, &u32KsymOk,
+                   &u32KsymSkip);
+    ldmas_ksym_one("pcim_set_mwi", (void *)pcim_set_mwi, &u32KsymOk,
+                   &u32KsymSkip);
+
     ldmas_ksym_one("readl", (void *)readl, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("writel", (void *)writel, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("readw", (void *)readw, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("writew", (void *)writew, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("readb", (void *)readb, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("writeb", (void *)writeb, &u32KsymOk, &u32KsymSkip);
+    /* Post-probe EEPROM/MAC path: replace empty ksym (no store) stub. */
+    ldmas_ksym_one("memcpy_fromio", (void *)memcpy_fromio, &u32KsymOk,
+                   &u32KsymSkip);
 
     ldmas_ksym_one("kmalloc_trace", (void *)kmalloc_trace, &u32KsymOk,
                    &u32KsymSkip);
+    ldmas_ksym_one("kmalloc", (void *)kmalloc, &u32KsymOk, &u32KsymSkip);
+    ldmas_ksym_one("kzalloc", (void *)kzalloc, &u32KsymOk, &u32KsymSkip);
     ldmas_ksym_one("kfree", (void *)kfree, &u32KsymOk, &u32KsymSkip);
+
+    /* Replace empty ksym firmware stubs (return 0 / no *fw write). Soft≠product. */
+    ldmas_ksym_one("firmware_request_nowarn", (void *)firmware_request_nowarn,
+                   &u32KsymOk, &u32KsymSkip);
+    ldmas_ksym_one("request_firmware", (void *)request_firmware, &u32KsymOk,
+                   &u32KsymSkip);
+    ldmas_ksym_one("request_firmware_direct", (void *)request_firmware_direct,
+                   &u32KsymOk, &u32KsymSkip);
+    ldmas_ksym_one("release_firmware", (void *)release_firmware, &u32KsymOk,
+                   &u32KsymSkip);
 
     u32N = u32KsymOk;
 

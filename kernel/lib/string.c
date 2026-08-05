@@ -107,7 +107,7 @@ static const char g_szStringSoftCatalog[] =
 static const char g_szStringSoftHonesty[] =
     "string: soft honesty freestanding=1 pure_c=1 no_heap=1 "
     "no_locale=1 no_io=1 counters=0 not_libc=1 soft_only=1 "
-    "wave=116 (soft inventory; not bar3)";
+    "wave=116 (soft inventory)";
 
 static const char g_szStringSoftSurfaces[] =
     "string: soft surfaces count=26 "
@@ -128,7 +128,7 @@ static const char g_szStringSoftRetmap[] =
 static const char g_szStringSoftRetclass[] =
     "string: soft retclass ok|fail|inval|nodev|busy|nomem "
     "soft_only=1 product_gate=0 wave=116 "
-    "(retclass taxonomy; Soft≠product; not bar3)";
+    "(retclass taxonomy; Soft≠product)";
 
 static const char g_szStringSoftRetlane[] =
     "string: soft retlane inv|selftest|rate|retcode|retmap|class "
@@ -138,533 +138,517 @@ static const char g_szStringSoftRetlane[] =
 static const char g_szStringSoftRetbound[] =
     "string: soft retbound soft_only=1 product_gate=0 hard_gate=0 "
     "never_blocks_m0=1 wave=116 "
-    "(retbound honesty; Soft≠product; not bar3)";
+    "(retbound honesty; Soft≠product)";
 
 static const char g_szStringSoftRetseal[] =
     "string: soft retseal exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retseal stamp; Soft≠product)";
 
 static const char g_szStringSoftRetpulse[] =
     "string: soft retpulse soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retpulse honesty; Soft≠product; not bar3)";
+    "(retpulse honesty; Soft≠product)";
 
 static const char g_szStringSoftRetmark[] =
     "string: soft retmark exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retmark stamp; Soft≠product)";
 
 static const char g_szStringSoftRetphase[] =
     "string: soft retphase soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retphase honesty; Soft≠product; not bar3)";
+    "(retphase honesty; Soft≠product)";
 
 static const char g_szStringSoftRetbadge[] =
     "string: soft retbadge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retbadge stamp; Soft≠product)";
 
 static const char g_szStringSoftRettoken[] =
     "string: soft rettoken soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(rettoken honesty; Soft≠product; not bar3)";
+    "(rettoken honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcrest[] =
     "string: soft retcrest exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcrest stamp; Soft≠product)";
 
 static const char g_szStringSoftRetvault[] =
     "string: soft retvault soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retvault honesty; Soft≠product; not bar3)";
+    "(retvault honesty; Soft≠product)";
 
 static const char g_szStringSoftRetbanner[] =
     "string: soft retbanner exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retbanner stamp; Soft≠product)";
 
 static const char g_szStringSoftRetledger[] =
     "string: soft retledger soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retledger honesty; Soft≠product; not bar3)";
+    "(retledger honesty; Soft≠product)";
 
 static const char g_szStringSoftRetbeacon[] =
     "string: soft retbeacon exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retbeacon stamp; Soft≠product)";
 
 static const char g_szStringSoftRetcipher[] =
     "string: soft retcipher soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcipher honesty; Soft≠product; not bar3)";
+    "(retcipher honesty; Soft≠product)";
 
 static const char g_szStringSoftRetflame[] =
     "string: soft retflame exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retflame stamp; Soft≠product)";
 
 /*
  * ---- Wave 27 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetprism[] =
     "string: soft retprism soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retprism honesty; Soft≠product; not bar3)";
+    "(retprism honesty; Soft≠product)";
 
 static const char g_szStringSoftRetforge[] =
     "string: soft retforge exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retforge stamp; Soft≠product)";
 
 /*
  * ---- Wave 28 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetshard[] =
     "string: soft retshard soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retshard honesty; Soft≠product; not bar3)";
+    "(retshard honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcrown[] =
     "string: soft retcrown exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcrown stamp; Soft≠product)";
 
 /*
  * ---- Wave 29 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetglyph[] =
     "string: soft retglyph soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retglyph honesty; Soft≠product; not bar3)";
+    "(retglyph honesty; Soft≠product)";
 
 static const char g_szStringSoftRetscepter[] =
     "string: soft retscepter exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retscepter stamp; Soft≠product)";
 
 /*
  * ---- Wave 30 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetsigil[] =
     "string: soft retsigil soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retsigil honesty; Soft≠product; not bar3)";
+    "(retsigil honesty; Soft≠product)";
 
 static const char g_szStringSoftRetemblem[] =
     "string: soft retemblem exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retemblem stamp; Soft≠product)";
 
 /*
  * ---- Wave 31 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetaegis[] =
     "string: soft retaegis soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retaegis honesty; Soft≠product; not bar3)";
+    "(retaegis honesty; Soft≠product)";
 
 static const char g_szStringSoftRetmantle[] =
     "string: soft retmantle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retmantle stamp; Soft≠product)";
 
 /*
  * ---- Wave 32 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetbulwark[] =
     "string: soft retbulwark soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retbulwark honesty; Soft≠product; not bar3)";
+    "(retbulwark honesty; Soft≠product)";
 
 static const char g_szStringSoftRetpanoply[] =
     "string: soft retpanoply exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retpanoply stamp; Soft≠product)";
 
 /*
  * ---- Wave 33 complementary surfaces (kept) (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetbastion[] =
     "string: soft retbastion soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retbastion honesty; Soft≠product; not bar3)";
+    "(retbastion honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcitadel[] =
     "string: soft retcitadel exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcitadel stamp; Soft≠product)";
 /*
  * ---- Wave 34 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetredoubt[] =
     "string: soft retredoubt soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retredoubt honesty; Soft≠product; not bar3)";
+    "(retredoubt honesty; Soft≠product)";
 
 static const char g_szStringSoftRetkeep[] =
     "string: soft retkeep exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retkeep stamp; Soft≠product)";
 /*
  * ---- Wave 35 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetfortress[] =
     "string: soft retfortress soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retfortress honesty; Soft≠product; not bar3)";
+    "(retfortress honesty; Soft≠product)";
 
 static const char g_szStringSoftRetpalace[] =
     "string: soft retpalace exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retpalace stamp; Soft≠product)";
 /*
  * ---- Wave 36 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRethold[] =
     "string: soft rethold soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(rethold honesty; Soft≠product; not bar3)";
+    "(rethold honesty; Soft≠product)";
 
 static const char g_szStringSoftRetspire[] =
     "string: soft retspire exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retspire stamp; Soft≠product)";
 
 /*
  * ---- Wave 37 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetwall[] =
     "string: soft retwall soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retwall honesty; Soft≠product; not bar3)";
+    "(retwall honesty; Soft≠product)";
 
 static const char g_szStringSoftRetgate[] =
     "string: soft retgate exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retgate stamp; Soft≠product)";
 /*
  * ---- Wave 38 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetmoat[] =
     "string: soft retmoat soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retmoat honesty; Soft≠product; not bar3)";
+    "(retmoat honesty; Soft≠product)";
 
 static const char g_szStringSoftRetower[] =
     "string: soft retower exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retower stamp; Soft≠product)";
 /*
  * ---- Wave 39 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetbarbican[] =
     "string: soft retbarbican soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retbarbican honesty; Soft≠product; not bar3)";
+    "(retbarbican honesty; Soft≠product)";
 
 static const char g_szStringSoftRetglacis[] =
     "string: soft retglacis exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retglacis stamp; Soft≠product)";
 
 /*
  * ---- Wave 40 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetcurtain[] =
     "string: soft retcurtain soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcurtain honesty; Soft≠product; not bar3)";
+    "(retcurtain honesty; Soft≠product)";
 
 static const char g_szStringSoftRetparapet[] =
     "string: soft retparapet exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retparapet stamp; Soft≠product)";
 /*
  * ---- Wave 41 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetravelin[] =
     "string: soft retravelin soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retravelin honesty; Soft≠product; not bar3)";
+    "(retravelin honesty; Soft≠product)";
 
 static const char g_szStringSoftRetditch[] =
     "string: soft retditch exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retditch stamp; Soft≠product)";
 
 /*
  * ---- Wave 42 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3.
  */
 static const char g_szStringSoftRetportcullis[] =
     "string: soft retportcullis soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retportcullis honesty; Soft≠product; not bar3)";
+    "(retportcullis honesty; Soft≠product)";
 
 static const char g_szStringSoftRetbattlement[] =
     "string: soft retbattlement exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retbattlement stamp; Soft≠product)";
 /*
  * ---- Wave 43 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retmachicolation/retarrowslit.
+ * Soft rodata only — Soft≠product. retmachicolation/retarrowslit.
  */
 static const char g_szStringSoftRetmachicolation[] =
     "string: soft retmachicolation soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retmachicolation honesty; Soft≠product; not bar3)";
+    "(retmachicolation honesty; Soft≠product)";
 
 static const char g_szStringSoftRetarrowslit[] =
     "string: soft retarrowslit exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retarrowslit stamp; Soft≠product)";
 
 /*
  * ---- Wave 44 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retmerlon/retembrasure.
+ * Soft rodata only — Soft≠product. retmerlon/retembrasure.
  */
 static const char g_szStringSoftRetmerlon[] =
     "string: soft retmerlon soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retmerlon honesty; Soft≠product; not bar3)";
+    "(retmerlon honesty; Soft≠product)";
 
 static const char g_szStringSoftRetembrasure[] =
     "string: soft retembrasure exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retembrasure stamp; Soft≠product)";
 
 /*
  * ---- Wave 45 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retkeepgate/retouterward.
+ * Soft rodata only — Soft≠product. retkeepgate/retouterward.
  */
 static const char g_szStringSoftRetkeepgate[] =
     "string: soft retkeepgate soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retkeepgate honesty; Soft≠product; not bar3)";
+    "(retkeepgate honesty; Soft≠product)";
 
 static const char g_szStringSoftRetouterward[] =
     "string: soft retouterward exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retouterward stamp; Soft≠product)";
 
 /*
  * ---- Wave 46 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retbailey/retpostern.
+ * Soft rodata only — Soft≠product. retbailey/retpostern.
  */
 static const char g_szStringSoftRetbailey[] =
     "string: soft retbailey soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retbailey honesty; Soft≠product; not bar3)";
+    "(retbailey honesty; Soft≠product)";
 
 static const char g_szStringSoftRetpostern[] =
     "string: soft retpostern exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retpostern stamp; Soft≠product)";
 
 /*
  * ---- Wave 47 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retinnerward/retdonjon.
+ * Soft rodata only — Soft≠product. retinnerward/retdonjon.
  */
 static const char g_szStringSoftRetinnerward[] =
     "string: soft retinnerward soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retinnerward honesty; Soft≠product; not bar3)";
+    "(retinnerward honesty; Soft≠product)";
 
 static const char g_szStringSoftRetdonjon[] =
     "string: soft retdonjon exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retdonjon stamp; Soft≠product)";
 
 /*
  * ---- Wave 48 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retchevaux/retpalisade.
+ * Soft rodata only — Soft≠product. retchevaux/retpalisade.
  */
 static const char g_szStringSoftRetchevaux[] =
     "string: soft retchevaux soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retchevaux honesty; Soft≠product; not bar3)";
+    "(retchevaux honesty; Soft≠product)";
 
 static const char g_szStringSoftRetpalisade[] =
     "string: soft retpalisade exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retpalisade stamp; Soft≠product)";
 
 /*
  * ---- Wave 49 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retglacisgate/retoutwork.
+ * Soft rodata only — Soft≠product. retglacisgate/retoutwork.
  */
 static const char g_szStringSoftRetglacisgate[] =
     "string: soft retglacisgate soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retglacisgate honesty; Soft≠product; not bar3)";
+    "(retglacisgate honesty; Soft≠product)";
 
 static const char g_szStringSoftRetoutwork[] =
     "string: soft retoutwork exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retoutwork stamp; Soft≠product)";
 
 /*
  * ---- Wave 50 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retsally/retcounterscarp.
+ * Soft rodata only — Soft≠product. retsally/retcounterscarp.
  */
 static const char g_szStringSoftRetsally[] =
     "string: soft retsally soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retsally honesty; Soft≠product; not bar3)";
+    "(retsally honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcounterscarp[] =
     "string: soft retcounterscarp exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcounterscarp stamp; Soft≠product)";
 
 /*
  * ---- Wave 51 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retfosse/retcoveredway.
+ * Soft rodata only — Soft≠product. retfosse/retcoveredway.
  */
 static const char g_szStringSoftRetfosse[] =
     "string: soft retfosse soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retfosse honesty; Soft≠product; not bar3)";
+    "(retfosse honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcoveredway[] =
     "string: soft retcoveredway exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcoveredway stamp; Soft≠product)";
 
 /*
  * ---- Wave 52 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. rettenaille/retdemilune.
+ * Soft rodata only — Soft≠product. rettenaille/retdemilune.
  */
 static const char g_szStringSoftRettenaille[] =
     "string: soft rettenaille soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(rettenaille honesty; Soft≠product; not bar3)";
+    "(rettenaille honesty; Soft≠product)";
 
 static const char g_szStringSoftRetdemilune[] =
     "string: soft retdemilune exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retdemilune stamp; Soft≠product)";
 /*
  * ---- Wave 53 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retravelin/retlunette.
+ * Soft rodata only — Soft≠product. retravelin/retlunette.
  * Grep: string: soft retravelin — Wave 41 rodata retained; wave field current (Wave 53 pair).
  * Grep: string: soft retlunette — Wave 53 exclusive lunette stamp.
  */
 static const char g_szStringSoftRetlunette[] =
     "string: soft retlunette exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retlunette stamp; Soft≠product)";
 /*
  * ---- Wave 54 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retcaponier/retredan.
+ * Soft rodata only — Soft≠product. retcaponier/retredan.
  * Grep: string: soft retcaponier — Wave 54 return-caponier honesty.
  * Grep: string: soft retredan — Wave 54 exclusive redan stamp.
  */
 static const char g_szStringSoftRetcaponier[] =
     "string: soft retcaponier soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcaponier honesty; Soft≠product; not bar3)";
+    "(retcaponier honesty; Soft≠product)";
 
 static const char g_szStringSoftRetredan[] =
     "string: soft retredan exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retredan stamp; Soft≠product)";
 
 /*
  * ---- Wave 55 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retflank/retface.
+ * Soft rodata only — Soft≠product. retflank/retface.
  * Grep: string: soft retflank — Wave 55 return-flank honesty.
  * Grep: string: soft retface — Wave 55 exclusive face stamp.
  */
 static const char g_szStringSoftRetflank[] =
     "string: soft retflank soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retflank honesty; Soft≠product; not bar3)";
+    "(retflank honesty; Soft≠product)";
 
 static const char g_szStringSoftRetface[] =
     "string: soft retface exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retface stamp; Soft≠product)";
 
 /*
  * ---- Wave 56 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retgorge/retshoulder.
+ * Soft rodata only — Soft≠product. retgorge/retshoulder.
  * Grep: string: soft retgorge — Wave 56 return-gorge honesty.
  * Grep: string: soft retshoulder — Wave 56 exclusive shoulder stamp.
  */
 static const char g_szStringSoftRetgorge[] =
     "string: soft retgorge soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retgorge honesty; Soft≠product; not bar3)";
+    "(retgorge honesty; Soft≠product)";
 
 static const char g_szStringSoftRetshoulder[] =
     "string: soft retshoulder exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retshoulder stamp; Soft≠product)";
 
 /*
  * ---- Wave 57 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retraverse/retcasemate.
+ * Soft rodata only — Soft≠product. retraverse/retcasemate.
  * Grep: string: soft retraverse — Wave 57 return-traverse honesty.
  * Grep: string: soft retcasemate — Wave 57 exclusive casemate stamp.
  */
 static const char g_szStringSoftRetraverse[] =
     "string: soft retraverse soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retraverse honesty; Soft≠product; not bar3)";
+    "(retraverse honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcasemate[] =
     "string: soft retcasemate exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcasemate stamp; Soft≠product)";
 
 /*
  * ---- Wave 58 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retorillon/retbonnette.
+ * Soft rodata only — Soft≠product. retorillon/retbonnette.
  * Grep: string: soft retorillon — Wave 58 return-orillon honesty.
  * Grep: string: soft retbonnette — Wave 58 exclusive bonnette stamp.
  */
 static const char g_szStringSoftRetorillon[] =
     "string: soft retorillon soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retorillon honesty; Soft≠product; not bar3)";
+    "(retorillon honesty; Soft≠product)";
 
 static const char g_szStringSoftRetbonnette[] =
     "string: soft retbonnette exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retbonnette stamp; Soft≠product)";
 
 /*
  * ---- Wave 59 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retcrownwork/rethornwork.
+ * Soft rodata only — Soft≠product. retcrownwork/rethornwork.
  * Grep: string: soft retcrownwork — Wave 59 return-crownwork honesty.
  * Grep: string: soft rethornwork — Wave 59 exclusive hornwork stamp.
  */
 static const char g_szStringSoftRetcrownwork[] =
     "string: soft retcrownwork soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcrownwork honesty; Soft≠product; not bar3)";
+    "(retcrownwork honesty; Soft≠product)";
 
 static const char g_szStringSoftRethornwork[] =
     "string: soft rethornwork exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(rethornwork stamp; Soft≠product)";
 
 
@@ -673,186 +657,186 @@ static const char g_szStringSoftRethornwork[] =
 
 /*
  * ---- Wave 60 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retplace/retenvelope.
+ * Soft rodata only — Soft≠product. retplace/retenvelope.
  * Grep: string: soft retplace — Wave 60 return-place honesty.
  * Grep: string: soft retenvelope — Wave 60 exclusive envelope stamp.
  */
 static const char g_szStringSoftRetplace[] =
     "string: soft retplace soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retplace honesty; Soft≠product; not bar3)";
+    "(retplace honesty; Soft≠product)";
 
 static const char g_szStringSoftRetenvelope[] =
     "string: soft retenvelope exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retenvelope stamp; Soft≠product)";
 
 /*
  * ---- Wave 61 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retcounterguard/retcoveredface.
+ * Soft rodata only — Soft≠product. retcounterguard/retcoveredface.
  * Grep: string: soft retcounterguard — Wave 61 return-counterguard honesty.
  * Grep: string: soft retcoveredface — Wave 61 exclusive coveredface stamp.
  */
 static const char g_szStringSoftRetcounterguard[] =
     "string: soft retcounterguard soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcounterguard honesty; Soft≠product; not bar3)";
+    "(retcounterguard honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcoveredface[] =
     "string: soft retcoveredface exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcoveredface stamp; Soft≠product)";
 /*
  * ---- Wave 62 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retbastionface/retcurtainangle.
+ * Soft rodata only — Soft≠product. retbastionface/retcurtainangle.
  * Grep: string: soft retbastionface — Wave 62 return-bastionface honesty.
  * Grep: string: soft retcurtainangle — Wave 62 exclusive curtainangle stamp.
  */
 static const char g_szStringSoftRetbastionface[] =
     "string: soft retbastionface soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retbastionface honesty; Soft≠product; not bar3)";
+    "(retbastionface honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcurtainangle[] =
     "string: soft retcurtainangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcurtainangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 63 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retdoubletenaille/retplaceofarms.
+ * Soft rodata only — Soft≠product. retdoubletenaille/retplaceofarms.
  * Grep: string: soft retdoubletenaille — Wave 63 return-doubletenaille honesty.
  * Grep: string: soft retplaceofarms — Wave 63 exclusive placeofarms stamp.
  */
 static const char g_szStringSoftRetdoubletenaille[] =
     "string: soft retdoubletenaille soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retdoubletenaille honesty; Soft≠product; not bar3)";
+    "(retdoubletenaille honesty; Soft≠product)";
 
 static const char g_szStringSoftRetplaceofarms[] =
     "string: soft retplaceofarms exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retplaceofarms stamp; Soft≠product)";
 
 /*
  * ---- Wave 64 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retreentrant/retsallyport.
+ * Soft rodata only — Soft≠product. retreentrant/retsallyport.
  * Grep: string: soft retreentrant — Wave 64 return-reentrant honesty.
  * Grep: string: soft retsallyport — Wave 64 exclusive sallyport stamp.
  */
 static const char g_szStringSoftRetreentrant[] =
     "string: soft retreentrant soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retreentrant honesty; Soft≠product; not bar3)";
+    "(retreentrant honesty; Soft≠product)";
 
 static const char g_szStringSoftRetsallyport[] =
     "string: soft retsallyport exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retsallyport stamp; Soft≠product)";
 
 /*
  * ---- Wave 65 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retgorgeangle/retshoulderangle.
+ * Soft rodata only — Soft≠product. retgorgeangle/retshoulderangle.
  * Grep: string: soft retgorgeangle — Wave 65 return-gorgeangle honesty.
  * Grep: string: soft retshoulderangle — Wave 65 exclusive shoulderangle stamp.
  */
 static const char g_szStringSoftRetgorgeangle[] =
     "string: soft retgorgeangle soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retgorgeangle honesty; Soft≠product; not bar3)";
+    "(retgorgeangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetshoulderangle[] =
     "string: soft retshoulderangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retshoulderangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 66 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retflankangle/retfaceangle.
+ * Soft rodata only — Soft≠product. retflankangle/retfaceangle.
  * Grep: string: soft retflankangle — Wave 66 return-flankangle honesty.
  * Grep: string: soft retfaceangle — Wave 66 exclusive faceangle stamp.
  */
 static const char g_szStringSoftRetflankangle[] =
     "string: soft retflankangle soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retflankangle honesty; Soft≠product; not bar3)";
+    "(retflankangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetfaceangle[] =
     "string: soft retfaceangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retfaceangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 67 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retcaponierangle/retredanangle.
+ * Soft rodata only — Soft≠product. retcaponierangle/retredanangle.
  * Grep: string: soft retcaponierangle — Wave 67 return-caponierangle honesty.
  * Grep: string: soft retredanangle — Wave 67 exclusive redanangle stamp.
  */
 static const char g_szStringSoftRetcaponierangle[] =
     "string: soft retcaponierangle soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retcaponierangle honesty; Soft≠product; not bar3)";
+    "(retcaponierangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetredanangle[] =
     "string: soft retredanangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retredanangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 68 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retlunetteangle/rettenailleangle.
+ * Soft rodata only — Soft≠product. retlunetteangle/rettenailleangle.
  * Grep: string: soft retlunetteangle — Wave 68 return-lunetteangle honesty.
  * Grep: string: soft rettenailleangle — Wave 68 exclusive tenailleangle stamp.
  */
 static const char g_szStringSoftRetlunetteangle[] =
     "string: soft retlunetteangle soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retlunetteangle honesty; Soft≠product; not bar3)";
+    "(retlunetteangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRettenailleangle[] =
     "string: soft rettenailleangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(rettenailleangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 69 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retdemiluneangle/retcoveredwayangle.
+ * Soft rodata only — Soft≠product. retdemiluneangle/retcoveredwayangle.
  * Grep: string: soft retdemiluneangle — Wave 69 return-demiluneangle honesty.
  * Grep: string: soft retcoveredwayangle — Wave 69 exclusive coveredwayangle stamp.
  */
 static const char g_szStringSoftRetdemiluneangle[] =
     "string: soft retdemiluneangle soft_only=1 product_gate=0 soft_ne_product=1 "
     "never_blocks_m0=1 wave=116 "
-    "(retdemiluneangle honesty; Soft≠product; not bar3)";
+    "(retdemiluneangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcoveredwayangle[] =
     "string: soft retcoveredwayangle exclusive=1 soft_ne_product=1 "
-    "product_kernel=OPEN bar3=0 wave=116 "
+    "product_kernel=OPEN wave=116 "
     "(retcoveredwayangle stamp; Soft≠product)";
 
 /*
  * ---- Wave 70 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retfosseangle/retcounterscarple.
+ * Soft rodata only — Soft≠product. retfosseangle/retcounterscarple.
  * Grep: string: soft retfosseangle — Wave 70 return-fosseangle honesty.
  * Grep: string: soft retcounterscarple — Wave 70 exclusive counterscarple stamp.
  */
 static const char g_szStringSoftRetfosseangle[] =
-    "string: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product; not bar3)";
+    "string: soft retfosseangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfosseangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetcounterscarple[] =
-    "string: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcounterscarple stamp; Soft≠product)";
+    "string: soft retcounterscarple exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcounterscarple stamp; Soft≠product)";
 
 /*
  * ---- Wave 71 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retsallyportangle/retreentrantangle.
+ * Soft rodata only — Soft≠product. retsallyportangle/retreentrantangle.
  * Grep: string: soft retsallyportangle — Wave 71 return-sallyportangle honesty.
  * Grep: string: soft retreentrantangle — Wave 71 exclusive reentrantangle stamp.
  */
 static const char g_szStringSoftRetsallyportangle[] =
-    "string: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product; not bar3)";
+    "string: soft retsallyportangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsallyportangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetreentrantangle[] =
-    "string: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retreentrantangle stamp; Soft≠product)";
+    "string: soft retreentrantangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retreentrantangle stamp; Soft≠product)";
 
 
 
@@ -863,280 +847,280 @@ static const char g_szStringSoftRetreentrantangle[] =
 
 /*
  * ---- Wave 72 exclusive complementary surfaces (never reshape primary).
- * Soft rodata only — Soft≠product; not bar3. retplaceofarmsangle/retdoubletenailleangle.
+ * Soft rodata only — Soft≠product. retplaceofarmsangle/retdoubletenailleangle.
  * Grep: string: soft retplaceofarmsangle — Wave 72 return-placeofarmsangle honesty.
  * Grep: string: soft retdoubletenailleangle — Wave 72 exclusive doubletenailleangle stamp.
  */
 static const char g_szStringSoftRetplaceofarmsangle[] =
-    "string: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product; not bar3)";
+    "string: soft retplaceofarmsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retplaceofarmsangle honesty; Soft≠product)";
 
 static const char g_szStringSoftRetdoubletenailleangle[] =
-    "string: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retdoubletenailleangle stamp; Soft≠product)";
+    "string: soft retdoubletenailleangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdoubletenailleangle stamp; Soft≠product)";
 /* Grep: string: soft retcurtainface — Wave 73 return-curtainface honesty */
 static const char g_szStringSoftRetcurtainface[] =
-    "string: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product; not bar3)";
+    "string: soft retcurtainface soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcurtainface honesty; Soft≠product)";
 /* Grep: string: soft retbastionangle — Wave 73 exclusive bastionangle stamp */
 static const char g_szStringSoftRetbastionangle[] =
-    "string: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbastionangle stamp; Soft≠product)";
+    "string: soft retbastionangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionangle stamp; Soft≠product)";
 /* Grep: string: soft retglacisangle — Wave 74 return-glacisangle honesty */
 static const char g_szStringSoftRetglacisangle[] =
-    "string: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product; not bar3)";
+    "string: soft retglacisangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retglacisangle honesty; Soft≠product)";
 /* Grep: string: soft retparapetangle — Wave 74 exclusive parapetangle stamp */
 static const char g_szStringSoftRetparapetangle[] =
-    "string: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retparapetangle stamp; Soft≠product)";
+    "string: soft retparapetangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparapetangle stamp; Soft≠product)";
 /* Grep: string: soft retmoatangle — Wave 75 return-moatangle honesty */
 static const char g_szStringSoftRetmoatangle[] =
-    "string: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product; not bar3)";
+    "string: soft retmoatangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoatangle honesty; Soft≠product)";
 /* Grep: string: soft retowerangle — Wave 75 exclusive towerangle stamp */
 static const char g_szStringSoftRetowerangle[] =
-    "string: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retowerangle stamp; Soft≠product)";
+    "string: soft retowerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retowerangle stamp; Soft≠product)";
 /* Grep: string: soft retgateangle — Wave 76 return-gateangle honesty */
 static const char g_szStringSoftRetgateangle[] =
-    "string: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product; not bar3)";
+    "string: soft retgateangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retgateangle honesty; Soft≠product)";
 /* Grep: string: soft retwallangle — Wave 76 exclusive wallangle stamp */
 static const char g_szStringSoftRetwallangle[] =
-    "string: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retwallangle stamp; Soft≠product)";
+    "string: soft retwallangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwallangle stamp; Soft≠product)";
 /* Grep: string: soft retspireangle — Wave 77 return-spireangle honesty */
 static const char g_szStringSoftRetspireangle[] =
-    "string: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product; not bar3)";
+    "string: soft retspireangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspireangle honesty; Soft≠product)";
 /* Grep: string: soft retholdangle — Wave 77 exclusive holdangle stamp */
 static const char g_szStringSoftRetholdangle[] =
-    "string: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retholdangle stamp; Soft≠product)";
+    "string: soft retholdangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retholdangle stamp; Soft≠product)";
 /* Grep: string: soft retpalaceangle — Wave 78 return-palaceangle honesty */
 static const char g_szStringSoftRetpalaceangle[] =
-    "string: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product; not bar3)";
+    "string: soft retpalaceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpalaceangle honesty; Soft≠product)";
 /* Grep: string: soft retfortressangle — Wave 78 exclusive fortressangle stamp */
 static const char g_szStringSoftRetfortressangle[] =
-    "string: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retfortressangle stamp; Soft≠product)";
+    "string: soft retfortressangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retfortressangle stamp; Soft≠product)";
 /* Grep: string: soft retkeepangle — Wave 79 return-keepangle honesty */
 static const char g_szStringSoftRetkeepangle[] =
-    "string: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product; not bar3)";
+    "string: soft retkeepangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retkeepangle honesty; Soft≠product)";
 /* Grep: string: soft retredoubtangle — Wave 79 exclusive redoubtangle stamp */
 static const char g_szStringSoftRetredoubtangle[] =
-    "string: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retredoubtangle stamp; Soft≠product)";
+    "string: soft retredoubtangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retredoubtangle stamp; Soft≠product)";
 /* Grep: string: soft retcitadelangle — Wave 80 return-citadelangle honesty */
 static const char g_szStringSoftRetcitadelangle[] =
-    "string: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product; not bar3)";
+    "string: soft retcitadelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcitadelangle honesty; Soft≠product)";
 /* Grep: string: soft retbastionkeep — Wave 80 exclusive bastionkeep stamp */
 static const char g_szStringSoftRetbastionkeep[] =
-    "string: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbastionkeep stamp; Soft≠product)";
+    "string: soft retbastionkeep exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbastionkeep stamp; Soft≠product)";
 /* Grep: string: soft retpanoplyangle — Wave 81 return-panoplyangle honesty */
 static const char g_szStringSoftRetpanoplyangle[] =
-    "string: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product; not bar3)";
+    "string: soft retpanoplyangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpanoplyangle honesty; Soft≠product)";
 /* Grep: string: soft retbulwarkangle — Wave 81 exclusive bulwarkangle stamp */
 static const char g_szStringSoftRetbulwarkangle[] =
-    "string: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbulwarkangle stamp; Soft≠product)";
+    "string: soft retbulwarkangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbulwarkangle stamp; Soft≠product)";
 /* Grep: string: soft retmantleangle — Wave 82 return-mantleangle honesty */
 static const char g_szStringSoftRetmantleangle[] =
-    "string: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product; not bar3)";
+    "string: soft retmantleangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmantleangle honesty; Soft≠product)";
 /* Grep: string: soft retaegisangle — Wave 82 exclusive aegisangle stamp */
 static const char g_szStringSoftRetaegisangle[] =
-    "string: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retaegisangle stamp; Soft≠product)";
+    "string: soft retaegisangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaegisangle stamp; Soft≠product)";
 /* Grep: string: soft retemblemangle — Wave 83 return-emblemangle honesty */
 static const char g_szStringSoftRetemblemangle[] =
-    "string: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product; not bar3)";
+    "string: soft retemblemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retemblemangle honesty; Soft≠product)";
 /* Grep: string: soft retsigilangle — Wave 83 exclusive sigilangle stamp */
 static const char g_szStringSoftRetsigilangle[] =
-    "string: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retsigilangle stamp; Soft≠product)";
+    "string: soft retsigilangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsigilangle stamp; Soft≠product)";
 /* Grep: string: soft retscepterangle — Wave 84 return-scepterangle honesty */
 static const char g_szStringSoftRetscepterangle[] =
-    "string: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product; not bar3)";
+    "string: soft retscepterangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retscepterangle honesty; Soft≠product)";
 /* Grep: string: soft retglyphangle — Wave 84 exclusive glyphangle stamp */
 static const char g_szStringSoftRetglyphangle[] =
-    "string: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retglyphangle stamp; Soft≠product)";
+    "string: soft retglyphangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retglyphangle stamp; Soft≠product)";
 /* Grep: string: soft retcrownangle — Wave 85 return-crownangle honesty */
 static const char g_szStringSoftRetcrownangle[] =
-    "string: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product; not bar3)";
+    "string: soft retcrownangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrownangle honesty; Soft≠product)";
 /* Grep: string: soft retshardangle — Wave 85 exclusive shardangle stamp */
 static const char g_szStringSoftRetshardangle[] =
-    "string: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retshardangle stamp; Soft≠product)";
+    "string: soft retshardangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retshardangle stamp; Soft≠product)";
 /* Grep: string: soft retforgeangle — Wave 86 return-forgeangle honesty */
 static const char g_szStringSoftRetforgeangle[] =
-    "string: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product; not bar3)";
+    "string: soft retforgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retforgeangle honesty; Soft≠product)";
 /* Grep: string: soft retprismangle — Wave 86 exclusive prismangle stamp */
 static const char g_szStringSoftRetprismangle[] =
-    "string: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retprismangle stamp; Soft≠product)";
+    "string: soft retprismangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retprismangle stamp; Soft≠product)";
 /* Grep: string: soft retflameangle — Wave 87 return-flameangle honesty */
 static const char g_szStringSoftRetflameangle[] =
-    "string: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product; not bar3)";
+    "string: soft retflameangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retflameangle honesty; Soft≠product)";
 /* Grep: string: soft retcipherangle — Wave 87 exclusive cipherangle stamp */
 static const char g_szStringSoftRetcipherangle[] =
-    "string: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcipherangle stamp; Soft≠product)";
+    "string: soft retcipherangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcipherangle stamp; Soft≠product)";
 /* Grep: string: soft retbeaconangle — Wave 88 return-beaconangle honesty */
 static const char g_szStringSoftRetbeaconangle[] =
-    "string: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product; not bar3)";
+    "string: soft retbeaconangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbeaconangle honesty; Soft≠product)";
 /* Grep: string: soft retledgerangle — Wave 88 exclusive ledgerangle stamp */
 static const char g_szStringSoftRetledgerangle[] =
-    "string: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retledgerangle stamp; Soft≠product)";
+    "string: soft retledgerangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retledgerangle stamp; Soft≠product)";
 /* Grep: string: soft retbannerangle — Wave 89 return-bannerangle honesty */
 static const char g_szStringSoftRetbannerangle[] =
-    "string: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product; not bar3)";
+    "string: soft retbannerangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbannerangle honesty; Soft≠product)";
 /* Grep: string: soft retvaultangle — Wave 89 exclusive vaultangle stamp */
 static const char g_szStringSoftRetvaultangle[] =
-    "string: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvaultangle stamp; Soft≠product)";
+    "string: soft retvaultangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvaultangle stamp; Soft≠product)";
 /* Grep: string: soft retcrestangle — Wave 90 return-crestangle honesty */
 static const char g_szStringSoftRetcrestangle[] =
-    "string: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product; not bar3)";
+    "string: soft retcrestangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcrestangle honesty; Soft≠product)";
 /* Grep: string: soft rettokenangle — Wave 90 exclusive tokenangle stamp */
 static const char g_szStringSoftRettokenangle[] =
-    "string: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rettokenangle stamp; Soft≠product)";
+    "string: soft rettokenangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettokenangle stamp; Soft≠product)";
 /* Grep: string: soft retbadgeangle — Wave 91 return-badgeangle honesty */
 static const char g_szStringSoftRetbadgeangle[] =
-    "string: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product; not bar3)";
+    "string: soft retbadgeangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retbadgeangle honesty; Soft≠product)";
 /* Grep: string: soft retphaseangle — Wave 91 exclusive phaseangle stamp */
 static const char g_szStringSoftRetphaseangle[] =
-    "string: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retphaseangle stamp; Soft≠product)";
+    "string: soft retphaseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retphaseangle stamp; Soft≠product)";
 /* Grep: string: soft retmarkangle — Wave 92 return-markangle honesty */
 static const char g_szStringSoftRetmarkangle[] =
-    "string: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product; not bar3)";
+    "string: soft retmarkangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmarkangle honesty; Soft≠product)";
 /* Grep: string: soft retpulseangle — Wave 92 exclusive pulseangle stamp */
 static const char g_szStringSoftRetpulseangle[] =
-    "string: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retpulseangle stamp; Soft≠product)";
+    "string: soft retpulseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpulseangle stamp; Soft≠product)";
 /* Grep: string: soft retsealangle — Wave 93 return-sealangle honesty */
 static const char g_szStringSoftRetsealangle[] =
-    "string: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product; not bar3)";
+    "string: soft retsealangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsealangle honesty; Soft≠product)";
 /* Grep: string: soft retboundangle — Wave 93 exclusive boundangle stamp */
 static const char g_szStringSoftRetboundangle[] =
-    "string: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retboundangle stamp; Soft≠product)";
+    "string: soft retboundangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retboundangle stamp; Soft≠product)";
 /* Grep: string: soft retstemangle — Wave 94 return-stemangle honesty */
 static const char g_szStringSoftRetstemangle[] =
-    "string: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product; not bar3)";
+    "string: soft retstemangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retstemangle honesty; Soft≠product)";
 /* Grep: string: soft retbladeangle — Wave 94 exclusive bladeangle stamp */
 static const char g_szStringSoftRetbladeangle[] =
-    "string: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbladeangle stamp; Soft≠product)";
+    "string: soft retbladeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbladeangle stamp; Soft≠product)";
 /* Grep: string: soft retchordangle — Wave 95 return-chordangle honesty */
 static const char g_szStringSoftRetchordangle[] =
-    "string: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product; not bar3)";
+    "string: soft retchordangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retchordangle honesty; Soft≠product)";
 /* Grep: string: soft retarcangle — Wave 95 exclusive arcangle stamp */
 static const char g_szStringSoftRetarcangle[] =
-    "string: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retarcangle stamp; Soft≠product)";
+    "string: soft retarcangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retarcangle stamp; Soft≠product)";
 /* Grep: string: soft retsectorangle — Wave 96 return-sectorangle honesty */
 static const char g_szStringSoftRetsectorangle[] =
-    "string: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product; not bar3)";
+    "string: soft retsectorangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsectorangle honesty; Soft≠product)";
 /* Grep: string: soft retwedgeangle — Wave 96 exclusive wedgeangle stamp */
 static const char g_szStringSoftRetwedgeangle[] =
-    "string: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retwedgeangle stamp; Soft≠product)";
+    "string: soft retwedgeangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retwedgeangle stamp; Soft≠product)";
 /* Grep: string: soft retradiusangle — Wave 97 return-radiusangle honesty */
 static const char g_szStringSoftRetradiusangle[] =
-    "string: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product; not bar3)";
+    "string: soft retradiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retradiusangle honesty; Soft≠product)";
 /* Grep: string: soft retdiameterangle — Wave 97 exclusive diameterangle stamp */
 static const char g_szStringSoftRetdiameterangle[] =
-    "string: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retdiameterangle stamp; Soft≠product)";
+    "string: soft retdiameterangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retdiameterangle stamp; Soft≠product)";
 /* Grep: string: soft retcircumangle — Wave 98 return-circumangle honesty */
 static const char g_szStringSoftRetcircumangle[] =
-    "string: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product; not bar3)";
+    "string: soft retcircumangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retcircumangle honesty; Soft≠product)";
 /* Grep: string: soft retellipseangle — Wave 98 exclusive ellipseangle stamp */
 static const char g_szStringSoftRetellipseangle[] =
-    "string: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retellipseangle stamp; Soft≠product)";
+    "string: soft retellipseangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retellipseangle stamp; Soft≠product)";
 /* Grep: string: soft rethyperangle — Wave 99 return-hyperangle honesty */
 static const char g_szStringSoftRethyperangle[] =
-    "string: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product; not bar3)";
+    "string: soft rethyperangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethyperangle honesty; Soft≠product)";
 /* Grep: string: soft retparabolaangle — Wave 99 exclusive parabolaangle stamp */
 static const char g_szStringSoftRetparabolaangle[] =
-    "string: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retparabolaangle stamp; Soft≠product)";
+    "string: soft retparabolaangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retparabolaangle stamp; Soft≠product)";
 /* Grep: string: soft retspiralangle — Wave 100 return-spiralangle honesty */
 static const char g_szStringSoftRetspiralangle[] =
-    "string: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product; not bar3)";
+    "string: soft retspiralangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retspiralangle honesty; Soft≠product)";
 /* Grep: string: soft rethelixangle — Wave 100 exclusive helixangle stamp */
 static const char g_szStringSoftRethelixangle[] =
-    "string: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rethelixangle stamp; Soft≠product)";
+    "string: soft rethelixangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rethelixangle stamp; Soft≠product)";
 /* Grep: string: soft rettorusangle — Wave 101 return-torusangle honesty */
 static const char g_szStringSoftRettorusangle[] =
-    "string: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product; not bar3)";
+    "string: soft rettorusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rettorusangle honesty; Soft≠product)";
 /* Grep: string: soft retknotangle — Wave 101 exclusive knotangle stamp */
 static const char g_szStringSoftRetknotangle[] =
-    "string: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retknotangle stamp; Soft≠product)";
+    "string: soft retknotangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retknotangle stamp; Soft≠product)";
 /* Grep: string: soft retmoebiusangle — Wave 102 return-moebiusangle honesty */
 static const char g_szStringSoftRetmoebiusangle[] =
-    "string: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product; not bar3)";
+    "string: soft retmoebiusangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmoebiusangle honesty; Soft≠product)";
 /* Grep: string: soft retkleinangle — Wave 102 exclusive kleinangle stamp */
 static const char g_szStringSoftRetkleinangle[] =
-    "string: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retkleinangle stamp; Soft≠product)";
+    "string: soft retkleinangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retkleinangle stamp; Soft≠product)";
 /* Grep: string: soft retprojectangle — Wave 103 return-projectangle honesty */
 static const char g_szStringSoftRetprojectangle[] =
-    "string: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product; not bar3)";
+    "string: soft retprojectangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retprojectangle honesty; Soft≠product)";
 /* Grep: string: soft retaffineangle — Wave 103 exclusive affineangle stamp */
 static const char g_szStringSoftRetaffineangle[] =
-    "string: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retaffineangle stamp; Soft≠product)";
+    "string: soft retaffineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retaffineangle stamp; Soft≠product)";
 /* Grep: string: soft retlinearangle — Wave 104 return-linearangle honesty */
 static const char g_szStringSoftRetlinearangle[] =
-    "string: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product; not bar3)";
+    "string: soft retlinearangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retlinearangle honesty; Soft≠product)";
 /* Grep: string: soft retbilinearangle — Wave 104 exclusive bilinearangle stamp */
 static const char g_szStringSoftRetbilinearangle[] =
-    "string: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbilinearangle stamp; Soft≠product)";
+    "string: soft retbilinearangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbilinearangle stamp; Soft≠product)";
 /* Grep: string: soft retquadraticangle — Wave 105 return-quadraticangle honesty */
 static const char g_szStringSoftRetquadraticangle[] =
-    "string: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product; not bar3)";
+    "string: soft retquadraticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquadraticangle honesty; Soft≠product)";
 /* Grep: string: soft retcubicangle — Wave 105 exclusive cubicangle stamp */
 static const char g_szStringSoftRetcubicangle[] =
-    "string: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcubicangle stamp; Soft≠product)";
+    "string: soft retcubicangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcubicangle stamp; Soft≠product)";
 /* Grep: string: soft retquarticangle — Wave 106 return-quarticangle honesty */
 static const char g_szStringSoftRetquarticangle[] =
-    "string: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product; not bar3)";
+    "string: soft retquarticangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retquarticangle honesty; Soft≠product)";
 /* Grep: string: soft retquinticangle — Wave 106 exclusive quinticangle stamp */
 static const char g_szStringSoftRetquinticangle[] =
-    "string: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retquinticangle stamp; Soft≠product)";
+    "string: soft retquinticangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retquinticangle stamp; Soft≠product)";
 /* Grep: string: soft retsplineangle — Wave 107 return-splineangle honesty */
 static const char g_szStringSoftRetsplineangle[] =
-    "string: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product; not bar3)";
+    "string: soft retsplineangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retsplineangle honesty; Soft≠product)";
 /* Grep: string: soft retbezierangle — Wave 107 exclusive bezierangle stamp */
 static const char g_szStringSoftRetbezierangle[] =
-    "string: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbezierangle stamp; Soft≠product)";
+    "string: soft retbezierangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbezierangle stamp; Soft≠product)";
 /* Grep: string: soft rethurmitangle — Wave 108 return-hermitangle honesty */
 static const char g_szStringSoftRethurmitangle[] =
-    "string: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product; not bar3)";
+    "string: soft rethurmitangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (rethurmitangle honesty; Soft≠product)";
 /* Grep: string: soft retcatmullangle — Wave 108 exclusive catmullangle stamp */
 static const char g_szStringSoftRetcatmullangle[] =
-    "string: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retcatmullangle stamp; Soft≠product)";
+    "string: soft retcatmullangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retcatmullangle stamp; Soft≠product)";
 /* Grep: string: soft retnurbsangle — Wave 109 return-nurbsangle honesty */
 static const char g_szStringSoftRetnurbsangle[] =
-    "string: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product; not bar3)";
+    "string: soft retnurbsangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retnurbsangle honesty; Soft≠product)";
 /* Grep: string: soft retbsplineangle — Wave 109 exclusive bsplineangle stamp */
 static const char g_szStringSoftRetbsplineangle[] =
-    "string: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retbsplineangle stamp; Soft≠product)";
+    "string: soft retbsplineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retbsplineangle stamp; Soft≠product)";
 /* Grep: string: soft retmeshangle — Wave 110 return-meshangle honesty */
 static const char g_szStringSoftRetmeshangle[] =
-    "string: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product; not bar3)";
+    "string: soft retmeshangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retmeshangle honesty; Soft≠product)";
 /* Grep: string: soft retgridangle — Wave 110 exclusive gridangle stamp */
 static const char g_szStringSoftRetgridangle[] =
-    "string: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retgridangle stamp; Soft≠product)";
+    "string: soft retgridangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retgridangle stamp; Soft≠product)";
 /* Grep: string: soft retvoxelangle — Wave 111 return-voxelangle honesty */
 static const char g_szStringSoftRetvoxelangle[] =
-    "string: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product; not bar3)";
+    "string: soft retvoxelangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retvoxelangle honesty; Soft≠product)";
 /* Grep: string: soft rettexelangle — Wave 111 exclusive texelangle stamp */
 static const char g_szStringSoftRettexelangle[] =
-    "string: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (rettexelangle stamp; Soft≠product)";
+    "string: soft rettexelangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (rettexelangle stamp; Soft≠product)";
 /* Grep: string: soft retfragmentangle — Wave 112 return-fragmentangle honesty */
 static const char g_szStringSoftRetfragmentangle[] =
-    "string: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product; not bar3)";
+    "string: soft retfragmentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfragmentangle honesty; Soft≠product)";
 /* Grep: string: soft retvertexangle — Wave 112 exclusive vertexangle stamp */
 static const char g_szStringSoftRetvertexangle[] =
-    "string: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvertexangle stamp; Soft≠product)";
+    "string: soft retvertexangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvertexangle stamp; Soft≠product)";
 /* Grep: string: soft retshaderangle — Wave 113 return-shaderangle honesty */
 static const char g_szStringSoftRetshaderangle[] =
-    "string: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product; not bar3)";
+    "string: soft retshaderangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retshaderangle honesty; Soft≠product)";
 /* Grep: string: soft retpipelineangle — Wave 113 exclusive pipelineangle stamp */
 static const char g_szStringSoftRetpipelineangle[] =
-    "string: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retpipelineangle stamp; Soft≠product)";
+    "string: soft retpipelineangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retpipelineangle stamp; Soft≠product)";
 /* Grep: string: soft retframebufferangle — Wave 114 return-framebufferangle honesty */
 static const char g_szStringSoftRetframebufferangle[] =
-    "string: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product; not bar3)";
+    "string: soft retframebufferangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retframebufferangle honesty; Soft≠product)";
 /* Grep: string: soft retswapchainangle — Wave 114 exclusive swapchainangle stamp */
 static const char g_szStringSoftRetswapchainangle[] =
-    "string: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retswapchainangle stamp; Soft≠product)";
+    "string: soft retswapchainangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retswapchainangle stamp; Soft≠product)";
 /* Grep: string: soft retpresentangle — Wave 115 return-presentangle honesty */
 static const char g_szStringSoftRetpresentangle[] =
-    "string: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product; not bar3)";
+    "string: soft retpresentangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retpresentangle honesty; Soft≠product)";
 /* Grep: string: soft retvsyncangle — Wave 115 exclusive vsyncangle stamp */
 static const char g_szStringSoftRetvsyncangle[] =
-    "string: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retvsyncangle stamp; Soft≠product)";
+    "string: soft retvsyncangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retvsyncangle stamp; Soft≠product)";
 
 /* Grep: string: soft retfenceangle — Wave 116 return-fenceangle honesty */
 static const char g_szStringSoftRetfenceangle[] =
-    "string: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product; not bar3)";
+    "string: soft retfenceangle soft_only=1 product_gate=0 soft_ne_product=1 never_blocks_m0=1 wave=116 (retfenceangle honesty; Soft≠product)";
 /* Grep: string: soft retsemaphoreangle — Wave 116 exclusive semaphoreangle stamp */
 static const char g_szStringSoftRetsemaphoreangle[] =
-    "string: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN bar3=0 wave=116 (retsemaphoreangle stamp; Soft≠product)";
+    "string: soft retsemaphoreangle exclusive=1 soft_ne_product=1 product_kernel=OPEN wave=116 (retsemaphoreangle stamp; Soft≠product)";
 
 /* Soft helper name table (order matches public soft set; cold only). */
 static const char *const g_apszStringSoftHelpers[] = {

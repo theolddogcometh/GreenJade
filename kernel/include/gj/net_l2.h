@@ -28,6 +28,12 @@
  */
 void net_l2_init(void);
 
+/**
+ * Refresh MAC from freestanding rtl8168 after reclaim_wire (hybrid 4a).
+ * Soft≠product. No-op if backend is not rtl8168.
+ */
+void net_l2_refresh_mac(void);
+
 /** Active backend (GJ_NET_L2_*). */
 u32 net_l2_backend(void);
 
@@ -58,3 +64,15 @@ const char *net_l2_name(void);
  * Call after soft r8169 / register_netdev path from kmain.
  */
 void net_l2_soft_linux_note(void);
+
+/**
+ * Soft MMIO handoff state (phase 1+; Soft≠product).
+ * Grep: net_l2: soft mmio handoff
+ */
+void net_l2_soft_handoff_mark_pending(void);
+/** Non-zero while freestanding quiesced and soft open not complete. */
+int  net_l2_soft_handoff_pending(void);
+/** Non-zero after dual-drive FAULT (fail closed). */
+int  net_l2_soft_handoff_fault(void);
+/** Record dual-drive FAULT (idempotent log). */
+void net_l2_soft_handoff_set_fault(const char *szWhy);

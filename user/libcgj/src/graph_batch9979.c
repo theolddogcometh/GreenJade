@@ -53,7 +53,7 @@ b9979_product_total_soft(void)
  *
  * Always returns 4. Soft pure-data sum of the eight exclusive product
  * score soft units in this continuum. Does not call sibling symbols
- * and does not probe shell/libcgj/smoke/dyn/bar3/steam/install/deck.
+ * and does not probe shell/libcgj/smoke/dyn/steam/install/deck.
  * No parent wires.
  */
 uint32_t

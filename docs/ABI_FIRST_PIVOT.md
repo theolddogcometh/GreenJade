@@ -4,8 +4,10 @@
 |-------|--------|
 | **Status** | **Accepted** (operator direction 2026-08) |
 | **Inventory** | [ABI_WAVE_STATUS.md](ABI_WAVE_STATUS.md) — soft-scaffold honesty |
+| **Coding backlog** | [TODO.md](TODO.md) § *Current track* (2026-08-03) |
 | **Law** | Dual MIT OR Apache-2.0 only; **no GPL source in tree** |
-| **Companions** | [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [HCL.md](HCL.md) · [DDI_SOFT.md](DDI_SOFT.md) · [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
+| **Bar3** | [STEAM_BAR3_STATUS.md](STEAM_BAR3_STATUS.md) only |
+| **Companions** | [LINUX_ABI_HYBRID.md](LINUX_ABI_HYBRID.md) · [HCL.md](HCL.md) · [DDI_SOFT.md](DDI_SOFT.md) · [G752VT_LINUX_HWTEST.md](G752VT_LINUX_HWTEST.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [PCI_DEV_SOFT_LAYOUT.md](PCI_DEV_SOFT_LAYOUT.md) · [DESIGN_SPEC_COMPLETE.md](DESIGN_SPEC_COMPLETE.md) |
 
 ## One-sentence strategy
 

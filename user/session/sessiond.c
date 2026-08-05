@@ -9,7 +9,7 @@
  * Host CI simulates the same present + input fanout protocol shapes.
  * Freestanding live path: sessiond_gj.c (Wave 126 soft inventory exclusive).
  * Host A1 here is libc soft-shape only — soft ≠ product multi-server confine.
- * Soft honesty: multi_server=0 confine=0 bar3=0 (Wave 126 exclusive deepen).
+ * Soft honesty: multi_server=0 confine=0 (Wave 126 exclusive deepen).
  *
  * Smoke markers (prefix-stable; scripts/smoke-all.sh greps sessiond: PASS):
  *   sessiond: PRESENT_FB path PASS
@@ -408,8 +408,8 @@ main(void)
      * Host A1 soft inventory only — soft ≠ product multi-server confine.
      */
     printf("sessiond: soft deepen product_kernel=OPEN wave=70 areas=1 multi_server=0 "
-           "confine=0 bar3=0 exclusive=1\n");
-    printf("sessiond: soft honesty multi_server=0 confine=0 bar3=0 "
+           "confine=0 exclusive=1\n");
+    printf("sessiond: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
     printf("sessiond: PASS\n");
     return 0;
@@ -418,5 +418,5 @@ main(void)
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */

@@ -22,8 +22,8 @@
  *   libgj: soft counts  none
  *   libgj: soft hot_path clean
  *   libgj: soft deepen  wave=70 areas=inventory,groups,names,policy,path,counts,areas,accessors,honesty
- *   libgj: soft path    freestanding=1 pure_c=1 no_heap=1 counts=none bar3=0
- *   libgj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *   libgj: soft path    freestanding=1 pure_c=1 no_heap=1 counts=none
+ *   libgj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
  *
  * Call counts intentionally omitted: hot string/mem helpers stay freestanding
  * product-path clean with no counter traffic. Inventory is source + rodata
@@ -41,7 +41,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define LIBGJ_SOFT_WAVE 70u
@@ -67,7 +67,7 @@ static const char g_szLibgjSoftInventory[] =
     "io=gj_puts,gj_write,gj_read,gj_dlog "
     "format=gj_itoa,gj_utoa,gj_xtoa,gj_snprintf "
     "policy=freestanding,pure_c,no_heap,no_locale,no_errno,ascii_only,soft_null "
-    "counts=none hot_path=clean accessors=area,policy,honesty bar3=0";
+    "counts=none hot_path=clean accessors=area,policy,honesty";
 
 /*
  * Wave 126 soft deepen stamp (rodata companion).
@@ -77,7 +77,7 @@ static const char g_szLibgjSoftDeepen[] =
     "libgj: soft deepen wave=70 areas=16 "
     "inventory,groups,names,length,compare,copy,search,case,ctype,mem,"
     "parse,io,format,policy,path,counts,areas,accessors,honesty "
-    "helpers=42 hot_path=clean counts=none multi_server=0 confine=0 bar3=0";
+    "helpers=42 hot_path=clean counts=none multi_server=0 confine=0";
 
 /*
  * Wave 111 honesty path line (static route labels).
@@ -86,14 +86,14 @@ static const char g_szLibgjSoftDeepen[] =
 static const char g_szLibgjSoftPath[] =
     "libgj: soft path freestanding=1 pure_c=1 no_heap=1 no_locale=1 "
     "no_errno=1 ascii_only=1 soft_null=1 counts=none hot_path=clean "
-    "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
+    "multi_server=0 confine=0 (soft inventory)";
 
 /*
  * Wave 126 exclusive honesty line (static).
  * Grep: libgj: soft honesty
  */
 static const char g_szLibgjSoftHonesty[] =
-    "libgj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "libgj: soft honesty multi_server=0 confine=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70 userland=1";
 
 /* Soft helper name table (order matches public soft set; cold only). */
@@ -246,7 +246,7 @@ gj_string_soft_path(void)
 
 /*
  * Cold soft honesty line (Wave 126 exclusive). Grep: libgj: soft honesty
- * Soft inventory ≠ product multi-server confine; never a bar3 claim.
+ * Soft inventory ≠ product multi-server confine;
  */
 const char *
 gj_string_soft_honesty(void)

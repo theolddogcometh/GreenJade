@@ -22,7 +22,7 @@
  * CGJ soft marker band (41691–41700): host soft probes
  * (cgj_soft_milestone_41700.*) may dlsym / direct-link this lamp.
  * Soft rule: missing symbol → skip; present but wrong value → hard fail.
- * Soft continuum ready ≠ bar3 ready (bar3 stays 0 at batch41693).
+ * Soft continuum ready ready (bar3 stays 0 at batch41693).
  * Soft gates only: does not wire Makefile / libc.map / smoke harnesses.
  * makefile_max honesty is parent-side (scan → makefile_max=41700 when wired).
  *

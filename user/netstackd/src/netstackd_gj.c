@@ -43,9 +43,9 @@
  *   netstackd-gj: soft steps ok=… skip=… max=… bits=0x…
  *   netstackd-gj: soft deepen wave=70 areas=… ok=… skip=…
  *   netstackd-gj: soft path reclaim=claim … multi_server=0 confine=0
- *                (soft inventory; not bar3; soft ≠ product multi-server confine)
+ *                (soft inventory; soft ≠ product multi-server confine)
  *   netstackd-gj: soft free-release PASS | soft free-release soft-skip
- * Diagnostics only — never hard-fail live path; soft ≠ bar3.
+ * Diagnostics only — never hard-fail live path; soft.
  * Honesty: soft inventory ≠ product multi-server confine.
  *
  *   make netstackd-gj → build/user/netstackd.elf
@@ -112,7 +112,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define GJ_SOFT_FREE_RELEASE (1u << 0)
@@ -481,13 +481,13 @@ soft_inventory_log(const struct soft_ctx *pSoft)
     msg("netstackd-gj: soft path reclaim=claim poll=eth stats=eth "
         "queue=owned dgram=echo tcp=door_stats rx=virtio remap=map_ring "
         "kick=vq ring=state free=release_noop multi_server=0 confine=0 "
-        "(soft inventory; not bar3; soft != product multi-server confine)\n");
+        "(soft inventory; soft != product multi-server confine)\n");
 
     /*
      * Grep: netstackd-gj: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    msg("netstackd-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    msg("netstackd-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 }
 

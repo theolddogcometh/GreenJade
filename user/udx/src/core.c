@@ -290,7 +290,7 @@ soft_inventory_log(void)
      */
     soft_emit("udx: soft open kernel_notify=OPEN multi_process_spsc=OPEN "
               "driver_host=OPEN soft_inventory=1 product=0 "
-              "bar3=OPEN wave=%u\n",
+              " wave=%u\n",
               UDX_SOFT_WAVE);
 
     /* Grep: udx: soft deepen wave (Wave 111 stamp; areas = prior soft lines). */
@@ -310,7 +310,7 @@ soft_inventory_log(void)
      * Grep: udx: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    soft_emit("udx: soft honesty multi_server=0 confine=0 bar3=0 "
+    soft_emit("udx: soft honesty multi_server=0 confine=0 "
               "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
               UDX_SOFT_WAVE);
 
@@ -321,7 +321,7 @@ soft_inventory_log(void)
      */
     soft_emit("udx: soft retgradientangle soft_only=1 product_gate=0 "
               "soft_ne_product=1 continuum_toward=26800 wave=%u "
-              "(retgradientangle honesty; Soft!=product; not bar3)\n",
+              "(retgradientangle honesty; Soft!=product)\n",
               UDX_SOFT_WAVE);
     soft_emit("udx: soft retblendangle exclusive=1 soft_ne_product=1 "
               "continuum_toward=26800 wave=%u "

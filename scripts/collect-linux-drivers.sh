@@ -26,14 +26,17 @@
 #
 # Optional embed (coordinator wires objs; not default kernel link):
 #   ./scripts/embed-linux-mod.sh              # r8169 → kernel/proc/r8169_mod_blob.S
+#   ./scripts/embed-linux-fw.sh               # rtl8168*.fw → soft request_firmware HIT
 #   ./scripts/embed-linux-mod.sh xhci_pci     # only if plain .ko staged (often SKIP:
 #                                             # host xHCI is builtin — no .ko)
+#   ./scripts/embed-linux-mod.sh usb-storage  # often PRESENT on el9 while HC builtin
 #
 # G752VT xHCI note (PCI 8086:a12f):
 #   Preferred modules: xhci_pci + xhci_hcd (+ usbcore stack).
 #   Many distros build xhci_* / usbcore as *builtin* → no .ko to stage; meta
 #   records BUILTIN and NEEDED-DRIVERS notes presence. Soft kernel path then
-#   SKIP (builtin) until a plain .ko is collected from another kver/distro.
+#   SKIP (builtin). usb-storage / uas are often *modular* — collect stages them
+#   and may auto-embed usb-storage for soft multi-mod MSC leaf smoke.
 #
 # Usage:
 #   ./scripts/collect-linux-drivers.sh [out_dir]
@@ -331,19 +334,26 @@ done 2>/dev/null || true
 ensure_raw_modules
 
 # Classify one CORE_MOD name: PRESENT (.ko staged) | BUILTIN | MISSING | UNKNOWN
+# Accepts underscore or hyphen (usb_storage ↔ usb-storage.ko on disk).
 mod_presence() {
 	name="$1"
-	if [ -f "$out/modules/${name}.ko" ] || [ -f "$out/modules_raw/${name}.ko" ] ||
-		ls "$out/modules/${name}.ko.xz" "$out/modules/${name}.ko.gz" \
-			"$out/modules/${name}.ko.zst" 2>/dev/null | grep -q .; then
-		echo "PRESENT"
-		return 0
-	fi
-	if [ -s "$out/meta/BUILTIN.txt" ] && grep -qE "^BUILTIN ${name}\$" "$out/meta/BUILTIN.txt"; then
+	name_hy=$(printf '%s' "$name" | tr '_' '-')
+	name_us=$(printf '%s' "$name" | tr '-' '_')
+	for n in "$name" "$name_hy" "$name_us"; do
+		if [ -f "$out/modules/${n}.ko" ] || [ -f "$out/modules_raw/${n}.ko" ] ||
+			ls "$out/modules/${n}.ko.xz" "$out/modules/${n}.ko.gz" \
+				"$out/modules/${n}.ko.zst" 2>/dev/null | grep -q .; then
+			echo "PRESENT"
+			return 0
+		fi
+	done
+	if [ -s "$out/meta/BUILTIN.txt" ] &&
+		grep -qE "^BUILTIN (${name}|${name_hy}|${name_us})\$" "$out/meta/BUILTIN.txt"; then
 		echo "BUILTIN"
 		return 0
 	fi
-	if [ -s "$out/meta/MISSING.txt" ] && grep -qE "^MISSING ${name}\$" "$out/meta/MISSING.txt"; then
+	if [ -s "$out/meta/MISSING.txt" ] &&
+		grep -qE "^MISSING (${name}|${name_hy}|${name_us})\$" "$out/meta/MISSING.txt"; then
 		echo "MISSING"
 		return 0
 	fi
@@ -352,10 +362,13 @@ mod_presence() {
 
 # G752VT xHCI (8086:a12f) — explicit presence oracle for soft module path.
 # Host often has xhci_pci/xhci_hcd/usbcore as *builtin* → no .ko for embed.
+# usb-storage / uas are often modular (MSC leaf) even when HC is builtin.
 xhci_pci_st=$(mod_presence xhci_pci)
 xhci_hcd_st=$(mod_presence xhci_hcd)
 usbcore_st=$(mod_presence usbcore)
 usb_common_st=$(mod_presence usb_common)
+usb_storage_st=$(mod_presence usb_storage)
+uas_st=$(mod_presence uas)
 r8169_st=$(mod_presence r8169)
 
 {
@@ -367,11 +380,15 @@ r8169_st=$(mod_presence r8169)
 	echo "PCI_ID 8086:a12f"
 	echo "CLASS  xHCI Intel 100 Series / C230 (G752VT-class)"
 	echo "PREFERRED_MODS xhci_pci,xhci_hcd,usbcore,usb_common"
+	echo "MULTI_MOD_ORDER usb_common usbcore xhci_hcd xhci_pci usb_storage"
+	echo "  (ideal Linux insmod order for stick MSC; soft path stubs this order)"
 	echo
 	echo "xhci_pci=$xhci_pci_st"
 	echo "xhci_hcd=$xhci_hcd_st"
 	echo "usbcore=$usbcore_st"
 	echo "usb_common=$usb_common_st"
+	echo "usb_storage=$usb_storage_st"
+	echo "uas=$uas_st"
 	echo "r8169=$r8169_st"
 	echo
 	case "$xhci_pci_st" in
@@ -383,8 +400,10 @@ r8169_st=$(mod_presence r8169)
 		;;
 	BUILTIN)
 		echo "SOFT_PATH note: xhci_pci is BUILTIN on this host — no .ko to copy."
-		echo "  Soft kernel path: SKIP (builtin). Collect from a kver that builds"
-		echo "  xhci_pci as a module, or stage .ko from another distro media."
+		echo "  Soft kernel path: SKIP (builtin). STATUS: MOD XHCI PCI SKIP BUILTIN."
+		echo "  USB linux path OPEN for host-controller .ko until collected from a"
+		echo "  kver/distro that builds xhci_pci as a module (all el9 kvers here:"
+		echo "  builtin). Leaf usb-storage may still be modular — see below."
 		echo "greppable: collect-linux-drivers: xhci 8086:a12f xhci_pci=BUILTIN"
 		;;
 	MISSING)
@@ -398,7 +417,47 @@ r8169_st=$(mod_presence r8169)
 	esac
 	echo "greppable: collect-linux-drivers: xhci 8086:a12f xhci_hcd=$xhci_hcd_st"
 	echo "greppable: collect-linux-drivers: xhci 8086:a12f usbcore=$usbcore_st"
+	echo "greppable: collect-linux-drivers: usb_storage=$usb_storage_st"
+	echo "greppable: collect-linux-drivers: uas=$uas_st"
+	if [ "$usb_storage_st" = "PRESENT" ]; then
+		echo
+		echo "MSC leaf: usb-storage.ko PRESENT — optional soft embed:"
+		echo "  ./scripts/embed-linux-mod.sh usb-storage"
+		echo "  → kernel/proc/usb_storage_mod_blob.S (weak; Makefile if present)"
+		echo "  Soft boot: main: soft linux_module usb_storage path …"
+		echo "  Honesty: MSC class alone cannot enumerate a stick without HC+usbcore."
+	fi
 } >"$out/meta/XHCI-STATUS.txt"
+
+# USB stack inventory (HC + MSC leaf) — peer to XHCI-STATUS for D8 honesty.
+{
+	echo "# GreenJade collect — USB linux module path (HC + MSC leaf)"
+	echo "# Generated: $(date -u -Iseconds 2>/dev/null || date -u)"
+	echo "# Host kver: $kver"
+	echo "# Soft≠product. G-AC-1. No GPL source in tree."
+	echo
+	echo "MULTI_MOD_ORDER usb_common usbcore xhci_hcd xhci_pci usb_storage"
+	echo "PCI_HC 8086:a12f"
+	echo
+	echo "usb_common=$usb_common_st"
+	echo "usbcore=$usbcore_st"
+	echo "xhci_hcd=$xhci_hcd_st"
+	echo "xhci_pci=$xhci_pci_st"
+	echo "usb_storage=$usb_storage_st"
+	echo "uas=$uas_st"
+	echo
+	if [ "$xhci_pci_st" = "BUILTIN" ] && [ "$usbcore_st" = "BUILTIN" ]; then
+		echo "HOST_REALITY: xHCI + usbcore BUILTIN (no HC .ko on this host/kver)."
+		echo "  Soft STATUS: MOD XHCI PCI SKIP BUILTIN / USB linux path OPEN builtin"
+		echo "  for controller; MSC leaf may still load soft if usb-storage.ko staged."
+	fi
+	if [ "$usb_storage_st" = "PRESENT" ]; then
+		echo "HOST_REALITY: usb-storage modular PRESENT — stage + optional embed OK."
+		echo "  Next for stick write via Linux modules: need modular (or soft) HC"
+		echo "  stack first; freestanding xhci_msc remains lab BOT path."
+	fi
+	echo "greppable: collect-linux-drivers: usb path OPEN builtin hc=$xhci_pci_st msc=$usb_storage_st"
+} >"$out/meta/USB-STATUS.txt"
 
 # NEEDED-DRIVERS.txt — install checklist for operators
 {
@@ -424,18 +483,25 @@ r8169_st=$(mod_presence r8169)
 	echo "PCI 8086:a12f xHCI presence (this host collect)"
 	echo "  xhci_pci=$xhci_pci_st  xhci_hcd=$xhci_hcd_st"
 	echo "  usbcore=$usbcore_st  usb_common=$usb_common_st"
+	echo "  usb_storage=$usb_storage_st  uas=$uas_st"
 	echo "  r8169=$r8169_st  (NIC peer; soft path separate)"
+	echo "  multi-mod order: usb_common → usbcore → xhci_hcd → xhci_pci → usb_storage"
 	if [ "$xhci_pci_st" = "BUILTIN" ] || [ "$xhci_hcd_st" = "BUILTIN" ]; then
 		echo "  NOTE: host often has xHCI as *builtin* (no .ko). Soft module path"
 		echo "  greps: main: soft linux_module xhci path SKIP builtin"
-		echo "  To stage a .ko: collect from a distro/kver that builds modules,"
-		echo "  then: ./scripts/embed-linux-mod.sh xhci_pci  # optional weak embed"
+		echo "  STATUS: USB linux path OPEN builtin (HC); collect HC .ko from"
+		echo "  a distro/kver that builds modules, then: embed-linux-mod.sh xhci_pci"
 	elif [ "$xhci_pci_st" = "PRESENT" ]; then
 		echo "  NOTE: xhci_pci.ko PRESENT — optional: embed-linux-mod.sh xhci_pci"
 		echo "  Soft path may load_mem if xhci_pci_mod_blob.S is linked."
 	fi
-	echo "  meta detail: meta/XHCI-STATUS.txt"
+	if [ "$usb_storage_st" = "PRESENT" ]; then
+		echo "  NOTE: usb-storage.ko PRESENT — optional: embed-linux-mod.sh usb-storage"
+		echo "  Soft boot may load leaf MSC module (deps still need usbcore/HC)."
+	fi
+	echo "  meta detail: meta/XHCI-STATUS.txt  meta/USB-STATUS.txt"
 	echo "  greppable: collect-linux-drivers: xhci 8086:a12f xhci_pci=$xhci_pci_st"
+	echo "  greppable: collect-linux-drivers: usb_storage=$usb_storage_st"
 	echo
 	echo "How to collect on a working Linux install of the same machine"
 	echo "  1. Boot Linux on the DUT (or identical HW)."
@@ -450,6 +516,7 @@ r8169_st=$(mod_presence r8169)
 	echo "  GJ-PERSIST/linux-drivers/firmware/    — soft firmware blobs"
 	echo "  GJ-PERSIST/linux-drivers/meta/        — maps + RAW-OK + XHCI-STATUS"
 	echo "  EFI/GREENJADE/NEEDED-DRIVERS.txt      — this checklist (ESP copy)"
+	echo "  ESP /linux-drivers/modules/r8169.ko  — UEFI soft media (D4; make hwtest-img)"
 	echo
 	echo "Staged modules (this run)"
 	if ls "$out/modules"/* >/dev/null 2>&1; then
@@ -493,5 +560,25 @@ echo "collect-linux-drivers: PASS out=$out kver=$kver modules=$n_mod raw_ko=$n_r
 echo "  checklist: $out/NEEDED-DRIVERS.txt"
 echo "  raw list:  $out/meta/RAW-OK.txt"
 echo "  xhci:      $out/meta/XHCI-STATUS.txt (8086:a12f xhci_pci=$xhci_pci_st)"
+echo "  usb:       $out/meta/USB-STATUS.txt (usb_storage=$usb_storage_st)"
 echo "  greppable: collect-linux-drivers: PASS"
 echo "  greppable: collect-linux-drivers: xhci 8086:a12f xhci_pci=$xhci_pci_st"
+echo "  greppable: collect-linux-drivers: usb_storage=$usb_storage_st"
+
+# Soft firmware embed for request_firmware HIT (rtl8168*.fw → kernel .incbin).
+# Soft≠product; optional — empty table if xz missing / xzcat absent.
+if [ -x "$root/scripts/embed-linux-fw.sh" ] || [ -f "$root/scripts/embed-linux-fw.sh" ]; then
+	chmod +x "$root/scripts/embed-linux-fw.sh" 2>/dev/null || true
+	GJ_LINUX_DRIVERS="$out" "$root/scripts/embed-linux-fw.sh" || \
+		echo "collect-linux-drivers: warn embed-linux-fw soft-failed (MISS path remains)" >&2
+fi
+
+# Optional USB MSC soft embed when usb-storage.ko staged (leaf; HC often builtin).
+# Soft≠product; weak link via Makefile if kernel/proc/usb_storage_mod_blob.S exists.
+if [ "$usb_storage_st" = "PRESENT" ]; then
+	if [ -x "$root/scripts/embed-linux-mod.sh" ] || [ -f "$root/scripts/embed-linux-mod.sh" ]; then
+		chmod +x "$root/scripts/embed-linux-mod.sh" 2>/dev/null || true
+		GJ_LINUX_DRIVERS="$out" "$root/scripts/embed-linux-mod.sh" usb-storage || \
+			echo "collect-linux-drivers: warn embed usb-storage soft-failed" >&2
+	fi
+fi

@@ -43,7 +43,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SCSI_SOFT_WAVE 70u
@@ -797,22 +797,22 @@ soft_inventory_log(void)
 
     /*
      * Grep: scsi_mid-gj: soft path
-     * Honesty: soft LUN policy ≠ product door INQUIRY path; not bar3.
+     * Honesty: soft LUN policy ≠ product door INQUIRY path.
      * Soft inventory ≠ product multi-server confine.
      */
     msg("scsi_mid-gj: soft path soft_lun=1 door=1 product_inq=door "
         "soft_inq=soft lun_honest=soft multi=soft lba=soft evpd=soft "
         "multi_server=0 confine=0 wave=70 "
-        "(soft inventory; not bar3; soft != product multi-server confine)\n");
+        "(soft inventory; soft != product multi-server confine)\n");
 
     /*
      * Grep: scsi_mid-gj: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    msg("scsi_mid-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    msg("scsi_mid-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 
-    /* Soft lamp only — never a product / bar3 gate. */
+    /* Soft lamp only — never a product gate. */
     msg("scsi_mid-gj: soft inventory PASS\n");
 }
 

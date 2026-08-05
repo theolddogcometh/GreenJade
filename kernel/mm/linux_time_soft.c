@@ -10,22 +10,28 @@
  *   - jiffies: exported volatile unsigned long; sync from timer_jiffies or bump
  *   - msleep / udelay / usleep_range / __const_udelay: capped spins + jiffies
  *   - request_irq table (32 lines): store handler; greppable bind log
+ *   - linux_time_soft_irq_inject(name): soft-call recorded handler (freestanding)
+ *   - _printk / _dev_err / _dev_info / _dev_warn: rate-capped kprintf soft
  *   - memcpy / memset: register freestanding string.c addresses (no reimpl)
  *
- * Soft ≠ product: no live IRQ delivery, no unbounded sleep.
+ * Soft ≠ product: no live PIC/APIC delivery; inject is explicit soft path only.
  *
  * Greppable markers (keep stable):
  *   linux_time_soft: soft init PASS
  *   linux_time_soft: soft ksym register PASS|SKIP
  *   linux_time_soft: soft irq bind irq=…
  *   linux_time_soft: soft irq free irq=…
+ *   linux_time_soft: soft irq inject name=…
  *   linux_time_soft: soft msleep …
+ *   linux_time_soft: soft _printk …
+ *   linux_time_soft: soft _dev_err …
  */
 #include <gj/klog.h>
 #include <gj/linux_time_soft.h>
 #include <gj/string.h>
 #include <gj/timer.h>
 #include <gj/types.h>
+#include <stdarg.h>
 
 /*
  * F2 linux_ksym may be linked later. Weak unresolved → NULL; init skips export.
@@ -55,6 +61,15 @@ static u32  g_cEnableIrq;
 static u32  g_cDisableIrq;
 static u32  g_cPoll;
 static u32  g_cIrqBound;
+static u32  g_cIrqInject;
+static u32  g_cIrqInjectFail;
+static u32  g_cPrintk;
+static u32  g_cDevErr;
+static u32  g_cDevInfo;
+static u32  g_cDevWarn;
+
+/** Soft log cap for _printk / _dev_* (once-ish; Soft≠product flood). */
+#define LTS_LOG_CAP  32u
 
 struct lts_irq_slot {
     void             *pfnHandler;
@@ -297,6 +312,17 @@ usleep_range(unsigned long min, unsigned long max)
     }
 }
 
+void
+usleep_range_state(unsigned long min, unsigned long max, unsigned state)
+{
+    /*
+     * Soft: ignore TASK_* state (no real schedule). Same budget as
+     * usleep_range. Post-probe r8169 delay path. Soft≠product.
+     */
+    (void)state;
+    usleep_range(min, max);
+}
+
 /* ---- IRQ soft table ----------------------------------------------------- */
 
 static int
@@ -456,6 +482,181 @@ disable_irq(unsigned int irq)
     }
 }
 
+/**
+ * Soft IRQ inject by request_irq name.
+ * Looks up the soft table for a matching name, and if a handler was recorded
+ * and disable-depth is 0, calls handler(irq, dev). Optional threaded wake
+ * (soft ret == 2) runs thread_fn. Soft≠product: no APIC; freestanding later.
+ * Grep: linux_time_soft: soft irq inject name=
+ *
+ * Returns 0 on call, LTS_EINVAL if not found / no handler, LTS_EBUSY if
+ * disabled.
+ */
+int
+linux_time_soft_irq_inject(const char *szName)
+{
+    u32 i;
+    struct lts_irq_slot *pSlot;
+    int (*pfnHandler)(int nIrq, void *pDev);
+    int (*pfnThread)(int nIrq, void *pDev);
+    int nRet;
+    /* Soft IRQ_WAKE_THREAD mental model (Linux value is 2). */
+    const int nWakeThread = 2;
+
+    if (!g_fReady) {
+        linux_time_soft_init();
+    }
+    if (szName == NULL || szName[0] == '\0') {
+        if (g_cIrqInjectFail < 0xffffffffu) {
+            g_cIrqInjectFail++;
+        }
+        return LTS_EINVAL;
+    }
+
+    for (i = 0u; i < LINUX_TIME_SOFT_IRQ_MAX; i++) {
+        pSlot = &g_aIrq[i];
+        if (pSlot->u8Used == 0u || pSlot->szName == NULL) {
+            continue;
+        }
+        if (strcmp(pSlot->szName, szName) != 0) {
+            continue;
+        }
+
+        if (pSlot->u32DisableDepth > 0u) {
+            if (g_cIrqInjectFail < 0xffffffffu) {
+                g_cIrqInjectFail++;
+            }
+            /* Grep: linux_time_soft: soft irq inject name= */
+            kprintf("linux_time_soft: soft irq inject name=%s irq=%u "
+                    "SKIP disabled depth=%u (Soft≠product)\n",
+                    szName, (unsigned)i, (unsigned)pSlot->u32DisableDepth);
+            return LTS_EBUSY;
+        }
+
+        pfnHandler = (int (*)(int, void *))(uintptr_t)pSlot->pfnHandler;
+        if (pfnHandler == NULL) {
+            if (g_cIrqInjectFail < 0xffffffffu) {
+                g_cIrqInjectFail++;
+            }
+            return LTS_EINVAL;
+        }
+
+        nRet = pfnHandler((int)i, pSlot->pDev);
+
+        /* Soft threaded path: primary returned wake-thread and thread_fn set. */
+        if (nRet == nWakeThread && pSlot->pfnThread != NULL &&
+            pSlot->pfnThread != pSlot->pfnHandler) {
+            pfnThread = (int (*)(int, void *))(uintptr_t)pSlot->pfnThread;
+            nRet = pfnThread((int)i, pSlot->pDev);
+        }
+
+        if (g_cIrqInject < 0xffffffffu) {
+            g_cIrqInject++;
+        }
+        /* Grep: linux_time_soft: soft irq inject name= */
+        kprintf("linux_time_soft: soft irq inject name=%s irq=%u "
+                "handler=%p dev=%p ret=%d calls=%u (Soft≠product)\n",
+                szName, (unsigned)i, pSlot->pfnHandler, pSlot->pDev, nRet,
+                (unsigned)g_cIrqInject);
+        (void)lts_jiffies_sync();
+        return 0;
+    }
+
+    if (g_cIrqInjectFail < 0xffffffffu) {
+        g_cIrqInjectFail++;
+    }
+    /* Grep: linux_time_soft: soft irq inject name= */
+    kprintf("linux_time_soft: soft irq inject name=%s SKIP unbound "
+            "(Soft≠product)\n",
+            szName);
+    return LTS_EINVAL;
+}
+
+u32
+linux_time_soft_irq_inject_count(void)
+{
+    return g_cIrqInject;
+}
+
+/* ---- Soft _printk / _dev_* (re-register over empty ksym stubs) ---------- */
+
+/**
+ * Soft printk path: print format string only (varargs ignored — Soft≠
+ * full vprintk). Rate-capped. Returns 0 (Linux int _printk).
+ */
+int
+_printk(const char *szFmt, ...)
+{
+    va_list vaArgs;
+
+    va_start(vaArgs, szFmt);
+    va_end(vaArgs);
+
+    if (g_cPrintk < 0xffffffffu) {
+        g_cPrintk++;
+    }
+    if (g_cPrintk > LTS_LOG_CAP) {
+        return 0;
+    }
+    /* Grep: linux_time_soft: soft _printk */
+    kprintf("linux_time_soft: soft _printk calls=%u %s\n",
+            (unsigned)g_cPrintk,
+            (szFmt != NULL && szFmt[0] != '\0') ? szFmt : "");
+    return 0;
+}
+
+static int
+lts_dev_log(u32 *pu32Ctr, const char *szLevel, const void *pDev,
+            const char *szFmt)
+{
+    if (pu32Ctr == NULL) {
+        return 0;
+    }
+    if (*pu32Ctr < 0xffffffffu) {
+        (*pu32Ctr)++;
+    }
+    if (*pu32Ctr > LTS_LOG_CAP) {
+        return 0;
+    }
+    /* Grep: linux_time_soft: soft _dev_err (and info/warn share prefix) */
+    kprintf("linux_time_soft: soft _dev_%s dev=%p calls=%u %s\n",
+            (szLevel != NULL) ? szLevel : "err",
+            pDev,
+            (unsigned)*pu32Ctr,
+            (szFmt != NULL && szFmt[0] != '\0') ? szFmt : "");
+    return 0;
+}
+
+int
+_dev_err(const void *pDev, const char *szFmt, ...)
+{
+    va_list vaArgs;
+
+    va_start(vaArgs, szFmt);
+    va_end(vaArgs);
+    return lts_dev_log(&g_cDevErr, "err", pDev, szFmt);
+}
+
+int
+_dev_info(const void *pDev, const char *szFmt, ...)
+{
+    va_list vaArgs;
+
+    va_start(vaArgs, szFmt);
+    va_end(vaArgs);
+    return lts_dev_log(&g_cDevInfo, "info", pDev, szFmt);
+}
+
+int
+_dev_warn(const void *pDev, const char *szFmt, ...)
+{
+    va_list vaArgs;
+
+    va_start(vaArgs, szFmt);
+    va_end(vaArgs);
+    return lts_dev_log(&g_cDevWarn, "warn", pDev, szFmt);
+}
+
 /* ---- Diagnostics -------------------------------------------------------- */
 
 u32
@@ -506,6 +707,12 @@ linux_time_soft_init(void)
     g_cDisableIrq = 0u;
     g_cPoll = 0u;
     g_cIrqBound = 0u;
+    g_cIrqInject = 0u;
+    g_cIrqInjectFail = 0u;
+    g_cPrintk = 0u;
+    g_cDevErr = 0u;
+    g_cDevInfo = 0u;
+    g_cDevWarn = 0u;
     memset(g_aIrq, 0, sizeof(g_aIrq));
     (void)lts_jiffies_sync();
     g_fReady = 1;
@@ -514,6 +721,7 @@ linux_time_soft_init(void)
      * Export soft bodies for F2 ksym / module resolve.
      * Weak linux_ksym_register: no-op SKIP when F2 not linked yet.
      * memcpy/memset: real freestanding string helpers (do not reimplement).
+     * _printk / _dev_*: replace empty ksym stubs for r8169 early probe logs.
      */
     u32KsymOk = 0u;
     u32KsymSkip = 0u;
@@ -524,12 +732,19 @@ linux_time_soft_init(void)
     lts_ksym_one("udelay", (void *)udelay, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("usleep_range", (void *)usleep_range, &u32KsymOk,
                  &u32KsymSkip);
+    lts_ksym_one("usleep_range_state", (void *)usleep_range_state, &u32KsymOk,
+                 &u32KsymSkip);
     lts_ksym_one("request_irq", (void *)request_irq, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("request_threaded_irq", (void *)request_threaded_irq,
                  &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("free_irq", (void *)free_irq, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("enable_irq", (void *)enable_irq, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("disable_irq", (void *)disable_irq, &u32KsymOk, &u32KsymSkip);
+    lts_ksym_one("_printk", (void *)_printk, &u32KsymOk, &u32KsymSkip);
+    lts_ksym_one("printk", (void *)_printk, &u32KsymOk, &u32KsymSkip);
+    lts_ksym_one("_dev_err", (void *)_dev_err, &u32KsymOk, &u32KsymSkip);
+    lts_ksym_one("_dev_info", (void *)_dev_info, &u32KsymOk, &u32KsymSkip);
+    lts_ksym_one("_dev_warn", (void *)_dev_warn, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("memcpy", (void *)memcpy, &u32KsymOk, &u32KsymSkip);
     lts_ksym_one("memset", (void *)memset, &u32KsymOk, &u32KsymSkip);
 

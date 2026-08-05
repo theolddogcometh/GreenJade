@@ -20,10 +20,12 @@
  * Relocs applied: R_X86_64_{64,PC32,PLT32,32,32S,GOTPCREL,GOTPCRELX,
  * REX_GOTPCRELX}. Others skipped with a soft log line.
  *
- * greppable: linux_module: soft load PASS|FAIL name= missing=
+ * greppable: linux_module: soft load source=embed|media|mem|finit name=
+ * greppable: linux_module: soft load PASS|FAIL source= name= missing=
  * greppable: linux_module: soft init PASS|FAIL
  * greppable: linux_module: soft exit
  * greppable: linux_module: soft reloc skip
+ * greppable: linux_module: soft media path OPEN|SKIP name= reason=
  */
 #include <gj/config.h>
 #include <gj/error.h>
@@ -791,14 +793,35 @@ linux_module_init(void)
             (unsigned)GJ_LINUX_MODULE_MAX, (unsigned)g_cMod);
 }
 
+/*
+ * Fail lamp with source tag (D4/D5 honesty). Soft≠product.
+ * greppable: linux_module: soft load FAIL source= name= missing=
+ */
+static void
+lmod_lamp_fail(const char *szSrc, const char *szName, const char *szMiss)
+{
+    kprintf("linux_module: soft load FAIL source=%s name=%s missing=%s\n",
+            szSrc != NULL && szSrc[0] != '\0' ? szSrc : "mem",
+            szName != NULL && szName[0] != '\0' ? szName : "anon",
+            szMiss != NULL && szMiss[0] != '\0' ? szMiss : "-");
+}
+
 i64
 linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
+{
+    return linux_module_load_mem_src(pElf, cb, szName, "mem");
+}
+
+i64
+linux_module_load_mem_src(const void *pElf, size_t cb, const char *szName,
+                          const char *szSource)
 {
     const u8 *pImg;
     const struct elf64_ehdr *pEh;
     const struct elf64_shdr *pShSym = NULL;
     const struct elf64_sym *pSym0 = NULL;
     const char *pStr = NULL;
+    const char *szSrc;
     u64 cbStr = 0;
     u32 cSym = 0;
     u32 iSh;
@@ -818,10 +841,10 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
 
     lmod_set_unres("");
 
-    if (pElf == NULL || cb < sizeof(struct elf64_ehdr)) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n",
-                szName != NULL ? szName : "anon");
-        return (i64)GJ_ERR_INVAL;
+    if (szSource != NULL && szSource[0] != '\0') {
+        szSrc = szSource;
+    } else {
+        szSrc = "mem";
     }
 
     if (szName != NULL && szName[0] != '\0') {
@@ -830,19 +853,27 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
         (void)strlcpy(szModName, "anon", sizeof(szModName));
     }
 
+    /* Attempt lamp first — greppable even when load fails early. */
+    kprintf("linux_module: soft load source=%s name=%s\n", szSrc, szModName);
+
+    if (pElf == NULL || cb < sizeof(struct elf64_ehdr)) {
+        lmod_lamp_fail(szSrc, szModName, "-");
+        return (i64)GJ_ERR_INVAL;
+    }
+
     if (lmod_find(szModName) != NULL) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_BUSY;
     }
     if (g_cMod >= GJ_LINUX_MODULE_MAX) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
 
     pImg = (const u8 *)pElf;
     pEh = (const struct elf64_ehdr *)pImg;
     if (!lmod_ehdr_ok(pEh, cb)) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_INVAL;
     }
 
@@ -854,8 +885,7 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
         const struct elf64_shdr *pSh = lmod_shdr(pImg, pEh, iSh);
 
         if (!lmod_sh_in_image(pSh, cb)) {
-            kprintf("linux_module: soft load FAIL name=%s missing=-\n",
-                    szModName);
+            lmod_lamp_fail(szSrc, szModName, "-");
             return (i64)GJ_ERR_INVAL;
         }
         if (pSh->u32Type == SHT_SYMTAB && pShSym == NULL) {
@@ -866,21 +896,18 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
             u64Ent = pSh->u64Entsize ? pSh->u64Entsize
                                      : (u64)sizeof(struct elf64_sym);
             if (u64Ent < sizeof(struct elf64_sym) || pSh->u64Size < u64Ent) {
-                kprintf("linux_module: soft load FAIL name=%s missing=-\n",
-                        szModName);
+                lmod_lamp_fail(szSrc, szModName, "-");
                 return (i64)GJ_ERR_INVAL;
             }
             cSym = (u32)(pSh->u64Size / u64Ent);
             pSym0 = (const struct elf64_sym *)(pImg + pSh->u64Offset);
             if (pSh->u32Link >= pEh->u16Shnum) {
-                kprintf("linux_module: soft load FAIL name=%s missing=-\n",
-                        szModName);
+                lmod_lamp_fail(szSrc, szModName, "-");
                 return (i64)GJ_ERR_INVAL;
             }
             pShStr = lmod_shdr(pImg, pEh, pSh->u32Link);
             if (pShStr->u32Type != SHT_STRTAB || !lmod_sh_in_image(pShStr, cb)) {
-                kprintf("linux_module: soft load FAIL name=%s missing=-\n",
-                        szModName);
+                lmod_lamp_fail(szSrc, szModName, "-");
                 return (i64)GJ_ERR_INVAL;
             }
             pStr = (const char *)(pImg + pShStr->u64Offset);
@@ -950,7 +977,7 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
     }
 
     if (cGot > GJ_LMOD_GOT_MAX) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
 
@@ -967,7 +994,7 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
 
     cPages = (u32)GJ_BYTES_TO_PAGES(u64Cursor);
     if (cPages == 0 || cPages > GJ_LMOD_PAGES_MAX) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
 
@@ -977,14 +1004,14 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
         paBase = pmm_alloc_pages(cPages);
     }
     if (paBase == 0) {
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
     lmod_zero_pages(paBase, cPages);
     pLoad = lmod_va(paBase);
     if (pLoad == NULL) {
         lmod_free_pages(paBase, cPages);
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
 
@@ -1006,7 +1033,7 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
     pMod = lmod_alloc_slot();
     if (pMod == NULL) {
         lmod_free_pages(paBase, cPages);
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_NOMEM;
     }
 
@@ -1022,7 +1049,7 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
 
     if (pSym0 == NULL || pStr == NULL) {
         lmod_free_slot(pMod);
-        kprintf("linux_module: soft load FAIL name=%s missing=-\n", szModName);
+        lmod_lamp_fail(szSrc, szModName, "-");
         return (i64)GJ_ERR_INVAL;
     }
 
@@ -1031,17 +1058,16 @@ linux_module_load_mem(const void *pElf, size_t cb, const char *szName)
         const char *szMiss =
             g_szLastUnres[0] != '\0' ? g_szLastUnres : "-";
         lmod_free_slot(pMod);
-        kprintf("linux_module: soft load FAIL name=%s missing=%s\n", szModName,
-                szMiss);
+        lmod_lamp_fail(szSrc, szModName, szMiss);
         return i64St;
     }
 
     lmod_bind_init_exit(pMod, pSym0, cSym, pStr, cbStr);
     g_cMod++;
 
-    kprintf("linux_module: soft load PASS name=%s missing=- pages=%u got=%u "
-            "init=%u exit=%u\n",
-            pMod->szName, (unsigned)pMod->cPages, (unsigned)pMod->cGot,
+    kprintf("linux_module: soft load PASS source=%s name=%s missing=- "
+            "pages=%u got=%u init=%u exit=%u\n",
+            szSrc, pMod->szName, (unsigned)pMod->cPages, (unsigned)pMod->cGot,
             pMod->pfnInit != NULL ? 1u : 0u, pMod->pfnExit != NULL ? 1u : 0u);
     return (i64)GJ_OK;
 }
@@ -1100,6 +1126,33 @@ int
 linux_module_loaded(const char *szName)
 {
     return lmod_find(szName) != NULL ? 1 : 0;
+}
+
+int
+linux_module_load_va_range(const char *szName, void **ppBase, u64 *pcb)
+{
+    struct gj_lmod *pMod;
+
+    if (ppBase != NULL) {
+        *ppBase = NULL;
+    }
+    if (pcb != NULL) {
+        *pcb = 0;
+    }
+    if (!g_fInited) {
+        return -1;
+    }
+    pMod = lmod_find(szName);
+    if (pMod == NULL || pMod->pLoad == NULL || pMod->cbLoad == 0ull) {
+        return -1;
+    }
+    if (ppBase != NULL) {
+        *ppBase = pMod->pLoad;
+    }
+    if (pcb != NULL) {
+        *pcb = pMod->cbLoad;
+    }
+    return 0;
 }
 
 u32

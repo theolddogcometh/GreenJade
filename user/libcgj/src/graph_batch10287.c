@@ -13,7 +13,7 @@
  *
  * Bar3 checklist soft product stubs CREATE-ONLY (10281-10290). Unique
  * gj_bar3_audio_check_u_10287 surface only; no multi-def. Distinct from
- * other audio / bar3 product lamps. Bar3 remains open at this wave.
+ * other audio product lamps. Bar3 remains open at this wave.
  * No parent wires.
  *
  * Clean-room freestanding pure C (integer only). Compiles with

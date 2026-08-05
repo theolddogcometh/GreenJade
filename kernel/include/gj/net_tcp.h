@@ -22,16 +22,17 @@
  *
  * Poll integration:
  *   net_eth_poll → net_tcp_input (per TCP frame) then net_tcp_poll
- *   (rtx last unacked data seg + TIME_WAIT soft reap after TCP_TW_MS).
+ *   (rtx SYN/SYN-ACK + last unacked data seg + TIME_WAIT soft reap).
  *   Cold poll/epoll readiness: net_tcp_poll_mask / net_tcp_fd_ok
  *   (POLLIN/OUT/ERR/HUP from RX, accept queue, write window, closed).
  *
  * Stats (accepts, segments, bytes_rx/tx, retransmits, tw_reaps):
  *   segs = TX segments + RX segments seen by net_tcp_input
- *   rtx  = successful last-segment retransmits from net_tcp_poll
+ *   rtx  = successful SYN/data retransmits from net_tcp_poll
  *   Exposed via net_door TCP_STATS and getters below.
  *
  * Greppable: multi-seg bulk / soft TIME_WAIT / listen backlog soft
+ *   net_tcp: soft eth syn …   — passive SYN → SYN-ACK on freestanding NIC
  */
 #pragma once
 
@@ -102,8 +103,9 @@ u32 net_tcp_poll_mask(i64 i64Fd, u32 u32Want);
 int net_tcp_input(const u8 *pFrame, u32 cb);
 
 /**
- * Idle tick: retransmit last unacked data segment (TCP_RTX_MS / max)
- * + TIME_WAIT soft reap (TCP_TW_MS). Called from net_eth_poll.
+ * Idle tick: retransmit SYN/SYN-ACK + last unacked data segment
+ * (TCP_RTX_MS / max) + TIME_WAIT soft reap (TCP_TW_MS).
+ * Called from net_eth_poll so external handshake survives sshd park.
  */
 void net_tcp_poll(void);
 

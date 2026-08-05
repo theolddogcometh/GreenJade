@@ -36,7 +36,7 @@
  *   libgj-gnu: soft inventory wave=70 surfaces=12 caps=0xf stamp=GNU1
  *   libgj-gnu: soft deepen wave=70 areas=export,stamp,caps,get,id,probe,
  *              touch,inventory,wave,surface,path,note
- *   libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 bar3=0
+ *   libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1
  * Diagnostics only — never a product bar3 claim; product 0x43 unchanged.
  */
 #include <stdint.h>
@@ -58,7 +58,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define GJ_GNU_SOFT_WAVE 70u
@@ -95,7 +95,7 @@ static const char g_szGnuSoftInventory[] =
     "export=0x43 stamp=GNU1 caps=0xf "
     "get=1 id=1 probe=1 touch=1 inventory=1 deepen=1 path=1 note=1 "
     "hash=gnu soname=libgj-gnu.so.1 freestanding=1 "
-    "multi_server=0 confine=0 bar3=0";
+    "multi_server=0 confine=0";
 
 /*
  * Wave 126 soft deepen stamp.
@@ -106,7 +106,7 @@ static const char g_szGnuSoftDeepen[] =
     "libgj-gnu: soft deepen wave=70 areas=12 "
     "export,stamp,caps,get,id,probe,touch,inventory,wave,surface,path,note "
     "product_export=0x43 soft_stamp=GNU1 hot_path=clean "
-    "multi_server=0 confine=0 bar3=0";
+    "multi_server=0 confine=0";
 
 /*
  * Soft path honesty line.
@@ -115,14 +115,14 @@ static const char g_szGnuSoftDeepen[] =
 static const char g_szGnuSoftPath[] =
     "libgj-gnu: soft path hash=gnu soname=libgj-gnu.so.1 "
     "export=0x43 freestanding=1 pure_c=1 no_heap=1 "
-    "multi_server=0 confine=0 bar3=0 (soft inventory; not bar3)";
+    "multi_server=0 confine=0 (soft inventory)";
 
 /*
  * Soft honesty line (Wave 126 exclusive).
  * Grep: libgj-gnu: soft honesty
  */
 static const char g_szGnuSoftHonesty[] =
-    "libgj-gnu: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 "
+    "libgj-gnu: soft honesty multi_server=0 confine=0 exclusive=1 "
     "soft=1 product_kernel=OPEN wave=70";
 
 /* Soft area name catalog (Wave 111; cold only). */

@@ -2,30 +2,45 @@
 
 | Field | Value |
 |-------|--------|
-| **Status** | **PLAN only** — EMU bind stays live; real `.ko` probe **not** enabled |
-| **Host oracle** | RHEL 9.8-class **5.14.0-687** x86_64 (`/lib/modules/…/build`, `vmlinux.h`) |
+| **Status** | **REAL probe soft PASS** proven (lab REAL+SOFT1 stable; prior EMU `PROBE … SOFT` / first `NETDEV SOFT 1`); freestanding still owns MMIO; **next** = D7 datapath / soft open · MMIO handoff |
+| **Host oracle** | RHEL 9.8-class **5.14.0-687** x86_64 — `sizeof(pci_dev)` = **`0xb40`** (2880) |
+| **Offset header** | [`kernel/include/gj/linux_pci_hostish_off.h`](../kernel/include/gj/linux_pci_hostish_off.h) |
 | **Soft code** | [`kernel/include/gj/linux_pci_soft.h`](../kernel/include/gj/linux_pci_soft.h) · [`kernel/mm/linux_pci_soft.c`](../kernel/mm/linux_pci_soft.c) |
 | **Law** | Dual **MIT OR Apache-2.0**; **no GPL source** in tree; host headers / staged `.ko` are **oracle only** |
-| **Honesty** | **Soft ≠ ABI-stable** — do **not** claim binary layout match to any Linux kver |
+| **Honesty** | **Soft ≠ ABI-stable** — do **not** claim binary layout match to any Linux kver; **soft ≠ product** (**G-AC-1**) |
 
 Companion: [LINUX_MODULE_PATH.md](LINUX_MODULE_PATH.md) · [LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md) · `build/linux-drivers/meta/R8169-UNRESOLVED-PLAN.txt`.
 
 ---
 
-## 1. Why EMU bind exists
+## 0. Wave note — 2026-08-04 (REAL probe soft PASS)
+
+**Lab evidence (G752):** `PROBE 10ec:8168 REAL` `ST=0` `NETDEV SOFT 1` (stable). Prior EMU: first `NETDEV SOFT 1` / `PROBE … SOFT`.
+
+| Fact | Detail |
+|------|--------|
+| **What works** | 40-byte `pci_device_id` stride; soft register + id match; **Strategy A** hostish blob **`0xb40`** real `probe()` → **ST=0**; Soft L2 ON when REAL |
+| **What does not** | Product TX/RX; freestanding **still owns MMIO** (not handed off) |
+| **Proven** | Real `r8169` probe soft PASS on hostish `pci_dev` (REAL+SOFT1) |
+| **Next** | **D7** net datapath · soft open/TX · MMIO handoff design · soft NAPI · hold14 refresh |
+| **xHCI** | Module path **SKIP builtin** — out of scope for this NIC experiment |
+
+---
+
+## 1. Why EMU bind exists (and stays default)
 
 GreenJade soft `struct pci_dev` is a **small clean-room snapshot** (vendor/device/BDF/BARs/irq/drvdata) used by soft helpers and inventory fill.
 
-Linux `struct pci_dev` (host RHEL 5.14) is a **multi-kilobyte** object: list links, `struct pci_bus *`, capability caches, **embedded `struct device`**, `struct resource resource[17]`, enable refcounts, MSI bookkeeping, RH KABI pads, …
+Linux `struct pci_dev` (host RHEL 5.14) is **`0xb40` bytes**: list links, `struct pci_bus *`, capability caches, **embedded `struct device`**, `struct resource resource[17]`, enable refcounts, MSI bookkeeping, RH KABI pads, …
 
-Calling real `r8169` `probe(pdev, id)` with the soft object would read/write **wrong offsets** (fault or memory corruption). Current path:
+Calling real `r8169` `probe(pdev, id)` with the soft object would read/write **wrong offsets** (fault or memory corruption). **EMU path** (lab):
 
 ```text
 id_table match → lpcis_soft_emu_bind → soft netdev register
-                 (NO .ko probe; lamp: soft probe emu …)
+                 (NO .ko probe; lamp: probe 10ec:8168 soft / NETDEV SOFT 1)
 ```
 
-Goal of this doc: list **early probe requirements** and a **recommended soft field order** so a future “probe-shaped” buffer can be filled **before** re-enabling real probe. Until then EMU remains correct.
+**Strategy A proven** (lab REAL+SOFT1): hostish **`0xb40`** blob filled from inventory → gated `.ko` probe → `PROBE … REAL` `ST=0` `NETDEV SOFT 1`. Soft ≠ product. EMU remains fallback on fault/nonzero. Goal of this doc: field/offset plan for hostish fill + deepen (post-probe soft open / MMIO handoff still OPEN).
 
 ---
 
@@ -86,7 +101,7 @@ Soft≠ABI-stable: offsets below are **host facts for one kver**, not a GreenJad
 
 ### 3.1 Early `pci_dev` header (stable prefix on this host)
 
-Computed from host `vmlinux.h` field order (x86_64 LP64, natural alignment):
+Oracle stamp: **`LINUX_PCI_HOSTISH_SIZE_PCI_DEV = 0x0b40`** in `linux_pci_hostish_off.h` (measured 2026-08-03, `5.14.0-687.15.1.el9_8.x86_64`). Soft≠ABI-stable across kver.
 
 | Offset (host) | Field | Size / notes | Needed early for r8169? |
 |---------------|-------|--------------|-------------------------|
@@ -104,6 +119,10 @@ Computed from host `vmlinux.h` field order (x86_64 LP64, natural alignment):
 | `0x44` | `class` | `u32` | Low after match |
 | `0x48` | `revision` | `u8` | **Yes** often (chip rev) |
 | `0x49` | `hdr_type` | `u8` | Low |
+| `0xc8` | embedded `dev` | `struct device` (~0x300) | **Yes** — drvdata / DMA / parent |
+| `0x3cc` | `irq` | `unsigned int` | **Yes** |
+| `0x3d0` | `resource[0]` | each res **0x40** | **Yes** BAR phys |
+| `0x858` | `enable_cnt` | refcount | **Yes** if enable real |
 
 Soft today: `vendor` at **offset 0**, `devfn` as **u8**, no `bus*` — **cannot** satisfy inlined host offsets.
 
@@ -203,30 +222,28 @@ Do **not** flip EMU→real probe until a dedicated “probe-shaped” buffer exi
 
 - **ABI-stable product `pci_dev`** across all distros  
 - Shipping GPL `.ko` as bar3 / product AC (**G-AC-1**)  
-- Changing **`pci_device_id` stride** (40-byte RHEL row — separate work; do not regress)
+- Changing **`pci_device_id` stride** (40-byte RHEL row — **proven**; do not regress)
 
 ---
 
-## 6. Implementation strategies (pick one later)
+## 6. Implementation strategies — **A proven (soft PASS)**
 
-| Strategy | Pros | Cons |
-|----------|------|------|
-| **A. Dual object** — soft inventory `pci_dev` + hostish probe blob | Soft helpers stay simple; EMU unchanged | Two fills; offset table per kver |
-| **B. Grow soft struct** toward host offsets with explicit pads | One object | Fragile; RH_KABI; huge pads; easy to get wrong |
-| **C. Stay EMU forever** + UDX product NIC | Law-friendly product path | Module-path D6 “real probe” stays OPEN |
+| Strategy | Pros | Cons | Status |
+|----------|------|------|--------|
+| **A. Dual object** — soft inventory `pci_dev` + hostish probe blob **`0xb40`** | Soft helpers stay simple; EMU fallback | Two fills; offset table per kver | **REAL probe soft PASS** (REAL+SOFT1) |
+| **B. Grow soft struct** toward host offsets with explicit pads | One object | Fragile; RH_KABI; huge pads; easy to get wrong | Not chosen |
+| **C. Stay EMU forever** + UDX product NIC | Law-friendly product path | Module-path real probe unused | EMU remains **fallback** + product path |
 
-**Recommendation:** **A** for module-path experiments; product laptop NIC remains UDX/DDI ([LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md)).
-
-When real probe is wired:
+**Recommendation (active):** **A** landed for module-path soft probe; product laptop NIC remains UDX/DDI ([LAPTOP_LINUX_DRIVER_HOST.md](LAPTOP_LINUX_DRIVER_HOST.md)). Offsets live in `linux_pci_hostish_off.h` (`SIZE_PCI_DEV=0xb40`, blob pool `0xc00`).
 
 ```text
-match → fill hostish blob from inventory
-      → optional: still log soft probe emu OFF
+match → fill hostish blob (0xb40) from inventory
       → call pView->probe(pHostish, pId)
+      → ST=0 → PROBE REAL + NETDEV SOFT 1 (proven REAL+SOFT1)
       → on fault/nonzero: fall back EMU + FAIL lamp
 ```
 
-Gate behind an explicit flag so default boot **keeps EMU** until proven.
+**Next (not probe):** D7 datapath · soft open/TX · MMIO handoff (freestanding still owns MMIO). Soft ≠ product.
 
 ---
 
@@ -252,12 +269,16 @@ pahole -C pci_dev /lib/modules/$(uname -r)/build/vmlinux 2>/dev/null | head
 
 | Lamp | Meaning |
 |------|---------|
-| `linux_pci_soft: soft probe emu (no .ko probe; …)` | Current safe path |
+| `linux_pci_soft: soft probe emu (no .ko probe; …)` | EMU fallback path (`NETDEV SOFT 1`) |
 | `linux_pci_soft: soft pci_dev incomplete field=…` | Fill notes missing host-shaped pieces |
-| `linux_pci_soft: soft probe 10ec:8168 PASS\|FAIL\|SKIP` | Bind outcome (EMU or future real) |
+| `linux_pci_soft: soft probe 10ec:8168 PASS\|FAIL\|SKIP` | Bind outcome (REAL or EMU) |
 | `linux_pci_soft: soft force emu 10ec:8168 PASS\|SKIP` | Safety-net bind without `.ko` register |
+| STATUS `netdev soft 1` / `pci reg=1 match=1` | Soft register + match |
+| STATUS `probe 10ec:8168 real` | Hostish real probe (lab REAL+SOFT1) |
+| STATUS `probe 10ec:8168 soft` | EMU soft bind lamp |
 
 ---
 
-*Soft ≠ product. Soft ≠ ABI-stable. Host layout is oracle for one kver only.*
-*EMU bind remains correct until a probe-shaped blob is intentionally enabled.*
+*Soft ≠ product. Soft ≠ ABI-stable. Host layout is oracle for one kver only (`0xb40` on RHEL 5.14.0-687).*  
+*Dual MIT OR Apache-2.0 tree; G-AC-1 — no `.ko` product AC.*  
+*REAL probe soft PASS proven (REAL+SOFT1); next = D7 datapath / MMIO handoff (freestanding owns MMIO).*

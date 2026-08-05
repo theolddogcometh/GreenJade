@@ -163,7 +163,7 @@ mmio_soft_inventory_log(void)
      * Grep: udx: mmio soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    mmio_soft_emit("udx: mmio soft honesty multi_server=0 confine=0 bar3=0 "
+    mmio_soft_emit("udx: mmio soft honesty multi_server=0 confine=0 "
                   "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
                   UDX_MMIO_SOFT_WAVE);
 
@@ -298,5 +298,5 @@ udx_iounmap(struct udx_iomem *pIo)
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */

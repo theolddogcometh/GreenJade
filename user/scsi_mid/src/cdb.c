@@ -962,10 +962,10 @@ scsi_mid_soft_inventory_log(void)
     (void)gj_debug_log(
         "scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
         "lun_honest=soft multi_server=0 confine=0 wave=70 "
-        "(soft inventory; not bar3)\n",
+        "(soft inventory)\n",
         138);
     (void)gj_debug_log(
-        "scsi_mid: soft honesty multi_server=0 confine=0 bar3=0 "
+        "scsi_mid: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n",
         82);
     (void)gj_debug_log("scsi_mid: soft inventory PASS\n", 30);
@@ -1023,21 +1023,21 @@ scsi_mid_soft_inventory_log(void)
 
     /*
      * Grep: scsi_mid: soft path
-     * Honesty: soft LUN ≠ product door INQUIRY; not bar3.
+     * Honesty: soft LUN ≠ product door INQUIRY.
      */
     printf("scsi_mid: soft path soft_lun=1 product_inq=door soft_inq=soft "
            "lun_honest=soft multi_server=0 confine=0 wave=%u "
-           "(soft inventory; not bar3)\n",
+           "(soft inventory)\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 
     /* Grep: scsi_mid: soft honesty (Wave 126 exclusive deepen) */
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
-    printf("scsi_mid: soft honesty multi_server=0 confine=0 bar3=0 "
+    printf("scsi_mid: soft honesty multi_server=0 confine=0 "
            "exclusive=1 soft=1 product_kernel=OPEN wave=%u\n",
            (unsigned)SCSI_MID_SOFT_WAVE);
 

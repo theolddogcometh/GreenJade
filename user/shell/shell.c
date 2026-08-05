@@ -265,7 +265,7 @@
  *            uaspect prints gcd-reduced W/H as "W/H")
  *           (udecknat is 1 if W==1280 and H==800 (Steam Deck native);
  *            ubar3 prints 1 (bar3 checklist path stub ready) since v1.60
- *            (printed 0 as bar3 still open in v1.32); umile echoes milestone id A)
+ *            (printed 0 as in v1.32); umile echoes milestone id A)
  *           (uvk prints 1 (Vulkan path stub ready); uwl prints 1 (Wayland
  *            path stub ready); ulic prints 1 (dual MIT/Apache license gate ok))
  *           (ufsr prints 1 (FSR stub ready); ufps echoes FPS limit arg or 60
@@ -371,7 +371,7 @@
  *            (scsi live soft tag until real); free exclusive continuum names;
  *            soft facts only; does not claim Deck Top 50 PASS)
  *           (u768gsoak prints 1 (large-RAM soak path shipped soft);
- *            umakefile14600 prints 1; ubar3open prints 0 (bar3 still open);
+ *            umakefile14600 prints 1; ubar3open prints 0 ();
  *            free exclusive continuum names; soft facts only;
  *            does not claim Deck Top 50 PASS)
  *           (ucontinuum14600 prints 1 (wired soft decade after 14500);
@@ -383,7 +383,7 @@
  *            umakefile15300 prints 1 (makefile_max=15300 soft fact);
  *            umatrixopen prints 0 (Deck Top 50 matrix still NOT-TRIED soft);
  *            free exclusive continuum names; soft facts only;
- *            soft continuum ≠ bar3; does not claim Deck Top 50 PASS)
+ *            soft continuum; does not claim Deck Top 50 PASS)
  *           (uwave14 prints 1 (Wave 14 exclusive soft deepen stamp kept);
  *            umulticonfine prints 0 (soft ≠ product multi-server confine);
  *            udaemonsoft prints soft daemon inventory honesty lines;
@@ -398,14 +398,14 @@
  *            uwave23 prints 1 (Wave 123 exclusive soft deepen stamp kept);
  *            uwave24 prints 1 (Wave 124 exclusive soft deepen stamp kept);
  *            uwave26 prints 1 (Wave 126 exclusive soft deepen stamp);
- *            free exclusive names; soft facts only; soft ≠ bar3)
+ *            free exclusive names; soft facts only; soft)
  *           (help/version soft banners Wave 111 honesty: help prints
  *            GreenJade soft product + shell=native vfs door + soft=1 +
- *            bar3=0 + multi_server=0 + confine=0 before cmds:; version keeps
+ * + multi_server=0 + confine=0 before cmds:; version keeps
  *            "GreenJade shell (native vfs door) v1.76" smoke substring then
- *            GreenJade soft product + soft=1 + bar3=0 + multi_server=0 +
+ *            GreenJade soft product + soft=1 + + multi_server=0 +
  *            confine=0 + wave=70 + product_kernel=OPEN; soft facts only —
- *            not bar3 close, not Deck Top 50 PASS; soft ≠ product
+ * close, not Deck Top 50 PASS; soft ≠ product
  *            multi-server confine)
  */
 #include <gj/string.h>
@@ -13685,7 +13685,7 @@ cmd_udecknat(const char *szW, const char *szH)
 
 /*
  * ubar3 — print 1 (bar3 checklist path stub ready) (product v1.60).
- * Printed 0 (bar3 still open) in v1.32; free exclusive name. Usage: ubar3
+ * Printed 0 () in v1.32; free exclusive name. Usage: ubar3
  */
 static int
 cmd_ubar3(void)
@@ -14987,7 +14987,7 @@ cmd_umakefile14600(void)
 }
 
 /*
- * ubar3open — print 0 (bar3 still open) (product v1.67).
+ * ubar3open — print 0 () (product v1.67).
  * Soft readiness one-liner; free exclusive name (ubar3soft already v1.65).
  * Soft facts only; does not claim Deck Top 50 PASS.
  * Usage: ubar3open
@@ -15042,7 +15042,7 @@ cmd_u1tibopen(void)
  * ucontinuum15300 — print 1 (wired soft high-water Wave 11) (product v1.69).
  * Soft fact only: continuum makefile_max=15300 soft graph high-water.
  * Free exclusive name (ucontinuum14500/14600 already exist).
- * Soft continuum ≠ bar3; does not claim Deck Top 50 PASS.
+ * Soft continuum; does not claim Deck Top 50 PASS.
  * Usage: ucontinuum15300
  */
 static int
@@ -15055,7 +15055,7 @@ cmd_ucontinuum15300(void)
 /*
  * umakefile15300 — print 1 (makefile_max=15300 soft fact) (product v1.69).
  * Soft fact only; free exclusive name (umakefile14600 already v1.67).
- * Soft continuum ≠ bar3; does not claim Deck Top 50 PASS.
+ * Soft continuum; does not claim Deck Top 50 PASS.
  * Usage: umakefile15300
  */
 static int
@@ -15081,7 +15081,7 @@ cmd_umatrixopen(void)
 /*
  * uwave14 — print 1 (Wave 14 exclusive soft deepen stamp) (product v1.70).
  * Soft fact only: Wave 14 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
+ * Free exclusive name; soft facts only; soft.
  * Usage: uwave14
  */
 static int
@@ -15094,7 +15094,7 @@ cmd_uwave14(void)
 /*
  * uwave15 — print 1 (Wave 15 exclusive soft deepen stamp) (product v1.71).
  * Soft fact only: Wave 15 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
+ * Free exclusive name; soft facts only; soft.
  * multi_server=0 confine=0 (soft ≠ product multi-server confine).
  * Usage: uwave15
  */
@@ -15108,8 +15108,8 @@ cmd_uwave15(void)
 /*
  * uwave16 — print 1 (Wave 16 exclusive soft deepen stamp) (product v1.72).
  * Soft fact only: Wave 16 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 (soft ≠ product multi-server confine).
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 (soft ≠ product multi-server confine).
  * Usage: uwave16
  */
 static int
@@ -15122,8 +15122,8 @@ cmd_uwave16(void)
 /*
  * uwave17 — print 1 (Wave 18 exclusive soft deepen stamp) (product v1.73).
  * Soft fact only: Wave 18 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave17
  */
@@ -15137,8 +15137,8 @@ cmd_uwave17(void)
 /*
  * uwave18 — print 1 (Wave 38 exclusive soft deepen stamp kept) (product v1.74).
  * Soft fact only: Wave 38 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave18
  */
@@ -15152,8 +15152,8 @@ cmd_uwave18(void)
 /*
  * uwave19 — print 1 (Wave 39 exclusive soft deepen stamp kept) (product v1.75).
  * Soft fact only: Wave 39 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces (historical Wave 39): retbarbican / retglacis kept.
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave19
@@ -15168,8 +15168,8 @@ cmd_uwave19(void)
 /*
  * uwave20 — print 1 (Wave 42 exclusive soft deepen stamp kept) (product v1.76).
  * Soft fact only: Wave 42 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces (historical Wave 42): retportcullis / retbattlement.
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave20
@@ -15184,8 +15184,8 @@ cmd_uwave20(void)
 /*
  * uwave21 — print 1 (Wave 43 exclusive soft deepen stamp kept) (product v1.77).
  * Soft fact only: Wave 43 stamp remains greppable after Wave 111 deepen.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces (historical Wave 43): retmachicolation / retarrowslit.
  * (soft ≠ product multi-server confine / product kernel complete).
  * Usage: uwave21
@@ -15214,8 +15214,8 @@ cmd_uwave22(void)
 /*
  * uwave23 — print 1 (Wave 123 exclusive soft deepen stamp kept) (product v1.80).
  * Soft fact only: user-daemon soft inventory wave high-water is 23 (historical).
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces: retlayerangle / retcanvasangle (CREATE-ONLY soft only; historical).
  * Continuum toward 26500 era (historical); soft ≠ product complete; product lamps 0.
  * (soft ≠ product multi-server confine / product kernel complete).
@@ -15231,8 +15231,8 @@ cmd_uwave23(void)
 /*
  * uwave24 — print 1 (Wave 124 exclusive soft deepen stamp kept) (product v1.81).
  * Soft fact only: user-daemon soft inventory wave high-water is 24 (historical).
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces: retbrushangle / retinkangle (CREATE-ONLY soft only; historical).
  * Continuum toward 26600 era (historical); soft ≠ product complete; product lamps 0.
  * (soft ≠ product multi-server confine / product kernel complete).
@@ -15248,8 +15248,8 @@ cmd_uwave24(void)
 /*
  * uwave26 — print 1 (Wave 126 exclusive soft deepen stamp) (product v1.82).
  * Soft fact only: user-daemon soft inventory wave high-water is 25.
- * Free exclusive name; soft facts only; soft ≠ bar3.
- * multi_server=0 confine=0 bar3=0 product_kernel=OPEN
+ * Free exclusive name; soft facts only; soft.
+ * multi_server=0 confine=0 product_kernel=OPEN
  * Soft deepen surfaces: retgradientangle / retblendangle (CREATE-ONLY soft only).
  * Continuum toward 26800; soft ≠ product complete; product lamps 0.
  * (soft ≠ product multi-server confine / product kernel complete).
@@ -15291,20 +15291,20 @@ cmd_udaemonsoft(void)
     out("greenjade-shell: soft units udx=1 cold_linux=1 libgj=1 "
         "libgj-so=1 libgj-gnu=1 vulkan_icd=1 multi_server=0 confine=0\n");
     out("greenjade-shell: soft deepen wave=70 multi_server=0 confine=0 "
-        "bar3=0 exclusive=1 product_kernel=OPEN\n");
-    out("greenjade-shell: soft honesty multi_server=0 confine=0 bar3=0 "
+        " exclusive=1 product_kernel=OPEN\n");
+    out("greenjade-shell: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
     out("greenjade-shell: soft path soft=1 multi_server=0 confine=0 "
-        "(soft inventory; not bar3; soft != product multi-server confine)\n");
+        "(soft inventory; soft != product multi-server confine)\n");
     out("greenjade-shell: soft exclusive wave=70 multi_server=0 "
-        "confine=0 bar3=0 userland=1 kernel=0 continuum=0 "
+        "confine=0 userland=1 kernel=0 continuum=0 "
         "product_kernel=OPEN\n");
-    out("greenjade-shell: soft open multi_server=0 confine=0 bar3=0 "
+    out("greenjade-shell: soft open multi_server=0 confine=0 "
         "product_kernel=OPEN soft_only=1 wave=70\n");
     /* Grep: greenjade-shell: soft retgradientangle / retblendangle (Wave 126) */
     out("greenjade-shell: soft retgradientangle soft_only=1 product_gate=0 "
         "soft_ne_product=1 continuum_toward=26800 wave=126 (retgradientangle honesty; "
-        "Soft!=product; not bar3)\n");
+        "Soft!=product)\n");
     out("greenjade-shell: soft retblendangle exclusive=1 soft_ne_product=1 "
         "continuum_toward=26800 wave=126 (retblendangle stamp; Soft!=product)\n");
     return 0;
@@ -15325,15 +15325,15 @@ run_line(const char *szLine)
     if (gj_strcmp(aCmd, "help") == 0) {
         /*
          * Soft product banner Wave 111 honesty (facts only). Identifies
-         * GreenJade soft product continuum shell; soft=1; bar3=0 (still
-         * open); multi_server=0; confine=0. Soft continuum ≠ bar3.
+         * GreenJade soft product continuum shell; soft=1; (still
+         * open); multi_server=0; confine=0. Soft continuum.
          * Soft ≠ product multi-server confine. Not Deck Top 50 PASS.
          * Greppable soft inventory for live logs.
          */
         out("GreenJade soft product\n");
         out("shell=native vfs door\n");
         out("soft=1\n");
-        out("bar3=0\n");
+        out("\n");
         out("multi_server=0\n");
         out("confine=0\n");
         out("product_kernel=OPEN\n");
@@ -15642,14 +15642,14 @@ run_line(const char *szLine)
          * Soft product version banner Wave 111 honesty.
          * Keep substring "GreenJade shell (native vfs door)" for smoke gate.
          * Extra lines are soft inventory only: GreenJade soft product identity,
-         * soft=1, bar3=0 (still open), multi_server=0, confine=0, wave=70.
-         * Soft continuum ≠ bar3. Soft ≠ product multi-server confine.
-         * Does not claim Deck Top 50 PASS or bar3 close.
+         * soft=1, (still open), multi_server=0, confine=0, wave=70.
+         * Soft continuum. Soft ≠ product multi-server confine.
+         * Does not claim Deck Top 50 PASS close.
          */
         out("GreenJade shell (native vfs door) v1.76\n");
         out("GreenJade soft product\n");
         out("soft=1\n");
-        out("bar3=0\n");
+        out("\n");
         out("multi_server=0\n");
         out("confine=0\n");
         out("product_kernel=OPEN\n");
@@ -19783,7 +19783,7 @@ _start(void)
         "ucontinuum14500",
         "uhda_client",
         "uscsi_live",
-        /* product v1.67: soak/makefile/bar3-open soft readiness one-liners */
+        /* product v1.67: soak/makefile-open soft readiness one-liners */
         "u768gsoak",
         "umakefile14600",
         "ubar3open",

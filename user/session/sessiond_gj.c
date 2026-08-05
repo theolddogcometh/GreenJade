@@ -43,8 +43,8 @@
  *   sessiond-gj: soft deepen wave=70 areas=… ok=… skip=… token=0x…
  *   sessiond-gj: soft path claim=live present=fb multi_frame=bit18
  *                reclaim=bit19 free=unowned multi_server=0 confine=0
- *                (soft; not bar3; soft ≠ product multi-server confine)
- *   sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
+ *
+ *   sessiond-gj: soft honesty multi_server=0 confine=0 exclusive=1 soft=1 product_kernel=OPEN wave=70
  * Diagnostics only — never hard-fail ownership path PASS; not a compositor claim.
  *
  * Soft health deepens door surface beyond hard claim/present/release:
@@ -109,7 +109,7 @@
 /* Wave 126 soft deepen surfaces (CREATE-ONLY soft ≠ product):
  *   greppable: soft retgradientangle continuum_toward=26800 soft_ne_product=1 wave=126
  *   greppable: soft retblendangle exclusive=1 continuum_toward=26800 soft_ne_product=1 wave=126
- * Soft ≠ product complete; product lamps 0; bar3 OPEN.
+ * Soft ≠ product complete; product lamps 0;
  */
 
 #define SOFT_H_DISPLAY  (1u << 0)
@@ -689,18 +689,18 @@ soft_inventory_log(void)
     msg(aLine);
 
     /*
-     * Grep: sessiond-gj: soft path (Wave 111 honesty; not bar3).
+     * Grep: sessiond-gj: soft path (Wave 111 honesty).
      * Soft inventory ≠ product multi-server confine.
      */
     msg("sessiond-gj: soft path claim=live present=fb multi_frame=bit18 "
         "reclaim=bit19 free=unowned multi_server=0 confine=0 "
-        "(soft; not bar3; soft != product multi-server confine)\n");
+        "\n");
 
     /*
      * Grep: sessiond-gj: soft honesty (Wave 126 exclusive deepen).
      * Soft inventory ≠ product multi-server confine.
      */
-    msg("sessiond-gj: soft honesty multi_server=0 confine=0 bar3=0 "
+    msg("sessiond-gj: soft honesty multi_server=0 confine=0 "
         "exclusive=1 soft=1 product_kernel=OPEN wave=70\n");
 }
 

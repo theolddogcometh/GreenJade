@@ -36,9 +36,10 @@
  *   9  netdev soft N | unres=…
  *  10  probe 10ec:8168 soft|miss
  *  11  pci reg=N match=M        (r8169 PASS path)
- *  12  mod xhci_pci …           (soft xhci path)
- *  13  probe 8086:a12f / skip note
- *  14–15  spare; trap may overwrite 6–10 on fault
+ *  12  mod xhci_pci … | SKIP builtin  (soft xhci path)
+ *  13  USB linux OPEN builtin | usb_storage need=usbcore | LOAD ok | probe a12f
+ *  14  soft l2 br rx=/tx=       (spare; REAL bridge lamp; never 7–13)
+ *  15  spare; trap may overwrite 6–10 on fault
  *
  * Soft≠product honesty lives in kprintf, not on these short STATUS lines.
  */

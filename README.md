@@ -78,9 +78,9 @@ USB / lab helpers (`install-usb`, `steam-fetch`, …) need root or lab host setu
 
 **Bring-up today (QEMU / soft product markers):** Multiboot2 + OVMF UEFI, SMP, virtio, hybrid Linux ABI surface, PE32 Wine int80 path, ELF dynlinker, fork COW, doors/session/ICD, packaging. Kernel smoke aims for **M0 OK** / **UD=0**. Media may stage a Steam tree as **READY**; that is bootstrap only.
 
-**Bar3 honesty:** Bar3 means a real-DUT path where the Steam **client** launches and Deck Top 50 titles can leave `NOT-TRIED`. Host/media staging, kernel smokes, and continuum soft gates are **not** bar3 completion. Client launch, title runs, and matrix fill are **open** — see [docs/STEAM_BAR3_STATUS.md](docs/STEAM_BAR3_STATUS.md).
+**Bar3 / Deck Top 50:** status and definitions live in **one place only** — [docs/STEAM_BAR3_STATUS.md](docs/STEAM_BAR3_STATUS.md) (currently **OPEN** / **NOT-TRIED × 50**). Boot console and soft inventory lamps do **not** restate bar3.
 
-**Soft continuum high-water:** CREATE-ONLY libcgj graph parent wire at **makefile_max=26800** (Wave 126; verify with `./scripts/gj-continuum-makefile-snippet.sh --max` — scan is source of truth). Soft deepen surfaces **retgradientangle**/**retblendangle** (CREATE-ONLY soft only). CREATE-ONLY continuum TUs pre-generated ahead through **graph_batch96000**. Product lamps remain **0**. Soft continuum **≠ bar3** and **≠ product complete**. Soft **≠** Deck Top 50 (still **NOT-TRIED × 50**).
+**Soft continuum high-water:** CREATE-ONLY libcgj graph parent wire (verify with `./scripts/gj-continuum-makefile-snippet.sh --max`). Product lamps remain **0**. Soft continuum is not product complete and is not Deck Top 50 progress.
 
 **Still open:** real-hardware UEFI install + Steam client, Deck Top 50 (matrix remains **NOT-TRIED**), full multi-server confine product, full ≥ 1 TiB soak when host allows.
 
@@ -100,10 +100,13 @@ Product direction is **ABI-first**, not freestanding class-driver thrash:
 
 **First DUT:** ASUS ROG **G752VT** — NIC `10ec:8168`, xHCI `8086:a12f`, lab static **10.200.125.50**.
 
+**Lab status (honest):** freestanding **ICMP ping** on that NIC is proven (hybrid SOFT + L2 bridge; freestanding owns the wire). **sshd TCP :22** and **USB stick / Linux USB** paths remain **OPEN** until DUT verify. Soft ≠ product; **G-AC-1**. Live backlog: [docs/TODO.md](docs/TODO.md) dual DoD · [docs/LINUX_MODULE_PATH.md](docs/LINUX_MODULE_PATH.md) · [docs/LAPTOP_LINUX_DRIVER_HOST.md](docs/LAPTOP_LINUX_DRIVER_HOST.md).
+
 ```sh
 make collect-linux-drivers   # host .ko → build/linux-drivers/ (+ NEEDED-DRIVERS)
 make hwtest-img              # → build/greenjade-hwtest.img (ESP + GJ-PERSIST)
 sudo ./scripts/install-hwtest-usb.sh /dev/sdX
+# after boot (lab): ping 10.200.125.50 ; nc -v -w 3 10.200.125.50 22
 ```
 
 On boot, GOP **STATUS (STATIC)** holds track module path (soft):
@@ -111,13 +114,14 @@ On boot, GOP **STATUS (STATIC)** holds track module path (soft):
 | Hold | Example |
 |------|---------|
 | 7 | `ksym n=…` |
-| 8 | `mod r8169 LOAD ok init=0` |
-| 9 | `netdev soft N` (want ≥1 after id_table stride fix) |
-| 10 | `probe 10ec:8168 soft` \| `miss` |
+| 8 | `mod r8169 … init=0` (or `SKIP load=0`) |
+| 9 | `netdev soft N` (want ≥1) |
+| 10 | `probe 10ec:8168 soft` \| `real` \| `miss` |
 | 11 | `pci reg=… match=…` |
-| 12–13 | xHCI soft SKIP when host `xhci_pci` is **builtin** (no `.ko`) |
+| 12–13 | xHCI soft SKIP when host `xhci_pci` is **builtin**; USB MSC / `usb_storage need=usbcore` |
+| 14–15 | soft L2 bridge · hybrid wire=fs soft=r8169 |
 
-Soft load of RHEL-class `r8169.ko` needs **40-byte** `pci_device_id` rows (fixed). Real `.ko` **probe** still needs host-shaped `pci_dev` (see [docs/PCI_DEV_SOFT_LAYOUT.md](docs/PCI_DEV_SOFT_LAYOUT.md)). Soft EMU bind proves match + soft netdev without calling Linux probe.
+Gate0 hybrid skips real `r8169` probe on the live BAR (EMU soft netdev + freestanding wire). Real hostish probe is gated ([docs/PCI_DEV_SOFT_LAYOUT.md](docs/PCI_DEV_SOFT_LAYOUT.md) · [docs/R8169_MMIO_HANDOFF.md](docs/R8169_MMIO_HANDOFF.md)).
 
 ---
 

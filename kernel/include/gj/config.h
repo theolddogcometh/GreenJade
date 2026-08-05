@@ -11,7 +11,7 @@
  * Soft stamp (Wave 14 exclusive — header comment only):
  *   Compile-time geometry / SMP / klog knobs. Not a soft inventory helper
  *   (no runtime tallies). Does not light product lamps, close multi-server
- *   product, or claim Steam bar3. Continuum high-water toward 15600 is
+ *   product,. Continuum high-water toward 15600 is
  *   documented in companion scripts/docs (CREATE-ONLY soft graph only).
  * greppable: GJ_CONFIG_SOFT_STAMP_WAVE14
  */
@@ -106,6 +106,52 @@
 #define GJ_KLOG_LEVEL  3
 #endif
 
+/*
+ * Soft freestanding→r8169 MMIO ownership handoff (lab only).
+ * Default 0: freestanding rtl8168 keeps BAR/rings (current working path).
+ * Set 1 only for deliberate G752 handoff experiments — can drop net until
+ * soft open is proven. Soft≠product; G-AC-1; see docs/R8169_MMIO_HANDOFF.md.
+ * greppable: GJ_SOFT_R8169_MMIO_HANDOFF
+ */
+#ifndef GJ_SOFT_R8169_MMIO_HANDOFF
+#define GJ_SOFT_R8169_MMIO_HANDOFF  0
+#endif
+
+/*
+ * Soft boot load of embedded/media r8169.ko (lab only).
+ * Default 1: load + init_module after freestanding net_l2 (hybrid 4a).
+ * Soft ksyms no-op real CF8/iomap for 10ec:8168 while rtl8168_ready().
+ * Set 0 to skip soft r8169 entirely (freestanding-only net prove). Soft≠product.
+ * greppable: GJ_SOFT_R8169_LOAD
+ * See docs/R8169_MMIO_HANDOFF.md · docs/LINUX_MODULE_PATH.md.
+ */
+#ifndef GJ_SOFT_R8169_LOAD
+#define GJ_SOFT_R8169_LOAD  1
+#endif
+
+/*
+ * Phase-3 Option B: call .ko ndo_open after sole-owner (RISKY lab only).
+ * Default 0: phase-3 try_open does soft open only (carrier/queue; no .ko).
+ * Requires GJ_SOFT_R8169_MMIO_HANDOFF=1 as well. Soft≠product; G-AC-1.
+ * greppable: GJ_SOFT_R8169_KO_NDO_OPEN
+ * See docs/R8169_MMIO_HANDOFF.md phase 3 Option B.
+ */
+#ifndef GJ_SOFT_R8169_KO_NDO_OPEN
+#define GJ_SOFT_R8169_KO_NDO_OPEN  0
+#endif
+
+/*
+ * Soft-originated L2 TX smoke at bridge enable (lab only).
+ * Default 0: API + ksym only — never auto-inject frames on live NIC.
+ * Set 1 only for deliberate reverse-path smoke (builds a soft skb and
+ * calls linux_netdev_soft_l2_tx_from_skb once). Soft≠product; G752 has
+ * real wire — do not ship default 1.
+ * greppable: GJ_SOFT_L2_TX_SMOKE
+ */
+#ifndef GJ_SOFT_L2_TX_SMOKE
+#define GJ_SOFT_L2_TX_SMOKE  0
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Derived helpers (pure macros)                                       */
 /* ------------------------------------------------------------------ */
@@ -148,3 +194,15 @@ _Static_assert(GJ_PMM_MAX_PHYS_TIB >= 1u,
                "GJ_PMM_MAX_PHYS_TIB design headroom");
 _Static_assert(GJ_KLOG_LEVEL <= GJ_KLOG_TRACE,
                "GJ_KLOG_LEVEL out of ladder");
+_Static_assert(GJ_SOFT_R8169_MMIO_HANDOFF == 0 ||
+               GJ_SOFT_R8169_MMIO_HANDOFF == 1,
+               "GJ_SOFT_R8169_MMIO_HANDOFF must be 0 or 1");
+_Static_assert(GJ_SOFT_R8169_KO_NDO_OPEN == 0 ||
+               GJ_SOFT_R8169_KO_NDO_OPEN == 1,
+               "GJ_SOFT_R8169_KO_NDO_OPEN must be 0 or 1");
+/* Option B requires handoff gate; both off or both on is fine; B alone is not. */
+_Static_assert(GJ_SOFT_R8169_KO_NDO_OPEN == 0 ||
+               GJ_SOFT_R8169_MMIO_HANDOFF == 1,
+               "GJ_SOFT_R8169_KO_NDO_OPEN=1 requires GJ_SOFT_R8169_MMIO_HANDOFF=1");
+_Static_assert(GJ_SOFT_L2_TX_SMOKE == 0 || GJ_SOFT_L2_TX_SMOKE == 1,
+               "GJ_SOFT_L2_TX_SMOKE must be 0 or 1");

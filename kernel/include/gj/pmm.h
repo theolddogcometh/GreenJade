@@ -79,7 +79,15 @@ struct gj_mem_region {
 };
 
 /**
- * Build freelists from usable regions; exclude [paKernelStart, paKernelEnd).
+ * Soft: reserve [paBase, paBase+cbLen) from freelist (UEFI soft media .ko).
+ * Call before pmm_init when boot_info soft media fields are set. Soft≠product.
+ * No-op if cbLen==0 or paBase==0. Grep: pmm: soft media reserve
+ */
+void pmm_soft_reserve(gj_paddr_t paBase, u64 cbLen);
+
+/**
+ * Build freelists from usable regions; exclude [paKernelStart, paKernelEnd)
+ * and any prior pmm_soft_reserve span.
  *
  * Call once early, before product alloc. High (PA ≥ 4 GiB) ranges may be
  * deferred until pmm_release_high. Invalid/overlapping regions soft-skip.

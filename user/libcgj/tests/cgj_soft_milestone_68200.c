@@ -3,7 +3,7 @@
  * Copyright (c) 2026 Project GreenJade contributors
  *
  * Soft host gates for continuum MILESTONE 68200 markers (CREATE-ONLY).
- * Coherent soft package (see NOTES_milestone_68200.txt). Mirror 25800; bar3=0.
+ * Coherent soft package (see NOTES_milestone_68200.txt). Mirror 25800;.
  *
  * Manual build (host libc + dl):
  *   cc -std=c11 -Wall -Wextra -O2 -o build/cgj_soft_milestone_68200 \

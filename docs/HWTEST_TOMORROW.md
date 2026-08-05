@@ -215,7 +215,7 @@ Do **not** mark matrix rows PASS from media READY or Linux inventory alone. See 
 **Minimum — freestanding “DUT boot attempted”:**
 
 - [ ] Stick boots firmware on **G752VT** (UEFI USB or Multiboot hybrid)
-- [ ] Evidence of loader/kernel progress (panel photo and/or ESP `BOOT.LOG` / `KLOG.TXT`)
+- [ ] Evidence of loader/kernel progress (panel STATUS capture and/or ESP `BOOT.LOG` / `KLOG.TXT`)
 - [ ] Note hang stage if any (**stage 11** expected until `a12f` control lands)
 - [ ] Record: model **G752VT**, BIOS **G752VT.307** (or current F2 → Main), RAM, boot path, USB port used
 
